@@ -35,8 +35,6 @@ export const ja = {
   secretField: { username: "ユーザー名", password: "パスワード", totp: "ワンタイムコード" },
   waitingForYou: "操作を待っています",
   secretAsked: "ログイン情報が必要です",
-  secretAskMore: (name: string) => `シークレット「${name}」に足りないものがあります`,
-  secretAskMissing: "足りないもの",
   secretAskFrom: "AI からのメッセージ",
   secretAskNote: "値はここ（Studio）にだけ入力します。AI には名前しか伝わりません",
   secretAskRegister: "登録する",
@@ -54,6 +52,14 @@ export const ja = {
   secretAskAdded: (name: string, sites: string[]) =>
     `「入力してよいサイト」に ${sites.join("、")} を追加しました。「${name}」のパスワードをこのサイトに入力してよいか確かめてから保存してください`,
   secretAskHint: "登録フォームに名前とサイトを入れてあります。ユーザー名・パスワードを入力して保存してください",
+  secretAskTitle: "ログイン情報を登録してください",
+  secretAskLead: (name: string) => `シークレット「${name}」として保存します。入力するのは下の値だけです`,
+  secretAskSites: "入力してよいサイト",
+  secretAskSiteInput: "入力してよいサイト（ログイン画面の URL）",
+  secretAskNewSites: "追加するサイト（このサイトにだけ入力します）",
+  secretAskSave: "登録",
+  secretAskFullForm: "すべての項目を編集",
+  secretAskNeedsForm: "この問題は登録フォームで直します",
   inUse: (callers: string[]) =>
     `${callers.map((c) => `「${c}」`).join("")}から呼ばれているため削除できません。先にそのシナリオの呼び出しを外してください`,
   extracted: (name: string) => `新しいシナリオ「${name}」にまとめました`,

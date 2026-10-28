@@ -265,6 +265,11 @@ export type StudioState = {
   loadSecrets(): Promise<void>;
   /** Returns true when saved. */
   saveSecret(input: SecretInput): Promise<boolean>;
+  /**
+   * Saves values and adds `addSites` to the sites the secret has now (read
+   * again first: the CLI may have changed them while Studio was open).
+   */
+  saveSecretAdding(input: Omit<SecretInput, "sites">, addSites: string[]): Promise<boolean>;
   removeSecret(name: string): Promise<void>;
   resetSecrets(): Promise<void>;
   setSecretsOpen(open: boolean): void;
@@ -278,7 +283,7 @@ export type StudioState = {
 
 export type SecretPrefill = { name: string; sites: string[]; fields: SecretField[] };
 
-export type SecretFix = { name: string; code: string; site?: string };
+export type SecretFix = { name: string; code: string; site?: string; field?: SecretField };
 
 /** Step errors the user fixes by registering or editing a secret. */
 export const SECRET_FIX_CODES = [
@@ -292,10 +297,11 @@ export const SECRET_FIX_CODES = [
 /** The secret a failed step asks the user to fix, from the error's details. */
 export function secretFixOf(error: { code: string; details?: unknown } | null | undefined): SecretFix | null {
   if (!error || !SECRET_FIX_CODES.includes(error.code)) return null;
-  const details = (error.details ?? {}) as { secret?: unknown; page?: unknown };
+  const details = (error.details ?? {}) as { secret?: unknown; page?: unknown; field?: unknown };
   if (typeof details.secret !== "string" || !details.secret) return null;
   const site = typeof details.page === "string" && details.page ? details.page : undefined;
-  return { name: details.secret, code: error.code, site };
+  const field = (["username", "password", "totp"] as const).find((f) => f === details.field);
+  return { name: details.secret, code: error.code, site, ...(field ? { field } : {}) };
 }
 
 export const isExternal = (entry: HistoryEntry) => entry.actor.kind !== "studio";
@@ -634,6 +640,13 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
+      async saveSecretAdding(input, addSites) {
+        await get().loadSecrets();
+        const current = get().secrets.find((s) => s.name === input.name)?.sites ?? [];
+        const sites = [...current, ...addSites.filter((site) => !current.includes(site))];
+        return get().saveSecret({ ...input, sites });
+      },
+
       async removeSecret(name) {
         try {
           await api.removeSecret(name);
@@ -659,7 +672,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async loadSecretRequests() {
         try {
-          set({ secretRequests: await api.listSecretRequests() });
+          // The dialog reads what each secret already has: keep both fresh.
+          const [secretRequests] = await Promise.all([api.listSecretRequests(), get().loadSecrets()]);
+          set({ secretRequests });
         } catch {
           // Requests are a convenience: the dialog still works without them.
         }
