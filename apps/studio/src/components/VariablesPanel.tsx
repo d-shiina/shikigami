@@ -36,7 +36,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
         <span className="font-mono text-sm font-medium">{variable.name}</span>
         <button
           type="button"
-          className="ml-auto text-xs text-slate-400 hover:text-red-600"
+          className="ml-auto text-xs text-slate-400 hover:text-shu-600"
           onClick={() => removeVariable(variable.name)}
         >
           {t.remove}
@@ -99,7 +99,7 @@ export function VariablesPanel() {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <button type="submit" className="rounded bg-brand-600 px-2 py-1 text-sm text-white">
+        <button type="submit" className="rounded bg-ink px-2 py-1 text-sm text-paper">
           {t.addVariable}
         </button>
       </form>

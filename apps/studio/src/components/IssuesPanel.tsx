@@ -5,7 +5,7 @@ export function IssuesPanel() {
   const validation = useStudio((s) => s.validation);
   const select = useStudio((s) => s.select);
   const issues = validation?.issues ?? [];
-  if (issues.length === 0) return <p className="p-4 text-sm text-emerald-700">✓ {t.noIssues}</p>;
+  if (issues.length === 0) return <p className="p-4 text-sm text-moegi-500">✓ {t.noIssues}</p>;
   return (
     <ul className="divide-y divide-slate-100">
       {issues.map((issue) => (
@@ -15,7 +15,7 @@ export function IssuesPanel() {
             className="w-full px-4 py-2 text-left hover:bg-slate-50"
             onClick={() => issue.stepId && select({ kind: "step", stepId: issue.stepId })}
           >
-            <div className={`text-xs font-semibold ${issue.severity === "error" ? "text-red-700" : "text-amber-700"}`}>
+            <div className={`text-xs font-semibold ${issue.severity === "error" ? "text-shu-600" : "text-amber-700"}`}>
               {issue.severity === "error" ? "エラー" : "警告"} · {issue.code}
             </div>
             <div className="text-sm">{issue.message}</div>

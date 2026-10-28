@@ -3,6 +3,7 @@
 import type {
   EditOp,
   EditOutcome,
+  HistoryEntry,
   LogLevel,
   RunEventEnvelope,
   RunStatus,
@@ -51,6 +52,11 @@ export type StudioState = {
   notice: string | null;
   error: string | null;
   run: RunState | null;
+  /** Core's change journal for the open scenario, oldest first. */
+  history: HistoryEntry[];
+  /** Revisions of non-Studio changes the user has looked at, per scenario. */
+  reviewed: Record<string, number[]>;
+  paletteOpen: boolean;
 
   init(): Promise<void>;
   refreshList(): Promise<void>;
@@ -74,7 +80,84 @@ export type StudioState = {
   onRunEvent(event: RunEventEnvelope): void;
   clearLog(): void;
   dismiss(): void;
+  loadHistory(): Promise<void>;
+  approve(revision: number): void;
+  approveAll(): void;
+  /** Reverts one journal entry by sending its inverse ops to Core as a new edit. */
+  revert(entry: HistoryEntry): Promise<void>;
+  setPaletteOpen(open: boolean): void;
 };
+
+export const isExternal = (entry: HistoryEntry) => entry.actor.kind !== "studio";
+
+/** Whether Core recorded ops that can be sent back to revert this entry. */
+export const isRevertible = (entry: HistoryEntry) =>
+  entry.kind !== "create" && entry.kind !== "delete" && (entry.inverse?.length ?? 0) > 0;
+
+/** What an entry's ops touch; "*" when they rewrite the whole step tree. */
+function targets(entry: HistoryEntry): Set<string> {
+  const keys = new Set<string>();
+  for (const op of entry.ops ?? []) {
+    if (op.op === "addStep") keys.add(`step:${op.step.id}`);
+    else if (op.op === "updateStep" || op.op === "removeStep" || op.op === "moveStep") keys.add(`step:${op.stepId}`);
+    else if (op.op === "setVariable") keys.add(`var:${op.variable.name}`);
+    else if (op.op === "removeVariable") keys.add(`var:${op.name}`);
+    else if (op.op === "updateScenario") keys.add("scenario");
+    else keys.add("*");
+  }
+  return keys;
+}
+
+/**
+ * Why an entry cannot be reverted safely, or null. Core's inverse ops restore
+ * whole previous values (e.g. all params), so sending them after a later edit
+ * to the same step or variable would silently undo that later edit too.
+ */
+export function revertBlocker(entry: HistoryEntry, history: HistoryEntry[]): string | null {
+  if (!isRevertible(entry)) return t.revertUnsupported;
+  const mine = targets(entry);
+  for (const later of history) {
+    if (later.revision <= entry.revision) continue;
+    for (const key of targets(later)) {
+      if (key === "*" || mine.has("*") || mine.has(key)) return t.revertBlocked;
+    }
+  }
+  return null;
+}
+
+/** External edits the user has not reviewed yet, newest first. */
+export function pendingReview(state: Pick<StudioState, "history" | "reviewed" | "scenario">): HistoryEntry[] {
+  const seen = new Set(state.reviewed[state.scenario?.id ?? ""] ?? []);
+  return state.history.filter((e) => isExternal(e) && isRevertible(e) && !seen.has(e.revision)).reverse();
+}
+
+/** Step IDs an entry's ops point at (for highlighting on the canvas). */
+export function touchedSteps(entry: HistoryEntry): string[] {
+  const ids: string[] = [];
+  for (const op of entry.ops ?? []) {
+    if (op.op === "addStep" && op.step.id) ids.push(op.step.id);
+    else if (op.op === "updateStep" || op.op === "moveStep") ids.push(op.stepId);
+  }
+  return ids;
+}
+
+const REVIEWED_KEY = "shikigami.studio.reviewed";
+
+function loadReviewed(): Record<string, number[]> {
+  try {
+    return JSON.parse(globalThis.localStorage?.getItem(REVIEWED_KEY) ?? "{}") as Record<string, number[]>;
+  } catch {
+    return {};
+  }
+}
+
+function saveReviewed(reviewed: Record<string, number[]>) {
+  try {
+    globalThis.localStorage?.setItem(REVIEWED_KEY, JSON.stringify(reviewed));
+  } catch {
+    // Review marks are a convenience; losing them only re-shows the cards.
+  }
+}
 
 /** Where a step lives in the tree. */
 export type Location = { parentId: string | null; block: string | null; index: number; siblings: number };
@@ -140,6 +223,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       if (!id) return;
       const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
       set({ scenario, validation, canUndo: undo.canUndo, canRedo: undo.canRedo });
+      await get().loadHistory();
     };
 
     /** Runs a mutation; on a revision conflict reloads and tells the user. */
@@ -149,6 +233,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       try {
         applyOutcome(await fn(scenario.id, scenario.revision ?? 0));
         void get().refreshList();
+        void get().loadHistory();
         return true;
       } catch (e) {
         if (e instanceof ApiError && e.code === "REVISION_CONFLICT") {
@@ -172,6 +257,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       notice: null,
       error: null,
       run: null,
+      history: [],
+      reviewed: loadReviewed(),
+      paletteOpen: false,
 
       async init() {
         try {
@@ -193,7 +281,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async open(id) {
         try {
           const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
-          set({ scenario, validation, canUndo: undo.canUndo, canRedo: undo.canRedo, selection: null, error: null });
+          set({ scenario, validation, canUndo: undo.canUndo, canRedo: undo.canRedo, selection: null, error: null, history: [] });
+          await get().loadHistory();
         } catch (e) {
           set({ error: message(e) });
         }
@@ -203,7 +292,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const outcome = await api.createScenario({ name });
           applyOutcome(outcome);
-          set({ selection: null });
+          set({ selection: null, history: [] });
+          void get().loadHistory();
           await get().refreshList();
         } catch (e) {
           set({ error: message(e) });
@@ -214,6 +304,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const outcome = await api.duplicateScenario(id);
           applyOutcome(outcome);
+          set({ history: [] });
+          void get().loadHistory();
           await get().refreshList();
         } catch (e) {
           set({ error: message(e) });
@@ -373,6 +465,52 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       dismiss() {
         set({ notice: null, error: null });
+      },
+
+      async loadHistory() {
+        const id = get().scenario?.id;
+        if (!id) return;
+        try {
+          const history = await api.history(id);
+          // Ignore a late answer for a scenario that is no longer open.
+          if (get().scenario?.id === id) set({ history });
+        } catch {
+          // The timeline is secondary; editing keeps working without it.
+        }
+      },
+
+      approve(revision) {
+        const id = get().scenario?.id;
+        if (!id) return;
+        const reviewed = { ...get().reviewed, [id]: [...(get().reviewed[id] ?? []), revision] };
+        saveReviewed(reviewed);
+        set({ reviewed });
+      },
+
+      approveAll() {
+        const id = get().scenario?.id;
+        if (!id) return;
+        const revisions = pendingReview(get()).map((e) => e.revision);
+        const reviewed = { ...get().reviewed, [id]: [...(get().reviewed[id] ?? []), ...revisions] };
+        saveReviewed(reviewed);
+        set({ reviewed });
+      },
+
+      async revert(entry) {
+        const blocker = revertBlocker(entry, get().history);
+        if (blocker) {
+          set({ error: blocker });
+          return;
+        }
+        const ok = await get().applyOps(entry.inverse ?? []);
+        if (ok) {
+          get().approve(entry.revision);
+          set({ notice: t.reverted });
+        }
+      },
+
+      setPaletteOpen(open) {
+        set({ paletteOpen: open });
       },
     };
   });

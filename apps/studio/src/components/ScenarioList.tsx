@@ -19,16 +19,16 @@ export function ScenarioList() {
   };
 
   return (
-    <aside className="flex h-full flex-col border-r border-slate-200 bg-white">
-      <div className="px-3 pt-3 pb-2 text-xs font-semibold tracking-wide text-slate-500">{t.scenarios}</div>
+    <aside className="flex h-full flex-col border-r border-slate-200 bg-sheet">
+      <div className="px-3 pt-4 pb-2 font-serif text-sm font-semibold text-ink">{t.scenarios}</div>
       <form onSubmit={submit} className="flex gap-1 px-3 pb-3">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t.newScenarioPrompt}
-          className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none"
+          className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-sm focus:border-ink focus:outline-none"
         />
-        <button type="submit" className="rounded bg-brand-600 px-2 py-1 text-sm text-white hover:bg-brand-700">
+        <button type="submit" className="rounded bg-ink px-2 py-1 text-sm text-paper hover:bg-slate-700">
           {t.newScenario}
         </button>
       </form>
@@ -42,7 +42,7 @@ export function ScenarioList() {
               onClick={() => open(s.id)}
               onKeyDown={(e) => e.key === "Enter" && open(s.id)}
               className={`group cursor-pointer border-l-4 px-3 py-2 ${
-                s.id === currentId ? "border-brand-500 bg-brand-50" : "border-transparent hover:bg-slate-50"
+                s.id === currentId ? "border-shu-500 bg-slate-100" : "border-transparent hover:bg-slate-50"
               }`}
             >
               <div className="truncate text-sm font-medium">{s.name}</div>
@@ -63,7 +63,7 @@ export function ScenarioList() {
                   </button>
                   <button
                     type="button"
-                    className={`rounded px-1 ${confirmId === s.id ? "bg-red-600 text-white" : "hover:bg-red-100 hover:text-red-700"}`}
+                    className={`rounded px-1 ${confirmId === s.id ? "bg-shu-600 text-white" : "hover:bg-shu-100 hover:text-shu-600"}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (confirmId === s.id) {
