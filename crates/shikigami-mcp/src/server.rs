@@ -12,7 +12,7 @@ use shikigami_core::{
     Actor, ActorKind, EditOp, ErrorPayload, NewScenario, RunId, ScenarioId, ScenarioService, StepId,
 };
 use shikigami_runtime::record::{self, RunRecorder};
-use shikigami_runtime::{RunOptions, RunSnapshot, Runtime};
+use shikigami_runtime::{RunHandle, RunOptions, RunSnapshot, Runtime};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
@@ -741,39 +741,55 @@ impl ShikigamiMcp {
         Ok(json!({ "runs": out }))
     }
 
+    /// Everything that can fail happens before the run starts, so a failed
+    /// call never leaves an unrecorded, unstoppable run behind.
+    fn launch(
+        &self,
+        scenario: shikigami_core::Scenario,
+        p: &RunScenarioParams,
+    ) -> Result<(RunId, RunHandle, RunRecorder), ErrorPayload> {
+        let id = RunId::generate();
+        let root = self.svc().store().root();
+        let recorder = RunRecorder::create(root, &id).map_err(io_err)?;
+        let mut runs = self
+            .inner
+            .runs
+            .lock()
+            .map_err(|_| err("INTERNAL", "run registry poisoned"))?;
+        let handle = match self.inner.runtime.start(
+            scenario,
+            RunOptions {
+                inputs: p.inputs.clone(),
+                run_id: Some(id.clone()),
+            },
+        ) {
+            Ok(handle) => handle,
+            Err(e) => {
+                drop(recorder);
+                let _ = std::fs::remove_dir_all(root.join("runs").join(id.as_str()));
+                return Err(ErrorPayload {
+                    code: e.code,
+                    message: e.message,
+                    details: e.details,
+                });
+            }
+        };
+        runs.insert(
+            id.clone(),
+            ActiveRun {
+                cancel: handle.cancel_token(),
+                snapshot: handle.snapshot_cell(),
+            },
+        );
+        Ok((id, handle, recorder))
+    }
+
     async fn start_run(&self, p: &RunScenarioParams) -> Outcome {
         let scenario = self
             .svc()
             .get_runnable(&ScenarioId::new(p.scenario_id.as_str()))?;
-        let handle = self
-            .inner
-            .runtime
-            .start(
-                scenario,
-                RunOptions {
-                    inputs: p.inputs.clone(),
-                    run_id: None,
-                },
-            )
-            .map_err(|e| ErrorPayload {
-                code: e.code,
-                message: e.message,
-                details: e.details,
-            })?;
-        let id = handle.run_id.clone();
-        let mut recorder = RunRecorder::create(self.svc().store().root(), &id).map_err(io_err)?;
+        let (id, handle, mut recorder) = self.launch(scenario, p)?;
         let (tx, mut rx) = watch::channel(None);
-        self.inner
-            .runs
-            .lock()
-            .map_err(|_| err("INTERNAL", "run registry poisoned"))?
-            .insert(
-                id.clone(),
-                ActiveRun {
-                    cancel: handle.cancel_token(),
-                    snapshot: handle.snapshot_cell(),
-                },
-            );
 
         let inner = self.inner.clone();
         let task_id = id.clone();
