@@ -356,3 +356,19 @@ fn missing_secrets_name_themselves() {
     assert_eq!(e.code, "SECRET_NOT_FOUND");
     assert_eq!(e.details().unwrap()["secret"], "Google");
 }
+
+#[test]
+fn tidying_keeps_requests_merged_with_more_than_is_registered() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    v.set(input("社内")).unwrap();
+    // One call asks for what is registered, another for one more site.
+    v.request(ask("社内", &["http://127.0.0.1:8787"], &[]))
+        .unwrap();
+    v.request(ask("社内", &["https://b.example"], &[])).unwrap();
+    v.tidy_requests().unwrap();
+    assert_eq!(
+        v.requests().unwrap()[0].missing.sites,
+        ["https://b.example"]
+    );
+}

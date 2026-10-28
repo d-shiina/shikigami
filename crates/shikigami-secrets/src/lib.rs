@@ -489,6 +489,14 @@ impl Vault {
         Ok(true)
     }
 
+    /// Drops the requests the registered secrets answer, each checked
+    /// against its current (possibly merged) requirements.
+    pub fn tidy_requests(&self) -> Result<(), SecretError> {
+        let _guard = self.lock()?;
+        let vault = self.read()?;
+        self.prune_requests(&vault)
+    }
+
     /// Drops the requests `vault` answers. Called with the lock held.
     fn prune_requests(&self, vault: &VaultFile) -> Result<(), SecretError> {
         let mut file = self.read_requests()?;

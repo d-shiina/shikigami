@@ -1544,7 +1544,9 @@ impl ShikigamiMcp {
             let missing = check().map_err(secret_err)?;
             if missing.is_empty() {
                 // Already registered (or just now): nothing for Studio to show.
-                let _ = vault.dismiss_request(&name);
+                // Another call may have merged more into the request, so it
+                // is checked again as it stands now, not dismissed.
+                let _ = vault.tidy_requests();
                 let secret = vault
                     .summaries()
                     .map_err(secret_err)?
