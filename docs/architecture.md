@@ -97,7 +97,8 @@ shikigami/
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
 │  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
 │  ├─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
-│  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き）
+│  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き、マクロは COM）
+│  ├─ shikigami-word/     word.*（docx の差し込み・読み取り）
 │  ├─ shikigami-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
 │  ├─ shikigami-pdf/      pdf.readText（PDF の文字を読む）

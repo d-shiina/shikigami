@@ -4333,6 +4333,69 @@
       "bindsVariables": [],
       "secretParams": [],
       "deprecated": null
+    },
+    {
+      "type": "word.fillTemplate",
+      "params": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "values": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "template",
+          "path",
+          "values"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "word.readText",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
     }
   ]
 }
