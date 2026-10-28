@@ -99,6 +99,8 @@ shikigami/
 │  ├─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
 │  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き、マクロは COM）
 │  ├─ shikigami-word/     word.*（docx の差し込み・読み取り）
+│  ├─ shikigami-mail/     mail.*（Outlook：下書き・一覧・添付保存）
+│  ├─ shikigami-com/      Office の COM 呼び出し（Excel マクロ・Outlook で共用）
 │  ├─ shikigami-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
 │  ├─ shikigami-pdf/      pdf.readText（PDF の文字を読む）
