@@ -13,7 +13,8 @@
 
 use std::mem::ManuallyDrop;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -49,10 +50,14 @@ pub fn run(
 ) -> Result<Value, StepError> {
     let (pid_tx, pid_rx) = mpsc::channel::<u32>();
     let (done_tx, done_rx) = mpsc::channel();
+    // Set when the wait gives up, so an Excel that reports its process only
+    // afterwards (still starting) quits instead of running the macro.
+    let abandoned = Arc::new(AtomicBool::new(false));
+    let flag = abandoned.clone();
     std::thread::Builder::new()
         .name("shikigami-excel-com".into())
         .spawn(move || {
-            let result = catch_unwind(AssertUnwindSafe(|| session(&request, &pid_tx)))
+            let result = catch_unwind(AssertUnwindSafe(|| session(&request, &pid_tx, &flag)))
                 .unwrap_or_else(|_| {
                     Err(StepError::new(
                         "ADAPTER_CRASHED",
@@ -82,6 +87,10 @@ pub fn run(
         }
         let stopped = cancel.is_cancelled();
         if stopped || Instant::now() >= deadline {
+            // Flag first, then look for the process: the session reports its
+            // process before checking the flag, so one of the two sees the
+            // other.
+            abandoned.store(true, Ordering::SeqCst);
             if let Ok(pid) = pid_rx.try_recv() {
                 kill(pid);
             }
@@ -117,7 +126,11 @@ impl Drop for Apartment {
     }
 }
 
-fn session(request: &MacroRequest, pid: &mpsc::Sender<u32>) -> Result<Value, StepError> {
+fn session(
+    request: &MacroRequest,
+    pid: &mpsc::Sender<u32>,
+    abandoned: &AtomicBool,
+) -> Result<Value, StepError> {
     // SAFETY: COM is initialised for this thread, and every interface
     // pointer is used and released on it.
     unsafe {
@@ -143,12 +156,17 @@ fn session(request: &MacroRequest, pid: &mpsc::Sender<u32>) -> Result<Value, Ste
             let _ = pid.send(id);
         }
     }
-    let result = with_app(&app, request);
+    let result = with_app(&app, request, abandoned);
     let _ = call(&app, "Quit", DISPATCH_METHOD, vec![]);
     result
 }
 
-fn with_app(app: &IDispatch, request: &MacroRequest) -> Result<Value, StepError> {
+fn with_app(
+    app: &IDispatch,
+    request: &MacroRequest,
+    abandoned: &AtomicBool,
+) -> Result<Value, StepError> {
+    check(abandoned)?;
     put(app, "DisplayAlerts", Var::bool(false))?;
     let _ = put(app, "AskToUpdateLinks", Var::bool(false));
     let books = get(app, "Workbooks")?.dispatch("Workbooks")?;
@@ -160,7 +178,7 @@ fn with_app(app: &IDispatch, request: &MacroRequest) -> Result<Value, StepError>
         vec![Var::str(&request.path), Var::i32(0)],
     )?
     .dispatch("Workbook")?;
-    let result = with_book(app, &book, request);
+    let result = with_book(app, &book, request, abandoned);
     let _ = call(&book, "Close", DISPATCH_METHOD, vec![Var::bool(false)]);
     result
 }
@@ -169,6 +187,7 @@ fn with_book(
     app: &IDispatch,
     book: &IDispatch,
     request: &MacroRequest,
+    abandoned: &AtomicBool,
 ) -> Result<Value, StepError> {
     if request.save && get(book, "ReadOnly")?.to_bool() {
         return Err(crate::book::in_use(std::path::Path::new(&request.path)));
@@ -183,14 +202,25 @@ fn with_book(
     for arg in &request.args {
         args.push(Var::from_json(arg)?);
     }
+    check(abandoned)?;
     let output = call(app, "Run", DISPATCH_METHOD | DISPATCH_PROPERTYGET, args).map_err(|e| {
         StepError::permanent("MACRO_FAILED", format!("macro '{}' failed: {}", request.name, e.message))
             .with_details(json!({ "hint": "Check the macro name (Module1.集計 or 集計), that it is a Public Sub/Function in a standard module, and that `args` match its parameters. A workbook downloaded from the internet must be unblocked (file properties → 許可する) before its macros run." }))
     })?;
     if request.save {
+        check(abandoned)?;
         call(book, "Save", DISPATCH_METHOD, vec![])?;
     }
     Ok(output.to_json())
+}
+
+/// Stops the session once the step has given up on it (its error is
+/// already reported, so this one is never seen).
+fn check(abandoned: &AtomicBool) -> Result<(), StepError> {
+    if abandoned.load(Ordering::SeqCst) {
+        return Err(StepError::new("CANCELLED", "the step was stopped"));
+    }
+    Ok(())
 }
 
 // -- IDispatch ----------------------------------------------------------------
