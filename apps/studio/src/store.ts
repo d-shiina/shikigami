@@ -118,14 +118,38 @@ export type RunState = {
   /** When each step began, in run order (retries not counted), to tell what a step saw. */
   starts: StepStart[];
   /**
-   * Steps of called scenarios, by the top-level call step they ran under:
-   * what an unfolded call shows. Their events never touch `steps`.
+   * Steps of called scenarios, by the call steps they ran under (`callKey`):
+   * what an unfolded or entered call shows. Their events never touch `steps`.
    */
   inner: Record<string, Record<string, StepRunState>>;
 };
 
 /** The `scenario.call` steps a run event happened inside (outermost first). */
 const callPathOf = (env: RunEventEnvelope): string[] => (env as { callPath?: string[] }).callPath ?? [];
+
+/** Key of a call path (outermost call step first), for `inner` and `unfolded`. */
+export const callKey = (path: string[]): string => path.join("/");
+
+/** One level of the chart the person has entered: the call step and the scenario it runs. */
+export type DiveLevel = { stepId: string; scenario: Scenario };
+
+/**
+ * The scenarios behind a path of entered call steps, outermost first. Stops at
+ * the first call that is gone or whose scenario is not loaded.
+ */
+export function diveChain(root: Scenario | null, called: Record<string, Scenario>, path: string[]): DiveLevel[] {
+  const chain: DiveLevel[] = [];
+  let current = root;
+  for (const stepId of path) {
+    const step = current ? findStep(current.steps ?? [], stepId) : undefined;
+    const target = step?.type === "scenario.call" ? step.params?.scenario : undefined;
+    const callee = typeof target === "string" ? called[target] : undefined;
+    if (!callee) break;
+    chain.push({ stepId, scenario: callee });
+    current = callee;
+  }
+  return chain;
+}
 
 /** Scenarios a step tree calls directly. */
 export function calledIds(steps: Step[]): string[] {
@@ -174,10 +198,12 @@ export type StudioState = {
   paletteOpen: boolean;
   /** Named versions of the open scenario, newest first. */
   versions: VersionSummary[];
-  /** The scenarios the open one calls, by id, for call nodes and their inputs. */
+  /** The scenarios the open one calls, directly or deeper, by id, for call nodes and their inputs. */
   called: Record<string, Scenario>;
-  /** Call steps shown unfolded on the chart. */
+  /** Call steps shown unfolded on the chart, by `callKey` of their path. */
   unfolded: Record<string, boolean>;
+  /** Call steps the chart has entered (double-click), outermost first: it shows the innermost one's scenario. */
+  dive: string[];
   workspace: WorkspaceInfo | null;
   /** A file whose scenario already exists, waiting for the user's choice. */
   pendingImport: { contents: string; name: string } | null;
@@ -222,7 +248,12 @@ export type StudioState = {
   setVariable(variable: VariableDef): Promise<void>;
   removeVariable(name: string): Promise<void>;
   loadCalled(): Promise<void>;
-  toggleUnfolded(stepId: string): void;
+  /** `key`: `callKey` of the call step's path. */
+  toggleUnfolded(key: string): void;
+  /** Shows the scenario a call step of the chart's current level runs, in place. */
+  enterCall(stepId: string): void;
+  /** Goes back up to `depth` entered calls (0: the open scenario itself). */
+  leaveCalls(depth: number): void;
   /** Moves neighbouring steps into a new scenario; returns true when done. */
   extract(stepIds: string[], name: string): Promise<boolean>;
   onExternalChange(scenarioId: string): Promise<void>;
@@ -583,6 +614,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       versions: [],
       called: {},
       unfolded: {},
+      dive: [],
       workspace: null,
       pendingImport: null,
       secrets: [],
@@ -713,6 +745,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             history: [],
             versions: [],
             called: {},
+            dive: [],
           });
           await Promise.all([get().loadHistory(), get().loadVersions(), get().loadCalled()]);
         } catch (e) {
@@ -764,12 +797,13 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       undo: async () => void (await mutate((id, rev) => api.undo(id, rev))),
       redo: async () => void (await mutate((id, rev) => api.redo(id, rev))),
 
+      // Picking a step of the open scenario brings the chart back up to it.
       select(selection) {
-        set({ selection });
+        set(selection ? { selection, dive: [] } : { selection });
       },
 
       goTo(stepId) {
-        set({ selection: { kind: "step", stepId }, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 } });
+        set({ selection: { kind: "step", stepId }, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 }, dive: [] });
       },
 
       stepBy(delta) {
@@ -851,22 +885,41 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async loadCalled() {
         const scenario = get().scenario;
         if (!scenario) return;
-        const ids = calledIds(scenario.steps ?? []).filter((id) => id !== scenario.id);
-        const pairs = await Promise.all(
-          ids.map((id) =>
-            api
-              .getScenario(id)
-              .then((s) => [id, s] as const)
-              .catch(() => null),
-          ),
-        );
+        // Calls inside called scenarios too, so the chart can enter them.
+        const called: Record<string, Scenario> = {};
+        const seen = new Set([scenario.id]);
+        let next = calledIds(scenario.steps ?? []);
+        while (next.length > 0) {
+          const ids = next.filter((id) => !seen.has(id));
+          ids.forEach((id) => seen.add(id));
+          const loaded = await Promise.all(ids.map((id) => api.getScenario(id).catch(() => null)));
+          next = [];
+          for (const callee of loaded) {
+            if (!callee) continue;
+            called[callee.id] = callee;
+            next.push(...calledIds(callee.steps ?? []));
+          }
+        }
         // Ignore a late answer for a scenario that is no longer open.
         if (get().scenario?.id !== scenario.id) return;
-        set({ called: Object.fromEntries(pairs.filter((p) => p !== null)) });
+        set({ called });
       },
 
-      toggleUnfolded(stepId) {
-        set((s) => ({ unfolded: { ...s.unfolded, [stepId]: !s.unfolded[stepId] } }));
+      toggleUnfolded(key) {
+        set((s) => ({ unfolded: { ...s.unfolded, [key]: !s.unfolded[key] } }));
+      },
+
+      enterCall(stepId) {
+        const { scenario, called, dive } = get();
+        const chain = diveChain(scenario, called, dive);
+        const path = [...dive.slice(0, chain.length), stepId];
+        if (diveChain(scenario, called, path).length !== path.length) return;
+        // The inspector edits the open scenario: nothing of it stays selected down here.
+        set({ dive: path, selection: null });
+      },
+
+      leaveCalls(depth) {
+        set((s) => ({ dive: s.dive.slice(0, Math.max(0, depth)) }));
       },
 
       async extract(stepIds, name) {
@@ -1006,12 +1059,13 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const path = callPathOf(env);
           if (path.length > 0) {
             // Inside a called scenario: its steps and variables are not the
-            // chart's. Steps directly inside a top-level call show when it is unfolded.
+            // chart's. They show when their call is unfolded or entered.
             const call = path[0]!;
-            const states = path.length === 1 ? { ...(run.inner[call] ?? {}) } : null;
-            if (env.type === "stepStarted" && states) states[env.stepId] = "running";
+            const key = callKey(path);
+            const states = { ...(run.inner[key] ?? {}) };
+            if (env.type === "stepStarted") states[env.stepId] = "running";
             if (env.type === "stepFinished") {
-              if (states) states[env.stepId] = env.outcome;
+              states[env.stepId] = env.outcome;
               // A failure reaches the call step itself and is logged there.
               if (human?.stepId === call) human = null;
             }
@@ -1020,7 +1074,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               human = { stepId: call, message: env.message };
               push("warn", `${t.waitingForYou}: ${env.message}`, call);
             }
-            if (states) run.inner = { ...run.inner, [call]: states };
+            run.inner = { ...run.inner, [key]: states };
             return { run, human, secretFix };
           }
           const change = asVariableChange(env);
@@ -1224,7 +1278,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setPaletteOpen(open) {
-        set({ paletteOpen: open });
+        // Steps are added to the open scenario: show it.
+        set(open ? { paletteOpen: open, dive: [] } : { paletteOpen: open });
       },
 
       async loadVersions() {

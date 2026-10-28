@@ -12,6 +12,7 @@ import {
   type Node,
   type NodeProps,
   NodeToolbar,
+  Panel,
   Position,
   ReactFlow,
   useReactFlow,
@@ -45,7 +46,7 @@ import {
 } from "../lib/nodeRows";
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence } from "../lib/sentence";
-import { revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
+import { callKey, diveChain, type DiveLevel, revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
@@ -57,6 +58,8 @@ import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 type CallView = {
   /** The call step itself. */
   stepId: string;
+  /** `callKey` of the call step's path from the open scenario. */
+  key: string;
   /** Id of the called scenario (empty when not chosen yet). */
   target: string;
   /** The called scenario, when it exists in this workspace. */
@@ -70,7 +73,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; breakpoint: boolean; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -391,7 +394,11 @@ function CallBar({ call }: { call: CallView }) {
   const count = call.callee ? outline(call.callee.steps ?? [], new Map()).length : 0;
   const button = "nodrag nopan rounded-[3px] px-1.5 leading-[18px] text-[11px] font-medium";
   return (
-    <div style={{ height: CALL_BAR_H }} className="flex items-center gap-1.5 border-t border-slate-100 px-3 text-[11px]">
+    <div
+      style={{ height: CALL_BAR_H }}
+      title={call.callee ? t.callEnterHint : undefined}
+      className="flex items-center gap-1.5 border-t border-slate-100 px-3 text-[11px]"
+    >
       {call.target === "" ? (
         <span className="text-slate-400">右のパネルで呼ぶシナリオを選びます</span>
       ) : missing ? (
@@ -407,7 +414,7 @@ function CallBar({ call }: { call: CallView }) {
             aria-expanded={call.unfolded}
             onClick={(e) => {
               e.stopPropagation();
-              toggle(call.stepId);
+              toggle(call.key);
             }}
             data-call-toggle
           >
@@ -494,7 +501,7 @@ function StepNode({ data }: StepNodeProps) {
         </NodeToolbar>
       )}
       <FlowHandles />
-      <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} />
+      {!data.readOnly && <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} />}
       {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
         <span
           className={`absolute top-full left-1 z-10 mt-1.5 rounded-[4px] px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
@@ -622,6 +629,19 @@ function useBringIntoView() {
   );
 }
 
+/** Inside an entered call: keeps its running step in view while a run is followed. */
+function FollowInside({ states }: { states: Record<string, StepRunState> }) {
+  const latest = useBringIntoView();
+  const bring = useRef(latest);
+  bring.current = latest;
+  const follow = useStudio((s) => s.run?.status === "running" && s.followRun);
+  const running = follow ? Object.entries(states).find(([, state]) => state === "running")?.[0] : undefined;
+  useEffect(() => {
+    if (running) bring.current(running);
+  }, [running]);
+  return null;
+}
+
 /** Follows keyboard / outline jumps, and the running step while a run is followed. */
 function Follow() {
   const latest = useBringIntoView();
@@ -647,11 +667,76 @@ function Follow() {
   return null;
 }
 
+/**
+ * Where the chart is when it has entered calls: the open scenario, then each
+ * called one, to click back up to; and a way to open the shown one for editing.
+ */
+function DiveBar({ root, chain }: { root: Scenario; chain: DiveLevel[] }) {
+  const leave = useStudio((s) => s.leaveCalls);
+  const open = useStudio((s) => s.open);
+  const shown = chain.at(-1)!.scenario;
+  const levels = [root, ...chain.map((level) => level.scenario)];
+  return (
+    // As wide as its words: a centred panel would otherwise only get half the canvas.
+    <div className="flex w-max max-w-[min(760px,calc(100cqw-32px))] items-center gap-1 rounded-[4px] border border-slate-200 bg-sheet py-1 pr-1 pl-1 text-[12px] shadow-raised">
+      <button
+        type="button"
+        title={t.diveUp}
+        aria-label={t.diveUp}
+        onClick={() => leave(chain.length - 1)}
+        className="shrink-0 rounded-[3px] px-1.5 leading-[22px] text-slate-600 hover:bg-slate-100"
+      >
+        ↑
+      </button>
+      <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-1">
+        {levels.map((level, depth) => (
+          <span key={depth} className="flex max-w-[14em] min-w-0 items-center gap-1">
+            {depth > 0 && <span className="shrink-0 text-slate-400">›</span>}
+            {depth < chain.length ? (
+              <button
+                type="button"
+                onClick={() => leave(depth)}
+                className="truncate rounded-[3px] px-1 leading-[22px] text-brand-600 hover:bg-slate-100 hover:underline"
+              >
+                {level.name}
+              </button>
+            ) : (
+              <span aria-current="page" className="truncate px-1 font-semibold">
+                {level.name}
+              </span>
+            )}
+          </span>
+        ))}
+      </nav>
+      <span title={t.diveReadOnly} className="ml-1 shrink-0 rounded-[3px] bg-slate-100 px-1.5 text-[11px] leading-[20px] text-slate-500">
+        {t.diveViewOnly}
+      </span>
+      <button
+        type="button"
+        onClick={() => void open(shown.id)}
+        title={t.diveOpen}
+        className="ml-1 shrink-0 rounded-[3px] bg-ink px-2 leading-[22px] text-[11px] font-medium text-paper hover:bg-slate-700"
+      >
+        開く ↗
+      </button>
+    </div>
+  );
+}
+
 const nodeTypes = { step: StepNode, slot: SlotNode };
 const NO_BREAKPOINTS: string[] = [];
+const NO_STATES: Record<string, StepRunState> = {};
 
 export function FlowCanvas() {
-  const scenario = useStudio((s) => s.scenario);
+  const root = useStudio((s) => s.scenario);
+  const called = useStudio((s) => s.called);
+  const dive = useStudio((s) => s.dive);
+  const enterCall = useStudio((s) => s.enterCall);
+  // Entered calls show their scenario here, read-only; edits stay with the open one.
+  const chain = useMemo(() => diveChain(root, called, dive), [root, called, dive]);
+  const path = useMemo(() => chain.map((level) => level.stepId), [chain]);
+  const inside = chain.length > 0;
+  const scenario = inside ? chain.at(-1)!.scenario : root;
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
   const validation = useStudio((s) => s.validation);
@@ -681,7 +766,6 @@ export function FlowCanvas() {
 
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const wrapper = useRef<HTMLDivElement>(null);
-  const called = useStudio((s) => s.called);
   const unfolded = useStudio((s) => s.unfolded);
   // What each call node shows, and the room its unfolded steps take.
   const calls = useMemo(() => {
@@ -691,10 +775,12 @@ export function FlowCanvas() {
         if (step.type === CALL && step.id) {
           const target = typeof step.params?.scenario === "string" ? step.params.scenario : "";
           const callee = called[target];
-          const open = Boolean(unfolded[step.id] && callee);
+          const key = callKey([...path, step.id]);
+          const open = Boolean(unfolded[key] && callee);
           const all = open && callee ? outline(callee.steps ?? [], defs) : [];
           map.set(step.id, {
             stepId: step.id,
+            key,
             target,
             callee,
             unfolded: open,
@@ -707,7 +793,7 @@ export function FlowCanvas() {
     };
     walk(scenario?.steps ?? []);
     return map;
-  }, [scenario, called, unfolded, defs]);
+  }, [scenario, called, unfolded, defs, path]);
   const extra = useMemo(
     () =>
       new Map(
@@ -722,11 +808,12 @@ export function FlowCanvas() {
 
   const issueCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const issue of validation?.issues ?? []) {
+    for (const issue of inside ? [] : (validation?.issues ?? [])) {
       if (issue.stepId && issue.severity === "error") counts.set(issue.stepId, (counts.get(issue.stepId) ?? 0) + 1);
     }
     return counts;
-  }, [validation]);
+  }, [validation, inside]);
+  const states = inside ? (run?.inner[callKey(path)] ?? NO_STATES) : (run?.steps ?? NO_STATES);
 
   const nodes: Node[] = layout.nodes.map((n) => {
     if (n.data.kind === "step") {
@@ -736,19 +823,21 @@ export function FlowCanvas() {
         draggable: false,
         data: {
           ...n.data,
-          runState: run?.steps[id],
-          breakpoint: breakpoints.includes(id),
-          pausedHere: run?.pause?.stepId === id,
+          runState: states[id],
+          readOnly: inside,
+          breakpoint: !inside && breakpoints.includes(id),
+          pausedHere: !inside && run?.pause?.stepId === id,
           issueCount: issueCounts.get(id) ?? 0,
-          selected: selection?.kind === "step" && selection.stepId === id,
-          byAi: !reviewing && reviews.has(id),
-          reviews: reviewing ? [] : (reviews.get(id) ?? []),
-          diff: reviewing ? diffs.get(id) : undefined,
-          note: reviewing ? notes.get(id) : undefined,
+          selected: !inside && selection?.kind === "step" && selection.stepId === id,
+          byAi: !inside && !reviewing && reviews.has(id),
+          reviews: inside || reviewing ? [] : (reviews.get(id) ?? []),
+          diff: !inside && reviewing ? diffs.get(id) : undefined,
+          note: !inside && reviewing ? notes.get(id) : undefined,
           vars,
-          run: run ? { changes: run.changes, starts: run.starts } : NO_RUN,
+          // Values are recorded for the open scenario's variables only.
+          run: run && !inside ? { changes: run.changes, starts: run.starts } : NO_RUN,
           defs,
-          call: calls.has(id) ? { ...calls.get(id)!, states: run?.inner[id] ?? {} } : undefined,
+          call: calls.has(id) ? { ...calls.get(id)!, states: run?.inner[calls.get(id)!.key] ?? NO_STATES } : undefined,
         },
       };
     }
@@ -758,7 +847,7 @@ export function FlowCanvas() {
       draggable: false,
       data: {
         ...slot,
-        selected: selection?.kind === "slot" && selection.parentId === slot.parentId && selection.block === slot.block,
+        selected: !inside && selection?.kind === "slot" && selection.parentId === slot.parentId && selection.block === slot.block,
       },
     };
   });
@@ -800,7 +889,7 @@ export function FlowCanvas() {
   }));
   edges.push(...linkEdges);
 
-  if (!scenario) {
+  if (!scenario || !root) {
     return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
         <img src="/mark.png" alt="" className="h-16 w-16 opacity-30 grayscale" />
         {t.noSelection}
@@ -809,7 +898,7 @@ export function FlowCanvas() {
 
   return (
     <ReactFlow
-      key={scenario.id}
+      key={`${root.id}/${callKey(path)}`}
       className="canvas-bg"
       colorMode={theme}
       nodes={nodes}
@@ -828,25 +917,39 @@ export function FlowCanvas() {
         const fitH = (box.clientHeight - pad) / bounds.height;
         const zoom = Math.max(Math.min(fitW, fitH, 1), MIN_READABLE_ZOOM);
         const x = zoom > fitW ? pad / 2 : (box.clientWidth - bounds.width * zoom) / 2;
-        const y = pad / 2;
+        // Inside a call, clear of the bar that says where the chart is.
+        const y = inside ? 104 : pad / 2;
         void flow.setViewport({ x: x - bounds.x * zoom, y: y - bounds.y * zoom, zoom });
 
       }}
       minZoom={0.2}
       onNodeClick={(_, node) => {
+        if (inside) return;
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
       onPaneClick={() => select(null)}
+      onNodeDoubleClick={(_, node) => {
+        const data = node.data as StepNodeData | SlotNodeData;
+        if (data.kind === "step" && data.step.id && calls.get(data.step.id)?.callee) enterCall(data.step.id);
+      }}
+      // Double-clicking a call enters it; zooming there would only get in the way.
+      zoomOnDoubleClick={false}
       // Dragging the view during a run means the person wants to look elsewhere.
       onMoveStart={(event) => event && run?.status === "running" && setFollowRun(false)}
       onNodeMouseEnter={(_, node) => node.type === "step" && focus.set(node.id)}
       onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="var(--color-slate-300)" />
-      <Follow />
-      {reviewing && <FocusOn id={layout.nodes.find((n) => diffs.has(n.id))?.id} />}
+      {inside ? <FollowInside states={states} /> : <Follow />}
+      {inside && (
+        // Below the outline and view buttons.
+        <Panel position="top-center" style={{ marginTop: 52 }}>
+          <DiveBar root={root} chain={chain} />
+        </Panel>
+      )}
+      {!inside && reviewing && <FocusOn id={layout.nodes.find((n) => diffs.has(n.id))?.id} />}
       <Controls showInteractive={false} />
     </ReactFlow>
   );

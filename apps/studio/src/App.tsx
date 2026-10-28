@@ -328,6 +328,7 @@ function navigate(e: KeyboardEvent, state: StudioState) {
     e.preventDefault();
     state.changeBy(e.shiftKey ? -1 : 1);
   } else if (key === "Escape" && state.selection) state.select(null);
+  else if ((key === "Escape" || key === "Backspace") && state.dive.length > 0) state.leaveCalls(state.dive.length - 1);
   else if (key === "o") state.setOutlineOpen(!state.outlineOpen);
 }
 
