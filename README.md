@@ -97,6 +97,8 @@ Claude Code ならプラグインを入れるだけです（`shikigami` コマ�
 /plugin install shikigami --marketplace d-shiina/shikigami
 ```
 
+Studio をインストールしている場合は、Studio と同じフォルダーにある `shikigami.exe` を登録すると Studio の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Studio 右上のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/release.md)）。
+
 MCP サーバーだけを登録する場合は `claude mcp add shikigami -- shikigami mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p shikigami-cli` で更新されます）。
 
 ```powershell

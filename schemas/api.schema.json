@@ -33,6 +33,30 @@
     },
     "error_payload": {
       "$ref": "#/$defs/ErrorPayload"
+    },
+    "new_version": {
+      "$ref": "#/$defs/NewVersion"
+    },
+    "scenario_version": {
+      "$ref": "#/$defs/ScenarioVersion"
+    },
+    "version_summary": {
+      "$ref": "#/$defs/VersionSummary"
+    },
+    "scenario_diff": {
+      "$ref": "#/$defs/ScenarioDiff"
+    },
+    "scenario_bundle": {
+      "$ref": "#/$defs/ScenarioBundle"
+    },
+    "import_outcome": {
+      "$ref": "#/$defs/ImportOutcome"
+    },
+    "import_conflict": {
+      "$ref": "#/$defs/ImportConflict"
+    },
+    "workspace_info": {
+      "$ref": "#/$defs/WorkspaceInfo"
     }
   },
   "required": [
@@ -45,7 +69,15 @@
     "step_type_def",
     "history_entry",
     "change_event",
-    "error_payload"
+    "error_payload",
+    "new_version",
+    "scenario_version",
+    "version_summary",
+    "scenario_diff",
+    "scenario_bundle",
+    "import_outcome",
+    "import_conflict",
+    "workspace_info"
   ],
   "$defs": {
     "Scenario": {
@@ -1116,6 +1148,430 @@
       "required": [
         "code",
         "message"
+      ]
+    },
+    "NewVersion": {
+      "description": "Input for creating a version.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Short name, e.g. \"v1\" or \"本番リリース\".",
+          "type": "string"
+        },
+        "note": {
+          "description": "What changed or why this version matters.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "ScenarioVersion": {
+      "description": "One named snapshot of a scenario.",
+      "type": "object",
+      "properties": {
+        "number": {
+          "description": "Per-scenario sequence number (1, 2, …). This is how versions are referenced.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "uid": {
+          "description": "Globally unique ID; keeps versions apart when bundles are imported.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "$ref": "#/$defs/Actor"
+        },
+        "revision": {
+          "description": "Scenario revision the snapshot was taken from.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "scenario": {
+          "$ref": "#/$defs/Scenario"
+        }
+      },
+      "required": [
+        "number",
+        "uid",
+        "name",
+        "createdAt",
+        "createdBy",
+        "revision",
+        "scenario"
+      ]
+    },
+    "VersionSummary": {
+      "description": "Listing entry for versions (no scenario body).",
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "createdBy": {
+          "$ref": "#/$defs/Actor"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stepCount": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "number",
+        "name",
+        "createdAt",
+        "createdBy",
+        "revision",
+        "stepCount"
+      ]
+    },
+    "ScenarioDiff": {
+      "description": "Differences from `from` to `to`.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/DiffSide"
+        },
+        "to": {
+          "$ref": "#/$defs/DiffSide"
+        },
+        "identical": {
+          "description": "True when the contents are the same (names, variables, steps, settings).",
+          "type": "boolean"
+        },
+        "scenario": {
+          "description": "Scenario-level fields: name, description, tags, settings.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldChange"
+          }
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VariableChange"
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StepChange"
+          }
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "identical",
+        "scenario",
+        "variables",
+        "steps"
+      ]
+    },
+    "DiffSide": {
+      "description": "Which side of a comparison: a version number, or the current content.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "Version number; absent for the current content.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "label": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "label",
+        "revision"
+      ]
+    },
+    "FieldChange": {
+      "description": "One changed field: `name`, `params.url`, `settings`, …",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "before": true,
+        "after": true
+      },
+      "required": [
+        "field"
+      ]
+    },
+    "VariableChange": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DiffKind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldChange"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ]
+    },
+    "DiffKind": {
+      "type": "string",
+      "enum": [
+        "added",
+        "removed",
+        "changed",
+        "moved"
+      ]
+    },
+    "StepChange": {
+      "description": "One step-level difference. Added and removed subtrees are reported once,\nat their top step (`stepCount` includes the children).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DiffKind"
+        },
+        "stepId": {
+          "$ref": "#/$defs/StepId"
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "fields": {
+          "description": "Changed fields (`changed` only).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldChange"
+          }
+        },
+        "from": {
+          "description": "Location in the older content (`removed`, `moved`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to": {
+          "description": "Location in the newer content (`added`, `moved`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stepCount": {
+          "description": "Steps in the subtree (`added`, `removed`).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "kind",
+        "stepId",
+        "type"
+      ]
+    },
+    "StepLocation": {
+      "description": "Where a step sits: top level (`parentId` absent) or a parent's block.",
+      "type": "object",
+      "properties": {
+        "parentId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "block": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "index"
+      ]
+    },
+    "ScenarioBundle": {
+      "description": "File format for moving a scenario (and its versions) between workspaces.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "description": "Always `shikigami.scenarioBundle`.",
+          "type": "string"
+        },
+        "formatVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "scenario": {
+          "$ref": "#/$defs/Scenario"
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScenarioVersion"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "format",
+        "formatVersion",
+        "exportedAt",
+        "scenario"
+      ]
+    },
+    "ImportOutcome": {
+      "description": "Result of importing a bundle or scenario file.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/ImportMode"
+        },
+        "versionsAdded": {
+          "description": "Versions from the bundle that were added (already present ones are skipped).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "scenario": {
+          "$ref": "#/$defs/Scenario"
+        },
+        "validation": {
+          "description": "Full validation of the new revision. Drafts may contain errors;\nthey must be fixed before the scenario can run.",
+          "$ref": "#/$defs/ValidationReport"
+        },
+        "canUndo": {
+          "type": "boolean"
+        },
+        "canRedo": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mode",
+        "versionsAdded",
+        "scenario",
+        "validation",
+        "canUndo",
+        "canRedo"
+      ]
+    },
+    "ImportMode": {
+      "type": "string",
+      "enum": [
+        "created",
+        "updated",
+        "copied"
+      ]
+    },
+    "ImportConflict": {
+      "description": "What to do when an imported scenario's ID already exists.",
+      "oneOf": [
+        {
+          "description": "Apply the imported content to the existing scenario (one undoable\nedit) and add the bundle's versions that are not there yet.",
+          "type": "string",
+          "const": "update"
+        },
+        {
+          "description": "Import as a new scenario with a new ID.",
+          "type": "string",
+          "const": "copy"
+        }
+      ]
+    },
+    "WorkspaceInfo": {
+      "description": "Where a workspace keeps its data, for display and diagnostics.",
+      "type": "object",
+      "properties": {
+        "root": {
+          "type": "string"
+        },
+        "localRoot": {
+          "description": "Undo history, run records and audit logs of this PC.",
+          "type": "string"
+        },
+        "shared": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "root",
+        "localRoot",
+        "shared"
       ]
     }
   },

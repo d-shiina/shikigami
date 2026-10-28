@@ -1,0 +1,61 @@
+name: Release
+
+# Pushing a tag such as v0.2.0 builds the signed Windows installers, publishes
+# them as a GitHub Release with latest.json, and installed Studios pick the
+# update up on their next launch. See docs/release.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  studio:
+    name: Studio (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches the workspace version
+        shell: bash
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The installer ships the CLI (MCP server) next to Studio.
+      - run: pnpm studio:bundle-cli
+      - run: node apps/studio/scripts/set-pubkey.mjs
+        env:
+          TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/studio
+          tauriScript: pnpm tauri
+          args: --config src-tauri/tauri.release.gen.json
+          tagName: v__VERSION__
+          releaseName: Shikigami Studio v__VERSION__
+          releaseBody: See the commits since the previous release.
+          releaseDraft: false
+          prerelease: false
+          updaterJsonPreferNsis: true

@@ -148,6 +148,33 @@ async fn ai_builds_validates_and_runs_a_scenario() {
         .await;
     assert_eq!(more["events"], json!([]));
 
+    let sums = h
+        .ok(
+            "get_run_logs",
+            json!({ "runId": run_id, "variable": "sum" }),
+        )
+        .await;
+    let trace: Vec<(Value, Option<&str>)> = sums["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            assert_eq!(e["type"], "variableChanged");
+            (e["value"].clone(), e["stepId"].as_str())
+        })
+        .collect();
+    let set_id = added["scenario"]["steps"][0]["blocks"]["body"][0]["id"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        trace,
+        [
+            (json!(0), None),
+            (json!(10), Some(set_id)),
+            (json!(30), Some(set_id)),
+        ]
+    );
+
     let status = h.ok("get_run_status", json!({ "runId": run_id })).await;
     assert_eq!(status["active"], false);
     assert_eq!(status["report"]["status"], "succeeded");
@@ -310,7 +337,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 24);
+    assert_eq!(tools.len(), 31);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -377,6 +404,71 @@ async fn test_step_runs_one_step_without_touching_scenarios() {
     assert_eq!(e["code"], "ADAPTER_UNAVAILABLE");
     let scenarios = h.ok("list_scenarios", json!({})).await;
     assert_eq!(scenarios["scenarios"].as_array().map(Vec::len), Some(0));
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn versions_diff_restore_and_bundle_round_trip() {
+    let h = start(ServerOptions::default()).await;
+    let created = h
+        .ok(
+            "create_scenario",
+            json!({
+                "name": "版テスト",
+                "steps": [{ "id": "stp_a", "type": "log.message", "params": { "message": "a" } }]
+            }),
+        )
+        .await;
+    let id = created["scenario"]["id"].as_str().unwrap().to_owned();
+    let v = h
+        .ok(
+            "create_version",
+            json!({ "scenarioId": id, "name": "v1", "note": "最初の版", "expectedRevision": 1 }),
+        )
+        .await;
+    assert_eq!(v["version"]["number"], 1);
+
+    h.ok(
+        "update_step",
+        json!({ "scenarioId": id, "stepId": "stp_a", "patch": { "params": { "message": "b" } } }),
+    )
+    .await;
+    // Defaults: latest version vs. current content.
+    let diff = h.ok("diff_versions", json!({ "scenarioId": id })).await;
+    assert_eq!(diff["from"]["version"], 1);
+    assert_eq!(diff["steps"][0]["kind"], "changed");
+    assert_eq!(diff["steps"][0]["fields"][0]["field"], "params.message");
+
+    let restored = h
+        .ok("restore_version", json!({ "scenarioId": id, "number": 1 }))
+        .await;
+    assert_eq!(restored["scenario"]["steps"][0]["params"]["message"], "a");
+    assert_eq!(restored["canUndo"], true);
+
+    let listed = h.ok("list_versions", json!({ "scenarioId": id })).await;
+    assert_eq!(listed["versions"][0]["note"], "最初の版");
+    let got = h
+        .ok("get_version", json!({ "scenarioId": id, "number": 1 }))
+        .await;
+    assert_eq!(got["scenario"]["id"], id.as_str());
+
+    let exported = h.ok("export_scenario", json!({ "scenarioId": id })).await;
+    let bundle = exported["bundle"].clone();
+    assert_eq!(bundle["format"], "shikigami.scenarioBundle");
+    let (is_error, conflict) = h
+        .call("import_scenario", json!({ "bundle": bundle.clone() }))
+        .await;
+    assert!(is_error);
+    assert_eq!(conflict["code"], "IMPORT_CONFLICT");
+    let copy = h
+        .ok(
+            "import_scenario",
+            json!({ "bundle": bundle, "onConflict": "copy" }),
+        )
+        .await;
+    assert_eq!(copy["mode"], "copied");
+    assert_eq!(copy["versionsAdded"], 1);
+    assert_ne!(copy["scenario"]["id"], id.as_str());
     h.client.cancel().await.unwrap();
 }
 
