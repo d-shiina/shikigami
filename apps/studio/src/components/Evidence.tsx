@@ -230,7 +230,7 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-6" onClick={onClose}>
       <div
         lang="ja"
-        className="flex max-h-full w-[min(1100px,100%)] flex-col overflow-hidden rounded-[4px] bg-sheet shadow-lifted"
+        className="flex max-h-full w-[min(1100px,100%)] flex-col overflow-hidden rounded-[4px] bg-sheet shadow-dialog"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5">

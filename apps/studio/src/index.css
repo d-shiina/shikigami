@@ -34,24 +34,24 @@
   --color-accent-500: #f5872a;
 
   /*
-   * 式神 are paper: every surface is a sheet laid on the desk (paper). A
-   * sheet shows the edge of the one under it, toolbars and panels included.
-   * Only what is picked up for a moment (the selected step, menus, dialogs)
-   * shows two edges and casts a deeper shadow.
+   * 式神 are paper, laid out like Material Design: every surface is a sheet
+   * at some height above the desk (paper), and its shadow says how high.
+   *   sheet  1dp   nodes, cards, panels resting on the desk
+   *   raised 4dp   toolbars and the outline floating over the chart
+   *   lifted 8dp   what is picked up: the selected step, menus, popovers
+   *   dialog 24dp  dialogs and the command palette, above everything
    * Corners stay nearly square.
    */
-  --color-edge: #d3dce7;
   --radius-xs: 2px;
   --radius-sm: 3px;
   --radius-md: 3px;
   --radius-lg: 4px;
   --radius-xl: 4px;
   --radius-2xl: 4px;
-  --shadow-sheet:
-    3px 3px 0 -1px var(--color-sheet), 3px 3px 0 0 var(--color-edge), 0 8px 14px -10px rgb(15 27 42 / 0.3);
-  --shadow-lifted:
-    4px 4px 0 -1px var(--color-sheet), 4px 4px 0 0 var(--color-edge), 8px 8px 0 -1px var(--color-sheet),
-    8px 8px 0 0 var(--color-edge), 0 20px 34px -14px rgb(15 27 42 / 0.4);
+  --shadow-sheet: 0 1px 3px rgb(15 27 42 / 0.12), 0 1px 2px rgb(15 27 42 / 0.16);
+  --shadow-raised: 0 4px 8px rgb(15 27 42 / 0.12), 0 2px 4px rgb(15 27 42 / 0.12);
+  --shadow-lifted: 0 10px 20px rgb(15 27 42 / 0.16), 0 6px 6px rgb(15 27 42 / 0.14);
+  --shadow-dialog: 0 19px 38px rgb(15 27 42 / 0.28), 0 15px 12px rgb(15 27 42 / 0.18);
 }
 
 /*
@@ -65,7 +65,6 @@
   --color-paper: #0b1420;
   --color-sheet: #131e2c;
   --color-ink: #e4ebf3;
-  --color-edge: #2a3a50;
 
   --color-slate-50: #182434;
   --color-slate-100: #1f2d40;
@@ -207,5 +206,5 @@ textarea,
   border: 1px solid var(--color-slate-200);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  box-shadow: var(--shadow-sheet);
+  box-shadow: var(--shadow-raised);
 }

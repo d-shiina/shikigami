@@ -73,7 +73,7 @@ export function CommandPalette() {
       onMouseDown={() => setOpen(false)}
     >
       <div
-        className="w-[520px] overflow-hidden rounded-[4px] border border-slate-300 bg-sheet shadow-lifted"
+        className="w-[520px] overflow-hidden rounded-[4px] border border-slate-300 bg-sheet shadow-dialog"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">

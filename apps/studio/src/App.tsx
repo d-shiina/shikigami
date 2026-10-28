@@ -87,7 +87,7 @@ function SidePanel() {
   ];
   return (
     // A sheet laid over the edge of the desk.
-    <aside className="relative z-[1] flex h-full flex-col border-l border-slate-200 bg-sheet shadow-[-2px_0_0_-1px_var(--color-sheet),-2px_0_0_0_var(--color-edge),-10px_0_18px_-14px_rgb(15_27_42/.35)]">
+    <aside className="relative z-[1] flex h-full flex-col border-l border-slate-200 bg-sheet shadow-sheet">
       <nav className="flex border-b border-slate-200 px-2">
         {tabs.map(([key, label, count]) => (
           <button
@@ -140,7 +140,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => 
     ["story", t.viewStory],
   ];
   return (
-    <div className="absolute top-3 right-4 flex overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-xs shadow-sheet">
+    <div className="absolute top-3 right-4 flex overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-xs shadow-raised">
       {options.map(([key, label]) => (
         <button
           key={key}

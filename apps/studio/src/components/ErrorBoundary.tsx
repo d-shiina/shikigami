@@ -24,7 +24,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
     return (
       <div className="canvas-bg flex h-full items-center justify-center p-8">
-        <div className="w-[480px] space-y-3 rounded-[4px] border border-shu-100 bg-sheet p-6 shadow-lifted">
+        <div className="w-[480px] space-y-3 rounded-[4px] border border-shu-100 bg-sheet p-6 shadow-dialog">
           <div className="flex items-center gap-2">
             <img src="/mark.png" alt="" className="h-6 w-6" />
             <h1 className="text-lg font-semibold">画面の表示中にエラーが起きました</h1>
