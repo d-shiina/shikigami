@@ -1056,3 +1056,47 @@ async fn concurrent_for_each_reports_each_iteration() {
     );
     assert!(events.windows(2).all(|w| w[0].seq + 1 == w[1].seq));
 }
+
+#[tokio::test]
+async fn variable_changes_mask_secrets_copied_anywhere() {
+    let mut s = scenario(vec![
+        set("pin_copy", "pin"),
+        set("user_copy", "login.user"),
+        set("id_copy", "login.id"),
+    ]);
+    let mut pin = var("pin", VarType::Number, VarDirection::Input, None);
+    pin.secret = true;
+    let mut login = var("login", VarType::Object, VarDirection::Input, None);
+    login.secret = true;
+    // Declared before the secrets it contains.
+    s.variables = vec![
+        var("header", VarType::String, VarDirection::Input, None),
+        pin,
+        login,
+    ];
+    let (report, events) = run(
+        &Runtime::new(),
+        s,
+        json!({
+            "header": "Bearer s3cr3t-token",
+            "pin": 4821,
+            "login": { "user": "s3cr3t-token", "id": 7 },
+        }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(
+        changes(&events),
+        [
+            change("header", json!("Bearer ***"), None),
+            change("pin", json!("***"), None),
+            change("login", json!("***"), None),
+            change("pin_copy", json!("***"), Some("s1")),
+            change("user_copy", json!("***"), Some("s2")),
+            // Too short to mask by substring without blanking other text.
+            change("id_copy", json!(7), Some("s3")),
+        ]
+    );
+    let all = serde_json::to_string(&events).expect("json");
+    assert!(!all.contains("s3cr3t") && !all.contains("4821"));
+}

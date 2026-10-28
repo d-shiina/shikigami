@@ -296,6 +296,7 @@ fn init_variables(
             ));
         }
     }
+    let mut values = Vec::with_capacity(scenario.variables.len());
     for var in &scenario.variables {
         let value = match inputs.get(&var.name) {
             Some(value) if var.direction.is_input() => {
@@ -318,6 +319,16 @@ fn init_variables(
                 None => Value::Null,
             },
         };
+        values.push((var, value));
+    }
+    // Know every secret before the first value is reported, so a secret
+    // copied into an earlier-declared input is masked too.
+    for (var, value) in &values {
+        if var.secret {
+            executor.emitter.add_secret(value);
+        }
+    }
+    for (var, value) in values {
         executor.set_var(&var.name, value, None);
     }
     Ok(())

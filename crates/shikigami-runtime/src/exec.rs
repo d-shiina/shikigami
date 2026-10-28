@@ -32,6 +32,7 @@ const MASK: &str = "***";
 /// Longest value (in characters, as JSON text for arrays and objects)
 /// recorded in full by `variableChanged`.
 const VALUE_PREVIEW_CHARS: usize = 1000;
+const MIN_SECRET_PART_CHARS: usize = 4;
 
 // ---------------------------------------------------------------------------
 // Event emission with secret masking
@@ -69,8 +70,26 @@ impl Emitter {
     }
 
     pub(crate) fn add_secret(&self, value: &Value) {
+        self.add_secret_part(value, 0);
+    }
+
+    /// Each part of a structured secret is secret too, so copying one field
+    /// elsewhere stays masked. Parts shorter than `MIN_SECRET_PART_CHARS`
+    /// (ids, flags, ...) are left out: masking is by substring, and they
+    /// would blank unrelated text.
+    fn add_secret_part(&self, value: &Value, depth: usize) {
+        match value {
+            Value::Array(items) => items
+                .iter()
+                .for_each(|v| self.add_secret_part(v, depth + 1)),
+            Value::Object(map) => map
+                .values()
+                .for_each(|v| self.add_secret_part(v, depth + 1)),
+            Value::Null | Value::Bool(_) => return,
+            _ => {}
+        }
         let text = expr::to_display(value);
-        if text.is_empty() {
+        if text.is_empty() || (depth > 0 && text.chars().count() < MIN_SECRET_PART_CHARS) {
             return;
         }
         if let Ok(mut secrets) = self.inner.secrets.write()
@@ -91,9 +110,20 @@ impl Emitter {
             .fold(text.to_owned(), |acc, s| acc.replace(s.as_str(), MASK))
     }
 
+    fn is_secret(&self, text: &str) -> bool {
+        self.inner
+            .secrets
+            .read()
+            .is_ok_and(|secrets| secrets.iter().any(|s| s == text))
+    }
+
     pub(crate) fn mask_value(&self, value: &Value) -> Value {
         match value {
             Value::String(s) => Value::String(self.mask(s)),
+            // A secret number (a PIN, ...) copied as a number.
+            Value::Number(_) if self.is_secret(&expr::to_display(value)) => {
+                Value::String(MASK.into())
+            }
             Value::Array(items) => Value::Array(items.iter().map(|v| self.mask_value(v)).collect()),
             Value::Object(map) => Value::Object(
                 map.iter()
