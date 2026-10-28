@@ -125,6 +125,8 @@ export function SecretsDialog() {
   const secrets = useStudio((s) => s.secrets);
   const keyLocation = useStudio((s) => s.secretKeyLocation);
   const removeSecret = useStudio((s) => s.removeSecret);
+  const keyMissing = useStudio((s) => s.secretKeyMissing);
+  const resetSecrets = useStudio((s) => s.resetSecrets);
   const [editing, setEditing] = useState<{ draft: Draft; isNew: boolean } | null>(null);
   if (!open) return null;
 
@@ -152,7 +154,23 @@ export function SecretsDialog() {
         <p className="mb-1 text-xs text-slate-600">{t.secretsIntro}</p>
         {keyLocation && <p className="mb-4 text-[11px] text-slate-400">{t.secretKeyNote(keyLocation)}</p>}
 
-        {editing ? (
+        {keyMissing ? (
+          <div className="space-y-2 rounded border border-shu-600/40 bg-shu-600/5 p-3 text-sm">
+            <p>{t.secretKeyMissing}</p>
+            <ul className="text-xs text-slate-500">
+              {secrets.map((s) => (
+                <li key={s.name}>{s.name}</li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="rounded bg-ink px-3 py-1 text-sm text-paper"
+              onClick={() => window.confirm(t.secretConfirmReset) && void resetSecrets()}
+            >
+              {t.secretReset}
+            </button>
+          </div>
+        ) : editing ? (
           <SecretForm
             key={editing.draft.name}
             initial={editing.draft}

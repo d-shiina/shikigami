@@ -84,9 +84,10 @@ export const api = {
     call<string>("run_scenario", { id, inputs }),
   stopRun: (runId: string) => call<void>("stop_run", { runId }),
   runStatus: (runId: string) => call<RunSnapshot | null>("run_status", { runId }),
-  listSecrets: () => call<{ secrets: SecretInfo[]; keyLocation: string }>("list_secrets"),
+  listSecrets: () => call<{ secrets: SecretInfo[]; keyLocation: string; keyMissing: boolean }>("list_secrets"),
   setSecret: (input: SecretInput) => call<SecretInfo>("set_secret", { input }),
   removeSecret: (name: string) => call<void>("remove_secret", { name }),
+  resetSecrets: () => call<number>("reset_secrets"),
   forgetLogin: (session: string) => call<boolean>("forget_login", { session }),
 };
 

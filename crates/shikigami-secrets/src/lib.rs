@@ -15,7 +15,6 @@ mod keys;
 mod totp;
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -35,6 +34,7 @@ pub use keys::{Key, KeyStore, MemoryKeyStore, platform_key_store};
 
 const VAULT_FILE: &str = "vault.json";
 const SESSIONS_DIR: &str = "sessions";
+const LOCK_FILE: &str = ".lock";
 
 /// A secret as Studio and the CLI list it (no password or TOTP key).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -125,8 +125,6 @@ struct Values {
 pub struct Vault {
     dir: PathBuf,
     keys: Box<dyn KeyStore>,
-    // Serialises read-modify-write within this process.
-    lock: Mutex<()>,
 }
 
 impl std::fmt::Debug for Vault {
@@ -162,7 +160,6 @@ impl Vault {
         Self {
             dir: workspace_root.join("secrets"),
             keys,
-            lock: Mutex::new(()),
         }
     }
 
@@ -210,8 +207,8 @@ impl Vault {
 
     /// Registers a new secret or updates one (fields left `None` are kept).
     pub fn set(&self, input: SecretInput) -> Result<SecretInfo, SecretError> {
-        let _guard = self.lock.lock().map_err(io_error)?;
         secret::check_name(&input.name).map_err(|m| SecretError::new("INVALID_SECRET_NAME", m))?;
+        let _guard = self.lock()?;
         let mut file = self.read()?;
         let key = self.key(&file, true)?;
         if file.id.is_empty() {
@@ -291,7 +288,7 @@ impl Vault {
     }
 
     pub fn remove(&self, name: &str) -> Result<(), SecretError> {
-        let _guard = self.lock.lock().map_err(io_error)?;
+        let _guard = self.lock()?;
         let mut file = self.read()?;
         let before = file.entries.len();
         file.entries.retain(|e| e.name != name);
@@ -310,7 +307,53 @@ impl Vault {
         }
     }
 
+    /// True when secrets are registered but their key is not on this PC /
+    /// Windows user (the workspace was copied from elsewhere). The names are
+    /// still listed; the values can only be registered again after
+    /// [`Vault::reset`].
+    pub fn key_missing(&self) -> Result<bool, SecretError> {
+        let file = self.read()?;
+        Ok(!file.id.is_empty() && self.keys.load(&file.id)?.is_none())
+    }
+
+    /// Deletes every secret, every saved login and the key, so secrets can
+    /// be registered again (the way out of `SECRET_KEY_MISSING`). Returns
+    /// the number of secrets deleted.
+    pub fn reset(&self) -> Result<usize, SecretError> {
+        let _guard = self.lock()?;
+        let file = self.read()?;
+        match std::fs::remove_dir_all(self.dir.join(SESSIONS_DIR)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(io_error(e)),
+        }
+        self.write(&VaultFile {
+            version: 1,
+            ..VaultFile::default()
+        })?;
+        if !file.id.is_empty() {
+            self.keys.remove(&file.id)?;
+        }
+        Ok(file.entries.len())
+    }
+
     // -- storage --------------------------------------------------------------
+
+    /// Serialises read-modify-write of the vault across threads and
+    /// processes (Studio, the CLI and the MCP server share a workspace),
+    /// including the first-time creation of the key. Released on drop.
+    fn lock(&self) -> Result<std::fs::File, SecretError> {
+        std::fs::create_dir_all(&self.dir).map_err(io_error)?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.dir.join(LOCK_FILE))
+            .map_err(io_error)?;
+        file.lock().map_err(io_error)?;
+        Ok(file)
+    }
 
     fn read(&self) -> Result<VaultFile, SecretError> {
         match std::fs::read(self.dir.join(VAULT_FILE)) {
@@ -337,7 +380,7 @@ impl Vault {
                     "SECRET_KEY_MISSING",
                     "the key of this workspace's secrets is not on this PC / Windows user",
                 )
-                .with_hint("Secrets are tied to the Windows user that registered them. Register them again in Studio (シークレット).")
+                .with_hint("Secrets are tied to the Windows user that registered them. Ask the user to reset the secrets in Studio (シークレット) or with `shikigami secret reset`, then register them again.")
             });
         }
         if !create {
@@ -425,7 +468,7 @@ impl SecretProvider for Vault {
 
     fn save_session(&self, name: &str, state: &Value) -> Result<(), SecretError> {
         secret::check_name(name).map_err(|m| SecretError::new("INVALID_SESSION_NAME", m))?;
-        let _guard = self.lock.lock().map_err(io_error)?;
+        let _guard = self.lock()?;
         let file = self.read()?;
         let key = self.key(&file, true)?;
         let plain = serde_json::to_vec(state).map_err(io_error)?;

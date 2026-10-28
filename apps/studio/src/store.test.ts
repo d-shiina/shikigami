@@ -28,7 +28,7 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
     validate: vi.fn(async () => ({ valid: true, issues: [] })),
     undoState: vi.fn(async () => ({ canUndo: false, canRedo: false })),
     history: vi.fn(async () => []),
-    listSecrets: vi.fn(async () => ({ secrets: [], keyLocation: "test" })),
+    listSecrets: vi.fn(async () => ({ secrets: [], keyLocation: "test", keyMissing: false })),
   };
   return { ...base, ...overrides } as Api;
 }
@@ -103,13 +103,28 @@ describe("studio store", () => {
     const listed = { name: "受注", username: "tanaka", sites: ["https://x.example"], fields: ["username", "password"], updatedAt: "" };
     const setSecret = vi.fn(async () => listed as never);
     const store = createStudioStore(
-      fakeApi({ setSecret, listSecrets: vi.fn(async () => ({ secrets: [listed as never], keyLocation: "test" })) }),
+      fakeApi({ setSecret, listSecrets: vi.fn(async () => ({ secrets: [listed as never], keyLocation: "test", keyMissing: false })) }),
     );
     const ok = await store.getState().saveSecret({ name: "受注", username: "tanaka", password: "hunter2", sites: ["https://x.example"] });
     expect(ok).toBe(true);
     expect(setSecret).toHaveBeenCalledOnce();
     expect(JSON.stringify(store.getState())).not.toContain("hunter2");
     expect(store.getState().secrets.map((s) => s.name)).toEqual(["受注"]);
+  });
+
+  it("offers a reset when the secrets' key is not on this PC", async () => {
+    let missing = true;
+    const resetSecrets = vi.fn(async () => {
+      missing = false;
+      return 1;
+    });
+    const listSecrets = vi.fn(async () => ({ secrets: [], keyLocation: "test", keyMissing: missing }));
+    const store = createStudioStore(fakeApi({ listSecrets, resetSecrets }));
+    await store.getState().loadSecrets();
+    expect(store.getState().secretKeyMissing).toBe(true);
+    await store.getState().resetSecrets();
+    expect(resetSecrets).toHaveBeenCalledOnce();
+    expect(store.getState().secretKeyMissing).toBe(false);
   });
 
   it("tracks run progress from events", () => {

@@ -17,6 +17,8 @@ pub type Key = [u8; 32];
 pub trait KeyStore: Send + Sync {
     fn load(&self, vault_id: &str) -> Result<Option<Key>, SecretError>;
     fn store(&self, vault_id: &str, key: &Key) -> Result<(), SecretError>;
+    /// Deletes the key; a key that is not there is not an error.
+    fn remove(&self, vault_id: &str) -> Result<(), SecretError>;
     /// Shown in Studio and the CLI.
     fn describe(&self) -> String;
 }
@@ -73,6 +75,13 @@ impl KeyStore for CredentialManager {
             .map_err(|e| key_error(format!("Windows Credential Manager: {e}")))
     }
 
+    fn remove(&self, vault_id: &str) -> Result<(), SecretError> {
+        match Self::entry(vault_id)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(key_error(format!("Windows Credential Manager: {e}"))),
+        }
+    }
+
     fn describe(&self) -> String {
         "Windows 資格情報マネージャー".into()
     }
@@ -110,6 +119,13 @@ impl KeyStore for KeyFile {
             .map_err(|e| key_error(e.to_string()))
     }
 
+    fn remove(&self, vault_id: &str) -> Result<(), SecretError> {
+        match std::fs::remove_file(self.dir.join(format!("{vault_id}.key"))) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(key_error(e.to_string())),
+            _ => Ok(()),
+        }
+    }
+
     fn describe(&self) -> String {
         "鍵ファイル（開発用。Windows では資格情報マネージャー）".into()
     }
@@ -136,6 +152,14 @@ impl KeyStore for MemoryKeyStore {
             .lock()
             .map_err(|_| key_error("poisoned"))?
             .insert(vault_id.to_owned(), *key);
+        Ok(())
+    }
+
+    fn remove(&self, vault_id: &str) -> Result<(), SecretError> {
+        self.keys
+            .lock()
+            .map_err(|_| key_error("poisoned"))?
+            .remove(vault_id);
         Ok(())
     }
 

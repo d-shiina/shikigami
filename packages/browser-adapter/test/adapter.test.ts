@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import type { Server } from "node:http";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -141,6 +142,37 @@ describe("browser adapter", () => {
     const again = (await adapter.call("snapshot", r)) as { snapshot: string };
     expect(again.snapshot).not.toContain("typed-by-hand");
     await adapter.call("closeRun", r);
+  });
+
+  it("does not type a secret into a page reached while waiting for the field", async () => {
+    // An allowed page without the field that moves to another origin with a
+    // matching field while the fill is still waiting for it.
+    const target = base.replace("127.0.0.1", "localhost");
+    const hop = createServer((_, res) => {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.end(`<script>setTimeout(() => location.href = ${JSON.stringify(target)}, 300)</script>`);
+    });
+    await new Promise<void>((resolve) => hop.listen(0, "127.0.0.1", resolve));
+    const hopUrl = `http://127.0.0.1:${(hop.address() as AddressInfo).port}/`;
+    const r = { runId: "run_hop" };
+    try {
+      await adapter.call("open", { ...r, url: hopUrl });
+      const err = await failure(
+        adapter.call("fill", {
+          ...r,
+          target: { label: "パスワード" },
+          value: "shikigami",
+          secret: { name: "demo", sites: [new URL(hopUrl).origin], sensitive: true },
+        }),
+      );
+      expect(err.code).toBe("SECRET_SITE_MISMATCH");
+      const page = (await adapter.call("snapshot", r)) as { url: string; snapshot: string };
+      expect(page.url).toContain("localhost");
+      expect(page.snapshot).not.toContain("shikigami");
+    } finally {
+      await adapter.call("closeRun", r);
+      hop.close();
+    }
   });
 
   it("saves a login and reuses it in the next run", async () => {

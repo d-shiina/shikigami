@@ -134,6 +134,13 @@ enum SecretCmd {
     Remove { name: String },
     /// Forget a saved browser login (`session` of browser.open).
     Logout { session: String },
+    /// Delete every secret, saved login and the key, so secrets can be
+    /// registered again (e.g. after copying the workspace to another PC).
+    Reset {
+        /// Confirm the deletion.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -329,6 +336,15 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
             } else {
                 println!("no saved login '{session}'");
             }
+        }
+        SecretCmd::Reset { yes } => {
+            if !*yes {
+                bail!(
+                    "this deletes every secret and saved login of the workspace; run again with --yes to confirm"
+                );
+            }
+            let count = vault.reset()?;
+            println!("deleted {count} secret(s); register them again with `shikigami secret set`");
         }
     }
     Ok(())

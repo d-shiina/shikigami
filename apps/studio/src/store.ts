@@ -60,6 +60,8 @@ export type StudioState = {
   /** Registered secrets (names, user names, sites; never values). */
   secrets: SecretInfo[];
   secretKeyLocation: string;
+  /** Secrets are listed by name only: their key is not on this PC / user. */
+  secretKeyMissing: boolean;
   secretsOpen: boolean;
   /** A running step waits for the person at the PC (manual login, MFA). */
   human: { stepId: string; message: string } | null;
@@ -96,6 +98,7 @@ export type StudioState = {
   /** Returns true when saved. */
   saveSecret(input: SecretInput): Promise<boolean>;
   removeSecret(name: string): Promise<void>;
+  resetSecrets(): Promise<void>;
   setSecretsOpen(open: boolean): void;
 };
 
@@ -279,6 +282,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       paletteOpen: false,
       secrets: [],
       secretKeyLocation: "",
+      secretKeyMissing: false,
       secretsOpen: false,
       human: null,
 
@@ -294,8 +298,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async loadSecrets() {
         try {
-          const { secrets, keyLocation } = await api.listSecrets();
-          set({ secrets, secretKeyLocation: keyLocation });
+          const { secrets, keyLocation, keyMissing } = await api.listSecrets();
+          set({ secrets, secretKeyLocation: keyLocation, secretKeyMissing: keyMissing });
         } catch (e) {
           set({ error: message(e) });
         }
@@ -316,6 +320,15 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async removeSecret(name) {
         try {
           await api.removeSecret(name);
+          await get().loadSecrets();
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      async resetSecrets() {
+        try {
+          await api.resetSecrets();
           await get().loadSecrets();
         } catch (e) {
           set({ error: message(e) });

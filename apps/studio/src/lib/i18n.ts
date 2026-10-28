@@ -23,6 +23,10 @@ export const ja = {
   secretSaved: (name: string) => `シークレット「${name}」を保存しました`,
   secretKeyNote: (where: string) => `値は暗号化してワークスペースに保存し、鍵は ${where} に 1 件だけ置きます。`,
   secretNone: "まだ登録されていません",
+  secretKeyMissing:
+    "このワークスペースのシークレットは別の PC か別の Windows ユーザーで登録されたため、ここでは値を読めません。リセットしてから登録し直してください。",
+  secretReset: "リセットして登録し直す",
+  secretConfirmReset: "このワークスペースのシークレットと保存済みのログイン状態をすべて削除しますか？",
   secretUse: "シークレット",
   secretText: "文字",
   secretChoose: "（シークレットを選択）",

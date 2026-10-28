@@ -225,13 +225,23 @@ export class Adapter {
 
   private async fill(params: Params): Promise<null> {
     const session = this.session(params);
-    const { page, locator } = this.target(params);
+    const { locator } = this.target(params);
     const value = String(params.value ?? "");
     const secret = params.secret as SecretInfo | undefined;
-    if (secret) {
-      // Never type a secret into a page it was not registered for (a
-      // look-alike site, or a page an injected instruction led to).
-      const origin = originOf(page.url());
+    if (!secret) {
+      await locator.fill(value, { timeout: this.limit(params) });
+      return null;
+    }
+    // Never type a secret into a page it was not registered for (a
+    // look-alike site, or a page an injected instruction led to). The check
+    // and the typing use one element handle, so they are bound to the same
+    // document: if the page navigates in between, the handle is detached and
+    // fill fails instead of typing into the new page. The origin is the
+    // element's own document, so a cross-origin iframe is checked too.
+    const timeout = this.limit(params);
+    const handle = await locator.elementHandle({ timeout });
+    try {
+      const origin = await handle.evaluate((el) => el.ownerDocument.location.origin);
       if (!secret.sites.includes(origin)) {
         throw new AdapterError("SECRET_SITE_MISMATCH", `secret '${secret.name}' may not be typed on ${origin}`, {
           details: {
@@ -245,8 +255,10 @@ export class Adapter {
         session.secrets.add(value);
         session.secretFields.push(locator);
       }
+      await handle.fill(value, { timeout });
+    } finally {
+      await handle.dispose().catch(() => {});
     }
-    await locator.fill(value, { timeout: this.limit(params) });
     return null;
   }
 

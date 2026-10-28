@@ -252,14 +252,42 @@ pub struct SecretList {
     secrets: Vec<SecretInfo>,
     /// Where the encryption key is kept (shown in the dialog).
     key_location: String,
+    /// Secrets are registered but their key is not on this PC / Windows
+    /// user: only names are listed, and `reset_secrets` is the way out.
+    key_missing: bool,
 }
 
 #[tauri::command]
 pub fn list_secrets(state: State<'_, AppState>) -> CmdResult<SecretList> {
+    let vault = &state.vault;
+    let key_missing = vault.key_missing().map_err(secret_err)?;
+    let secrets = if key_missing {
+        vault
+            .summaries()
+            .map_err(secret_err)?
+            .into_iter()
+            .map(|s| SecretInfo {
+                name: s.name,
+                username: String::new(),
+                sites: s.sites,
+                fields: s.fields,
+                description: s.description,
+                updated_at: String::new(),
+            })
+            .collect()
+    } else {
+        vault.list().map_err(secret_err)?
+    };
     Ok(SecretList {
-        secrets: state.vault.list().map_err(secret_err)?,
-        key_location: state.vault.key_location(),
+        secrets,
+        key_location: vault.key_location(),
+        key_missing,
     })
+}
+
+#[tauri::command]
+pub fn reset_secrets(state: State<'_, AppState>) -> CmdResult<usize> {
+    state.vault.reset().map_err(secret_err)
 }
 
 #[tauri::command]

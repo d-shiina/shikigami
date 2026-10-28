@@ -4,7 +4,7 @@
 
 1. **値は人が登録する**。Studio の「🔑 シークレット」（または CLI）で、名前を付けて登録します（例：「受注システム」）。
 2. **シナリオと AI には名前だけ**。シナリオには `{ "secret": "受注システム", "field": "password" }` とだけ書きます。値は実行中のステップが受け取るだけで、シナリオファイル・MCP の結果・ログ・スクリーンショットのどこにも出ません。
-3. **登録したサイトにしか入力しない**。シークレットには「入力してよいサイト」を登録します。ほかのページには入力を拒否します（そっくりな偽サイトや、ページに仕込まれた指示に AI が誘導された場合の対策）。
+3. **登録したサイトにしか入力しない**。シークレットには「入力してよいサイト」を登録します。ほかのページには入力を拒否します（そっくりな偽サイトや、ページに仕込まれた指示に AI が誘導された場合の対策）。照合は入力欄そのもののページで行うので、待っている間に別のサイトへ移った場合や、別のサイトの iframe の中の入力欄にも入力しません。
 
 ## 登録する
 
@@ -27,6 +27,7 @@ shikigami secret set 受注システム --totp JBSWY3DPEHPK3PXP                 
 shikigami secret list
 shikigami secret remove 受注システム
 shikigami secret logout 受注システム        # 保存したログイン状態（下記）だけ消す
+shikigami secret reset --yes               # すべて消して登録し直す（別の PC からコピーしたとき）
 ```
 
 スクリプトから渡すときは `--password-stdin`（標準入力の 1 行目）。
@@ -39,7 +40,8 @@ shikigami secret logout 受注システム        # 保存したログイン状�
 ```
 
 - 値は AES-256-GCM で暗号化します。鍵は **Windows 資格情報マネージャーにワークスペースごと 1 件だけ**（「Shikigami / vault …」）置きます。シークレットを何件登録しても資格情報マネージャーの項目は増えません。
-- 鍵は登録した Windows ユーザーの DPAPI で守られます。ワークスペースのフォルダーを別の PC や別のユーザーにコピーしても値は読めません（`SECRET_KEY_MISSING`。その PC で登録し直します）。
+- 鍵は登録した Windows ユーザーの DPAPI で守られます。ワークスペースのフォルダーを別の PC や別のユーザーにコピーしても値は読めません（`SECRET_KEY_MISSING`）。そのときは Studio の「🔑 シークレット」に出る「リセットして登録し直す」（または `shikigami secret reset --yes`）で、読めなくなったシークレット・ログイン状態・鍵を消してから登録し直します。
+- Studio・CLI・MCP サーバーが同じワークスペースを同時に更新しても上書きし合わないよう、更新は `secrets/.lock` で 1 つずつ行います。
 - Windows 以外（開発・CI）では鍵を `secrets/<id>.key`（所有者だけ読める）に置きます。保護にはならないので本番では使いません。
 
 ## シナリオでの使い方
@@ -92,6 +94,6 @@ shikigami secret logout 受注システム        # 保存したログイン状�
 | `SECRET_FIELD_EMPTY` | その項目（パスワード・MFA キーなど）が未設定 |
 | `SECRET_SITE_NOT_SET` | 入力してよいサイトが未登録。サイトを追加する |
 | `SECRET_SITE_MISMATCH` | いまのページが登録サイトではない。URL を確認し、正しければサイトを追加する |
-| `SECRET_KEY_MISSING` | この PC / Windows ユーザーに鍵がない。登録し直す |
+| `SECRET_KEY_MISSING` | この PC / Windows ユーザーに鍵がない。Studio か `shikigami secret reset --yes` でリセットして登録し直す |
 | `SECRETS_UNAVAILABLE` | シークレットのない Runtime で実行した（Studio・CLI・MCP から実行する） |
 | `HUMAN_REQUIRED` / `HUMAN_TIMEOUT` | 人の操作が必要だが画面がない／時間内に終わらなかった |

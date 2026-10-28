@@ -79,6 +79,7 @@ pub fn run() {
             commands::list_secrets,
             commands::set_secret,
             commands::remove_secret,
+            commands::reset_secrets,
             commands::forget_login,
         ])
         .run(tauri::generate_context!());

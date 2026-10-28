@@ -150,3 +150,76 @@ fn sites_are_normalized_to_origins() {
     i.sites = Some(vec!["ftp://x".into()]);
     assert_eq!(vault(dir.path()).set(i).unwrap_err().code, "INVALID_SITE");
 }
+
+/// One key store seen by several vaults (as Studio, the CLI and the MCP
+/// server share Windows Credential Manager).
+struct Shared(std::sync::Arc<MemoryKeyStore>);
+
+impl KeyStore for Shared {
+    fn load(&self, vault_id: &str) -> Result<Option<Key>, SecretError> {
+        self.0.load(vault_id)
+    }
+    fn store(&self, vault_id: &str, key: &Key) -> Result<(), SecretError> {
+        self.0.store(vault_id, key)
+    }
+    fn remove(&self, vault_id: &str) -> Result<(), SecretError> {
+        self.0.remove(vault_id)
+    }
+    fn describe(&self) -> String {
+        "shared".into()
+    }
+}
+
+#[test]
+fn concurrent_clients_do_not_lose_updates() {
+    let dir = tempfile::tempdir().unwrap();
+    let keys = std::sync::Arc::new(MemoryKeyStore::default());
+    std::thread::scope(|scope| {
+        for i in 0..8 {
+            let keys = keys.clone();
+            let root = dir.path();
+            scope.spawn(move || {
+                // Each client has its own vault, as separate processes do.
+                let v = Vault::with_key_store(root, Box::new(Shared(keys)));
+                v.set(input(&format!("s{i}"))).unwrap();
+            });
+        }
+    });
+    let v = Vault::with_key_store(dir.path(), Box::new(Shared(keys)));
+    let list = v.list().unwrap();
+    assert_eq!(list.len(), 8);
+    for i in 0..8 {
+        let r = v
+            .resolve(&reference(&format!("s{i}"), SecretField::Password))
+            .unwrap();
+        assert_eq!(r.value, "hunter2");
+    }
+}
+
+#[test]
+fn a_copied_workspace_can_be_reset_and_registered_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let original = vault(dir.path());
+    original.set(input("a")).unwrap();
+    original.save_session("a", &json!({"cookies": []})).unwrap();
+
+    // Same files, another PC / Windows user: the key is not there.
+    let copy = vault(dir.path());
+    assert!(copy.key_missing().unwrap());
+    let err = copy.set(input("b")).unwrap_err();
+    assert_eq!(err.code, "SECRET_KEY_MISSING");
+    assert!(err.hint.unwrap().contains("secret reset"));
+    assert_eq!(copy.summaries().unwrap().len(), 1);
+
+    assert_eq!(copy.reset().unwrap(), 1);
+    assert!(!copy.key_missing().unwrap());
+    assert!(copy.summaries().unwrap().is_empty());
+    assert_eq!(copy.load_session("a").unwrap(), None);
+    copy.set(input("b")).unwrap();
+    assert_eq!(
+        copy.resolve(&reference("b", SecretField::Password))
+            .unwrap()
+            .value,
+        "hunter2"
+    );
+}
