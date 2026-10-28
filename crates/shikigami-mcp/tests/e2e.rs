@@ -310,7 +310,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 23);
+    assert_eq!(tools.len(), 24);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -370,6 +370,9 @@ async fn test_step_runs_one_step_without_touching_scenarios() {
     assert_eq!(e["code"], "UNKNOWN_STEP_TYPE");
     // Without a browser adapter, inspect_page says so.
     let (is_error, e) = h.call("inspect_page", json!({ "url": "http://x/" })).await;
+    assert!(is_error);
+    assert_eq!(e["code"], "ADAPTER_UNAVAILABLE");
+    let (is_error, e) = h.call("inspect_ui", json!({})).await;
     assert!(is_error);
     assert_eq!(e["code"], "ADAPTER_UNAVAILABLE");
     let scenarios = h.ok("list_scenarios", json!({})).await;
