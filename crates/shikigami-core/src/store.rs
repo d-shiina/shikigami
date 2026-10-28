@@ -17,8 +17,10 @@
 //! (write temp file + rename), so readers never observe partial writes.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -318,8 +320,20 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> CoreResult<()> {
     let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
     tmp.write_all(bytes)?;
     tmp.as_file().sync_all()?;
-    tmp.persist(path).map_err(|e| CoreError::Io(e.error))?;
-    Ok(())
+    // On Windows, replacing the target fails with "access denied" while another
+    // process (antivirus, indexer, a reader) briefly holds it open, so retry.
+    let mut attempt = 0;
+    loop {
+        match tmp.persist(path) {
+            Ok(_) => return Ok(()),
+            Err(e) if e.error.kind() == ErrorKind::PermissionDenied && attempt < 5 => {
+                attempt += 1;
+                tmp = e.file;
+                thread::sleep(Duration::from_millis(10 << attempt));
+            }
+            Err(e) => return Err(CoreError::Io(e.error)),
+        }
+    }
 }
 
 /// Reads a JSON value from disk (used by import paths).
