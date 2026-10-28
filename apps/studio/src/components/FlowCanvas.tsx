@@ -272,7 +272,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
   const first = typeColor(row.refs[0] ?? "");
   const lit = row.refs.some((r) => focused === varFocus(r));
   return (
-    <div style={{ height: ROW_H, background: lit ? `${first}1f` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
+    <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${first} 12%, transparent)` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
       {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={`読む変数: ${row.refs.join(", ")}`} />}
       {across && row.refs.length > 0 && (
         <Chips side="in" color={first}>
