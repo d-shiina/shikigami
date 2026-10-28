@@ -78,6 +78,11 @@ pub struct ActionInput {
     /// Cancelled when the run is stopped or the attempt times out. Long
     /// operations should observe it; the Runtime also drops the future.
     pub cancel: CancellationToken,
+    /// This attempt's time limit (the step's `timeoutMs`). A handler that
+    /// hands work to another process should pass on a slightly shorter limit,
+    /// so the operation has stopped by the time the Runtime retries or moves
+    /// on (dropping the future cannot stop work in another process).
+    pub timeout_ms: u64,
     pub(crate) emitter: Emitter,
 }
 

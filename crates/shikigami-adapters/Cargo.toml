@@ -1,0 +1,14 @@
+[package]
+name = "shikigami-adapters"
+description = "The list of application adapters shipped with Shikigami (one place to add a new one)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+shikigami-runtime.workspace = true
+shikigami-browser.workspace = true
+
+[lints]
+workspace = true

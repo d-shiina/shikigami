@@ -873,6 +873,7 @@ impl Executor {
                 attempt,
                 params: params.clone(),
                 cancel: attempt_cancel.clone(),
+                timeout_ms,
                 emitter: self.emitter.clone(),
             };
             // Wait for exclusive resources (not counted towards the timeout).

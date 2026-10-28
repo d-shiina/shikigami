@@ -79,6 +79,25 @@ describe("browser adapter", () => {
     expect(closed.code).toBe("BROWSER_NOT_OPEN");
   });
 
+  it("selects by label or value and stops at the step's time limit", async () => {
+    const html = '<meta charset="utf-8"><label for="c">国</label><select id="c"><option value="jp">日本</option><option value="us">米国</option></select>';
+    const page = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+    await adapter.call("open", { ...run, context: "form", url: page });
+    expect(await adapter.call("select", { ...run, context: "form", target: { label: "国" }, value: "米国" })).toEqual(["us"]);
+    const started = Date.now();
+    expect(await adapter.call("select", { ...run, context: "form", target: { label: "国" }, value: "jp" })).toEqual(["jp"]);
+    expect(Date.now() - started).toBeLessThan(1000);
+    const missing = await failure(adapter.call("select", { ...run, context: "form", target: { label: "国" }, value: "英国" }));
+    expect(missing.code).toBe("OPTION_NOT_FOUND");
+
+    const t0 = Date.now();
+    const slow = await failure(
+      adapter.call("click", { ...run, context: "form", target: { role: "button", name: "ない" }, timeoutMs: 300 }),
+    );
+    expect(slow.code).toBe("ELEMENT_NOT_FOUND");
+    expect(Date.now() - t0).toBeLessThan(2500);
+  });
+
   it("closes every context of a finished run", async () => {
     await adapter.call("closeRun", run);
     const err = await failure(adapter.call("getTable", { ...run, context: "stock" }));

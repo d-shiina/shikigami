@@ -8,11 +8,13 @@
 // failure path, so boxing it would add noise without a measurable benefit.
 #![allow(clippy::result_large_err)]
 
+pub mod adapter;
 pub mod builtin;
 pub mod event;
 mod exec;
 pub mod handler;
 pub mod record;
+pub mod sidecar;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -26,6 +28,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+pub use adapter::Adapter;
 pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunReport, RunSnapshot, RunStatus, StepOutcome,
 };
@@ -41,6 +44,10 @@ pub struct RunOptions {
     pub inputs: Map<String, Value>,
     /// Use a specific run ID (otherwise one is generated).
     pub run_id: Option<RunId>,
+    /// Skip the run-finished hooks so adapter state (open browser contexts,
+    /// ...) survives the run. Used to try single steps from MCP in one
+    /// session: pass the same `run_id` each time.
+    pub keep_adapter_state: bool,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -116,7 +123,11 @@ impl Runtime {
         let init = init_variables(&scenario, &options.inputs, &mut executor);
 
         let task_run_id = run_id.clone();
-        let hooks = self.run_finished_hooks.clone();
+        let hooks = if options.keep_adapter_state {
+            Arc::new(Vec::new())
+        } else {
+            self.run_finished_hooks.clone()
+        };
         let join = tokio::spawn(async move {
             let started_at = OffsetDateTime::now_utc();
             let clock = Instant::now();
@@ -226,6 +237,11 @@ impl RuntimeBuilder {
             .insert(def.step_type.clone(), Arc::new(handler));
         self.registry.register(def);
         self
+    }
+
+    /// Installs an adapter's step types (see [`adapter::Adapter`]).
+    pub fn adapter(self, adapter: &dyn adapter::Adapter) -> Self {
+        adapter.install(self)
     }
 
     /// Registers cleanup to run when each run ends, e.g. closing the

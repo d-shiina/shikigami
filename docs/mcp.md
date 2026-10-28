@@ -71,7 +71,7 @@ args = ["mcp"]
 | run | `run_scenario` | Runtime で実行（AI は実行に関与しない）。`waitMs` で完了まで待てる |
 |  | `stop_scenario` | 実行のキャンセル |
 | ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)） |
-|  | `test_browser_step` | browser ステップを 1 つ試して結果と実行後のページを返す |
+| 試行 | `test_step` | ステップを 1 つその場で実行して出力を返す（browser ステップなら実行後のページも）。シナリオは変更しない |
 
 - 検証結果の各 issue には直し方のヒント（`hint`：近い名前の候補、必須・使える params、式とテンプレートの書き分けなど）が付きます。AI が 1 回で直せるようにするためです。
 - 入力スキーマは Rust の型から自動生成しています。結果は `structuredContent`（JSON）で返します。
@@ -97,4 +97,4 @@ args = ["mcp"]
 - 削除の「Studio 上での人間の承認」、ツール権限のクライアント別設定、シナリオ単位の「MCP からの実行可否」は未実装です（現状は `--allow` によるサーバー単位の制限のみ）。
 - 監査ログは JSONL です。SQLite への索引化は未実装です。
 - Streamable HTTP トランスポートは未実装です（stdio のみ）。
-- Windows の UI 操作系ツール（`inspect_ui` など）は Phase 4 で追加します。ブラウザ用は `inspect_page` / `test_browser_step`（[browser.md](browser.md)）。
+- Windows の UI 操作系ツール（`inspect_ui` など）は Phase 4 で追加します。ブラウザ用は `inspect_page` / `test_step`（[browser.md](browser.md)）。

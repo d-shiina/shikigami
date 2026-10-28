@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use serde_json::{Value, json};
 use shikigami_core::{Scenario, Step, Validator};
@@ -42,11 +41,8 @@ fn fake() -> Fake {
         FAKE_ADAPTER.replace("__LOG__", &serde_json::to_string(&log).unwrap()),
     )
     .unwrap();
-    let client = Arc::new(BrowserClient::new(BrowserConfig {
-        node: PathBuf::from("node"),
-        script: Some(script),
-    }));
-    let runtime = install(Runtime::builder(), client).build();
+    let adapter = BrowserAdapter::new(sidecar_config(PathBuf::from("node"), Some(script)));
+    let runtime = Runtime::builder().adapter(&adapter).build();
     Fake {
         _dir: dir,
         log,
@@ -82,14 +78,9 @@ fn click(text: &str) -> Step {
 
 #[test]
 fn every_example_is_a_valid_step() {
-    let runtime = install(
-        Runtime::builder(),
-        Arc::new(BrowserClient::new(BrowserConfig {
-            node: "node".into(),
-            script: None,
-        })),
-    )
-    .build();
+    let runtime = Runtime::builder()
+        .adapter(&BrowserAdapter::new(sidecar_config("node".into(), None)))
+        .build();
     let validator = Validator::new(runtime.registry().clone());
     for (def, _) in step_defs() {
         assert!(!def.examples.is_empty(), "{}", def.step_type);
@@ -137,6 +128,8 @@ async fn steps_forward_rendered_params_with_the_run_id() {
     assert_eq!(calls[0]["params"]["url"], "http://example.test/");
     assert_eq!(calls[1]["params"]["runId"], json!(report.run_id.as_str()));
     assert_eq!(calls[1]["params"]["target"], json!({ "text": "送信" }));
+    // The adapter stops each operation just before the step timeout (30 s).
+    assert_eq!(calls[1]["params"]["timeoutMs"], json!(29_500));
 }
 
 #[tokio::test]
@@ -160,11 +153,9 @@ async fn a_crashed_adapter_fails_the_step_and_restarts() {
 
 #[tokio::test]
 async fn a_missing_adapter_is_reported_without_retrying() {
-    let client = Arc::new(BrowserClient::new(BrowserConfig {
-        node: "node".into(),
-        script: None,
-    }));
-    let runtime = install(Runtime::builder(), client).build();
+    let runtime = Runtime::builder()
+        .adapter(&BrowserAdapter::new(sidecar_config("node".into(), None)))
+        .build();
     let report = run(&runtime, vec![open("http://x/")]).await;
     let error = report.error.unwrap();
     assert_eq!(error.code, "ADAPTER_UNAVAILABLE");

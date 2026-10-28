@@ -191,11 +191,9 @@ pub struct InspectPageParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct TestBrowserStepParams {
-    /// A browser step type, e.g. "browser.click" (see list_step_types).
-    #[serde(rename = "type")]
-    pub step_type: String,
-    /// The step's params exactly as they would appear in the scenario, with literal values (no {{ }}).
-    #[serde(default)]
-    pub params: Map<String, Value>,
+pub struct TestStepParams {
+    /// One step as it would appear in a scenario, e.g.
+    /// { "type": "browser.click", "params": { "target": { "role": "button", "name": "ログイン" } } }.
+    /// `id` may be omitted.
+    pub step: Step,
 }

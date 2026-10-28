@@ -29,7 +29,7 @@ pnpm demo:browser
 2. 未処理の注文ごとに「出荷する」を押し、処理完了の表示を待つ（`control.forEach` + `control.if`）
 3. 出荷した注文番号・合計金額・在庫切れの商品を出力する
 
-サイトだけ起動するときは `pnpm demo:site`。Studio からも同じシナリオを読み込んで実行できます。
+CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\shikigami.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Studio からも同じシナリオを読み込んで実行できます。
 
 ## ステップ
 
@@ -60,13 +60,14 @@ pnpm demo:browser
 // 共通：exact（完全一致）, nth（複数一致したときの 0 始まりの番号）
 ```
 
-待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。
+待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。待つ上限はステップの `timeoutMs`（既定 30 秒）で、アダプター側の操作もその直前で止まるため、タイムアウトしたクリックが再試行の後で遅れて実行されることはありません。
 
 ### エラー
 
 | コード | 意味 | 再試行 |
 |---|---|---|
 | `ELEMENT_NOT_FOUND` | 要素が見つからない。`details.page` にそのときのページ（アクセシビリティツリー）と直し方のヒント | する |
+| `OPTION_NOT_FOUND` | `browser.select` の値が選択肢の表示名にも値にもない。`details.options` に選択肢 | しない |
 | `ELEMENT_AMBIGUOUS` | 複数の要素に一致。`exact` / `nth` で絞る | しない |
 | `BROWSER_NOT_OPEN` | 同じ `context` の `browser.open` がない | しない |
 | `NAVIGATION_FAILED` | ページを開けない | する |
@@ -79,7 +80,7 @@ pnpm demo:browser
 MCP サーバーに 2 つのツールがあります（権限区分は `run`）。
 
 - `inspect_page`：ページを開いて（または開いているページの）アクセシビリティツリーを返す。`- button "ログイン"` と出ていれば `{ "role": "button", "name": "ログイン" }` がそのまま `target` になる
-- `test_browser_step`：browser ステップを 1 つその場で実行して、結果と実行後のページを返す。ログインしてから次の画面を調べる、といった下調べに使う。シナリオは変更しない
+- `test_step`：ステップを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのステップでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。シナリオは変更しない
 
 AI はこれでサイトを確かめながらステップを組み、`validate_scenario` → `run_scenario` で AI なしの実行を確認します。
 
@@ -90,5 +91,6 @@ Runtime ──(JSON-RPC over stdio)──▶ node packages/browser-adapter/src/m
   browser.* ステップ                   実行 × context ごとに BrowserContext
 ```
 
+- ブラウザ対応は「アダプター」の 1 つです。ほかのアプリを足す方法は [adapters.md](adapters.md)。
 - アダプターは最初のブラウザステップで起動し、全実行で共有します。異常終了すると実行中のステップは `ADAPTER_CRASHED` で失敗し、次の要求で起動し直します。
 - アダプターの stderr は Rust の tracing（`shikigami_browser::adapter`）に流れます。

@@ -55,6 +55,7 @@ async fn run(runtime: &Runtime, s: Scenario, inputs: Value) -> (RunReport, Vec<R
             RunOptions {
                 inputs,
                 run_id: None,
+                ..RunOptions::default()
             },
         )
         .expect("start");

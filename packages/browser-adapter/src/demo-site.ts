@@ -16,8 +16,9 @@ const TYPES: Record<string, string> = {
 
 export function startDemoSite(port = 8787): Promise<{ server: Server; url: string }> {
   const server = createServer(async (req, res) => {
-    const path = normalize(decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname));
-    const file = join(ROOT, path.endsWith("/") ? `${path}index.html` : path);
+    // Decide on index.html before normalize(): on Windows it turns "/" into "\\".
+    const path = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname);
+    const file = join(ROOT, normalize(path.endsWith("/") ? `${path}index.html` : path));
     if (!file.startsWith(ROOT)) {
       res.writeHead(403).end();
       return;

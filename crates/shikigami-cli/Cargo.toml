@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 shikigami-core.workspace = true
 shikigami-runtime.workspace = true
-shikigami-browser.workspace = true
+shikigami-adapters.workspace = true
 shikigami-mcp.workspace = true
 anyhow.workspace = true
 clap.workspace = true
