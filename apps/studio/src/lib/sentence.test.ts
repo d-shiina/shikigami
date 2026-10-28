@@ -1,6 +1,6 @@
 import type { StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { plain, sentence, targetText } from "./sentence";
+import { plain, readable, sentence, targetText } from "./sentence";
 
 describe("sentence", () => {
   it("reads known step types as Japanese", () => {
@@ -24,5 +24,13 @@ describe("sentence", () => {
   it("describes browser targets by meaning", () => {
     expect(targetText({ role: "button", name: "ログイン" })).toBe("「ログイン」ボタン");
     expect(targetText({ text: "次へ", nth: 1 })).toBe("「次へ」の2番目");
+  });
+});
+
+describe("readable", () => {
+  it("puts built-in functions and operators into words", () => {
+    expect(readable("len(invoices)")).toBe("invoicesの件数");
+    expect(readable("invoice.amount >= threshold && invoice.status != 'paid'")).toBe("invoice.amount ≥ threshold かつ invoice.status ≠ 'paid'");
+    expect(readable("!isEmpty(flagged)")).toBe("flaggedが空でない");
   });
 });

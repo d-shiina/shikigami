@@ -8,9 +8,29 @@ export type Part = { text: string } | { code: string };
 
 const w = (text: string): Part => ({ text });
 
+const PATH = String.raw`([A-Za-z_][\w.]*(?:\[\d+\])?)`;
+/** Built-in functions that read better as words. The scenario keeps the expression as written. */
+const WORDS: [RegExp, string][] = [
+  [new RegExp(String.raw`\blen\(${PATH}\)`, "g"), "$1の件数"],
+  [new RegExp(String.raw`\bsum\(${PATH}\)`, "g"), "$1の合計"],
+  [new RegExp(String.raw`!isEmpty\(${PATH}\)`, "g"), "$1が空でない"],
+  [new RegExp(String.raw`\bisEmpty\(${PATH}\)`, "g"), "$1が空"],
+  [/\s*&&\s*/g, " かつ "],
+  [/\s*\|\|\s*/g, " または "],
+  [/\s*>=\s*/g, " ≥ "],
+  [/\s*<=\s*/g, " ≤ "],
+  [/\s*!=\s*/g, " ≠ "],
+  [/\s*==\s*/g, " = "],
+];
+
+/** An expression as it reads on screen: `len(invoices)` becomes `invoicesの件数`. */
+export function readable(expr: string): string {
+  return WORDS.reduce((text, [pattern, words]) => text.replace(pattern, words), expr);
+}
+
 function code(value: unknown): Part {
   if (value === undefined || value === null || value === "") return { text: "（未設定）" };
-  return { code: typeof value === "string" ? value : JSON.stringify(value) };
+  return { code: typeof value === "string" ? readable(value) : JSON.stringify(value) };
 }
 
 /** A literal with `{{ expr }}` holes: the words stay words, the holes become chips. */
@@ -19,7 +39,7 @@ function template(value: unknown): Part[] {
   return value
     .split(/(\{\{.*?\}\})/)
     .filter((piece) => piece !== "")
-    .map((piece) => (piece.startsWith("{{") ? { code: piece.slice(2, -2).trim() } : w(piece)));
+    .map((piece) => (piece.startsWith("{{") ? { code: readable(piece.slice(2, -2).trim()) } : w(piece)));
 }
 
 /** A browser target such as { role: "button", name: "ログイン" } in words. */
