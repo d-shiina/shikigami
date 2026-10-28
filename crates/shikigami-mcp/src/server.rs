@@ -106,7 +106,8 @@ Shikigami Studio, and scenarios run later without you.\n\
 - Prefer small edits (add_step, update_step) or one update_scenario with several ops; each call is one undo step for the human.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the scenario: re-read it and redo your change, never overwrite blindly.\n\
 - After editing, call validate_scenario and fix every error, then run_scenario (waitMs) and inspect get_run_logs.\n\
-- Templates use {{ expr }}; expressions are a safe language without side effects.";
+- Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
+- Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.";
 
 struct ActiveRun {
     cancel: CancellationToken,
@@ -329,6 +330,8 @@ impl ShikigamiMcp {
                     "description": d.description,
                     "blocks": d.blocks,
                     "hasOutput": d.has_output,
+                    "expressionParams": d.expression_params,
+                    "bindsVariables": d.binds_variables,
                     "risk": d.risk,
                 })
             })

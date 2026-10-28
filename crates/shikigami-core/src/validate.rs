@@ -360,6 +360,10 @@ impl Cx<'_> {
             );
         }
 
+        if step.step_type == control::PARALLEL {
+            self.parallel_writes(step, path);
+        }
+
         // A branch of `control.parallel` cannot break out of an enclosing loop.
         let child_depth = if step.step_type == control::PARALLEL {
             0
@@ -387,6 +391,37 @@ impl Cx<'_> {
                 });
             }
             self.steps(children, &block_path, child_depth);
+        }
+    }
+
+    /// Two branches writing the same variable would make the result depend
+    /// on timing (or fail at run time), so it is rejected up front.
+    fn parallel_writes(&mut self, step: &Step, path: &str) {
+        let mut owner: HashMap<String, usize> = HashMap::new();
+        for (index, branch) in step.block("branches").iter().enumerate() {
+            let mut names = BTreeSet::new();
+            collect_writes(branch, &self.validator.registry, &mut names);
+            for name in names {
+                match owner.get(&name) {
+                    Some(&other) if other != index => {
+                        self.error(
+                            "PARALLEL_VARIABLE_CONFLICT",
+                            format!(
+                                "parallel branches {other} and {index} both write variable '{name}'"
+                            ),
+                            format!("{path}/blocks/branches/{index}"),
+                            Some(&step.id),
+                        );
+                        self.hint(format!(
+                            "Give each branch its own variable (e.g. {name}A / {name}B) and combine them after the parallel step."
+                        ));
+                    }
+                    Some(_) => {}
+                    None => {
+                        owner.insert(name, index);
+                    }
+                }
+            }
         }
     }
 
@@ -487,6 +522,28 @@ impl Cx<'_> {
     }
 }
 
+/// Variables a step (and its children) may assign.
+fn collect_writes(step: &Step, registry: &StepRegistry, out: &mut BTreeSet<String>) {
+    if let Some(save_as) = &step.save_as {
+        out.insert(save_as.clone());
+    }
+    if step.on_error == Some(crate::model::OnError::Continue) {
+        out.insert(LAST_ERROR_VAR.to_owned());
+    }
+    if let Some(def) = registry.get(&step.step_type) {
+        for key in &def.binds_variables {
+            if let Some(Value::String(name)) = step.params.get(key) {
+                out.insert(name.clone());
+            }
+        }
+    }
+    for children in step.blocks.values() {
+        for child in children {
+            collect_writes(child, registry, out);
+        }
+    }
+}
+
 /// Fix instructions for issues without a more specific hint.
 fn generic_hint(code: &str) -> Option<&'static str> {
     Some(match code {
@@ -535,6 +592,19 @@ fn params_hint(def: &StepTypeDef) -> String {
     let allowed = names("properties");
     let required = names("required");
     let mut hint = String::new();
+    if def.step_type == crate::registry::builtin::VARIABLE_SET {
+        hint.push_str(
+            "Give exactly one of `value` (literal or template) or `expression` (bare expression). ",
+        );
+    }
+    if let Some(Value::Object(props)) = schema.get("properties")
+        && props.values().any(|p| {
+            p.pointer("/oneOf/1/pattern").and_then(Value::as_str)
+                == Some(crate::registry::SINGLE_TEMPLATE_PATTERN)
+        })
+    {
+        hint.push_str("Numeric params take an integer or exactly one {{ expr }} template, e.g. 3 or \"{{ retryCount }}\". ");
+    }
     if !required.is_empty() {
         hint.push_str(&format!("Required params: {}. ", required.join(", ")));
     }

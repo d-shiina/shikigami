@@ -287,10 +287,13 @@ impl Executor {
         expr::evaluate(source, &self.vars).map_err(expr_error)
     }
 
-    /// Evaluates a param that may be a literal or an expression string.
+    /// Reads a numeric param: an integer literal or a `{{ expr }}` template
+    /// (strings are templates in every non-expression param).
     fn eval_number(&self, step: &Step, key: &str) -> Result<f64, RunError> {
         let value = match step.params.get(key) {
-            Some(Value::String(src)) => self.eval(src)?,
+            Some(text @ Value::String(_)) => {
+                expr::render_value(text, &self.vars).map_err(expr_error)?
+            }
             Some(other) => other.clone(),
             None => {
                 return Err(RunError::new(

@@ -483,18 +483,34 @@ async fn parallel_branches_run_concurrently_and_merge_variables() {
 
 #[tokio::test]
 async fn parallel_branches_writing_the_same_variable_differently_conflict() {
-    let s = scenario(vec![parallel(vec![set("x", "1"), set("x", "2")])]);
-    let (report, _) = run(&Runtime::new(), s, json!({})).await;
-    assert_eq!(report.status, RunStatus::Failed);
-    let error = report.error.unwrap();
-    assert_eq!(error.code, "PARALLEL_VARIABLE_CONFLICT");
-    assert_eq!(error.details.unwrap()["variable"], "x");
+    // Rejected by validation before the run starts...
+    let s = scenario(vec![parallel(vec![
+        set("x", "1"),
+        group(vec![set("x", "2")]),
+    ])]);
+    let err = Runtime::new()
+        .start(s, RunOptions::default())
+        .err()
+        .expect("invalid");
+    assert!(
+        err.details
+            .unwrap()
+            .to_string()
+            .contains("PARALLEL_VARIABLE_CONFLICT")
+    );
 
-    // Writing the same value is not a conflict.
-    let mut s = scenario(vec![parallel(vec![set("x", "1"), set("x", "1")])]);
-    s.variables = outputs(&["x"]);
-    let (report, _) = run(&Runtime::new(), s, json!({})).await;
-    assert_eq!(report.outputs["x"], json!(1));
+    // Swallowed errors write `lastError`, so they count as writes too.
+    let fail = || {
+        let mut step = Step::new("test.flaky").with_param("succeedOn", 9);
+        step.on_error = Some(OnError::Continue);
+        step
+    };
+    let s = scenario(vec![parallel(vec![fail(), fail()])]);
+    let err = flaky_runtime()
+        .start(s, RunOptions::default())
+        .err()
+        .expect("invalid");
+    assert!(err.details.unwrap().to_string().contains("lastError"));
 }
 
 #[tokio::test]
@@ -624,4 +640,36 @@ async fn events_from_parallel_branches_arrive_in_seq_order() {
     let seqs: Vec<u64> = events.iter().map(|e| e.seq).collect();
     let expected: Vec<u64> = (0..seqs.len() as u64).collect();
     assert_eq!(seqs, expected);
+}
+
+#[tokio::test]
+async fn numeric_params_take_an_integer_or_a_template() {
+    let mut s = scenario(vec![
+        Step::new("control.repeat")
+            .with_param("count", "{{ n }}")
+            .with_block("body", vec![set("hits", "hits + 1")]),
+        delay(0).with_param("ms", "{{ n - 3 }}"),
+    ]);
+    s.variables = vec![
+        var("n", VarType::Number, VarDirection::Input, Some(json!(3))),
+        var(
+            "hits",
+            VarType::Number,
+            VarDirection::Output,
+            Some(json!(0)),
+        ),
+    ];
+    let (report, _) = run(&Runtime::new(), s.clone(), json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["hits"], json!(3));
+
+    // A bare expression is not a template: rejected before running, with a hint.
+    s.steps[0].params.insert("count".into(), json!("n"));
+    let err = Runtime::new()
+        .start(s, RunOptions::default())
+        .err()
+        .expect("invalid");
+    let details = err.details.unwrap().to_string();
+    assert!(details.contains("INVALID_PARAMS"));
+    assert!(details.contains("{{ retryCount }}"), "{details}");
 }

@@ -31,10 +31,10 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 
 - ステップの `id` は省略すれば Core が採番する。既存ステップを指すときは `get_scenario` で得た ID を使う。
 - 制御構文は子を `blocks` に持つ：`control.if`（`then` / `else`）、`control.while` / `control.repeat` / `control.forEach`（`body`）、`control.try`（`try` / `catch` / `finally`）。
-- 互いに独立した処理は `control.parallel`（`branches` の各ステップが同時に動く）で並行にできる。複数ステップのブランチは `control.group` で包む。ブランチ同士で同じ変数に別の値を書くと `PARALLEL_VARIABLE_CONFLICT` になるので、ブランチごとに別の変数へ結果を入れる。
-- 文字列 params はテンプレート：`"{{ invoice.amount * 1.1 }}"`。`expression` 系の params（`control.if` の `condition` など）は `{{ }}` なしの式をそのまま書く。
-- 式で使える関数は安全なものに限られる（`len`, `contains`, `round` など）。任意コードは実行できない。
-- 入出力は `variables` の `direction`（`input` / `output` / `internal`）で宣言する。パスワード等は `secret: true` にするとログで `***` に伏せられる。
+- 互いに独立した処理は `control.parallel`（`branches` の各ステップが同時に動く）で並行にできる。複数ステップのブランチは `control.group` で包む。2つ以上のブランチが同じ変数に書く（`saveAs`・`variable.set`・`onError: continue` の `lastError` を含む）と検証で `PARALLEL_VARIABLE_CONFLICT` になるので、ブランチごとに別の変数へ結果を入れ、並行ステップの後でまとめる。
+- 書き分けの規則は1つだけ：ステップ型の `expressionParams`（`list_step_types` に載っている。`control.if` の `condition` など）には `{{ }}` なしの式を書く。それ以外の文字列 params はすべてテンプレートで、`"合計 {{ total }} 円"` のように書く。文字列全体が1つの `{{ 式 }}` なら値の型（数値・配列など）がそのまま渡る。回数・待ち時間などの数値 params は `3` か `"{{ retryCount }}"`。
+- 式で使える関数は安全なものに限られる（`len`, `contains`, `startsWith`, `endsWith`, `lower`, `upper`, `trim`, `str`, `num`, `isEmpty`, `coalesce`, `join`, `split`）。任意コードは実行できない。
+- 入出力は `variables` の `direction`（`input` / `output` / `inOut` / `local`。省略時は `local`）で宣言する。パスワード等は `secret: true` にするとログで `***` に伏せられる。
 - 失敗し得るステップには `retry`（回数と間隔）や `timeoutMs`、`onError` を設定する。`onError: continue` のときエラー内容は変数 `lastError` に入る。
 - `name` には人間が Studio で読んで分かる日本語の説明を付ける（例：「請求書の合計を計算」）。
 

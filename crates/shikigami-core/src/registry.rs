@@ -174,9 +174,24 @@ fn object_schema(properties: Value, required: &[&str]) -> Value {
 
 const IDENT_PATTERN: &str = "^[A-Za-z_][A-Za-z0-9_]*$";
 
+/// Pattern of a string that is exactly one `{{ … }}` template.
+pub const SINGLE_TEMPLATE_PATTERN: &str = r"^\s*\{\{.*\}\}\s*$";
+
+/// An integer literal, or one `{{ expr }}` template that evaluates to one.
+/// The same rule as every other non-expression param: strings are templates.
+fn number_or_template(min: u64, max: u64) -> Value {
+    json!({
+        "oneOf": [
+            { "type": "integer", "minimum": min, "maximum": max },
+            { "type": "string", "pattern": SINGLE_TEMPLATE_PATTERN },
+        ],
+        "description": "整数、または {{ 式 }}（例: 3 / \"{{ retryCount }}\"）",
+    })
+}
+
 fn builtin_defs() -> Vec<StepTypeDef> {
     let ident = json!({ "type": "string", "pattern": IDENT_PATTERN });
-    let expression = json!({ "type": "string", "minLength": 1, "description": "式 (例: count > 3 && status == 'OK')" });
+    let expression = json!({ "type": "string", "minLength": 1, "description": "式。{{ }} は付けない (例: count > 3 && status == 'OK')" });
     vec![
         StepTypeDef {
             step_type: control::IF.into(),
@@ -217,7 +232,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             description: "Repeats `body` `count` times. `indexVar` (optional) receives the 0-based iteration index.".into(),
             params_schema: object_schema(
                 json!({
-                    "count": { "oneOf": [ { "type": "integer", "minimum": 0, "maximum": 1_000_000 }, { "type": "string", "minLength": 1 } ] },
+                    "count": number_or_template(0, 1_000_000),
                     "indexVar": ident,
                 }),
                 &["count"],
@@ -380,7 +395,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             label: "待機（時間指定）".into(),
             description: "Waits for `ms` milliseconds. Prefer state-based waits (e.g. wait_for_element) for UI synchronisation.".into(),
             params_schema: object_schema(
-                json!({ "ms": { "oneOf": [ { "type": "integer", "minimum": 0, "maximum": 3_600_000 }, { "type": "string", "minLength": 1 } ] } }),
+                json!({ "ms": number_or_template(0, 3_600_000) }),
                 &["ms"],
             ),
             blocks: vec![],
