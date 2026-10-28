@@ -14,6 +14,8 @@ export const CATEGORY_LABEL: Record<string, string> = {
   windows: "Windows",
   office: "Office",
   file: "ファイル",
+  network: "Web API",
+  system: "システム",
   text: "文字",
   number: "数値",
   date: "日付",
@@ -31,6 +33,8 @@ export const CATEGORY_COLOR: Record<string, string> = {
   windows: "var(--cat-windows)",
   office: "var(--cat-office)",
   file: "var(--cat-file)",
+  network: "var(--cat-browser)",
+  system: "var(--cat-windows)",
   // Presets are "変数に代入" steps underneath, so they share its colour.
   text: "var(--cat-variable)",
   number: "var(--cat-variable)",
@@ -40,7 +44,7 @@ export const CATEGORY_COLOR: Record<string, string> = {
 };
 
 /** Categories in the order they are listed: the flow's own steps first, then what they drive. */
-const ORDER = ["control", "variable", "text", "number", "date", "list", "flow", "log", "browser", "windows", "file", "other"];
+const ORDER = ["control", "variable", "text", "number", "date", "list", "flow", "log", "browser", "windows", "office", "file", "network", "system", "other"];
 const CATEGORY_KEY = "shikigami.studio.paletteCategory";
 
 const rank = (category: string) => {
