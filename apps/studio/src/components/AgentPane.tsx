@@ -43,7 +43,7 @@ const toolLabel = (name: string) => TOOL_LABELS[name] ?? name;
 export function AgentButton() {
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
-  const busy = useAgent((s) => s.turnId !== null);
+  const busy = useAgent((s) => s.turnId !== null || s.sending);
   const name = useAgent((s) => s.info?.name ?? "AI");
   return (
     <button
@@ -64,6 +64,7 @@ export function AgentPane() {
   const info = useAgent((s) => s.info);
   const items = useAgent((s) => s.items);
   const turnId = useAgent((s) => s.turnId);
+  const sending = useAgent((s) => s.sending);
   const send = useAgent((s) => s.send);
   const stop = useAgent((s) => s.stop);
   const reset = useAgent((s) => s.reset);
@@ -90,7 +91,7 @@ export function AgentPane() {
         <button
           type="button"
           onClick={reset}
-          disabled={turnId !== null || items.length === 0}
+          disabled={turnId !== null || sending || items.length === 0}
           className="grid h-6 w-6 place-items-center rounded-[5px] text-[15px] text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
           title="新しい会話"
           aria-label="新しい会話"
@@ -154,7 +155,7 @@ export function AgentPane() {
           ) : (
             <button
               type="button"
-              disabled={!info?.available || draft.trim() === ""}
+              disabled={!info?.available || sending || draft.trim() === ""}
               onClick={() => void submit()}
               className="ml-auto h-8 shrink-0 rounded-[6px] bg-ink px-4 text-[12px] font-semibold text-white enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400"
             >

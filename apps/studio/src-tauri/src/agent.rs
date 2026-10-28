@@ -207,8 +207,10 @@ pub fn agent_info() -> AgentInfo {
 }
 
 /// Starts one turn and returns its id; progress arrives as `agent-event`.
+/// Async so it runs on Tauri's Tokio runtime, which spawning a
+/// `tokio::process` child requires.
 #[tauri::command]
-pub fn agent_send(
+pub async fn agent_send(
     app: AppHandle,
     state: State<'_, AppState>,
     turns: State<'_, AgentTurns>,

@@ -288,7 +288,7 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
   const selection = useStudio((s) => s.selection);
   const sendBack = useStudio((s) => s.sendBack);
   const scenario = useStudio((s) => s.scenario);
-  const agentReady = useAgent((s) => s.info?.available === true && s.turnId === null);
+  const agentReady = useAgent((s) => s.info?.available === true && s.turnId === null && !s.sending);
   const agentName = useAgent((s) => s.info?.name ?? "AI");
   const askAgent = useAgent((s) => s.send);
   const [fixNow, setFixNow] = useState(true);

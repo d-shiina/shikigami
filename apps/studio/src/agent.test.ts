@@ -60,6 +60,22 @@ describe("agent store", () => {
     expect(store.getState().items[1]).toMatchObject({ parts: [{ kind: "text", text: "早い返事" }] });
   });
 
+  it("refuses a second message while the first is still being sent", async () => {
+    let release: (id: string) => void = () => undefined;
+    const api = fakeAgent({ send: vi.fn(() => new Promise<string>((r) => (release = r))) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    const first = store.getState().send("一つ目");
+    expect(await store.getState().send("二つ目")).toBe(false);
+    store.getState().reset();
+    expect(store.getState().items).toHaveLength(1);
+    release("turn_1");
+    await first;
+    expect(api.send).toHaveBeenCalledOnce();
+    expect(store.getState().turnId).toBe("turn_1");
+    expect(store.getState().sending).toBe(false);
+  });
+
   it("refuses a second message while one runs and reports a refused send", async () => {
     const api = fakeAgent();
     const store = createAgentStore(api);

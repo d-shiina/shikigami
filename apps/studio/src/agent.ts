@@ -31,6 +31,8 @@ export type AgentState = {
   sessionId: string | null;
   /** The turn in flight. */
   turnId: string | null;
+  /** A message is on its way and its turn id not known yet. */
+  sending: boolean;
   init(): Promise<void>;
   setOpen(open: boolean): void;
   /** `context` is a short label shown above the message, e.g. the scenario. */
@@ -79,6 +81,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       items: [],
       sessionId: loadSession(),
       turnId: null,
+      sending: false,
 
       async init() {
         try {
@@ -94,13 +97,14 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
 
       async send(message, scenario, context = null) {
         const text = message.trim();
-        if (!text || get().turnId) return false;
+        if (!text || get().turnId || get().sending) return false;
         const person: ChatItem = { role: "person", id: nextId(), text, context };
-        set({ items: [...get().items, person], open: true });
+        set({ items: [...get().items, person], open: true, sending: true });
         try {
           const turnId = await api.send({ message: text, sessionId: get().info?.remembers ? get().sessionId : null, scenario });
           set({
             turnId,
+            sending: false,
             items: [...get().items, { role: "ai", id: nextId(), turnId, parts: [], status: "running", message: null }],
           });
           for (const e of early.get(turnId) ?? []) get().onEvent(e);
@@ -108,6 +112,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
           return true;
         } catch (e) {
           set({
+            sending: false,
             items: [
               ...get().items,
               { role: "ai", id: nextId(), turnId: "", parts: [], status: "failed", message: errorText(e) },
@@ -123,7 +128,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       },
 
       reset() {
-        if (get().turnId) return;
+        if (get().turnId || get().sending) return;
         saveSession(null);
         set({ items: [], sessionId: null });
       },
