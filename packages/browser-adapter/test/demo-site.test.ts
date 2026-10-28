@@ -24,7 +24,7 @@ describe("demo site", () => {
 
   it("serves index.html for the root", async () => {
     const html = await (await fetch(base)).text();
-    expect(html).toContain("式神商事");
+    expect(html).toContain("サンプル商事");
   });
 
   it("answers 404 for a missing file and refuses to leave the site", async () => {

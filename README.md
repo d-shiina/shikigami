@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="式神 SHIKIGAMI" width="520">
+  <img src="docs/assets/mark.png" alt="Shikigami" width="160">
 </p>
 
-# Shikigami（式神）
+# Shikigami
 
 MCP-native desktop RPA where AI and humans build, edit, and run the same automation scenarios.
 

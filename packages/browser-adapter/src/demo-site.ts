@@ -41,5 +41,5 @@ export function startDemoSite(port = 8787): Promise<{ server: Server; url: strin
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const { url } = await startDemoSite(Number(process.argv[2] ?? 8787));
-  console.log(`式神商事のデモサイト: ${url}  (Ctrl+C で終了)`);
+  console.log(`サンプル商事のデモサイト: ${url}  (Ctrl+C で終了)`);
 }

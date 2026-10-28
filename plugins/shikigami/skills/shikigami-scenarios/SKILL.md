@@ -1,9 +1,9 @@
 ---
 name: shikigami-scenarios
-description: Use when the user asks to create, change, debug or run an RPA scenario / automation in Shikigami（式神）, or mentions Shikigami Studio. Covers the shikigami MCP tools and how to edit scenarios safely alongside a human.
+description: Use when the user asks to create, change, debug or run an RPA scenario / automation in Shikigami, or mentions Shikigami Studio. Covers the shikigami MCP tools and how to edit scenarios safely alongside a human.
 ---
 
-# Shikigami（式神）のシナリオを作る・直す・動かす
+# Shikigamiのシナリオを作る・直す・動かす
 
 Shikigami はローカルで動く RPA です。あなた（AI）が作ったシナリオは、人間が Shikigami Studio で見て編集し、最後は **AI なし** で `shikigami run` により実行されます。したがって目的は「いま操作をこなすこと」ではなく、「AI がいなくても正しく動き続けるシナリオを残すこと」です。
 

@@ -4,7 +4,7 @@
     "name": "Shikigami"
   },
   "metadata": {
-    "description": "Shikigami（式神）RPA の Claude Code プラグイン"
+    "description": "ShikigamiRPA の Claude Code プラグイン"
   },
   "plugins": [
     {
