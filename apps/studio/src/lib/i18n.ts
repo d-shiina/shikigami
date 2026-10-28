@@ -85,6 +85,7 @@ export const ja = {
   revertThis: "この変更を取り消す",
   reverted: "変更を差し戻しました（新しい変更として記録されています）。",
   unreviewed: "未確認",
+  wholeEntry: "この操作は、同じ変更に含まれる次の内容すべてに効きます:",
   revertBlocked: "この後に同じ対象が変更されているため、自動では差し戻せません。後の変更から順に取り消してください。",
   revertUnsupported: "この変更は差し戻せません。",
   you: "あなた",

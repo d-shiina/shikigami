@@ -5,7 +5,7 @@ import { actorLabel, describe, formatValue, relativeTime } from "../lib/changes"
 import { t } from "../lib/i18n";
 import { type Part, plain, sentence } from "../lib/sentence";
 import { revertBlocker, type StepRunState, touchedSteps } from "../store";
-import { ActorMark, usePendingReview } from "./Timeline";
+import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type Defs = ReadonlyMap<string, StepTypeDef>;
 
@@ -43,9 +43,11 @@ function ReviewTag({ entry, added, stepId }: { entry: HistoryEntry; added: boole
   const revert = useStudio((s) => s.revert);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const blocker = revertBlocker(entry, history);
+  const lines = describe(entry, scenario, defs);
+  const scope = entryScope(lines);
   const diffs = added
     ? []
-    : describe(entry, scenario, defs)
+    : lines
         .filter((l) => l.stepId === stepId)
         .flatMap((l) => l.diffs);
   return (
@@ -70,18 +72,21 @@ function ReviewTag({ entry, added, stepId }: { entry: HistoryEntry; added: boole
         <button
           type="button"
           onClick={() => approve(entry.revision)}
+          title={scope.title}
           className="rounded bg-ink px-2 py-px text-paper hover:bg-slate-700"
         >
           {t.approve}
+          {scope.suffix}
         </button>
         <button
           type="button"
           onClick={() => revert(entry)}
           disabled={blocker !== null}
-          title={blocker ?? undefined}
+          title={blocker ?? scope.title}
           className="rounded border border-shu-500 px-2 py-px text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
         >
           {t.revert}
+          {scope.suffix}
         </button>
       </div>
     </div>

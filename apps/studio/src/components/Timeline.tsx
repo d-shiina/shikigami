@@ -13,6 +13,18 @@ export function usePendingReview(): HistoryEntry[] {
   return useMemo(() => pendingReview({ history, reviewed, scenario }), [history, reviewed, scenario]);
 }
 
+/**
+ * Approve/revert act on a whole journal entry. When the entry changed more
+ * than the step a button sits beside, say so and list everything it covers.
+ */
+export function entryScope(lines: ChangeLine[]): { suffix: string; title?: string } {
+  if (lines.length <= 1) return { suffix: "" };
+  return {
+    suffix: `（${lines.length}件まとめて）`,
+    title: `${t.wholeEntry}\n${lines.map((l) => `・${verbLabel(l.verb)} ${l.subject}`).join("\n")}`,
+  };
+}
+
 export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: number }) {
   const external = isExternal(entry);
   return (

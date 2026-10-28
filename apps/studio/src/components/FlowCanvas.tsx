@@ -15,12 +15,12 @@ import { useStudio } from "../context";
 import { layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
 import type { HistoryEntry } from "@shikigami/schema";
-import { actorLabel } from "../lib/changes";
+import { actorLabel, describe } from "../lib/changes";
 import { sentence } from "../lib/sentence";
 import { revertBlocker, type StepRunState, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
-import { ActorMark, usePendingReview } from "./Timeline";
+import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
   Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[] }>
@@ -38,22 +38,28 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   const history = useStudio((s) => s.history);
   const approve = useStudio((s) => s.approve);
   const revert = useStudio((s) => s.revert);
+  const scenario = useStudio((s) => s.scenario);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const blocker = revertBlocker(entry, history);
+  const scope = entryScope(describe(entry, scenario, defs));
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-md">
+    <div title={scope.title} className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-md">
       <ActorMark entry={entry} size={18} />
       <span className="text-slate-600">{actorLabel(entry)}の変更</span>
       <button type="button" onClick={() => approve(entry.revision)} className="rounded-full bg-ink px-2 py-0.5 text-paper hover:bg-slate-700">
         {t.approve}
+        {scope.suffix}
       </button>
       <button
         type="button"
         onClick={() => revert(entry)}
         disabled={blocker !== null}
-        title={blocker ?? undefined}
+        title={blocker ?? scope.title}
         className="rounded-full border border-shu-500 px-2 py-0.5 text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
       >
         {t.revert}
+        {scope.suffix}
       </button>
     </div>
   );
