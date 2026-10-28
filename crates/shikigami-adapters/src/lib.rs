@@ -12,12 +12,14 @@ use shikigami_runtime::{Adapter, Runtime};
 
 /// The adapters built into Shikigami.
 pub fn builtin() -> Vec<Arc<dyn Adapter>> {
-    vec![
+    let mut adapters: Vec<Arc<dyn Adapter>> = vec![
         Arc::new(shikigami_browser::BrowserAdapter::discover()),
         Arc::new(shikigami_desktop::DesktopAdapter::new()),
         Arc::new(shikigami_files::FileAdapter::new()),
         Arc::new(shikigami_excel::ExcelAdapter::new()),
-    ]
+    ];
+    adapters.extend(shikigami_system::adapters());
+    adapters
 }
 
 /// Built-in adapters and installed plugins, with the plugins that could not

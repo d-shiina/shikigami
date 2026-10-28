@@ -1,0 +1,29 @@
+[package]
+name = "shikigami-system"
+description = "HTTP, process, clipboard and dialog steps for Shikigami (http.*, process.*, clipboard.*, dialog.*)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+shikigami-core.workspace = true
+shikigami-runtime.workspace = true
+shikigami-files.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["process", "io-util"] }
+tokio-util.workspace = true
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+encoding_rs = "0.8.35"
+form_urlencoded = "1.2.2"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
+
+[target."cfg(windows)".dependencies]
+clipboard-win = "5.4.3"
+win32job = "2.0.3"

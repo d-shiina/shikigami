@@ -8,8 +8,21 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value, json};
 use shikigami_core::expr::to_display;
 use shikigami_runtime::StepError;
+use tokio_util::sync::CancellationToken;
 
 use crate::encoding;
+
+/// Refuses to change files once the attempt was stopped or timed out: the
+/// Runtime has moved on and may already run the next attempt.
+pub fn check_cancel(cancel: &CancellationToken) -> Result<(), StepError> {
+    if cancel.is_cancelled() {
+        return Err(StepError::new(
+            "CANCELLED",
+            "the step was stopped before it finished changing files",
+        ));
+    }
+    Ok(())
+}
 
 /// Turns an I/O error into a step error with a stable code.
 pub fn io_error(e: &io::Error, path: &Path) -> StepError {
@@ -58,7 +71,11 @@ fn ensure_parent(path: &Path) -> Result<(), StepError> {
 
 /// Replaces `path` with `bytes` through a temporary file in the same folder,
 /// so a reader never sees half a file.
-pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), StepError> {
+pub fn write_atomic(
+    path: &Path,
+    bytes: &[u8],
+    cancel: &CancellationToken,
+) -> Result<(), StepError> {
     ensure_parent(path)?;
     let dir = path
         .parent()
@@ -66,11 +83,13 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), StepError> {
         .unwrap_or(Path::new("."));
     let mut tmp = tempfile::NamedTempFile::new_in(dir).map_err(|e| io_error(&e, dir))?;
     tmp.write_all(bytes).map_err(|e| io_error(&e, path))?;
+    check_cancel(cancel)?;
     tmp.persist(path).map_err(|e| io_error(&e.error, path))?;
     Ok(())
 }
 
-pub fn append(path: &Path, bytes: &[u8]) -> Result<(), StepError> {
+pub fn append(path: &Path, bytes: &[u8], cancel: &CancellationToken) -> Result<(), StepError> {
+    check_cancel(cancel)?;
     ensure_parent(path)?;
     let mut file = fs::OpenOptions::new()
         .create(true)
@@ -89,12 +108,13 @@ pub fn write_text(
     text: &str,
     encoding: &str,
     append_mode: bool,
+    cancel: &CancellationToken,
 ) -> Result<(), StepError> {
     if append_mode {
         let bytes = encoding::encode(text, encoding, !has_content(path))?;
-        append(path, &bytes)
+        append(path, &bytes, cancel)
     } else {
-        write_atomic(path, &encoding::encode(text, encoding, true)?)
+        write_atomic(path, &encoding::encode(text, encoding, true)?, cancel)
     }
 }
 
@@ -179,7 +199,9 @@ fn csv_columns(
     columns: Option<Vec<String>>,
     existing: Option<Vec<String>>,
 ) -> Vec<String> {
-    if let Some(columns) = columns.or(existing) {
+    // When appending, the file's header decides: rows are matched to it by
+    // key, so values never land under another column.
+    if let Some(columns) = existing.or(columns) {
         return columns;
     }
     let mut out: Vec<String> = Vec::new();
@@ -203,6 +225,7 @@ pub struct CsvWrite<'a> {
     pub header: bool,
     pub append: bool,
     pub encoding: &'a str,
+    pub cancel: &'a CancellationToken,
 }
 
 pub fn write_csv(w: &CsvWrite<'_>) -> Result<usize, StepError> {
@@ -258,7 +281,7 @@ pub fn write_csv(w: &CsvWrite<'_>) -> Result<usize, StepError> {
         .map_err(|e| StepError::permanent("CSV_INVALID", e.to_string()))?;
     let text =
         String::from_utf8(bytes).map_err(|e| StepError::permanent("CSV_INVALID", e.to_string()))?;
-    write_text(w.path, &text, w.encoding, w.append)?;
+    write_text(w.path, &text, w.encoding, w.append, w.cancel)?;
     Ok(w.rows.len())
 }
 
@@ -342,9 +365,10 @@ pub fn list(folder: &Path, options: &ListOptions<'_>) -> Result<Value, StepError
     ))
 }
 
-fn copy_tree(from: &Path, to: &Path) -> Result<(), StepError> {
+fn copy_tree(from: &Path, to: &Path, cancel: &CancellationToken) -> Result<(), StepError> {
     fs::create_dir_all(to).map_err(|e| io_error(&e, to))?;
     for item in fs::read_dir(from).map_err(|e| io_error(&e, from))? {
+        check_cancel(cancel)?;
         let item = item.map_err(|e| io_error(&e, from))?;
         let target = to.join(item.file_name());
         if item
@@ -352,10 +376,41 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), StepError> {
             .map_err(|e| io_error(&e, &item.path()))?
             .is_dir()
         {
-            copy_tree(&item.path(), &target)?;
+            copy_tree(&item.path(), &target, cancel)?;
         } else {
             fs::copy(item.path(), &target).map_err(|e| io_error(&e, &item.path()))?;
         }
+    }
+    Ok(())
+}
+
+/// The same file or folder under two spellings (`a.csv` / `A.CSV`, `.\\a`).
+fn same_path(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// Rejects a destination that is the source itself or lies inside it.
+fn check_distinct(from: &Path, to: &Path) -> Result<(), StepError> {
+    let inside = fs::canonicalize(from).ok().is_some_and(|from| {
+        to.ancestors()
+            .skip(1)
+            .filter_map(|a| fs::canonicalize(a).ok())
+            .any(|a| a == from)
+    });
+    if same_path(from, to) || inside {
+        return Err(StepError::permanent(
+            "SAME_PATH",
+            format!(
+                "{} cannot be copied or moved onto or into itself",
+                from.display()
+            ),
+        )
+        .with_details(
+            json!({ "from": from.display().to_string(), "to": to.display().to_string() }),
+        ));
     }
     Ok(())
 }
@@ -370,11 +425,18 @@ fn prepare_target(to: &Path, overwrite: bool) -> Result<(), StepError> {
     ensure_parent(to)
 }
 
-pub fn copy(from: &Path, to: &Path, overwrite: bool) -> Result<(), StepError> {
+pub fn copy(
+    from: &Path,
+    to: &Path,
+    overwrite: bool,
+    cancel: &CancellationToken,
+) -> Result<(), StepError> {
     let meta = fs::metadata(from).map_err(|e| io_error(&e, from))?;
+    check_distinct(from, to)?;
+    check_cancel(cancel)?;
     prepare_target(to, overwrite)?;
     if meta.is_dir() {
-        copy_tree(from, to)
+        copy_tree(from, to, cancel)
     } else {
         fs::copy(from, to)
             .map(|_| ())
@@ -382,14 +444,28 @@ pub fn copy(from: &Path, to: &Path, overwrite: bool) -> Result<(), StepError> {
     }
 }
 
-pub fn rename(from: &Path, to: &Path, overwrite: bool) -> Result<(), StepError> {
+pub fn rename(
+    from: &Path,
+    to: &Path,
+    overwrite: bool,
+    cancel: &CancellationToken,
+) -> Result<(), StepError> {
     fs::metadata(from).map_err(|e| io_error(&e, from))?;
-    prepare_target(to, overwrite)?;
+    // Renaming `a.csv` to `A.csv` (same file on Windows) is allowed.
+    let case_only = same_path(from, to) && from != to;
+    if !case_only {
+        check_distinct(from, to)?;
+    }
+    check_cancel(cancel)?;
+    if !case_only {
+        prepare_target(to, overwrite)?;
+    }
     if fs::rename(from, to).is_ok() {
         return Ok(());
     }
     // Another drive: copy, then delete the original.
-    copy(from, to, false)?;
+    copy(from, to, false, cancel)?;
+    check_cancel(cancel)?;
     remove(from, true).map(|_| ())
 }
 
@@ -444,12 +520,21 @@ pub(crate) fn entry_name(raw: &[u8]) -> String {
     }
 }
 
+struct ZipJob<'a> {
+    options: zip::write::SimpleFileOptions,
+    /// The archive being written (and the one it replaces): never added to itself.
+    skip: Vec<PathBuf>,
+    cancel: &'a CancellationToken,
+}
+
 fn add_to_zip(
     zip: &mut zip::ZipWriter<fs::File>,
     path: &Path,
     name: &str,
-    options: zip::write::SimpleFileOptions,
+    job: &ZipJob<'_>,
 ) -> Result<(), StepError> {
+    check_cancel(job.cancel)?;
+    let options = job.options;
     let fail = |e: zip::result::ZipError| StepError::new("ZIP_ERROR", e.to_string());
     let meta = fs::metadata(path).map_err(|e| io_error(&e, path))?;
     if meta.is_dir() {
@@ -462,7 +547,11 @@ fn add_to_zip(
         children.sort_by_key(fs::DirEntry::file_name);
         for child in children {
             let child_name = format!("{name}/{}", child.file_name().to_string_lossy());
-            add_to_zip(zip, &child.path(), &child_name, options)?;
+            let child_path = child.path();
+            if fs::canonicalize(&child_path).is_ok_and(|c| job.skip.contains(&c)) {
+                continue;
+            }
+            add_to_zip(zip, &child_path, &child_name, job)?;
         }
     } else {
         zip.start_file(name, options).map_err(fail)?;
@@ -472,7 +561,12 @@ fn add_to_zip(
     Ok(())
 }
 
-pub fn zip(sources: &[PathBuf], to: &Path, overwrite: bool) -> Result<(), StepError> {
+pub fn zip(
+    sources: &[PathBuf],
+    to: &Path,
+    overwrite: bool,
+    cancel: &CancellationToken,
+) -> Result<(), StepError> {
     for source in sources {
         fs::metadata(source).map_err(|e| io_error(&e, source))?;
     }
@@ -487,23 +581,58 @@ pub fn zip(sources: &[PathBuf], to: &Path, overwrite: bool) -> Result<(), StepEr
     let tmp = tempfile::NamedTempFile::new_in(dir).map_err(|e| io_error(&e, dir))?;
     let file = tmp.reopen().map_err(|e| io_error(&e, to))?;
     let mut writer = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let job = ZipJob {
+        options: zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated),
+        skip: [tmp.path(), to]
+            .iter()
+            .filter_map(|p| fs::canonicalize(p).ok())
+            .collect(),
+        cancel,
+    };
     for source in sources {
         let name = source
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "root".into());
-        add_to_zip(&mut writer, source, &name, options)?;
+        add_to_zip(&mut writer, source, &name, &job)?;
     }
     writer
         .finish()
         .map_err(|e| StepError::new("ZIP_ERROR", e.to_string()))?;
+    check_cancel(cancel)?;
     tmp.persist(to).map_err(|e| io_error(&e.error, to))?;
     Ok(())
 }
 
-pub fn unzip(path: &Path, to: &Path, overwrite: bool) -> Result<Value, StepError> {
+/// Fails when a folder between `root` and `target` is a link (symlink or
+/// junction) that already exists: writing through it would leave `root`.
+fn check_no_links(root: &Path, target: &Path) -> Result<(), StepError> {
+    let Ok(relative) = target.strip_prefix(root) else {
+        return Ok(());
+    };
+    let mut current = root.to_path_buf();
+    for part in relative.components() {
+        current.push(part);
+        if fs::symlink_metadata(&current).is_ok_and(|m| m.file_type().is_symlink()) {
+            return Err(StepError::permanent(
+                "ZIP_INVALID",
+                format!(
+                    "{} is a link; extracting through it would leave the destination",
+                    current.display()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub fn unzip(
+    path: &Path,
+    to: &Path,
+    overwrite: bool,
+    cancel: &CancellationToken,
+) -> Result<Value, StepError> {
     let file = fs::File::open(path).map_err(|e| io_error(&e, path))?;
     let bad = |e: zip::result::ZipError| {
         StepError::permanent("ZIP_INVALID", format!("{}: {e}", path.display()))
@@ -530,6 +659,7 @@ pub fn unzip(path: &Path, to: &Path, overwrite: bool) -> Result<Value, StepError
             ));
         }
         let target = to.join(&relative);
+        check_no_links(to, &target)?;
         if !entry.is_dir() && !overwrite && target.exists() {
             return Err(exists_error(&target));
         }
@@ -537,6 +667,8 @@ pub fn unzip(path: &Path, to: &Path, overwrite: bool) -> Result<Value, StepError
     }
     let mut extracted = Vec::new();
     for (i, target, is_dir) in planned {
+        check_cancel(cancel)?;
+        check_no_links(to, &target)?;
         if is_dir {
             fs::create_dir_all(&target).map_err(|e| io_error(&e, &target))?;
             continue;
