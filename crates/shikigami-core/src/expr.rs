@@ -4,10 +4,13 @@
 //! from untrusted page content), so instead of embedding a scripting engine we
 //! evaluate a tiny, total language over JSON values:
 //!
-//! - literals: `1`, `2.5`, `'text'`, `"text"`, `true`, `false`, `null`, `[1, 2]`
+//! - literals: `1`, `2.5`, `'text'`, `"text"`, `true`, `false`, `null`,
+//!   `[1, 2]`, `{ name: 'A', amount: 1 }`
 //! - variables and paths: `user.name`, `items[0]`, `row['列名']`
 //! - operators: `!` `-` `*` `/` `%` `+` `-` `<` `<=` `>` `>=` `==` `!=` `&&` `||`
-//! - whitelisted pure functions: see [`FUNCTIONS`]
+//! - whitelisted functions without side effects: see [`FUNCTION_DOCS`]
+//! - `x => …` only as the second argument of `map` / `filter` / `find` /
+//!   `some` / `every` / `sortBy` / `groupBy`
 //!
 //! Templates embed expressions in strings: `"こんにちは {{ user.name }}"`.
 //! A string that is exactly one `{{ … }}` evaluates to the typed value.
@@ -17,24 +20,11 @@ use std::fmt;
 
 use serde_json::{Map, Number, Value};
 
-/// Names of the built-in functions (all pure).
-pub const FUNCTIONS: &[&str] = &[
-    "len",
-    "contains",
-    "startsWith",
-    "endsWith",
-    "lower",
-    "upper",
-    "trim",
-    "str",
-    "num",
-    "isEmpty",
-    "coalesce",
-    "join",
-    "split",
-    "sum",
-    "round",
-];
+mod date;
+mod functions;
+mod width;
+
+pub use functions::{FUNCTION_DOCS, FunctionDoc, function_names};
 
 const MAX_DEPTH: usize = 64;
 
@@ -79,7 +69,12 @@ pub enum Expr {
     List(Vec<Expr>),
     Member(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
+    /// `{ key: expr, … }`
+    Object(Vec<(String, Expr)>),
     Call(String, Vec<Expr>),
+    /// `param => body`; only allowed as an argument of the functions in
+    /// [`functions::HIGHER_ORDER`].
+    Lambda(String, Box<Expr>),
     Unary(UnaryOp, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
 }
@@ -293,8 +288,8 @@ impl fmt::Display for Tok {
 }
 
 const OPS: &[&str] = &[
-    "&&", "||", "==", "!=", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "!", "(", ")", "[", "]",
-    ".", ",",
+    "=>", "&&", "||", "==", "!=", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "!", "(", ")",
+    "[", "]", "{", "}", ".", ",", ":",
 ];
 
 fn tokenize(source: &str) -> Result<Vec<(usize, Tok)>, ExprError> {
@@ -345,6 +340,7 @@ fn tokenize(source: &str) -> Result<Vec<(usize, Tok)>, ExprError> {
                         i += 1;
                         s.push(match esc {
                             'n' => '\n',
+                            'r' => '\r',
                             't' => '\t',
                             other => other,
                         });
@@ -507,6 +503,21 @@ impl Parser {
         }
     }
 
+    /// `param => body`, the second argument of a higher-order function.
+    fn lambda(&mut self) -> Result<Expr, ExprError> {
+        if let (Tok::Ident(param), Some((_, Tok::Op("=>")))) =
+            (self.peek().clone(), self.tokens.get(self.pos + 1))
+        {
+            self.pos += 2;
+            let body = self.expr()?;
+            return Ok(Expr::Lambda(param, Box::new(body)));
+        }
+        Err(self.error(format!(
+            "expected 'x => …' (e.g. r => r.amount), found {}",
+            self.peek()
+        )))
+    }
+
     fn primary(&mut self) -> Result<Expr, ExprError> {
         match self.next() {
             Tok::Num(n) => Ok(Expr::Literal(number(n))),
@@ -516,18 +527,29 @@ impl Parser {
                 "false" => Ok(Expr::Literal(Value::Bool(false))),
                 "null" => Ok(Expr::Literal(Value::Null)),
                 _ if self.eat("(") => {
-                    if !FUNCTIONS.contains(&name.as_str()) {
+                    if functions::doc(&name).is_none() {
                         return Err(ExprError::UnknownFunction(name));
                     }
+                    let higher_order = functions::HIGHER_ORDER.contains(&name.as_str());
                     let mut args = Vec::new();
                     if !self.eat(")") {
                         loop {
-                            args.push(self.expr()?);
+                            let arg = if higher_order && args.len() == 1 {
+                                self.lambda()?
+                            } else {
+                                self.expr()?
+                            };
+                            args.push(arg);
                             if self.eat(")") {
                                 break;
                             }
                             self.expect(",")?;
                         }
+                    }
+                    if higher_order && !matches!(args.get(1), Some(Expr::Lambda(..))) {
+                        return Err(self.error(format!(
+                            "{name}() takes a list and 'x => …', e.g. {name}(rows, r => r.amount)"
+                        )));
                     }
                     Ok(Expr::Call(name, args))
                 }
@@ -537,6 +559,29 @@ impl Parser {
                 let e = self.expr()?;
                 self.expect(")")?;
                 Ok(e)
+            }
+            Tok::Op("{") => {
+                let mut fields: Vec<(String, Expr)> = Vec::new();
+                if !self.eat("}") {
+                    loop {
+                        let key = match self.next() {
+                            Tok::Ident(k) | Tok::Str(k) => k,
+                            other => {
+                                self.pos = self.pos.saturating_sub(1);
+                                return Err(self.error(format!("expected a key, found {other}")));
+                            }
+                        };
+                        self.expect(":")?;
+                        let value = self.expr()?;
+                        fields.retain(|(k, _)| *k != key);
+                        fields.push((key, value));
+                        if self.eat("}") {
+                            break;
+                        }
+                        self.expect(",")?;
+                    }
+                }
+                Ok(Expr::Object(fields))
             }
             Tok::Op("[") => {
                 let mut items = Vec::new();
@@ -569,6 +614,13 @@ fn collect_vars(expr: &Expr, out: &mut BTreeSet<String>) {
             out.insert(name.clone());
         }
         Expr::List(items) | Expr::Call(_, items) => items.iter().for_each(|e| collect_vars(e, out)),
+        Expr::Object(fields) => fields.iter().for_each(|(_, e)| collect_vars(e, out)),
+        Expr::Lambda(param, body) => {
+            let mut inner = BTreeSet::new();
+            collect_vars(body, &mut inner);
+            inner.remove(param);
+            out.extend(inner);
+        }
         Expr::Member(base, _) => collect_vars(base, out),
         Expr::Index(base, index) => {
             collect_vars(base, out);
@@ -627,6 +679,15 @@ fn eval(expr: &Expr, scope: &dyn Scope) -> Result<Value, ExprError> {
             .map(|e| eval(e, scope))
             .collect::<Result<Vec<_>, _>>()
             .map(Value::Array),
+        Expr::Object(fields) => fields
+            .iter()
+            .map(|(k, e)| Ok((k.clone(), eval(e, scope)?)))
+            .collect::<Result<Map<_, _>, _>>()
+            .map(Value::Object),
+        Expr::Lambda(..) => Err(ExprError::Type(
+            "'x => …' can only be an argument of map, filter, find, some, every, sortBy or groupBy"
+                .into(),
+        )),
         Expr::Member(base, name) => Ok(match eval(base, scope)? {
             Value::Object(map) => map.get(name).cloned().unwrap_or(Value::Null),
             Value::Array(items) if name == "length" => Value::from(items.len()),
@@ -675,14 +736,49 @@ fn eval(expr: &Expr, scope: &dyn Scope) -> Result<Value, ExprError> {
             let right = eval(b, scope)?;
             binary(*op, &left, &right)
         }
+        Expr::Call(name, args) if functions::HIGHER_ORDER.contains(&name.as_str()) => {
+            functions::call_higher_order(name, args, scope)
+        }
         Expr::Call(name, args) => {
             let args = args
                 .iter()
                 .map(|e| eval(e, scope))
                 .collect::<Result<Vec<_>, _>>()?;
-            call(name, &args)
+            functions::call(name, &args)
         }
     }
+}
+
+/// A scope with one extra variable (the parameter of `x => …`).
+struct Bound<'a> {
+    name: &'a str,
+    value: Value,
+    parent: &'a dyn Scope,
+}
+
+impl Scope for Bound<'_> {
+    fn get(&self, name: &str) -> Option<&Value> {
+        if name == self.name {
+            Some(&self.value)
+        } else {
+            self.parent.get(name)
+        }
+    }
+}
+
+/// Evaluates the body of `param => body` with `param` bound to `value`.
+fn apply_lambda(lambda: &Expr, value: Value, scope: &dyn Scope) -> Result<Value, ExprError> {
+    let Expr::Lambda(param, body) = lambda else {
+        return Err(ExprError::Type("expected 'x => …'".into()));
+    };
+    eval(
+        body,
+        &Bound {
+            name: param,
+            value,
+            parent: scope,
+        },
+    )
 }
 
 fn binary(op: BinaryOp, left: &Value, right: &Value) -> Result<Value, ExprError> {
@@ -745,162 +841,6 @@ fn binary(op: BinaryOp, left: &Value, right: &Value) -> Result<Value, ExprError>
 fn unreachable_logical() -> Value {
     // `&&` and `||` short-circuit in `eval` and never reach `binary`.
     Value::Null
-}
-
-fn arity(name: &str, args: &[Value], n: usize) -> Result<(), ExprError> {
-    if args.len() == n {
-        Ok(())
-    } else {
-        Err(ExprError::Type(format!(
-            "{name}() takes {n} argument(s), got {}",
-            args.len()
-        )))
-    }
-}
-
-fn str_arg<'a>(name: &str, value: &'a Value) -> Result<&'a str, ExprError> {
-    value.as_str().ok_or_else(|| {
-        ExprError::Type(format!(
-            "{name}() expects a string, got {}",
-            type_name(value)
-        ))
-    })
-}
-
-fn call(name: &str, args: &[Value]) -> Result<Value, ExprError> {
-    match name {
-        "len" => {
-            arity(name, args, 1)?;
-            Ok(Value::from(match &args[0] {
-                Value::String(s) => s.chars().count(),
-                Value::Array(a) => a.len(),
-                Value::Object(o) => o.len(),
-                Value::Null => 0,
-                other => return Err(ExprError::Type(format!("len() of {}", type_name(other)))),
-            }))
-        }
-        "contains" => {
-            arity(name, args, 2)?;
-            Ok(Value::Bool(match (&args[0], &args[1]) {
-                (Value::String(s), needle) => s.contains(&to_display(needle)),
-                (Value::Array(items), needle) => items.iter().any(|v| loose_eq(v, needle)),
-                (Value::Object(map), Value::String(key)) => map.contains_key(key),
-                _ => false,
-            }))
-        }
-        "startsWith" | "endsWith" => {
-            arity(name, args, 2)?;
-            let s = str_arg(name, &args[0])?;
-            let p = str_arg(name, &args[1])?;
-            Ok(Value::Bool(if name == "startsWith" {
-                s.starts_with(p)
-            } else {
-                s.ends_with(p)
-            }))
-        }
-        "lower" => {
-            arity(name, args, 1)?;
-            Ok(Value::String(str_arg(name, &args[0])?.to_lowercase()))
-        }
-        "upper" => {
-            arity(name, args, 1)?;
-            Ok(Value::String(str_arg(name, &args[0])?.to_uppercase()))
-        }
-        "trim" => {
-            arity(name, args, 1)?;
-            Ok(Value::String(str_arg(name, &args[0])?.trim().to_owned()))
-        }
-        "str" => {
-            arity(name, args, 1)?;
-            Ok(Value::String(to_display(&args[0])))
-        }
-        "num" => {
-            arity(name, args, 1)?;
-            match &args[0] {
-                Value::Number(_) => Ok(args[0].clone()),
-                Value::String(s) => {
-                    let cleaned = s.trim().replace(',', "");
-                    cleaned
-                        .parse::<f64>()
-                        .map(number)
-                        .map_err(|_| ExprError::Type(format!("num() cannot parse '{s}'")))
-                }
-                Value::Bool(b) => Ok(Value::from(u8::from(*b))),
-                other => Err(ExprError::Type(format!("num() of {}", type_name(other)))),
-            }
-        }
-        "isEmpty" => {
-            arity(name, args, 1)?;
-            Ok(Value::Bool(
-                !truthy(&args[0]) && !matches!(args[0], Value::Bool(false) | Value::Number(_)),
-            ))
-        }
-        "coalesce" => Ok(args
-            .iter()
-            .find(|v| !v.is_null())
-            .cloned()
-            .unwrap_or(Value::Null)),
-        "round" => {
-            // round(x) or round(x, digits); halves round away from zero.
-            if args.is_empty() || args.len() > 2 {
-                return Err(ExprError::Type(format!(
-                    "round() takes 1 or 2 arguments, got {}",
-                    args.len()
-                )));
-            }
-            let x = args[0]
-                .as_f64()
-                .ok_or_else(|| ExprError::Type(format!("round() of {}", type_name(&args[0]))))?;
-            let digits = match args.get(1) {
-                None => 0,
-                Some(d) => d
-                    .as_i64()
-                    .filter(|d| (0..=10).contains(d))
-                    .ok_or_else(|| ExprError::Type("round() digits must be 0-10".into()))?,
-            };
-            let scale = 10f64.powi(digits as i32);
-            Ok(number((x * scale).round() / scale))
-        }
-        "sum" => {
-            arity(name, args, 1)?;
-            let Value::Array(items) = &args[0] else {
-                return Err(ExprError::Type("sum() expects an array".into()));
-            };
-            let mut total = 0.0;
-            for item in items {
-                total += match item {
-                    Value::Number(n) => n.as_f64().unwrap_or(0.0),
-                    Value::Null => 0.0,
-                    other => {
-                        return Err(ExprError::Type(format!(
-                            "sum() of an array containing {}",
-                            type_name(other)
-                        )));
-                    }
-                };
-            }
-            Ok(number(total))
-        }
-        "join" => {
-            arity(name, args, 2)?;
-            let Value::Array(items) = &args[0] else {
-                return Err(ExprError::Type("join() expects an array".into()));
-            };
-            let sep = str_arg(name, &args[1])?;
-            Ok(Value::String(
-                items.iter().map(to_display).collect::<Vec<_>>().join(sep),
-            ))
-        }
-        "split" => {
-            arity(name, args, 2)?;
-            let s = str_arg(name, &args[0])?;
-            let sep = str_arg(name, &args[1])?;
-            Ok(Value::Array(
-                s.split(sep).map(|p| Value::String(p.to_owned())).collect(),
-            ))
-        }
-        other => Err(ExprError::UnknownFunction(other.to_owned())),
-    }
 }
 
 #[cfg(test)]
@@ -999,9 +939,10 @@ mod tests {
             Err(ExprError::Type(_))
         ));
         assert!(matches!(
-            evaluate("{}", &scope()),
+            evaluate("{ a }", &scope()),
             Err(ExprError::Syntax { .. })
         ));
+        assert_eq!(evaluate("{}", &scope()), Ok(json!({})));
     }
 
     #[test]

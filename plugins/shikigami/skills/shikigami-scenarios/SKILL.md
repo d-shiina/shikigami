@@ -43,7 +43,10 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 - 制御構文は子を `blocks` に持つ：`control.if`（`then` / `else`）、`control.while` / `control.repeat` / `control.forEach`（`body`）、`control.try`（`try` / `catch` / `finally`）。
 - 互いに独立した処理は `control.parallel`（`branches` の各ステップが同時に動く）で並行にできる。複数ステップのブランチは `control.group` で包む。2つ以上のブランチが同じ変数に書く（`saveAs`・`variable.set`・`onError: continue` の `lastError` を含む）と検証で `PARALLEL_VARIABLE_CONFLICT` になるので、ブランチごとに別の変数へ結果を入れ、並行ステップの後でまとめる。
 - 書き分けの規則は1つだけ：ステップ型の `expressionParams`（`list_step_types` に載っている。`control.if` の `condition` など）には `{{ }}` なしの式を書く。それ以外の文字列 params はすべてテンプレートで、`"合計 {{ total }} 円"` のように書く。文字列全体が1つの `{{ 式 }}` なら値の型（数値・配列など）がそのまま渡る。回数・待ち時間などの数値 params は `3` か `"{{ retryCount }}"`。
-- 式で使える関数は安全なものに限られる（`len`, `contains`, `startsWith`, `endsWith`, `lower`, `upper`, `trim`, `str`, `num`, `isEmpty`, `coalesce`, `join`, `split`, `sum`, `round`）。任意コードは実行できない。
+- 文字列・数値・日付・リスト・JSON の加工はステップではなく**式の関数**で書く（`variable.set` の `expression` や `{{ }}` の中）。一覧と例は `list_step_types` の `functions`（`docs/expressions.md`）。任意コードは実行できない。
+  - 連結は `+` かテンプレート：`sei + ' ' + mei`、`"{{ sei }} {{ mei }} 様"`。トリミングは `trim`、置換は `replace`（正規表現は `regexReplace`）、切り出しは `slice`、ゼロ埋めは `padStart(no, 5, '0')`、全角→半角は `toHalfWidth`。
+  - 表（配列）の加工は `map` / `filter` / `find` / `sortBy` / `groupBy` に `r => …` を渡す：`sum(map(filter(rows, r => r.status == '済'), r => num(r.amount)))`。レコードの追加・変更は `merge(row, { status: '済' })`、作るときは `{ name: r.氏名, amount: num(r.金額) }`。
+  - 日付は文字列（`2026-10-28` / `2026-10-28T09:30:00`）で持つ：`today()`、`formatDate(today(), 'yyyyMMdd')`、`dateAdd(d, -1, 'month')`、`endOfMonth(d)`、`parseDate('令和8年10月28日', 'gge年M月d日')`。
 - 入出力は `variables` の `direction`（`input` / `output` / `inOut` / `local`。省略時は `local`）で宣言する。`secret: true` の変数はログで `***` に伏せられるが、既定値は書けない（パスワードは下のシークレットを使う）。
 - 要素ごとの処理は `control.forEach`。各回の結果は `collect`（式）で返すと `saveAs` に配列で入る。互いに独立した要素は `concurrency`（例 `4`）で同時に処理できるが、その場合は各回が変数のコピーで動くので、本体で外の変数に書かず（`FOREACH_SHARED_WRITE`）、`collect` + `saveAs` で受け取ってループ後に `sum(results)` などで集計する。
 - 時間のかかる処理の完了や状態の変化を待つときは `wait.until`（`condition` が真になるまで `intervalMs` ごとに確認。`check` ブロックで状態を読んで `saveAs` で変数に入れる。待つ上限は `timeoutMs`、超えると `WAIT_TIMEOUT`）。`flow.delay` の固定待ちや `retry` で代用しない。
