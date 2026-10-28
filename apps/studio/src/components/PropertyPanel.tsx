@@ -2,7 +2,8 @@ import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { findStep } from "../store";
+import { findStep, touchedSteps } from "../store";
+import { ActorMark, usePendingReview } from "./Timeline";
 
 type JsonSchema = {
   type?: string;
@@ -14,7 +15,7 @@ type JsonSchema = {
 };
 
 const inputClass =
-  "w-full rounded border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none";
+  "w-full rounded border border-slate-300 px-2 py-1 text-sm focus:border-ink focus:outline-none";
 
 /** Text field that commits on blur / Enter, so each edit is one undoable change. */
 function CommitInput(props: {
@@ -159,10 +160,10 @@ function ParamsEditor({ step, def, update }: { step: Step; def?: StepTypeDef; up
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          {error && <div className="text-xs text-red-600">{error}</div>}
+          {error && <div className="text-xs text-shu-600">{error}</div>}
           <button
             type="button"
-            className="rounded bg-brand-600 px-2 py-1 text-xs text-white"
+            className="rounded bg-ink px-2 py-1 text-xs text-paper"
             onClick={() => {
               try {
                 const parsed = JSON.parse(text) as Record<string, unknown>;
@@ -199,6 +200,9 @@ export function PropertyPanel() {
   const stepTypes = useStudio((s) => s.stepTypes);
   const validation = useStudio((s) => s.validation);
   const updateStep = useStudio((s) => s.updateStep);
+  const approve = useStudio((s) => s.approve);
+  const revert = useStudio((s) => s.revert);
+  const pending = usePendingReview();
 
   if (!scenario || selection?.kind !== "step") {
     return <p className="p-4 text-sm text-slate-400">{t.selectStep}</p>;
@@ -220,8 +224,24 @@ export function PropertyPanel() {
         {def?.description && <p className="mt-1 text-xs text-slate-500">{def.description}</p>}
         <div className="mt-1 font-mono text-[10px] text-slate-400">{id}</div>
       </div>
+      {pending
+        .filter((e) => touchedSteps(e).includes(id))
+        .map((e) => (
+          <div key={e.revision} className="flex items-center gap-2 rounded-md border border-shu-100 bg-shu-50 px-2 py-1.5 text-xs">
+            <ActorMark entry={e} size={18} />
+            <span className="flex-1">
+              {t.actor[e.actor.kind]}が変更（rev {e.revision}・{t.unreviewed}）
+            </span>
+            <button type="button" className="font-medium hover:underline" onClick={() => approve(e.revision)}>
+              {t.approve}
+            </button>
+            <button type="button" className="font-medium text-shu-600 hover:underline" onClick={() => revert(e)}>
+              {t.revert}
+            </button>
+          </div>
+        ))}
       {issues.length > 0 && (
-        <ul className="space-y-1 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+        <ul className="space-y-1 rounded border border-shu-100 bg-shu-50 p-2 text-xs text-shu-600">
           {issues.map((i) => (
             <li key={`${i.code}${i.path}${i.message}`}>
               {i.severity === "warning" ? "⚠" : "✕"} {i.message}

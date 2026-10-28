@@ -6,7 +6,7 @@ const LEVEL_STYLE = {
   debug: "text-slate-400",
   info: "text-slate-700",
   warn: "text-amber-700",
-  error: "text-red-700",
+  error: "text-shu-600",
 } as const;
 
 export function RunLog() {
@@ -18,7 +18,7 @@ export function RunLog() {
   useEffect(() => end.current?.scrollIntoView({ block: "end" }), [count]);
 
   return (
-    <section className="flex h-full flex-col border-t border-slate-200 bg-white">
+    <section className="flex h-full flex-col border-t border-slate-200 bg-sheet">
       <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-1">
         <span className="text-xs font-semibold text-slate-500">{t.log}</span>
         {run && (

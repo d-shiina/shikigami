@@ -1,8 +1,8 @@
-import type { EditOp, EditOutcome, RunEventEnvelope, Scenario } from "@shikigami/schema";
+import type { EditOp, EditOutcome, HistoryEntry, RunEventEnvelope, Scenario } from "@shikigami/schema";
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
-import { createStudioStore, locate } from "./store";
+import { createStudioStore, locate, pendingReview, touchedSteps } from "./store";
 
 const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({
   schemaVersion: 1,
@@ -27,6 +27,7 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
     getScenario: vi.fn(async () => scenario(1)),
     validate: vi.fn(async () => ({ valid: true, issues: [] })),
     undoState: vi.fn(async () => ({ canUndo: false, canRedo: false })),
+    history: vi.fn(async () => []),
   };
   return { ...base, ...overrides } as Api;
 }
@@ -105,5 +106,37 @@ describe("studio store", () => {
     expect(locate(steps, "b")).toEqual({ parentId: "if", block: "then", index: 0, siblings: 1 });
     expect(locate(steps, "if")).toEqual({ parentId: null, block: null, index: 1, siblings: 2 });
     expect(locate(steps, "zzz")).toBeNull();
+  });
+
+  describe("review of external edits", () => {
+    const aiEdit: HistoryEntry = {
+      kind: "edit",
+      revision: 2,
+      actor: { kind: "mcp", name: "Claude" },
+      at: "2026-10-28T00:00:00Z",
+      label: "update step stp_a",
+      ops: [{ op: "updateStep", stepId: "stp_a", patch: { params: { message: "new" } } }],
+      inverse: [{ op: "updateStep", stepId: "stp_a", patch: { params: { message: "old" } } }],
+    };
+    const ownEdit: HistoryEntry = { ...aiEdit, revision: 3, actor: { kind: "studio" } };
+
+    it("lists only unreviewed non-Studio edits", async () => {
+      const store = createStudioStore(fakeApi({ history: vi.fn(async () => [aiEdit, ownEdit]) }));
+      await store.getState().open("scn_a");
+      expect(pendingReview(store.getState()).map((e) => e.revision)).toEqual([2]);
+      expect(touchedSteps(aiEdit)).toEqual(["stp_a"]);
+      store.getState().approve(2);
+      expect(pendingReview(store.getState())).toEqual([]);
+    });
+
+    it("reverts by sending Core's recorded inverse ops as a new edit", async () => {
+      const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(scenario(4)));
+      const store = createStudioStore(fakeApi({ edit, history: vi.fn(async () => [aiEdit]) }));
+      await store.getState().open("scn_a");
+      await store.getState().revert(aiEdit);
+      expect(edit).toHaveBeenCalledWith("scn_a", 1, aiEdit.inverse);
+      expect(pendingReview(store.getState())).toEqual([]);
+      expect(store.getState().notice).toBe(t.reverted);
+    });
   });
 });
