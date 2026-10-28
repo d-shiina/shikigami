@@ -839,6 +839,13 @@
               "type": "null"
             }
           ]
+        },
+        "hint": {
+          "description": "How to fix it, written for AI clients (and shown to humans in Studio).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -904,6 +911,11 @@
         },
         "risk": {
           "$ref": "#/$defs/RiskLevel"
+        },
+        "examples": {
+          "description": "Complete, valid step objects showing typical use (IDs omitted). AI\nclients get them from `get_step_schema` and can copy them.",
+          "type": "array",
+          "items": true
         }
       },
       "required": [

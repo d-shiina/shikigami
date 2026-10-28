@@ -19,6 +19,7 @@ export function IssuesPanel() {
               {issue.severity === "error" ? "エラー" : "警告"} · {issue.code}
             </div>
             <div className="text-sm">{issue.message}</div>
+            {issue.hint && <div className="mt-0.5 text-xs text-slate-600">→ {issue.hint}</div>}
             <div className="font-mono text-[10px] text-slate-400">{issue.path}</div>
           </button>
         </li>

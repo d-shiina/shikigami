@@ -36,6 +36,9 @@ pub struct ValidationIssue {
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_id: Option<StepId>,
+    /// How to fix it, written for AI clients (and shown to humans in Studio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
@@ -90,6 +93,11 @@ impl Validator {
             known_vars: known_variables(scenario, &self.registry),
         };
         cx.scenario(scenario);
+        for issue in &mut cx.issues {
+            if issue.hint.is_none() {
+                issue.hint = generic_hint(&issue.code).map(str::to_owned);
+            }
+        }
         let valid = !cx.issues.iter().any(|i| i.severity == Severity::Error);
         ValidationReport {
             valid,
@@ -157,7 +165,15 @@ impl Cx<'_> {
             message,
             path,
             step_id: step.filter(|id| !id.is_empty()).cloned(),
+            hint: None,
         });
+    }
+
+    /// Attaches a context-specific hint to the issue pushed last.
+    fn hint(&mut self, hint: impl Into<String>) {
+        if let Some(issue) = self.issues.last_mut() {
+            issue.hint = Some(hint.into());
+        }
     }
 
     fn error(&mut self, code: &str, message: String, path: String, step: Option<&StepId>) {
@@ -294,6 +310,18 @@ impl Cx<'_> {
                 format!("{path}/type"),
                 id,
             );
+            let names: Vec<&str> = self
+                .validator
+                .registry
+                .iter()
+                .map(|d| d.step_type.as_str())
+                .collect();
+            self.hint(match closest(&step.step_type, names.iter().copied()) {
+                Some(near) => {
+                    format!("Did you mean '{near}'? Call list_step_types for every available type.")
+                }
+                None => "Call list_step_types for every available type.".to_owned(),
+            });
             // Still descend so nested IDs are checked.
             for (name, children) in &step.blocks {
                 self.steps(children, &format!("{path}/blocks/{name}"), loop_depth);
@@ -347,6 +375,16 @@ impl Cx<'_> {
                     block_path.clone(),
                     id,
                 );
+                let allowed: Vec<&str> = def.blocks.iter().map(|b| b.name.as_str()).collect();
+                self.hint(if allowed.is_empty() {
+                    format!("'{}' has no child blocks; remove `blocks`.", def.step_type)
+                } else {
+                    format!(
+                        "Allowed blocks of '{}': {}.",
+                        def.step_type,
+                        allowed.join(", ")
+                    )
+                });
             }
             self.steps(children, &block_path, child_depth);
         }
@@ -361,6 +399,7 @@ impl Cx<'_> {
                     .iter_errors(&instance)
                     .map(|e| (e.instance_path().to_string(), e.to_string()))
                     .collect();
+                let hint = params_hint(def);
                 for (pointer, message) in errors {
                     self.error(
                         "INVALID_PARAMS",
@@ -368,6 +407,7 @@ impl Cx<'_> {
                         format!("{path}/params{pointer}"),
                         id,
                     );
+                    self.hint(hint.clone());
                 }
             }
             Some(Err(message)) => {
@@ -387,7 +427,16 @@ impl Cx<'_> {
                 if let Value::String(src) = value {
                     match Expr::parse(src) {
                         Ok(expr) => self.check_vars(expr.variables(), &param_path, id),
-                        Err(e) => self.error(e.code(), e.to_string(), param_path, id),
+                        Err(e) => {
+                            self.error(e.code(), e.to_string(), param_path, id);
+                            if src.contains("{{") {
+                                self.hint(format!(
+                                    "'{key}' is an expression param: write the bare expression without {{{{ }}}}, e.g. \"count > 3\"."
+                                ));
+                            } else {
+                                self.expr_hint(&e);
+                            }
+                        }
                     }
                 }
                 continue;
@@ -397,9 +446,24 @@ impl Cx<'_> {
             for result in results {
                 match result {
                     Ok(template) => self.check_vars(template.variables(), &param_path, id),
-                    Err(e) => self.error(e.code(), e.to_string(), param_path.clone(), id),
+                    Err(e) => {
+                        self.error(e.code(), e.to_string(), param_path.clone(), id);
+                        self.expr_hint(&e);
+                    }
                 }
             }
+        }
+    }
+
+    fn expr_hint(&mut self, error: &expr::ExprError) {
+        if let expr::ExprError::UnknownFunction(name) = error {
+            let near = closest(name, expr::FUNCTIONS.iter().copied());
+            self.hint(format!(
+                "{}Available functions: {}.",
+                near.map(|n| format!("Did you mean '{n}'? "))
+                    .unwrap_or_default(),
+                expr::FUNCTIONS.join(", ")
+            ));
         }
     }
 
@@ -412,9 +476,113 @@ impl Cx<'_> {
                     path.to_owned(),
                     id,
                 );
+                let near =
+                    closest(&name, self.known_vars.iter().map(String::as_str)).map(str::to_owned);
+                self.hint(match near {
+                    Some(near) => format!("Did you mean '{near}'? Otherwise declare '{name}' in `variables` or assign it first (variable.set or saveAs)."),
+                    None => format!("Declare '{name}' in `variables` (inputs need direction \"input\") or assign it first with variable.set or saveAs."),
+                });
             }
         }
     }
+}
+
+/// Fix instructions for issues without a more specific hint.
+fn generic_hint(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "MISSING_STEP_ID" | "INVALID_STEP_ID" | "DUPLICATE_STEP_ID" => {
+            "Omit `id` when adding steps (Core assigns unique IDs); use existing IDs only to refer to steps from get_scenario."
+        }
+        "NOT_IN_LOOP" => {
+            "Put break/continue inside control.while, control.repeat or control.forEach. A control.parallel branch cannot leave an outer loop; end the branch or use control.fail."
+        }
+        "NO_OUTPUT" => "Remove `saveAs`: this step type returns no value.",
+        "INVALID_VARIABLE_NAME" => {
+            "Use letters, digits and '_' and start with a letter or '_' (e.g. invoiceTotal)."
+        }
+        "DUPLICATE_VARIABLE" => "Keep one declaration per variable name.",
+        "VARIABLE_TYPE_MISMATCH" => {
+            "Make `default` match `type`, or change `type` (any accepts every value)."
+        }
+        "INVALID_RETRY" => "Set retry.maxAttempts to 1 or more (1 means no retry).",
+        "EMPTY_NAME" => "Give the scenario a short descriptive name.",
+        "INVALID_SCENARIO_ID" => "Omit `id` when creating a scenario; Core assigns one.",
+        "UNSUPPORTED_SCHEMA_VERSION" => "Use schemaVersion 1.",
+        "EXPR_SYNTAX" => {
+            "Check quotes and brackets. Strings use '...', comparisons ==, !=, <, >, logic &&, ||, !. In template params wrap expressions in {{ }}."
+        }
+        "INVALID_STEP_DEFINITION" => {
+            "The step type itself is broken; report it instead of changing the scenario."
+        }
+        _ => return None,
+    })
+}
+
+/// Required and allowed params of a step type, from its schema.
+fn params_hint(def: &StepTypeDef) -> String {
+    let schema = &def.params_schema;
+    let names = |key: &str| -> Vec<String> {
+        match schema.get(key) {
+            Some(Value::Object(map)) => map.keys().cloned().collect(),
+            Some(Value::Array(items)) => items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect(),
+            _ => Vec::new(),
+        }
+    };
+    let allowed = names("properties");
+    let required = names("required");
+    let mut hint = String::new();
+    if !required.is_empty() {
+        hint.push_str(&format!("Required params: {}. ", required.join(", ")));
+    }
+    if !allowed.is_empty() {
+        hint.push_str(&format!("Allowed params: {}. ", allowed.join(", ")));
+    }
+    hint.push_str(&format!(
+        "Call get_step_schema(\"{}\") for the schema and a working example.",
+        def.step_type
+    ));
+    hint
+}
+
+/// The candidate closest to `name` by edit distance, if reasonably close.
+fn closest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+    let max = (name.chars().count() / 3).max(2);
+    candidates
+        .map(|c| (edit_distance(&name.to_lowercase(), &c.to_lowercase()), c))
+        .filter(|(d, _)| *d <= max)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c)
+}
+
+/// Edit distance counting a swap of two adjacent characters as one edit
+/// (optimal string alignment), so typos like `control.fi` → `control.if` rank first.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut d = vec![vec![0usize; b.len() + 1]; a.len() + 1];
+    for (i, row) in d.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for (j, cell) in d[0].iter_mut().enumerate() {
+        *cell = j;
+    }
+    for i in 1..=a.len() {
+        for j in 1..=b.len() {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            let mut best = (d[i - 1][j] + 1)
+                .min(d[i][j - 1] + 1)
+                .min(d[i - 1][j - 1] + cost);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                best = best.min(d[i - 2][j - 2] + 1);
+            }
+            d[i][j] = best;
+        }
+    }
+    d[a.len()][b.len()]
 }
 
 #[cfg(test)]
@@ -540,5 +708,72 @@ mod tests {
             c.contains("VARIABLE_TYPE_MISMATCH") && c.contains("DUPLICATE_VARIABLE"),
             "{c}"
         );
+    }
+
+    fn hint_of<'a>(report: &'a ValidationReport, code: &str) -> &'a str {
+        report
+            .issues
+            .iter()
+            .find(|i| i.code == code)
+            .and_then(|i| i.hint.as_deref())
+            .unwrap_or_else(|| panic!("no hint for {code}: {report:?}"))
+    }
+
+    #[test]
+    fn issues_carry_fix_hints() {
+        let mut s = Scenario::new("hints");
+        s.variables.push(VariableDef::new("total", VarType::Number));
+        s.steps = vec![
+            Step::new("control.fi").with_id("a"),
+            Step::new("log.message")
+                .with_id("b")
+                .with_param("message", "{{ totl }}"),
+            Step::new("log.message").with_id("c").with_param("msg", "x"),
+            Step::new("control.if")
+                .with_id("d")
+                .with_param("condition", "{{ total > 1 }}"),
+            Step::new("log.message")
+                .with_id("e")
+                .with_param("message", "{{ lne(total) }}"),
+        ];
+        let report = validator().validate(&s);
+        assert!(hint_of(&report, "UNKNOWN_STEP_TYPE").contains("'control.if'"));
+        assert!(hint_of(&report, "UNDEFINED_VARIABLE").contains("'total'"));
+        let params = hint_of(&report, "INVALID_PARAMS");
+        assert!(params.contains("Required params: message"), "{params}");
+        assert!(params.contains("get_step_schema"));
+        assert!(hint_of(&report, "EXPR_SYNTAX").contains("without {{ }}"));
+        assert!(hint_of(&report, "EXPR_UNKNOWN_FUNCTION").contains("'len'"));
+        // Every error gets some hint.
+        for issue in report.errors() {
+            assert!(issue.hint.is_some(), "{issue:?}");
+        }
+    }
+
+    #[test]
+    fn every_builtin_example_is_a_valid_step() {
+        let v = validator();
+        for def in v.registry().iter() {
+            assert!(!def.examples.is_empty(), "{} has no example", def.step_type);
+            for example in &def.examples {
+                let mut step: Step = serde_json::from_value(example.clone())
+                    .unwrap_or_else(|e| panic!("{}: {e}", def.step_type));
+                assert_eq!(step.step_type, def.step_type);
+                crate::ops::assign_missing_ids(&mut step);
+                // break/continue are only valid inside a loop.
+                let step = if matches!(def.step_type.as_str(), control::BREAK | control::CONTINUE) {
+                    Step::new(control::REPEAT)
+                        .with_id("loop")
+                        .with_param("count", 1)
+                        .with_block("body", vec![step])
+                } else {
+                    step
+                };
+                let mut s = Scenario::new("example");
+                s.steps = vec![step];
+                let report = v.validate(&s);
+                assert!(report.valid, "{}: {:?}", def.step_type, report.issues);
+            }
+        }
     }
 }

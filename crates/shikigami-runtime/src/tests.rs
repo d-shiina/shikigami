@@ -89,6 +89,7 @@ fn flaky_def() -> StepTypeDef {
         expression_params: vec![],
         binds_variables: vec![],
         risk: RiskLevel::Safe,
+        examples: vec![],
     }
 }
 

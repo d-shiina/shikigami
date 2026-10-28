@@ -94,6 +94,10 @@ pub struct StepTypeDef {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binds_variables: Vec<String>,
     pub risk: RiskLevel,
+    /// Complete, valid step objects showing typical use (IDs omitted). AI
+    /// clients get them from `get_step_schema` and can copy them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<Value>,
 }
 
 impl StepTypeDef {
@@ -123,7 +127,8 @@ impl StepRegistry {
     /// Registry with every built-in (adapter-independent) step type.
     pub fn with_builtins() -> Self {
         let mut registry = Self::empty();
-        for def in builtin_defs() {
+        for mut def in builtin_defs() {
+            def.examples = builtin_examples(&def.step_type);
             registry.register(def);
         }
         registry
@@ -184,6 +189,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec!["condition".into()],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::WHILE.into(),
@@ -202,6 +208,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec!["condition".into()],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::REPEAT.into(),
@@ -220,6 +227,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec!["indexVar".into()],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::FOR_EACH.into(),
@@ -235,6 +243,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec!["items".into()],
             binds_variables: vec!["itemVar".into(), "indexVar".into()],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::TRY.into(),
@@ -247,6 +256,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec!["errorVar".into()],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::PARALLEL.into(),
@@ -262,6 +272,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::GROUP.into(),
@@ -274,6 +285,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::BREAK.into(),
@@ -286,6 +298,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::CONTINUE.into(),
@@ -298,6 +311,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: control::FAIL.into(),
@@ -316,6 +330,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: builtin::VARIABLE_SET.into(),
@@ -338,6 +353,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec!["expression".into()],
             binds_variables: vec!["name".into()],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: builtin::LOG_MESSAGE.into(),
@@ -356,6 +372,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
         StepTypeDef {
             step_type: builtin::FLOW_DELAY.into(),
@@ -371,6 +388,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             expression_params: vec![],
             binds_variables: vec![],
             risk: RiskLevel::Safe,
+            examples: vec![],
         },
     ]
 }
@@ -380,6 +398,86 @@ pub fn is_identifier(name: &str) -> bool {
     let mut chars = name.chars();
     matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Copyable examples for the built-in step types.
+fn builtin_examples(step_type: &str) -> Vec<Value> {
+    match step_type {
+        control::IF => vec![json!({
+            "type": "control.if",
+            "name": "高額かどうか",
+            "params": { "condition": "invoice.amount >= 100000" },
+            "blocks": {
+                "then": [ { "type": "log.message", "params": { "message": "高額: {{ invoice.no }}" } } ],
+                "else": [ { "type": "log.message", "params": { "message": "通常: {{ invoice.no }}" } } ]
+            }
+        })],
+        control::WHILE => vec![json!({
+            "type": "control.while",
+            "name": "10 件になるまで",
+            "params": { "condition": "count < 10", "maxIterations": 500 },
+            "blocks": { "body": [
+                { "type": "variable.set", "params": { "name": "count", "expression": "count + 1" } }
+            ] }
+        })],
+        control::REPEAT => vec![json!({
+            "type": "control.repeat",
+            "name": "3回試す",
+            "params": { "count": 3, "indexVar": "i" },
+            "blocks": { "body": [ { "type": "log.message", "params": { "message": "{{ i + 1 }} 回目" } } ] }
+        })],
+        control::FOR_EACH => vec![json!({
+            "type": "control.forEach",
+            "name": "請求書ごとに処理",
+            "params": { "items": "invoices", "itemVar": "invoice", "indexVar": "i" },
+            "blocks": { "body": [
+                { "type": "variable.set", "params": { "name": "total", "expression": "total + invoice.amount" } }
+            ] }
+        })],
+        control::TRY => vec![json!({
+            "type": "control.try",
+            "name": "失敗しても続ける",
+            "params": { "errorVar": "error" },
+            "blocks": {
+                "try": [ { "type": "control.fail", "params": { "message": "例" } } ],
+                "catch": [ { "type": "log.message", "params": { "level": "warn", "message": "失敗: {{ error.message }}" } } ],
+                "finally": [ { "type": "log.message", "params": { "message": "後片付け" } } ]
+            }
+        })],
+        control::PARALLEL => vec![json!({
+            "type": "control.parallel",
+            "name": "同時に処理",
+            "params": {},
+            "blocks": { "branches": [
+                { "type": "control.group", "name": "帳票を出力して待つ", "blocks": { "body": [
+                    { "type": "flow.delay", "params": { "ms": 1000 } },
+                    { "type": "variable.set", "params": { "name": "reportReady", "value": true } }
+                ] } },
+                { "type": "variable.set", "name": "その間に別の作業", "params": { "name": "otherDone", "value": true } }
+            ] }
+        })],
+        control::GROUP => vec![json!({
+            "type": "control.group",
+            "name": "ログインする",
+            "blocks": { "body": [ { "type": "log.message", "params": { "message": "ログイン" } } ] }
+        })],
+        control::BREAK => vec![json!({ "type": "control.break" })],
+        control::CONTINUE => vec![json!({ "type": "control.continue" })],
+        control::FAIL => vec![json!({
+            "type": "control.fail",
+            "params": { "message": "請求書 {{ invoice.no }} の金額が不正です", "code": "INVALID_AMOUNT" }
+        })],
+        builtin::VARIABLE_SET => vec![
+            json!({ "type": "variable.set", "params": { "name": "total", "expression": "total + invoice.amount" } }),
+            json!({ "type": "variable.set", "params": { "name": "greeting", "value": "こんにちは {{ user.name }}" } }),
+        ],
+        builtin::LOG_MESSAGE => vec![json!({
+            "type": "log.message",
+            "params": { "level": "info", "message": "合計 {{ total }} 円" }
+        })],
+        builtin::FLOW_DELAY => vec![json!({ "type": "flow.delay", "params": { "ms": 1000 } })],
+        _ => Vec::new(),
+    }
 }
 
 #[cfg(test)]

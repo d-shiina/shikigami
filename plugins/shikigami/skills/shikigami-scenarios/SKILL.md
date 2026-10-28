@@ -10,13 +10,13 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 ## 基本の流れ
 
 1. **把握する**：`list_scenarios` → 対象があれば `get_scenario`。返ってきた `revision` を覚えておく。
-2. **使えるステップを調べる**：`list_step_types` で一覧、使う型ごとに `get_step_schema` で params の JSON Schema を確認する。スキーマにない params は書かない。
+2. **使えるステップを調べる**：`list_step_types` で一覧、使う型ごとに `get_step_schema` で params の JSON Schema と記述例（`examples`）を確認する。記述例をひな形にして書き、スキーマにない params は書かない。
 3. **小さく編集する**：
    - 新規は `create_scenario`（変数と最初のステップをまとめて渡してよい）。
    - 追加・変更・削除・移動は `add_step` / `update_step` / `remove_step` / `move_step`。
    - 関連する複数の変更は `update_scenario` の `ops` にまとめると 1 リビジョン（人間の Undo 1 回分）になる。
    - 書き込み系には毎回 `expectedRevision`（直前に読んだ値）を付ける。
-4. **検証する**：`validate_scenario` でエラーが 0 になるまで直す。下書きは不正でも保存されるが、エラーがあると実行できない（`VALIDATION_FAILED`）。
+4. **検証する**：`validate_scenario` でエラーが 0 になるまで直す。各 issue の `hint` に直し方（候補の名前、必須・使える params など）が書いてあるので、それに従う。下書きは不正でも保存されるが、エラーがあると実行できない（`VALIDATION_FAILED`）。
 5. **実行して確かめる**：`run_scenario`（`waitMs` を付けると完了まで待つ）→ 失敗したら `get_run_logs` で失敗ステップ ID とエラーコードを見て直す。
 6. **報告する**：何を変えたか（ステップ名・ID）、検証結果、実行結果をユーザーに伝える。
 
