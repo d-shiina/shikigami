@@ -460,6 +460,8 @@ impl FileStore {
     }
 
     /// Writes a new version file. Never overwrites: versions are immutable.
+    /// The file is written under a temporary name and published complete, so
+    /// a crash never leaves a truncated snapshot at a version's number.
     pub(crate) fn save_version(&self, version: &ScenarioVersion) -> CoreResult<()> {
         let id = &version.scenario.id;
         self.checked(id)?;
@@ -467,12 +469,11 @@ impl FileStore {
         fs::create_dir_all(&dir)?;
         let mut json = serde_json::to_vec_pretty(version)?;
         json.push(b'\n');
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(dir.join(format!("{}.json", version.number)))?;
-        file.write_all(&json)?;
-        file.sync_all()?;
+        let mut tmp = tempfile::NamedTempFile::new_in(&dir)?;
+        tmp.write_all(&json)?;
+        tmp.as_file().sync_all()?;
+        tmp.persist_noclobber(dir.join(format!("{}.json", version.number)))
+            .map_err(|e| CoreError::Io(e.error))?;
         Ok(())
     }
 

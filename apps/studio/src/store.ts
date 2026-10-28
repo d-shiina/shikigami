@@ -327,7 +327,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const outcome = await api.createScenario({ name });
           applyOutcome(outcome);
-          set({ selection: null, history: [] });
+          set({ selection: null, history: [], versions: [] });
           void get().loadHistory();
           await get().refreshList();
         } catch (e) {
@@ -339,7 +339,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const outcome = await api.duplicateScenario(id);
           applyOutcome(outcome);
-          set({ history: [] });
+          set({ history: [], versions: [] });
           void get().loadHistory();
           await get().refreshList();
         } catch (e) {

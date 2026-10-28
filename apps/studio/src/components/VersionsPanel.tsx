@@ -143,16 +143,18 @@ export function VersionsPanel() {
   const versions = useStudio((s) => s.versions);
   const stepTypes = useStudio((s) => s.stepTypes);
   const loadVersions = useStudio((s) => s.loadVersions);
+  const scenarioId = useStudio((s) => s.scenario?.id);
   const createVersion = useStudio((s) => s.createVersion);
   const exportScenario = useStudio((s) => s.exportScenario);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
 
-  // Others may have saved versions in a shared workspace since we opened it.
+  // Reload on every scenario switch; others may also have saved versions in
+  // a shared workspace since we opened it.
   useEffect(() => {
     void loadVersions();
-  }, [loadVersions]);
+  }, [loadVersions, scenarioId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,7 +197,7 @@ export function VersionsPanel() {
         ) : (
           <ol>
             {versions.map((v) => (
-              <VersionRow key={v.number} version={v} defs={defs} />
+              <VersionRow key={`${scenarioId}-${v.number}`} version={v} defs={defs} />
             ))}
           </ol>
         )}
