@@ -114,6 +114,86 @@ export type ImportMode = "created" | "updated" | "copied";
  */
 export type ImportConflict = "update" | "copy";
 /**
+ * Identifier of a screen an AI looked at (review evidence).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ObservationId".
+ */
+export type ObservationId = string;
+/**
+ * One line of `history/<scenario-id>/evidence.jsonl`.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "Evidence".
+ */
+export type Evidence = {
+  /**
+   * Revision this record belongs to.
+   */
+  revision: number;
+  at: string;
+  actor: Actor;
+} & Evidence1;
+export type Evidence1 =
+  | {
+      kind: "testRun";
+      runId: RunId;
+      /**
+       * `succeeded`, `failed`, `cancelled`, ...
+       */
+      status: string;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+      /**
+       * Step the run failed at.
+       */
+      stepId?: StepId | null;
+      /**
+       * Named version the run's content matched.
+       */
+      version?: number | null;
+      startedAt: string;
+      finishedAt: string;
+    }
+  | {
+      kind: "observation";
+      observationId: ObservationId;
+      source: ObservationSource;
+      title: string;
+      /**
+       * Steps that edit touched.
+       */
+      stepIds?: StepId[];
+      hasScreenshot: boolean;
+    }
+  | {
+      kind: "review";
+      verdict: ReviewVerdict;
+      reason?: string;
+      steps?: StepNote[];
+    };
+/**
+ * Identifier of a single scenario execution.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "RunId".
+ */
+export type RunId = string;
+/**
+ * What produced an observation.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ObservationSource".
+ */
+export type ObservationSource = "inspectPage" | "inspectUi" | "testStep";
+/**
+ * A human's verdict on a revision.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ReviewVerdict".
+ */
+export type ReviewVerdict = "approved" | "rejected";
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "VarType".
  */
@@ -146,6 +226,11 @@ export interface ShikigamiApi {
   import_outcome: ImportOutcome;
   import_conflict: ImportConflict;
   workspace_info: WorkspaceInfo;
+  change_note: ChangeNote;
+  review_timeline: ReviewTimeline;
+  evidence: Evidence;
+  new_review: NewReview;
+  observation_content: ObservationContent;
 }
 /**
  * A scenario: the unit that AI clients, Studio and the Runtime share.
@@ -548,6 +633,14 @@ export interface HistoryEntry {
   at: string;
   label: string;
   /**
+   * The author's own explanation of the change (an AI's `summary`).
+   */
+  summary?: string | null;
+  /**
+   * Steps the change added, changed, moved or removed.
+   */
+  stepIds?: StepId[];
+  /**
    * Ops that were applied.
    */
   ops?: EditOp[];
@@ -798,6 +891,143 @@ export interface WorkspaceInfo {
   shared: boolean;
 }
 /**
+ * What the author of a change says about it (MCP edit tools).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ChangeNote".
+ */
+export interface ChangeNote {
+  /**
+   * Why the change was made, in the author's words. Kept in the journal.
+   */
+  summary?: string | null;
+  /**
+   * Observations (screens looked at with inspect_* / test_step) the change
+   * is based on. They are linked to the new revision and its steps.
+   */
+  observations?: ObservationId[];
+}
+/**
+ * What to review: the changes since the last approval and their evidence.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ReviewTimeline".
+ */
+export interface ReviewTimeline {
+  scenarioId: ScenarioId;
+  /**
+   * Current revision of the scenario.
+   */
+  revision: number;
+  /**
+   * Changes and evidence after this revision are listed (by default the
+   * last approved revision, or 0).
+   */
+  sinceRevision: number;
+  lastApproval?: Evidence | null;
+  /**
+   * The latest review when it sent the scenario back and nobody approved
+   * it since: what the AI still has to address.
+   */
+  openFeedback?: Evidence | null;
+  /**
+   * Oldest first.
+   */
+  changes: ChangeRecord[];
+  /**
+   * Test runs, observations and reviews, oldest first.
+   */
+  evidence: Evidence[];
+}
+/**
+ * A note on one step in a review.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "StepNote".
+ */
+export interface StepNote {
+  stepId: StepId;
+  note: string;
+}
+/**
+ * One change in a review timeline (a journal entry without its ops).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ChangeRecord".
+ */
+export interface ChangeRecord {
+  revision: number;
+  kind: ChangeKind;
+  actor: Actor;
+  at: string;
+  label: string;
+  summary?: string | null;
+  stepIds?: StepId[];
+}
+/**
+ * Input for a review (Studio).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "NewReview".
+ */
+export interface NewReview {
+  /**
+   * The revision that was reviewed; must still be the current one.
+   */
+  revision: number;
+  verdict: ReviewVerdict;
+  /**
+   * Why it was sent back (required for `rejected`) or a remark.
+   */
+  reason?: string;
+  steps?: StepNote[];
+}
+/**
+ * An observation with the contents of its files, for Studio.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ObservationContent".
+ */
+export interface ObservationContent {
+  id: ObservationId;
+  source: ObservationSource;
+  at: string;
+  actor: Actor;
+  title: string;
+  request: unknown;
+  status?: string | null;
+  output?: unknown;
+  /**
+   * File name of the UI tree (`tree.txt`) in the observation's folder.
+   */
+  treeFile?: string | null;
+  /**
+   * File name of the screenshot (`screenshot.png` / `.jpg`).
+   */
+  screenshotFile?: string | null;
+  /**
+   * What was cut or left out to keep the size down.
+   */
+  notes?: string[];
+  /**
+   * Revisions whose edits named this observation as their basis.
+   */
+  linked?: ObservationLink[];
+  tree?: string | null;
+  /**
+   * `data:image/png;base64,...`
+   */
+  screenshotDataUrl?: string | null;
+}
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ObservationLink".
+ */
+export interface ObservationLink {
+  scenarioId: ScenarioId;
+  revision: number;
+}
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "Metadata".
  */
@@ -822,13 +1052,6 @@ export type RunEventEnvelope = {
   seq: number;
   at: string;
 } & RunEventEnvelope1;
-/**
- * Identifier of a single scenario execution.
- *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
- * via the `definition` "RunId".
- */
-export type RunId = string;
 export type RunEventEnvelope1 =
   | {
       type: "runStarted";

@@ -57,6 +57,21 @@
     },
     "workspace_info": {
       "$ref": "#/$defs/WorkspaceInfo"
+    },
+    "change_note": {
+      "$ref": "#/$defs/ChangeNote"
+    },
+    "review_timeline": {
+      "$ref": "#/$defs/ReviewTimeline"
+    },
+    "evidence": {
+      "$ref": "#/$defs/Evidence"
+    },
+    "new_review": {
+      "$ref": "#/$defs/NewReview"
+    },
+    "observation_content": {
+      "$ref": "#/$defs/ObservationContent"
     }
   },
   "required": [
@@ -77,7 +92,12 @@
     "scenario_bundle",
     "import_outcome",
     "import_conflict",
-    "workspace_info"
+    "workspace_info",
+    "change_note",
+    "review_timeline",
+    "evidence",
+    "new_review",
+    "observation_content"
   ],
   "$defs": {
     "Scenario": {
@@ -1046,6 +1066,20 @@
         "label": {
           "type": "string"
         },
+        "summary": {
+          "description": "The author's own explanation of the change (an AI's `summary`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stepIds": {
+          "description": "Steps the change added, changed, moved or removed.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StepId"
+          }
+        },
         "ops": {
           "description": "Ops that were applied.",
           "type": "array",
@@ -1572,6 +1606,454 @@
         "root",
         "localRoot",
         "shared"
+      ]
+    },
+    "ChangeNote": {
+      "description": "What the author of a change says about it (MCP edit tools).",
+      "type": "object",
+      "properties": {
+        "summary": {
+          "description": "Why the change was made, in the author's words. Kept in the journal.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observations": {
+          "description": "Observations (screens looked at with inspect_* / test_step) the change\nis based on. They are linked to the new revision and its steps.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservationId"
+          }
+        }
+      }
+    },
+    "ObservationId": {
+      "description": "Identifier of a screen an AI looked at (review evidence).",
+      "type": "string"
+    },
+    "ReviewTimeline": {
+      "description": "What to review: the changes since the last approval and their evidence.",
+      "type": "object",
+      "properties": {
+        "scenarioId": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "revision": {
+          "description": "Current revision of the scenario.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sinceRevision": {
+          "description": "Changes and evidence after this revision are listed (by default the\nlast approved revision, or 0).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "lastApproval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "openFeedback": {
+          "description": "The latest review when it sent the scenario back and nobody approved\nit since: what the AI still has to address.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changes": {
+          "description": "Oldest first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChangeRecord"
+          }
+        },
+        "evidence": {
+          "description": "Test runs, observations and reviews, oldest first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        }
+      },
+      "required": [
+        "scenarioId",
+        "revision",
+        "sinceRevision",
+        "changes",
+        "evidence"
+      ]
+    },
+    "Evidence": {
+      "description": "One line of `history/<scenario-id>/evidence.jsonl`.",
+      "type": "object",
+      "properties": {
+        "revision": {
+          "description": "Revision this record belongs to.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": "string"
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        }
+      },
+      "required": [
+        "revision",
+        "at",
+        "actor"
+      ],
+      "oneOf": [
+        {
+          "description": "A run an AI started over MCP to test `revision`.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "testRun"
+            },
+            "runId": {
+              "$ref": "#/$defs/RunId"
+            },
+            "status": {
+              "description": "`succeeded`, `failed`, `cancelled`, ...",
+              "type": "string"
+            },
+            "errorCode": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "errorMessage": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "stepId": {
+              "description": "Step the run failed at.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StepId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "version": {
+              "description": "Named version the run's content matched.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "startedAt": {
+              "type": "string"
+            },
+            "finishedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "runId",
+            "status",
+            "startedAt",
+            "finishedAt"
+          ]
+        },
+        {
+          "description": "An observation named by the edit that created `revision`.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "observation"
+            },
+            "observationId": {
+              "$ref": "#/$defs/ObservationId"
+            },
+            "source": {
+              "$ref": "#/$defs/ObservationSource"
+            },
+            "title": {
+              "type": "string"
+            },
+            "stepIds": {
+              "description": "Steps that edit touched.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/StepId"
+              }
+            },
+            "hasScreenshot": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "observationId",
+            "source",
+            "title",
+            "hasScreenshot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "review"
+            },
+            "verdict": {
+              "$ref": "#/$defs/ReviewVerdict"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/StepNote"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "verdict"
+          ]
+        }
+      ]
+    },
+    "RunId": {
+      "description": "Identifier of a single scenario execution.",
+      "type": "string"
+    },
+    "ObservationSource": {
+      "description": "What produced an observation.",
+      "type": "string",
+      "enum": [
+        "inspectPage",
+        "inspectUi",
+        "testStep"
+      ]
+    },
+    "ReviewVerdict": {
+      "description": "A human's verdict on a revision.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "approved"
+          ]
+        },
+        {
+          "description": "Sent back to the AI (差し戻し) with a reason.",
+          "type": "string",
+          "const": "rejected"
+        }
+      ]
+    },
+    "StepNote": {
+      "description": "A note on one step in a review.",
+      "type": "object",
+      "properties": {
+        "stepId": {
+          "$ref": "#/$defs/StepId"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "stepId",
+        "note"
+      ]
+    },
+    "ChangeRecord": {
+      "description": "One change in a review timeline (a journal entry without its ops).",
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/ChangeKind"
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "at": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stepIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StepId"
+          }
+        }
+      },
+      "required": [
+        "revision",
+        "kind",
+        "actor",
+        "at",
+        "label"
+      ]
+    },
+    "NewReview": {
+      "description": "Input for a review (Studio).",
+      "type": "object",
+      "properties": {
+        "revision": {
+          "description": "The revision that was reviewed; must still be the current one.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "verdict": {
+          "$ref": "#/$defs/ReviewVerdict"
+        },
+        "reason": {
+          "description": "Why it was sent back (required for `rejected`) or a remark.",
+          "type": "string",
+          "default": ""
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StepNote"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "revision",
+        "verdict"
+      ]
+    },
+    "ObservationContent": {
+      "description": "An observation with the contents of its files, for Studio.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ObservationId"
+        },
+        "source": {
+          "$ref": "#/$defs/ObservationSource"
+        },
+        "at": {
+          "type": "string"
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "title": {
+          "type": "string"
+        },
+        "request": true,
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": true,
+        "treeFile": {
+          "description": "File name of the UI tree (`tree.txt`) in the observation's folder.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "screenshotFile": {
+          "description": "File name of the screenshot (`screenshot.png` / `.jpg`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "description": "What was cut or left out to keep the size down.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "linked": {
+          "description": "Revisions whose edits named this observation as their basis.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservationLink"
+          }
+        },
+        "tree": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "screenshotDataUrl": {
+          "description": "`data:image/png;base64,...`",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "at",
+        "actor",
+        "title",
+        "request"
+      ]
+    },
+    "ObservationLink": {
+      "type": "object",
+      "properties": {
+        "scenarioId": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "scenarioId",
+        "revision"
       ]
     }
   },

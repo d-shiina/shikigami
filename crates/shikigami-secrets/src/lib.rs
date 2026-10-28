@@ -121,6 +121,10 @@ struct Values {
     totp: Option<String>,
 }
 
+/// Shortest value [`Vault::mask`] replaces.
+const MIN_MASKED_LEN: usize = 4;
+const MASK: &str = "***";
+
 /// The secrets of one workspace.
 pub struct Vault {
     dir: PathBuf,
@@ -203,6 +207,35 @@ impl Vault {
                 description: e.description,
             })
             .collect())
+    }
+
+    /// Replaces every registered password (and TOTP key) that appears in
+    /// `text` with `***`, e.g. before an AI's view of a screen is stored as
+    /// review evidence. Without a key on this PC nothing can be matched and
+    /// the text is returned unchanged.
+    pub fn mask(&self, text: &str) -> String {
+        let Ok(file) = self.read() else {
+            return text.to_owned();
+        };
+        if file.entries.is_empty() {
+            return text.to_owned();
+        }
+        let Ok(key) = self.key(&file, false) else {
+            return text.to_owned();
+        };
+        let mut values: Vec<String> = file
+            .entries
+            .iter()
+            .filter_map(|e| open(&key, e).ok())
+            .flat_map(|v| [Some(v.password), v.totp])
+            .flatten()
+            // Very short values would mask ordinary words.
+            .filter(|v| v.chars().count() >= MIN_MASKED_LEN)
+            .collect();
+        values.sort_by_key(|v| std::cmp::Reverse(v.len()));
+        values
+            .iter()
+            .fold(text.to_owned(), |acc, v| acc.replace(v.as_str(), MASK))
     }
 
     /// Registers a new secret or updates one (fields left `None` are kept).
