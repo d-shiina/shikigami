@@ -24,7 +24,7 @@ flowchart LR
   end
 
   subgraph local[ユーザーのPC]
-    MCP["shikigami-mcp<br/>(Rust, stdio)"]
+    MCP["shikigami mcp<br/>(Rust, stdio)"]
     STUDIO["Shikigami Studio<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
@@ -55,7 +55,7 @@ flowchart LR
 | プロセス | 起動者 | 役割 |
 |---|---|---|
 | `shikigami-studio` | ユーザー | GUI。Core/Runtime をライブラリとして内包 |
-| `shikigami-mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作 |
+| `shikigami mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作。CLI と同じ実行ファイルのサブコマンド（配布物を 1 つにするため） |
 | `shikigami` (CLI) | ユーザー / スケジューラー | ヘッドレス実行・管理 |
 | `browser-adapter` (Node) | Runtime | Playwright 操作。必要時のみ起動 |
 
@@ -66,7 +66,7 @@ Studio と MCP サーバーは **別プロセスで同じワークスペース�
 ```mermaid
 sequenceDiagram
   participant AI as AIクライアント
-  participant M as shikigami-mcp
+  participant M as shikigami mcp
   participant C as Scenario Core
   participant A as Adapter
   participant S as Studio
@@ -94,7 +94,7 @@ shikigami/
 │  ├─ shikigami-core/         Scenario Core（モデル・式・検証・EditOp・履歴・保存・Schema出力）
 │  ├─ shikigami-runtime/      RPA Runtime（インタプリタ・Handler IF・実行記録）
 │  ├─ shikigami-cli/          CLI（`shikigami` バイナリ）
-│  ├─ shikigami-mcp/          [Phase 2] MCP サーバー（rmcp）
+│  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
 │  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
 │  └─ shikigami-adapter-windows/  [Phase 4] UI Automation
 ├─ apps/
@@ -102,6 +102,7 @@ shikigami/
 ├─ packages/
 │  ├─ schema/                 @shikigami/schema：Rust から生成した TS 型
 │  └─ browser-adapter/        [Phase 3] Node.js + Playwright
+├─ plugins/shikigami/        Claude Code プラグイン（MCP 設定＋スキル）
 ├─ schemas/                   生成された JSON Schema（コミット対象、CI でズレ検出）
 ├─ examples/                  サンプルシナリオ（テストでも使用）
 └─ docs/                      設計書・調査・アセット
@@ -115,9 +116,9 @@ shikigami/
 |---|---|---|
 | `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Scenario`, `Step`, `EditOp`, `ScenarioService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
 | `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
-| `shikigami-cli` | core, runtime, clap | `shikigami scenario/run/validate/step-types/schema` |
+| `shikigami-cli` | core, runtime, mcp, clap | `shikigami scenario/run/validate/step-types/schema/mcp` |
 | `shikigami-studio` | core, runtime, tauri, notify | Tauri コマンド（§7.1） |
-| `shikigami-mcp` (P2) | core, runtime, rmcp | MCP ツール（§6） |
+| `shikigami-mcp` | core, runtime, rmcp | `ShikigamiMcp`（MCP ツール、§6）, `serve_stdio` |
 | `shikigami-adapter-*` (P3/P4) | runtime | `StepTypeDef` + `ActionHandler` の組 |
 
 依存方向は **core ← runtime ← adapters ← (studio | mcp | cli)** の一方向。core は tokio にも Tauri にも依存しない（同期 API、どこからでも使える）。
@@ -229,6 +230,8 @@ Runtime::builder()
 - 子プロセスの異常終了は Rust 側で検知し、実行中ステップを `ADAPTER_CRASHED` で失敗させ、次回要求時に再起動する。
 
 ## 6. MCP Tool Interface（Phase 2）
+
+> **実装状況**：シナリオ・ステップ・実行の各ツール（UI 操作系と `debug_scenario` / `test_step` を除く）は実装済み。`get_history`、`list_runs`、`undo` / `redo` を追加し、実行ログは `get_run_logs(runId, afterSeq?)` とした。使い方・クライアント別の設定は [mcp.md](mcp.md)。UI 操作系は Phase 3 / 4。
 
 全ツールは Core / Runtime / Adapter を呼ぶだけの薄い層。入力スキーマは Rust 型から自動生成し、出力は構造化 JSON（`structuredContent`）で返す。エラーは §9 の `ErrorPayload` をそのまま返す。
 
@@ -381,6 +384,21 @@ CREATE TABLE credentials_index (          -- 値は OS の資格情報ストア�
 | 監査 | 全 MCP ツール呼び出し・承認・実行を `audit_log` に記録（シナリオ変更は P1 からジャーナル記録済み） | P2 |
 | 実行権限 | シナリオ単位で「MCP からの実行可否」「無人実行可否」を設定 | P2 |
 
+## 10.5 並行実行（式神の多重召喚）
+
+複数の処理を同時に動かせることを製品の特徴にする。段階は 3 つ。
+
+| 段階 | 内容 | 状況 |
+|---|---|---|
+| シナリオ間 | 複数のシナリオ（同じシナリオの複数実行を含む）を同時に実行。各実行は独立した非同期タスクで、変数・キャンセル・記録も実行ごとに独立 | **実装済み**（Runtime / MCP の `run_scenario` を複数呼べる） |
+| シナリオ内 | `control.parallel`（複数ブランチを同時実行し全完了を待つ。1 つ失敗したら残りをキャンセル）と、`control.forEach` の `concurrency`（同時処理数の上限） | 設計済み・未実装 |
+| 資源の調停 | ステップ型ごとに使う資源を宣言し、Runtime のスケジューラーが割り当てる。`desktop.input`（実マウス・キーボード・前面ウィンドウ）は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | 設計済み・未実装 |
+
+- **デスクトップ操作は物理的に 1 組**：Windows のマウス・キーボード入力（SendInput）と前面ウィンドウは画面に 1 つしかないため、これらを使うステップは `desktop.input` の使用権を取得してから実行する（取得待ちの時間はタイムアウトに含めない）。UI Automation のパターン操作（Invoke / Value / SelectionItem など）はフォーカス不要なものが多く、使用権なしで並行実行できるよう Phase 4 で型ごとに宣言する。
+- **ブラウザは並列向き**：Playwright のブラウザコンテキストは独立しており、ヘッドレスなら多数を同時に動かせる（Phase 3）。
+- **変数の扱い**：並行ブランチ内の代入は競合しうるため、`control.parallel` の各ブランチは親の変数を読み取り専用で参照し、書き込みはブランチの `saveAs` で結果として受け取る方式を予定（確定は実装時）。
+- **さらに多くのデスクトップを動かす**には Windows のセッション（RDP / 仮想マシン）を複数使うしかない。これは将来の「ワーカー」機能として扱い、MVP の範囲外。
+
 ## 11. 重要な設計判断（採用理由・代替案・トレードオフ）
 
 ### 判断1：シナリオは「ステップ木（ブロック構造）」で表現する
@@ -444,7 +462,7 @@ CREATE TABLE credentials_index (          -- 値は OS の資格情報ストア�
 
 | # | 基準 | 確認方法 |
 |---|---|---|
-| A1 | Claude Code / Codex から `shikigami-mcp` に stdio 接続し、ツール一覧が取得できる | 手動 E2E（各クライアントの設定例を docs に記載） |
+| A1 | Claude Code / Codex から `shikigami mcp` に stdio 接続し、ツール一覧が取得できる | 手動 E2E（各クライアントの設定例を docs に記載） |
 | A2 | AI が `navigate_browser` → `inspect_ui` で要素を取得し、Role/Label ベースの Target で `click_element` / `type_text` できる | 自動 E2E（ローカルのテスト用 Web アプリ）＋手動 |
 | A3 | AI が `create_scenario` / `add_step` でシナリオを保存し、`validate_scenario` がエラー 0 を返す | 自動 E2E |
 | A4 | Studio を起動していれば、AI の変更が 1 秒以内に画面へ反映される | 自動（ファイル監視テスト）＋手動 |
@@ -455,7 +473,7 @@ CREATE TABLE credentials_index (          -- 値は OS の資格情報ストア�
 | A9 | 機密変数の値がログ・記録ファイルに出力されない | 自動 |
 | A10 | **Windows 11 実機** で、インストーラー（NSIS / MSI）から導入した Studio / CLI / MCP サーバーにより A1〜A9 の E2E が通る | 手動 E2E（必須）＋ CI（windows-latest でのビルド・テスト） |
 
-## 13. Phase 1 の実装状況と制約
+## 13. 実装状況と制約
 
 ### 実装済み（テストあり）
 
@@ -464,12 +482,14 @@ CREATE TABLE credentials_index (          -- 値は OS の資格情報ストア�
 - Runtime：制御フロー全種、変数・入出力、テンプレート展開、タイムアウト、リトライ（指数バックオフ）、キャンセル、`onError`、機密値マスク、実行イベント・実行記録（JSONL）、ライブ状態（スナップショット）
 - CLI：`scenario list/show/create/import/edit/undo/redo/delete/history`、`run`（入力指定・JSON 出力・Ctrl+C でキャンセル）、`validate`、`step-types`、`schema export`
 - Studio（Tauri 2 + React）：シナリオ一覧・作成・複製・削除、フローチャート表示（木から自動レイアウト）、ステップ追加・削除・上下移動、スキーマから生成するプロパティフォーム、変数編集、検証結果表示、Undo/Redo（Ctrl+Z / Ctrl+Y）、実行・停止・実行ログ・ステップ状態のハイライト、**外部（MCP / CLI）変更のリアルタイム反映**、競合時の自動再読込
+- MCP サーバー（Phase 2）：`shikigami mcp`（stdio）、シナリオ・ステップ・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
+- Claude Code プラグイン：`plugins/shikigami`（MCP 設定＋スキル `shikigami-scenarios`）とマーケットプレイス定義。`claude plugin validate` 合格
 
 ### 未実装（後続フェーズ）
 
-- MCP サーバー（Phase 2）、ブラウザ操作（Phase 3）、Windows 操作（Phase 4）
+- ブラウザ操作（Phase 3）、Windows 操作（Phase 4）、並行実行のシナリオ内構文と資源調停（§10.5）
 - Studio のドラッグ＆ドロップ編集、ブレークポイント・ステップ実行、UI 要素インスペクター、差分表示（Phase 5）
-- SQLite、監査ログ、権限設定、許可リスト、資格情報ストア連携（Phase 2〜）
+- SQLite、クライアント別のツール権限設定・削除時の人間承認、許可リスト、資格情報ストア連携、MCP の Streamable HTTP
 
 ### 既知の制約
 

@@ -1,0 +1,8 @@
+{
+  "name": "shikigami",
+  "version": "0.1.0",
+  "description": "Shikigami（式神）RPA: build, edit and run desktop automation scenarios shared with Shikigami Studio.",
+  "author": { "name": "Shikigami" },
+  "repository": "https://github.com/d-shiina/shikigami",
+  "keywords": ["rpa", "automation", "windows", "mcp"]
+}

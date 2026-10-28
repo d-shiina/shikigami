@@ -1,0 +1,27 @@
+[package]
+name = "shikigami-mcp"
+description = "Shikigami MCP server: lets AI clients edit and run scenarios through Scenario Core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+shikigami-core.workspace = true
+shikigami-runtime.workspace = true
+rmcp = { workspace = true, features = ["server", "macros", "transport-io"] }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+rmcp = { workspace = true, features = ["client"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true
