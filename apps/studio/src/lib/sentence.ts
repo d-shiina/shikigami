@@ -69,6 +69,22 @@ const ROLE: Record<string, string> = {
   combobox: "選択欄",
 };
 
+/**
+ * Names of the workspace's scenarios by id, so a call reads as the scenario
+ * it runs. Studio keeps it in step with the scenario list.
+ */
+let scenarioNames: ReadonlyMap<string, string> = new Map();
+
+export function setScenarioNames(names: ReadonlyMap<string, string>) {
+  scenarioNames = names;
+}
+
+/** What a call's target reads as: its name, or its id when it is not in this workspace. */
+export function calledName(id: unknown): string | null {
+  if (typeof id !== "string" || id === "") return null;
+  return scenarioNames.get(id) ?? id;
+}
+
 type Builder = (p: Record<string, unknown>, step: Step) => Part[];
 
 const BUILDERS: Record<string, Builder> = {
@@ -83,6 +99,10 @@ const BUILDERS: Record<string, Builder> = {
   "control.continue": () => [w("次の繰り返しへ進む")],
   "control.fail": (p) => [w("「"), ...template(p.message), w("」として失敗させる")],
   "flow.delay": (p) => [code(p.ms), w(" ミリ秒待つ")],
+  "scenario.call": (p) => {
+    const name = calledName(p.scenario);
+    return name ? [w(`サブシナリオ「${name}」を呼ぶ`)] : [w("サブシナリオを呼ぶ（呼ぶシナリオが未設定）")];
+  },
   "browser.open": (p) => [...template(p.url), w(" をブラウザで開く")],
   "browser.click": (p) => [w(`${targetText(p.target)}を押す`)],
   "browser.fill": (p) => [w(`${targetText(p.target)}に `), ...template(p.value), w(" を入れる")],

@@ -7,8 +7,9 @@ use std::sync::{Arc, Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::call::{self, Subscenario};
 use crate::error::{CoreError, CoreResult};
-use crate::ids::{ObservationId, ScenarioId};
+use crate::ids::{ObservationId, ScenarioId, StepId};
 use crate::model::{Scenario, ScenarioSummary, Step, VariableDef, now};
 use crate::ops::{self, EditOp};
 use crate::registry::StepRegistry;
@@ -20,7 +21,7 @@ use crate::store::{Actor, ChangeKind, FileStore, HistoryEntry, UNDO_LIMIT, UndoS
 use crate::validate::{ValidationReport, Validator};
 use crate::version::{
     self, BUNDLE_FORMAT, BUNDLE_FORMAT_VERSION, ImportConflict, ImportMode, NewVersion,
-    ScenarioBundle, ScenarioDiff, ScenarioVersion, VersionSummary,
+    ScenarioBundle, ScenarioDiff, ScenarioVersion, SubscenarioImport, VersionSummary,
 };
 
 /// Input for creating a scenario.
@@ -73,6 +74,15 @@ pub struct ChangeEvent {
     pub actor: Actor,
 }
 
+/// One sub-scenario of an imported bundle.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedSubscenario {
+    pub id: ScenarioId,
+    pub name: String,
+    pub mode: SubscenarioImport,
+}
+
 /// Result of importing a bundle or scenario file.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -80,8 +90,23 @@ pub struct ImportOutcome {
     pub mode: ImportMode,
     /// Versions from the bundle that were added (already present ones are skipped).
     pub versions_added: usize,
+    /// The bundle's sub-scenarios and what happened to each.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subscenarios: Vec<ImportedSubscenario>,
     #[serde(flatten)]
     pub outcome: EditOutcome,
+}
+
+/// Result of moving steps into a new sub-scenario.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtractOutcome {
+    /// The new scenario holding the steps.
+    pub subscenario: EditOutcome,
+    /// The calling scenario, with the steps replaced by one `scenario.call`.
+    pub caller: EditOutcome,
+    /// ID of the new `scenario.call` step.
+    pub call_step_id: StepId,
 }
 
 type Listener = Arc<dyn Fn(&ChangeEvent) + Send + Sync>;
@@ -143,8 +168,80 @@ impl ScenarioService {
         self.store.load(id)
     }
 
+    /// Full validation, including the scenarios it calls.
     pub fn validate(&self, scenario: &Scenario) -> ValidationReport {
-        self.validator.validate(scenario)
+        self.validator
+            .validate_with_calls(scenario, &|id| self.store.load(id).ok())
+    }
+
+    /// [`Self::validate`] for a document from a bundle: its sub-scenarios
+    /// are looked up in `bundled` before the workspace.
+    pub fn validate_bundled(&self, scenario: &Scenario, bundled: &[Scenario]) -> ValidationReport {
+        self.validator.validate_with_calls(scenario, &|id| {
+            bundled
+                .iter()
+                .find(|s| &s.id == id)
+                .cloned()
+                .or_else(|| self.store.load(id).ok())
+        })
+    }
+
+    /// Every scenario `scenario` calls, directly or through others (each
+    /// once, missing ones left out), with the version each one matches.
+    /// Pass them to the Runtime with the run.
+    pub fn subscenarios(&self, scenario: &Scenario) -> CoreResult<Vec<Subscenario>> {
+        self.subscenarios_bundled(scenario, &[])
+    }
+
+    /// Like [`Self::subscenarios`] for a bundle: its own sub-scenarios win
+    /// over the workspace's, the same lookup [`Self::validate_bundled`] uses.
+    pub fn subscenarios_bundled(
+        &self,
+        scenario: &Scenario,
+        bundled: &[Scenario],
+    ) -> CoreResult<Vec<Subscenario>> {
+        Ok(self
+            .called_scenarios(scenario, bundled)
+            .into_iter()
+            .map(|s| {
+                let version = self.matching_version(&s).ok().flatten();
+                Subscenario {
+                    scenario: s,
+                    version,
+                }
+            })
+            .collect())
+    }
+
+    fn called_scenarios(&self, scenario: &Scenario, bundled: &[Scenario]) -> Vec<Scenario> {
+        let mut found: Vec<Scenario> = Vec::new();
+        let mut queue: Vec<ScenarioId> = call::called_ids(scenario).into_iter().collect();
+        while let Some(id) = queue.pop() {
+            if id == scenario.id || found.iter().any(|s| s.id == id) {
+                continue;
+            }
+            let next = match bundled.iter().find(|s| s.id == id) {
+                Some(s) => Some(s.clone()),
+                None => self.store.load(&id).ok(),
+            };
+            if let Some(next) = next {
+                queue.extend(call::called_ids(&next));
+                found.push(next);
+            }
+        }
+        found.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+        found
+    }
+
+    /// Scenarios that call `id` directly.
+    pub fn callers(&self, id: &ScenarioId) -> CoreResult<Vec<ScenarioSummary>> {
+        Ok(self
+            .store
+            .load_all()?
+            .iter()
+            .filter(|s| &s.id != id && call::called_ids(s).contains(id))
+            .map(Scenario::summary)
+            .collect())
     }
 
     pub fn validate_stored(&self, id: &ScenarioId) -> CoreResult<ValidationReport> {
@@ -282,6 +379,13 @@ impl ScenarioService {
         expected_revision: Option<u64>,
         actor: Actor,
     ) -> CoreResult<()> {
+        let callers = self.callers(id)?;
+        if !callers.is_empty() {
+            return Err(CoreError::ScenarioInUse {
+                scenario_id: id.clone(),
+                callers: callers.into_iter().map(|c| (c.id, c.name)).collect(),
+            });
+        }
         let _lock = self.store.lock()?;
         let current = self.store.load(id)?;
         check_revision(expected_revision, current.revision)?;
@@ -806,6 +910,66 @@ impl ScenarioService {
         }
     }
 
+    // -- sub-scenarios ----------------------------------------------------
+
+    /// Moves `step_ids` (next to each other in one block) into a new
+    /// scenario named `name` and puts one `scenario.call` in their place
+    /// that reads and writes the same variables. Two changes: the new
+    /// scenario is created, then the caller is edited once (undoable).
+    pub fn extract_subscenario(
+        &self,
+        id: &ScenarioId,
+        expected_revision: Option<u64>,
+        step_ids: &[StepId],
+        name: &str,
+        actor: Actor,
+        note: ChangeNote,
+    ) -> CoreResult<ExtractOutcome> {
+        let caller = self.get(id)?;
+        check_revision(expected_revision, caller.revision)?;
+        let plan = call::extract(&caller, step_ids, name, self.registry())?;
+        let summary = review::clean_text(note.summary.clone(), review::MAX_SUMMARY_CHARS);
+        let subscenario = self.insert_new(
+            plan.subscenario,
+            actor.clone(),
+            "extract subscenario",
+            summary,
+        )?;
+        let mut call_step = plan.call;
+        ops::assign_missing_ids(&mut call_step);
+        let call_step_id = call_step.id.clone();
+        let mut edit: Vec<EditOp> = plan
+            .declare
+            .into_iter()
+            .map(|variable| EditOp::SetVariable {
+                variable,
+                index: None,
+            })
+            .collect();
+        edit.extend(
+            plan.removed
+                .into_iter()
+                .map(|step_id| EditOp::RemoveStep { step_id }),
+        );
+        edit.push(EditOp::AddStep {
+            step: call_step,
+            position: plan.position,
+        });
+        let caller = match self.edit_noted(id, Some(caller.revision), edit, actor.clone(), note) {
+            Ok(outcome) => outcome,
+            Err(e) => {
+                // The caller changed in between: do not leave the copy behind.
+                let _ = self.delete(&subscenario.scenario.id, None, actor);
+                return Err(e);
+            }
+        };
+        Ok(ExtractOutcome {
+            subscenario,
+            caller,
+            call_step_id,
+        })
+    }
+
     // -- sharing ----------------------------------------------------------
 
     /// Packs a scenario (and optionally its versions) into a bundle for
@@ -822,12 +986,15 @@ impl ScenarioService {
         } else {
             Vec::new()
         };
+        let mut subscenarios = self.called_scenarios(&scenario, &[]);
+        subscenarios.iter_mut().for_each(version::strip_secrets);
         Ok(ScenarioBundle {
             format: BUNDLE_FORMAT.into(),
             format_version: BUNDLE_FORMAT_VERSION,
             exported_at: now(),
             scenario,
             versions,
+            subscenarios,
         })
     }
 
@@ -843,6 +1010,25 @@ impl ScenarioService {
         actor: Actor,
     ) -> CoreResult<ImportOutcome> {
         let bundle = parse_bundle(value)?;
+        // Sub-scenarios first, so the scenario validates against them.
+        let mut subscenarios = Vec::with_capacity(bundle.subscenarios.len());
+        for sub in bundle.subscenarios {
+            if sub.id == bundle.scenario.id || !sub.id.is_well_formed() {
+                continue;
+            }
+            let (id, name) = (sub.id.clone(), sub.name.clone());
+            let mode = if !self.store.exists(&sub.id) {
+                self.insert_imported(sub, actor.clone())?;
+                SubscenarioImport::Created
+            } else if on_conflict == Some(ImportConflict::Update) {
+                let label = "import update".to_owned();
+                self.match_content(&id, &sub, None, actor.clone(), label)?;
+                SubscenarioImport::Updated
+            } else {
+                SubscenarioImport::Kept
+            };
+            subscenarios.push(ImportedSubscenario { id, name, mode });
+        }
         let mut scenario = bundle.scenario;
         let exists = scenario.id.is_well_formed() && self.store.exists(&scenario.id);
         let (mode, outcome) = match (exists, on_conflict) {
@@ -873,9 +1059,15 @@ impl ScenarioService {
             }
         };
         let versions_added = self.add_versions(&outcome.scenario.id, bundle.versions)?;
+        // Validated before the sub-scenarios existed when it was created.
+        let outcome = EditOutcome {
+            validation: self.validate(&outcome.scenario),
+            ..outcome
+        };
         Ok(ImportOutcome {
             mode,
             versions_added,
+            subscenarios,
             outcome,
         })
     }
@@ -1029,6 +1221,7 @@ fn parse_bundle(value: serde_json::Value) -> CoreResult<ScenarioBundle> {
             exported_at: now(),
             scenario: crate::migrate::from_value(value)?,
             versions: Vec::new(),
+            subscenarios: Vec::new(),
         });
     }
     let found = value
@@ -1043,6 +1236,9 @@ fn parse_bundle(value: serde_json::Value) -> CoreResult<ScenarioBundle> {
     let mut bundle: ScenarioBundle = serde_json::from_value(value)?;
     // Run the scenario documents through the same migrations as files.
     bundle.scenario = crate::migrate::from_value(serde_json::to_value(&bundle.scenario)?)?;
+    for sub in &mut bundle.subscenarios {
+        *sub = crate::migrate::from_value(serde_json::to_value(&*sub)?)?;
+    }
     Ok(bundle)
 }
 

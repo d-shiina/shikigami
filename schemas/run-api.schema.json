@@ -34,6 +34,13 @@
         },
         "at": {
           "type": "string"
+        },
+        "callPath": {
+          "description": "The `scenario.call` steps (outermost first) the event happened\ninside; empty for the scenario that was started. Step IDs in the\nevent belong to the innermost called scenario.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StepId"
+          }
         }
       },
       "required": [
@@ -272,12 +279,12 @@
       "description": "Identifier of a single scenario execution.",
       "type": "string"
     },
-    "ScenarioId": {
-      "description": "Identifier of a scenario. Also used as its file name in the store.",
-      "type": "string"
-    },
     "StepId": {
       "description": "Identifier of a step. Unique within a scenario and stable across edits.",
+      "type": "string"
+    },
+    "ScenarioId": {
+      "description": "Identifier of a scenario. Also used as its file name in the store.",
       "type": "string"
     },
     "StepOutcome": {
@@ -393,6 +400,13 @@
           "description": "Values of output variables (secret outputs are masked when recorded).",
           "type": "object",
           "additionalProperties": true
+        },
+        "subscenarios": {
+          "description": "The scenarios `scenario.call` steps could run, as they were when the\nrun started.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubscenarioRef"
+          }
         }
       },
       "required": [
@@ -404,6 +418,37 @@
         "startedAt",
         "finishedAt",
         "outputs"
+      ]
+    },
+    "SubscenarioRef": {
+      "description": "A called scenario's content as used by a run.",
+      "type": "object",
+      "properties": {
+        "scenarioId": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "scenarioName": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "version": {
+          "description": "Named version its content matches, if any.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "scenarioId",
+        "scenarioName",
+        "revision"
       ]
     },
     "RunSnapshot": {

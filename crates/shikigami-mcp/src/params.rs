@@ -160,6 +160,25 @@ pub struct MoveStepParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct ExtractSubscenarioParams {
+    pub scenario_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_revision: Option<u64>,
+    /// IDs of the steps to move, next to each other in one block (same
+    /// parent and block), e.g. the three steps that log in. Their children
+    /// move with them.
+    pub step_ids: Vec<String>,
+    /// Name of the new scenario and of the call step, e.g. "ログインする".
+    pub name: String,
+    /// One or two sentences for the human who reviews your change in Studio:
+    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
+    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RevisionedRef {
     pub scenario_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

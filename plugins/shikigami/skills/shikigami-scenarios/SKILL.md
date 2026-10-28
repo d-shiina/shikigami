@@ -48,6 +48,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
   - 表（配列）の加工は `map` / `filter` / `find` / `sortBy` / `groupBy` に `r => …` を渡す：`sum(map(filter(rows, r => r.status == '済'), r => num(r.amount)))`。レコードの追加・変更は `merge(row, { status: '済' })`、作るときは `{ name: r.氏名, amount: num(r.金額) }`。
   - 日付は文字列（`2026-10-28` / `2026-10-28T09:30:00`）で持つ：`today()`、`formatDate(today(), 'yyyyMMdd')`、`dateAdd(d, -1, 'month')`、`endOfMonth(d)`、`parseDate('令和8年10月28日', 'gge年M月d日')`。
 - 入出力は `variables` の `direction`（`input` / `output` / `inOut` / `local`。省略時は `local`）で宣言する。`secret: true` の変数はログで `***` に伏せられるが、既定値は書けない（パスワードは下のシークレットを使う）。
+- 長くなったフローや、何度も使う手順（ログイン、1 件の登録など）はサブシナリオにする。並んだステップは `extract_subscenario`（`stepIds`・`name`）でそのまま切り出せる（読み書きする変数は自動で入出力になる）。手で書くときは `scenario.call`：`params.scenario` に呼ぶシナリオの ID、`inputs` に「呼ばれる側の入力変数 → 値（テンプレート可）」、`outputs` に「呼ばれる側の出力変数 → 受け取る変数名」。どちらもキーは呼ばれる側の変数名。`saveAs` と `retry` は使わない。呼ばれる側の変数は見えないので、必要なものはすべて `inputs` で渡す。`get_scenario` の `subscenarios` に呼ぶ側から見た入力・出力の一覧が出る。
 - 要素ごとの処理は `control.forEach`。各回の結果は `collect`（式）で返すと `saveAs` に配列で入る。互いに独立した要素は `concurrency`（例 `4`）で同時に処理できるが、その場合は各回が変数のコピーで動くので、本体で外の変数に書かず（`FOREACH_SHARED_WRITE`）、`collect` + `saveAs` で受け取ってループ後に `sum(results)` などで集計する。
 - 時間のかかる処理の完了や状態の変化を待つときは `wait.until`（`condition` が真になるまで `intervalMs` ごとに確認。`check` ブロックで状態を読んで `saveAs` で変数に入れる。待つ上限は `timeoutMs`、超えると `WAIT_TIMEOUT`）。`flow.delay` の固定待ちや `retry` で代用しない。
 - 失敗し得るステップには `retry`（回数と間隔）や `timeoutMs`、`onError` を設定する。`onError: continue` のときエラー内容は変数 `lastError` に入る。
