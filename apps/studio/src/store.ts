@@ -78,7 +78,11 @@ export type RunState = {
   steps: Record<string, StepRunState>;
   logs: LogEntry[];
   changes: VariableChange[];
+  /** When each step began, in run order (retries not counted), to tell what a step saw. */
+  starts: StepStart[];
 };
+
+export type StepStart = { stepId: string; seq: number };
 
 export type StudioState = {
   summaries: ScenarioSummary[];
@@ -541,7 +545,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const runId = await api.run(scenario.id);
           set((s) => ({
             // Events may have arrived before the command returned.
-            run: s.run?.runId === runId ? s.run : { runId, status: "running", steps: {}, logs: [], changes: [] },
+            run: s.run?.runId === runId ? s.run : { runId, status: "running", steps: {}, logs: [], changes: [], starts: [] },
             error: null,
           }));
         } catch (e) {
@@ -565,7 +569,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const run: RunState =
             s.run && s.run.runId === env.runId
               ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs }
-              : { runId: env.runId, status: "running", steps: {}, logs: [], changes: [] };
+              : { runId: env.runId, status: "running", steps: {}, logs: [], changes: [], starts: [] };
           const push = (level: LogLevel, msg: string, stepId?: string | null) => {
             run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
           };
@@ -578,6 +582,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               break;
             case "stepStarted":
               run.steps[env.stepId] = "running";
+              if ((env.attempt ?? 1) <= 1) run.starts = [...run.starts, { stepId: env.stepId, seq: env.seq }];
               break;
             case "humanActionRequired":
               human = { stepId: env.stepId, message: env.message };

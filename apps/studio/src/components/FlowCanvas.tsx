@@ -24,14 +24,15 @@ import { focus, useFocus, varFocus } from "../lib/focus";
 import { actorLabel, describe } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
-import { findStep, revertBlocker, type StepRunState, touchedSteps, type VariableChange } from "../store";
+import { revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
+import { valuesSeenBy } from "../lib/runValues";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; changes: VariableChange[]; dir: Direction }>
+  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; dir: Direction }>
 >;
 
 const MIN_READABLE_ZOOM = 0.85;
@@ -129,19 +130,21 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
 
 const edgeTypes = { link: LinkEdge };
 
-const NO_CHANGES: VariableChange[] = [];
+type RunValues = { changes: VariableChange[]; starts: StepStart[] };
+const NO_RUN: RunValues = { changes: [], starts: [] };
 /** Chips shown per input before the rest fold into "+n". */
 const MAX_CHIPS = 2;
 
 /** The values a chip's popover lists: the last few, newest last. */
-function ValuePopover({ name, color, values, anchor }: { name: string; color: string; values: VariableChange[]; anchor: DOMRect }) {
-  const last = values.at(-1);
+const MAX_RUNS = 5;
+
+/**
+ * What this step saw (or wrote) for one variable, once per time it ran:
+ * a single value for a plain step, one line per pass inside a loop.
+ */
+function ValuePopover({ name, color, values, side, anchor }: { name: string; color: string; values: VariableChange[]; side: "in" | "out"; anchor: DOMRect }) {
   const below = anchor.top < window.innerHeight / 2;
-  const steps = useStudio((s) => s.scenario?.steps);
-  const stepName = (id: string) => {
-    const step = steps && findStep(steps, id);
-    return step ? (step.name ?? step.type) : undefined;
-  };
+  const many = values.length > 1;
   return createPortal(
     <div
       // Above the chip, or below it when there is no room up top.
@@ -151,33 +154,25 @@ function ValuePopover({ name, color, values, anchor }: { name: string; color: st
       <div className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
         <span className="font-mono font-semibold">{name}</span>
-        {values.length > 1 && <span className="text-slate-400">{values.length}回変化</span>}
+        <span className="text-slate-400">
+          {side === "in" ? "このステップが受け取った値" : "このステップが書き込んだ値"}
+          {many && `（${values.length}回実行）`}
+        </span>
       </div>
-      {last ? (
-        <>
-          <div className="mt-1.5 text-[10px] text-slate-400">実行が終わったときの値</div>
-          <div className="mt-0.5 rounded-[3px] border border-slate-100 bg-paper px-2 py-1.5">
-            <ChangeView change={last} />
-          </div>
-          {values.length > 1 && (
-            <div className="mt-1.5">
-              <div className="text-[10px] text-slate-400">この実行での移り変わり（古い順）</div>
-              <ol className="mt-0.5 space-y-0.5">
-                {values.slice(-6).map((w) => (
-                  <li key={w.seq} className={`flex gap-2 ${w === last ? "font-semibold text-ink" : "text-slate-500"}`}>
-                    <span className="w-24 shrink-0 truncate text-[10px] leading-[16px] text-slate-400">
-                      {w.stepId ? (stepName(w.stepId) ?? w.stepId) : "はじめの値"}
-                      {w.iteration != null && `・${w.iteration + 1}件目`}
-                    </span>
-                    <span className="truncate">{changeText(w)}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-        </>
-      ) : (
+      {values.length === 0 ? (
         <div className="mt-0.5 text-slate-400">実行すると、ここに値が出ます</div>
+      ) : (
+        <ol className="mt-1.5 space-y-1">
+          {values.slice(0, MAX_RUNS).map((w, i) => (
+            <li key={`${w.seq}-${i}`} className="flex items-start gap-2">
+              {many && <span className="w-9 shrink-0 pt-1 text-[10px] text-slate-400">{i + 1}回目</span>}
+              <div className="min-w-0 flex-1 rounded-[3px] border border-slate-100 bg-paper px-2 py-1">
+                <ChangeView change={w} />
+              </div>
+            </li>
+          ))}
+          {values.length > MAX_RUNS && <li className="text-[10px] text-slate-400">…ほか {values.length - MAX_RUNS} 回</li>}
+        </ol>
       )}
     </div>,
     document.body,
@@ -214,7 +209,7 @@ function VarChip({ name, color, values, side, owner }: { name: string; color: st
       ) : (
         <span className="truncate font-semibold">{name}</span>
       )}
-      {anchor && <ValuePopover name={name} color={color} values={values} anchor={anchor} />}
+      {anchor && <ValuePopover name={name} color={color} values={values} side={side} anchor={anchor} />}
     </span>
   );
 }
@@ -232,7 +227,7 @@ function Chips({ side, color, children }: { side: "in" | "out"; color: string; c
   );
 }
 
-function NodeRow({ row, vars, changes, stepId }: { row: Row; vars: Map<string, string | undefined>; changes: VariableChange[]; stepId: string }) {
+function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, string | undefined>; run: RunValues; stepId: string }) {
   const focused = useFocus();
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "#94a3b8";
   const across = useContext(DirContext) === "horizontal";
@@ -256,7 +251,7 @@ function NodeRow({ row, vars, changes, stepId }: { row: Row; vars: Map<string, s
               owner={stepId}
               name={row.variable}
               color={color}
-              values={changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
+              values={run.changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
             />
           </Chips>
         )}
@@ -271,7 +266,7 @@ function NodeRow({ row, vars, changes, stepId }: { row: Row; vars: Map<string, s
       {across && row.refs.length > 0 && (
         <Chips side="in" color={first}>
           {row.refs.slice(0, MAX_CHIPS).map((r) => (
-            <VarChip key={r} side="in" owner={stepId} name={r} color={typeColor(r)} values={changes.filter((c) => c.variable === r)} />
+            <VarChip key={r} side="in" owner={stepId} name={r} color={typeColor(r)} values={valuesSeenBy(run.changes, run.starts, r, stepId)} />
           ))}
           {row.refs.length > MAX_CHIPS && (
             <span className="text-[10px] text-slate-400" title={row.refs.slice(MAX_CHIPS).join(", ")}>
@@ -341,7 +336,7 @@ function StepNode({ data }: StepNodeProps) {
       {rows.length > 0 && (
         <div style={{ paddingBottom: NODE_PAD_B }} className="border-t border-dashed border-slate-200">
           {rows.map((row, i) => (
-            <NodeRow key={i} row={row} vars={data.vars} changes={data.changes} stepId={data.step.id ?? ""} />
+            <NodeRow key={i} row={row} vars={data.vars} run={data.run} stepId={data.step.id ?? ""} />
           ))}
         </div>
       )}
@@ -431,7 +426,7 @@ export function FlowCanvas() {
           byAi: reviews.has(id),
           reviews: reviews.get(id) ?? [],
           vars,
-          changes: run?.changes ?? NO_CHANGES,
+          run: run ? { changes: run.changes, starts: run.starts } : NO_RUN,
         },
       };
     }
