@@ -1,221 +1,86 @@
-// Japanese is the default UI language. Internal identifiers stay English;
-// only display strings live here so that an English dictionary can be added
-// without touching components.
-export const ja = {
-  appName: "Shikigami Studio",
-  secrets: "シークレット",
-  secretsIntro:
-    "ログインに使う ID・パスワードを名前を付けて登録します。シナリオと AI には名前だけが渡り、値は登録したサイトの入力欄にだけ入力されます。",
-  secretName: "名前（シナリオや AI に伝える名前）",
-  secretUsername: "ユーザー名",
-  secretPassword: "パスワード",
-  secretPasswordKeep: "変更しないときは空のまま",
-  secretTotp: "MFA の設定キー（任意）",
-  secretTotpHint: "認証アプリ用の QR コードの横に出るキー、または otpauth:// の文字列。ワンタイムコードを自動で入力します",
-  secretSites: "入力してよいサイト・アプリ（1 行に 1 つ）",
-  secretSitesHint: "例：https://example.com、デスクトップアプリは app:billing.exe、プラグインは plugin:名前。ここにない先には渡しません",
-  secretDescription: "メモ（任意）",
-  secretSave: "保存",
-  secretNew: "新しく登録",
-  secretEdit: "編集",
-  secretDelete: "削除",
-  secretConfirmDelete: (name: string) => `シークレット「${name}」と保存済みのログイン状態を削除しますか？`,
-  secretSaved: (name: string) => `シークレット「${name}」を保存しました`,
-  secretKeyNote: (where: string) => `値は暗号化してワークスペースに保存し、鍵は ${where} に 1 件だけ置きます。`,
-  secretNone: "まだ登録されていません",
-  secretKeyMissing:
-    "このワークスペースのシークレットは別の PC か別の Windows ユーザーで登録されたため、ここでは値を読めません。リセットしてから登録し直してください。",
-  secretReset: "リセットして登録し直す",
-  secretConfirmReset: "このワークスペースのシークレットと保存済みのログイン状態をすべて削除しますか？",
-  secretUse: "シークレット",
-  secretText: "文字",
-  secretChoose: "（シークレットを選択）",
-  secretRegister: "登録",
-  secretFieldLabel: "項目",
-  secretField: { username: "ユーザー名", password: "パスワード", totp: "ワンタイムコード" },
-  waitingForYou: "操作を待っています",
-  secretAsked: "ログイン情報が必要です",
-  secretAskMore: (name: string) => `シークレット「${name}」に足りないものがあります`,
-  secretAskMissing: "足りないもの",
-  secretAskFrom: "AI からのメッセージ",
-  secretAskNote: "値はここ（Studio）にだけ入力します。AI には名前しか伝わりません",
-  secretAskRegister: "登録する",
-  secretAskLater: "あとで",
-  secretAskOthers: (n: number) => `ほかに ${n} 件`,
-  secretFixTitle: (name: string, code: string) =>
-    ({
-      SECRET_NOT_FOUND: `シークレット「${name}」が登録されていないため止まりました`,
-      SECRET_FIELD_EMPTY: `シークレット「${name}」に必要な項目が入っていないため止まりました`,
-      SECRET_SITE_NOT_SET: `シークレット「${name}」に入力してよいサイトがないため止まりました`,
-      SECRET_SITE_MISMATCH: `シークレット「${name}」はこのページに入力できないため止まりました`,
-      SECRET_APP_NOT_SET: `シークレット「${name}」に入力してよいアプリがないため止まりました`,
-    })[code] ?? `シークレット「${name}」の問題で止まりました`,
-  secretFixSite: (site: string) => `止まったページ：${site}（正しいサイトなら「入力してよいサイト」に追加）`,
-  secretAskAdded: (name: string, sites: string[]) =>
-    `「入力してよいサイト」に ${sites.join("、")} を追加しました。「${name}」のパスワードをこのサイトに入力してよいか確かめてから保存してください`,
-  secretAskHint: "登録フォームに名前とサイトを入れてあります。ユーザー名・パスワードを入力して保存してください",
-  inUse: (callers: string[]) =>
-    `${callers.map((c) => `「${c}」`).join("")}から呼ばれているため削除できません。先にそのシナリオの呼び出しを外してください`,
-  extracted: (name: string) => `新しいシナリオ「${name}」にまとめました`,
-  close: "閉じる",
-  cancel: "やめる",
-  secretNoDefault: "機密の変数には既定値を書けません。パスワードは右上の「シークレット」に登録して、入力ステップで選びます",
-  scenarios: "シナリオ",
-  newScenario: "新規作成",
-  newScenarioPrompt: "シナリオ名",
-  defaultScenarioName: "新しいシナリオ",
-  duplicate: "複製",
-  delete: "削除",
-  confirmDelete: "このシナリオをゴミ箱に移動しますか？",
-  noScenarios: "シナリオがありません",
-  noSelection: "左の一覧からシナリオを選択してください",
-  undo: "元に戻す",
-  redo: "やり直す",
-  validate: "検証",
-  run: "実行",
-  stop: "停止",
-  addStep: "ステップ追加",
-  addAfterSelection: "選択の後に追加",
-  addInto: "の中に追加",
-  moveUp: "上へ",
-  moveDown: "下へ",
-  properties: "プロパティ",
-  variables: "変数",
-  addVariable: "変数を追加",
-  issues: "検証結果",
-  noIssues: "問題はありません",
-  log: "実行ログ",
-  clearLog: "クリア",
-  stepName: "表示名",
-  stepType: "種類",
-  params: "パラメーター",
-  disabled: "無効化",
-  timeoutMs: "タイムアウト (ms)",
-  retry: "リトライ回数",
-  onError: "エラー時",
-  onErrorFail: "停止する",
-  onErrorContinue: "続行する",
-  saveAs: "結果を保存する変数",
-  rawJson: "JSONで編集",
-  apply: "適用",
-  invalidJson: "JSONとして解析できません",
-  selectStep: "ステップを選択するとプロパティを編集できます",
-  emptyScenario: "ステップがありません。上の「ステップ追加」から始めてください。",
-  revision: "リビジョン",
-  reloadedByConflict: "他のクライアント（AIなど）が更新したため、最新の内容を読み込みました。",
-  externalChange: "外部（MCP / CLI）での変更を反映しました。",
-  runStarted: "実行を開始しました",
-  status: {
-    pending: "待機中",
-    running: "実行中",
-    paused: "一時停止中",
-    succeeded: "成功",
-    failed: "失敗",
-    cancelled: "キャンセル",
-  },
-  direction: {
-    input: "入力",
-    output: "出力",
-    inOut: "入出力",
-    local: "ローカル",
-  },
-  varType: {
-    string: "文字列",
-    number: "数値",
-    boolean: "真偽値",
-    object: "オブジェクト",
-    array: "配列",
-    any: "任意",
-  },
-  secret: "機密",
-  remove: "削除",
-  name: "名前",
-  type: "型",
-  defaultValue: "初期値",
-  tagline: "AIと人が同じシナリオを編む",
-  timeline: "記録",
-  timelineEmpty: "まだ変更はありません",
-  review: "AIの変更を確認",
-  reviewHint: "MCP経由の変更は即時に反映済みです。内容を確かめて、残すか取り消すかを選べます。",
-  approve: "残す",
-  approveAll: "すべて残す",
-  revert: "取り消す",
-  revertThis: "この変更を取り消す",
-  reverted: "AIの変更を取り消しました（新しい変更として記録されています）。",
-  unreviewed: "未確認",
-  sentBack: "差し戻しました。AIが次に読むときに理由が伝わります。",
-  approved: "この版を本番に使うものとして記録しました。",
-  wholeEntry: "この操作は、同じ変更に含まれる次の内容すべてに効きます:",
-  revertBlocked: "この後に同じ対象が変更されているため、自動では取り消せません。後の変更から順に取り消してください。",
-  revertUnsupported: "この変更は取り消せません。",
-  you: "あなた",
-  paletteTitle: "ステップを呼び出す",
-  palettePlaceholder: "やりたいことを入力（例: 待機、ログ、繰り返し）",
-  paletteEmpty: "該当するステップがありません",
-  addHere: "ここに追加",
-  shortcut: "Ctrl+K",
-  inspect: "設定",
-  versions: "版",
-  versionName: "版の名前（例: v1、本番リリース）",
-  versionNote: "メモ（任意）",
-  saveVersion: "版として保存",
-  versionSaved: "版を保存しました",
-  versionsEmpty: "まだ版はありません。動作を確認できたら名前を付けて保存しましょう。",
-  versionsHint: "版はワークスペースを使う全員に共有されます。復元は通常の編集として記録され、元に戻せます。",
-  showDiff: "現在との差分",
-  hideDiff: "差分を閉じる",
-  noDiff: "現在の内容と同じです",
-  restore: "この版に戻す",
-  confirmRestore: "戻す",
-  restored: "版の内容に戻しました（元に戻すで取り消せます）。",
-  diffKind: {
-    added: "追加",
-    removed: "削除",
-    changed: "変更",
-    moved: "移動",
-  },
-  share: "共有",
-  exportScenario: "ファイルに書き出す",
-  exported: "書き出しました",
-  importScenario: "ファイルから読み込む",
-  imported: "読み込みました",
-  importConflict: "同じシナリオがすでにあります",
-  importUpdate: "このシナリオを更新",
-  importCopy: "別のシナリオとして追加",
-  workspace: "保存先",
-  workspaceShared: "共有",
-  changeWorkspace: "変更",
-  workspacePath: "フォルダのパス（例: \\\\server\\rpa\\workspace）",
-  workspaceSharedLabel: "複数人で使う（OneDrive・ファイルサーバー）",
-  workspaceApply: "切り替えて再起動",
-  updateAvailable: "更新",
-  updateChecking: "更新を確認しています…",
-  updateLatest: "最新版です",
-  updateReady: "に更新できます。",
-  updateInstall: "更新して再起動",
-  updateInstalling: "ダウンロード中…",
-  updateCheck: "もう一度確認",
-  updatesDisabled: "開発版のため自動更新は行いません。",
-  mcpSetup: "Claude Code に MCP サーバーを登録するコマンド（更新しても同じパスのまま使えます）",
-  copy: "コピー",
-  copied: "コピーしました",
-  viewStory: "手順書",
-  viewFlow: "フロー図",
-  storyAddHere: "ここに手順を追加",
-  storyEmptyBlock: "まだ手順がありません。ここに追加",
-  actor: {
-    studio: "あなた",
-    mcp: "AI",
-    cli: "CLI",
-    system: "システム",
-  },
-  change: {
-    create: "作成",
-    edit: "編集",
-    undo: "元に戻す",
-    redo: "やり直す",
-    delete: "削除",
-  },
-} as const;
+// The display language: Japanese or English, or follow the OS. Components read
+// strings from `t`, a live binding that switches with the language; Studio
+// re-mounts its shell on a switch so everything on screen is redrawn.
+import { useSyncExternalStore } from "react";
+import { en } from "./locales/en";
+import { type Dict, ja } from "./locales/ja";
 
-export const t = ja;
+export type { Dict };
+export type Locale = "ja" | "en";
+export type LocaleChoice = "system" | Locale;
+
+const KEY = "shikigami.studio.locale";
+const DICTS: Record<Locale, Dict> = { ja, en };
+const listeners = new Set<() => void>();
+
+function stored(): LocaleChoice {
+  try {
+    const value = globalThis.localStorage?.getItem(KEY);
+    return value === "ja" || value === "en" ? value : "system";
+  } catch {
+    return "system";
+  }
+}
+
+/** The OS language: Japanese when it is Japanese, English otherwise. */
+function system(): Locale {
+  const lang = globalThis.navigator?.language ?? "ja";
+  return lang.toLowerCase().startsWith("ja") ? "ja" : "en";
+}
+
+let choice: LocaleChoice = stored();
+export let locale: Locale = choice === "system" ? system() : choice;
+export let t: Dict = DICTS[locale];
+
+function apply() {
+  locale = choice === "system" ? system() : choice;
+  t = DICTS[locale];
+  const root = globalThis.document?.documentElement;
+  if (root) root.lang = locale;
+  for (const l of listeners) l();
+}
+
+/** Applies the saved choice. Call once, before the first render. */
+export function initLocale() {
+  apply();
+}
+
+export function setLocale(next: LocaleChoice, remember = true) {
+  choice = next;
+  if (remember) {
+    try {
+      globalThis.localStorage?.setItem(KEY, next);
+    } catch {
+      // Only a remembered preference.
+    }
+  }
+  apply();
+}
+
+export function useLocale(): { choice: LocaleChoice; locale: Locale } {
+  const value = useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => `${choice}:${locale}`,
+  );
+  const [c, l] = value.split(":") as [LocaleChoice, Locale];
+  return { choice: c, locale: l };
+}
+
+/**
+ * A step type's name in the current language. The registry (Rust, plugins)
+ * names steps in Japanese; English names live in the dictionary and fall
+ * back to the registry's label for types it does not know.
+ */
+export function stepLabel(type: string, label?: string): string {
+  if (locale === "ja") return label ?? type;
+  return (t.stepTypes as Record<string, string>)[type] ?? label ?? type;
+}
+
+/** A block's name (then / else / body …) in the current language. */
+export function blockName(type: string, block: string, label: string): string {
+  if (locale === "ja") return label;
+  return (t.blockNames as Record<string, string>)[`${type}:${block}`] ?? (t.blockNames as Record<string, string>)[block] ?? label;
+}

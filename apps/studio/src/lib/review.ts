@@ -2,6 +2,7 @@
 // which steps were added, changed or removed, read straight from the ops and
 // inverse ops Core recorded. Display only.
 import type { HistoryEntry, Step } from "@shikigami/schema";
+import { t } from "./i18n";
 
 export type StepDiff = "added" | "changed";
 
@@ -58,11 +59,11 @@ function generatedIds(entry: HistoryEntry): string[] {
 export function headline(summary: ReviewSummary): string {
   const count = (d: StepDiff) => [...summary.steps.values()].filter((v) => v === d).length;
   const parts = [
-    count("added") && `${count("added")}手順追加`,
-    count("changed") && `${count("changed")}手順変更`,
-    summary.removed.length && `${summary.removed.length}手順削除`,
-    summary.variables && `変数${summary.variables}つ`,
-    summary.scenario && "シナリオ設定",
+    count("added") && t.headline.added(count("added")),
+    count("changed") && t.headline.changed(count("changed")),
+    summary.removed.length && t.headline.removed(summary.removed.length),
+    summary.variables && t.headline.variables(summary.variables),
+    summary.scenario && t.headline.scenario,
   ].filter(Boolean);
-  return parts.length > 0 ? parts.join("・") : "変更";
+  return parts.length > 0 ? parts.join(t.headline.sep) : t.headline.none;
 }

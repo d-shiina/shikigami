@@ -23,7 +23,7 @@ function ImportBox({ input }: { input: React.RefObject<HTMLInputElement | null> 
         <div className="space-y-1.5 rounded border border-shu-100 bg-paper p-2 text-xs">
           <p>
             {t.importConflict}
-            {pending.name && <span className="font-semibold">「{pending.name}」</span>}
+            {pending.name && <span className="font-semibold">{t.quote(pending.name)}</span>}
           </p>
           <button
             type="button"
@@ -50,7 +50,8 @@ function ImportBox({ input }: { input: React.RefObject<HTMLInputElement | null> 
 
 const OPEN_KEY = "shikigami.studio.closedGroups";
 const SORT_KEY = "shikigami.studio.sort";
-const NO_TAG = "タグなし";
+/** Group key for untagged scenarios; sorts last and shows as `t.list.noTag`. */
+const NO_TAG = "\u0000";
 const RECENT = 5;
 
 type Sort = "updated" | "name";
@@ -103,7 +104,7 @@ function ScenarioItem({ summary, active, query }: { summary: ScenarioSummary; ac
   const duplicate = useStudio((s) => s.duplicate);
   const remove = useStudio((s) => s.remove);
   const [confirming, setConfirming] = useState(false);
-  const detail = [summary.description, `${summary.stepCount} 手順`, summary.updatedAt && `${relativeTime(summary.updatedAt)}に更新`]
+  const detail = [summary.description, t.list.stepCount(summary.stepCount), summary.updatedAt && t.list.updated(relativeTime(summary.updatedAt))]
     .filter(Boolean)
     .join("\n");
   return (
@@ -124,7 +125,7 @@ function ScenarioItem({ summary, active, query }: { summary: ScenarioSummary; ac
           <Marked text={summary.name} query={query} />
         </span>
         <span className="shrink-0 text-[10px] text-slate-400 tabular-nums group-hover:hidden group-focus-within:hidden">
-          {summary.updatedAt ? relativeTime(summary.updatedAt) : `版${summary.revision}`}
+          {summary.updatedAt ? relativeTime(summary.updatedAt) : t.evidence.revision(summary.revision)}
         </span>
         <span className="hidden shrink-0 gap-0.5 group-hover:flex group-focus-within:flex">
           <button
@@ -149,7 +150,7 @@ function ScenarioItem({ summary, active, query }: { summary: ScenarioSummary; ac
             }}
             onBlur={() => setConfirming(false)}
           >
-            {confirming ? "削除する" : t.delete}
+            {confirming ? t.list.confirmDelete : t.delete}
           </button>
         </span>
       </div>
@@ -252,7 +253,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
             onClick={() => setMenu(!menu)}
             className="flex h-6 items-center gap-1 rounded-[4px] bg-ink px-2 text-[11px] font-semibold text-paper hover:bg-brand-700"
           >
-            ＋ 追加
+            ＋ {t.list.add}
           </button>
           {menu && (
             <div className="absolute top-full right-0 z-20 mt-1 w-44 overflow-hidden rounded-[4px] border border-slate-200 bg-sheet py-1 text-[12px] shadow-lifted">
@@ -277,7 +278,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
                 {t.importScenario}
               </button>
               <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] leading-relaxed text-slate-400">
-                Claude Code などのAIに「〜するシナリオを作って」と頼んでも増えます
+                {t.list.askAiHint}
               </div>
             </div>
           )}
@@ -285,7 +286,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
         <button
           type="button"
           onClick={onCollapse}
-          title="一覧をたたむ"
+          title={t.list.collapse}
           className="grid h-6 w-6 place-items-center rounded-[4px] text-slate-400 hover:bg-slate-200 hover:text-ink"
         >
           «
@@ -303,7 +304,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
             className="min-w-0 flex-1 rounded-[4px] border border-brand-500 bg-sheet px-2 py-1 text-[12px] focus:outline-none"
           />
           <button type="submit" className="rounded-[4px] bg-ink px-2 text-[11px] text-paper">
-            作る
+            {t.list.create}
           </button>
         </form>
       )}
@@ -318,19 +319,19 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-            placeholder="検索"
+            placeholder={t.list.search}
             className="min-w-0 flex-1 bg-transparent text-[12px] focus:outline-none"
           />
-          {q && <span className="shrink-0 text-[10px] text-slate-400">{sorted.length}件</span>}
+          {q && <span className="shrink-0 text-[10px] text-slate-400">{t.list.count(sorted.length)}</span>}
         </div>
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as Sort)}
-          title="並び順"
+          title={t.list.sort}
           className="h-7 rounded-[4px] border border-slate-200 bg-sheet px-1 text-[11px] text-slate-600 focus:outline-none"
         >
-          <option value="updated">更新順</option>
-          <option value="name">名前順</option>
+          <option value="updated">{t.list.byUpdated}</option>
+          <option value="name">{t.list.byName}</option>
         </select>
       </div>
       <ul className="flex-1 overflow-y-auto px-2 pb-3">
@@ -338,19 +339,19 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
           <li className="mx-1 rounded-[4px] border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
             {t.noScenarios}
             <br />
-            ＋追加 から作るか、AIに頼んでください
+            {t.list.emptyHint}
           </li>
         )}
-        {summaries.length > 0 && sorted.length === 0 && <li className="px-2 py-2 text-xs text-slate-400">見つかりません</li>}
+        {summaries.length > 0 && sorted.length === 0 && <li className="px-2 py-2 text-xs text-slate-400">{t.list.notFound}</li>}
         {grouped ? (
           <>
-            <Group label="最近さわったもの" count={recent.length} closed={closed.includes("@recent")} onToggle={() => toggle("@recent")}>
+            <Group label={t.list.recent} count={recent.length} closed={closed.includes("@recent")} onToggle={() => toggle("@recent")}>
               {recent.map((s) => (
                 <ScenarioItem key={s.id} summary={s} active={s.id === currentId} query="" />
               ))}
             </Group>
             {groups.map(([tag, list]) => (
-              <Group key={tag} label={tag} count={list.length} closed={closed.includes(tag)} onToggle={() => toggle(tag)}>
+              <Group key={tag} label={tag === NO_TAG ? t.list.noTag : tag} count={list.length} closed={closed.includes(tag)} onToggle={() => toggle(tag)}>
                 {list.map((s) => (
                   <ScenarioItem key={s.id} summary={s} active={s.id === currentId} query="" />
                 ))}
@@ -379,7 +380,7 @@ export function ScenarioRail({ onExpand }: { onExpand: () => void }) {
       <button
         type="button"
         onClick={onExpand}
-        title="シナリオ一覧を開く"
+        title={t.list.expand}
         className="grid h-7 w-7 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-200 hover:text-ink"
       >
         »

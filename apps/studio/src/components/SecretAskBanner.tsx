@@ -11,8 +11,8 @@ function siteLabel(site: string) {
 
 /** What a request still needs, e.g. 「ユーザー名・パスワード / accounts.google.com」. */
 function missingText(request: SecretRequest) {
-  const fields = request.missing.fields.map((f) => t.secretField[f]).join("・");
-  const sites = request.missing.sites.map(siteLabel).join("、");
+  const fields = request.missing.fields.map((f) => t.secretField[f]).join(t.listSep);
+  const sites = request.missing.sites.map(siteLabel).join(t.listSep);
   return [fields, sites].filter(Boolean).join(" / ");
 }
 
@@ -36,11 +36,13 @@ export function SecretAskBanner() {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span aria-hidden>🔑</span>
           <span className="font-medium">
-            {request.missing.registered ? t.secretAskMore(request.name) : `${t.secretAsked}：「${request.name}」`}
+            {request.missing.registered ? t.secretAskMore(request.name) : `${t.secretAsked}${t.colon}${t.quote(request.name)}`}
           </span>
           {missingText(request) && (
             <span className="text-xs text-slate-600">
-              {t.secretAskMissing}：{missingText(request)}
+              {t.secretAskMissing}
+              {t.colon}
+              {missingText(request)}
             </span>
           )}
           {requests.length > 1 && <span className="text-xs text-slate-500">{t.secretAskOthers(requests.length - 1)}</span>}
@@ -59,7 +61,9 @@ export function SecretAskBanner() {
           {request.reason && (
             // The AI's own words: shown as a quote, never as Shikigami's instruction.
             <p className="basis-full text-xs text-slate-600">
-              {t.secretAskFrom}：「{request.reason}」
+              {t.secretAskFrom}
+              {t.colon}
+              {t.quote(request.reason)}
             </p>
           )}
           <p className="basis-full text-[11px] text-slate-500">{t.secretAskNote}</p>

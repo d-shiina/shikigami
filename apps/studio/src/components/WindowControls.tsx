@@ -2,6 +2,7 @@
 // drags the window, double-click maximizes, and these are the caption buttons.
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
+import { t } from "../lib/i18n";
 
 function inTauri(): boolean {
   return "__TAURI_INTERNALS__" in globalThis;
@@ -23,12 +24,12 @@ export function WindowControls() {
   const win = getCurrentWindow();
   return (
     <div className="-mr-4 flex self-stretch">
-      <button type="button" title="最小化" className={BUTTON} onClick={() => void win.minimize()}>
+      <button type="button" title={t.window.minimize} className={BUTTON} onClick={() => void win.minimize()}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
           <path d="M0 5.5h10" stroke="currentColor" />
         </svg>
       </button>
-      <button type="button" title={maximized ? "元に戻す" : "最大化"} className={BUTTON} onClick={() => void win.toggleMaximize()}>
+      <button type="button" title={maximized ? t.window.restore : t.window.maximize} className={BUTTON} onClick={() => void win.toggleMaximize()}>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
           {maximized ? (
             <path d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z" stroke="currentColor" />
@@ -37,7 +38,7 @@ export function WindowControls() {
           )}
         </svg>
       </button>
-      <button type="button" title="閉じる" className={`${BUTTON} hover:bg-[#c42b1c]! hover:text-white!`} onClick={() => void win.close()}>
+      <button type="button" title={t.close} className={`${BUTTON} hover:bg-[#c42b1c]! hover:text-white!`} onClick={() => void win.close()}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
           <path d="M.5.5l9 9M9.5.5l-9 9" stroke="currentColor" />
         </svg>

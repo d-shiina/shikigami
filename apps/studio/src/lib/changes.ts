@@ -1,9 +1,9 @@
-// Turns Core's journal entries into readable Japanese lines for the timeline
+// Turns Core's journal entries into readable lines for the timeline
 // and the review cards. Display only: before/after values come straight from
 // the ops and inverse ops Core recorded, nothing is recomputed here.
 import type { EditOp, HistoryEntry, Scenario, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { findStep } from "../store";
-import { t } from "./i18n";
+import { stepLabel, t } from "./i18n";
 
 export type FieldDiff = { field: string; before: unknown; after: unknown };
 
@@ -14,30 +14,17 @@ export type ChangeLine = {
   diffs: FieldDiff[];
 };
 
-const FIELD_LABEL: Record<string, string> = {
-  name: t.stepName,
-  description: "説明",
-  disabled: t.disabled,
-  timeoutMs: t.timeoutMs,
-  retry: t.retry,
-  onError: t.onError,
-  saveAs: t.saveAs,
-};
+/** Step fields a patch can set besides params, with their labels. */
+const FIELDS = ["name", "description", "disabled", "timeoutMs", "retry", "onError", "saveAs"] as const;
 
-const VERB_LABEL: Record<ChangeLine["verb"], string> = {
-  add: "追加",
-  update: "変更",
-  remove: "削除",
-  move: "移動",
-  scenario: "シナリオ",
-  variable: "変数",
-  replace: "置換",
-};
+function fieldLabel(field: (typeof FIELDS)[number]): string {
+  return field === "description" ? t.versionField.description : t[field === "name" ? "stepName" : field];
+}
 
-export const verbLabel = (verb: ChangeLine["verb"]) => VERB_LABEL[verb];
+export const verbLabel = (verb: ChangeLine["verb"]) => t.verbs[verb];
 
 export function formatValue(value: unknown): string {
-  if (value === undefined || value === null || value === "") return "（なし）";
+  if (value === undefined || value === null || value === "") return t.values.none;
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
@@ -52,8 +39,8 @@ function patchDiffs(patch: StepPatch, inverse: StepPatch | undefined): FieldDiff
       diffs.push({ field: key, before: before[key], after: after[key] });
     }
   }
-  for (const key of Object.keys(FIELD_LABEL) as (keyof StepPatch)[]) {
-    if (key in patch) diffs.push({ field: FIELD_LABEL[key] ?? key, before: inverse?.[key], after: patch[key] });
+  for (const key of FIELDS) {
+    if (key in patch) diffs.push({ field: fieldLabel(key), before: inverse?.[key], after: patch[key] });
   }
   return diffs;
 }
@@ -61,8 +48,8 @@ function patchDiffs(patch: StepPatch, inverse: StepPatch | undefined): FieldDiff
 /** Name to show for a step: its display name, else its type label. */
 function stepName(id: string, scenario: Scenario | null, defs: ReadonlyMap<string, StepTypeDef>, fallback?: EditOp) {
   const step = scenario ? findStep(scenario.steps ?? [], id) : null;
-  if (step) return step.name || defs.get(step.type)?.label || step.type;
-  if (fallback?.op === "addStep") return fallback.step.name || defs.get(fallback.step.type)?.label || fallback.step.type;
+  if (step) return step.name || stepLabel(step.type, defs.get(step.type)?.label);
+  if (fallback?.op === "addStep") return fallback.step.name || stepLabel(fallback.step.type, defs.get(fallback.step.type)?.label);
   return id;
 }
 
@@ -80,7 +67,7 @@ export function describe(
         return {
           verb: "add",
           stepId: op.step.id ?? undefined,
-          subject: op.step.name || defs.get(op.step.type)?.label || op.step.type,
+          subject: op.step.name || stepLabel(op.step.type, defs.get(op.step.type)?.label),
           diffs: Object.entries(op.step.params ?? {}).map(([field, after]) => ({ field, before: undefined, after })),
         };
       case "updateStep": {
@@ -113,7 +100,7 @@ export function describe(
       case "removeVariable":
         return { verb: "remove", subject: `${t.variables} ${op.name}`, diffs: [] };
       case "replaceSteps":
-        return { verb: "replace", subject: `${op.steps.length} ステップ`, diffs: [] };
+        return { verb: "replace", subject: t.flow.stepCount(op.steps.length), diffs: [] };
     }
   });
 }
@@ -126,8 +113,8 @@ export function actorLabel(entry: HistoryEntry): string {
 
 export function relativeTime(at: string, now = Date.now()): string {
   const diff = Math.max(0, Math.round((now - Date.parse(at)) / 1000));
-  if (diff < 60) return "たった今";
-  if (diff < 3600) return `${Math.floor(diff / 60)}分前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}時間前`;
+  if (diff < 60) return t.time.now;
+  if (diff < 3600) return t.time.minutesAgo(Math.floor(diff / 60));
+  if (diff < 86400) return t.time.hoursAgo(Math.floor(diff / 3600));
   return at.slice(5, 16).replace("T", " ");
 }

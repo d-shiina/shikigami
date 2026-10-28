@@ -107,7 +107,7 @@ function SecretForm({
           value={draft.name}
           disabled={!isNew}
           required
-          placeholder="受注システム"
+          placeholder={t.secretNamePlaceholder}
           onChange={(e) => edit({ name: e.target.value })}
         />
       </Labeled>

@@ -59,31 +59,31 @@ export function ScenarioHeader() {
         title={t.issues}
       >
         {errors ? <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span> : <CheckIcon />}
-        {errors ? `エラー ${errors} 件` : "検証OK"}
+        {errors ? t.toolbar.errors(errors) : t.toolbar.valid}
       </span>
       {running ? (
         <div className="flex h-8 items-center overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-[13px]">
           <span className="flex items-center gap-2 px-3 font-medium text-ink">
             <span className={`h-2 w-2 rounded-full ${paused ? (run?.pause?.reason === "error" ? "bg-shu-500" : "bg-mizu-500") : "bg-accent-500 animate-pulse"}`} />
-            {paused ? "一時停止中" : "実行中"}
+            {paused ? t.status.paused : t.status.running}
           </span>
           {!paused && (
             <button
               type="button"
               onClick={() => void debug({ action: "pause" })}
-              title="次の手順の前で一時停止する"
+              title={t.toolbar.pauseTitle}
               className="flex h-full items-center gap-1 border-l border-slate-300 px-2.5 text-[12px] text-slate-600 hover:bg-slate-50"
             >
-              ❚❚ 一時停止
+              ❚❚ {t.runMsg.paused}
             </button>
           )}
           <button
             type="button"
             onClick={() => setFollowRun(!followRun)}
-            title={followRun ? "動いている手順を画面で追っています（画面を動かすと止まります）" : "動いている手順を画面で追う"}
+            title={followRun ? t.toolbar.followingTitle : t.toolbar.followTitle}
             className={`flex h-full items-center gap-1 border-l border-slate-300 px-2.5 text-[12px] ${followRun ? "bg-brand-50 font-semibold text-brand-700" : "text-slate-500 hover:bg-slate-50"}`}
           >
-            {followRun ? "◉" : "○"} 追う
+            {followRun ? "◉" : "○"} {t.toolbar.follow}
           </button>
           <button
             type="button"
@@ -100,7 +100,7 @@ export function ScenarioHeader() {
           type="button"
           onClick={() => startRun()}
           disabled={errors > 0}
-          title={errors > 0 ? "検証エラーを直すと実行できます" : `${t.run} (F5)`}
+          title={errors > 0 ? t.toolbar.fixErrors : `${t.run} (F5)`}
           className="group flex h-8 items-center gap-2 rounded-[4px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-paper shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
         >
           <span className="text-[#5fd08a] group-disabled:text-paper dark:text-moegi-100">
@@ -115,10 +115,10 @@ export function ScenarioHeader() {
           type="button"
           onClick={() => startRun({ step: true })}
           disabled={errors > 0}
-          title="最初の手順の前で止めて、1手順ずつ実行する (F10)"
+          title={t.toolbar.stepRunTitle}
           className="flex h-8 items-center gap-1 rounded-[6px] border border-slate-300 px-2.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
         >
-          ステップ実行
+          {t.toolbar.stepRun}
         </button>
       )}
     </>

@@ -24,17 +24,17 @@ function parseDefault(text: string, type: VarType): unknown {
   }
 }
 
-const GROUPS: { title: string; directions: VarDirection[]; hint: string }[] = [
-  { title: "入力", directions: ["input", "inOut"], hint: "実行するときに渡す値" },
-  { title: "出力", directions: ["output"], hint: "終わったときに返す値" },
-  { title: "内部", directions: ["local"], hint: "シナリオの中だけで使う値" },
+const GROUPS: { key: "input" | "output" | "local"; directions: VarDirection[] }[] = [
+  { key: "input", directions: ["input", "inOut"] },
+  { key: "output", directions: ["output"] },
+  { key: "local", directions: ["local"] },
 ];
 
 /** How a variable changed during the last run: when, by which step, to what. */
 function RunTrace({ changes }: { changes: VariableChange[] }) {
   const scenario = useStudio((s) => s.scenario);
   const goTo = useStudio((s) => s.goTo);
-  if (changes.length === 0) return <p className="text-[11px] text-slate-400">この実行では変わっていません</p>;
+  if (changes.length === 0) return <p className="text-[11px] text-slate-400">{t.vars.unchanged}</p>;
   const start = Date.parse(changes[0]?.at ?? "");
   return (
     <ol className="relative space-y-1 border-l border-slate-200 pl-3">
@@ -50,7 +50,7 @@ function RunTrace({ changes }: { changes: VariableChange[] }) {
                   {step?.name || step?.type || c.stepId}
                 </button>
               ) : (
-                <span>はじめの値</span>
+                <span>{t.vars.initial}</span>
               )}
               {c.iteration != null && <span className="text-slate-400">#{c.iteration}</span>}
               <span className="ml-auto shrink-0 font-mono text-[10px] text-slate-400">+{Number.isFinite(ms) ? ms : 0}ms</span>
@@ -100,7 +100,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
           {t.varType[type]}
         </span>
         {last ? (
-          <span className="max-w-[110px] truncate rounded bg-brand-50 px-1.5 font-mono text-[10px] text-brand-700" title={`実行後の値（${traced.length}回変化）`}>
+          <span className="max-w-[110px] truncate rounded bg-brand-50 px-1.5 font-mono text-[10px] text-brand-700" title={t.vars.afterRun(traced.length)}>
             {valueText(last)}
           </span>
         ) : (
@@ -112,7 +112,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
         <div className="space-y-1 px-2 pb-2">
           {variable.description && <p className="pb-1 text-[11px] text-slate-500">{variable.description}</p>}
           <label className={row}>
-            <span className={rowLabel}>型</span>
+            <span className={rowLabel}>{t.type}</span>
             <select className={cell} value={type} onChange={(e) => update({ type: e.target.value as VarType })}>
               {TYPES.map((v) => (
                 <option key={v} value={v}>
@@ -122,7 +122,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
             </select>
           </label>
           <label className={row}>
-            <span className={rowLabel}>向き</span>
+            <span className={rowLabel}>{t.vars.direction}</span>
             <select className={cell} value={direction} onChange={(e) => update({ direction: e.target.value as VarDirection })}>
               {DIRECTIONS.map((d) => (
                 <option key={d} value={d}>
@@ -139,7 +139,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
               <span className={rowLabel}>{t.defaultValue}</span>
               <input
                 className={`${cell} font-mono`}
-                placeholder="（なし）"
+                placeholder={t.values.none}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
@@ -157,7 +157,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
           </label>
           {changes && (
             <div className="pt-2">
-              <div className="pb-1 text-[11px] font-bold text-slate-600">実行中の変化（{traced.length}回）</div>
+              <div className="pb-1 text-[11px] font-bold text-slate-600">{t.vars.changes(traced.length)}</div>
               <RunTrace changes={traced} />
             </div>
           )}
@@ -186,14 +186,14 @@ export function VariablesPanel() {
       {GROUPS.map((group) => {
         const members = variables.filter((v) => group.directions.includes(v.direction ?? "local"));
         return (
-          <section key={group.title}>
+          <section key={group.key}>
             <div className="flex items-baseline gap-2 px-2 pb-1">
-              <span className="text-[11px] font-bold tracking-wider text-slate-600">{group.title}</span>
-              <span className="text-[10px] text-slate-400">{group.hint}</span>
+              <span className="text-[11px] font-bold tracking-wider text-slate-600">{t.vars.groups[group.key].title}</span>
+              <span className="text-[10px] text-slate-400">{t.vars.groups[group.key].hint}</span>
               <span className="ml-auto text-[10px] text-slate-400">{members.length}</span>
             </div>
             {members.length === 0 ? (
-              <p className="rounded-[4px] border border-dashed border-slate-200 px-2 py-1.5 text-[11px] text-slate-400">なし</p>
+              <p className="rounded-[4px] border border-dashed border-slate-200 px-2 py-1.5 text-[11px] text-slate-400">{t.vars.nothing}</p>
             ) : (
               <ul className="space-y-0.5">
                 {members.map((v) => (

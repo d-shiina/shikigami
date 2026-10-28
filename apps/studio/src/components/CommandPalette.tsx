@@ -1,27 +1,11 @@
 import type { StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
-import { t } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
 import { KEYWORD } from "../lib/keywords";
-import { PRESETS } from "../lib/presets";
+import { presets } from "../lib/presets";
 
-export const CATEGORY_LABEL: Record<string, string> = {
-  control: "制御",
-  variable: "変数",
-  log: "ログ",
-  flow: "フロー",
-  browser: "ブラウザ",
-  windows: "Windows",
-  office: "Office",
-  file: "ファイル",
-  network: "Web API",
-  system: "システム",
-  text: "文字",
-  number: "数値",
-  date: "日付",
-  list: "表・リスト",
-  other: "その他",
-};
+export const categoryLabel = (category: string): string => (t.categories as Record<string, string>)[category] ?? category;
 
 /** Category colour, taken from the logo swirl. Used for node stripes too. */
 export const CATEGORY_COLOR: Record<string, string> = {
@@ -60,15 +44,16 @@ function stepItem(def: StepTypeDef): Item {
   return {
     key: def.type,
     category: def.category,
-    label: def.label,
+    label: stepLabel(def.type, def.label),
     keyword: KEYWORD[def.type],
     summary: summary(def.description ?? def.type),
-    search: `${def.label} ${def.type} ${def.description ?? ""}`,
+    search: `${stepLabel(def.type, def.label)} ${def.label} ${def.type} ${def.description ?? ""}`,
     add: (addStep) => void addStep(def.type),
   };
 }
 
-const PRESET_ITEMS: Item[] = PRESETS.map((preset) => ({
+const presetItems = (): Item[] =>
+  presets().map((preset) => ({
   key: preset.key,
   category: preset.category,
   label: preset.label,
@@ -76,7 +61,7 @@ const PRESET_ITEMS: Item[] = PRESETS.map((preset) => ({
   summary: `${preset.description}　${preset.name} ← ${preset.expression}`,
   search: `${preset.label} ${preset.keyword} ${preset.description}`,
   add: (addStep) => void addStep("variable.set", { name: preset.name, expression: preset.expression }, preset.label),
-}));
+  }));
 
 /** The first sentence of a description: enough to tell steps apart in a list. */
 function summary(text: string): string {
@@ -95,7 +80,7 @@ function loadCategory(): string {
 
 function matches(item: Item, query: string): boolean {
   if (!query) return true;
-  const haystack = `${item.search} ${CATEGORY_LABEL[item.category] ?? ""}`.toLowerCase();
+  const haystack = `${item.search} ${categoryLabel(item.category)}`.toLowerCase();
   return query
     .toLowerCase()
     .split(/\s+/)
@@ -119,7 +104,7 @@ export function CommandPalette() {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
 
-  const items = useMemo(() => [...stepTypes.map(stepItem), ...PRESET_ITEMS], [stepTypes]);
+  const items = useMemo(() => [...stepTypes.map(stepItem), ...presetItems()], [stepTypes]);
   const categories = useMemo(() => {
     const counts = new Map<string, number>();
     for (const i of items) counts.set(i.category, (counts.get(i.category) ?? 0) + 1);
@@ -206,7 +191,7 @@ export function CommandPalette() {
         </div>
         <div className="flex items-center gap-2 px-4 pt-2 text-[11px] text-slate-500">
           {t.paletteTitle} · {selection?.kind === "slot" ? t.addInto : selection?.kind === "step" ? t.addAfterSelection : t.addHere}
-          <span className="ml-auto">{query ? "すべてのカテゴリから検索" : "←→ でカテゴリ切り替え"}</span>
+          <span className="ml-auto">{query ? t.palette.searchAll : t.palette.switchHint}</span>
         </div>
         <div className="flex min-h-0 flex-1">
           <nav className="w-[156px] shrink-0 overflow-y-auto border-r border-slate-100 p-2">
@@ -226,7 +211,7 @@ export function CommandPalette() {
                   }`}
                 >
                   <span className="h-3.5 w-1 shrink-0 rounded-[1px]" style={{ background: CATEGORY_COLOR[c] ?? CATEGORY_COLOR.other }} />
-                  <span className="flex-1 truncate">{CATEGORY_LABEL[c] ?? c}</span>
+                  <span className="flex-1 truncate">{categoryLabel(c)}</span>
                   <span className="text-[11px] text-slate-400">{count}</span>
                 </button>
               );
@@ -237,7 +222,7 @@ export function CommandPalette() {
             {results.map((item, i) => (
               <li key={item.key}>
                 {query && item.category !== results[i - 1]?.category && (
-                  <div className="px-3 pt-2 pb-1 text-[11px] font-bold text-slate-400">{CATEGORY_LABEL[item.category] ?? item.category}</div>
+                  <div className="px-3 pt-2 pb-1 text-[11px] font-bold text-slate-400">{categoryLabel(item.category)}</div>
                 )}
                 <button
                   type="button"

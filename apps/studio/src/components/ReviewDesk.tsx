@@ -10,6 +10,7 @@ import { sentence, plain } from "../lib/sentence";
 import { approvedUpTo, groupRevertBlocker, pendingIn } from "../store";
 import { Explanations, FeedbackBox, Observations, type Observed, type Review, SendBackForm, Section, TestRuns, type TestRun } from "./Evidence";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
+import { t } from "../lib/i18n";
 
 export type InboxItem = {
   scenarioId: string;
@@ -48,13 +49,13 @@ export function ReviewInbox() {
   return (
     <aside className="flex h-full flex-col border-r border-slate-200 bg-paper">
       <div className="px-3 pt-3 pb-1">
-        <div className="text-[12px] font-bold">AIからの変更</div>
-        <div className="text-[11px] leading-relaxed text-slate-400">見て「残す」と、そのまま本番の実行に使われます</div>
+        <div className="text-[12px] font-bold">{t.desk.title}</div>
+        <div className="text-[11px] leading-relaxed text-slate-400">{t.desk.hint}</div>
       </div>
       <ul className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
         {inbox.filter((i) => !i.waiting).length === 0 && (
           <li className="mx-1 rounded-[4px] border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
-            確認待ちはありません
+            {t.desk.empty}
           </li>
         )}
         {[...inbox.filter((i) => !i.waiting), ...inbox.filter((i) => i.waiting)].map((item, index, all) => {
@@ -63,7 +64,7 @@ export function ReviewInbox() {
           const firstWaiting = item.waiting && !all[index - 1]?.waiting;
           return (
             <li key={item.scenarioId}>
-              {firstWaiting && <div className="px-2 pt-3 pb-1 text-[11px] font-bold text-slate-400">差し戻し中（AIの修正待ち）</div>}
+              {firstWaiting && <div className="px-2 pt-3 pb-1 text-[11px] font-bold text-slate-400">{t.desk.sentBack}</div>}
               <button
                 type="button"
                 onClick={() => void open(item.scenarioId)}
@@ -75,10 +76,10 @@ export function ReviewInbox() {
                   <span className="truncate text-[13px] font-bold">{item.name}</span>
                 </div>
                 <div className="mt-0.5 truncate pl-[24px] text-[11px] text-slate-500">
-                  {item.waiting ? `「${item.waiting.reason || "手順への指摘"}」` : headline(summarize([...item.entries].reverse()))}
+                  {item.waiting ? t.quote(item.waiting.reason || t.desk.stepNotes) : headline(summarize([...item.entries].reverse()))}
                 </div>
                 <div className="pl-[24px] text-[10px] text-slate-400">
-                  {newest && `${actorLabel(newest)} ・ ${relativeTime(newest.at)}`} ・ {item.entries.length}回の編集
+                  {newest && `${actorLabel(newest)} ・ ${relativeTime(newest.at)}`} ・ {t.desk.edits(item.entries.length)}
                 </div>
               </button>
             </li>
@@ -130,19 +131,19 @@ export function ReviewPanel() {
     const next = inbox.find((i) => i.scenarioId !== scenario?.id && !i.waiting);
     return (
       <div className="p-5 text-[13px]">
-        <div className="flex items-center gap-2 font-bold text-moegi-500">✓ このシナリオは確認済みです</div>
+        <div className="flex items-center gap-2 font-bold text-moegi-500">✓ {t.desk.reviewed}</div>
         {next ? (
           <button
             type="button"
             onClick={() => void open(next.scenarioId)}
             className="mt-4 flex w-full items-center gap-2 rounded-[4px] border border-slate-200 px-3 py-2 text-left hover:border-brand-500"
           >
-            <span className="text-[11px] text-slate-400">次</span>
+            <span className="text-[11px] text-slate-400">{t.desk.next}</span>
             <span className="flex-1 truncate font-semibold">{next.name}</span>
             <span className="text-slate-400">→</span>
           </button>
         ) : (
-          <p className="mt-2 text-slate-500">確認待ちはもうありません。</p>
+          <p className="mt-2 text-slate-500">{t.desk.noneLeft}</p>
         )}
       </div>
     );
@@ -155,30 +156,30 @@ export function ReviewPanel() {
           <div className="min-w-0 flex-1">
             <div className="truncate text-[15px] font-bold">{headline(summary)}</div>
             <div className="text-[11px] text-slate-500">
-              {actorLabel(newest)} ・ 版 {oldest.revision - 1} → {newest.revision} ・ {relativeTime(newest.at)}
+              {actorLabel(newest)} ・ {t.evidence.revision(oldest.revision - 1)} → {newest.revision} ・ {relativeTime(newest.at)}
             </div>
           </div>
         </div>
         {feedback && <FeedbackBox feedback={feedback} fixedAfter={newest.revision > feedback.revision} />}
-        <Section title="AIの説明">
+        <Section title={t.desk.explanation}>
           <Explanations entries={oldestFirst} />
         </Section>
-        <Section title="AIの試し実行">
+        <Section title={t.desk.testRuns}>
           <TestRuns runs={runs} revision={scenario?.revision ?? 0} />
         </Section>
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-          <Legend color="#2f8a4c" label="AIが追加" />
-          <Legend color="#f5872a" label="AIが変更" />
-          {summary.removed.length > 0 && <Legend color="#e8501f" label="AIが削除（下に一覧）" />}
+          <Legend color="#2f8a4c" label={t.flow.aiAdded} />
+          <Legend color="#f5872a" label={t.flow.aiChanged} />
+          {summary.removed.length > 0 && <Legend color="#e8501f" label={t.desk.aiRemoved} />}
           <ChangeStepper />
         </div>
         <section>
-          <div className="mb-1.5 text-[11px] font-bold text-slate-500">変わったところ</div>
+          <div className="mb-1.5 text-[11px] font-bold text-slate-500">{t.desk.changes}</div>
           <Lines lines={lines} detailed />
         </section>
         {summary.removed.length > 0 && (
           <section>
-            <div className="mb-1.5 text-[11px] font-bold text-shu-600">消した手順</div>
+            <div className="mb-1.5 text-[11px] font-bold text-shu-600">{t.desk.removed}</div>
             <ul className="space-y-1">
               {summary.removed.map((s) => (
                 <li key={s.id} className="rounded-[4px] border border-shu-100 bg-shu-50 px-2 py-1 text-[12px] text-shu-600 line-through">
@@ -188,7 +189,7 @@ export function ReviewPanel() {
             </ul>
           </section>
         )}
-        <Section title="AIが確かめた画面">
+        <Section title={t.desk.screens}>
           <Observations items={observed} />
         </Section>
       </div>
@@ -203,10 +204,10 @@ function ChangeStepper() {
   const button = "grid h-6 w-6 place-items-center rounded-[4px] border border-slate-200 text-slate-600 hover:border-brand-500 hover:text-brand-700";
   return (
     <span className="ml-auto flex items-center gap-1 text-slate-500">
-      <button type="button" className={button} onClick={() => changeBy(-1)} title="前の変更（Shift+N）" aria-label="前の変更">
+      <button type="button" className={button} onClick={() => changeBy(-1)} title={t.desk.prevChangeTitle} aria-label={t.desk.prevChange}>
         ‹
       </button>
-      <button type="button" className={button} onClick={() => changeBy(1)} title="次の変更（N）" aria-label="次の変更">
+      <button type="button" className={button} onClick={() => changeBy(1)} title={t.desk.nextChangeTitle} aria-label={t.outline.nextChange}>
         ›
       </button>
       <kbd className="rounded bg-slate-100 px-1 text-[10px]">N</kbd>
@@ -242,32 +243,32 @@ export function ReviewActions() {
   return (
     <div className="space-y-2 border-t border-slate-200 bg-sheet px-4 py-3">
       <div className="flex items-center text-[11px] text-slate-400">
-        AIの {pending.length} 回の編集をまとめて
+        {t.desk.allEdits(pending.length)}
         <button
           type="button"
           onClick={() => void revertAll()}
           disabled={blocker !== null}
-          title={blocker ?? "AIが変える前に戻します（新しい変更として記録されます）"}
+          title={blocker ?? t.desk.revertTitle}
           className="ml-auto text-slate-500 underline-offset-2 enabled:hover:text-shu-600 enabled:hover:underline disabled:text-slate-300"
         >
-          ↶ 変更を取り消す
+          ↶ {t.desk.revertAll}
         </button>
       </div>
       <div className="flex gap-2">
         <button
           type="button"
           onClick={() => setSending(true)}
-          title="理由を書いてAIに直してもらいます（変更はそのまま残ります）"
+          title={t.desk.sendBackTitle}
           className="h-9 flex-1 rounded-[4px] border border-shu-500/60 px-3 text-[13px] font-semibold text-shu-600 hover:bg-shu-50"
         >
-          差し戻す…
+          {t.desk.sendBack}
         </button>
         <button
           type="button"
           onClick={() => void approveAll()}
           className="h-9 flex-[2] rounded-[4px] bg-ink px-4 text-[13px] font-semibold text-paper hover:bg-brand-700"
         >
-          ✓ 残して本番に使う
+          ✓ {t.desk.keep}
         </button>
       </div>
     </div>

@@ -24,7 +24,7 @@ export function usePendingReview(): HistoryEntry[] {
 export function entryScope(lines: ChangeLine[]): { suffix: string; title?: string } {
   if (lines.length <= 1) return { suffix: "" };
   return {
-    suffix: `（${lines.length}件まとめて）`,
+    suffix: t.timelineAll(lines.length),
     title: `${t.wholeEntry}\n${lines.map((l) => `・${verbLabel(l.verb)} ${l.subject}`).join("\n")}`,
   };
 }
@@ -43,7 +43,7 @@ export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: nu
       }`}
       title={actorLabel(entry)}
     >
-      {entry.actor.kind === "mcp" ? "AI" : entry.actor.kind === "studio" ? "人" : t.actor[entry.actor.kind].slice(0, 2)}
+      {entry.actor.kind === "mcp" ? "AI" : entry.actor.kind === "studio" ? t.personMark : t.actor[entry.actor.kind].slice(0, 2)}
     </span>
   );
 }
@@ -154,7 +154,7 @@ function Entry({ entry, pending }: { entry: HistoryEntry; pending: boolean }) {
         </div>
         <div className="mt-1">
           {lines.length > 0 ? <Lines lines={lines} detailed={false} /> : <span className="text-sm text-slate-500">
-              {entry.kind === "create" ? "シナリオを作成" : entry.kind === "delete" ? "シナリオを削除" : entry.label}
+              {entry.kind === "create" ? t.scenarioCreated : entry.kind === "delete" ? t.scenarioDeleted : entry.label}
             </span>}
         </div>
         {revertBlocker(entry, history) === null && (

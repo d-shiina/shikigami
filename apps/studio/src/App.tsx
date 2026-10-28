@@ -24,7 +24,7 @@ import { VersionsPanel } from "./components/VersionsPanel";
 import { WindowControls } from "./components/WindowControls";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
-import { t } from "./lib/i18n";
+import { t, useLocale } from "./lib/i18n";
 import { createStudioStore, isActive, type StudioState } from "./store";
 
 type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
@@ -37,7 +37,9 @@ function HumanBanner() {
     <div className="flex items-center gap-2 border-b border-shu-100 bg-shu-50 px-4 py-2 text-sm font-medium text-shu-600">
       <span className="bg-shu-500 h-2 w-2 rounded-full" />
       <span>
-        {t.waitingForYou}：{human.message}
+        {t.waitingForYou}
+        {t.colon}
+        {human.message}
       </span>
     </div>
   );
@@ -57,7 +59,7 @@ function Banner() {
       <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-shu-500" : "bg-brand-500"}`} />
       <span>{error ?? notice}</span>
       <button type="button" className="ml-auto text-xs text-slate-500 hover:underline" onClick={dismiss}>
-        閉じる
+        {t.close}
       </button>
     </div>
   );
@@ -81,7 +83,7 @@ function SidePanel() {
     lastPending.current = pendingCount;
   }, [pendingCount]);
   const tabs: [Tab, string, number][] = [
-    ...(reviewing ? [["review", "確認", pendingCount] as [Tab, string, number]] : []),
+    ...(reviewing ? [["review", t.reviewTab, pendingCount] as [Tab, string, number]] : []),
     ["timeline", t.timeline, reviewing ? 0 : pendingCount],
     ["versions", t.versions, 0],
     ["properties", t.inspect, 0],
@@ -197,10 +199,10 @@ function ModeSwitch() {
   return (
     <div className="flex items-center gap-0.5 rounded-[4px] bg-slate-100 p-0.5">
       <button type="button" className={tab(!reviewing)} onClick={() => setReviewing(false)}>
-        シナリオ
+        {t.scenarios}
       </button>
       <button type="button" className={tab(reviewing)} onClick={enterReview}>
-        確認待ち
+        {t.awaitingReview}
         {inbox.length > 0 && <span className="rounded-[3px] bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
       </button>
     </div>
@@ -358,6 +360,8 @@ function debugKey(e: KeyboardEvent, state: StudioState) {
 }
 
 export function App() {
+  // A language switch redraws the whole shell; the stores (and the open scenario) stay.
+  const { locale } = useLocale();
   const store = useMemo(() => createStudioStore(api), []);
   const agentStore = useMemo(() => createAgentStore(agent), []);
 
@@ -428,7 +432,7 @@ export function App() {
     <StudioContext.Provider value={store}>
       <AgentContext.Provider value={agentStore}>
         <ErrorBoundary>
-          <Shell />
+          <Shell key={locale} />
         </ErrorBoundary>
       </AgentContext.Provider>
     </StudioContext.Provider>

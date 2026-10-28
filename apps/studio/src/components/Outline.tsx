@@ -7,6 +7,7 @@ import { summarize } from "../lib/review";
 import { plain, sentence } from "../lib/sentence";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { usePendingReview } from "./Timeline";
+import { t } from "../lib/i18n";
 
 const RUN_DOT: Record<string, string> = {
   running: "bg-accent-500 animate-pulse",
@@ -22,7 +23,7 @@ export function OutlineToggle() {
     <button
       type="button"
       onClick={() => setOpen(!open)}
-      title="手順の目次（O）・↑↓で前後の手順へ"
+      title={t.outline.title}
       className={`absolute top-3 left-4 z-10 flex h-[26px] items-center gap-1.5 rounded-[3px] border px-3 text-xs shadow-raised ${
         open ? "border-ink bg-ink text-paper" : "border-slate-300 bg-sheet text-slate-600 hover:bg-slate-100"
       }`}
@@ -30,7 +31,7 @@ export function OutlineToggle() {
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
         <path d="M1 2.5h10M3 6h8M3 9.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
-      目次
+      {t.outline.toggle}
     </button>
   );
 }
@@ -63,14 +64,14 @@ export function OutlinePanel() {
   return (
     <nav className="absolute top-12 left-4 z-10 flex max-h-[calc(100%-8rem)] w-[264px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
       <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
-        <span className="font-bold text-ink">手順</span>
+        <span className="font-bold text-ink">{t.outline.steps}</span>
         <span>{items.length}</span>
         <span className="ml-auto">
-          <kbd className="rounded bg-slate-100 px-1">↑↓</kbd> 移動
+          <kbd className="rounded bg-slate-100 px-1">↑↓</kbd> {t.outline.move}
           {reviewing && (
             <>
               {" "}
-              <kbd className="rounded bg-slate-100 px-1">N</kbd> 次の変更
+              <kbd className="rounded bg-slate-100 px-1">N</kbd> {t.outline.nextChange}
             </>
           )}
         </span>
@@ -104,7 +105,7 @@ export function OutlinePanel() {
                 </span>
                 {diff && (
                   <span className={`shrink-0 rounded-[3px] px-1.5 text-[9px] leading-4 font-bold text-white ${diff === "added" ? "bg-moegi-500" : "bg-accent-500"}`}>
-                    {diff === "added" ? "追加" : "変更"}
+                    {diff === "added" ? t.diffKind.added : t.diffKind.changed}
                   </span>
                 )}
                 {errors.has(item.id) && <span className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span>}

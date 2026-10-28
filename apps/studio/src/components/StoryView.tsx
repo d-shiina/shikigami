@@ -1,8 +1,8 @@
-import type { HistoryEntry, Step, StepTypeDef, VariableDef } from "@shikigami/schema";
+import type { HistoryEntry, Step, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo } from "react";
 import { useStudio } from "../context";
 import { actorLabel, describe, formatValue, relativeTime } from "../lib/changes";
-import { t } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
 import { blockLabel } from "../lib/keywords";
 import { type Part, plain, sentence } from "../lib/sentence";
 import { revertBlocker, type StepRunState, touchedSteps } from "../store";
@@ -69,7 +69,7 @@ function ReviewTag({ entry, added, stepId }: { entry: HistoryEntry; added: boole
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
         <ActorMark entry={entry} size={18} />
         <span>
-          {actorLabel(entry)}が{added ? "追加" : "変更"} · {relativeTime(entry.at)}
+          {t.story.by(actorLabel(entry), added)} · {relativeTime(entry.at)}
         </span>
         <button
           type="button"
@@ -174,7 +174,7 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
           </div>
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             {step.name && <span className="text-slate-600">{step.name}</span>}
-            <span>{def?.label ?? step.type}</span>
+            <span>{stepLabel(step.type, def?.label)}</span>
             {issues > 0 && <span className="rounded-[3px] bg-shu-100 px-1.5 font-semibold text-shu-600">! {issues}</span>}
           </div>
           {rationale && <p className="mt-1 text-xs text-slate-500">💬 {rationale}</p>}
@@ -208,16 +208,10 @@ function StepList({ steps, ctx, parentId, block }: { steps: Step[]; ctx: Ctx; pa
   );
 }
 
-const DIRECTION_VERB: Record<NonNullable<VariableDef["direction"]>, string> = {
-  input: "受け取る",
-  output: "返す",
-  inOut: "受け取って返す",
-  local: "使う",
-};
 
 /** A default value short enough for a chip: lists show their size. */
 function brief(value: unknown): string {
-  if (Array.isArray(value)) return `${value.length}件`;
+  if (Array.isArray(value)) return t.values.items(value.length);
   const text = formatValue(value);
   return text.length > 24 ? `${text.slice(0, 24)}…` : text;
 }
@@ -290,7 +284,7 @@ export function StoryView() {
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             {variables.map((v) => (
               <span key={v.name} className="rounded-[3px] border border-slate-200 bg-paper px-2.5 py-0.5">
-                {DIRECTION_VERB[v.direction ?? "local"]} <b className="font-mono font-medium text-brand-600">{v.name}</b>
+                {t.story.direction[v.direction ?? "local"]} <b className="font-mono font-medium text-brand-600">{v.name}</b>
                 {v.default !== undefined && v.default !== null && !v.secret && (
                   <span className="text-slate-500"> = {brief(v.default)}</span>
                 )}
