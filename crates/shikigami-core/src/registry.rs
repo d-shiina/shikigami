@@ -59,6 +59,8 @@ pub enum StepCategory {
     Flow,
     Browser,
     Windows,
+    // Excel and other Office documents (`excel.*`).
+    Office,
     File,
     Other,
 }
