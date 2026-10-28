@@ -9,7 +9,7 @@ import { CATEGORY_COLOR } from "./CommandPalette";
 import { usePendingReview } from "./Timeline";
 
 const RUN_DOT: Record<string, string> = {
-  running: "swirl animate-pulse",
+  running: "bg-accent-500 animate-pulse",
   succeeded: "bg-moegi-500",
   failed: "bg-shu-500",
   skipped: "bg-slate-300",
@@ -23,7 +23,7 @@ export function OutlineToggle() {
       type="button"
       onClick={() => setOpen(!open)}
       title="手順の目次（O）・↑↓で前後の手順へ"
-      className={`absolute top-3 left-4 z-10 flex h-[26px] items-center gap-1.5 rounded-full border px-3 text-xs shadow-sm ${
+      className={`absolute top-3 left-4 z-10 flex h-[26px] items-center gap-1.5 rounded-[3px] border px-3 text-xs shadow-raised ${
         open ? "border-ink bg-ink text-paper" : "border-slate-300 bg-sheet text-slate-600 hover:bg-slate-100"
       }`}
     >
@@ -61,7 +61,7 @@ export function OutlinePanel() {
   if (!open || !scenario) return null;
 
   return (
-    <nav className="absolute top-12 left-4 z-10 flex max-h-[calc(100%-8rem)] w-[264px] flex-col overflow-hidden rounded-[8px] border border-slate-200 bg-sheet/95 shadow-lg backdrop-blur">
+    <nav className="absolute top-12 left-4 z-10 flex max-h-[calc(100%-8rem)] w-[264px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
       <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
         <span className="font-bold text-ink">手順</span>
         <span>{items.length}</span>
@@ -103,7 +103,7 @@ export function OutlinePanel() {
                   {item.step.name || plain(sentence(item.step, def))}
                 </span>
                 {diff && (
-                  <span className={`shrink-0 rounded-full px-1.5 text-[9px] leading-4 font-bold text-white ${diff === "added" ? "bg-moegi-500" : "bg-accent-500"}`}>
+                  <span className={`shrink-0 rounded-[3px] px-1.5 text-[9px] leading-4 font-bold text-white ${diff === "added" ? "bg-moegi-500" : "bg-accent-500"}`}>
                     {diff === "added" ? "追加" : "変更"}
                   </span>
                 )}

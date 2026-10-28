@@ -186,7 +186,7 @@ export function SecretsDialog() {
       <div
         role="dialog"
         aria-label={t.secrets}
-        className="max-h-[85vh] w-[520px] overflow-y-auto rounded-lg border border-slate-200 bg-sheet p-5 shadow-xl"
+        className="max-h-[85vh] w-[520px] overflow-y-auto rounded-[4px] border border-slate-200 bg-sheet p-5 shadow-dialog"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-2 flex items-center">

@@ -21,7 +21,6 @@ import type {
   WorkspaceInfo,
 } from "@shikigami/schema";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { Direction } from "./flow/layout";
 import {
   type Api,
   ApiError,
@@ -122,8 +121,6 @@ export type StudioState = {
   /** While running, keep the running step in view. */
   followRun: boolean;
   outlineOpen: boolean;
-  /** Which way the flow chart reads: left to right, or top to bottom. */
-  flowDirection: Direction;
   paletteOpen: boolean;
   /** Named versions of the open scenario, newest first. */
   versions: VersionSummary[];
@@ -163,7 +160,6 @@ export type StudioState = {
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
   setOutlineOpen(open: boolean): void;
-  setFlowDirection(direction: Direction): void;
   addStep(type: string): Promise<void>;
   moveSelected(delta: -1 | 1): Promise<void>;
   removeSelected(): Promise<void>;
@@ -324,16 +320,6 @@ export function touchedSteps(entry: HistoryEntry): string[] {
 
 const REVIEWED_KEY = "shikigami.studio.reviewed";
 const OUTLINE_KEY = "shikigami.studio.outline";
-const DIRECTION_KEY = "shikigami.studio.direction";
-
-function loadDirection(): Direction {
-  try {
-    const value = globalThis.localStorage?.getItem(DIRECTION_KEY);
-    return value === "horizontal" || value === "vertical" ? value : "vertical";
-  } catch {
-    return "vertical";
-  }
-}
 
 function loadFlag(key: string, fallback: boolean): boolean {
   try {
@@ -480,7 +466,6 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       reveal: null,
       followRun: true,
       outlineOpen: loadFlag(OUTLINE_KEY, false),
-      flowDirection: loadDirection(),
       paletteOpen: false,
       versions: [],
       workspace: null,
@@ -691,15 +676,6 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       setOutlineOpen(open) {
         saveFlag(OUTLINE_KEY, open);
         set({ outlineOpen: open });
-      },
-
-      setFlowDirection(direction) {
-        try {
-          globalThis.localStorage?.setItem(DIRECTION_KEY, direction);
-        } catch {
-          // Storage can be unavailable; the choice then lasts for this session.
-        }
-        set({ flowDirection: direction });
       },
 
       async addStep(type) {

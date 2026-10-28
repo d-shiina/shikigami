@@ -107,7 +107,7 @@ function AddLine({ parentId, block, label }: { parentId: string | null; block: s
         select({ kind: "slot", parentId, block });
         setPaletteOpen(true);
       }}
-      className={`ml-9 block w-[calc(100%-2.25rem)] rounded-md border border-dashed px-3 py-1.5 text-left text-xs ${
+      className={`ml-9 block w-[calc(100%-2.25rem)] rounded-[4px] border border-dashed px-3 py-1.5 text-left text-xs ${
         active ? "border-ink text-ink" : "border-transparent text-slate-400 hover:border-slate-300 hover:text-slate-600"
       }`}
     >
@@ -151,7 +151,7 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
         data-step={id}
         onClick={() => select({ kind: "step", stepId: id })}
         onKeyDown={(e) => e.key === "Enter" && select({ kind: "step", stepId: id })}
-        className={`group flex cursor-pointer gap-3 rounded-lg px-2.5 py-2 ${
+        className={`group flex cursor-pointer gap-3 rounded-[4px] px-2.5 py-2 ${
           added
             ? "bg-gradient-to-r from-moegi-100 to-transparent shadow-[inset_3px_0_var(--color-moegi-500)]"
             : marks.length > 0
@@ -174,7 +174,7 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             {step.name && <span className="text-slate-600">{step.name}</span>}
             <span>{def?.label ?? step.type}</span>
-            {issues > 0 && <span className="rounded-full bg-shu-100 px-1.5 font-semibold text-shu-600">! {issues}</span>}
+            {issues > 0 && <span className="rounded-[3px] bg-shu-100 px-1.5 font-semibold text-shu-600">! {issues}</span>}
           </div>
           {rationale && <p className="mt-1 text-xs text-slate-500">💬 {rationale}</p>}
           {marks.map((m) => (
@@ -279,7 +279,7 @@ export function StoryView() {
   return (
     <div className="canvas-bg h-full overflow-y-auto px-6 pt-14 pb-24" onClick={() => select(null)} onKeyDown={() => {}}>
       <article
-        className="mx-auto max-w-[760px] rounded-xl border border-slate-200 bg-sheet px-9 py-7 shadow-[0_1px_0_rgba(15,27,42,.06)]"
+        className="mx-auto max-w-[760px] rounded-[4px] border border-slate-200 bg-sheet px-9 py-7 shadow-sheet"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={() => {}}
       >
@@ -288,7 +288,7 @@ export function StoryView() {
         {variables.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             {variables.map((v) => (
-              <span key={v.name} className="rounded-full border border-slate-200 bg-paper px-2.5 py-0.5">
+              <span key={v.name} className="rounded-[3px] border border-slate-200 bg-paper px-2.5 py-0.5">
                 {DIRECTION_VERB[v.direction ?? "local"]} <b className="font-mono font-medium text-brand-600">{v.name}</b>
                 {v.default !== undefined && v.default !== null && !v.secret && (
                   <span className="text-slate-500"> = {brief(v.default)}</span>

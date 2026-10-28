@@ -13,6 +13,8 @@
   --font-mono: "Cascadia Mono", Consolas, "Noto Sans JP Variable", "BIZ UDGothic", monospace;
 
   --color-paper: #f4f7fb;
+  /* The flow chart's desk: a shade under paper, so steps stand out on it. */
+  --color-desk: #e9eef4;
   --color-sheet: #ffffff;
   --color-ink: #0f1b2a;
 
@@ -32,6 +34,28 @@
   --color-shu-500: #e8501f;
   --color-shu-600: #c73d12;
   --color-accent-500: #f5872a;
+
+  /*
+   * 式神 are paper, laid out like Material Design: every surface is a sheet
+   * at some height above the desk (paper), and its shadow says how high.
+   *   sheet  1dp   cards and panels resting on the desk
+   *   node   2dp   steps on the chart: the work itself, drawn crisply
+   *   raised 4dp   toolbars and the outline floating over the chart
+   *   lifted 8dp   what is picked up: the selected step, menus, popovers
+   *   dialog 24dp  dialogs and the command palette, above everything
+   * Corners stay nearly square.
+   */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+  --shadow-sheet: 0 1px 3px rgb(15 27 42 / 0.12), 0 1px 2px rgb(15 27 42 / 0.16);
+  --shadow-node: 0 1px 2px rgb(15 27 42 / 0.2), 0 2px 6px rgb(15 27 42 / 0.1);
+  --shadow-raised: 0 4px 8px rgb(15 27 42 / 0.12), 0 2px 4px rgb(15 27 42 / 0.12);
+  --shadow-lifted: 0 10px 20px rgb(15 27 42 / 0.16), 0 6px 6px rgb(15 27 42 / 0.14);
+  --shadow-dialog: 0 19px 38px rgb(15 27 42 / 0.28), 0 15px 12px rgb(15 27 42 / 0.18);
 }
 
 /*
@@ -43,6 +67,7 @@
 
 :root[data-theme="dark"] {
   --color-paper: #0b1420;
+  --color-desk: #070d16;
   --color-sheet: #131e2c;
   --color-ink: #e4ebf3;
 
@@ -77,7 +102,7 @@
   --color-amber-700: #f2bd66;
 }
 
-/* Step categories and variable types, and the chart's own surfaces. */
+/* Step categories and variable types, and the chart's edges. */
 :root {
   --cat-control: #0f3a66;
   --cat-variable: #3f9a5a;
@@ -87,9 +112,6 @@
   --cat-windows: #e0301e;
   --cat-file: #64748b;
   --cat-other: #94a3b8;
-  --frame-0: #eaf1f8;
-  --frame-1: #e2ebf5;
-  --frame-2: #d9e5f2;
   --flow-edge: #5b6b80;
 }
 
@@ -102,15 +124,12 @@
   --cat-windows: #ff6e4f;
   --cat-file: #9aa9bb;
   --cat-other: #8193a8;
-  --frame-0: #111c2a;
-  --frame-1: #152233;
-  --frame-2: #1a283b;
   --flow-edge: #8193a8;
 }
 
 /* React Flow's dark mode brings its own greys; keep the app's navy. */
 .react-flow.dark {
-  --xy-background-color: var(--color-paper);
+  --xy-background-color: var(--color-desk);
   --xy-controls-button-background-color: var(--color-sheet);
   --xy-controls-button-background-color-hover: var(--color-slate-100);
   --xy-controls-button-border-color: var(--color-slate-200);
@@ -153,16 +172,17 @@ textarea,
   background: linear-gradient(135deg, #f5a03a, #f0702a 55%, #e0301e);
 }
 
-/* Gradient outline for cards an AI changed and nobody reviewed yet. */
+/*
+ * Cards an AI changed and nobody reviewed yet: a solid blue edge. The swirl's
+ * full gradient muddies at this size, so AI marks use its blue alone.
+ */
 .ai-border {
-  border: 2px solid transparent !important;
-  background:
-    linear-gradient(var(--color-sheet), var(--color-sheet)) padding-box,
-    conic-gradient(from 200deg, #0f3a66, #0a6fa8, #12c2cc, #3f9a5a, #f5872a, #e0301e, #0f3a66) border-box;
+  border: 2px solid var(--color-brand-500) !important;
 }
 
 .canvas-bg {
-  background-color: var(--color-paper);
+  --xy-background-color: var(--color-desk);
+  background-color: var(--color-desk);
 }
 
 .react-flow__edge-text {
@@ -185,4 +205,12 @@ textarea,
 /* Variable links can't be selected, but still take hover for their value tip. */
 .react-flow__edge.data-link {
   pointer-events: visibleStroke;
+}
+
+/* The zoom buttons are a small sheet too. */
+.react-flow__controls {
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow-raised);
 }
