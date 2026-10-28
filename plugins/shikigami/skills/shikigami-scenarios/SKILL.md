@@ -27,6 +27,13 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 - `undo` / `redo` は Studio と共通の 1 本のスタック。最新の変更が人間のものなら、ユーザーに確認してから戻す。
 - `delete_scenario` はユーザーが明示的に削除を頼んだときだけ使う（ゴミ箱へ移動。`expectedRevision` 必須）。
 
+## 版と共有
+
+- ユーザーが「動いた」「これで完成」と言ったら、`create_version` で版を残すことを提案する（名前は短く。例：`v1`、`本番リリース`）。
+- 「前回から何が変わった？」には `diff_versions`（引数なしで最新の版 → 現在）。
+- `restore_version` はユーザーが頼んだときだけ。1 回の編集として記録され、`undo` で取り消せる。
+- 別の人・別の PC に渡すときは `export_scenario` の `bundle` を、相手側で `import_scenario` に渡す。`IMPORT_CONFLICT` が返ったら、既存を更新するか（`onConflict: "update"`）別シナリオとして追加するか（`"copy"`）をユーザーに聞く。
+
 ## シナリオの書き方
 
 - ステップの `id` は省略すれば Core が採番する。既存ステップを指すときは `get_scenario` で得た ID を使う。

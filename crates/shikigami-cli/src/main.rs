@@ -10,7 +10,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use serde_json::{Map, Value};
 use shikigami_core::{
-    Actor, ActorKind, FileStore, NewScenario, Scenario, ScenarioId, ScenarioService,
+    Actor, ActorKind, DiffKind, FileStore, ImportConflict, NewScenario, NewVersion, Scenario,
+    ScenarioDiff, ScenarioId, ScenarioService, UserConfig, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{LogLevel, RunEvent, RunOptions, RunStatus, Runtime, StepOutcome};
@@ -30,6 +31,12 @@ enum Command {
     /// Manage scenarios in the workspace.
     #[command(subcommand)]
     Scenario(ScenarioCmd),
+    /// Named versions of a scenario: save, list, compare, restore.
+    #[command(subcommand)]
+    Version(VersionCmd),
+    /// Workspace location and sharing.
+    #[command(subcommand)]
+    Workspace(WorkspaceCmd),
     /// Run a scenario (by ID or JSON file) without GUI or AI.
     Run {
         /// Scenario ID in the workspace, or a path to a scenario JSON file.
@@ -68,8 +75,23 @@ enum ScenarioCmd {
     Create {
         name: String,
     },
+    /// Import a bundle (`*.shikigami.json`) or a scenario JSON file.
     Import {
         file: PathBuf,
+        /// When the scenario ID already exists: `update` it (undoable) or
+        /// import a `copy` under a new ID.
+        #[arg(long, value_enum)]
+        on_conflict: Option<OnConflict>,
+    },
+    /// Write a bundle (scenario + versions) for another workspace or person.
+    Export {
+        id: String,
+        /// Output file (default: stdout).
+        #[arg(long, short = 'o')]
+        output: Option<PathBuf>,
+        /// Leave the named versions out.
+        #[arg(long)]
+        no_versions: bool,
     },
     Delete {
         id: String,
@@ -94,6 +116,59 @@ enum ScenarioCmd {
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum OnConflict {
+    Update,
+    Copy,
+}
+
+#[derive(Subcommand)]
+enum VersionCmd {
+    /// Save the current content as a named version.
+    Create {
+        id: String,
+        name: String,
+        #[arg(long, default_value = "")]
+        note: String,
+    },
+    List {
+        id: String,
+    },
+    /// Print one version (including the scenario snapshot) as JSON.
+    Show {
+        id: String,
+        number: u32,
+    },
+    /// Compare two versions. Defaults: FROM = latest version, TO = current content.
+    Diff {
+        id: String,
+        from: Option<u32>,
+        to: Option<u32>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Make the current content equal to a version (one undoable edit).
+    Restore {
+        id: String,
+        number: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorkspaceCmd {
+    /// Show where this workspace keeps shared and per-PC data.
+    Info,
+    /// Prepare a folder as a workspace. With --shared, several people can use
+    /// it (OneDrive, a file server); undo history and run logs stay on each PC.
+    Init {
+        dir: PathBuf,
+        #[arg(long)]
+        shared: bool,
+    },
+    /// Make DIR the default workspace for Studio, the CLI and the MCP server.
+    Use { dir: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -143,6 +218,31 @@ fn real_main() -> Result<ExitCode> {
         Command::Scenario(cmd) => {
             let svc = open_service()?;
             scenario_cmd(&svc, cmd)?;
+        }
+        Command::Version(cmd) => {
+            let svc = open_service()?;
+            version_cmd(&svc, cmd)?;
+        }
+        Command::Workspace(WorkspaceCmd::Info) => {
+            let svc = open_service()?;
+            println!("{}", serde_json::to_string_pretty(&svc.store().info())?);
+        }
+        Command::Workspace(WorkspaceCmd::Init { dir, shared }) => {
+            FileStore::init(dir, &WorkspaceManifest { shared: *shared })?;
+            let store = FileStore::open(dir)?;
+            println!("{}", serde_json::to_string_pretty(&store.info())?);
+        }
+        Command::Workspace(WorkspaceCmd::Use { dir }) => {
+            let dir = std::path::absolute(dir)?;
+            FileStore::open(&dir)
+                .with_context(|| format!("opening workspace {}", dir.display()))?;
+            let mut config = UserConfig::load();
+            config.workspace = Some(dir.clone());
+            config.save()?;
+            println!("default workspace: {}", dir.display());
+            if std::env::var_os("SHIKIGAMI_HOME").is_some() {
+                eprintln!("note: SHIKIGAMI_HOME is set and takes precedence");
+            }
         }
         Command::Validate { target } => {
             let svc = open_service()?;
@@ -198,11 +298,22 @@ fn real_main() -> Result<ExitCode> {
         } => {
             let svc = open_service()?;
             let scenario = resolve(&svc, target)?;
+            let version = svc.matching_version(&scenario).ok().flatten();
             let inputs = parse_inputs(inputs)?;
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            let status = rt.block_on(run(&runtime, svc.store().root(), scenario, inputs, *json))?;
+            let status = rt.block_on(run(
+                &runtime,
+                svc.store().local_root(),
+                scenario,
+                RunOptions {
+                    inputs,
+                    version,
+                    ..RunOptions::default()
+                },
+                *json,
+            ))?;
             return Ok(match status {
                 RunStatus::Succeeded => ExitCode::SUCCESS,
                 RunStatus::Cancelled => ExitCode::from(130),
@@ -239,15 +350,42 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
             )?;
             println!("{}", out.scenario.id);
         }
-        ScenarioCmd::Import { file } => {
-            let scenario = load_file(file)?;
-            let out = svc.import(scenario, actor())?;
-            println!("{}", out.scenario.id);
-            for issue in &out.validation.issues {
+        ScenarioCmd::Import { file, on_conflict } => {
+            let text = std::fs::read_to_string(file)
+                .with_context(|| format!("reading {}", file.display()))?;
+            let value: Value = serde_json::from_str(&text).context("parsing JSON")?;
+            let on_conflict = on_conflict.map(|c| match c {
+                OnConflict::Update => ImportConflict::Update,
+                OnConflict::Copy => ImportConflict::Copy,
+            });
+            let out = svc.import_bundle(value, on_conflict, actor())?;
+            println!("{}", out.outcome.scenario.id);
+            eprintln!("{:?}, {} version(s) added", out.mode, out.versions_added);
+            for issue in &out.outcome.validation.issues {
                 eprintln!(
                     "{:?} {} {}: {}",
                     issue.severity, issue.code, issue.path, issue.message
                 );
+            }
+        }
+        ScenarioCmd::Export {
+            id,
+            output,
+            no_versions,
+        } => {
+            let bundle = svc.export(&ScenarioId::new(id.as_str()), !no_versions)?;
+            let json = serde_json::to_string_pretty(&bundle)? + "\n";
+            match output {
+                Some(path) => {
+                    std::fs::write(path, json)
+                        .with_context(|| format!("writing {}", path.display()))?;
+                    eprintln!(
+                        "wrote {} ({} version(s))",
+                        path.display(),
+                        bundle.versions.len()
+                    );
+                }
+                None => print!("{json}"),
             }
         }
         ScenarioCmd::Delete { id } => {
@@ -294,6 +432,105 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
     Ok(())
 }
 
+fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> Result<()> {
+    match cmd {
+        VersionCmd::Create { id, name, note } => {
+            let v = svc.create_version(
+                &ScenarioId::new(id.as_str()),
+                NewVersion {
+                    name: name.clone(),
+                    note: note.clone(),
+                },
+                None,
+                actor(),
+            )?;
+            println!("v{} {} (rev {})", v.number, v.name, v.revision);
+        }
+        VersionCmd::List { id } => {
+            for v in svc.list_versions(&ScenarioId::new(id.as_str()))? {
+                let at = v
+                    .created_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default();
+                println!(
+                    "v{}\trev {}\t{}\t{:?} {}\t{}\t{}",
+                    v.number,
+                    v.revision,
+                    at,
+                    v.created_by.kind,
+                    v.created_by.name.as_deref().unwrap_or(""),
+                    v.name,
+                    v.note
+                );
+            }
+        }
+        VersionCmd::Show { id, number } => {
+            let v = svc.get_version(&ScenarioId::new(id.as_str()), *number)?;
+            println!("{}", serde_json::to_string_pretty(&v)?);
+        }
+        VersionCmd::Diff { id, from, to, json } => {
+            let id = ScenarioId::new(id.as_str());
+            let from = match from {
+                Some(n) => Some(*n),
+                None => svc.latest_version(&id)?,
+            };
+            let diff = svc.diff_versions(&id, from, *to)?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&diff)?);
+            } else {
+                print_diff(&diff);
+            }
+        }
+        VersionCmd::Restore { id, number } => {
+            print_outcome(&svc.restore_version(
+                &ScenarioId::new(id.as_str()),
+                *number,
+                None,
+                actor(),
+            )?);
+        }
+    }
+    Ok(())
+}
+
+fn print_diff(diff: &ScenarioDiff) {
+    println!("{} -> {}", diff.from.label, diff.to.label);
+    if diff.identical {
+        println!("no differences");
+        return;
+    }
+    for f in &diff.scenario {
+        println!("~ scenario.{}", f.field);
+    }
+    for v in &diff.variables {
+        println!("{} variable {}", diff_mark(v.kind), v.name);
+    }
+    for s in &diff.steps {
+        let fields: Vec<&str> = s.fields.iter().map(|f| f.field.as_str()).collect();
+        println!(
+            "{} {} {} {}{}",
+            diff_mark(s.kind),
+            s.step_id,
+            s.step_type,
+            s.name,
+            if fields.is_empty() {
+                String::new()
+            } else {
+                format!(" [{}]", fields.join(", "))
+            }
+        );
+    }
+}
+
+fn diff_mark(kind: DiffKind) -> &'static str {
+    match kind {
+        DiffKind::Added => "+",
+        DiffKind::Removed => "-",
+        DiffKind::Changed => "~",
+        DiffKind::Moved => ">",
+    }
+}
+
 fn print_outcome(out: &shikigami_core::EditOutcome) {
     println!(
         "rev {} ({} issue(s))",
@@ -308,10 +545,18 @@ fn print_outcome(out: &shikigami_core::EditOutcome) {
     }
 }
 
+/// Reads a scenario JSON file or the scenario inside a bundle.
 fn load_file(path: &Path) -> Result<Scenario> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    Ok(shikigami_core::migrate::parse_scenario(&text)?)
+    let mut value: Value = serde_json::from_str(&text).context("parsing JSON")?;
+    if shikigami_core::version::is_bundle(&value) {
+        value = value
+            .get_mut("scenario")
+            .map(Value::take)
+            .unwrap_or_default();
+    }
+    Ok(shikigami_core::migrate::from_value(value)?)
 }
 
 /// A target is a file path when it ends with `.json` or exists on disk.
@@ -340,27 +585,18 @@ async fn run(
     runtime: &Runtime,
     workspace: &Path,
     scenario: Scenario,
-    inputs: Map<String, Value>,
+    options: RunOptions,
     json: bool,
 ) -> Result<RunStatus> {
-    let handle = runtime
-        .start(
-            scenario,
-            RunOptions {
-                inputs,
-                run_id: None,
-                ..RunOptions::default()
-            },
+    let handle = runtime.start(scenario, options).map_err(|e| {
+        anyhow::anyhow!(
+            "{e}\n{}",
+            e.details
+                .as_ref()
+                .map(|d| d.to_string())
+                .unwrap_or_default()
         )
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "{e}\n{}",
-                e.details
-                    .as_ref()
-                    .map(|d| d.to_string())
-                    .unwrap_or_default()
-            )
-        })?;
+    })?;
     let cancel = handle.cancel_token();
     tokio::spawn(async move {
         if tokio::signal::ctrl_c().await.is_ok() {

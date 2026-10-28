@@ -149,4 +149,44 @@ describe("studio store", () => {
       expect(store.getState().error).toBe(t.revertBlocked);
     });
   });
+
+  describe("versions and sharing", () => {
+    it("saves a version at the current revision and restores through Core", async () => {
+      const createVersion = vi.fn(async () => ({
+        number: 1,
+        name: "v1",
+        createdAt: "2026-10-28T00:00:00Z",
+        createdBy: { kind: "studio" as const },
+        revision: 1,
+        stepCount: 0,
+      }));
+      const restoreVersion = vi.fn(async () => outcome(scenario(3)));
+      const listVersions = vi.fn(async () => []);
+      const store = createStudioStore(fakeApi({ createVersion, restoreVersion, listVersions }));
+      await store.getState().open("scn_a");
+      expect(await store.getState().createVersion("v1", "")).toBe(true);
+      expect(createVersion).toHaveBeenCalledWith("scn_a", 1, { name: "v1", note: "" });
+      await store.getState().restoreVersion(1);
+      expect(restoreVersion).toHaveBeenCalledWith("scn_a", 1, 1);
+      expect(store.getState().scenario?.revision).toBe(3);
+      expect(store.getState().notice).toBe(t.restored);
+    });
+
+    it("keeps a conflicting import until the user chooses update or copy", async () => {
+      const importScenario = vi.fn(async (_contents: string, onConflict?: string) => {
+        if (!onConflict) {
+          throw new ApiError({ code: "IMPORT_CONFLICT", message: "exists", details: { name: "A" } });
+        }
+        return { ...outcome(scenario(2)), mode: "updated" as const, versionsAdded: 1 };
+      });
+      const store = createStudioStore(fakeApi({ importScenario, listVersions: vi.fn(async () => []) }));
+      await store.getState().importFile("{}");
+      expect(store.getState().pendingImport).toEqual({ contents: "{}", name: "A" });
+      expect(store.getState().error).toBeNull();
+      await store.getState().importFile("{}", "update");
+      expect(importScenario).toHaveBeenLastCalledWith("{}", "update");
+      expect(store.getState().pendingImport).toBeNull();
+      expect(store.getState().scenario?.revision).toBe(2);
+    });
+  });
 });

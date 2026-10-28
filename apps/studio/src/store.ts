@@ -4,6 +4,7 @@ import type {
   EditOp,
   EditOutcome,
   HistoryEntry,
+  ImportConflict,
   LogLevel,
   RunEventEnvelope,
   RunStatus,
@@ -14,6 +15,8 @@ import type {
   StepTypeDef,
   ValidationReport,
   VariableDef,
+  VersionSummary,
+  WorkspaceInfo,
 } from "@shikigami/schema";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { type Api, ApiError } from "./lib/api";
@@ -57,6 +60,11 @@ export type StudioState = {
   /** Revisions of non-Studio changes the user has looked at, per scenario. */
   reviewed: Record<string, number[]>;
   paletteOpen: boolean;
+  /** Named versions of the open scenario, newest first. */
+  versions: VersionSummary[];
+  workspace: WorkspaceInfo | null;
+  /** A file whose scenario already exists, waiting for the user's choice. */
+  pendingImport: { contents: string; name: string } | null;
 
   init(): Promise<void>;
   refreshList(): Promise<void>;
@@ -86,6 +94,14 @@ export type StudioState = {
   /** Reverts one journal entry by sending its inverse ops to Core as a new edit. */
   revert(entry: HistoryEntry): Promise<void>;
   setPaletteOpen(open: boolean): void;
+  loadVersions(): Promise<void>;
+  createVersion(name: string, note: string): Promise<boolean>;
+  restoreVersion(number: number): Promise<void>;
+  exportScenario(): Promise<void>;
+  /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. */
+  importFile(contents: string, onConflict?: ImportConflict): Promise<void>;
+  cancelImport(): void;
+  setWorkspace(path: string, shared: boolean): Promise<void>;
 };
 
 export const isExternal = (entry: HistoryEntry) => entry.actor.kind !== "studio";
@@ -266,11 +282,15 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       history: [],
       reviewed: loadReviewed(),
       paletteOpen: false,
+      versions: [],
+      workspace: null,
+      pendingImport: null,
 
       async init() {
         try {
           const [stepTypes, summaries] = await Promise.all([api.listStepTypes(), api.listScenarios()]);
           set({ stepTypes, summaries });
+          set({ workspace: await api.workspaceInfo() });
         } catch (e) {
           set({ error: message(e) });
         }
@@ -287,8 +307,17 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async open(id) {
         try {
           const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
-          set({ scenario, validation, canUndo: undo.canUndo, canRedo: undo.canRedo, selection: null, error: null, history: [] });
-          await get().loadHistory();
+          set({
+            scenario,
+            validation,
+            canUndo: undo.canUndo,
+            canRedo: undo.canRedo,
+            selection: null,
+            error: null,
+            history: [],
+            versions: [],
+          });
+          await Promise.all([get().loadHistory(), get().loadVersions()]);
         } catch (e) {
           set({ error: message(e) });
         }
@@ -517,6 +546,81 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       setPaletteOpen(open) {
         set({ paletteOpen: open });
+      },
+
+      async loadVersions() {
+        const id = get().scenario?.id;
+        if (!id) return;
+        try {
+          const versions = await api.listVersions(id);
+          if (get().scenario?.id === id) set({ versions });
+        } catch {
+          // Versions are secondary; editing keeps working without them.
+        }
+      },
+
+      async createVersion(name, note) {
+        const scenario = get().scenario;
+        if (!scenario) return false;
+        try {
+          await api.createVersion(scenario.id, scenario.revision ?? 0, { name, note });
+          await get().loadVersions();
+          set({ notice: t.versionSaved, error: null });
+          return true;
+        } catch (e) {
+          if (e instanceof ApiError && e.code === "REVISION_CONFLICT") {
+            await reloadCurrent();
+            set({ notice: t.reloadedByConflict });
+          } else {
+            set({ error: message(e) });
+          }
+          return false;
+        }
+      },
+
+      async restoreVersion(number) {
+        const ok = await mutate((id, rev) => api.restoreVersion(id, number, rev));
+        if (ok) set({ notice: t.restored, selection: null });
+      },
+
+      async exportScenario() {
+        const id = get().scenario?.id;
+        if (!id) return;
+        try {
+          const path = await api.exportScenario(id);
+          set({ notice: `${t.exported}: ${path}`, error: null });
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      async importFile(contents, onConflict) {
+        try {
+          const outcome = await api.importScenario(contents, onConflict);
+          applyOutcome(outcome);
+          set({ pendingImport: null, selection: null, history: [], versions: [], notice: `${t.imported}: ${outcome.scenario.name}` });
+          await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
+        } catch (e) {
+          if (e instanceof ApiError && e.code === "IMPORT_CONFLICT") {
+            const name = (e.details as { name?: string } | undefined)?.name ?? "";
+            set({ pendingImport: { contents, name }, error: null });
+          } else {
+            set({ pendingImport: null, error: message(e) });
+          }
+        }
+      },
+
+      cancelImport() {
+        set({ pendingImport: null });
+      },
+
+      async setWorkspace(path, shared) {
+        try {
+          // Studio restarts on success, so nothing after this runs.
+          await api.setWorkspace(path, shared);
+        } catch (e) {
+          set({ error: message(e) });
+        }
       },
     };
   });

@@ -48,6 +48,9 @@ pub struct RunOptions {
     /// ...) survives the run. Used to try single steps from MCP in one
     /// session: pass the same `run_id` each time.
     pub keep_adapter_state: bool,
+    /// Named version whose content is being run, recorded in the report
+    /// (see `ScenarioService::matching_version`).
+    pub version: Option<u32>,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -123,6 +126,7 @@ impl Runtime {
         let init = init_variables(&scenario, &options.inputs, &mut executor);
 
         let task_run_id = run_id.clone();
+        let version = options.version;
         let hooks = if options.keep_adapter_state {
             Arc::new(Vec::new())
         } else {
@@ -181,6 +185,7 @@ impl Runtime {
                 scenario_id: scenario.id,
                 scenario_name: scenario.name,
                 revision: scenario.revision,
+                version,
                 status,
                 started_at,
                 finished_at: OffsetDateTime::now_utc(),

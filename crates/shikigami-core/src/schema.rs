@@ -13,9 +13,12 @@ use crate::model::Scenario;
 use crate::model::ScenarioSummary;
 use crate::ops::EditOp;
 use crate::registry::StepTypeDef;
-use crate::service::{ChangeEvent, EditOutcome, NewScenario};
-use crate::store::HistoryEntry;
+use crate::service::{ChangeEvent, EditOutcome, ImportOutcome, NewScenario};
+use crate::store::{HistoryEntry, WorkspaceInfo};
 use crate::validate::ValidationReport;
+use crate::version::{
+    ImportConflict, NewVersion, ScenarioBundle, ScenarioDiff, ScenarioVersion, VersionSummary,
+};
 
 const SCHEMA_BASE: &str = "https://shikigami.dev/schemas";
 
@@ -54,6 +57,14 @@ struct Api {
     history_entry: HistoryEntry,
     change_event: ChangeEvent,
     error_payload: ErrorPayload,
+    new_version: NewVersion,
+    scenario_version: ScenarioVersion,
+    version_summary: VersionSummary,
+    scenario_diff: ScenarioDiff,
+    scenario_bundle: ScenarioBundle,
+    import_outcome: ImportOutcome,
+    import_conflict: ImportConflict,
+    workspace_info: WorkspaceInfo,
 }
 
 fn api_schema() -> Value {

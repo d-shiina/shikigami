@@ -57,6 +57,13 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::workspace_info,
+            commands::set_workspace,
+            commands::list_versions,
+            commands::create_version,
+            commands::diff_versions,
+            commands::restore_version,
+            commands::export_scenario,
+            commands::import_scenario,
             commands::list_scenarios,
             commands::get_scenario,
             commands::create_scenario,

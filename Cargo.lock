@@ -3357,6 +3357,7 @@ dependencies = [
  "shikigami-mcp",
  "shikigami-runtime",
  "tempfile",
+ "time",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3416,6 +3417,7 @@ dependencies = [
 name = "shikigami-studio"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "notify",
  "serde",
  "serde_json",

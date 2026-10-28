@@ -307,9 +307,13 @@ Runtime::builder()
 
 ワークスペース配置：
 
+共有ワークスペースでは `history/`・`runs/` を各 PC 側に置く（[design/sharing-versioning.md](design/sharing-versioning.md)）。
+
 ```text
-<workspace>/            既定: %APPDATA%\Shikigami\workspace（SHIKIGAMI_HOME で変更可）
+<workspace>/            既定: SHIKIGAMI_HOME > config.json の workspace > %APPDATA%\Shikigami\workspace
+  workspace.json        任意。{"shared": true} なら共有ワークスペース
   scenarios/<id>.json   シナリオ（正）
+  versions/<id>/<n>.json  名前付きの版（不変のスナップショット）
   history/<id>/journal.jsonl  変更ジャーナル（追記のみ・監査）
   history/<id>/undo.json      Undo/Redo スタック
   runs/<run-id>/events.jsonl  実行イベント（機密値マスク済み）

@@ -294,6 +294,15 @@
           "format": "uint64",
           "minimum": 0
         },
+        "version": {
+          "description": "Named version whose content was run, when it matches one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
         "status": {
           "$ref": "#/$defs/RunStatus"
         },

@@ -3,13 +3,22 @@
 //! Layout of a workspace directory:
 //!
 //! ```text
-//! <root>/
-//!   scenarios/<scenario-id>.json      canonical scenario documents (git-friendly)
-//!   history/<scenario-id>/journal.jsonl   append-only change journal (audit)
-//!   history/<scenario-id>/undo.json       undo/redo stacks
-//!   trash/<scenario-id>.<unix-ts>.json    deleted scenarios (recoverable)
+//! <root>/                                 shared part (may live on a file server)
+//!   workspace.json                         optional manifest (`"shared": true`)
+//!   scenarios/<scenario-id>.json           canonical scenario documents
+//!   versions/<scenario-id>/<number>.json   named versions (snapshots)
+//!   trash/<scenario-id>.<unix-ts>.json     deleted scenarios (recoverable)
 //!   .lock                                  advisory lock for read-modify-write
+//! <local root>/                            per-PC part
+//!   history/<scenario-id>/journal.jsonl    append-only change journal (audit)
+//!   history/<scenario-id>/undo.json        undo/redo stacks
+//!   runs/<run-id>/…                        run records (see shikigami-runtime)
 //! ```
+//!
+//! For a private workspace the local root is the workspace root itself. For a
+//! shared workspace (several people on OneDrive or a file server) it is a
+//! per-PC directory under `%LOCALAPPDATA%\Shikigami\local\`, so one
+//! person's undo stacks and run logs never sync to (or conflict with) others.
 //!
 //! Studio, the MCP server and the CLI are separate processes that may share a
 //! workspace. Every mutation takes an exclusive OS file lock, re-reads the
@@ -32,6 +41,7 @@ use crate::ids::ScenarioId;
 use crate::migrate;
 use crate::model::Scenario;
 use crate::ops::EditOp;
+use crate::version::ScenarioVersion;
 
 /// Who made a change. Recorded in history and the audit journal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -112,6 +122,71 @@ pub(crate) const UNDO_LIMIT: usize = 200;
 #[derive(Debug, Clone)]
 pub struct FileStore {
     root: PathBuf,
+    local: PathBuf,
+    shared: bool,
+}
+
+/// Optional `<root>/workspace.json`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceManifest {
+    /// Several people use this folder (OneDrive, a file server). Per-PC data
+    /// (undo history, run records) is then kept outside the folder.
+    #[serde(default)]
+    pub shared: bool,
+}
+
+/// Where a workspace keeps its data, for display and diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceInfo {
+    pub root: String,
+    /// Undo history, run records and audit logs of this PC.
+    pub local_root: String,
+    pub shared: bool,
+}
+
+/// User-level settings shared by Studio, the CLI and the MCP server
+/// (`%APPDATA%\Shikigami\config.json`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserConfig {
+    /// Default workspace folder when neither `--workspace` nor
+    /// `SHIKIGAMI_HOME` is given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<PathBuf>,
+    /// Settings written by newer builds or other features are kept as-is.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, Value>,
+}
+
+impl UserConfig {
+    pub fn path() -> PathBuf {
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Shikigami")
+            .join("config.json")
+    }
+
+    pub fn load() -> Self {
+        match fs::read(Self::path()) {
+            Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "ignoring unreadable config.json");
+                Self::default()
+            }),
+            Err(_) => Self::default(),
+        }
+    }
+
+    pub fn save(&self) -> CoreResult<()> {
+        let path = Self::path();
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        let mut json = serde_json::to_vec_pretty(self)?;
+        json.push(b'\n');
+        write_atomic(&path, &json)
+    }
 }
 
 /// Exclusive workspace lock; released on drop.
@@ -131,17 +206,51 @@ impl FileStore {
     /// Opens (and creates if needed) a workspace directory.
     pub fn open(root: impl Into<PathBuf>) -> CoreResult<Self> {
         let root = root.into();
-        for dir in ["scenarios", "history", "trash"] {
-            fs::create_dir_all(root.join(dir))?;
-        }
-        Ok(Self { root })
+        let manifest = read_manifest(&root)?;
+        let local = if manifest.shared {
+            local_root_for(&root)
+        } else {
+            root.clone()
+        };
+        Self::open_with_local(root, local, manifest.shared)
     }
 
-    /// Default workspace: `$SHIKIGAMI_HOME`, else the platform data dir
-    /// (e.g. `%APPDATA%\Shikigami\workspace` on Windows).
+    /// Opens a workspace with an explicit per-PC directory (tests).
+    pub fn open_with_local(
+        root: impl Into<PathBuf>,
+        local: impl Into<PathBuf>,
+        shared: bool,
+    ) -> CoreResult<Self> {
+        let root = root.into();
+        let local = local.into();
+        for dir in ["scenarios", "versions", "trash"] {
+            fs::create_dir_all(root.join(dir))?;
+        }
+        fs::create_dir_all(local.join("history"))?;
+        Ok(Self {
+            root,
+            local,
+            shared,
+        })
+    }
+
+    /// Writes (or updates) `<root>/workspace.json`. Takes effect the next time
+    /// the workspace is opened.
+    pub fn init(root: &Path, manifest: &WorkspaceManifest) -> CoreResult<()> {
+        fs::create_dir_all(root)?;
+        let mut json = serde_json::to_vec_pretty(manifest)?;
+        json.push(b'\n');
+        write_atomic(&root.join(MANIFEST_FILE), &json)
+    }
+
+    /// Default workspace: `$SHIKIGAMI_HOME`, else `workspace` in the user
+    /// config, else the platform data dir (e.g. `%APPDATA%\Shikigami\workspace`).
     pub fn default_root() -> PathBuf {
         if let Some(home) = std::env::var_os("SHIKIGAMI_HOME") {
             return PathBuf::from(home);
+        }
+        if let Some(workspace) = UserConfig::load().workspace {
+            return workspace;
         }
         dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
@@ -151,6 +260,23 @@ impl FileStore {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Per-PC directory: undo history, run records, audit logs.
+    pub fn local_root(&self) -> &Path {
+        &self.local
+    }
+
+    pub fn is_shared(&self) -> bool {
+        self.shared
+    }
+
+    pub fn info(&self) -> WorkspaceInfo {
+        WorkspaceInfo {
+            root: self.root.display().to_string(),
+            local_root: self.local.display().to_string(),
+            shared: self.shared,
+        }
     }
 
     pub fn scenarios_dir(&self) -> PathBuf {
@@ -180,7 +306,7 @@ impl FileStore {
     }
 
     fn history_dir(&self, id: &ScenarioId) -> PathBuf {
-        self.root.join("history").join(id.as_str())
+        self.local.join("history").join(id.as_str())
     }
 
     pub fn exists(&self, id: &ScenarioId) -> bool {
@@ -286,6 +412,70 @@ impl FileStore {
         Ok(entries.split_off(skip))
     }
 
+    fn versions_dir(&self, id: &ScenarioId) -> PathBuf {
+        self.root.join("versions").join(id.as_str())
+    }
+
+    /// Every stored version of a scenario, oldest first. Unreadable files are
+    /// skipped and logged.
+    pub fn load_versions(&self, id: &ScenarioId) -> CoreResult<Vec<ScenarioVersion>> {
+        self.checked(id)?;
+        let dir = self.versions_dir(id);
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e.into()),
+        };
+        let mut out = Vec::new();
+        for entry in entries {
+            let path = entry?.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let parsed = fs::read(&path)
+                .map_err(CoreError::from)
+                .and_then(|bytes| Ok(serde_json::from_slice::<ScenarioVersion>(&bytes)?));
+            match parsed {
+                Ok(v) => out.push(v),
+                Err(e) => {
+                    tracing::warn!(path = %path.display(), error = %e, "skipping unreadable version")
+                }
+            }
+        }
+        out.sort_by_key(|v| v.number);
+        Ok(out)
+    }
+
+    pub fn load_version(&self, id: &ScenarioId, number: u32) -> CoreResult<ScenarioVersion> {
+        self.checked(id)?;
+        let path = self.versions_dir(id).join(format!("{number}.json"));
+        match fs::read(&path) {
+            Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
+            Err(e) if e.kind() == ErrorKind::NotFound => Err(CoreError::VersionNotFound {
+                scenario_id: id.clone(),
+                number,
+            }),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Writes a new version file. Never overwrites: versions are immutable.
+    pub(crate) fn save_version(&self, version: &ScenarioVersion) -> CoreResult<()> {
+        let id = &version.scenario.id;
+        self.checked(id)?;
+        let dir = self.versions_dir(id);
+        fs::create_dir_all(&dir)?;
+        let mut json = serde_json::to_vec_pretty(version)?;
+        json.push(b'\n');
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dir.join(format!("{}.json", version.number)))?;
+        file.write_all(&json)?;
+        file.sync_all()?;
+        Ok(())
+    }
+
     pub(crate) fn load_undo(&self, id: &ScenarioId) -> CoreResult<UndoState> {
         let path = self.history_dir(id).join("undo.json");
         match fs::read(&path) {
@@ -313,7 +503,47 @@ impl FileStore {
     }
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> CoreResult<()> {
+const MANIFEST_FILE: &str = "workspace.json";
+
+fn read_manifest(root: &Path) -> CoreResult<WorkspaceManifest> {
+    match fs::read(root.join(MANIFEST_FILE)) {
+        Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(WorkspaceManifest::default()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// `%LOCALAPPDATA%\Shikigami\local\<hash of the workspace path>`.
+fn local_root_for(root: &Path) -> PathBuf {
+    let absolute = std::path::absolute(root).unwrap_or_else(|_| root.to_path_buf());
+    // Windows paths are case-insensitive; one folder must map to one directory.
+    let key = absolute.to_string_lossy().to_lowercase();
+    let key = key.trim_end_matches(['\\', '/']);
+    // FNV-1a: stable across builds (unlike `DefaultHasher`).
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in key.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    let name = absolute
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Shikigami")
+        .join("local")
+        .join(format!("{}-{hash:016x}", sanitize_file_name(&name)))
+}
+
+fn sanitize_file_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric() || matches!(c, '-' | '_'))
+        .take(32)
+        .collect()
+}
+
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> CoreResult<()> {
     let dir = path
         .parent()
         .ok_or_else(|| CoreError::InvalidEdit(format!("invalid path {}", path.display())))?;

@@ -16,6 +16,7 @@ pub mod schema;
 pub mod service;
 pub mod store;
 pub mod validate;
+pub mod version;
 
 pub use error::{CoreError, CoreResult, ErrorPayload};
 pub use ids::{RunId, ScenarioId, StepId};
@@ -25,6 +26,13 @@ pub use model::{
 };
 pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
 pub use registry::{RiskLevel, StepCategory, StepRegistry, StepTypeDef};
-pub use service::{ChangeEvent, EditOutcome, NewScenario, ScenarioService};
-pub use store::{Actor, ActorKind, ChangeKind, FileStore, HistoryEntry};
+pub use service::{ChangeEvent, EditOutcome, ImportOutcome, NewScenario, ScenarioService};
+pub use store::{
+    Actor, ActorKind, ChangeKind, FileStore, HistoryEntry, UserConfig, WorkspaceInfo,
+    WorkspaceManifest,
+};
 pub use validate::{Severity, ValidationIssue, ValidationReport, Validator};
+pub use version::{
+    DiffKind, ImportConflict, ImportMode, NewVersion, ScenarioBundle, ScenarioDiff,
+    ScenarioVersion, VersionSummary,
+};
