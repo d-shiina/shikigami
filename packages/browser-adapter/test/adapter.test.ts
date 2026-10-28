@@ -104,6 +104,77 @@ describe("browser adapter", () => {
     expect(err.code).toBe("BROWSER_NOT_OPEN");
   });
 
+  it("types secrets only on their sites and masks them", async () => {
+    const r = { runId: "run_secret" };
+    await adapter.call("open", { ...r, url: base });
+    const site = new URL(base).origin;
+    await adapter.call("fill", {
+      ...r,
+      target: { label: "ユーザー名" },
+      value: "demo",
+      secret: { name: "demo", sites: [site], sensitive: false },
+    });
+    const elsewhere = await failure(
+      adapter.call("fill", {
+        ...r,
+        target: { label: "パスワード" },
+        value: "shikigami",
+        secret: { name: "demo", sites: ["https://example.com"], sensitive: true },
+      }),
+    );
+    expect(elsewhere.code).toBe("SECRET_SITE_MISMATCH");
+    expect(String(elsewhere.details?.hint)).toContain("Studio");
+
+    await adapter.call("fill", {
+      ...r,
+      target: { label: "パスワード" },
+      value: "shikigami",
+      secret: { name: "demo", sites: [site], sensitive: true },
+    });
+    const page = (await adapter.call("snapshot", r)) as { snapshot: string; login?: { hint: string } };
+    expect(page.snapshot).not.toContain("shikigami");
+    expect(page.snapshot).toContain("demo");
+    expect(page.login?.hint).toContain("list_secrets");
+
+    // Typed by hand (not through a secret): still hidden from AI clients.
+    await adapter.call("fill", { ...r, target: { label: "パスワード" }, value: "typed-by-hand" });
+    const again = (await adapter.call("snapshot", r)) as { snapshot: string };
+    expect(again.snapshot).not.toContain("typed-by-hand");
+    await adapter.call("closeRun", r);
+  });
+
+  it("saves a login and reuses it in the next run", async () => {
+    const first = { runId: "run_login_1" };
+    await adapter.call("open", { ...first, url: `${base}orders.html`, session: "demo" });
+    expect(await adapter.call("isVisible", { ...first, target: { role: "heading", name: "受注一覧" }, waitMs: 500 })).toBe(false);
+    await adapter.call("fill", { ...first, target: { label: "ユーザー名" }, value: "demo" });
+    await adapter.call("fill", { ...first, target: { label: "パスワード" }, value: "shikigami" });
+    await adapter.call("click", { ...first, target: { role: "button", name: "ログイン" } });
+    await adapter.call("waitFor", { ...first, target: { role: "heading", name: "受注一覧" } });
+    const closed = (await adapter.call("closeRun", first)) as { sessions: { name: string; state: unknown }[] };
+    expect(closed.sessions.map((s) => s.name)).toEqual(["demo"]);
+
+    const second = { runId: "run_login_2" };
+    await adapter.call("open", {
+      ...second,
+      url: `${base}orders.html`,
+      session: "demo",
+      storageState: closed.sessions[0]?.state,
+    });
+    expect(await adapter.call("isVisible", { ...second, target: { role: "heading", name: "受注一覧" } })).toBe(true);
+    await adapter.call("closeRun", second);
+  });
+
+  it("refuses to wait for a person without a window", async () => {
+    const r = { runId: "run_human" };
+    await adapter.call("open", { ...r, url: base });
+    const err = await failure(
+      adapter.call("waitForHuman", { ...r, until: { role: "heading", name: "受注一覧" }, timeoutMs: 1000 }),
+    );
+    expect(err.code).toBe("HUMAN_REQUIRED");
+    await adapter.call("closeRun", r);
+  });
+
   it("finds the demo site files", () => {
     expect(existsSync(new URL("../../../examples/web/index.html", import.meta.url))).toBe(true);
   });

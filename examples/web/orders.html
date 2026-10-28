@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <title>式神商事 受注管理システム - 受注一覧</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    // Not logged in: go to the login page before anything is shown.
+    if (!localStorage.getItem("user")) location.replace("index.html");
+  </script>
 </head>
 <body>
   <header><strong>式神商事 受注管理システム</strong><span id="who"></span></header>

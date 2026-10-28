@@ -28,6 +28,7 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
     validate: vi.fn(async () => ({ valid: true, issues: [] })),
     undoState: vi.fn(async () => ({ canUndo: false, canRedo: false })),
     history: vi.fn(async () => []),
+    listSecrets: vi.fn(async () => ({ secrets: [], keyLocation: "test" })),
   };
   return { ...base, ...overrides } as Api;
 }
@@ -79,6 +80,36 @@ describe("studio store", () => {
     await store.getState().onExternalChange("scn_a");
     expect(store.getState().scenario?.steps?.[0]?.id).toBe("stp_mcp");
     expect(store.getState().notice).toBe(t.externalChange);
+  });
+
+  it("shows that a run waits for the person until the step ends", () => {
+    const store = createStudioStore(fakeApi());
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "humanActionRequired", stepId: "s1", message: "スマホで承認してください" });
+    expect(store.getState().human).toEqual({ stepId: "s1", message: "スマホで承認してください" });
+    store.getState().onRunEvent({
+      ...base,
+      seq: 1,
+      type: "stepFinished",
+      stepId: "s1",
+      stepType: "browser.waitForHuman",
+      outcome: "succeeded",
+      durationMs: 1,
+    });
+    expect(store.getState().human).toBeNull();
+  });
+
+  it("registers secrets without keeping their values", async () => {
+    const listed = { name: "受注", username: "tanaka", sites: ["https://x.example"], fields: ["username", "password"], updatedAt: "" };
+    const setSecret = vi.fn(async () => listed as never);
+    const store = createStudioStore(
+      fakeApi({ setSecret, listSecrets: vi.fn(async () => ({ secrets: [listed as never], keyLocation: "test" })) }),
+    );
+    const ok = await store.getState().saveSecret({ name: "受注", username: "tanaka", password: "hunter2", sites: ["https://x.example"] });
+    expect(ok).toBe(true);
+    expect(setSecret).toHaveBeenCalledOnce();
+    expect(JSON.stringify(store.getState())).not.toContain("hunter2");
+    expect(store.getState().secrets.map((s) => s.name)).toEqual(["受注"]);
   });
 
   it("tracks run progress from events", () => {
