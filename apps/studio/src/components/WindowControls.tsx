@@ -8,7 +8,7 @@ function inTauri(): boolean {
   return "__TAURI_INTERNALS__" in globalThis;
 }
 
-const BUTTON = "grid h-12 w-12 place-items-center text-slate-500 hover:bg-slate-100 hover:text-ink";
+const BUTTON = "grid h-10 w-11 place-items-center text-slate-500 hover:bg-slate-100 hover:text-ink";
 
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
@@ -23,7 +23,7 @@ export function WindowControls() {
   if (!inTauri()) return null;
   const win = getCurrentWindow();
   return (
-    <div className="-mr-4 flex self-stretch">
+    <div className="-mr-3 flex self-stretch">
       <button type="button" title={t.window.minimize} className={BUTTON} onClick={() => void win.minimize()}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
           <path d="M0 5.5h10" stroke="currentColor" />

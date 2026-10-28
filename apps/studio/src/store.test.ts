@@ -2,7 +2,7 @@ import type { EditOp, EditOutcome, Evidence, HistoryEntry, ReviewTimeline, RunEv
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
-import { draftFor } from "./components/SecretsDialog";
+import { draftFor } from "./components/SecretsPage";
 import { calledIds, createStudioStore, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
 
 const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({

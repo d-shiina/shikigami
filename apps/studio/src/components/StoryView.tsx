@@ -7,6 +7,7 @@ import { blockLabel } from "../lib/keywords";
 import { type Part, plain, sentence } from "../lib/sentence";
 import { revertBlocker, type StepRunState, touchedSteps } from "../store";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
+import { StepTools } from "./StepTools";
 
 type Defs = ReadonlyMap<string, StepTypeDef>;
 
@@ -182,6 +183,12 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
             <ReviewTag key={m.entry.revision} entry={m.entry} added={m.added} stepId={id} />
           ))}
         </div>
+        {selected && (
+          // Clicks on the tools must not reselect the row.
+          <div className="shrink-0 self-start" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            <StepTools step={step} />
+          </div>
+        )}
       </div>
       {lanes.map((lane) => (
         <div key={lane.name} className="ml-[21px] border-l-2 border-slate-200 pl-3">

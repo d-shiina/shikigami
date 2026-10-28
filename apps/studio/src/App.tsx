@@ -1,33 +1,30 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AgentContext, createAgentStore } from "./agent";
+import { useEffect, useMemo, useState } from "react";
+import { AgentContext, createAgentStore, useAgent } from "./agent";
 import { AgentButton, AgentPane } from "./components/AgentPane";
+import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
-import { IssuesPanel } from "./components/IssuesPanel";
-import { PropertyPanel } from "./components/PropertyPanel";
-import { RunLog } from "./components/RunLog";
+import { HistoryDialog } from "./components/HistoryDialog";
+import { Inspector } from "./components/Inspector";
+import { OutlinePanel } from "./components/Outline";
+import { Rail } from "./components/Rail";
+import { ReviewInbox, ReviewPanel } from "./components/ReviewDesk";
 import { RunPausePanel } from "./components/RunPausePanel";
-import { OutlinePanel, OutlineToggle } from "./components/Outline";
-import { ReviewInbox, ReviewPanel, useInbox } from "./components/ReviewDesk";
 import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
-import { StoryView } from "./components/StoryView";
 import { SecretAskDialog } from "./components/SecretAskDialog";
-import { SecretsDialog } from "./components/SecretsDialog";
+import { SecretsPage } from "./components/SecretsPage";
+import { SettingsPage } from "./components/SettingsPage";
 import { StatusBar } from "./components/StatusBar";
-import { Timeline, usePendingReview } from "./components/Timeline";
-import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
-import { VariablesPanel } from "./components/VariablesPanel";
-import { VersionsPanel } from "./components/VersionsPanel";
+import { StoryView } from "./components/StoryView";
+import { CanvasDock, ScenarioBar, type View } from "./components/Toolbar";
 import { WindowControls } from "./components/WindowControls";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
 import { t, useLocale } from "./lib/i18n";
 import { createStudioStore, isActive, type StudioState } from "./store";
-
-type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -65,237 +62,149 @@ function Banner() {
   );
 }
 
-function SidePanel() {
-  const reviewing = useStudio((s) => s.reviewing);
-  const [tab, setTab] = useState<Tab>(reviewing ? "review" : "timeline");
-  // The review desk opens on its own tab, and leaving it falls back to the record.
-  useEffect(() => setTab(reviewing ? "review" : "timeline"), [reviewing]);
-  const issueCount = useStudio((s) => s.validation?.issues.length ?? 0);
-  const selection = useStudio((s) => s.selection);
-  const pendingCount = usePendingReview().length;
-  useEffect(() => {
-    if (selection?.kind === "step" && !reviewing) setTab("properties");
-  }, [selection, reviewing]);
-  // New AI edits pull the review to the front.
-  const lastPending = useRef(pendingCount);
-  useEffect(() => {
-    if (pendingCount > lastPending.current && !reviewing) setTab("timeline");
-    lastPending.current = pendingCount;
-  }, [pendingCount]);
-  const tabs: [Tab, string, number][] = [
-    ...(reviewing ? [["review", t.reviewTab, pendingCount] as [Tab, string, number]] : []),
-    ["timeline", t.timeline, reviewing ? 0 : pendingCount],
-    ["versions", t.versions, 0],
-    ["properties", t.inspect, 0],
-    ["variables", t.variables, 0],
-    ["issues", t.issues, issueCount],
-  ];
-  return (
-    // A sheet laid over the edge of the desk.
-    <aside className="relative z-[1] flex h-full flex-col border-l border-slate-200 bg-sheet shadow-sheet">
-      <nav className="flex border-b border-slate-200 px-2">
-        {tabs.map(([key, label, count]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={`relative flex flex-1 items-center justify-center gap-1 py-2.5 text-xs font-medium ${
-              tab === key ? "text-ink" : "text-slate-500 hover:text-ink"
-            }`}
-          >
-            {label}
-            {count > 0 && (
-              <span
-                className={`rounded-[3px] px-1.5 text-[10px] ${key === "timeline" || key === "review" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
-              >
-                {count}
-              </span>
-            )}
-            {tab === key && <span className="absolute inset-x-3 bottom-[-1px] h-[2px] rounded-full bg-ink" />}
-          </button>
-        ))}
-      </nav>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {tab === "review" && <ReviewPanel />}
-        {tab === "timeline" && <Timeline />}
-        {tab === "versions" && <VersionsPanel />}
-        {tab === "properties" && <PropertyPanel />}
-        {tab === "variables" && <VariablesPanel />}
-        {tab === "issues" && <IssuesPanel />}
-      </div>
-    </aside>
-  );
-}
-
-type View = "story" | "flow";
 const VIEW_KEY = "shikigami.studio.view";
 const LIST_KEY = "shikigami.studio.list";
 
-function loadView(): View {
-  try {
-    return globalThis.localStorage?.getItem(VIEW_KEY) === "story" ? "story" : "flow";
-  } catch {
-    return "flow";
-  }
-}
-
-function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
-  const options: [View, string][] = [
-    ["flow", t.viewFlow],
-    ["story", t.viewStory],
-  ];
-  return (
-    <div className="absolute top-3 right-4 flex overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-xs shadow-raised">
-      {options.map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange(key)}
-          className={`px-3 py-1 ${view === key ? "bg-ink text-paper" : "text-slate-600 hover:bg-slate-100"}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function SecretsButton() {
-  const setOpen = useStudio((s) => s.setSecretsOpen);
-  const count = useStudio((s) => s.secrets.length);
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      className="flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
-      title={t.secretsIntro}
-    >
-      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
-        <circle cx="5" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M8 8h6.5M12 8v2.5M14 8v2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-      {t.secrets}
-      {count > 0 && <span className="rounded-[3px] bg-slate-200 px-1.5 text-[10px]">{count}</span>}
-    </button>
-  );
-}
-
-/** Scenarios, or the AI edits waiting for review. */
-function ModeSwitch() {
-  const reviewing = useStudio((s) => s.reviewing);
-  const setReviewing = useStudio((s) => s.setReviewing);
-  const open = useStudio((s) => s.open);
-  const currentId = useStudio((s) => s.scenario?.id);
-  // Sent-back scenarios wait on the AI, not on the person.
-  const inbox = useInbox().filter((i) => !i.waiting);
-  const enterReview = () => {
-    setReviewing(true);
-    // Land on something to review rather than a scenario with nothing new.
-    const first = inbox[0];
-    if (first && !inbox.some((i) => i.scenarioId === currentId)) void open(first.scenarioId);
-  };
-  const tab = (on: boolean) =>
-    `flex h-7 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-semibold ${on ? "bg-sheet text-ink shadow-sheet" : "text-slate-500 hover:text-ink"}`;
-  return (
-    <div className="flex items-center gap-0.5 rounded-[4px] bg-slate-100 p-0.5">
-      <button type="button" className={tab(!reviewing)} onClick={() => setReviewing(false)}>
-        {t.scenarios}
-      </button>
-      <button type="button" className={tab(reviewing)} onClick={enterReview}>
-        {t.awaitingReview}
-        {inbox.length > 0 && <span className="rounded-[3px] bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
-      </button>
-    </div>
-  );
-}
-
-function Shell() {
-  const hasScenario = useStudio((s) => s.scenario !== null);
-  const [view, setViewState] = useState<View>(loadView);
-  const setView = (next: View) => {
-    setViewState(next);
+function useRemembered<T extends string>(key: string, fallback: T, read: (raw: string | null) => T): [T, (next: T) => void] {
+  const [value, setValue] = useState<T>(() => {
     try {
-      globalThis.localStorage?.setItem(VIEW_KEY, next);
+      return read(globalThis.localStorage?.getItem(key) ?? null);
     } catch {
-      // Only a remembered preference.
-    }
-  };
-  const hasRun = useStudio((s) => s.run !== null);
-  const reviewing = useStudio((s) => s.reviewing);
-  const [listOpen, setListOpenState] = useState(() => {
-    try {
-      return globalThis.localStorage?.getItem(LIST_KEY) !== "closed";
-    } catch {
-      return true;
+      return fallback;
     }
   });
-  const setListOpen = (open: boolean) => {
-    setListOpenState(open);
+  const set = (next: T) => {
+    setValue(next);
     try {
-      globalThis.localStorage?.setItem(LIST_KEY, open ? "open" : "closed");
+      globalThis.localStorage?.setItem(key, next);
     } catch {
       // Only a remembered preference.
     }
   };
+  return [value, set];
+}
+
+/**
+ * The editor: the open scenario's bar, its chart (or procedure), what the run
+ * did and what is wrong underneath, and the inspector on the right. The
+ * scenario list and the review desk both open scenarios into it.
+ */
+function Editor({ list, right }: { list: React.ReactNode; right: React.ReactNode }) {
+  const hasScenario = useStudio((s) => s.scenario !== null);
+  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" ? "story" : "flow"));
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
-      {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
-      <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 border-b border-slate-200 bg-sheet px-4 select-none">
-        <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
-        <ModeSwitch />
-        <ScenarioHeader />
-        <span className="h-5 w-px bg-slate-200" />
-        <AgentButton />
-        <SecretsButton />
-        <WindowControls />
-      </header>
-      <div className="col-span-3">
-        <HumanBanner />
-        <Banner />
-      </div>
-      <div className="min-h-0">
-        {reviewing ? (
-          <ReviewInbox />
-        ) : listOpen ? (
-          <ScenarioList onCollapse={() => setListOpen(false)} />
-        ) : (
-          <ScenarioRail onExpand={() => setListOpen(true)} />
-        )}
-      </div>
+    <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)_340px]">
+      <div className="min-h-0">{list}</div>
       <main className="flex min-h-0 min-w-0 flex-col">
+        <ScenarioBar view={view} onView={setView} />
         <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
             <StoryView />
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
-              {hasScenario && (
-                <>
-                  <OutlineToggle />
-                  <OutlinePanel />
-                </>
-              )}
+              {hasScenario && <OutlinePanel />}
             </ReactFlowProvider>
           )}
-          {hasScenario && <ViewToggle view={view} onChange={setView} />}
           {/* Clear of the zoom controls in the bottom-left corner. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
             <CanvasDock />
           </div>
         </div>
         <RunPausePanel />
-        {hasRun && (
-          <div className="h-44 min-h-0">
-            <RunLog />
-          </div>
-        )}
+        <BottomPanel />
       </main>
-      <div className="min-h-0">{hasScenario && <SidePanel />}</div>
+      <div className="min-h-0 w-[340px]">{right}</div>
+    </div>
+  );
+}
+
+function ScenariosPlace() {
+  const [list, setList] = useRemembered<"open" | "closed">(LIST_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
+  // The AI pane takes its width from the list first: the chart is the last thing to shrink.
+  const agentOpen = useAgent((s) => s.open);
+  return (
+    <Editor
+      // Fixed widths: a long scenario name must not widen the list into the chart.
+      list={
+        list === "open" && !agentOpen ? (
+          <div className="h-full w-[248px]">
+            <ScenarioList onCollapse={() => setList("closed")} />
+          </div>
+        ) : (
+          <div className="h-full w-[44px]">
+            <ScenarioRail onExpand={() => setList("open")} />
+          </div>
+        )
+      }
+      right={<Inspector />}
+    />
+  );
+}
+
+/** The review desk: what waits, the chart with the AI's changes marked, and the verdict on the right. */
+function ReviewPlace() {
+  const hasScenario = useStudio((s) => s.scenario !== null);
+  return (
+    <Editor
+      list={
+        <div className="h-full w-[248px]">
+          <ReviewInbox />
+        </div>
+      }
+      right={
+        hasScenario && (
+          <aside className="flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
+            <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 text-[12px] font-semibold">{t.reviewTab}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ReviewPanel />
+            </div>
+          </aside>
+        )
+      }
+    />
+  );
+}
+
+function Shell() {
+  const place = useStudio((s) => s.place);
+  return (
+    <div className="flex h-full flex-col">
+      {/*
+        The window's title bar: the mark, room to drag the window, the AI pane
+        (it opens below, at the right edge, from any place) and the caption
+        buttons. Drag anywhere that is not a control, double-click to maximize.
+      */}
+      <header data-tauri-drag-region className="relative flex h-10 shrink-0 items-center gap-3 border-b border-slate-200 bg-sheet pl-[24px] select-none">
+        <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
+        <span data-tauri-drag-region className="flex-1 self-stretch" />
+        <AgentButton />
+        <WindowControls />
+      </header>
+      <HumanBanner />
+      <Banner />
+      <div className="flex min-h-0 flex-1">
+        <Rail />
+        <div className="flex min-h-0 min-w-0 flex-1">
+          {place === "scenarios" && <ScenariosPlace />}
+          {place === "review" && <ReviewPlace />}
+          {place === "secrets" && (
+            <div className="min-w-0 flex-1">
+              <SecretsPage />
+            </div>
+          )}
+          {place === "settings" && (
+            <div className="min-w-0 flex-1">
+              <SettingsPage />
+            </div>
+          )}
+        </div>
+        <AgentPane />
+      </div>
       <StatusBar />
       <CommandPalette />
-      <SecretsDialog />
+      <HistoryDialog />
       <SecretAskDialog />
-      <AgentPane />
     </div>
   );
 }

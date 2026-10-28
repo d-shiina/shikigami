@@ -161,9 +161,8 @@ function SecretForm({
   );
 }
 
-export function SecretsDialog() {
-  const open = useStudio((s) => s.secretsOpen);
-  const setOpen = useStudio((s) => s.setSecretsOpen);
+/** The secrets place: registered logins, and the form to add or change one. */
+export function SecretsPage() {
   const secrets = useStudio((s) => s.secrets);
   const keyLocation = useStudio((s) => s.secretKeyLocation);
   const removeSecret = useStudio((s) => s.removeSecret);
@@ -179,28 +178,17 @@ export function SecretsDialog() {
     setEditing({ ...draftFor(secrets, prefill), asked: true });
     clearPrefill();
   }, [prefill, secrets, clearPrefill]);
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-ink/30" onClick={() => setOpen(false)}>
-      <div
-        role="dialog"
-        aria-label={t.secrets}
-        className="max-h-[85vh] w-[520px] overflow-y-auto rounded-[4px] border border-slate-200 bg-sheet p-5 shadow-dialog"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="h-full overflow-y-auto bg-paper">
+      <div className="mx-auto max-w-[640px] px-6 py-6">
+        {/* The page's one primary action ends its title row. */}
         <div className="mb-2 flex items-center">
-          <h2 className="font-serif text-lg font-bold">{t.secrets}</h2>
-          <button
-            type="button"
-            className="ml-auto text-xs text-slate-500 hover:underline"
-            onClick={() => {
-              setEditing(null);
-              setOpen(false);
-            }}
-          >
-            {t.close}
-          </button>
+          <h2 className="text-lg font-bold">{t.secrets}</h2>
+          {!keyMissing && !editing && (
+            <button type="button" className="ml-auto rounded-[4px] bg-ink px-3 py-1 text-sm text-paper hover:bg-slate-700" onClick={() => setEditing({ draft: empty, isNew: true })}>
+              {t.secretNew}
+            </button>
+          )}
         </div>
         <p className="mb-1 text-xs text-slate-600">{t.secretsIntro}</p>
         {keyLocation && <p className="mb-4 text-[11px] text-slate-400">{t.secretKeyNote(keyLocation)}</p>}
@@ -235,7 +223,7 @@ export function SecretsDialog() {
             <ul className="mb-3 space-y-2">
               {secrets.length === 0 && <li className="text-sm text-slate-400">{t.secretNone}</li>}
               {secrets.map((s) => (
-                <li key={s.name} className="rounded border border-slate-200 p-2">
+                <li key={s.name} className="rounded-[4px] border border-slate-200 bg-sheet p-3 shadow-sheet">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{s.name}</span>
                     <span className="text-xs text-slate-500">{s.username}</span>
@@ -269,13 +257,6 @@ export function SecretsDialog() {
                 </li>
               ))}
             </ul>
-            <button
-              type="button"
-              className="rounded bg-ink px-3 py-1 text-sm text-paper"
-              onClick={() => setEditing({ draft: empty, isNew: true })}
-            >
-              {t.secretNew}
-            </button>
           </>
         )}
       </div>

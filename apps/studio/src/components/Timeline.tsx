@@ -204,7 +204,6 @@ export function Timeline() {
         </section>
       )}
       <section>
-        <h3 className="mb-3 text-sm font-semibold">{t.timeline}</h3>
         {entries.length === 0 ? (
           <p className="text-sm text-slate-400">{t.timelineEmpty}</p>
         ) : (

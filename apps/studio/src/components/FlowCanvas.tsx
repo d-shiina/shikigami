@@ -50,6 +50,7 @@ import { callKey, diveChain, type DiveLevel, revertBlocker, type StepRunState, t
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
+import { StepTools } from "./StepTools";
 import { valuesSeenBy } from "../lib/runValues";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
@@ -162,7 +163,8 @@ function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; co
   );
 }
 
-const FLOW_HANDLE = "!border-0 !bg-slate-300";
+// Flow handles only anchor the lines: nothing connects by hand, so they are not drawn.
+const FLOW_HANDLE = "!h-px !min-h-0 !w-px !min-w-0 !border-0 !bg-transparent";
 
 /** Where step-to-step flow enters (top) and leaves (bottom) a node. */
 function FlowHandles() {
@@ -196,10 +198,38 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
  * A step-to-step edge. Its block label ("forEach：…", "catch：…") sits just
  * above the step it leads to, not halfway, where sibling edges share a line.
  */
-function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd }: EdgeProps) {
-  // Top to bottom, turn right below the source so the label has the run down to the step to itself.
-  const centerY = label && sourcePosition === Position.Bottom ? sourceY + 12 : undefined;
-  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY });
+function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
+  const detourX = (data as { detourX?: number } | undefined)?.detourX;
+  if (detourX !== undefined) {
+    // Around a loop's body: out of the step, along to the side of the body,
+    // then back up into the loop's head (a back edge) or down into the next step.
+    const r = 4;
+    const outY = sourceY + 12;
+    const back = targetY < sourceY;
+    const toward = (from: number, to: number) => (to > from ? 1 : -1);
+    const sx = toward(sourceX, detourX);
+    const path = back
+      ? [
+          `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
+          `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
+          `V ${targetY + 12 + r} Q ${detourX} ${targetY + 12} ${detourX - sx * r} ${targetY + 12}`,
+          `H ${targetX + NODE_W / 2 + 2}`,
+        ].join(" ")
+      : [
+          `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
+          `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY + r}`,
+          `V ${targetY - 16 - r} Q ${detourX} ${targetY - 16} ${detourX - sx * r} ${targetY - 16}`,
+          `H ${targetX - toward(targetX, detourX) * r} Q ${targetX} ${targetY - 16} ${targetX} ${targetY - 16 + r}`,
+          `V ${targetY}`,
+        ].join(" ");
+    return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+  }
+  // Splits turn just below their step; joins turn just above the next step, so
+  // branches of different lengths meet on one line instead of at staggered heights.
+  const down = sourcePosition === Position.Bottom && targetY > sourceY;
+  const centerY = down && label ? sourceY + 12 : down && Math.abs(sourceX - targetX) > 1 ? targetY - 16 : undefined;
+  // The offset must not reach past the turn, or the line runs on below it and doubles back.
+  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset: centerY === undefined ? 20 : 12, borderRadius: 4 });
   return (
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
@@ -495,9 +525,14 @@ function StepNode({ data }: StepNodeProps) {
         data.runState ? RUN_STYLE[data.runState] : ""
       }`}
     >
-      {latest && (
-        <NodeToolbar isVisible position={Position.Top} offset={12}>
-          <ReviewToolbar entry={latest} />
+      {(latest || (data.selected && !data.readOnly)) && (
+        // Beside the step's head: the flow line runs through the top and bottom
+        // centres, and variable chips sit beside the rows below the head.
+        <NodeToolbar isVisible position={Position.Right} align="start" offset={8}>
+          <div className="flex items-center gap-1.5">
+            {latest && <ReviewToolbar entry={latest} />}
+            {data.selected && !data.readOnly && <StepTools step={data.step} />}
+          </div>
         </NodeToolbar>
       )}
       <FlowHandles />
@@ -883,6 +918,7 @@ export function FlowCanvas() {
     sourceHandle: "flow",
     targetHandle: "flow",
     type: "block",
+    data: { detourX: e.detourX },
     animated: e.loop,
     style: { stroke: "var(--flow-edge)", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
     // A plain colour: the marker id is built from it, so no var().
@@ -945,8 +981,7 @@ export function FlowCanvas() {
       <Background gap={24} size={1.2} color="var(--color-slate-300)" />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
       {inside && (
-        // Below the outline and view buttons.
-        <Panel position="top-center" style={{ marginTop: 52 }}>
+        <Panel position="top-center">
           <DiveBar root={root} chain={chain} />
         </Panel>
       )}

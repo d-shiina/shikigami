@@ -13,6 +13,7 @@ import type {
   RunEventEnvelope,
   RunStatus,
   Scenario,
+  ScenarioPatch,
   ScenarioSummary,
   Step,
   StepNote,
@@ -42,6 +43,12 @@ export type Selection =
   | { kind: "step"; stepId: string }
   | { kind: "slot"; parentId: string | null; block: string | null }
   | null;
+
+/** The places on the left rail; each fills the window below the title bar. */
+export type Place = "scenarios" | "review" | "secrets" | "settings";
+
+/** Tabs of the panel under the chart: what happened, and what is wrong. */
+export type BottomTab = "log" | "issues";
 
 export type StepRunState = "running" | "succeeded" | "failed" | "skipped" | "paused";
 
@@ -198,6 +205,11 @@ export type StudioState = {
   breakpoints: Record<string, string[]>;
   outlineOpen: boolean;
   paletteOpen: boolean;
+  place: Place;
+  /** The panel under the chart (run log, issues); null when closed. */
+  bottom: BottomTab | null;
+  /** The scenario's record and versions, opened from its revision. */
+  historyOpen: boolean;
   /** Named versions of the open scenario, newest first. */
   versions: VersionSummary[];
   /** The scenarios the open one calls, directly or deeper, by id, for call nodes and their inputs. */
@@ -242,6 +254,12 @@ export type StudioState = {
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
   setOutlineOpen(open: boolean): void;
+  /** Also keeps `reviewing` and `secretsOpen` in step. */
+  setPlace(place: Place): void;
+  setBottom(tab: BottomTab | null): void;
+  setHistoryOpen(open: boolean): void;
+  /** Name, description and run settings of the open scenario. */
+  updateScenario(patch: ScenarioPatch): Promise<void>;
   /** Adds a step after the selection; `params` and `name` override the type's defaults (palette presets). */
   addStep(type: string, params?: Record<string, unknown>, name?: string): Promise<void>;
   moveSelected(delta: -1 | 1): Promise<void>;
@@ -612,6 +630,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
+      place: "scenarios",
+      bottom: null,
+      historyOpen: false,
       versions: [],
       called: {},
       unfolded: {},
@@ -693,8 +714,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setSecretsOpen(open) {
-        set(open ? { secretsOpen: true } : { secretsOpen: false, secretPrefill: null });
-        if (open) void get().loadSecrets();
+        get().setPlace(open ? "secrets" : "scenarios");
       },
 
       async loadSecretRequests() {
@@ -717,7 +737,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       openSecretForm(prefill) {
-        set({ secretsOpen: true });
+        set({ place: "secrets", reviewing: false, secretsOpen: true });
         // The form edits the secret when it exists: list first, then fill.
         void get()
           .loadSecrets()
@@ -844,6 +864,24 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       setOutlineOpen(open) {
         saveFlag(OUTLINE_KEY, open);
         set({ outlineOpen: open });
+      },
+
+      setPlace(place) {
+        set({ place, reviewing: place === "review", secretsOpen: place === "secrets", historyOpen: false });
+        if (place === "secrets") void get().loadSecrets();
+        else set({ secretPrefill: null });
+      },
+
+      setBottom(tab) {
+        set({ bottom: tab });
+      },
+
+      setHistoryOpen(open) {
+        set({ historyOpen: open });
+      },
+
+      async updateScenario(patch) {
+        await get().applyOps([{ op: "updateScenario", patch }]);
       },
 
       async addStep(type, params, name) {
@@ -991,6 +1029,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             run: s.run?.runId === runId ? s.run : newRun(runId, scenario.id),
             error: null,
             followRun: true,
+            // A run's log opens under the chart.
+            bottom: "log",
           }));
         } catch (e) {
           set({ error: message(e) });
@@ -1287,7 +1327,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setReviewing(on) {
-        set({ reviewing: on });
+        set({ reviewing: on, place: on ? "review" : "scenarios", secretsOpen: false });
       },
 
       setPaletteOpen(open) {
