@@ -10,7 +10,11 @@ export function usePendingReview(): HistoryEntry[] {
   const history = useStudio((s) => s.history);
   const reviewed = useStudio((s) => s.reviewed);
   const scenario = useStudio((s) => s.scenario);
-  return useMemo(() => pendingReview({ history, reviewed, scenario }), [history, reviewed, scenario]);
+  const timelines = useStudio((s) => s.timelines);
+  return useMemo(
+    () => pendingReview({ history, reviewed, scenario, timelines }),
+    [history, reviewed, scenario, timelines],
+  );
 }
 
 /**
@@ -186,7 +190,7 @@ export function Timeline() {
               <span className="ml-1 text-shu-600">{pending.length}</span>
             </h3>
             {pending.length > 1 && (
-              <button type="button" onClick={approveAll} className="ml-auto text-xs text-slate-500 hover:text-ink">
+              <button type="button" onClick={() => void approveAll()} className="ml-auto text-xs text-slate-500 hover:text-ink">
                 {t.approveAll}
               </button>
             )}

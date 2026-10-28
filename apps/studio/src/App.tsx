@@ -176,7 +176,8 @@ function ModeSwitch() {
   const setReviewing = useStudio((s) => s.setReviewing);
   const open = useStudio((s) => s.open);
   const currentId = useStudio((s) => s.scenario?.id);
-  const inbox = useInbox();
+  // Sent-back scenarios wait on the AI, not on the person.
+  const inbox = useInbox().filter((i) => !i.waiting);
   const enterReview = () => {
     setReviewing(true);
     // Land on something to review rather than a scenario with nothing new.
