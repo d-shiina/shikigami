@@ -124,7 +124,7 @@ function StepNode({ data }: StepNodeProps) {
   return (
     <div
       style={{ width: NODE_W }}
-      className={`relative rounded-xl border bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)] ${
+      className={`relative rounded-[4px] border bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)] ${
         data.byAi ? "ai-border" : data.selected ? "border-brand-500 ring-4 ring-brand-100" : "border-slate-200"
       } ${data.selected && data.byAi ? "ring-4 ring-brand-100" : ""} ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
         data.runState ? RUN_STYLE[data.runState] : ""
@@ -138,7 +138,7 @@ function StepNode({ data }: StepNodeProps) {
       <Handle id="flow" type="target" position={Position.Top} className={FLOW_HANDLE} />
       <div
         style={{ height: 24, background: `${color}1a` }}
-        className="flex items-center gap-1.5 rounded-t-[11px] border-b border-slate-100 px-3"
+        className="flex items-center gap-1.5 rounded-t-[3px] border-b border-slate-100 px-3"
       >
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
         <span className="truncate text-[11px] font-bold" style={{ color }}>
@@ -177,7 +177,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
-      className={`flex items-center justify-center rounded-xl border border-dashed text-xs ${
+      className={`flex items-center justify-center rounded-[4px] border border-dashed text-xs ${
         data.selected ? "border-brand-500 bg-brand-50 text-brand-600" : "border-slate-300 text-slate-400"
       }`}
     >
@@ -194,8 +194,8 @@ type IoNodeData = { kind: "io"; side: "input" | "output"; variables: VariableDef
 function IoNode({ data }: NodeProps<Node<IoNodeData>>) {
   const input = data.side === "input";
   return (
-    <div style={{ width: IO_W }} className="rounded-xl border border-slate-300 bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)]">
-      <div style={{ height: 24 }} className="flex items-center gap-1.5 rounded-t-[11px] bg-ink px-3 text-[11px] font-bold text-paper">
+    <div style={{ width: IO_W }} className="rounded-[4px] border border-slate-300 bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)]">
+      <div style={{ height: 24 }} className="flex items-center gap-1.5 rounded-t-[3px] bg-ink px-3 text-[11px] font-bold text-paper">
         <span className="swirl h-2 w-2 rounded-full" />
         {input ? "シナリオ入力" : "シナリオ出力"}
       </div>
