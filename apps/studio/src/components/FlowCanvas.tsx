@@ -644,6 +644,20 @@ function Follow() {
     const timer = setTimeout(() => bring.current(pausedAt), 120);
     return () => clearTimeout(timer);
   }, [paused, pausedAt]);
+  // When a side column opens or the window resizes, the chart moves with the
+  // canvas: its centre stays put, and the selected step stays in view.
+  const flow = useReactFlow();
+  const width = useStore((s) => s.width);
+  const selected = useStudio((s) => (s.selection?.kind === "step" ? s.selection.stepId : undefined));
+  const lastWidth = useRef(width);
+  useEffect(() => {
+    const before = lastWidth.current;
+    lastWidth.current = width;
+    if (!before || !width || before === width) return;
+    const view = flow.getViewport();
+    void flow.setViewport({ ...view, x: view.x + (width - before) / 2 });
+    if (selected) bring.current(selected);
+  }, [width]);
   return null;
 }
 
