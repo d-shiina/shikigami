@@ -1,0 +1,4241 @@
+{
+  "schemaVersion": 2,
+  "stepTypes": [
+    {
+      "type": "browser.click",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.close",
+      "params": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.fill",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "value"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "browser.getTable",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.getText",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "all": {
+            "type": "boolean"
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.isVisible",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "waitMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20000
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.open",
+      "params": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "headless": {
+            "type": "boolean"
+          },
+          "session": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.press",
+      "params": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.screenshot",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fullPage": {
+            "type": "boolean"
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.select",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.waitFor",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "visible",
+              "hidden",
+              "attached",
+              "detached"
+            ]
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "browser.waitForHuman",
+      "params": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "until": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "testId": {
+                "type": "string"
+              },
+              "css": {
+                "type": "string"
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "nth": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "role"
+                ]
+              },
+              {
+                "required": [
+                  "label"
+                ]
+              },
+              {
+                "required": [
+                  "placeholder"
+                ]
+              },
+              {
+                "required": [
+                  "text"
+                ]
+              },
+              {
+                "required": [
+                  "testId"
+                ]
+              },
+              {
+                "required": [
+                  "css"
+                ]
+              }
+            ]
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "until"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "clipboard.get",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "clipboard.set",
+      "params": {
+        "type": "object",
+        "properties": {
+          "text": {}
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.break",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.continue",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.fail",
+      "params": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.forEach",
+      "params": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemVar": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "indexVar": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "collect": {
+            "type": "string",
+            "minLength": 1
+          },
+          "concurrency": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "itemVar"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [
+        "body"
+      ],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [
+        "items",
+        "collect"
+      ],
+      "bindsVariables": [
+        "itemVar",
+        "indexVar"
+      ],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.group",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [
+        "body"
+      ],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.if",
+      "params": {
+        "type": "object",
+        "properties": {
+          "condition": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "condition"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [
+        "then",
+        "else"
+      ],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [
+        "condition"
+      ],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.parallel",
+      "params": {
+        "type": "object",
+        "properties": {
+          "maxConcurrency": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [
+        "branches"
+      ],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.repeat",
+      "params": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          },
+          "indexVar": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [
+        "body"
+      ],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [
+        "indexVar"
+      ],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.try",
+      "params": {
+        "type": "object",
+        "properties": {
+          "errorVar": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [
+        "try",
+        "catch",
+        "finally"
+      ],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [
+        "errorVar"
+      ],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "control.while",
+      "params": {
+        "type": "object",
+        "properties": {
+          "condition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maxIterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          }
+        },
+        "required": [
+          "condition"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [
+        "body"
+      ],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [
+        "condition"
+      ],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.click",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.closeWindow",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.getValue",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.isVisible",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "waitMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20000
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.launch",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "workingDir": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.mouseClick",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "point": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "button": {
+            "enum": [
+              "left",
+              "right"
+            ]
+          },
+          "double": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.press",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target",
+          "key"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.select",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.setValue",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "target",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "value"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.type",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "text": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "text"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.waitFor",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "state": {
+            "enum": [
+              "visible",
+              "hidden",
+              "enabled"
+            ]
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "dialog.input",
+      "params": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "default": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "dialog.message",
+      "params": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "buttons": {
+            "enum": [
+              "ok",
+              "okCancel",
+              "yesNo",
+              "yesNoCancel"
+            ]
+          },
+          "level": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ]
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "dialog.selectFile",
+      "params": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "file",
+              "files",
+              "folder",
+              "save"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "excel.addSheet",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sheet": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "path",
+          "sheet"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "excel.appendRows",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sheet": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rows": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          },
+          "headerRow": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "excel.listSheets",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "excel.readCell",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sheet": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cell": {
+            "type": "string",
+            "minLength": 2
+          }
+        },
+        "required": [
+          "path",
+          "cell"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "excel.readRange",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sheet": {
+            "type": "string",
+            "minLength": 1
+          },
+          "range": {
+            "type": "string",
+            "minLength": 2
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "excel.readRows",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sheet": {
+            "type": "string",
+            "minLength": 1
+          },
+          "headerRow": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "excel.writeCell",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sheet": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cell": {
+            "type": "string",
+            "minLength": 2
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "date"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "formula": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "formula"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "cell",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "excel.writeRange",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sheet": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cell": {
+            "type": "string",
+            "minLength": 2
+          },
+          "values": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "date"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "formula": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "formula"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "cell",
+          "values"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.copy",
+      "params": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overwrite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.createFolder",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.delete",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recursive": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.exists",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.list",
+      "params": {
+        "type": "object",
+        "properties": {
+          "folder": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recursive": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "file",
+              "folder",
+              "all"
+            ]
+          }
+        },
+        "required": [
+          "folder"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.move",
+      "params": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overwrite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.readCsv",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "encoding": {
+            "enum": [
+              "auto",
+              "utf-8",
+              "shift_jis"
+            ]
+          },
+          "delimiter": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2
+          },
+          "header": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.readText",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "encoding": {
+            "enum": [
+              "auto",
+              "utf-8",
+              "shift_jis"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.unzip",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overwrite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.writeCsv",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rows": {},
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "append": {
+            "type": "boolean"
+          },
+          "header": {
+            "type": "boolean"
+          },
+          "encoding": {
+            "enum": [
+              "utf-8",
+              "utf-8-bom",
+              "shift_jis"
+            ]
+          },
+          "delimiter": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2
+          }
+        },
+        "required": [
+          "path",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.writeText",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {},
+          "append": {
+            "type": "boolean"
+          },
+          "encoding": {
+            "enum": [
+              "utf-8",
+              "utf-8-bom",
+              "shift_jis"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "file.zip",
+      "params": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              }
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overwrite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "flow.delay",
+      "params": {
+        "type": "object",
+        "properties": {
+          "ms": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600000
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ms"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "http.request",
+      "params": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE",
+              "HEAD"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "query": {
+            "type": "object"
+          },
+          "headers": {
+            "type": "object"
+          },
+          "json": {},
+          "form": {
+            "type": "object"
+          },
+          "body": {
+            "type": "string"
+          },
+          "auth": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "authType": {
+            "enum": [
+              "bearer",
+              "basic",
+              "header"
+            ]
+          },
+          "authHeader": {
+            "type": "string",
+            "minLength": 1
+          },
+          "saveTo": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "auth"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "log.message",
+      "params": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ]
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "process.run",
+      "params": {
+        "type": "object",
+        "properties": {
+          "program": {
+            "type": "string",
+            "minLength": 1
+          },
+          "args": {
+            "type": "array"
+          },
+          "cwd": {
+            "type": "string",
+            "minLength": 1
+          },
+          "env": {
+            "type": "object"
+          },
+          "stdin": {
+            "type": "string"
+          },
+          "okExitCodes": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "encoding": {
+            "enum": [
+              "auto",
+              "utf-8",
+              "shift_jis"
+            ]
+          }
+        },
+        "required": [
+          "program"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "scenario.call",
+      "params": {
+        "type": "object",
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "inputs": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          },
+          "outputs": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          }
+        },
+        "required": [
+          "scenario"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "variable.set",
+      "params": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "value": {},
+          "expression": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "value"
+            ]
+          },
+          {
+            "required": [
+              "expression"
+            ]
+          }
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [
+        "expression"
+      ],
+      "bindsVariables": [
+        "name"
+      ],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "wait.until",
+      "params": {
+        "type": "object",
+        "properties": {
+          "condition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "intervalMs": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 50,
+                "maximum": 60000
+              },
+              {
+                "type": "string",
+                "pattern": "^\\s*\\{\\{.*\\}\\}\\s*$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "condition"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [
+        "check"
+      ],
+      "hasOutput": false,
+      "risk": "safe",
+      "expressionParams": [
+        "condition"
+      ],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    }
+  ]
+}

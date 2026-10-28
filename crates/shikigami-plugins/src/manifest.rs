@@ -5,7 +5,9 @@ use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
-use shikigami_core::registry::{RiskLevel, StepCategory, StepRegistry, StepTypeDef};
+use shikigami_core::registry::{
+    Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef,
+};
 use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef};
 use shikigami_core::secret::text_or_secret_schema;
 use shikigami_core::{Scenario, Step, Validator};
@@ -94,6 +96,9 @@ pub struct StepManifest {
     pub resources: Vec<ResourceManifest>,
     #[serde(default)]
     pub default_timeout_ms: Option<u64>,
+    /// Marks the step as one to stop using (it keeps working).
+    #[serde(default)]
+    pub deprecated: Option<Deprecation>,
 }
 
 fn interactive() -> RiskLevel {
@@ -170,8 +175,12 @@ impl Manifest {
                 "choose a name of your own, e.g. the system's name",
             );
         }
-        if self.version.trim().is_empty() {
-            p.add("version", "is empty", "write e.g. 0.1.0");
+        if let Err(e) = semver::Version::parse(&self.version) {
+            p.add(
+                "version",
+                format!("'{}' is not a semver version ({e})", self.version),
+                "write major.minor.patch, e.g. 0.1.0; raise major when params change incompatibly",
+            );
         }
         if self.label.trim().is_empty() {
             p.add("label", "is empty", "write the name people see in Studio");
@@ -375,6 +384,11 @@ impl Manifest {
             resources,
             secret_params: step.secret_params.clone(),
             default_timeout_ms: step.default_timeout_ms,
+            deprecated: step.deprecated.clone(),
+            plugin: Some(PluginInfo {
+                name: self.name.clone(),
+                version: self.version.clone(),
+            }),
         })
     }
 }

@@ -328,6 +328,31 @@ fn bad_manifests_are_rejected_with_hints() {
     let mut typo = manifest("t", json!([echo_step(json!({}))]));
     typo["comand"] = json!({});
     has(&problems(typo), "unknown field");
+    // Scenarios record the version in `requires`, so it must be semver.
+    let mut loose = manifest("t", json!([echo_step(json!({}))]));
+    loose["version"] = json!("1.2");
+    has(&problems(loose), "not a semver version");
+}
+
+#[test]
+fn step_types_carry_their_plugin_and_deprecation() {
+    let dir = plugin_dir(
+        manifest(
+            "t",
+            json!([echo_step(json!({
+                "deprecated": { "note": "Use t.echo2.", "replacement": "t.echo2" }
+            }))]),
+        ),
+        ECHO,
+    );
+    let plugin = Plugin::load(dir.path(), &[]).unwrap();
+    let def = &plugin.step_defs()[0];
+    let info = def.plugin.as_ref().unwrap();
+    assert_eq!((info.name.as_str(), info.version.as_str()), ("t", "0.0.1"));
+    assert_eq!(
+        def.deprecated.as_ref().unwrap().replacement.as_deref(),
+        Some("t.echo2")
+    );
 }
 
 #[test]

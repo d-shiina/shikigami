@@ -12,6 +12,7 @@ pub mod migrate;
 pub mod model;
 pub mod ops;
 pub mod registry;
+pub mod requires;
 pub mod resource;
 pub mod review;
 pub mod schema;
@@ -29,7 +30,7 @@ pub use model::{
     Step, VarDirection, VarType, VariableDef,
 };
 pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
-pub use registry::{RiskLevel, StepCategory, StepRegistry, StepTypeDef};
+pub use registry::{Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef};
 pub use review::{
     ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,
     ObservationContent, ObservationSource, ReviewTimeline, ReviewVerdict, StepNote, TestRun,

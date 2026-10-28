@@ -1,0 +1,2520 @@
+{
+  "tools": [
+    {
+      "name": "add_step",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "Step": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/StepId"
+              },
+              "type": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "blocks": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Step"
+                  }
+                }
+              },
+              "disabled": {
+                "type": "boolean"
+              },
+              "timeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "retry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "saveAs": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "meta": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "type"
+            ]
+          },
+          "StepId": {
+            "type": "string"
+          },
+          "RetryPolicy": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "backoffMs": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 1000
+              },
+              "backoffMultiplier": {
+                "type": "number",
+                "format": "double",
+                "default": 2.0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "maxAttempts"
+            ]
+          },
+          "OnError": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "fail"
+              },
+              {
+                "type": "string",
+                "const": "continue"
+              }
+            ]
+          },
+          "Position": {
+            "type": "object",
+            "properties": {
+              "parentId": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/StepId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "block": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "step": {
+            "$ref": "#/$defs/Step"
+          },
+          "position": {
+            "$ref": "#/$defs/Position",
+            "default": {}
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "scenarioId",
+          "step"
+        ]
+      },
+      "class": "write"
+    },
+    {
+      "name": "create_scenario",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "VariableDef": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/$defs/VarType",
+                "default": "any"
+              },
+              "direction": {
+                "$ref": "#/$defs/VarDirection",
+                "default": "local"
+              },
+              "default": true,
+              "description": {
+                "type": "string"
+              },
+              "secret": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ]
+          },
+          "VarType": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "object",
+              "array",
+              "any"
+            ]
+          },
+          "VarDirection": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local"
+                ]
+              },
+              {
+                "type": "string",
+                "const": "input"
+              },
+              {
+                "type": "string",
+                "const": "output"
+              },
+              {
+                "type": "string",
+                "const": "inOut"
+              }
+            ]
+          },
+          "Step": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/StepId"
+              },
+              "type": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "blocks": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Step"
+                  }
+                }
+              },
+              "disabled": {
+                "type": "boolean"
+              },
+              "timeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "retry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "saveAs": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "meta": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "type"
+            ]
+          },
+          "StepId": {
+            "type": "string"
+          },
+          "RetryPolicy": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "backoffMs": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 1000
+              },
+              "backoffMultiplier": {
+                "type": "number",
+                "format": "double",
+                "default": 2.0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "maxAttempts"
+            ]
+          },
+          "OnError": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "fail"
+              },
+              {
+                "type": "string",
+                "const": "continue"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "default": ""
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/VariableDef"
+            },
+            "default": []
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Step"
+            },
+            "default": []
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "class": "write"
+    },
+    {
+      "name": "create_version",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "default": ""
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
+      "name": "delete_scenario",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "expectedRevision"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
+      "name": "diff_versions",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "from": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0
+          },
+          "to": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "export_scenario",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "includeVersions": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "extract_subscenario",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "stepIds",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "stepIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
+      "name": "get_history",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "get_review",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "sinceRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "get_run_logs",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "runId"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "afterSeq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint",
+            "minimum": 0
+          },
+          "variable": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "get_run_status",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "runId"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "get_scenario",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "get_step_schema",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "get_version",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "number"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "import_scenario",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "ImportConflict": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "update"
+              },
+              {
+                "type": "string",
+                "const": "copy"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "bundle": {},
+          "onConflict": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ImportConflict"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "bundle"
+        ]
+      },
+      "class": "write"
+    },
+    {
+      "name": "inspect_page",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target": {},
+          "screenshot": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "class": "run"
+    },
+    {
+      "name": "inspect_ui",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "window": {},
+          "element": {},
+          "maxNodes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "type": "object"
+      },
+      "class": "run"
+    },
+    {
+      "name": "list_runs",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "scenarioId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "type": "object"
+      },
+      "class": "read"
+    },
+    {
+      "name": "list_scenarios",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "class": "read"
+    },
+    {
+      "name": "list_secrets",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "class": "read"
+    },
+    {
+      "name": "list_step_types",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "class": "read"
+    },
+    {
+      "name": "list_versions",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
+      "name": "move_step",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "Position": {
+            "type": "object",
+            "properties": {
+              "parentId": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/StepId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "block": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint",
+                "minimum": 0
+              }
+            }
+          },
+          "StepId": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/$defs/Position"
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "scenarioId",
+          "stepId",
+          "position"
+        ]
+      },
+      "class": "write"
+    },
+    {
+      "name": "redo",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
+      "name": "remove_step",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "stepId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
+      "name": "request_secret",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "SecretField": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "username",
+                  "password"
+                ]
+              },
+              {
+                "type": "string",
+                "const": "totp"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SecretField"
+            },
+            "default": []
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "waitMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "class": "write"
+    },
+    {
+      "name": "restore_version",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "number"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
+      "name": "run_scenario",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": true,
+            "default": {}
+          },
+          "waitMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "run"
+    },
+    {
+      "name": "stop_scenario",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "runId"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "run"
+    },
+    {
+      "name": "test_step",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "Step": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/StepId"
+              },
+              "type": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "blocks": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Step"
+                  }
+                }
+              },
+              "disabled": {
+                "type": "boolean"
+              },
+              "timeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "retry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "saveAs": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "meta": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "type"
+            ]
+          },
+          "StepId": {
+            "type": "string"
+          },
+          "RetryPolicy": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "backoffMs": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 1000
+              },
+              "backoffMultiplier": {
+                "type": "number",
+                "format": "double",
+                "default": 2.0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "maxAttempts"
+            ]
+          },
+          "OnError": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "fail"
+              },
+              {
+                "type": "string",
+                "const": "continue"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "step": {
+            "$ref": "#/$defs/Step"
+          }
+        },
+        "required": [
+          "step"
+        ]
+      },
+      "class": "run"
+    },
+    {
+      "name": "undo",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
+      "name": "update_scenario",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "EditOp": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "addStep"
+                  },
+                  "step": {
+                    "$ref": "#/$defs/Step"
+                  },
+                  "position": {
+                    "$ref": "#/$defs/Position",
+                    "default": {}
+                  }
+                },
+                "required": [
+                  "op",
+                  "step"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "updateStep"
+                  },
+                  "stepId": {
+                    "$ref": "#/$defs/StepId"
+                  },
+                  "patch": {
+                    "$ref": "#/$defs/StepPatch"
+                  }
+                },
+                "required": [
+                  "op",
+                  "stepId",
+                  "patch"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "removeStep"
+                  },
+                  "stepId": {
+                    "$ref": "#/$defs/StepId"
+                  }
+                },
+                "required": [
+                  "op",
+                  "stepId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "moveStep"
+                  },
+                  "stepId": {
+                    "$ref": "#/$defs/StepId"
+                  },
+                  "position": {
+                    "$ref": "#/$defs/Position"
+                  }
+                },
+                "required": [
+                  "op",
+                  "stepId",
+                  "position"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "updateScenario"
+                  },
+                  "patch": {
+                    "$ref": "#/$defs/ScenarioPatch"
+                  }
+                },
+                "required": [
+                  "op",
+                  "patch"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "setVariable"
+                  },
+                  "variable": {
+                    "$ref": "#/$defs/VariableDef"
+                  },
+                  "index": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "format": "uint",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "op",
+                  "variable"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "removeVariable"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "op",
+                  "name"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "replaceSteps"
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Step"
+                    }
+                  }
+                },
+                "required": [
+                  "op",
+                  "steps"
+                ]
+              }
+            ]
+          },
+          "Step": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/StepId"
+              },
+              "type": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "blocks": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Step"
+                  }
+                }
+              },
+              "disabled": {
+                "type": "boolean"
+              },
+              "timeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "retry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "saveAs": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "meta": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "type"
+            ]
+          },
+          "StepId": {
+            "type": "string"
+          },
+          "RetryPolicy": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "backoffMs": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 1000
+              },
+              "backoffMultiplier": {
+                "type": "number",
+                "format": "double",
+                "default": 2.0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "maxAttempts"
+            ]
+          },
+          "OnError": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "fail"
+              },
+              {
+                "type": "string",
+                "const": "continue"
+              }
+            ]
+          },
+          "Position": {
+            "type": "object",
+            "properties": {
+              "parentId": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/StepId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "block": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint",
+                "minimum": 0
+              }
+            }
+          },
+          "StepPatch": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "params": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              },
+              "replaceParams": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              },
+              "disabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "timeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "retry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "saveAs": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "meta": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "ScenarioPatch": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "settings": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ScenarioSettings"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "tags": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "requires": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "ScenarioSettings": {
+            "type": "object",
+            "properties": {
+              "defaultTimeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "defaultRetry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "VariableDef": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/$defs/VarType",
+                "default": "any"
+              },
+              "direction": {
+                "$ref": "#/$defs/VarDirection",
+                "default": "local"
+              },
+              "default": true,
+              "description": {
+                "type": "string"
+              },
+              "secret": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ]
+          },
+          "VarType": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "object",
+              "array",
+              "any"
+            ]
+          },
+          "VarDirection": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local"
+                ]
+              },
+              {
+                "type": "string",
+                "const": "input"
+              },
+              {
+                "type": "string",
+                "const": "output"
+              },
+              {
+                "type": "string",
+                "const": "inOut"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "ops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/EditOp"
+            }
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "scenarioId",
+          "ops"
+        ]
+      },
+      "class": "write"
+    },
+    {
+      "name": "update_step",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "StepPatch": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "params": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              },
+              "replaceParams": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              },
+              "disabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "timeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "retry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "saveAs": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "meta": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "RetryPolicy": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "backoffMs": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 1000
+              },
+              "backoffMultiplier": {
+                "type": "number",
+                "format": "double",
+                "default": 2.0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "maxAttempts"
+            ]
+          },
+          "OnError": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "fail"
+              },
+              {
+                "type": "string",
+                "const": "continue"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "patch": {
+            "$ref": "#/$defs/StepPatch"
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "scenarioId",
+          "stepId",
+          "patch"
+        ]
+      },
+      "class": "write"
+    },
+    {
+      "name": "validate_scenario",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "Scenario": {
+            "type": "object",
+            "properties": {
+              "$schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "schemaVersion": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "id": {
+                "$ref": "#/$defs/ScenarioId"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "requires": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "revision": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 0
+              },
+              "variables": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/VariableDef"
+                }
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Step"
+                },
+                "default": []
+              },
+              "settings": {
+                "$ref": "#/$defs/ScenarioSettings"
+              },
+              "metadata": {
+                "$ref": "#/$defs/Metadata",
+                "default": {}
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "schemaVersion",
+              "id",
+              "name"
+            ]
+          },
+          "ScenarioId": {
+            "type": "string"
+          },
+          "VariableDef": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/$defs/VarType",
+                "default": "any"
+              },
+              "direction": {
+                "$ref": "#/$defs/VarDirection",
+                "default": "local"
+              },
+              "default": true,
+              "description": {
+                "type": "string"
+              },
+              "secret": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ]
+          },
+          "VarType": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "object",
+              "array",
+              "any"
+            ]
+          },
+          "VarDirection": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local"
+                ]
+              },
+              {
+                "type": "string",
+                "const": "input"
+              },
+              {
+                "type": "string",
+                "const": "output"
+              },
+              {
+                "type": "string",
+                "const": "inOut"
+              }
+            ]
+          },
+          "Step": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/StepId"
+              },
+              "type": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "blocks": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Step"
+                  }
+                }
+              },
+              "disabled": {
+                "type": "boolean"
+              },
+              "timeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "retry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "saveAs": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "meta": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "type"
+            ]
+          },
+          "StepId": {
+            "type": "string"
+          },
+          "RetryPolicy": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "backoffMs": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0,
+                "default": 1000
+              },
+              "backoffMultiplier": {
+                "type": "number",
+                "format": "double",
+                "default": 2.0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "maxAttempts"
+            ]
+          },
+          "OnError": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "fail"
+              },
+              {
+                "type": "string",
+                "const": "continue"
+              }
+            ]
+          },
+          "ScenarioSettings": {
+            "type": "object",
+            "properties": {
+              "defaultTimeoutMs": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "defaultRetry": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RetryPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "onError": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OnError"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "Metadata": {
+            "type": "object",
+            "properties": {
+              "createdAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "updatedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scenario": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Scenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "class": "read"
+    }
+  ]
+}

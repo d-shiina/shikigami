@@ -94,6 +94,8 @@ fn flaky_def() -> StepTypeDef {
         resources: vec![],
         secret_params: vec![],
         default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
     }
 }
 
@@ -596,6 +598,8 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
         resources: vec![ResourceDef::Static(DESKTOP_INPUT.into())],
         secret_params: vec![],
         default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
         ..flaky_def()
     };
     let runtime = Runtime::builder()
@@ -635,6 +639,8 @@ async fn steps_on_the_same_file_take_turns() {
         resources: vec![ResourceDef::file("path")],
         secret_params: vec![],
         default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
         ..flaky_def()
     };
     let runtime = Runtime::builder()
@@ -1013,6 +1019,8 @@ fn typing_def() -> StepTypeDef {
         has_output: true,
         secret_params: vec!["value".into()],
         default_timeout_ms: Some(50),
+        deprecated: None,
+        plugin: None,
         ..flaky_def()
     }
 }

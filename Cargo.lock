@@ -4150,6 +4150,7 @@ dependencies = [
  "jsonschema",
  "regex",
  "schemars 1.2.3",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",
@@ -4229,6 +4230,7 @@ version = "0.1.0"
 dependencies = [
  "dirs",
  "jsonschema",
+ "semver",
  "serde",
  "serde_json",
  "shikigami-core",

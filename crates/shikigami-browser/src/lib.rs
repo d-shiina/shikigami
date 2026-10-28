@@ -564,6 +564,8 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 resources,
                 secret_params: d.secret_params.iter().map(|p| (*p).to_owned()).collect(),
                 default_timeout_ms: d.default_timeout_ms,
+                deprecated: None,
+                plugin: None,
             };
             (def, d.method)
         })

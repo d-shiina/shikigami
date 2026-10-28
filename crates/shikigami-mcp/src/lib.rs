@@ -13,7 +13,7 @@ mod params;
 mod server;
 
 pub use params::*;
-pub use server::{ServerOptions, ShikigamiMcp, ToolClass};
+pub use server::{ServerOptions, ShikigamiMcp, ToolClass, tool_contract};
 
 use std::sync::Arc;
 

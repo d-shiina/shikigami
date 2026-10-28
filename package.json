@@ -1,6 +1,7 @@
 {
   "name": "shikigami",
   "private": true,
+  "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.3",
   "scripts": {
     "schema:generate": "cargo run -q -p shikigami-cli -- schema export && pnpm --filter @shikigami/schema generate",

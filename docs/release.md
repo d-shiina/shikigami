@@ -39,6 +39,7 @@ GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` �
 
 ## リリースの手順
 
+1. [CHANGELOG.md](../CHANGELOG.md) の「未リリース」を版番号と日付の見出しにする（破壊的変更・非推奨は [compatibility.md](compatibility.md) §9）
 1. ルートの `Cargo.toml` の `[workspace.package]` の `version` を上げる（Studio・CLI・MCP サーバーはこの 1 か所でバージョンが決まります）。`cargo check` で `Cargo.lock` も更新してコミット
 2. 同じバージョンのタグを push する
 
