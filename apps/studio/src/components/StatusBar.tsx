@@ -118,6 +118,7 @@ function Waiting() {
 const RUN_LABEL: Record<string, string> = {
   pending: "実行待ち",
   running: "実行中",
+  paused: "一時停止中",
   succeeded: "実行：成功",
   failed: "実行：失敗",
   cancelled: "実行：停止",
@@ -128,10 +129,10 @@ function RunStatus() {
   const steps = useStudio((s) => s.scenario?.steps);
   const goTo = useStudio((s) => s.goTo);
   if (!run) return null;
-  const current = run.status === "running" ? run.starts.at(-1)?.stepId : undefined;
+  const current = run.status === "paused" ? run.pause?.stepId : run.status === "running" ? run.starts.at(-1)?.stepId : undefined;
   const name = current ? findName(steps ?? [], current) : undefined;
   const color =
-    run.status === "running" ? "bg-accent-500 animate-pulse" : run.status === "succeeded" ? "bg-moegi-500" : run.status === "failed" ? "bg-shu-500" : "bg-slate-400";
+    run.status === "running" ? "bg-accent-500 animate-pulse" : run.status === "paused" ? (run.pause?.reason === "error" ? "bg-shu-500" : "bg-mizu-500") : run.status === "succeeded" ? "bg-moegi-500" : run.status === "failed" ? "bg-shu-500" : "bg-slate-400";
   return (
     <button type="button" className={BUTTON} onClick={() => current && goTo(current)} title={current ? "実行中の手順へ移動" : undefined}>
       <span className={`h-2 w-2 rounded-full ${color}`} />

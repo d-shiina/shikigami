@@ -397,3 +397,43 @@ async fn a_failed_call_still_hands_back_what_it_assigned() {
     // `y` was never assigned inside, so the caller's value stays.
     assert_eq!(report.outputs.get("y"), Some(&json!("keep")));
 }
+
+#[tokio::test]
+async fn an_interactive_run_pauses_at_the_call_step_not_inside_the_callee() {
+    let mut broken = Scenario::new("壊れている");
+    broken.id = "scn_broken".into();
+    broken.steps = vec![Step::new("control.fail").with_param("message", "boom")];
+    let broken = with_ids(broken, "b");
+    let main = caller(
+        vec![call("scn_broken", json!({}), json!({})), set("after", "1")],
+        vec![],
+    );
+    let mut handle = Runtime::new()
+        .start(
+            main,
+            RunOptions {
+                subscenarios: subs(vec![broken]),
+                debug: Some(crate::DebugOptions {
+                    pause_on_error: true,
+                    ..Default::default()
+                }),
+                ..RunOptions::default()
+            },
+        )
+        .expect("start");
+    let control = handle.debug_control().expect("debug control");
+    let mut paused_at = Vec::new();
+    while let Some(event) = tokio::time::timeout(Duration::from_secs(5), handle.next_event())
+        .await
+        .expect("the run stalled")
+    {
+        if let RunEvent::Paused { step_id, .. } = &event.event {
+            paused_at.push(step_id.to_string());
+            control.send(crate::DebugCommand::Skip).expect("skip");
+        }
+    }
+    let report = handle.wait().await.expect("wait");
+    assert_eq!(paused_at, vec!["m1".to_owned()]);
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs.get("after"), None);
+}

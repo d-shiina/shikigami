@@ -70,7 +70,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; breakpoint: boolean; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -90,9 +90,28 @@ const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: string 
 const RUN_STYLE: Record<StepRunState, string> = {
   running: "ring-2 ring-accent-500 animate-pulse",
   succeeded: "ring-2 ring-moegi-500/60",
-  failed: "ring-2 ring-shu-500",
+  failed: "ring-[3px] ring-shu-500 shadow-[0_0_0_9px_color-mix(in_srgb,var(--color-shu-500)_18%,transparent)]",
   skipped: "opacity-60",
+  paused: "ring-[3px] ring-mizu-500 shadow-[0_0_0_9px_color-mix(in_srgb,var(--color-mizu-500)_18%,transparent)]",
 };
+
+/** Click target left of a step's header: a red dot when the run pauses before it. */
+function BreakpointDot({ stepId, on }: { stepId: string; on: boolean }) {
+  const toggle = useStudio((s) => s.toggleBreakpoint);
+  return (
+    <button
+      type="button"
+      title={on ? "ブレークポイントを外す (F9)" : "ここで一時停止する（ブレークポイント, F9）"}
+      onClick={(e) => {
+        e.stopPropagation();
+        toggle(stepId);
+      }}
+      className={`nodrag absolute -top-[7px] -left-[7px] z-10 h-[14px] w-[14px] rounded-full border-2 ${
+        on ? "border-sheet bg-shu-500 shadow" : "border-transparent bg-transparent group-hover:border-shu-500/60 group-hover:bg-sheet"
+      }`}
+    />
+  );
+}
 
 /** 残す / 取り消す for an unreviewed AI edit, floating beside its node. */
 function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
@@ -356,6 +375,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
 const INNER_MARK: Record<StepRunState, { text: string; className: string }> = {
   running: { text: "●", className: "text-accent-500 animate-pulse" },
   succeeded: { text: "✓", className: "text-moegi-600" },
+  paused: { text: "❚❚", className: "text-mizu-500" },
   failed: { text: "✕", className: "text-shu-600" },
   skipped: { text: "–", className: "text-slate-400" },
 };
@@ -456,7 +476,7 @@ function StepNode({ data }: StepNodeProps) {
     <div
       style={{ width: NODE_W }}
       // The selected step is lifted off the stack: two sheet edges and a deeper shadow.
-      className={`relative rounded-[4px] border bg-sheet transition-shadow ${data.selected ? "shadow-lifted" : "shadow-node hover:shadow-raised"} ${
+      className={`group relative rounded-[4px] border bg-sheet transition-shadow ${data.selected ? "shadow-lifted" : "shadow-node hover:shadow-raised"} ${
         data.diff
           ? `border-2 ${DIFF_STYLE[data.diff].border}`
           : data.byAi
@@ -474,6 +494,16 @@ function StepNode({ data }: StepNodeProps) {
         </NodeToolbar>
       )}
       <FlowHandles />
+      <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} />
+      {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
+        <span
+          className={`absolute top-full left-1 z-10 mt-1.5 rounded-[4px] px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
+            data.runState === "failed" ? "bg-shu-500" : "bg-mizu-500"
+          }`}
+        >
+          {data.runState === "failed" ? "✕ ここで止まっています" : "❚❚ ここで一時停止中"}
+        </span>
+      )}
       {data.note && (
         <span
           title={data.note}
@@ -606,10 +636,19 @@ function Follow() {
   useEffect(() => {
     if (running) bring.current(running);
   }, [running]);
+  // Where a run paused, once the pause panel has taken its room from the canvas.
+  const paused = useStudio((s) => (s.run?.status === "paused" ? s.run.pause?.seq : undefined));
+  const pausedAt = useStudio((s) => s.run?.pause?.stepId);
+  useEffect(() => {
+    if (paused === undefined || !pausedAt) return;
+    const timer = setTimeout(() => bring.current(pausedAt), 120);
+    return () => clearTimeout(timer);
+  }, [paused, pausedAt]);
   return null;
 }
 
 const nodeTypes = { step: StepNode, slot: SlotNode };
+const NO_BREAKPOINTS: string[] = [];
 
 export function FlowCanvas() {
   const scenario = useStudio((s) => s.scenario);
@@ -617,6 +656,7 @@ export function FlowCanvas() {
   const selection = useStudio((s) => s.selection);
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
+  const breakpoints = useStudio((s) => (s.scenario ? s.breakpoints[s.scenario.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const theme = useTheme().mode;
@@ -697,6 +737,8 @@ export function FlowCanvas() {
         data: {
           ...n.data,
           runState: run?.steps[id],
+          breakpoint: breakpoints.includes(id),
+          pausedHere: run?.pause?.stepId === id,
           issueCount: issueCounts.get(id) ?? 0,
           selected: selection?.kind === "step" && selection.stepId === id,
           byAi: !reviewing && reviews.has(id),

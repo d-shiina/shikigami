@@ -22,6 +22,7 @@ use tokio::sync::{OwnedMutexGuard, Semaphore, mpsc};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
+use crate::debug::{BlockKey, DebugCommand, Debugger, PauseReason, ResumeAction};
 use crate::event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunSnapshot, RunStatus, StepOutcome,
 };
@@ -322,6 +323,9 @@ pub(crate) enum Flow {
     Next,
     Break,
     Continue,
+    /// Interactive runs: read the step again from the current revision and
+    /// run it (after a pause that swapped the scenario, or a retry).
+    Retry,
 }
 
 pub(crate) enum Interrupt {
@@ -356,6 +360,11 @@ pub(crate) struct Executor {
     pub default_retry: Option<RetryPolicy>,
     pub default_on_error: OnError,
     pub resources: Arc<ResourceLocks>,
+    /// Set for interactive runs, on the main line only (not in forks).
+    pub debug: Option<Arc<Debugger>>,
+    /// How many enclosing steps handle an error (a `try` with a `catch`, a
+    /// `wait.until` with `onError: continue`): errors there do not pause.
+    pub handled_depth: u32,
     /// Scenarios `scenario.call` can run, as they were when the run started.
     pub library: Arc<HashMap<ScenarioId, Arc<Scenario>>>,
 }
@@ -405,6 +414,8 @@ impl Executor {
             default_retry: self.default_retry,
             default_on_error: self.default_on_error,
             resources: self.resources.clone(),
+            debug: None,
+            handled_depth: 0,
             library: self.library.clone(),
         }
     }
@@ -445,6 +456,193 @@ impl Executor {
         self.vars.insert(name.to_owned(), value);
     }
 
+    /// Runs a control step's block. Interactive runs read each step from
+    /// the current revision as they reach it (see `debug`).
+    fn sub_block<'a>(&'a mut self, parent: &'a Step, name: &'a str) -> BoxFuture<'a, StepResult> {
+        match self.debug.clone() {
+            Some(debug) => self.live_block(
+                debug,
+                BlockKey::Child {
+                    parent: parent.id.clone(),
+                    name: name.to_owned(),
+                },
+            ),
+            None => self.block(parent.block(name)),
+        }
+    }
+
+    /// Runs the scenario's top-level steps.
+    pub(crate) fn top_block<'a>(&'a mut self, steps: &'a [Step]) -> BoxFuture<'a, StepResult> {
+        match self.debug.clone() {
+            Some(debug) => self.live_block(debug, BlockKey::Top),
+            None => self.block(steps),
+        }
+    }
+
+    fn live_block(&mut self, debug: Arc<Debugger>, key: BlockKey) -> BoxFuture<'_, StepResult> {
+        Box::pin(async move {
+            debug.push_frame(key.clone());
+            let mut prev: Option<StepId> = None;
+            let result = loop {
+                let Some(step) = debug.next_step(&key, prev.as_ref()) else {
+                    break Ok(Flow::Next);
+                };
+                debug.set_current(Some(step.id.clone()));
+                match self.step(&step).await {
+                    // A step the new revision removed (skipped while paused)
+                    // leaves the cursor where it was.
+                    Ok(Flow::Next) if !debug.in_block(&key, &step.id) => {}
+                    Ok(Flow::Next) => {
+                        debug.finished(step.id.clone());
+                        prev = Some(step.id);
+                    }
+                    Ok(Flow::Retry) => {}
+                    other => break other,
+                }
+            };
+            debug.pop_frame();
+            result
+        })
+    }
+
+    /// Runs a block whose errors an enclosing step handles (when `handled`).
+    async fn handled_block(&mut self, handled: bool, parent: &Step, name: &str) -> StepResult {
+        let depth = u32::from(handled);
+        self.handled_depth += depth;
+        let result = self.sub_block(parent, name).await;
+        self.handled_depth -= depth;
+        result
+    }
+
+    fn effective_on_error(&self, step: &Step) -> OnError {
+        step.on_error.unwrap_or(self.default_on_error)
+    }
+
+    /// Whether `error` at `step` should pause the run: interactive, and
+    /// nothing in the scenario handles it.
+    fn pauses_on_error(&self, step: &Step, error: &RunError) -> bool {
+        let Some(debug) = &self.debug else {
+            return false;
+        };
+        let own_on_error =
+            !is_control_type(&step.step_type) || step.step_type == control::WAIT_UNTIL;
+        debug.pause_on_error()
+            && !debug.is_given_up(error)
+            && self.handled_depth == 0
+            && !(own_on_error && self.effective_on_error(step) == OnError::Continue)
+    }
+
+    /// Values of all variables for a `paused` event.
+    fn variable_values(&self) -> Map<String, Value> {
+        self.vars
+            .iter()
+            .map(|(name, value)| {
+                let value = if self.secret_vars.iter().any(|s| s == name) {
+                    Value::String(MASK.into())
+                } else {
+                    preview(self.emitter.mask_value(value)).0
+                };
+                (name.clone(), value)
+            })
+            .collect()
+    }
+
+    /// Pauses before or after `step` and waits for a person. Returns the
+    /// command and whether a newer revision was swapped in meanwhile.
+    async fn pause(
+        &mut self,
+        debug: &Debugger,
+        reason: PauseReason,
+        step: &Step,
+        error: Option<&RunError>,
+    ) -> Result<(DebugCommand, bool), Interrupt> {
+        debug.enter_pause(reason);
+        self.emitter.update_snapshot(|s| {
+            s.status = RunStatus::Paused;
+            s.current_step = Some(step.id.clone());
+        });
+        self.emitter.emit(RunEvent::Paused {
+            step_id: step.id.clone(),
+            step_type: step.step_type.clone(),
+            reason,
+            error: error.map(|e| self.emitter.mask_error(e.clone())),
+            variables: self.variable_values(),
+            revision: debug.scenario().revision,
+        });
+        let waited = Instant::now();
+        let command = tokio::select! {
+            biased;
+            () = self.cancel.cancelled() => {
+                debug.leave_pause();
+                return Err(Interrupt::Cancelled);
+            }
+            command = debug.wait() => command,
+        };
+        debug.add_paused(duration_ms(waited));
+        let updated = debug.take_updated();
+        if updated {
+            self.adopt(&debug.scenario());
+        }
+        self.emitter
+            .update_snapshot(|s| s.status = RunStatus::Running);
+        self.emitter.emit(RunEvent::Resumed {
+            action: match command {
+                DebugCommand::StepOver => ResumeAction::StepOver,
+                DebugCommand::StepInto => ResumeAction::StepInto,
+                DebugCommand::StepOut => ResumeAction::StepOut,
+                DebugCommand::Retry => ResumeAction::Retry,
+                DebugCommand::Skip => ResumeAction::Skip,
+                DebugCommand::Abort => ResumeAction::Abort,
+                _ => ResumeAction::Continue,
+            },
+            revision: updated.then(|| debug.scenario().revision),
+        });
+        Ok((command, updated))
+    }
+
+    /// Catches up with a revision swapped in while paused: newly declared
+    /// variables get their defaults (values of the others stay), and the
+    /// scenario settings apply from now on.
+    fn adopt(&mut self, scenario: &Scenario) {
+        self.secret_vars = scenario
+            .variables
+            .iter()
+            .filter(|v| v.secret)
+            .map(|v| v.name.clone())
+            .collect();
+        for var in &scenario.variables {
+            if !self.vars.contains_key(&var.name) {
+                let value = var.default.clone().unwrap_or(Value::Null);
+                if var.secret {
+                    self.emitter.add_secret(&value);
+                }
+                self.set_var(&var.name, value, None);
+            }
+        }
+        self.default_timeout_ms = scenario
+            .settings
+            .default_timeout_ms
+            .unwrap_or(DEFAULT_TIMEOUT_MS);
+        self.default_retry = scenario.settings.default_retry;
+        self.default_on_error = scenario.settings.on_error.unwrap_or(OnError::Fail);
+    }
+
+    /// Total time this run has spent paused so far.
+    fn paused_ms(&self) -> u64 {
+        self.debug.as_ref().map_or(0, |d| d.paused_ms())
+    }
+
+    fn skipped(&self, step: &Step) {
+        self.emitter.emit(RunEvent::StepFinished {
+            step_id: step.id.clone(),
+            step_type: step.step_type.clone(),
+            outcome: StepOutcome::Skipped,
+            duration_ms: 0,
+            error: None,
+            will_retry: false,
+        });
+    }
+
     fn check_cancel(&self) -> Result<(), Interrupt> {
         if self.cancel.is_cancelled() {
             Err(Interrupt::Cancelled)
@@ -470,15 +668,25 @@ impl Executor {
     async fn step(&mut self, step: &Step) -> StepResult {
         self.check_cancel()?;
         if step.disabled {
-            self.emitter.emit(RunEvent::StepFinished {
-                step_id: step.id.clone(),
-                step_type: step.step_type.clone(),
-                outcome: StepOutcome::Skipped,
-                duration_ms: 0,
-                error: None,
-                will_retry: false,
-            });
+            self.skipped(step);
             return Ok(Flow::Next);
+        }
+        if let Some(debug) = self.debug.clone()
+            && let Some(reason) = debug.should_pause(&step.id)
+        {
+            match self.pause(&debug, reason, step, None).await? {
+                (DebugCommand::Skip, _) => {
+                    self.skipped(step);
+                    return Ok(Flow::Next);
+                }
+                (DebugCommand::Abort, _) => return Err(Interrupt::Cancelled),
+                // The step may have changed: run it as it is now.
+                (_, true) => {
+                    debug.skip_pause_once(step.id.clone());
+                    return Ok(Flow::Retry);
+                }
+                _ => {}
+            }
         }
         // Inside a call the snapshot keeps showing the call step.
         let top_level = self.emitter.call_depth() == 0;
@@ -539,10 +747,11 @@ impl Executor {
                 step.step_type.as_str(),
                 control::WAIT_UNTIL | scenario::CALL
             ) {
-                return result;
+                return self.on_failure(step, result).await;
             }
         }
 
+        let result = self.on_failure(step, result).await;
         match result {
             Err(Interrupt::Failed(error))
                 if step.on_error.unwrap_or(self.default_on_error) == OnError::Continue =>
@@ -560,6 +769,41 @@ impl Executor {
         }
     }
 
+    /// Interactive runs: pauses on an error nothing handles and does what
+    /// the person chooses. Other results pass through.
+    async fn on_failure(&mut self, step: &Step, result: StepResult) -> StepResult {
+        let Some(debug) = self.debug.clone() else {
+            return result;
+        };
+        let error = match &result {
+            Err(Interrupt::Failed(error)) if self.pauses_on_error(step, error) => error.clone(),
+            _ => return result,
+        };
+        match self
+            .pause(&debug, PauseReason::Error, step, Some(&error))
+            .await?
+        {
+            (DebugCommand::Skip, _) => {
+                self.emitter.log(
+                    LogLevel::Warn,
+                    format!("失敗したステップを飛ばして続行します: {}", error.message),
+                    Some(step.id.clone()),
+                );
+                self.skipped(step);
+                Ok(Flow::Next)
+            }
+            (DebugCommand::Abort, _) => {
+                debug.give_up(error);
+                result
+            }
+            // Retry, or resume (which starts with the failed step).
+            _ => {
+                debug.skip_pause_once(step.id.clone());
+                Ok(Flow::Retry)
+            }
+        }
+    }
+
     async fn control(&mut self, step: &Step) -> StepResult {
         match step.step_type.as_str() {
             control::IF => {
@@ -569,7 +813,7 @@ impl Executor {
                 } else {
                     "else"
                 };
-                self.block(step.block(branch)).await
+                self.sub_block(step, branch).await
             }
             control::WHILE => {
                 let condition = Expr::parse(param_str(step, "condition")?).map_err(expr_error)?;
@@ -592,7 +836,7 @@ impl Executor {
                         )
                         .into());
                     }
-                    if let Flow::Break = self.block(step.block("body")).await? {
+                    if let Flow::Break = self.sub_block(step, "body").await? {
                         break;
                     }
                 }
@@ -616,7 +860,7 @@ impl Executor {
                     if let Some(name) = &index_var {
                         self.set_var(name, Value::from(i), Some(&step.id));
                     }
-                    if let Flow::Break = self.block(step.block("body")).await? {
+                    if let Flow::Break = self.sub_block(step, "body").await? {
                         break;
                     }
                 }
@@ -630,7 +874,8 @@ impl Executor {
                     .and_then(Value::as_str)
                     .unwrap_or("error")
                     .to_owned();
-                let mut result = self.block(step.block("try")).await;
+                let catches = !step.block("catch").is_empty();
+                let mut result = self.handled_block(catches, step, "try").await;
                 if let Err(Interrupt::Failed(error)) = &result
                     && !step.block("catch").is_empty()
                 {
@@ -641,18 +886,18 @@ impl Executor {
                     );
                     let value = error.to_value();
                     self.set_var(&error_var, value, Some(&step.id));
-                    result = self.block(step.block("catch")).await;
+                    result = self.sub_block(step, "catch").await;
                 }
                 // `finally` runs after success or failure, but not after cancellation.
                 if matches!(result, Err(Interrupt::Cancelled)) {
                     return result;
                 }
-                match self.block(step.block("finally")).await {
+                match self.sub_block(step, "finally").await {
                     Ok(Flow::Next) => result,
                     other => other,
                 }
             }
-            control::GROUP => self.block(step.block("body")).await,
+            control::GROUP => self.sub_block(step, "body").await,
             control::PARALLEL => self.parallel(step).await,
             control::WAIT_UNTIL => self.wait_until(step).await,
             scenario::CALL => self.call(step).await,
@@ -826,7 +1071,7 @@ impl Executor {
             for (index, item) in items.into_iter().enumerate() {
                 self.check_cancel()?;
                 self.bind_item(step, index, item);
-                let flow = self.block(step.block("body")).await?;
+                let flow = self.sub_block(step, "body").await?;
                 if let Some(collect) = &collect {
                     results.push(collect.eval(&self.vars).map_err(expr_error)?);
                 }
@@ -1056,15 +1301,18 @@ impl Executor {
         };
         let timeout_ms = step.timeout_ms.unwrap_or(self.default_timeout_ms);
         let started = Instant::now();
+        // Time spent paused inside the check does not count towards the timeout.
+        let paused_before = self.paused_ms();
         let mut polls = 0u64;
         loop {
             self.check_cancel()?;
-            self.block(step.block("check")).await?;
+            let handles = self.effective_on_error(step) == OnError::Continue;
+            self.handled_block(handles, step, "check").await?;
             polls += 1;
             if expr::truthy(&condition.eval(&self.vars).map_err(expr_error)?) {
                 return Ok(Flow::Next);
             }
-            let elapsed_ms = duration_ms(started);
+            let elapsed_ms = duration_ms(started).saturating_sub(self.paused_ms() - paused_before);
             if elapsed_ms >= timeout_ms {
                 return Err(RunError {
                     details: Some(serde_json::json!({ "elapsedMs": elapsed_ms, "polls": polls })),

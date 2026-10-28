@@ -108,6 +108,7 @@ export const ja = {
   status: {
     pending: "待機中",
     running: "実行中",
+    paused: "一時停止中",
     succeeded: "成功",
     failed: "失敗",
     cancelled: "キャンセル",

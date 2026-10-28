@@ -43,6 +43,8 @@ pub enum ObservationSource {
     InspectPage,
     InspectUi,
     TestStep,
+    /// The screen when an interactive run in Studio paused on an error.
+    RunPause,
 }
 
 /// Input for recording an observation.

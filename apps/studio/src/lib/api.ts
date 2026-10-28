@@ -2,6 +2,7 @@
 // which in turn is a thin wrapper over ScenarioService / Runtime. The
 // frontend never edits scenario documents itself; it only sends EditOps.
 import type {
+  DebugCommand,
   EditOp,
   EditOutcome,
   ErrorPayload,
@@ -61,6 +62,17 @@ export type SecretRequest = {
   requestedAt: string;
   /** What the registered secret (if any) still lacks. */
   missing: { registered: boolean; fields: SecretField[]; sites: string[] };
+};
+
+/** The screen a run paused on (see `capture_pause`). */
+export type RunEvidence = {
+  runId: string;
+  /** The `paused` event it belongs to. */
+  seq: number;
+  stepId: string;
+  observation?: ObservationContent;
+  /** Why there is no observation. */
+  problem?: string;
 };
 
 export class ApiError extends Error {
@@ -123,8 +135,12 @@ export const api = {
   reviewTimeline: (id: string, since?: number) => call<ReviewTimeline>("review_timeline", { id, since }),
   submitReview: (id: string, input: NewReview) => call<Evidence>("submit_review", { id, input }),
   getObservation: (id: string) => call<ObservationContent>("get_observation", { id }),
-  run: (id: string, inputs?: Record<string, unknown>) =>
-    call<string>("run_scenario", { id, inputs }),
+  /** Studio runs pause on unhandled errors and at `debug.breakpoints`; `debug.step` pauses before the first step. */
+  run: (id: string, inputs?: Record<string, unknown>, debug?: { breakpoints: string[]; step?: boolean }) =>
+    call<string>("run_scenario", { id, inputs, debug }),
+  /** Step commands for a paused run; resuming swaps in the stored revision first (e.g. the AI's fix). */
+  debugRun: (runId: string, command: DebugCommand) =>
+    call<{ revision: number; updated: boolean }>("debug_run", { runId, command }),
   stopRun: (runId: string) => call<void>("stop_run", { runId }),
   runStatus: (runId: string) => call<RunSnapshot | null>("run_status", { runId }),
   listSecrets: () => call<{ secrets: SecretInfo[]; keyLocation: string; keyMissing: boolean }>("list_secrets"),
@@ -210,6 +226,8 @@ export const events = {
     listen<{ scenarioId: string }>("scenario-changed", (e) => handler(e.payload.scenarioId)),
   onRunEvent: (handler: (event: RunEventEnvelope) => void): Promise<UnlistenFn> =>
     listen<RunEventEnvelope>("run-event", (e) => handler(e.payload)),
+  onRunEvidence: (handler: (evidence: RunEvidence) => void): Promise<UnlistenFn> =>
+    listen<RunEvidence>("run-evidence", (e) => handler(e.payload)),
   /** An AI asked for a login, or a request was answered or dismissed (any process). */
   onSecretRequestsChanged: (handler: () => void): Promise<UnlistenFn> =>
     listen("secret-requests-changed", () => handler()),

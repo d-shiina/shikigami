@@ -11,12 +11,16 @@
     },
     "run_snapshot": {
       "$ref": "#/$defs/RunSnapshot"
+    },
+    "debug_command": {
+      "$ref": "#/$defs/DebugCommand"
     }
   },
   "required": [
     "run_event_envelope",
     "run_report",
-    "run_snapshot"
+    "run_snapshot",
+    "debug_command"
   ],
   "$defs": {
     "RunEventEnvelope": {
@@ -242,6 +246,77 @@
           ]
         },
         {
+          "description": "An interactive run stopped before `stepId` (breakpoint, step\ncommand, pause request) or after it failed (`reason: \"error\"`, with\n`error`). Nothing runs until it is resumed.\n\n`variables` holds every variable's value at that point, masked and\ncut like `variableChanged` values. `revision` is the scenario\nrevision the run is executing.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "paused"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "stepType": {
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/PauseReason"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RunError"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "variables": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "stepId",
+            "stepType",
+            "reason",
+            "variables",
+            "revision"
+          ]
+        },
+        {
+          "description": "The run goes on after `paused`. `revision` is set when a newer\nrevision of the scenario was swapped in while it was paused.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "resumed"
+            },
+            "action": {
+              "$ref": "#/$defs/ResumeAction"
+            },
+            "revision": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "action"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "type": {
@@ -340,14 +415,61 @@
         "error"
       ]
     },
-    "RunStatus": {
+    "PauseReason": {
+      "description": "Why a run paused.",
+      "oneOf": [
+        {
+          "description": "Before a step with a breakpoint.",
+          "type": "string",
+          "const": "breakpoint"
+        },
+        {
+          "description": "Before the next step after a step command or at the start.",
+          "type": "string",
+          "const": "step"
+        },
+        {
+          "description": "Before the next step after [`DebugCommand::Pause`].",
+          "type": "string",
+          "const": "requested"
+        },
+        {
+          "description": "After the step failed (`error` says why); it has not been handled.",
+          "type": "string",
+          "const": "error"
+        }
+      ]
+    },
+    "ResumeAction": {
+      "description": "What a resumed run does next (reported as `resumed`).",
       "type": "string",
       "enum": [
-        "pending",
-        "running",
-        "succeeded",
-        "failed",
-        "cancelled"
+        "continue",
+        "stepOver",
+        "stepInto",
+        "stepOut",
+        "retry",
+        "skip",
+        "abort"
+      ]
+    },
+    "RunStatus": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        {
+          "description": "An interactive run waits for a person (see `paused`).",
+          "type": "string",
+          "const": "paused"
+        }
       ]
     },
     "RunReport": {
@@ -485,6 +607,135 @@
         "scenarioId",
         "status",
         "stepsExecuted"
+      ]
+    },
+    "DebugCommand": {
+      "description": "What a person does with a run (see [`DebugControl::send`]).",
+      "oneOf": [
+        {
+          "description": "Run until the next breakpoint or unhandled error. Paused on an\nerror: run the failed step again first.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "continue"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "description": "Run the step paused at, including everything inside it, and pause\nbefore the next one at the same level or above.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "stepOver"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "description": "Pause before the very next step, inside blocks too.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "stepInto"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "description": "Finish the block paused in and pause after it.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "stepOut"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "description": "Paused on an error: run the failed step again, as it is now defined.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "retry"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "description": "Leave the step paused at (or failed) undone and go on with the next.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "skip"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "description": "End the run: as failed when paused on an error, otherwise as cancelled.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "abort"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "description": "While running: pause before the next step.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "pause"
+            }
+          },
+          "required": [
+            "action"
+          ]
+        },
+        {
+          "description": "Replace the breakpoints (any time).",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "setBreakpoints"
+            },
+            "stepIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/StepId"
+              }
+            }
+          },
+          "required": [
+            "action",
+            "stepIds"
+          ]
+        }
       ]
     }
   },

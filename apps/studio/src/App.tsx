@@ -9,6 +9,7 @@ import { FlowCanvas } from "./components/FlowCanvas";
 import { IssuesPanel } from "./components/IssuesPanel";
 import { PropertyPanel } from "./components/PropertyPanel";
 import { RunLog } from "./components/RunLog";
+import { RunPausePanel } from "./components/RunPausePanel";
 import { OutlinePanel, OutlineToggle } from "./components/Outline";
 import { ReviewInbox, ReviewPanel, useInbox } from "./components/ReviewDesk";
 import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
@@ -24,7 +25,7 @@ import { WindowControls } from "./components/WindowControls";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
 import { t } from "./lib/i18n";
-import { createStudioStore, type StudioState } from "./store";
+import { createStudioStore, isActive, type StudioState } from "./store";
 
 type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
 
@@ -282,6 +283,7 @@ function Shell() {
             <CanvasDock />
           </div>
         </div>
+        <RunPausePanel />
         {hasRun && (
           <div className="h-44 min-h-0">
             <RunLog />
@@ -330,6 +332,32 @@ function navigate(e: KeyboardEvent, state: StudioState) {
   else if (key === "o") state.setOutlineOpen(!state.outlineOpen);
 }
 
+/**
+ * F5 run / continue (Shift: stop), F10 step over, F11 step into (Shift:
+ * out), F9 breakpoint on the selected step. F10 / F11 start a run that
+ * pauses before its first step.
+ */
+function debugKey(e: KeyboardEvent, state: StudioState) {
+  const run = state.run;
+  const paused = run?.status === "paused";
+  const runnable = state.scenario && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error");
+  if (e.key === "F9") {
+    if (state.selection?.kind === "step") state.toggleBreakpoint(state.selection.stepId);
+  } else if (e.key === "F5") {
+    if (e.shiftKey) {
+      if (isActive(run)) void state.stopRun();
+    } else if (paused) {
+      void state.debug({ action: run.pause?.reason === "error" ? "retry" : "continue" });
+    } else if (runnable) {
+      void state.startRun();
+    }
+  } else if (paused && run.pause?.reason !== "error") {
+    void state.debug({ action: e.key === "F10" ? "stepOver" : e.shiftKey ? "stepOut" : "stepInto" });
+  } else if (runnable && !e.shiftKey) {
+    void state.startRun({ step: true });
+  }
+}
+
 export function App() {
   const store = useMemo(() => createStudioStore(api), []);
   const agentStore = useMemo(() => createAgentStore(agent), []);
@@ -339,6 +367,7 @@ export function App() {
     const unlisten = [
       events.onScenarioChanged((id) => void store.getState().onExternalChange(id)),
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
+      events.onRunEvidence((e) => store.getState().onRunEvidence(e)),
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
       agent.onEvent((e) => agentStore.getState().onEvent(e)),
     ];
@@ -358,15 +387,10 @@ export function App() {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (e.key === "F5") {
-        // Run, or stop with Shift, instead of reloading the window.
+      if (e.key === "F5" || e.key === "F9" || e.key === "F10" || e.key === "F11") {
+        // Run and step like a debugger, instead of reloading the window.
         e.preventDefault();
-        const state = store.getState();
-        if (e.shiftKey) {
-          if (state.run?.status === "running") void state.stopRun();
-        } else if (state.scenario && state.run?.status !== "running" && !state.validation?.issues.some((i) => i.severity === "error")) {
-          void state.startRun();
-        }
+        debugKey(e, store.getState());
         return;
       }
       if (mod && e.key.toLowerCase() === "j") {
