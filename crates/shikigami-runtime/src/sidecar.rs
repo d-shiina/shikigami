@@ -62,6 +62,8 @@ pub struct SidecarClient {
     config: SidecarConfig,
     connection: tokio::sync::Mutex<Option<Arc<Connection>>>,
     next_id: AtomicU64,
+    /// Secret values handed to the process; masked in its stderr lines.
+    masked: Arc<Mutex<Vec<String>>>,
 }
 
 fn crashed(message: impl Into<String>) -> StepError {
@@ -82,6 +84,16 @@ impl SidecarClient {
             config,
             connection: tokio::sync::Mutex::new(None),
             next_id: AtomicU64::new(1),
+            masked: Arc::default(),
+        }
+    }
+
+    /// Masks `value` in what the process writes to stderr from now on.
+    /// Call it before handing a secret to the process.
+    pub fn mask(&self, value: &str) {
+        let mut masked = lock(&self.masked);
+        if !value.is_empty() && !masked.iter().any(|v| v == value) {
+            masked.push(value.to_owned());
         }
     }
 
@@ -202,9 +214,13 @@ impl SidecarClient {
             });
         }
         let log_name = name.clone();
+        let masked = self.masked.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
+            while let Ok(Some(mut line)) = lines.next_line().await {
+                for value in lock(&masked).iter() {
+                    line = line.replace(value.as_str(), "***");
+                }
                 tracing::debug!(target: "shikigami::adapter", adapter = %log_name, "{line}");
             }
         });

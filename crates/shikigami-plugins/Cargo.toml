@@ -12,12 +12,12 @@ shikigami-runtime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 jsonschema.workspace = true
+tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 dirs.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
 tempfile.workspace = true
 
 [lints]

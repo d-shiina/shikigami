@@ -31,6 +31,9 @@ pub use manifest::{MANIFEST_FILE, Manifest, RESERVED_NAMES};
 /// How much earlier than the step timeout the plugin is asked to stop.
 const TIMEOUT_MARGIN_MS: u64 = 500;
 
+/// How long a run's end waits for a plugin to answer `closeRun`.
+const CLOSE_RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Secret sites a plugin is written as: `plugin:kintone`.
 pub const PLUGIN_SITE_PREFIX: &str = "plugin:";
 
@@ -74,6 +77,9 @@ pub struct Discovery {
 impl Plugin {
     /// Loads the plugin in `dir`. `taken` are adapter names already in use.
     pub fn load(dir: &Path, taken: &[&str]) -> Result<Self, PluginProblem> {
+        // The process starts in `dir`, so a relative program path must not
+        // be resolved against it a second time.
+        let dir = &std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf());
         let problem = |problems: Vec<String>| PluginProblem {
             dir: dir.to_path_buf(),
             problems,
@@ -217,14 +223,13 @@ impl Adapter for Plugin {
             let client = client.clone();
             Box::pin(async move {
                 if client.is_running().await {
-                    // Plugins without per-run state may not answer it.
-                    let _ = client
-                        .call(
-                            "closeRun",
-                            json!({ "runId": end.run_id.as_str() }),
-                            &CancellationToken::new(),
-                        )
-                        .await;
+                    // A plugin that never answers must not hold the run open.
+                    let cancel = CancellationToken::new();
+                    let call =
+                        client.call("closeRun", json!({ "runId": end.run_id.as_str() }), &cancel);
+                    if tokio::time::timeout(CLOSE_RUN_TIMEOUT, call).await.is_err() {
+                        tracing::warn!("a plugin did not answer closeRun");
+                    }
                 }
             })
         }))
@@ -302,6 +307,8 @@ impl PluginStep {
                 "hint": format!("Ask the user to add {site} to this secret's sites in Studio (シークレット) if this plugin may use it.")
             })));
         }
+        // Masked in the plugin's own diagnostics too.
+        self.client.mask(&secret.value);
         Ok(Some(secret.value))
     }
 }

@@ -358,3 +358,38 @@ fn discover_loads_folders_of_plugins_and_reports_the_rest() {
     assert!(found.problems[0].dir.ends_with("b"));
     assert!(found.problems[1].dir.ends_with("c"));
 }
+
+#[test]
+fn relative_plugin_dirs_are_made_absolute() {
+    // Tests run in the crate folder.
+    let plugin = Plugin::load(Path::new("../../examples/plugins/hello"), &[]).unwrap();
+    assert!(plugin.dir().is_absolute());
+}
+
+#[tokio::test]
+async fn a_plugin_ignoring_close_run_does_not_hold_the_run() {
+    const SILENT_ON_CLOSE: &str = r#"
+import { createInterface } from "node:readline";
+createInterface({ input: process.stdin }).on("line", (line) => {
+  const { id, method, params } = JSON.parse(line);
+  if (method === "closeRun") return;
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result: params.value }) + "\n");
+});
+"#;
+    let dir = plugin_dir(
+        manifest("t", json!([echo_step(json!({}))])),
+        SILENT_ON_CLOSE,
+    );
+    let plugin = Plugin::load(dir.path(), &[]).unwrap();
+    let runtime = runtime(&plugin);
+    let report = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        run(
+            &runtime,
+            vec![json!({ "type": "t.echo", "params": { "value": "a" } })],
+        ),
+    )
+    .await
+    .expect("the run ends");
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+}
