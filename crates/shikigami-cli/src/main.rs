@@ -3,8 +3,10 @@
 //! Uses exactly the same Scenario Core and Runtime as Studio and the MCP
 //! server; it is the reference for running scenarios without GUI or AI.
 
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
@@ -14,6 +16,7 @@ use shikigami_core::{
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{LogLevel, RunEvent, RunOptions, RunStatus, Runtime, StepOutcome};
+use shikigami_secrets::{SecretInput, Vault};
 
 #[derive(Parser)]
 #[command(name = "shikigami", version, about = "Shikigami RPA command line")]
@@ -54,6 +57,10 @@ enum Command {
     /// JSON Schema utilities.
     #[command(subcommand)]
     Schema(SchemaCmd),
+    /// Manage secrets (logins) that scenarios type by name. Values are
+    /// encrypted in the workspace; the key is kept by Windows Credential Manager.
+    #[command(subcommand)]
+    Secret(SecretCmd),
     /// Serve MCP over stdio for AI clients (Claude Code, Codex, Cursor, ...).
     Mcp {
         /// Tool classes to expose, comma separated: read, write, run.
@@ -100,6 +107,46 @@ enum ScenarioCmd {
 }
 
 #[derive(Subcommand)]
+enum SecretCmd {
+    /// List registered secrets (names, user names, sites; never values).
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Register a secret or update it (options left out keep their value).
+    Set {
+        name: String,
+        #[arg(long)]
+        username: Option<String>,
+        /// Read the password from the first line of stdin instead of asking.
+        #[arg(long)]
+        password_stdin: bool,
+        /// Ask for the password (hidden input). Default when the secret is new.
+        #[arg(long, conflicts_with = "password_stdin")]
+        password: bool,
+        /// MFA setup key (base32) or the otpauth:// text of the QR code; "" removes it.
+        #[arg(long)]
+        totp: Option<String>,
+        /// Site the secret may be typed into (repeatable), e.g. https://example.com
+        #[arg(long = "site", value_name = "URL")]
+        sites: Vec<String>,
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Delete a secret.
+    Remove { name: String },
+    /// Forget a saved browser login (`session` of browser.open).
+    Logout { session: String },
+    /// Delete every secret, saved login and the key, so secrets can be
+    /// registered again (e.g. after copying the workspace to another PC).
+    Reset {
+        /// Confirm the deletion.
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum SchemaCmd {
     /// Write JSON Schemas to a directory (default: ./schemas).
     Export {
@@ -132,11 +179,13 @@ fn real_main() -> Result<ExitCode> {
     let cli = Cli::parse();
     let adapters = shikigami_adapters::all();
     let runtime = shikigami_adapters::runtime(&adapters);
-    let open_service = || -> Result<ScenarioService> {
-        let root = cli
-            .workspace
+    let workspace = || {
+        cli.workspace
             .clone()
-            .unwrap_or_else(FileStore::default_root);
+            .unwrap_or_else(FileStore::default_root)
+    };
+    let open_service = || -> Result<ScenarioService> {
+        let root = workspace();
         let store = FileStore::open(&root)
             .with_context(|| format!("opening workspace {}", root.display()))?;
         Ok(ScenarioService::new(store, runtime.registry().clone()))
@@ -146,6 +195,10 @@ fn real_main() -> Result<ExitCode> {
         Command::Scenario(cmd) => {
             let svc = open_service()?;
             scenario_cmd(&svc, cmd)?;
+        }
+        Command::Secret(cmd) => {
+            let svc = open_service()?;
+            secret_cmd(&Vault::open(svc.store().root()), cmd)?;
         }
         Command::Validate { target } => {
             let svc = open_service()?;
@@ -206,6 +259,9 @@ fn real_main() -> Result<ExitCode> {
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
+            let runtime = runtime
+                .clone()
+                .with_secrets(Arc::new(Vault::open(svc.store().root())));
             let status = rt.block_on(run(
                 &runtime,
                 svc.store().root(),
@@ -222,6 +278,87 @@ fn real_main() -> Result<ExitCode> {
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
+    match cmd {
+        SecretCmd::List { json } => {
+            let list = vault.list()?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&list)?);
+            } else if list.is_empty() {
+                println!("(no secrets; key store: {})", vault.key_location());
+            } else {
+                for s in list {
+                    let fields: Vec<_> = s.fields.iter().map(|f| f.as_str()).collect();
+                    println!(
+                        "{}\tuser={}\tfields={}\tsites={}",
+                        s.name,
+                        s.username,
+                        fields.join(","),
+                        s.sites.join(" ")
+                    );
+                }
+            }
+        }
+        SecretCmd::Set {
+            name,
+            username,
+            password_stdin,
+            password,
+            totp,
+            sites,
+            description,
+        } => {
+            let is_new = !vault.summaries()?.iter().any(|s| &s.name == name);
+            let password = if *password_stdin {
+                let mut line = String::new();
+                std::io::stdin().read_line(&mut line)?;
+                Some(line.trim_end_matches(['\r', '\n']).to_owned())
+            } else if *password || (is_new && std::io::stdin().is_terminal()) {
+                Some(rpassword::prompt_password(format!(
+                    "{name} のパスワード: "
+                ))?)
+            } else {
+                None
+            };
+            let info = vault.set(SecretInput {
+                name: name.clone(),
+                username: username.clone(),
+                password,
+                totp: totp.clone(),
+                sites: (!sites.is_empty()).then(|| sites.clone()),
+                description: description.clone(),
+            })?;
+            if info.sites.is_empty() {
+                eprintln!(
+                    "warning: no --site given; browser steps refuse to type this secret until a site is added"
+                );
+            }
+            println!("saved secret '{}' ({})", info.name, vault.key_location());
+        }
+        SecretCmd::Remove { name } => {
+            vault.remove(name)?;
+            println!("removed secret '{name}'");
+        }
+        SecretCmd::Logout { session } => {
+            if vault.remove_session(session)? {
+                println!("forgot the saved login '{session}'");
+            } else {
+                println!("no saved login '{session}'");
+            }
+        }
+        SecretCmd::Reset { yes } => {
+            if !*yes {
+                bail!(
+                    "this deletes every secret and saved login of the workspace; run again with --yes to confirm"
+                );
+            }
+            let count = vault.reset()?;
+            println!("deleted {count} secret(s); register them again with `shikigami secret set`");
+        }
+    }
+    Ok(())
 }
 
 fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {

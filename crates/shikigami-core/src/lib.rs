@@ -13,6 +13,7 @@ pub mod ops;
 pub mod registry;
 pub mod resource;
 pub mod schema;
+pub mod secret;
 pub mod service;
 pub mod store;
 pub mod validate;

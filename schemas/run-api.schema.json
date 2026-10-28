@@ -214,6 +214,27 @@
           ]
         },
         {
+          "description": "A step waits for a person (e.g. to log in or approve MFA on the\nscreen). Studio shows `message` until the step finishes.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "humanActionRequired"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "stepId",
+            "message"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "type": {

@@ -18,6 +18,28 @@ import { isErrorPayload } from "@shikigami/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+export type SecretField = "username" | "password" | "totp";
+
+/** A registered secret as Studio lists it: never the password or TOTP key. */
+export type SecretInfo = {
+  name: string;
+  username: string;
+  sites: string[];
+  fields: SecretField[];
+  description?: string;
+  updatedAt: string;
+};
+
+/** Registers or updates a secret; fields left out keep their stored value. */
+export type SecretInput = {
+  name: string;
+  username?: string;
+  password?: string;
+  totp?: string;
+  sites?: string[];
+  description?: string;
+};
+
 export class ApiError extends Error {
   readonly code: string;
   readonly details: unknown;
@@ -62,6 +84,11 @@ export const api = {
     call<string>("run_scenario", { id, inputs }),
   stopRun: (runId: string) => call<void>("stop_run", { runId }),
   runStatus: (runId: string) => call<RunSnapshot | null>("run_status", { runId }),
+  listSecrets: () => call<{ secrets: SecretInfo[]; keyLocation: string; keyMissing: boolean }>("list_secrets"),
+  setSecret: (input: SecretInput) => call<SecretInfo>("set_secret", { input }),
+  removeSecret: (name: string) => call<void>("remove_secret", { name }),
+  resetSecrets: () => call<number>("reset_secrets"),
+  forgetLogin: (session: string) => call<boolean>("forget_login", { session }),
 };
 
 export type Api = typeof api;

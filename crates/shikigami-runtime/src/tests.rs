@@ -92,6 +92,8 @@ fn flaky_def() -> StepTypeDef {
         risk: RiskLevel::Safe,
         examples: vec![],
         resources: vec![],
+        secret_params: vec![],
+        default_timeout_ms: None,
     }
 }
 
@@ -592,6 +594,8 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
         params_schema: json!({ "type": "object" }),
         has_output: false,
         resources: vec![ResourceDef::Static(DESKTOP_INPUT.into())],
+        secret_params: vec![],
+        default_timeout_ms: None,
         ..flaky_def()
     };
     let runtime = Runtime::builder()
@@ -629,6 +633,8 @@ async fn steps_on_the_same_file_take_turns() {
         params_schema: json!({ "type": "object", "properties": { "path": { "type": "string" } } }),
         has_output: false,
         resources: vec![ResourceDef::file("path")],
+        secret_params: vec![],
+        default_timeout_ms: None,
         ..flaky_def()
     };
     let runtime = Runtime::builder()
@@ -955,6 +961,114 @@ async fn variable_changes_hide_secrets() {
     assert!(!all.contains("hunter2"));
 }
 
+// ---------------------------------------------------------------------------
+// Secrets
+
+struct MemorySecrets;
+
+impl SecretProvider for MemorySecrets {
+    fn resolve(
+        &self,
+        reference: &shikigami_core::secret::SecretRef,
+    ) -> Result<shikigami_core::secret::ResolvedSecret, shikigami_core::secret::SecretError> {
+        if reference.secret != "受注" {
+            return Err(shikigami_core::secret::SecretError::new(
+                "SECRET_NOT_FOUND",
+                "no such secret",
+            ));
+        }
+        Ok(shikigami_core::secret::ResolvedSecret {
+            name: reference.secret.clone(),
+            field: reference.field,
+            value: match reference.field {
+                shikigami_core::secret::SecretField::Username => "tanaka".into(),
+                _ => "hunter2".into(),
+            },
+            sites: vec!["https://example.com".into()],
+        })
+    }
+
+    fn load_session(
+        &self,
+        _name: &str,
+    ) -> Result<Option<Value>, shikigami_core::secret::SecretError> {
+        Ok(None)
+    }
+
+    fn save_session(
+        &self,
+        _name: &str,
+        _state: &Value,
+    ) -> Result<(), shikigami_core::secret::SecretError> {
+        Ok(())
+    }
+}
+
+/// Test input step: types `value` (a secret or text) and echoes it to the
+/// log and the output, as a careless adapter might.
+fn typing_def() -> StepTypeDef {
+    StepTypeDef {
+        step_type: "test.type".into(),
+        params_schema: json!({ "type": "object", "properties": { "value": shikigami_core::secret::text_or_secret_schema("text") } }),
+        has_output: true,
+        secret_params: vec!["value".into()],
+        default_timeout_ms: Some(50),
+        ..flaky_def()
+    }
+}
+
+struct Typing;
+
+impl ActionHandler for Typing {
+    fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+        Box::pin(async move {
+            let value = input.params.get("value").cloned().unwrap_or(Value::Null);
+            let text = match input.resolve_secret(&value)? {
+                Some(secret) => secret.value,
+                None => value.as_str().unwrap_or_default().to_owned(),
+            };
+            if text == "slow" {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+            input.log(LogLevel::Info, format!("typed {text}"));
+            Ok(json!({ "typed": text, "limit": input.timeout_ms }))
+        })
+    }
+}
+
+fn typing_runtime() -> Runtime {
+    Runtime::builder().register(typing_def(), Typing).build()
+}
+
+#[tokio::test]
+async fn secrets_are_resolved_for_steps_and_masked_everywhere() {
+    let runtime = typing_runtime().with_secrets(Arc::new(MemorySecrets));
+    let mut s = scenario(vec![
+        Step {
+            save_as: Some("user".into()),
+            ..Step::new("test.type")
+                .with_param("value", json!({ "secret": "受注", "field": "username" }))
+        },
+        Step {
+            save_as: Some("typed".into()),
+            ..Step::new("test.type")
+                .with_param("value", json!({ "secret": "受注", "field": "password" }))
+        },
+    ]);
+    s.variables
+        .push(var("typed", VarType::Any, VarDirection::Output, None));
+    s.variables
+        .push(var("user", VarType::Any, VarDirection::Output, None));
+    let (report, events) = run(&runtime, s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    // User names stay readable; passwords never leave the step.
+    assert_eq!(logs(&events), ["typed tanaka", "typed ***"]);
+    assert_eq!(report.outputs["typed"]["typed"], json!("***"));
+    assert_eq!(report.outputs["user"]["typed"], json!("tanaka"));
+    let all = serde_json::to_string(&events).unwrap();
+    assert!(!all.contains("hunter2"));
+}
+
 #[tokio::test]
 async fn large_values_are_recorded_as_a_preview() {
     let s = scenario(vec![
@@ -1099,4 +1213,31 @@ async fn variable_changes_mask_secrets_copied_anywhere() {
     );
     let all = serde_json::to_string(&events).expect("json");
     assert!(!all.contains("s3cr3t") && !all.contains("4821"));
+}
+
+#[tokio::test]
+async fn missing_secrets_fail_the_step_with_a_hint() {
+    let mut s =
+        scenario(vec![Step::new("test.type").with_param(
+            "value",
+            json!({ "secret": "受注", "field": "password" }),
+        )]);
+    let (report, _) = run(&typing_runtime(), s.clone(), json!({})).await;
+    assert_eq!(report.error.unwrap().code, "SECRETS_UNAVAILABLE");
+
+    s.steps[0] = Step::new("test.type")
+        .with_param("value", json!({ "secret": "other", "field": "password" }));
+    s.steps[0].id = "s1".into();
+    let runtime = typing_runtime().with_secrets(Arc::new(MemorySecrets));
+    let (report, _) = run(&runtime, s, json!({})).await;
+    assert_eq!(report.error.unwrap().code, "SECRET_NOT_FOUND");
+}
+
+#[tokio::test]
+async fn step_types_can_set_their_own_default_timeout() {
+    let mut s = scenario(vec![Step::new("test.type").with_param("value", "slow")]);
+    // The scenario default is long; the step type's own 50 ms wins.
+    s.settings.default_timeout_ms = Some(60_000);
+    let (report, _) = run(&typing_runtime(), s, json!({})).await;
+    assert_eq!(report.error.unwrap().code, "STEP_TIMEOUT");
 }

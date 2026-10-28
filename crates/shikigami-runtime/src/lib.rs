@@ -22,6 +22,7 @@ use std::time::Instant;
 
 use serde_json::{Map, Value};
 use shikigami_core::registry::builtin as builtin_types;
+use shikigami_core::secret::SecretProvider;
 use shikigami_core::{OnError, RunId, Scenario, StepRegistry, StepTypeDef, Validator};
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
@@ -59,6 +60,8 @@ pub struct Runtime {
     run_finished_hooks: Arc<Vec<RunFinishedHook>>,
     validator: Arc<Validator>,
     resources: Arc<ResourceLocks>,
+    default_timeouts: Arc<HashMap<String, u64>>,
+    secrets: Option<Arc<dyn SecretProvider>>,
 }
 
 impl Runtime {
@@ -69,6 +72,13 @@ impl Runtime {
 
     pub fn builder() -> RuntimeBuilder {
         RuntimeBuilder::new()
+    }
+
+    /// Where steps look up registered secrets (`{ "secret": .., "field": .. }`
+    /// params) and saved browser logins: the workspace vault.
+    pub fn with_secrets(mut self, secrets: Arc<dyn SecretProvider>) -> Self {
+        self.secrets = Some(secrets);
+        self
     }
 
     /// Step types this runtime can execute. Use the same registry for the
@@ -105,6 +115,8 @@ impl Runtime {
                 run_id: run_id.clone(),
                 handlers: self.handlers.clone(),
                 resource_defs: self.resource_defs.clone(),
+                default_timeouts: self.default_timeouts.clone(),
+                secrets: self.secrets.clone(),
                 vars: Map::new(),
                 secret_vars: scenario
                     .variables
@@ -124,6 +136,7 @@ impl Runtime {
         let inputs = options.inputs;
 
         let task_run_id = run_id.clone();
+        let secrets = self.secrets.clone();
         let hooks = if options.keep_adapter_state {
             Arc::new(Vec::new())
         } else {
@@ -158,7 +171,8 @@ impl Runtime {
                     let value = if v.secret {
                         Value::String("***".into())
                     } else {
-                        value
+                        // Also hides secrets a step happened to read back.
+                        emitter.mask_value(&value)
                     };
                     (v.name.clone(), value)
                 })
@@ -166,7 +180,11 @@ impl Runtime {
 
             // Release per-run adapter state (browser contexts, ...).
             for hook in hooks.iter() {
-                hook(task_run_id.clone()).await;
+                hook(RunEnd {
+                    run_id: task_run_id.clone(),
+                    secrets: secrets.clone(),
+                })
+                .await;
             }
 
             let duration_ms = u64::try_from(clock.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -210,7 +228,14 @@ impl Default for Runtime {
 }
 
 /// Called once when a run ends (after its last step, before `RunFinished`).
-pub type RunFinishedHook = Arc<dyn Fn(RunId) -> BoxFuture<'static, ()> + Send + Sync>;
+pub type RunFinishedHook = Arc<dyn Fn(RunEnd) -> BoxFuture<'static, ()> + Send + Sync>;
+
+/// What a [`RunFinishedHook`] gets.
+pub struct RunEnd {
+    pub run_id: RunId,
+    /// The Runtime's secret store, e.g. to save browser logins for reuse.
+    pub secrets: Option<Arc<dyn SecretProvider>>,
+}
 
 pub struct RuntimeBuilder {
     registry: StepRegistry,
@@ -267,6 +292,13 @@ impl RuntimeBuilder {
                     .collect(),
             ),
             resources: Arc::default(),
+            default_timeouts: Arc::new(
+                self.registry
+                    .iter()
+                    .filter_map(|def| Some((def.step_type.clone(), def.default_timeout_ms?)))
+                    .collect(),
+            ),
+            secrets: None,
             run_finished_hooks: Arc::new(self.run_finished_hooks),
             registry: self.registry,
         }

@@ -63,12 +63,13 @@ args = ["mcp"]
 |  | `list_step_types` / `get_step_schema` | 使えるステップ型と、その params の JSON Schema・コピーして使える記述例（`examples`） |
 |  | `get_history` | 誰が（Studio / MCP クライアント名 / CLI）いつ何を変えたか |
 |  | `get_run_status` / `get_run_logs` / `list_runs` | 実行中の状態・最終レポート・イベントログ（`afterSeq` で差分取得、`variable` でその変数の変化だけ） |
+|  | `list_secrets` | Studio で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
 | write | `create_scenario` | 新規作成（ステップ ID は省略可） |
 |  | `update_scenario` | 複数の EditOp を 1 リビジョンとして原子的に適用 |
 |  | `add_step` / `update_step` / `remove_step` / `move_step` | 個別の編集 |
 |  | `undo` / `redo` | Studio・CLI と共通の Undo スタック |
 |  | `delete_scenario` | ゴミ箱へ移動。`expectedRevision` 必須。`destructiveHint` 付き |
-| run | `run_scenario` | Runtime で実行（AI は実行に関与しない）。`waitMs` で完了まで待てる |
+| run | `run_scenario` | Runtime で実行（AI は実行に関与しない）。`waitMs` で完了まで待てる。`secret: true` の入力変数には値を渡せない |
 |  | `stop_scenario` | 実行のキャンセル |
 | ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)） |
 | 試行 | `test_step` | ステップを 1 つその場で実行して出力を返す（browser ステップなら実行後のページも）。シナリオは変更しない |

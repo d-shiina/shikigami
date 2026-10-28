@@ -31,7 +31,7 @@ export function ScenarioHeader() {
     <>
       <span className="text-slate-300">/</span>
       <div className="min-w-0 flex-1">
-        <span className="truncate font-serif text-base font-semibold">{scenario.name}</span>
+        <span className="truncate text-base font-bold">{scenario.name}</span>
         <span className="ml-2 text-xs text-slate-500">
           {t.revision} {scenario.revision}
         </span>
@@ -47,7 +47,7 @@ export function ScenarioHeader() {
         <button
           type="button"
           onClick={() => stopRun()}
-          className="rounded-md border-2 border-shu-500 px-3 py-1 font-serif text-sm font-bold text-shu-600 hover:bg-shu-50"
+          className="rounded-full border-2 border-shu-500 px-4 py-1 text-sm font-bold text-shu-600 hover:bg-shu-50"
         >
           ■ {t.stop}
         </button>
@@ -57,7 +57,7 @@ export function ScenarioHeader() {
           onClick={() => startRun()}
           disabled={errors > 0}
           title={errors > 0 ? "検証エラーを直すと実行できます" : undefined}
-          className="rounded-md bg-shu-500 px-4 py-1 font-serif text-sm font-bold tracking-widest text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,.35)] hover:bg-shu-600 disabled:bg-slate-300"
+          className="warm rounded-full px-5 py-1 text-sm font-bold tracking-wider text-white shadow-[0_2px_8px_rgba(232,80,31,.35)] hover:brightness-105 disabled:bg-none disabled:bg-slate-300 disabled:shadow-none"
         >
           {t.run}
         </button>

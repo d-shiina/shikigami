@@ -28,6 +28,7 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
     validate: vi.fn(async () => ({ valid: true, issues: [] })),
     undoState: vi.fn(async () => ({ canUndo: false, canRedo: false })),
     history: vi.fn(async () => []),
+    listSecrets: vi.fn(async () => ({ secrets: [], keyLocation: "test", keyMissing: false })),
   };
   return { ...base, ...overrides } as Api;
 }
@@ -81,6 +82,51 @@ describe("studio store", () => {
     expect(store.getState().notice).toBe(t.externalChange);
   });
 
+  it("shows that a run waits for the person until the step ends", () => {
+    const store = createStudioStore(fakeApi());
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "humanActionRequired", stepId: "s1", message: "スマホで承認してください" });
+    expect(store.getState().human).toEqual({ stepId: "s1", message: "スマホで承認してください" });
+    store.getState().onRunEvent({
+      ...base,
+      seq: 1,
+      type: "stepFinished",
+      stepId: "s1",
+      stepType: "browser.waitForHuman",
+      outcome: "succeeded",
+      durationMs: 1,
+    });
+    expect(store.getState().human).toBeNull();
+  });
+
+  it("registers secrets without keeping their values", async () => {
+    const listed = { name: "受注", username: "tanaka", sites: ["https://x.example"], fields: ["username", "password"], updatedAt: "" };
+    const setSecret = vi.fn(async () => listed as never);
+    const store = createStudioStore(
+      fakeApi({ setSecret, listSecrets: vi.fn(async () => ({ secrets: [listed as never], keyLocation: "test", keyMissing: false })) }),
+    );
+    const ok = await store.getState().saveSecret({ name: "受注", username: "tanaka", password: "hunter2", sites: ["https://x.example"] });
+    expect(ok).toBe(true);
+    expect(setSecret).toHaveBeenCalledOnce();
+    expect(JSON.stringify(store.getState())).not.toContain("hunter2");
+    expect(store.getState().secrets.map((s) => s.name)).toEqual(["受注"]);
+  });
+
+  it("offers a reset when the secrets' key is not on this PC", async () => {
+    let missing = true;
+    const resetSecrets = vi.fn(async () => {
+      missing = false;
+      return 1;
+    });
+    const listSecrets = vi.fn(async () => ({ secrets: [], keyLocation: "test", keyMissing: missing }));
+    const store = createStudioStore(fakeApi({ listSecrets, resetSecrets }));
+    await store.getState().loadSecrets();
+    expect(store.getState().secretKeyMissing).toBe(true);
+    await store.getState().resetSecrets();
+    expect(resetSecrets).toHaveBeenCalledOnce();
+    expect(store.getState().secretKeyMissing).toBe(false);
+  });
+
   it("tracks run progress from events", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
@@ -96,6 +142,24 @@ describe("studio store", () => {
     expect(run.status).toBe("succeeded");
     expect(run.steps.s1).toBe("succeeded");
     expect(run.logs.map((l) => l.message)).toContain("hello");
+  });
+
+  it("records variable changes the Runtime reports", () => {
+    const store = createStudioStore(fakeApi());
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    const changes = [
+      { ...base, seq: 1, type: "variableChanged", variable: "total", value: 0 },
+      { ...base, seq: 2, type: "variableChanged", variable: "total", value: 12000, stepId: "s_add" },
+      { ...base, seq: 3, type: "variableChanged", variable: "password", value: "***", stepId: "s_get", secret: true },
+    ];
+    // Typed loosely: the schema package gains this event with the Runtime change.
+    for (const e of changes) store.getState().onRunEvent(e as unknown as RunEventEnvelope);
+    expect(store.getState().run!.changes.map((c) => [c.variable, c.value, c.stepId, c.secret])).toEqual([
+      ["total", 0, null, false],
+      ["total", 12000, "s_add", false],
+      ["password", "***", "s_get", true],
+    ]);
   });
 
   it("locates nested steps for move operations", () => {

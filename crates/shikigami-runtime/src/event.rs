@@ -144,6 +144,9 @@ pub enum RunEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         step_id: Option<StepId>,
     },
+    /// A step waits for a person (e.g. to log in or approve MFA on the
+    /// screen). Studio shows `message` until the step finishes.
+    HumanActionRequired { step_id: StepId, message: String },
     RunFinished {
         status: RunStatus,
         #[serde(default, skip_serializing_if = "Option::is_none")]
