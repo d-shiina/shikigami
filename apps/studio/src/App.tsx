@@ -8,6 +8,7 @@ import { PropertyPanel } from "./components/PropertyPanel";
 import { RunLog } from "./components/RunLog";
 import { ScenarioList } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
+import { SecretsDialog } from "./components/SecretsDialog";
 import { Timeline, usePendingReview } from "./components/Timeline";
 import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
 import { VariablesPanel } from "./components/VariablesPanel";
@@ -17,6 +18,20 @@ import { t } from "./lib/i18n";
 import { createStudioStore } from "./store";
 
 type Tab = "timeline" | "properties" | "variables" | "issues";
+
+/** Shown while a run waits for the person at the PC (manual login, MFA). */
+function HumanBanner() {
+  const human = useStudio((s) => s.human);
+  if (!human) return null;
+  return (
+    <div className="flex items-center gap-2 border-b border-shu-100 bg-shu-50 px-4 py-2 text-sm font-medium text-shu-600">
+      <span className="swirl h-2 w-2 rounded-full" />
+      <span>
+        {t.waitingForYou}：{human.message}
+      </span>
+    </div>
+  );
+}
 
 function Banner() {
   const notice = useStudio((s) => s.notice);
@@ -124,6 +139,22 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => 
   );
 }
 
+function SecretsButton() {
+  const setOpen = useStudio((s) => s.setSecretsOpen);
+  const count = useStudio((s) => s.secrets.length);
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="flex items-center gap-1 rounded-full px-3 py-1 text-xs text-slate-600 hover:bg-slate-100"
+      title={t.secretsIntro}
+    >
+      🔑 {t.secrets}
+      {count > 0 && <span className="rounded-full bg-slate-200 px-1 text-[10px]">{count}</span>}
+    </button>
+  );
+}
+
 function Shell() {
   const hasScenario = useStudio((s) => s.scenario !== null);
   const [view, setViewState] = useState<View>(loadView);
@@ -143,9 +174,11 @@ function Shell() {
         <span className="text-lg font-black tracking-wider">式神</span>
         <span className="-ml-1 text-xs font-medium tracking-[.2em] text-slate-500">STUDIO</span>
         <ScenarioHeader />
+        <SecretsButton />
         <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
       </header>
       <div className="col-span-3">
+        <HumanBanner />
         <Banner />
       </div>
       <div className="min-h-0">
@@ -173,6 +206,7 @@ function Shell() {
       </main>
       <div className="min-h-0">{hasScenario && <SidePanel />}</div>
       <CommandPalette />
+      <SecretsDialog />
     </div>
   );
 }

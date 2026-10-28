@@ -79,19 +79,29 @@ function VariableRow({ variable }: { variable: VariableDef }) {
               ))}
             </select>
           </label>
-          <label className={row}>
-            <span className={rowLabel}>{t.defaultValue}</span>
-            <input
-              className={`${cell} font-mono`}
-              placeholder="（なし）"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
-            />
-          </label>
+          {variable.secret ? (
+            // A default would be stored in plain text in the scenario.
+            <p className="text-[11px] text-slate-400">{t.secretNoDefault}</p>
+          ) : (
+            <label className={row}>
+              <span className={rowLabel}>{t.defaultValue}</span>
+              <input
+                className={`${cell} font-mono`}
+                placeholder="（なし）"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
+              />
+            </label>
+          )}
           <label className={row}>
             <span className={rowLabel}>{t.secret}</span>
-            <input type="checkbox" className="justify-self-start" checked={variable.secret ?? false} onChange={(e) => update({ secret: e.target.checked })} />
+            <input
+              type="checkbox"
+              className="justify-self-start"
+              checked={variable.secret ?? false}
+              onChange={(e) => update(e.target.checked ? { secret: true, default: undefined } : { secret: false })}
+            />
           </label>
           <div className="flex justify-end pt-1">
             <button type="button" className="text-[11px] text-slate-400 hover:text-shu-600" onClick={() => removeVariable(variable.name)}>

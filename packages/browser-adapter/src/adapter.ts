@@ -6,7 +6,7 @@
 // tabs. Waiting relies on Playwright's auto-waiting, never on fixed sleeps.
 
 import { chromium } from "playwright-core";
-import type { Browser, BrowserContext, LaunchOptions, Locator, Page } from "playwright-core";
+import type { Browser, BrowserContext, BrowserContextOptions, LaunchOptions, Locator, Page } from "playwright-core";
 
 import { AdapterError, describe, locate, type Target } from "./targets.ts";
 
@@ -32,9 +32,41 @@ type Params = Common & Record<string, unknown>;
 interface Session {
   context: BrowserContext;
   page: Page;
+  headless: boolean;
+  /** Name the login state is saved under when the context closes (`session` of browser.open). */
+  saveAs?: string;
+  /** Secret values typed in this context: masked in everything the adapter returns. */
+  secrets: Set<string>;
+  /** Fields that received a secret: blacked out in screenshots. */
+  secretFields: Locator[];
+}
+
+/** A registered secret resolved by the Runtime for browser.fill. */
+interface SecretInfo {
+  name: string;
+  /** Origins it may be typed into, e.g. "https://example.com". */
+  sites: string[];
+  sensitive: boolean;
+}
+
+const MASK = "***";
+const PASSWORD_FIELDS = 'input[type="password"]';
+
+/** `https://example.com:443/login` → `https://example.com` (as the Runtime normalizes sites). */
+export function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
 }
 
 const SNAPSHOT_LIMIT = 4000;
+
+interface SavedSession {
+  name: string;
+  state: unknown;
+}
 
 export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): AdapterOptions {
   const headlessEnv = env.SHIKIGAMI_BROWSER_HEADLESS;
@@ -82,6 +114,10 @@ export class Adapter {
           return await this.screenshot(params);
         case "snapshot":
           return await this.snapshot(params);
+        case "isVisible":
+          return await this.isVisible(params);
+        case "waitForHuman":
+          return await this.waitForHuman(params);
         case "close":
           return await this.close(params);
         case "closeRun":
@@ -158,12 +194,14 @@ export class Adapter {
     let session = this.sessions.get(key);
     if (!session || session.page.isClosed()) {
       const headless = this.options.forceHeadless || params.headless === true;
-      const context = await (await this.browser(headless)).newContext({ locale: "ja-JP" });
+      const storageState = params.storageState as BrowserContextOptions["storageState"] | undefined;
+      const context = await (await this.browser(headless)).newContext({ locale: "ja-JP", storageState });
       context.setDefaultTimeout(this.timeout);
       const page = await context.newPage();
-      session = { context, page };
+      session = { context, page, headless, secrets: new Set(), secretFields: [] };
       this.sessions.set(key, session);
     }
+    if (typeof params.session === "string" && params.session) session.saveAs = params.session;
     try {
       await session.page.goto(url, { waitUntil: "load", timeout: this.limit(params) });
     } catch (error) {
@@ -186,7 +224,41 @@ export class Adapter {
   }
 
   private async fill(params: Params): Promise<null> {
-    await this.target(params).locator.fill(String(params.value ?? ""), { timeout: this.limit(params) });
+    const session = this.session(params);
+    const { locator } = this.target(params);
+    const value = String(params.value ?? "");
+    const secret = params.secret as SecretInfo | undefined;
+    if (!secret) {
+      await locator.fill(value, { timeout: this.limit(params) });
+      return null;
+    }
+    // Never type a secret into a page it was not registered for (a
+    // look-alike site, or a page an injected instruction led to). The check
+    // and the typing use one element handle, so they are bound to the same
+    // document: if the page navigates in between, the handle is detached and
+    // fill fails instead of typing into the new page. The origin is the
+    // element's own document, so a cross-origin iframe is checked too.
+    const timeout = this.limit(params);
+    const handle = await locator.elementHandle({ timeout });
+    try {
+      const origin = await handle.evaluate((el) => el.ownerDocument.location.origin);
+      if (!secret.sites.includes(origin)) {
+        throw new AdapterError("SECRET_SITE_MISMATCH", `secret '${secret.name}' may not be typed on ${origin}`, {
+          details: {
+            page: origin,
+            sites: secret.sites,
+            hint: "This page is not one of the secret's registered sites. Check that the URL is right; if it is, ask the user to add it to the secret in Studio (シークレット).",
+          },
+        });
+      }
+      if (secret.sensitive && value) {
+        session.secrets.add(value);
+        session.secretFields.push(locator);
+      }
+      await handle.fill(value, { timeout });
+    } finally {
+      await handle.dispose().catch(() => {});
+    }
     return null;
   }
 
@@ -222,12 +294,13 @@ export class Adapter {
   }
 
   private async getText(params: Params): Promise<unknown> {
+    const session = this.session(params);
     const { locator } = this.target(params);
     if (params.all === true) {
       await locator.first().waitFor({ timeout: this.limit(params) });
-      return (await locator.allInnerTexts()).map((t) => t.trim());
+      return (await locator.allInnerTexts()).map((t) => this.mask(session, t.trim()));
     }
-    return (await locator.innerText({ timeout: this.limit(params) })).trim();
+    return this.mask(session, (await locator.innerText({ timeout: this.limit(params) })).trim());
   }
 
   /** Reads an HTML table into objects keyed by its header cells. */
@@ -235,7 +308,8 @@ export class Adapter {
     const { page } = this.session(params);
     const table = params.target ? locate(page, params.target as Target) : page.getByRole("table").first();
     await table.waitFor({ timeout: this.limit(params) });
-    return await table.evaluate((el) => {
+    const session = this.session(params);
+    const rows = await table.evaluate((el) => {
       const text = (cell: Element) => (cell as HTMLElement).innerText.trim();
       const rows = Array.from(el.querySelectorAll("tr"));
       const headerRow = el.querySelector("thead tr") ?? rows.find((r) => r.querySelector("th")) ?? rows[0];
@@ -251,6 +325,7 @@ export class Adapter {
           return record;
         });
     });
+    return rows.map((row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, this.mask(session, v)])));
   }
 
   private async waitFor(params: Params): Promise<null> {
@@ -262,35 +337,122 @@ export class Adapter {
   private async screenshot(params: Params): Promise<unknown> {
     const path = String(params.path ?? "");
     if (!path) throw new AdapterError("INVALID_PARAMS", "path is required");
-    const { page } = this.session(params);
-    await page.screenshot({ path, fullPage: params.fullPage === true, timeout: this.limit(params) });
+    const session = this.session(params);
+    // Password fields and fields that received a secret are blacked out.
+    const mask = [session.page.locator(PASSWORD_FIELDS), ...session.secretFields];
+    await session.page.screenshot({
+      path,
+      fullPage: params.fullPage === true,
+      mask,
+      maskColor: "#000",
+      timeout: this.limit(params),
+    });
     return path;
+  }
+
+  /** True when `target` is (or becomes, within `waitMs`) visible; never throws for a missing element. */
+  private async isVisible(params: Params): Promise<boolean> {
+    const { locator } = this.target(params);
+    const waitMs = typeof params.waitMs === "number" ? params.waitMs : 2000;
+    try {
+      await locator.first().waitFor({ state: "visible", timeout: Math.max(waitMs, 1) });
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") return false;
+      throw error;
+    }
+  }
+
+  /**
+   * Waits for the person at the PC to finish something in the browser window
+   * (log in, approve MFA): done when `until` is visible. The Runtime shows the
+   * message; this brings the window to the front.
+   */
+  private async waitForHuman(params: Params): Promise<null> {
+    const session = this.session(params);
+    if (session.headless) {
+      throw new AdapterError("HUMAN_REQUIRED", "this step needs a person, but the browser runs without a window", {
+        details: {
+          hint: "Run with a visible browser (no `headless`, SHIKIGAMI_BROWSER_HEADLESS unset), or keep the login with browser.open `session` so unattended runs skip it.",
+        },
+      });
+    }
+    await session.page.bringToFront().catch(() => {});
+    const timeout = typeof params.timeoutMs === "number" ? params.timeoutMs : 300_000;
+    try {
+      await locate(session.page, params.until as Target | undefined)
+        .first()
+        .waitFor({ state: "visible", timeout });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new AdapterError("HUMAN_TIMEOUT", `nobody finished it within ${Math.round(timeout / 1000)} s`, {
+          retryable: false,
+          details: { until: params.until, hint: "Raise the step's timeoutMs, or check that `until` names what the page shows afterwards." },
+        });
+      }
+      throw error;
+    }
+    return null;
   }
 
   /** Accessibility snapshot for AI clients choosing targets. */
   private async snapshot(params: Params): Promise<unknown> {
     if (params.url) await this.open(params);
-    const { page } = this.session(params);
+    const session = this.session(params);
+    const { page } = session;
     const root = params.target ? locate(page, params.target as Target) : page.locator("body");
-    return { url: page.url(), title: await page.title(), snapshot: await root.ariaSnapshot() };
+    const snapshot = await this.redact(session, await root.ariaSnapshot());
+    const result: Record<string, unknown> = { url: page.url(), title: await page.title(), snapshot };
+    if (await page.locator(PASSWORD_FIELDS).first().isVisible().catch(() => false)) {
+      result.login = {
+        site: originOf(page.url()),
+        hint: "This page asks for a login. Never ask the user for the password in chat: use a registered secret (list_secrets; browser.fill value { \"secret\": \"<name>\", \"field\": \"password\" }) or let the user log in by hand with browser.waitForHuman.",
+      };
+    }
+    return result;
   }
 
-  private async close(params: Params): Promise<null> {
+  /** Replaces secret values (and whatever is typed in password fields, even by hand) with ***. */
+  private async redact(session: Session, text: string): Promise<string> {
+    const typed = await session.page
+      .locator(PASSWORD_FIELDS)
+      .evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))
+      .catch(() => [] as string[]);
+    return this.mask(session, text, typed);
+  }
+
+  private mask(session: Session, text: string, extra: string[] = []): string {
+    const values = [...session.secrets, ...extra].filter((v) => v.length > 0).sort((a, b) => b.length - a.length);
+    return values.reduce((acc, v) => acc.split(v).join(MASK), text);
+  }
+
+  /** Closes a context. Returns the login state to save when it was opened with `session`. */
+  private async close(params: Params): Promise<{ sessions: SavedSession[] }> {
     const key = this.key(params);
     const session = this.sessions.get(key);
     this.sessions.delete(key);
-    await session?.context.close().catch(() => {});
-    return null;
+    return { sessions: session ? await this.closeSession(session) : [] };
   }
 
-  private async closeRun(runId: string): Promise<null> {
+  private async closeRun(runId: string): Promise<{ sessions: SavedSession[] }> {
+    const saved: SavedSession[] = [];
     for (const [key, session] of [...this.sessions]) {
       if (key.startsWith(`${runId}/`)) {
         this.sessions.delete(key);
-        await session.context.close().catch(() => {});
+        saved.push(...(await this.closeSession(session)));
       }
     }
-    return null;
+    return { sessions: saved };
+  }
+
+  private async closeSession(session: Session): Promise<SavedSession[]> {
+    let saved: SavedSession[] = [];
+    if (session.saveAs) {
+      const state = await session.context.storageState().catch(() => undefined);
+      if (state) saved = [{ name: session.saveAs, state }];
+    }
+    await session.context.close().catch(() => {});
+    return saved;
   }
 
   /** Maps Playwright failures to stable error codes with repair hints. */
@@ -327,10 +489,11 @@ export class Adapter {
   }
 
   private async pageSnapshot(params: Params): Promise<string | undefined> {
-    const page = this.sessions.get(this.key(params))?.page;
-    if (!page || page.isClosed()) return undefined;
+    const session = this.sessions.get(this.key(params));
+    const page = session?.page;
+    if (!session || !page || page.isClosed()) return undefined;
     try {
-      const text = await page.locator("body").ariaSnapshot({ timeout: 2000 });
+      const text = await this.redact(session, await page.locator("body").ariaSnapshot({ timeout: 2000 }));
       return text.length > SNAPSHOT_LIMIT ? `${text.slice(0, SNAPSHOT_LIMIT)}\n…` : text;
     } catch {
       return undefined;
