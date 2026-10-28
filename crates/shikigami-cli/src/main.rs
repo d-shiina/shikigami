@@ -51,6 +51,12 @@ enum Command {
     /// JSON Schema utilities.
     #[command(subcommand)]
     Schema(SchemaCmd),
+    /// Serve MCP over stdio for AI clients (Claude Code, Codex, Cursor, ...).
+    Mcp {
+        /// Tool classes to expose, comma separated: read, write, run.
+        #[arg(long, value_delimiter = ',', default_value = "read,write,run")]
+        allow: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -165,6 +171,21 @@ fn real_main() -> Result<ExitCode> {
                 std::fs::write(&path, serde_json::to_string_pretty(&schema)? + "\n")?;
                 println!("wrote {}", path.display());
             }
+        }
+        Command::Mcp { allow } => {
+            let mut options = shikigami_mcp::ServerOptions { allow: Vec::new() };
+            for name in allow {
+                let Some(class) = shikigami_mcp::ToolClass::parse(name) else {
+                    bail!("unknown tool class: {name} (expected read, write or run)");
+                };
+                options.allow.push(class);
+            }
+            let svc = std::sync::Arc::new(open_service()?);
+            // stdout carries the protocol; logs already go to stderr.
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            rt.block_on(shikigami_mcp::serve_stdio(svc, runtime.clone(), options))?;
         }
         Command::Run {
             target,

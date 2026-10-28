@@ -88,7 +88,8 @@ Windows SDK は C++ Build Tools の「Desktop development with C++」ワーク�
 - 公式 Rust SDK `rmcp` 3.8.0 は MCP 仕様 **2026-07-28** を実装し、2025-11-25 以前とも互換（README で確認）。
 - トランスポート：stdio（`transport-io`）、Streamable HTTP サーバー（`transport-streamable-http-server`）等。旧 HTTP+SSE（2024-11-05）は提供されない。
 - `#[tool_router]` / `#[tool]` マクロと schemars によりツールの入力スキーマを自動生成できる。
-- Claude Code / Codex / Cursor との実接続確認は Phase 2 で実施する（本書時点では未確認）。
+- Phase 2 で確認：rmcp 3.8.0 のクライアントからの全ツール呼び出し（自動テスト）、Claude Code CLI 2.1.312 での `claude mcp add` 登録と接続ヘルスチェック成功（プロトコル 2025-06-18 で初期化）。Codex / Cursor からの接続は未確認。
+- Claude Code プラグインの形式（`.claude-plugin/plugin.json`、`.mcp.json`、`skills/<name>/SKILL.md`、マーケットプレイスの `.claude-plugin/marketplace.json`）は `claude plugin validate` で検証済み。
 
 ## 5. 名前の衝突確認
 

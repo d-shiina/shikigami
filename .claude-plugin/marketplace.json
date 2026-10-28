@@ -1,0 +1,16 @@
+{
+  "name": "shikigami",
+  "owner": {
+    "name": "Shikigami"
+  },
+  "metadata": {
+    "description": "Shikigami（式神）RPA の Claude Code プラグイン"
+  },
+  "plugins": [
+    {
+      "name": "shikigami",
+      "source": "./plugins/shikigami",
+      "description": "Shikigami RPA の MCP サーバー設定と、シナリオ作成の作法を教えるスキル"
+    }
+  ]
+}
