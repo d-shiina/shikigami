@@ -136,8 +136,10 @@ export function CanvasDock() {
   const moveSelected = useStudio((s) => s.moveSelected);
   const removeSelected = useStudio((s) => s.removeSelected);
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
+  const inside = useStudio((s) => s.dive.length > 0);
 
-  if (!scenario) return null;
+  // Inside a call the chart shows another scenario: editing tools would act on the open one.
+  if (!scenario || inside) return null;
   const stepSelected = selection?.kind === "step";
 
   return (

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
 import { draftFor } from "./components/SecretsDialog";
-import { calledIds, createStudioStore, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
+import { calledIds, createStudioStore, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
 
 const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({
   schemaVersion: 1,
@@ -354,8 +354,40 @@ describe("studio store", () => {
     const run = store.getState().run!;
     expect(run.steps).toEqual({ c1: "running" });
     expect(run.inner.c1).toEqual({ t1: "succeeded" });
+    // A call inside the call keeps its own steps, for when the chart enters it.
+    expect(run.inner["c1/t9"]).toEqual({ u1: "running" });
+    // What an entered call follows: the step started last, not an enclosing loop still running.
+    expect(run.innerLatest).toEqual({ c1: "t1", "c1/t9": "u1" });
     // The callee's variables are not the caller's.
     expect(run.changes.map((c) => c.variable)).not.toContain("scratch");
+  });
+
+  it("enters calls on the chart, nested ones too, and goes back up", async () => {
+    const scenarios: Record<string, Scenario> = {
+      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }]) },
+      scn_b: { ...scenario(1, [{ id: "c2", type: "scenario.call", params: { scenario: "scn_c" } }]), id: "scn_b", name: "B" },
+      scn_c: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
+    };
+    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
+    const store = createStudioStore(fakeApi({ getScenario, listVersions: vi.fn(async () => []) }));
+    await store.getState().open("scn_a");
+    // Called scenarios are loaded however deep they are called.
+    expect(Object.keys(store.getState().called).sort()).toEqual(["scn_b", "scn_c"]);
+    store.getState().select({ kind: "step", stepId: "c1" });
+    store.getState().enterCall("c1");
+    expect(store.getState().dive).toEqual(["c1"]);
+    expect(store.getState().selection).toBeNull();
+    store.getState().enterCall("c2");
+    expect(store.getState().dive).toEqual(["c1", "c2"]);
+    expect(diveChain(store.getState().scenario, store.getState().called, store.getState().dive).map((l) => l.scenario.name)).toEqual(["B", "C"]);
+    // Not a call of the shown level: nothing happens.
+    store.getState().enterCall("x");
+    expect(store.getState().dive).toEqual(["c1", "c2"]);
+    store.getState().leaveCalls(1);
+    expect(store.getState().dive).toEqual(["c1"]);
+    // Picking a step of the open scenario (outline, palette) comes back up.
+    store.getState().goTo("c1");
+    expect(store.getState().dive).toEqual([]);
   });
 
   it("finds the scenarios a scenario calls, nested ones included", () => {

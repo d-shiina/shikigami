@@ -209,6 +209,11 @@ export const ja = {
   viewFlow: "フロー図",
   storyAddHere: "ここに手順を追加",
   storyEmptyBlock: "まだ手順がありません。ここに追加",
+  callEnterHint: "ダブルクリックで中に入る",
+  diveUp: "上の階層へ戻る（Esc）",
+  diveViewOnly: "閲覧のみ",
+  diveReadOnly: "呼び出し先のシナリオを表示しています。編集するときは「開く」で開きます",
+  diveOpen: "このシナリオを開いて編集",
   actor: {
     studio: "あなた",
     mcp: "AI",
