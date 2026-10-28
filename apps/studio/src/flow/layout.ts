@@ -134,10 +134,14 @@ function measure(step: Step, axes: Axes, defs: Defs): Size {
   if (ls.length === 0) return own;
   const ms = ls.map((l) => measureList(l.steps, axes, defs));
   if (axes.dir === "horizontal") {
-    // Blocks hang below their step, side by side, so the top row reads as
-    // the scenario's main line and nesting grows downwards.
-    const lanesMain = LANE_INDENT + ms.reduce((acc, m) => acc + m.main, 0) + axes.mainGap * (ms.length - 1);
-    return { main: Math.max(own.main, lanesMain), cross: own.cross + GAP_Y + Math.max(...ms.map((m) => m.cross)) };
+    // Blocks hang below their step, one under another, so the top row reads
+    // as the scenario's main line, nesting grows downwards, and each lane's
+    // exit runs right on its own row instead of through a sibling lane.
+    const lanesCross = ms.reduce((acc, m) => acc + m.cross, 0) + axes.crossGap * (ms.length - 1);
+    return {
+      main: Math.max(own.main, LANE_INDENT + Math.max(...ms.map((m) => m.main))),
+      cross: own.cross + axes.crossGap + lanesCross,
+    };
   }
   const cross = ms.reduce((acc, m) => acc + m.cross, 0) + axes.crossGap * (ms.length - 1);
   const main = own.main + axes.mainGap + Math.max(...ms.map((m) => m.main));
@@ -226,12 +230,11 @@ class Builder {
       }
     };
     if (this.axes.dir === "horizontal") {
-      let laneMain = main + LANE_INDENT;
-      const laneCross = cross + own.cross + GAP_Y;
+      let laneCross = cross + own.cross + this.axes.crossGap;
       ls.forEach((lane, i) => {
         const size = sizes[i] ?? this.axes.slot;
-        attach(this.list(lane.steps, laneMain, laneCross, size.cross, id, lane.name, lane.label, lane.start), lane);
-        laneMain += size.main + this.axes.mainGap;
+        attach(this.list(lane.steps, main + LANE_INDENT, laneCross, size.cross, id, lane.name, lane.label, lane.start), lane);
+        laneCross += size.cross + this.axes.crossGap;
       });
       return { entry: id, exits: isLoop ? [id] : exits };
     }

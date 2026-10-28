@@ -83,7 +83,7 @@ describe("layoutScenario", () => {
     expect(intoAfter.sort()).toEqual(["a", "b", "c"]);
   });
 
-  it("runs left to right by default, with blocks hanging below their step", () => {
+  it("runs left to right by default, with blocks stacked below their step", () => {
     const steps: Step[] = [
       log("a"),
       { id: "if", type: "control.if", blocks: { then: [log("t")], else: [log("e")] } },
@@ -95,8 +95,9 @@ describe("layoutScenario", () => {
     expect(pos.a!.x).toBeLessThan(pos.if!.x);
     expect(pos.if!.x).toBeLessThan(pos.t!.x);
     expect(pos.t!.y).toBeGreaterThan(pos.if!.y);
-    expect(pos.t!.y).toBe(pos.e!.y);
-    expect(pos.t!.x).toBeLessThan(pos.e!.x);
+    // lanes stack, so the then-lane's exit never runs through the else-lane
+    expect(pos.t!.x).toBe(pos.e!.x);
+    expect(pos.t!.y).toBeLessThan(pos.e!.y);
     expect(pos.e!.x).toBeLessThan(pos.after!.x);
     // the main line stays on one row
     expect(pos.a!.y).toBe(pos.after!.y);
