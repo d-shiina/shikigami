@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ShikigamiRunApi",
+  "type": "object",
+  "properties": {
+    "run_event_envelope": {
+      "$ref": "#/$defs/RunEventEnvelope"
+    },
+    "run_report": {
+      "$ref": "#/$defs/RunReport"
+    },
+    "run_snapshot": {
+      "$ref": "#/$defs/RunSnapshot"
+    }
+  },
+  "required": [
+    "run_event_envelope",
+    "run_report",
+    "run_snapshot"
+  ],
+  "$defs": {
+    "RunEventEnvelope": {
+      "description": "A run event with ordering and timing metadata.",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/RunId"
+        },
+        "seq": {
+          "description": "Monotonic sequence number within the run, starting at 0.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "seq",
+        "at"
+      ],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "runStarted"
+            },
+            "scenarioId": {
+              "$ref": "#/$defs/ScenarioId"
+            },
+            "scenarioName": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "scenarioId",
+            "scenarioName",
+            "revision"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "stepStarted"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "stepType": {
+              "type": "string"
+            },
+            "attempt": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "stepId",
+            "stepType",
+            "attempt"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "stepFinished"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "stepType": {
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/StepOutcome"
+            },
+            "durationMs": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RunError"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "willRetry": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "stepId",
+            "stepType",
+            "outcome",
+            "durationMs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "log"
+            },
+            "level": {
+              "$ref": "#/$defs/LogLevel"
+            },
+            "message": {
+              "type": "string"
+            },
+            "stepId": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StepId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "level",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "runFinished"
+            },
+            "status": {
+              "$ref": "#/$defs/RunStatus"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RunError"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "durationMs": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "status",
+            "durationMs"
+          ]
+        }
+      ]
+    },
+    "RunId": {
+      "description": "Identifier of a single scenario execution.",
+      "type": "string"
+    },
+    "ScenarioId": {
+      "description": "Identifier of a scenario. Also used as its file name in the store.",
+      "type": "string"
+    },
+    "StepId": {
+      "description": "Identifier of a step. Unique within a scenario and stable across edits.",
+      "type": "string"
+    },
+    "StepOutcome": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "skipped"
+      ]
+    },
+    "RunError": {
+      "description": "Structured failure information, kept for AI-assisted diagnosis.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "Stable code, e.g. `STEP_TIMEOUT`, `EXPR_UNDEFINED_VARIABLE`, `ELEMENT_NOT_FOUND`.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "stepId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stepType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "details": {
+          "description": "Adapter-specific evidence: UI element snapshot, screenshot path,\nexpected vs. actual state, etc."
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "LogLevel": {
+      "type": "string",
+      "enum": [
+        "debug",
+        "info",
+        "warn",
+        "error"
+      ]
+    },
+    "RunStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "RunReport": {
+      "description": "Final result of a run.",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/RunId"
+        },
+        "scenarioId": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "scenarioName": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "$ref": "#/$defs/RunStatus"
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "finishedAt": {
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputs": {
+          "description": "Values of output variables (secret outputs are masked when recorded).",
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "runId",
+        "scenarioId",
+        "scenarioName",
+        "revision",
+        "status",
+        "startedAt",
+        "finishedAt",
+        "outputs"
+      ]
+    },
+    "RunSnapshot": {
+      "description": "Live state of a run, for `get_run_status` while it is executing.",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/RunId"
+        },
+        "scenarioId": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "status": {
+          "$ref": "#/$defs/RunStatus"
+        },
+        "currentStep": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stepsExecuted": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "runId",
+        "scenarioId",
+        "status",
+        "stepsExecuted"
+      ]
+    }
+  },
+  "$id": "https://shikigami.dev/schemas/run-api.schema.json"
+}

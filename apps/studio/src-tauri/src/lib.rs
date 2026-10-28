@@ -1,0 +1,81 @@
+//! Shikigami Studio backend.
+//!
+//! Every command is a thin wrapper over `ScenarioService` (editing) or
+//! `Runtime` (execution). Studio owns no scenario logic of its own, so what
+//! the GUI does is exactly what MCP clients and the CLI can do.
+
+mod commands;
+mod watcher;
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use shikigami_core::{FileStore, RunId, ScenarioService};
+use shikigami_runtime::{RunSnapshot, Runtime};
+use tokio_util::sync::CancellationToken;
+
+pub(crate) struct ActiveRun {
+    pub cancel: CancellationToken,
+    pub snapshot: Arc<Mutex<RunSnapshot>>,
+}
+
+pub(crate) struct AppState {
+    pub service: Arc<ScenarioService>,
+    pub runtime: Runtime,
+    pub runs: Mutex<HashMap<RunId, ActiveRun>>,
+}
+
+pub fn run() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,shikigami=debug".into()),
+        )
+        .init();
+
+    let runtime = Runtime::new();
+    let root = FileStore::default_root();
+    let store = match FileStore::open(&root) {
+        Ok(store) => store,
+        Err(e) => {
+            tracing::error!(error = %e, root = %root.display(), "cannot open workspace");
+            std::process::exit(1);
+        }
+    };
+    let service = Arc::new(ScenarioService::new(store, runtime.registry().clone()));
+    let state = AppState {
+        service: service.clone(),
+        runtime,
+        runs: Mutex::new(HashMap::new()),
+    };
+
+    let result = tauri::Builder::default()
+        .manage(state)
+        .setup(move |app| {
+            watcher::spawn(app.handle().clone(), service.store().scenarios_dir());
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::workspace_info,
+            commands::list_scenarios,
+            commands::get_scenario,
+            commands::create_scenario,
+            commands::duplicate_scenario,
+            commands::delete_scenario,
+            commands::edit_scenario,
+            commands::undo,
+            commands::redo,
+            commands::undo_state,
+            commands::validate_scenario,
+            commands::list_step_types,
+            commands::scenario_history,
+            commands::run_scenario,
+            commands::stop_run,
+            commands::run_status,
+        ])
+        .run(tauri::generate_context!());
+    if let Err(e) = result {
+        tracing::error!(error = %e, "Studio exited with an error");
+        std::process::exit(1);
+    }
+}

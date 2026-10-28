@@ -1,0 +1,27 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+@theme {
+  --font-sans: "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  --color-brand-50: #eef6fb;
+  --color-brand-100: #d5e9f5;
+  --color-brand-500: #1a6fa3;
+  --color-brand-600: #155b87;
+  --color-brand-700: #0f3f61;
+  --color-accent-500: #f0782a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+.react-flow__edge-text {
+  font-size: 11px;
+}

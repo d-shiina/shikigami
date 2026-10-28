@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/shikigami-core",
+    "crates/shikigami-runtime",
+    "crates/shikigami-cli",
+    "apps/studio/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "UNLICENSED"
+repository = "https://github.com/d-shiina/shikigami"
+
+[workspace.dependencies]
+shikigami-core = { path = "crates/shikigami-core" }
+shikigami-runtime = { path = "crates/shikigami-runtime" }
+
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+schemars = { version = "1.2.3", features = ["preserve_order"] }
+jsonschema = { version = "0.60.2", default-features = false }
+thiserror = "2.0.21"
+anyhow = "1.0.104"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "signal"] }
+tokio-util = "0.7.20"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+uuid = { version = "1.29.0", features = ["v7", "serde"] }
+time = { version = "0.3.55", features = ["serde", "formatting", "parsing", "macros"] }
+notify = "8.2.1"
+clap = { version = "4.6.7", features = ["derive"] }
+tempfile = "3.27.0"
+dirs = "7.0.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+
+[profile.release]
+lto = "thin"

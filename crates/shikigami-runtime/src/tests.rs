@@ -1,0 +1,442 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
+
+use serde_json::json;
+use shikigami_core::registry::{RiskLevel, StepCategory};
+use shikigami_core::{RetryPolicy, Step, VarDirection, VarType, VariableDef};
+
+use super::*;
+
+fn scenario(steps: Vec<Step>) -> Scenario {
+    let mut s = Scenario::new("test");
+    s.steps = steps;
+    let mut n = 0;
+    for step in s.steps.iter_mut() {
+        assign_ids(step, &mut n);
+    }
+    s
+}
+
+fn assign_ids(step: &mut Step, n: &mut u32) {
+    if step.id.is_empty() {
+        *n += 1;
+        step.id = format!("s{n}").into();
+    }
+    for children in step.blocks.values_mut() {
+        for c in children {
+            assign_ids(c, n);
+        }
+    }
+}
+
+fn var(name: &str, ty: VarType, dir: VarDirection, default: Option<Value>) -> VariableDef {
+    VariableDef {
+        direction: dir,
+        default,
+        ..VariableDef::new(name, ty)
+    }
+}
+
+fn set(name: &str, expression: &str) -> Step {
+    Step::new("variable.set")
+        .with_param("name", name)
+        .with_param("expression", expression)
+}
+
+fn log(message: &str) -> Step {
+    Step::new("log.message").with_param("message", message)
+}
+
+async fn run(runtime: &Runtime, s: Scenario, inputs: Value) -> (RunReport, Vec<RunEventEnvelope>) {
+    let inputs = inputs.as_object().cloned().unwrap_or_default();
+    let handle = runtime
+        .start(
+            s,
+            RunOptions {
+                inputs,
+                run_id: None,
+            },
+        )
+        .expect("start");
+    let mut events = Vec::new();
+    let report = handle
+        .wait_with(|e| events.push(e.clone()))
+        .await
+        .expect("wait");
+    (report, events)
+}
+
+fn logs(events: &[RunEventEnvelope]) -> Vec<String> {
+    events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::Log { message, .. } => Some(message.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Test adapter step type: fails until the given attempt, then returns the attempt number.
+fn flaky_def() -> StepTypeDef {
+    StepTypeDef {
+        step_type: "test.flaky".into(),
+        category: StepCategory::Other,
+        label: "flaky".into(),
+        description: String::new(),
+        params_schema: json!({ "type": "object", "properties": { "succeedOn": { "type": "integer" }, "sleepMs": { "type": "integer" } } }),
+        blocks: vec![],
+        has_output: true,
+        expression_params: vec![],
+        binds_variables: vec![],
+        risk: RiskLevel::Safe,
+    }
+}
+
+struct Flaky(AtomicU32);
+
+impl ActionHandler for Flaky {
+    fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+        Box::pin(async move {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            if let Some(ms) = input.params.get("sleepMs").and_then(Value::as_u64) {
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+            }
+            let succeed_on = input
+                .params
+                .get("succeedOn")
+                .and_then(Value::as_u64)
+                .unwrap_or(1);
+            if u64::from(input.attempt) >= succeed_on {
+                Ok(json!(input.attempt))
+            } else {
+                Err(StepError::new("ELEMENT_NOT_FOUND", "not yet"))
+            }
+        })
+    }
+}
+
+fn flaky_runtime() -> Runtime {
+    Runtime::builder()
+        .register(flaky_def(), Flaky(AtomicU32::new(0)))
+        .build()
+}
+
+#[tokio::test]
+async fn runs_the_example_scenario_without_ai() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/invoice-summary.json");
+    let text = std::fs::read_to_string(path).expect("example");
+    let s = shikigami_core::migrate::parse_scenario(&text).expect("parse");
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs.get("total"), Some(&json!(170000)));
+    assert_eq!(report.outputs.get("flagged"), Some(&json!(["INV-002"])));
+    let logs = logs(&events);
+    assert_eq!(
+        logs.first().map(String::as_str),
+        Some("3 件の請求書を処理します")
+    );
+    assert!(logs.iter().any(|l| l.contains("INV-002 (150000 円)")));
+    // Events are strictly ordered.
+    assert!(events.windows(2).all(|w| w[0].seq < w[1].seq));
+    assert!(matches!(
+        events.last().map(|e| &e.event),
+        Some(RunEvent::RunFinished { .. })
+    ));
+}
+
+#[tokio::test]
+async fn inputs_are_type_checked() {
+    let mut s = scenario(vec![]);
+    s.variables
+        .push(var("n", VarType::Number, VarDirection::Input, None));
+    let (report, _) = run(&Runtime::new(), s.clone(), json!({})).await;
+    assert_eq!(report.error.map(|e| e.code), Some("MISSING_INPUT".into()));
+    let (report, _) = run(&Runtime::new(), s.clone(), json!({ "n": "x" })).await;
+    assert_eq!(report.error.map(|e| e.code), Some("INVALID_INPUT".into()));
+    let (report, _) = run(&Runtime::new(), s, json!({ "n": 1, "zzz": 2 })).await;
+    assert_eq!(report.error.map(|e| e.code), Some("UNKNOWN_INPUT".into()));
+}
+
+#[tokio::test]
+async fn invalid_scenarios_do_not_start() {
+    let s = scenario(vec![Step::new("control.if")]);
+    let err = Runtime::new()
+        .start(s, RunOptions::default())
+        .err()
+        .expect("invalid");
+    assert_eq!(err.code, "VALIDATION_FAILED");
+}
+
+#[tokio::test]
+async fn loops_with_break_and_continue() {
+    let mut s = scenario(vec![
+        set("acc", "''"),
+        Step::new("control.repeat")
+            .with_param("count", 10)
+            .with_param("indexVar", "i")
+            .with_block(
+                "body",
+                vec![
+                    Step::new("control.if")
+                        .with_param("condition", "i == 1")
+                        .with_block("then", vec![Step::new("control.continue")]),
+                    Step::new("control.if")
+                        .with_param("condition", "i >= 4")
+                        .with_block("then", vec![Step::new("control.break")]),
+                    set("acc", "acc + i"),
+                ],
+            ),
+        set("n", "0"),
+        Step::new("control.while")
+            .with_param("condition", "n < 3")
+            .with_block("body", vec![set("n", "n + 1")]),
+    ]);
+    s.variables
+        .push(var("acc", VarType::String, VarDirection::Output, None));
+    s.variables
+        .push(var("n", VarType::Number, VarDirection::Output, None));
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["acc"], json!("023"));
+    assert_eq!(report.outputs["n"], json!(3));
+}
+
+#[tokio::test]
+async fn infinite_loops_are_bounded() {
+    let s = scenario(vec![
+        Step::new("control.while")
+            .with_param("condition", "true")
+            .with_param("maxIterations", 5),
+    ]);
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(
+        report.error.map(|e| e.code),
+        Some("LOOP_LIMIT_EXCEEDED".into())
+    );
+}
+
+#[tokio::test]
+async fn try_catch_finally() {
+    let mut s = scenario(vec![
+        Step::new("control.try")
+            .with_param("errorVar", "err")
+            .with_block(
+                "try",
+                vec![
+                    log("before"),
+                    Step::new("control.fail")
+                        .with_param("message", "boom")
+                        .with_param("code", "MY_ERROR")
+                        .with_id("failing"),
+                    log("never"),
+                ],
+            )
+            .with_block("catch", vec![set("caught", "err.code + ':' + err.stepId")])
+            .with_block("finally", vec![log("cleanup")]),
+    ]);
+    s.variables
+        .push(var("caught", VarType::String, VarDirection::Output, None));
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(report.outputs["caught"], json!("MY_ERROR:failing"));
+    let logs = logs(&events);
+    assert!(logs.contains(&"cleanup".to_string()));
+    assert!(!logs.contains(&"never".to_string()));
+}
+
+#[tokio::test]
+async fn failures_record_the_failing_step() {
+    let s = scenario(vec![
+        Step::new("control.if")
+            .with_param("condition", "true")
+            .with_block("then", vec![set("x", "undefinedThing + 1").with_id("bad")]),
+    ]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let error = report.error.expect("error");
+    assert_eq!(error.code, "EXPR_UNDEFINED_VARIABLE");
+    assert_eq!(error.step_id.as_ref().map(|s| s.as_str()), Some("bad"));
+    assert_eq!(error.step_type.as_deref(), Some("variable.set"));
+    // The failing step reports the error; the enclosing `if` is marked failed without duplicating it.
+    let finished: Vec<_> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::StepFinished {
+                step_id,
+                outcome,
+                error,
+                ..
+            } => Some((step_id.to_string(), *outcome, error.is_some())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        finished,
+        [
+            ("bad".into(), StepOutcome::Failed, true),
+            ("s1".into(), StepOutcome::Failed, false)
+        ]
+    );
+}
+
+#[tokio::test]
+async fn retries_with_backoff_then_saves_output() {
+    let mut step = Step::new("test.flaky").with_param("succeedOn", 3);
+    step.retry = Some(RetryPolicy {
+        max_attempts: 3,
+        backoff_ms: 1,
+        backoff_multiplier: 2.0,
+    });
+    step.save_as = Some("attempts".into());
+    let mut s = scenario(vec![step]);
+    s.variables
+        .push(var("attempts", VarType::Number, VarDirection::Output, None));
+    let (report, events) = run(&flaky_runtime(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["attempts"], json!(3));
+    let retries = events
+        .iter()
+        .filter(|e| {
+            matches!(
+                e.event,
+                RunEvent::StepFinished {
+                    will_retry: true,
+                    ..
+                }
+            )
+        })
+        .count();
+    assert_eq!(retries, 2);
+}
+
+#[tokio::test]
+async fn retries_exhausted_fail_and_on_error_continue_records_last_error() {
+    let mut step = Step::new("test.flaky").with_param("succeedOn", 5);
+    step.retry = Some(RetryPolicy {
+        max_attempts: 2,
+        backoff_ms: 1,
+        backoff_multiplier: 1.0,
+    });
+    let (report, _) = run(&flaky_runtime(), scenario(vec![step.clone()]), json!({})).await;
+    assert_eq!(
+        report.error.map(|e| e.code),
+        Some("ELEMENT_NOT_FOUND".into())
+    );
+
+    step.on_error = Some(OnError::Continue);
+    let mut s = scenario(vec![step, set("code", "lastError.code")]);
+    s.variables
+        .push(var("code", VarType::String, VarDirection::Output, None));
+    let (report, _) = run(&flaky_runtime(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(report.outputs["code"], json!("ELEMENT_NOT_FOUND"));
+}
+
+#[tokio::test]
+async fn steps_time_out() {
+    let mut step = Step::new("test.flaky").with_param("sleepMs", 5_000);
+    step.timeout_ms = Some(20);
+    let (report, _) = run(&flaky_runtime(), scenario(vec![step]), json!({})).await;
+    assert_eq!(report.error.map(|e| e.code), Some("STEP_TIMEOUT".into()));
+}
+
+#[tokio::test]
+async fn runs_can_be_cancelled_mid_step() {
+    let s = scenario(vec![
+        Step::new("flow.delay").with_param("ms", 60_000),
+        log("never"),
+    ]);
+    let mut handle = Runtime::new()
+        .start(s, RunOptions::default())
+        .expect("start");
+    // Wait until the delay step has started.
+    while let Some(e) = handle.next_event().await {
+        if matches!(e.event, RunEvent::StepStarted { .. }) {
+            break;
+        }
+    }
+    let snapshot = handle.snapshot().expect("snapshot");
+    assert_eq!(snapshot.status, RunStatus::Running);
+    assert_eq!(
+        snapshot.current_step.as_ref().map(|s| s.as_str()),
+        Some("s1")
+    );
+    handle.cancel();
+    let report = tokio::time::timeout(Duration::from_secs(5), handle.wait())
+        .await
+        .expect("finished")
+        .expect("report");
+    assert_eq!(report.status, RunStatus::Cancelled);
+}
+
+#[tokio::test]
+async fn secrets_are_masked_in_logs_errors_and_outputs() {
+    let mut s = scenario(vec![
+        log("password is {{ password }}"),
+        Step::new("control.fail").with_param("message", "login failed with {{ password }}"),
+    ]);
+    let mut password = var("password", VarType::String, VarDirection::InOut, None);
+    password.secret = true;
+    s.variables.push(password);
+    let (report, events) = run(&Runtime::new(), s, json!({ "password": "hunter2" })).await;
+    assert_eq!(logs(&events), ["password is ***"]);
+    assert_eq!(
+        report.error.expect("error").message,
+        "login failed with ***"
+    );
+    assert_eq!(report.outputs["password"], json!("***"));
+    let all = serde_json::to_string(&events).expect("json");
+    assert!(!all.contains("hunter2"));
+}
+
+#[tokio::test]
+async fn disabled_steps_are_skipped() {
+    let mut skipped = log("skipped");
+    skipped.disabled = true;
+    let (_, events) = run(
+        &Runtime::new(),
+        scenario(vec![skipped, log("ran")]),
+        json!({}),
+    )
+    .await;
+    assert_eq!(logs(&events), ["ran"]);
+}
+
+#[tokio::test]
+async fn run_records_round_trip() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let handle = Runtime::new()
+        .start(scenario(vec![log("hello")]), RunOptions::default())
+        .expect("start");
+    let run_id = handle.run_id.clone();
+    let mut recorder = record::RunRecorder::create(dir.path(), &run_id).expect("recorder");
+    let report = handle
+        .wait_with(|e| recorder.write_event(e).expect("write"))
+        .await
+        .expect("report");
+    recorder.finish(&report).expect("finish");
+
+    assert_eq!(
+        record::list_runs(dir.path()).expect("list"),
+        std::slice::from_ref(&run_id)
+    );
+    assert_eq!(
+        record::read_report(dir.path(), &run_id).expect("read"),
+        Some(report)
+    );
+    let events = record::read_events(dir.path(), &run_id).expect("events");
+    assert_eq!(logs(&events), ["hello"]);
+}
+
+#[test]
+fn committed_run_schema_is_up_to_date() {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/run-api.schema.json");
+    let expected = serde_json::to_string_pretty(&run_api_schema()).expect("json") + "\n";
+    let actual = std::fs::read_to_string(path).unwrap_or_default();
+    assert!(
+        actual == expected,
+        "schemas/run-api.schema.json is outdated; run `pnpm schema:generate`"
+    );
+}
