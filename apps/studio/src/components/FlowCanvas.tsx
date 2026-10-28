@@ -24,10 +24,10 @@ import { focus, useFocus, varFocus } from "../lib/focus";
 import { actorLabel, describe } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
-import { valueText } from "../lib/runValues";
 import { revertBlocker, type StepRunState, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
+import { ChangeView, changeText } from "./ValueView";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
@@ -136,10 +136,12 @@ const MAX_CHIPS = 2;
 /** The values a chip's popover lists: the last few, newest last. */
 function ValuePopover({ name, color, values, anchor }: { name: string; color: string; values: VariableChange[]; anchor: DOMRect }) {
   const last = values.at(-1);
+  const below = anchor.top < window.innerHeight / 2;
   return createPortal(
     <div
-      style={{ left: anchor.left + anchor.width / 2, top: anchor.top - 6 }}
-      className="pointer-events-none fixed z-50 max-w-[280px] -translate-x-1/2 -translate-y-full rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lg"
+      // Above the chip, or below it when there is no room up top.
+      style={{ left: anchor.left + anchor.width / 2, top: below ? anchor.bottom + 6 : anchor.top - 6 }}
+      className={`pointer-events-none fixed z-50 max-w-[480px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lg`}
     >
       <div className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
@@ -147,14 +149,24 @@ function ValuePopover({ name, color, values, anchor }: { name: string; color: st
         {values.length > 1 && <span className="text-slate-400">{values.length}回変化</span>}
       </div>
       {last ? (
-        <ul className="mt-1 space-y-0.5 font-mono">
-          {values.slice(-5).map((w) => (
-            <li key={w.seq} className={`truncate ${w === last ? "font-semibold text-ink" : "text-slate-500"}`}>
-              {w.iteration != null && <span className="mr-1 text-slate-400">[{w.iteration}]</span>}
-              {valueText(w)}
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="mt-1.5 rounded-[3px] border border-slate-100 bg-paper px-2 py-1.5">
+            {last.iteration != null && <div className="mb-0.5 text-[10px] text-slate-400">{last.iteration + 1}件目のとき</div>}
+            <ChangeView change={last} />
+          </div>
+          {values.length > 1 && (
+            <div className="mt-1.5">
+              <div className="text-[10px] text-slate-400">それまでの値</div>
+              <ol className="mt-0.5 space-y-0.5 text-slate-500">
+                {values.slice(-6, -1).map((w) => (
+                  <li key={w.seq} className="truncate">
+                    {changeText(w)}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </>
       ) : (
         <div className="mt-0.5 text-slate-400">実行すると、ここに値が出ます</div>
       )}
@@ -189,7 +201,7 @@ function VarChip({ name, color, values, side, owner }: { name: string; color: st
       }}
     >
       {side === "out" && last ? (
-        <span className="truncate text-ink">{valueText(last)}</span>
+        <span className="truncate text-ink">{changeText(last)}</span>
       ) : (
         <span className="truncate font-semibold">{name}</span>
       )}
