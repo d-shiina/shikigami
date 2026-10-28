@@ -7,6 +7,7 @@ import { IssuesPanel } from "./components/IssuesPanel";
 import { PropertyPanel } from "./components/PropertyPanel";
 import { RunLog } from "./components/RunLog";
 import { ScenarioList } from "./components/ScenarioList";
+import { StoryView } from "./components/StoryView";
 import { Timeline, usePendingReview } from "./components/Timeline";
 import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
 import { VariablesPanel } from "./components/VariablesPanel";
@@ -90,8 +91,49 @@ function SidePanel() {
   );
 }
 
+type View = "story" | "flow";
+const VIEW_KEY = "shikigami.studio.view";
+
+function loadView(): View {
+  try {
+    return globalThis.localStorage?.getItem(VIEW_KEY) === "flow" ? "flow" : "story";
+  } catch {
+    return "story";
+  }
+}
+
+function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
+  const options: [View, string][] = [
+    ["story", t.viewStory],
+    ["flow", t.viewFlow],
+  ];
+  return (
+    <div className="absolute top-3 right-4 flex overflow-hidden rounded-full border border-slate-300 bg-sheet text-xs shadow-sm">
+      {options.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={`px-3 py-1 ${view === key ? "bg-ink text-paper" : "text-slate-600 hover:bg-slate-100"}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Shell() {
   const hasScenario = useStudio((s) => s.scenario !== null);
+  const [view, setViewState] = useState<View>(loadView);
+  const setView = (next: View) => {
+    setViewState(next);
+    try {
+      globalThis.localStorage?.setItem(VIEW_KEY, next);
+    } catch {
+      // Only a remembered preference.
+    }
+  };
   const hasRun = useStudio((s) => s.run !== null);
   return (
     <div className="grid h-full grid-cols-[232px_1fr_360px] grid-rows-[auto_auto_1fr]">
@@ -109,9 +151,14 @@ function Shell() {
       </div>
       <main className="flex min-h-0 flex-col">
         <div className="relative min-h-0 flex-1">
-          <ReactFlowProvider>
-            <FlowCanvas />
-          </ReactFlowProvider>
+          {view === "story" ? (
+            <StoryView />
+          ) : (
+            <ReactFlowProvider>
+              <FlowCanvas />
+            </ReactFlowProvider>
+          )}
+          {hasScenario && <ViewToggle view={view} onChange={setView} />}
           <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
             <CanvasDock />
           </div>

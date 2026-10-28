@@ -94,6 +94,10 @@ export const ja = {
   addHere: "ここに追加",
   shortcut: "Ctrl+K",
   inspect: "設定",
+  viewStory: "手順書",
+  viewFlow: "フロー図",
+  storyAddHere: "ここに手順を追加",
+  storyEmptyBlock: "まだ手順がありません。ここに追加",
   actor: {
     studio: "あなた",
     mcp: "AI",
