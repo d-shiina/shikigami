@@ -24,7 +24,7 @@ function saveOrders(orders) {
 }
 
 function requireLogin() {
-  const user = sessionStorage.getItem("user");
+  const user = localStorage.getItem("user");
   if (!user) {
     location.href = "index.html";
     return null;

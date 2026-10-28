@@ -62,17 +62,22 @@ function VariableRow({ variable }: { variable: VariableDef }) {
           ))}
         </select>
         <label className="flex items-center gap-1 text-xs">
-          <input type="checkbox" checked={variable.secret ?? false} onChange={(e) => update({ secret: e.target.checked })} />
+          <input type="checkbox" checked={variable.secret ?? false} onChange={(e) => update(e.target.checked ? { secret: true, default: undefined } : { secret: false })} />
           {t.secret}
         </label>
       </div>
-      <input
-        className={`${cell} w-full font-mono`}
-        placeholder={t.defaultValue}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
-      />
+      {variable.secret ? (
+        // A default would be stored in plain text in the scenario.
+        <p className="text-[11px] text-slate-400">{t.secretNoDefault}</p>
+      ) : (
+        <input
+          className={`${cell} w-full font-mono`}
+          placeholder={t.defaultValue}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
+        />
+      )}
     </li>
   );
 }

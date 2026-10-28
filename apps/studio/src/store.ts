@@ -16,7 +16,7 @@ import type {
   VariableDef,
 } from "@shikigami/schema";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { type Api, ApiError } from "./lib/api";
+import { type Api, ApiError, type SecretInfo, type SecretInput } from "./lib/api";
 import { t } from "./lib/i18n";
 
 export type Selection =
@@ -57,6 +57,14 @@ export type StudioState = {
   /** Revisions of non-Studio changes the user has looked at, per scenario. */
   reviewed: Record<string, number[]>;
   paletteOpen: boolean;
+  /** Registered secrets (names, user names, sites; never values). */
+  secrets: SecretInfo[];
+  secretKeyLocation: string;
+  /** Secrets are listed by name only: their key is not on this PC / user. */
+  secretKeyMissing: boolean;
+  secretsOpen: boolean;
+  /** A running step waits for the person at the PC (manual login, MFA). */
+  human: { stepId: string; message: string } | null;
 
   init(): Promise<void>;
   refreshList(): Promise<void>;
@@ -86,6 +94,12 @@ export type StudioState = {
   /** Reverts one journal entry by sending its inverse ops to Core as a new edit. */
   revert(entry: HistoryEntry): Promise<void>;
   setPaletteOpen(open: boolean): void;
+  loadSecrets(): Promise<void>;
+  /** Returns true when saved. */
+  saveSecret(input: SecretInput): Promise<boolean>;
+  removeSecret(name: string): Promise<void>;
+  resetSecrets(): Promise<void>;
+  setSecretsOpen(open: boolean): void;
 };
 
 export const isExternal = (entry: HistoryEntry) => entry.actor.kind !== "studio";
@@ -266,6 +280,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       history: [],
       reviewed: loadReviewed(),
       paletteOpen: false,
+      secrets: [],
+      secretKeyLocation: "",
+      secretKeyMissing: false,
+      secretsOpen: false,
+      human: null,
 
       async init() {
         try {
@@ -274,6 +293,51 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         } catch (e) {
           set({ error: message(e) });
         }
+        await get().loadSecrets();
+      },
+
+      async loadSecrets() {
+        try {
+          const { secrets, keyLocation, keyMissing } = await api.listSecrets();
+          set({ secrets, secretKeyLocation: keyLocation, secretKeyMissing: keyMissing });
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      async saveSecret(input) {
+        try {
+          await api.setSecret(input);
+          await get().loadSecrets();
+          set({ notice: t.secretSaved(input.name), error: null });
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      },
+
+      async removeSecret(name) {
+        try {
+          await api.removeSecret(name);
+          await get().loadSecrets();
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      async resetSecrets() {
+        try {
+          await api.resetSecrets();
+          await get().loadSecrets();
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      setSecretsOpen(open) {
+        set({ secretsOpen: open });
+        if (open) void get().loadSecrets();
       },
 
       async refreshList() {
@@ -432,6 +496,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       onRunEvent(env) {
         set((s) => {
+          let human = s.human;
           const run: RunState =
             s.run && s.run.runId === env.runId
               ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs }
@@ -447,7 +512,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             case "stepStarted":
               run.steps[env.stepId] = "running";
               break;
+            case "humanActionRequired":
+              human = { stepId: env.stepId, message: env.message };
+              push("warn", `${t.waitingForYou}: ${env.message}`, env.stepId);
+              break;
             case "stepFinished":
+              if (human?.stepId === env.stepId) human = null;
               run.steps[env.stepId] = env.outcome;
               if (env.error) {
                 push("error", `${env.error.code}: ${env.error.message}${env.willRetry ? "（リトライします）" : ""}`, env.stepId);
@@ -457,11 +527,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push(env.level, env.message, env.stepId);
               break;
             case "runFinished":
+              human = null;
               run.status = env.status;
               push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]} (${env.durationMs} ms)`);
               break;
           }
-          return { run };
+          return { run, human };
         });
       },
 

@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde_json::{Value, json};
 use shikigami_core::{Scenario, Step, Validator};
@@ -12,6 +13,7 @@ const FAKE_ADAPTER: &str = r#"
 import { appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 const log = __LOG__;
+const sessions = [];
 createInterface({ input: process.stdin }).on("line", (line) => {
   const { id, method, params } = JSON.parse(line);
   appendFileSync(log, JSON.stringify({ method, params }) + "\n");
@@ -21,7 +23,12 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       data: { code: "ELEMENT_NOT_FOUND", retryable: true, details: { hint: "look again" } } } }) + "\n");
     return;
   }
-  const result = method === "open" ? { url: params.url, title: "fake" } : method === "getTable" ? [{ a: "1" }] : null;
+  if (method === "open" && params.session) sessions.push(params.session);
+  const saved = sessions.splice(0).map((name) => ({ name, state: { cookies: [{ name: "sid", value: "abc" }] } }));
+  const result = method === "open" ? (sessions.push(...saved.map((s) => s.name)), { url: params.url, title: "fake" })
+    : method === "getTable" ? [{ a: "1" }]
+    : method === "closeRun" || method === "close" ? { sessions: saved }
+    : (sessions.push(...saved.map((s) => s.name)), null);
   process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n");
 });
 "#;
@@ -165,4 +172,92 @@ async fn a_missing_adapter_is_reported_without_retrying() {
             .unwrap()
             .contains("Node.js")
     );
+}
+
+fn vault(dir: &Path) -> Arc<shikigami_secrets::Vault> {
+    let vault = shikigami_secrets::Vault::with_key_store(
+        dir,
+        Box::new(shikigami_secrets::MemoryKeyStore::default()),
+    );
+    vault
+        .set(shikigami_secrets::SecretInput {
+            name: "受注".into(),
+            username: Some("tanaka".into()),
+            password: Some("hunter2".into()),
+            sites: Some(vec!["https://orders.example.com/login".into()]),
+            ..Default::default()
+        })
+        .unwrap();
+    vault
+        .set(shikigami_secrets::SecretInput {
+            name: "no-site".into(),
+            password: Some("x".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    Arc::new(vault)
+}
+
+fn fill_secret(name: &str, field: &str) -> Step {
+    Step::new(types::FILL)
+        .with_param("target", json!({ "label": "パスワード" }))
+        .with_param("value", json!({ "secret": name, "field": field }))
+}
+
+#[tokio::test]
+async fn secrets_go_to_the_adapter_with_their_sites_only() {
+    let f = fake();
+    let dir = tempfile::tempdir().unwrap();
+    let runtime = f.runtime.clone().with_secrets(vault(dir.path()));
+    let report = run(
+        &runtime,
+        vec![
+            open("https://orders.example.com/"),
+            fill_secret("受注", "password"),
+        ],
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let calls = calls(&f.log);
+    assert_eq!(calls[1]["params"]["value"], "hunter2");
+    assert_eq!(
+        calls[1]["params"]["secret"],
+        json!({ "name": "受注", "sites": ["https://orders.example.com"], "sensitive": true })
+    );
+
+    // A secret without a site is never typed anywhere.
+    let report = run(
+        &runtime,
+        vec![open("https://x/"), fill_secret("no-site", "password")],
+    )
+    .await;
+    let error = report.error.unwrap();
+    assert_eq!(error.code, "SECRET_SITE_NOT_SET");
+    assert!(
+        error.details.unwrap()["hint"]
+            .as_str()
+            .unwrap()
+            .contains("Studio")
+    );
+}
+
+#[tokio::test]
+async fn logins_are_saved_when_the_run_ends_and_loaded_next_time() {
+    let f = fake();
+    let dir = tempfile::tempdir().unwrap();
+    let secrets = vault(dir.path());
+    let runtime = f.runtime.clone().with_secrets(secrets.clone());
+    let open_session = || open("https://orders.example.com/").with_param("session", "受注");
+
+    let report = run(&runtime, vec![open_session()]).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    use shikigami_core::secret::SecretProvider;
+    let saved = secrets.load_session("受注").unwrap().unwrap();
+    assert_eq!(saved["cookies"][0]["value"], "abc");
+
+    run(&runtime, vec![open_session()]).await;
+    let calls = calls(&f.log);
+    let opens: Vec<&Value> = calls.iter().filter(|c| c["method"] == "open").collect();
+    assert!(opens[0]["params"].get("storageState").is_none());
+    assert_eq!(opens[1]["params"]["storageState"], saved);
 }
