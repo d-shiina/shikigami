@@ -221,7 +221,7 @@ function ThemeSwitch() {
 
 export function StatusBar() {
   return (
-    <footer className="col-span-3 flex h-7 min-w-0 items-center border-t border-slate-200 bg-sheet px-2 text-[11px] text-slate-500">
+    <footer className="col-span-full flex h-7 min-w-0 items-center border-t border-slate-200 bg-sheet px-2 text-[11px] text-slate-500">
       <Workspace />
       <AiActivity />
       <Waiting />

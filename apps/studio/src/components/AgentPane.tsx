@@ -1,7 +1,7 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code by default) with Shikigami's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { useEffect, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { type AgentPart, type ChatItem, useAgent } from "../agent";
 import { agent } from "../lib/api";
 import { useStudio } from "../context";
@@ -40,6 +40,54 @@ const TOOL_LABELS: Record<string, string> = {
 
 const toolLabel = (name: string) => TOOL_LABELS[name] ?? name;
 
+const WIDTH_KEY = "shikigami.agentWidth";
+const MIN_WIDTH = 300;
+const MAX_WIDTH = 720;
+// The flow chart keeps at least this much of the window when the pane is dragged wider.
+const CANVAS_ROOM = 640;
+
+const clampWidth = (width: number) =>
+  Math.round(Math.max(MIN_WIDTH, Math.min(width, MAX_WIDTH, (globalThis.innerWidth ?? 1600) - CANVAS_ROOM)));
+
+function loadWidth() {
+  try {
+    const saved = Number(globalThis.localStorage?.getItem(WIDTH_KEY));
+    if (saved > 0) return clampWidth(saved);
+  } catch {
+    // Only a remembered preference.
+  }
+  return 380;
+}
+
+/** Drag the pane's left edge; the width is remembered. */
+function useWidth() {
+  const [width, setWidth] = useState(loadWidth);
+  const startDrag = (e: ReactPointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    let next = width;
+    const move = (ev: PointerEvent) => {
+      next = clampWidth(startWidth + startX - ev.clientX);
+      setWidth(next);
+    };
+    const up = () => {
+      globalThis.removeEventListener("pointermove", move);
+      globalThis.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      try {
+        globalThis.localStorage?.setItem(WIDTH_KEY, String(next));
+      } catch {
+        // Only a remembered preference.
+      }
+    };
+    document.body.style.cursor = "col-resize";
+    globalThis.addEventListener("pointermove", move);
+    globalThis.addEventListener("pointerup", up);
+  };
+  return [width, startDrag] as const;
+}
+
 /** Header button that opens the pane. */
 export function AgentButton() {
   const open = useAgent((s) => s.open);
@@ -73,6 +121,7 @@ export function AgentPane() {
   const selection = useStudio((s) => s.selection);
   const [draft, setDraft] = useState("");
   const end = useRef<HTMLDivElement>(null);
+  const [width, startDrag] = useWidth();
   useEffect(() => {
     // Newer WebView2 returns a promise here; an effect must not.
     void end.current?.scrollIntoView({ block: "end" });
@@ -85,7 +134,13 @@ export function AgentPane() {
     if (await send(draft, ref, context)) setDraft("");
   };
   return (
-    <aside className="fixed top-12 right-0 bottom-7 z-30 flex w-[380px] flex-col border-l border-slate-200 bg-sheet shadow-xl">
+    <aside style={{ width }} className="relative col-start-4 row-start-3 flex min-h-0 flex-col border-l border-slate-200 bg-sheet">
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        onPointerDown={startDrag}
+        className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-brand-500/30"
+      />
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5">
         <div className="min-w-0 flex-1 text-[13px] font-bold">{info?.name ?? "AI"}</div>
         <button

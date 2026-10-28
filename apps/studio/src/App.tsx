@@ -236,9 +236,9 @@ function Shell() {
     }
   };
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
+    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px_auto]" : "grid-cols-[44px_minmax(0,1fr)_360px_auto]"}`}>
       {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
-      <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 border-b border-slate-200 bg-sheet px-4 select-none">
+      <header data-tauri-drag-region className="relative col-span-full flex h-12 items-center gap-3 border-b border-slate-200 bg-sheet px-4 select-none">
         <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
         <ModeSwitch />
         <ScenarioHeader />
@@ -247,7 +247,7 @@ function Shell() {
         <SecretsButton />
         <WindowControls />
       </header>
-      <div className="col-span-3">
+      <div className="col-span-full">
         <HumanBanner />
         <SecretAskBanner />
         <Banner />
@@ -290,10 +290,11 @@ function Shell() {
         )}
       </main>
       <div className="min-h-0">{hasScenario && <SidePanel />}</div>
+      {/* Its own column, so the properties and the record stay in view beside it. */}
+      <AgentPane />
       <StatusBar />
       <CommandPalette />
       <SecretsDialog />
-      <AgentPane />
     </div>
   );
 }
