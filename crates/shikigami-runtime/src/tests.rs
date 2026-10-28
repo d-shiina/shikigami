@@ -861,6 +861,106 @@ async fn runs_the_batch_example() {
     assert_eq!(report.outputs["taxed"][1], json!(165000));
 }
 
+/// `(variable, value, stepId)` of every `variableChanged` event, in order.
+fn changes(events: &[RunEventEnvelope]) -> Vec<(String, Value, Option<String>)> {
+    events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::VariableChanged {
+                variable,
+                value,
+                step_id,
+                ..
+            } => Some((
+                variable.clone(),
+                value.clone(),
+                step_id.as_ref().map(|s| s.as_str().to_owned()),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+fn change(variable: &str, value: Value, step_id: Option<&str>) -> (String, Value, Option<String>) {
+    (variable.to_owned(), value, step_id.map(str::to_owned))
+}
+
+#[tokio::test]
+async fn variable_changes_are_reported_with_the_assigning_step() {
+    let mut s = scenario(vec![
+        set("total", "price * 2"),
+        Step::new("control.repeat")
+            .with_param("count", 2)
+            .with_param("indexVar", "i")
+            .with_block("body", vec![set("total", "total + i")]),
+    ]);
+    s.variables = vec![
+        var("price", VarType::Number, VarDirection::Input, None),
+        var(
+            "total",
+            VarType::Number,
+            VarDirection::Output,
+            Some(json!(0)),
+        ),
+    ];
+    let (report, events) = run(&Runtime::new(), s, json!({ "price": 10 })).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert!(matches!(events[0].event, RunEvent::RunStarted { .. }));
+    assert_eq!(
+        changes(&events),
+        [
+            change("price", json!(10), None),
+            change("total", json!(0), None),
+            change("total", json!(20), Some("s1")),
+            change("i", json!(0), Some("s2")),
+            change("total", json!(20), Some("s3")),
+            change("i", json!(1), Some("s2")),
+            change("total", json!(21), Some("s3")),
+        ]
+    );
+    // Each change sits between its step's started and finished events.
+    let seq_of = |pred: &dyn Fn(&RunEvent) -> bool| {
+        events.iter().find(|e| pred(&e.event)).expect("event").seq
+    };
+    let started =
+        seq_of(&|e| matches!(e, RunEvent::StepStarted { step_id, .. } if step_id.as_str() == "s1"));
+    let changed = seq_of(
+        &|e| matches!(e, RunEvent::VariableChanged { step_id: Some(id), .. } if id.as_str() == "s1"),
+    );
+    let finished = seq_of(
+        &|e| matches!(e, RunEvent::StepFinished { step_id, .. } if step_id.as_str() == "s1"),
+    );
+    assert!(started < changed && changed < finished);
+}
+
+#[tokio::test]
+async fn variable_changes_hide_secrets() {
+    let mut s = scenario(vec![set("greeting", "'pw=' + password")]);
+    let mut password = var("password", VarType::String, VarDirection::Input, None);
+    password.secret = true;
+    s.variables.push(password);
+    let (_, events) = run(&Runtime::new(), s, json!({ "password": "hunter2" })).await;
+    let secret_flags: Vec<_> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::VariableChanged {
+                variable, secret, ..
+            } => Some((variable.as_str(), *secret)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(secret_flags, [("password", true), ("greeting", false)]);
+    assert_eq!(
+        changes(&events),
+        [
+            change("password", json!("***"), None),
+            change("greeting", json!("pw=***"), Some("s1")),
+        ]
+    );
+    let all = serde_json::to_string(&events).expect("json");
+    assert!(!all.contains("hunter2"));
+}
+
 // ---------------------------------------------------------------------------
 // Secrets
 
@@ -967,6 +1067,152 @@ async fn secrets_are_resolved_for_steps_and_masked_everywhere() {
     assert_eq!(report.outputs["user"]["typed"], json!("tanaka"));
     let all = serde_json::to_string(&events).unwrap();
     assert!(!all.contains("hunter2"));
+}
+
+#[tokio::test]
+async fn large_values_are_recorded_as_a_preview() {
+    let s = scenario(vec![
+        Step::new("variable.set")
+            .with_param("name", "text")
+            .with_param("value", "あ".repeat(1500)),
+        set("rows", "[1, 2, 3]"),
+        Step::new("variable.set")
+            .with_param("name", "big")
+            .with_param("value", json!(vec!["0123456789"; 200])),
+    ]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let recorded: Vec<_> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::VariableChanged {
+                value, truncated, ..
+            } => Some((value.clone(), *truncated)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(recorded.len(), 3);
+    let (text, truncated) = &recorded[0];
+    assert!(truncated);
+    assert_eq!(text.as_str().expect("string").chars().count(), 1001);
+    assert_eq!(recorded[1], (json!([1, 2, 3]), false));
+    let (big, truncated) = &recorded[2];
+    assert!(truncated);
+    let big = big.as_str().expect("json text preview");
+    assert!(big.starts_with("[\"0123456789\",") && big.ends_with('…'));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn parallel_branches_report_their_own_changes_once() {
+    let mut s = scenario(vec![parallel(vec![
+        group(vec![delay(30), set("a", "1")]),
+        group(vec![set("b", "2")]),
+    ])]);
+    s.variables = outputs(&["a", "b"]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let after_inputs: Vec<_> = changes(&events)
+        .into_iter()
+        .filter(|(_, _, step)| step.is_some())
+        .collect();
+    // b's branch has no delay, so it changes first; the merge adds nothing.
+    assert_eq!(
+        after_inputs,
+        [
+            change("b", json!(2), Some("s6")),
+            change("a", json!(1), Some("s4")),
+        ]
+    );
+    assert!(events.windows(2).all(|w| w[0].seq + 1 == w[1].seq));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_for_each_reports_each_iteration() {
+    let mut step = for_each("[3, 1, 2]", vec![delay(20), set("doubled", "item * 2")])
+        .with_param("concurrency", 3);
+    step.id = "loop".into();
+    step.save_as = Some("out".into());
+    let s = scenario(vec![step]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let mut recorded: Vec<_> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::VariableChanged {
+                variable,
+                value,
+                step_id,
+                iteration,
+                ..
+            } => Some((
+                *iteration,
+                variable.as_str(),
+                value.as_f64(),
+                step_id.as_ref().map(|s| s.as_str()),
+            )),
+            _ => None,
+        })
+        .collect();
+    // The loop's own result comes last, outside any iteration.
+    assert_eq!(recorded.pop(), Some((None, "out", None, Some("loop"))));
+    // Iterations interleave, but each one's changes carry its item index.
+    recorded.sort_by_key(|(iteration, variable, ..)| (*iteration, *variable));
+    assert_eq!(
+        recorded,
+        [
+            (Some(0), "doubled", Some(6.0), Some("s2")),
+            (Some(0), "item", Some(3.0), Some("loop")),
+            (Some(1), "doubled", Some(2.0), Some("s2")),
+            (Some(1), "item", Some(1.0), Some("loop")),
+            (Some(2), "doubled", Some(4.0), Some("s2")),
+            (Some(2), "item", Some(2.0), Some("loop")),
+        ]
+    );
+    assert!(events.windows(2).all(|w| w[0].seq + 1 == w[1].seq));
+}
+
+#[tokio::test]
+async fn variable_changes_mask_secrets_copied_anywhere() {
+    let mut s = scenario(vec![
+        set("pin_copy", "pin"),
+        set("user_copy", "login.user"),
+        set("id_copy", "login.id"),
+    ]);
+    let mut pin = var("pin", VarType::Number, VarDirection::Input, None);
+    pin.secret = true;
+    let mut login = var("login", VarType::Object, VarDirection::Input, None);
+    login.secret = true;
+    // Declared before the secrets it contains.
+    s.variables = vec![
+        var("header", VarType::String, VarDirection::Input, None),
+        pin,
+        login,
+    ];
+    let (report, events) = run(
+        &Runtime::new(),
+        s,
+        json!({
+            "header": "Bearer s3cr3t-token",
+            "pin": 4821,
+            "login": { "user": "s3cr3t-token", "id": 7 },
+        }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(
+        changes(&events),
+        [
+            change("header", json!("Bearer ***"), None),
+            change("pin", json!("***"), None),
+            change("login", json!("***"), None),
+            change("pin_copy", json!("***"), Some("s1")),
+            change("user_copy", json!("***"), Some("s2")),
+            // Too short to mask by substring without blanking other text.
+            change("id_copy", json!(7), Some("s3")),
+        ]
+    );
+    let all = serde_json::to_string(&events).expect("json");
+    assert!(!all.contains("s3cr3t") && !all.contains("4821"));
 }
 
 #[tokio::test]

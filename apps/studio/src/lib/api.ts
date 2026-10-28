@@ -6,13 +6,19 @@ import type {
   EditOutcome,
   ErrorPayload,
   HistoryEntry,
+  ImportConflict,
+  ImportOutcome,
   NewScenario,
+  NewVersion,
   RunEventEnvelope,
   RunSnapshot,
   Scenario,
+  ScenarioDiff,
   ScenarioSummary,
   StepTypeDef,
   ValidationReport,
+  VersionSummary,
+  WorkspaceInfo,
 } from "@shikigami/schema";
 import { isErrorPayload } from "@shikigami/schema";
 import { invoke } from "@tauri-apps/api/core";
@@ -62,7 +68,21 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 }
 
 export const api = {
-  workspaceInfo: () => call<{ root: string }>("workspace_info"),
+  workspaceInfo: () => call<WorkspaceInfo>("workspace_info"),
+  /** Saves the default workspace and restarts Studio on it. */
+  setWorkspace: (path: string, shared: boolean) => call<void>("set_workspace", { path, shared }),
+  listVersions: (id: string) => call<VersionSummary[]>("list_versions", { id }),
+  createVersion: (id: string, expectedRevision: number, input: NewVersion) =>
+    call<VersionSummary>("create_version", { id, expectedRevision, input }),
+  /** `from` / `to` are version numbers; omitted means the current content. */
+  diffVersions: (id: string, from?: number, to?: number) =>
+    call<ScenarioDiff>("diff_versions", { id, from, to }),
+  restoreVersion: (id: string, number: number, expectedRevision: number) =>
+    call<EditOutcome>("restore_version", { id, number, expectedRevision }),
+  /** Writes a bundle to the Downloads folder; returns its path. */
+  exportScenario: (id: string) => call<string>("export_scenario", { id }),
+  importScenario: (contents: string, onConflict?: ImportConflict) =>
+    call<ImportOutcome>("import_scenario", { contents, onConflict }),
   listScenarios: () => call<ScenarioSummary[]>("list_scenarios"),
   getScenario: (id: string) => call<Scenario>("get_scenario", { id }),
   createScenario: (input: NewScenario) => call<EditOutcome>("create_scenario", { input }),
@@ -89,6 +109,36 @@ export const api = {
   removeSecret: (name: string) => call<void>("remove_secret", { name }),
   resetSecrets: () => call<number>("reset_secrets"),
   forgetLogin: (session: string) => call<boolean>("forget_login", { session }),
+};
+
+export interface AppInfo {
+  version: string;
+  /** False in development builds. */
+  updatesEnabled: boolean;
+  /** The bundled CLI (MCP server), when Studio was installed. */
+  cliPath: string | null;
+}
+
+export interface UpdateInfo {
+  version: string;
+  currentVersion: string;
+  notes: string | null;
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
+}
+
+// Kept apart from `api` so the scenario store and its test doubles stay
+// unaware of app updates.
+export const updates = {
+  appInfo: () => call<AppInfo>("app_info"),
+  check: () => call<UpdateInfo | null>("check_update"),
+  /** Never resolves on success: the installer restarts Studio. */
+  install: () => call<void>("install_update"),
+  onProgress: (handler: (p: UpdateProgress) => void): Promise<UnlistenFn> =>
+    listen<UpdateProgress>("update-progress", (e) => handler(e.payload)),
 };
 
 export type Api = typeof api;

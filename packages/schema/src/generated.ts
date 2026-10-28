@@ -98,6 +98,23 @@ export type ChangeKind = "create" | "edit" | "undo" | "redo" | "delete";
 export type ActorKind = "studio" | "mcp" | "cli" | "system";
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "DiffKind".
+ */
+export type DiffKind = "added" | "removed" | "changed" | "moved";
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ImportMode".
+ */
+export type ImportMode = "created" | "updated" | "copied";
+/**
+ * What to do when an imported scenario's ID already exists.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ImportConflict".
+ */
+export type ImportConflict = "update" | "copy";
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "VarType".
  */
 export type VarType = "string" | "number" | "boolean" | "object" | "array" | "any";
@@ -121,6 +138,14 @@ export interface ShikigamiApi {
   history_entry: HistoryEntry;
   change_event: ChangeEvent;
   error_payload: ErrorPayload;
+  new_version: NewVersion;
+  scenario_version: ScenarioVersion;
+  version_summary: VersionSummary;
+  scenario_diff: ScenarioDiff;
+  scenario_bundle: ScenarioBundle;
+  import_outcome: ImportOutcome;
+  import_conflict: ImportConflict;
+  workspace_info: WorkspaceInfo;
 }
 /**
  * A scenario: the unit that AI clients, Studio and the Runtime share.
@@ -568,6 +593,211 @@ export interface ErrorPayload {
   details?: unknown;
 }
 /**
+ * Input for creating a version.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "NewVersion".
+ */
+export interface NewVersion {
+  /**
+   * Short name, e.g. "v1" or "本番リリース".
+   */
+  name: string;
+  /**
+   * What changed or why this version matters.
+   */
+  note?: string;
+}
+/**
+ * One named snapshot of a scenario.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ScenarioVersion".
+ */
+export interface ScenarioVersion {
+  /**
+   * Per-scenario sequence number (1, 2, …). This is how versions are referenced.
+   */
+  number: number;
+  /**
+   * Globally unique ID; keeps versions apart when bundles are imported.
+   */
+  uid: string;
+  name: string;
+  note?: string;
+  createdAt: string;
+  createdBy: Actor;
+  /**
+   * Scenario revision the snapshot was taken from.
+   */
+  revision: number;
+  scenario: Scenario;
+}
+/**
+ * Listing entry for versions (no scenario body).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "VersionSummary".
+ */
+export interface VersionSummary {
+  number: number;
+  name: string;
+  note?: string;
+  createdAt: string;
+  createdBy: Actor;
+  revision: number;
+  stepCount: number;
+}
+/**
+ * Differences from `from` to `to`.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ScenarioDiff".
+ */
+export interface ScenarioDiff {
+  from: DiffSide;
+  to: DiffSide;
+  /**
+   * True when the contents are the same (names, variables, steps, settings).
+   */
+  identical: boolean;
+  /**
+   * Scenario-level fields: name, description, tags, settings.
+   */
+  scenario: FieldChange[];
+  variables: VariableChange[];
+  steps: StepChange[];
+}
+/**
+ * Which side of a comparison: a version number, or the current content.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "DiffSide".
+ */
+export interface DiffSide {
+  /**
+   * Version number; absent for the current content.
+   */
+  version?: number | null;
+  label: string;
+  revision: number;
+}
+/**
+ * One changed field: `name`, `params.url`, `settings`, …
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "FieldChange".
+ */
+export interface FieldChange {
+  field: string;
+  before?: unknown;
+  after?: unknown;
+}
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "VariableChange".
+ */
+export interface VariableChange {
+  kind: DiffKind;
+  name: string;
+  fields?: FieldChange[];
+}
+/**
+ * One step-level difference. Added and removed subtrees are reported once,
+ * at their top step (`stepCount` includes the children).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "StepChange".
+ */
+export interface StepChange {
+  kind: DiffKind;
+  stepId: StepId;
+  type: string;
+  name?: string;
+  /**
+   * Changed fields (`changed` only).
+   */
+  fields?: FieldChange[];
+  /**
+   * Location in the older content (`removed`, `moved`).
+   */
+  from?: StepLocation | null;
+  /**
+   * Location in the newer content (`added`, `moved`).
+   */
+  to?: StepLocation | null;
+  /**
+   * Steps in the subtree (`added`, `removed`).
+   */
+  stepCount?: number | null;
+}
+/**
+ * Where a step sits: top level (`parentId` absent) or a parent's block.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "StepLocation".
+ */
+export interface StepLocation {
+  parentId?: StepId | null;
+  block?: string | null;
+  index: number;
+}
+/**
+ * File format for moving a scenario (and its versions) between workspaces.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ScenarioBundle".
+ */
+export interface ScenarioBundle {
+  /**
+   * Always `shikigami.scenarioBundle`.
+   */
+  format: string;
+  formatVersion: number;
+  exportedAt: string;
+  scenario: Scenario;
+  versions?: ScenarioVersion[];
+}
+/**
+ * Result of importing a bundle or scenario file.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ImportOutcome".
+ */
+export interface ImportOutcome {
+  mode: ImportMode;
+  /**
+   * Versions from the bundle that were added (already present ones are skipped).
+   */
+  versionsAdded: number;
+  scenario: Scenario;
+  validation: ValidationReport2;
+  canUndo: boolean;
+  canRedo: boolean;
+}
+/**
+ * Full validation of the new revision. Drafts may contain errors;
+ * they must be fixed before the scenario can run.
+ */
+export interface ValidationReport2 {
+  valid: boolean;
+  issues: ValidationIssue[];
+}
+/**
+ * Where a workspace keeps its data, for display and diagnostics.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "WorkspaceInfo".
+ */
+export interface WorkspaceInfo {
+  root: string;
+  /**
+   * Undo history, run records and audit logs of this PC.
+   */
+  localRoot: string;
+  shared: boolean;
+}
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "Metadata".
  */
@@ -620,6 +850,26 @@ export type RunEventEnvelope1 =
       durationMs: number;
       error?: RunError | null;
       willRetry?: boolean;
+    }
+  | {
+      type: "variableChanged";
+      variable: string;
+      value: unknown;
+      /**
+       * The step that assigned it; absent for inputs and defaults.
+       */
+      stepId?: StepId | null;
+      /**
+       * Item index (from 0) of the concurrent `forEach` iteration that
+       * made the change, so interleaved iterations can be told apart.
+       */
+      iteration?: number | null;
+      secret?: boolean;
+      /**
+       * `value` is a preview: a long string cut short, or the start of
+       * a large array / object's JSON text.
+       */
+      truncated?: boolean;
     }
   | {
       type: "log";
@@ -692,6 +942,10 @@ export interface RunReport {
   scenarioId: ScenarioId;
   scenarioName: string;
   revision: number;
+  /**
+   * Named version whose content was run, when it matches one.
+   */
+  version?: number | null;
   status: RunStatus;
   startedAt: string;
   finishedAt: string;
