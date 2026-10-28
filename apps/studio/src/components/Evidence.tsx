@@ -4,6 +4,7 @@
 import type { Evidence, HistoryEntry, ObservationContent, StepNote } from "@shikigami/schema";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAgent } from "../agent";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { relativeTime } from "../lib/changes";
@@ -286,6 +287,11 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
 export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSent: () => void }) {
   const selection = useStudio((s) => s.selection);
   const sendBack = useStudio((s) => s.sendBack);
+  const scenario = useStudio((s) => s.scenario);
+  const agentReady = useAgent((s) => s.info?.available === true && s.turnId === null && !s.sending);
+  const agentName = useAgent((s) => s.info?.name ?? "AI");
+  const askAgent = useAgent((s) => s.send);
+  const [fixNow, setFixNow] = useState(true);
   const label = useStepLabel();
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState<StepNote[]>([]);
@@ -298,7 +304,17 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
     setBusy(true);
     const ok = await sendBack(reason, notes);
     setBusy(false);
-    if (ok) onSent();
+    if (!ok) return;
+    onSent();
+    if (fixNow && agentReady && scenario) {
+      // The reason itself travels through Core (get_scenario feedback); this only wakes the AI.
+      const quoted = reason.trim() ? `「${reason.trim()}」` : "手順への指摘";
+      void askAgent(
+        `${quoted}で差し戻しました。get_scenario の feedback を読んで、指摘どおりに直してください。`,
+        { id: scenario.id, name: scenario.name },
+        `${scenario.name} ・ 差し戻し`,
+      );
+    }
   };
   return (
     <div className="space-y-2">
@@ -342,6 +358,12 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
       >
         ＋ {hint}
       </button>
+      {agentReady && (
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
+          <input type="checkbox" checked={fixNow} onChange={(e) => setFixNow(e.target.checked)} />
+          {agentName} がすぐ直す
+        </label>
+      )}
       <div className="flex gap-2 pt-1">
         <button type="button" onClick={onCancel} className="h-9 rounded-[4px] px-3 text-[13px] text-slate-500 hover:bg-slate-100">
           やめる

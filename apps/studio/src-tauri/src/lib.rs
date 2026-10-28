@@ -4,6 +4,7 @@
 //! `Runtime` (execution). Studio owns no scenario logic of its own, so what
 //! the GUI does is exactly what MCP clients and the CLI can do.
 
+mod agent;
 mod commands;
 mod updater;
 mod watcher;
@@ -58,6 +59,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .manage(updater::PendingUpdate::default())
+        .manage(agent::AgentTurns::default())
         .setup(move |app| {
             fit_to_screen(app);
             updater::on_startup(app.handle());
@@ -106,6 +108,9 @@ pub fn run() {
             commands::forget_login,
             commands::list_secret_requests,
             commands::dismiss_secret_request,
+            agent::agent_info,
+            agent::agent_send,
+            agent::agent_stop,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {
