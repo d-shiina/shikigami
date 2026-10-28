@@ -6,7 +6,6 @@
 //! one-to-one to the document Studio and AI clients edit.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -39,7 +38,9 @@ pub struct Emitter {
 
 struct EmitterInner {
     run_id: RunId,
-    seq: AtomicU64,
+    // Held while sending, so parallel branches deliver events in `seq` order
+    // (log polling relies on it: `get_run_logs(afterSeq)`).
+    seq: Mutex<u64>,
     tx: mpsc::UnboundedSender<RunEventEnvelope>,
     secrets: RwLock<Vec<String>>,
     snapshot: Arc<Mutex<RunSnapshot>>,
@@ -54,7 +55,7 @@ impl Emitter {
         Self {
             inner: Arc::new(EmitterInner {
                 run_id,
-                seq: AtomicU64::new(0),
+                seq: Mutex::new(0),
                 tx,
                 secrets: RwLock::new(Vec::new()),
                 snapshot,
@@ -141,12 +142,17 @@ impl Emitter {
             },
             other => other,
         };
+        let mut seq = match self.inner.seq.lock() {
+            Ok(seq) => seq,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         let envelope = RunEventEnvelope {
             run_id: self.inner.run_id.clone(),
-            seq: self.inner.seq.fetch_add(1, Ordering::SeqCst),
+            seq: *seq,
             at: OffsetDateTime::now_utc(),
             event,
         };
+        *seq += 1;
         // The receiver may have been dropped (fire-and-forget runs); the run
         // continues regardless.
         let _ = self.inner.tx.send(envelope);
@@ -578,17 +584,27 @@ impl Executor {
             let mut executor = self.fork(group.child_token());
             let branch = branch.clone();
             let permits = permits.clone();
+            let group = group.clone();
             set.spawn(async move {
                 let permit = tokio::select! {
+                    biased;
                     () = executor.cancel.cancelled() => return (index, Err(Interrupt::Cancelled), executor.vars),
                     p = permits.acquire_owned() => p,
                 };
+                if executor.cancel.is_cancelled() {
+                    return (index, Err(Interrupt::Cancelled), executor.vars);
+                }
                 // Break/continue cannot cross the branch boundary (the
                 // validator rejects them), so the flow result is dropped.
                 let result = executor
                     .block(std::slice::from_ref(&branch))
                     .await
                     .map(|_| Flow::Next);
+                // Fail fast: stop queued branches before freeing the permit
+                // they are waiting for.
+                if matches!(result, Err(Interrupt::Failed(_))) {
+                    group.cancel();
+                }
                 drop(permit);
                 (index, result, executor.vars)
             });

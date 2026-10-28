@@ -597,3 +597,30 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
     assert_eq!(b.0.status, RunStatus::Succeeded);
     assert_eq!(mouse.peak.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn queued_branches_do_not_start_after_a_failure() {
+    let s = scenario(vec![
+        parallel(vec![
+            Step::new("control.fail").with_param("message", "boom"),
+            log("queued"),
+        ])
+        .with_param("maxConcurrency", 1),
+    ]);
+    for _ in 0..20 {
+        let (report, events) = run(&Runtime::new(), s.clone(), json!({})).await;
+        assert_eq!(report.status, RunStatus::Failed);
+        assert!(!logs(&events).contains(&"queued".to_owned()));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn events_from_parallel_branches_arrive_in_seq_order() {
+    let branch = || group((0..20).map(|i| log(&format!("m{i}"))).collect());
+    let s = scenario(vec![parallel((0..16).map(|_| branch()).collect())]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let seqs: Vec<u64> = events.iter().map(|e| e.seq).collect();
+    let expected: Vec<u64> = (0..seqs.len() as u64).collect();
+    assert_eq!(seqs, expected);
+}
