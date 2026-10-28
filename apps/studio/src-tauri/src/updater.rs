@@ -90,14 +90,16 @@ fn updates_enabled<R: Runtime>(app: &AppHandle<R>) -> bool {
         .is_some_and(|k| !k.trim().is_empty())
 }
 
-/// Startup housekeeping for installed builds: undo a parked CLI whose
-/// installer never ran, and delete copies left by finished updates.
-pub(crate) fn on_startup<R: Runtime>(app: &AppHandle<R>) {
+/// Startup housekeeping for installed builds: undo parked executables whose
+/// installer never ran, and delete copies left by finished updates. Runs
+/// before the adapters are built, since they look for `node\node.exe`.
+pub(crate) fn on_startup() {
     if cfg!(debug_assertions) {
         return;
     }
     if let Some(dir) = install_dir() {
-        restore_parked_exes(&dir, &app.package_info().version.to_string());
+        // Studio's version is the workspace version, as in `package_info`.
+        restore_parked_exes(&dir, env!("CARGO_PKG_VERSION"));
     }
 }
 
