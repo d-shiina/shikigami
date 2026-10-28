@@ -2,12 +2,14 @@
 // scenario: positions are computed, never stored, so AI edits and GUI edits
 // always render identically and no layout data leaks into scenario files.
 import type { Step, StepTypeDef } from "@shikigami/schema";
+import { blockLabel } from "../lib/keywords";
 import { nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
 export const SLOT_H = 40;
-const GAP_X = 48;
 const GAP_Y = 36;
+/** Top to bottom: room above a step for the flow edge and the review toolbar. */
+const GAP_MAIN_V = 56;
 /**
  * Left to right, room beside a step for its variable chips: the ones it
  * reads sit off its left edge, the ones it writes off its right.
@@ -80,7 +82,7 @@ function lanes(step: Step, defs: Defs): Lane[] {
   const declared = def?.blocks ?? [];
   const result: Lane[] = declared.map((b) => ({
     name: b.name,
-    label: b.label,
+    label: blockLabel(step, b.name, b.label),
     steps: step.blocks?.[b.name] ?? [],
     start: 0,
   }));
@@ -113,10 +115,11 @@ class Axes {
     private defs: Defs,
   ) {}
   get mainGap() {
-    return this.dir === "vertical" ? GAP_Y : GAP_MAIN_H;
+    return this.dir === "vertical" ? GAP_MAIN_V : GAP_MAIN_H;
   }
+  /** Top to bottom, side-by-side lanes leave room for each other's chips. */
   get crossGap() {
-    return this.dir === "vertical" ? GAP_X : GAP_Y;
+    return this.dir === "vertical" ? CHIP_ROOM * 2 : GAP_Y;
   }
   node(step: Step) {
     const h = nodeHeight(step, this.defs.get(step.type));
