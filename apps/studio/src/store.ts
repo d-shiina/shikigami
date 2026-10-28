@@ -160,7 +160,8 @@ export type StudioState = {
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
   setOutlineOpen(open: boolean): void;
-  addStep(type: string): Promise<void>;
+  /** Adds a step after the selection; `params` and `name` override the type's defaults (palette presets). */
+  addStep(type: string, params?: Record<string, unknown>, name?: string): Promise<void>;
   moveSelected(delta: -1 | 1): Promise<void>;
   removeSelected(): Promise<void>;
   updateStep(stepId: string, patch: StepPatch): Promise<void>;
@@ -678,7 +679,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ outlineOpen: open });
       },
 
-      async addStep(type) {
+      async addStep(type, params, name) {
         const { scenario, selection } = get();
         if (!scenario) return;
         let position: { parentId?: string | null; block?: string | null; index?: number | null } = {};
@@ -688,7 +689,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const loc = locate(scenario.steps ?? [], selection.stepId);
           if (loc) position = { parentId: loc.parentId, block: loc.block, index: loc.index + 1 };
         }
-        const step: Step = { id: newStepId(), type, params: { ...(DEFAULT_PARAMS[type] ?? {}) } };
+        const step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
         const ok = await get().applyOps([{ op: "addStep", step, position }]);
         if (ok && step.id) set({ selection: { kind: "step", stepId: step.id } });
       },
