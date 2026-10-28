@@ -110,6 +110,8 @@ pub struct SecretError {
     /// The secret the error is about, so Studio can offer to register or
     /// fix it.
     pub secret: Option<String>,
+    /// The field that is missing (SECRET_FIELD_EMPTY).
+    pub field: Option<SecretField>,
 }
 
 impl SecretError {
@@ -119,6 +121,7 @@ impl SecretError {
             message: message.into(),
             hint: None,
             secret: None,
+            field: None,
         }
     }
 
@@ -132,6 +135,11 @@ impl SecretError {
         self
     }
 
+    pub fn with_field(mut self, field: SecretField) -> Self {
+        self.field = Some(field);
+        self
+    }
+
     pub fn details(&self) -> Option<Value> {
         let mut details = serde_json::Map::new();
         if let Some(hint) = &self.hint {
@@ -139,6 +147,9 @@ impl SecretError {
         }
         if let Some(name) = &self.secret {
             details.insert("secret".into(), json!(name));
+        }
+        if let Some(field) = self.field {
+            details.insert("field".into(), json!(field.as_str()));
         }
         (!details.is_empty()).then_some(Value::Object(details))
     }

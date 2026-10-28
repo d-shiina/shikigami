@@ -204,6 +204,23 @@ describe("studio store", () => {
     expect(more.draft.sites).toBe("https://accounts.google.com\nhttps://mail.google.com");
   });
 
+  it("adds requested sites to the sites a secret has now, not to a stale list", async () => {
+    const setSecret = vi.fn(async () => ({}) as never);
+    // The CLI added a site after Studio last listed the secret.
+    const listSecrets = vi.fn(async () => ({
+      secrets: [{ name: "G", username: "me", sites: ["https://a.example", "https://cli.example"], fields: ["username", "password"], updatedAt: "" }] as never,
+      keyLocation: "test",
+      keyMissing: false,
+    }));
+    const store = createStudioStore(fakeApi({ setSecret, listSecrets }));
+    await store.getState().saveSecretAdding({ name: "G", totp: "JBSWY3DPEHPK3PXP" }, ["https://b.example", "https://a.example"]);
+    expect(setSecret).toHaveBeenCalledWith({
+      name: "G",
+      totp: "JBSWY3DPEHPK3PXP",
+      sites: ["https://a.example", "https://cli.example", "https://b.example"],
+    });
+  });
+
   it("offers a reset when the secrets' key is not on this PC", async () => {
     let missing = true;
     const resetSecrets = vi.fn(async () => {
