@@ -62,7 +62,7 @@ args = ["mcp"]
 |  | `validate_scenario` | 保存済み（`scenarioId`）または未保存の文書（`scenario`）を検証。全エラーを JSON Pointer 付きで返す |
 |  | `list_step_types` / `get_step_schema` | 使えるステップ型と、その params の JSON Schema・コピーして使える記述例（`examples`） |
 |  | `get_history` | 誰が（Studio / MCP クライアント名 / CLI）いつ何を変えたか |
-|  | `get_run_status` / `get_run_logs` / `list_runs` | 実行中の状態・最終レポート・イベントログ（`afterSeq` で差分取得） |
+|  | `get_run_status` / `get_run_logs` / `list_runs` | 実行中の状態・最終レポート・イベントログ（`afterSeq` で差分取得、`variable` でその変数の変化だけ） |
 |  | `list_secrets` | Studio で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
 | write | `create_scenario` | 新規作成（ステップ ID は省略可） |
 |  | `update_scenario` | 複数の EditOp を 1 リビジョンとして原子的に適用 |

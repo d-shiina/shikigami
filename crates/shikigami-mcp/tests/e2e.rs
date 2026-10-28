@@ -148,6 +148,33 @@ async fn ai_builds_validates_and_runs_a_scenario() {
         .await;
     assert_eq!(more["events"], json!([]));
 
+    let sums = h
+        .ok(
+            "get_run_logs",
+            json!({ "runId": run_id, "variable": "sum" }),
+        )
+        .await;
+    let trace: Vec<(Value, Option<&str>)> = sums["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            assert_eq!(e["type"], "variableChanged");
+            (e["value"].clone(), e["stepId"].as_str())
+        })
+        .collect();
+    let set_id = added["scenario"]["steps"][0]["blocks"]["body"][0]["id"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        trace,
+        [
+            (json!(0), None),
+            (json!(10), Some(set_id)),
+            (json!(30), Some(set_id)),
+        ]
+    );
+
     let status = h.ok("get_run_status", json!({ "runId": run_id })).await;
     assert_eq!(status["active"], false);
     assert_eq!(status["report"]["status"], "succeeded");
