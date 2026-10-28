@@ -19,7 +19,7 @@ const RUN_RING: Record<StepRunState, string> = {
   skipped: "border-slate-300 text-slate-300",
 };
 
-function Sentence({ parts }: { parts: Part[] }) {
+export function Sentence({ parts }: { parts: Part[] }) {
   return (
     <>
       {parts.map((p, i) =>
@@ -253,7 +253,7 @@ export function StoryView() {
 
   if (!scenario) {
     return (
-      <div className="washi flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+      <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
         <img src="/mark.png" alt="" className="h-16 w-16 opacity-30 grayscale" />
         {t.noSelection}
       </div>
@@ -264,13 +264,13 @@ export function StoryView() {
   const variables = (scenario.variables ?? []).filter((v) => v.direction && v.direction !== "local");
 
   return (
-    <div className="washi h-full overflow-y-auto px-6 pt-14 pb-24" onClick={() => select(null)} onKeyDown={() => {}}>
+    <div className="canvas-bg h-full overflow-y-auto px-6 pt-14 pb-24" onClick={() => select(null)} onKeyDown={() => {}}>
       <article
-        className="mx-auto max-w-[760px] rounded-xl border border-slate-200 bg-sheet px-9 py-7 shadow-[0_1px_0_#e3d9c7]"
+        className="mx-auto max-w-[760px] rounded-xl border border-slate-200 bg-sheet px-9 py-7 shadow-[0_1px_0_rgba(15,27,42,.06)]"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={() => {}}
       >
-        <h1 className="font-serif text-2xl font-semibold">{scenario.name}</h1>
+        <h1 className="text-2xl font-semibold">{scenario.name}</h1>
         {scenario.description && <p className="mt-1 text-sm text-slate-500">{scenario.description}</p>}
         {variables.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2 text-xs">

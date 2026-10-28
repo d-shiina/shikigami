@@ -23,11 +23,11 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
     return (
-      <div className="washi flex h-full items-center justify-center p-8">
+      <div className="canvas-bg flex h-full items-center justify-center p-8">
         <div className="w-[480px] space-y-3 rounded-lg border border-shu-100 bg-sheet p-6 shadow-lg">
           <div className="flex items-center gap-2">
             <img src="/mark.png" alt="" className="h-6 w-6" />
-            <h1 className="font-serif text-lg font-semibold">画面の表示中にエラーが起きました</h1>
+            <h1 className="text-lg font-semibold">画面の表示中にエラーが起きました</h1>
           </div>
           <p className="text-sm text-slate-600">
             シナリオはCoreに保存されているため失われていません。「再表示」で画面を戻せます。

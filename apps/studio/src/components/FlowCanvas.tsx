@@ -6,6 +6,7 @@ import {
   MarkerType,
   type Node,
   type NodeProps,
+  NodeToolbar,
   Position,
   ReactFlow,
 } from "@xyflow/react";
@@ -13,12 +14,16 @@ import { useMemo } from "react";
 import { useStudio } from "../context";
 import { layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
-import { type StepRunState, touchedSteps } from "../store";
+import type { HistoryEntry } from "@shikigami/schema";
+import { actorLabel } from "../lib/changes";
+import { sentence } from "../lib/sentence";
+import { revertBlocker, type StepRunState, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
-import { usePendingReview } from "./Timeline";
+import { Sentence } from "./StoryView";
+import { ActorMark, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean }>
+  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[] }>
 >;
 
 const RUN_STYLE: Record<StepRunState, string> = {
@@ -28,43 +33,74 @@ const RUN_STYLE: Record<StepRunState, string> = {
   skipped: "opacity-60",
 };
 
-function summary(data: StepNodeData): string {
-  const p = data.step.params ?? {};
-  const first = ["condition", "message", "items", "name", "count", "ms", "url", "selector"]
-    .map((k) => p[k])
-    .find((v) => v !== undefined && v !== "");
-  return first === undefined ? "" : typeof first === "string" ? first : JSON.stringify(first);
+/** 残す / 差し戻す for an unreviewed AI edit, floating beside its node. */
+function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
+  const history = useStudio((s) => s.history);
+  const approve = useStudio((s) => s.approve);
+  const revert = useStudio((s) => s.revert);
+  const blocker = revertBlocker(entry, history);
+  return (
+    <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-md">
+      <ActorMark entry={entry} size={18} />
+      <span className="text-slate-600">{actorLabel(entry)}の変更</span>
+      <button type="button" onClick={() => approve(entry.revision)} className="rounded-full bg-ink px-2 py-0.5 text-paper hover:bg-slate-700">
+        {t.approve}
+      </button>
+      <button
+        type="button"
+        onClick={() => revert(entry)}
+        disabled={blocker !== null}
+        title={blocker ?? undefined}
+        className="rounded-full border border-shu-500 px-2 py-0.5 text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
+      >
+        {t.revert}
+      </button>
+    </div>
+  );
 }
 
 function StepNode({ data }: StepNodeProps) {
   const category = data.def?.category ?? data.step.type.split(".")[0] ?? "other";
+  const latest = data.reviews.at(-1);
   return (
     <div
       style={{ width: NODE_W }}
-      className={`relative flex overflow-hidden rounded-md border bg-sheet shadow-[0_1px_0_#e3d9c7,0_2px_6px_rgba(43,38,32,.06)] ${
-        data.selected ? "border-ink ring-2 ring-ink/15" : "border-slate-200"
-      } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""} ${
-        data.byAi ? "outline-2 outline-offset-2 outline-shu-500/70 outline-dashed" : ""
+      className={`relative flex overflow-hidden rounded-xl border bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)] ${
+        data.byAi ? "ai-border" : data.selected ? "border-brand-500 ring-4 ring-brand-100" : "border-slate-200"
+      } ${data.selected && data.byAi ? "ring-4 ring-brand-100" : ""} ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
+        data.runState ? RUN_STYLE[data.runState] : ""
       }`}
     >
+      {latest && (
+        <NodeToolbar isVisible position={Position.Right} offset={12}>
+          <ReviewToolbar entry={latest} />
+        </NodeToolbar>
+      )}
       <Handle type="target" position={Position.Top} className="!border-0 !bg-slate-300" />
-      <span className="w-1.5 shrink-0" style={{ background: CATEGORY_COLOR[category] ?? CATEGORY_COLOR.other }} />
+      <span className="my-2 ml-2 w-[5px] shrink-0 rounded-full" style={{ background: CATEGORY_COLOR[category] ?? CATEGORY_COLOR.other }} />
       <div className="min-w-0 flex-1 px-3 py-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-medium tracking-wide text-slate-500">{data.def?.label ?? data.step.type}</span>
+          <span
+            className="truncate text-[10px] font-semibold tracking-wide"
+            style={{ color: CATEGORY_COLOR[category] ?? CATEGORY_COLOR.other }}
+          >
+            {data.step.name ? `${data.step.name} · ` : ""}
+            {data.def?.label ?? data.step.type}
+          </span>
           {data.byAi && (
-            <span className="swirl ml-auto rounded-full px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
+            <span className="swirl ml-auto shrink-0 rounded-full px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
               AI
             </span>
           )}
           {data.issueCount > 0 && (
-            <span className={`${data.byAi ? "" : "ml-auto"} rounded-full bg-shu-100 px-1.5 text-[10px] font-semibold text-shu-600`}>
+            <span className={`${data.byAi ? "" : "ml-auto"} shrink-0 rounded-full bg-shu-100 px-1.5 text-[10px] font-semibold text-shu-600`}>
               ! {data.issueCount}
             </span>
           )}
         </div>
-        <div className="mt-0.5 truncate text-sm font-medium">{data.step.name || summary(data) || data.step.type}</div>
-        {data.step.name && summary(data) && <div className="truncate font-mono text-[11px] text-slate-500">{summary(data)}</div>}
+        <div className="mt-1 line-clamp-2 text-[13px] leading-snug">
+          <Sentence parts={sentence(data.step, data.def)} />
+        </div>
       </div>
       <Handle type="source" position={Position.Bottom} className="!border-0 !bg-slate-300" />
     </div>
@@ -75,8 +111,8 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
-      className={`flex items-center justify-center rounded-md border border-dashed text-xs ${
-        data.selected ? "border-ink bg-sheet text-ink" : "border-slate-300 text-slate-400"
+      className={`flex items-center justify-center rounded-xl border border-dashed text-xs ${
+        data.selected ? "border-brand-500 bg-brand-50 text-brand-600" : "border-slate-300 text-slate-400"
       }`}
     >
       <Handle type="target" position={Position.Top} className="!border-0 !bg-slate-300" />
@@ -96,7 +132,14 @@ export function FlowCanvas() {
   const run = useStudio((s) => s.run);
   const select = useStudio((s) => s.select);
   const pending = usePendingReview();
-  const byAi = useMemo(() => new Set(pending.flatMap(touchedSteps)), [pending]);
+  // Oldest first, so the toolbar offers the newest unreviewed change.
+  const reviews = useMemo(() => {
+    const map = new Map<string, HistoryEntry[]>();
+    for (const entry of [...pending].reverse()) {
+      for (const id of new Set(touchedSteps(entry))) map.set(id, [...(map.get(id) ?? []), entry]);
+    }
+    return map;
+  }, [pending]);
 
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs), [scenario, defs]);
@@ -120,7 +163,8 @@ export function FlowCanvas() {
           runState: run?.steps[id],
           issueCount: issueCounts.get(id) ?? 0,
           selected: selection?.kind === "step" && selection.stepId === id,
-          byAi: byAi.has(id),
+          byAi: reviews.has(id),
+          reviews: reviews.get(id) ?? [],
         },
       };
     }
@@ -140,12 +184,12 @@ export function FlowCanvas() {
     type: "smoothstep",
     animated: e.loop,
     style: e.loop ? { strokeDasharray: "4 4" } : undefined,
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#a29580" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
     labelBgPadding: [4, 2],
   }));
 
   if (!scenario) {
-    return <div className="washi flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+    return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
         <img src="/mark.png" alt="" className="h-16 w-16 opacity-30 grayscale" />
         {t.noSelection}
       </div>;
@@ -154,7 +198,7 @@ export function FlowCanvas() {
   return (
     <ReactFlow
       key={scenario.id}
-      className="washi"
+      className="canvas-bg"
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -169,7 +213,7 @@ export function FlowCanvas() {
       }}
       onPaneClick={() => select(null)}
     >
-      <Background gap={24} size={1.2} color="#d8ccb6" />
+      <Background gap={24} size={1.2} color="#c3cedb" />
       <Controls showInteractive={false} />
     </ReactFlow>
   );

@@ -96,16 +96,16 @@ const VIEW_KEY = "shikigami.studio.view";
 
 function loadView(): View {
   try {
-    return globalThis.localStorage?.getItem(VIEW_KEY) === "flow" ? "flow" : "story";
+    return globalThis.localStorage?.getItem(VIEW_KEY) === "story" ? "story" : "flow";
   } catch {
-    return "story";
+    return "flow";
   }
 }
 
 function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
   const options: [View, string][] = [
-    ["story", t.viewStory],
     ["flow", t.viewFlow],
+    ["story", t.viewStory],
   ];
   return (
     <div className="absolute top-3 right-4 flex overflow-hidden rounded-full border border-slate-300 bg-sheet text-xs shadow-sm">
@@ -137,11 +137,12 @@ function Shell() {
   const hasRun = useStudio((s) => s.run !== null);
   return (
     <div className="grid h-full grid-cols-[232px_1fr_360px] grid-rows-[auto_auto_1fr]">
-      <header className="col-span-3 flex items-center gap-3 border-b border-slate-200 bg-sheet px-4 py-2">
+      <header className="relative col-span-3 flex items-center gap-3 bg-sheet px-4 py-2">
         <img src="/mark.png" alt="" className="h-7 w-7" />
-        <span className="font-serif text-lg font-bold tracking-wider">式神</span>
+        <span className="text-lg font-black tracking-wider">式神</span>
         <span className="-ml-1 text-xs font-medium tracking-[.2em] text-slate-500">STUDIO</span>
         <ScenarioHeader />
+        <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
       </header>
       <div className="col-span-3">
         <Banner />

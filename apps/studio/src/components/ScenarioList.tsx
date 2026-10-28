@@ -20,7 +20,7 @@ export function ScenarioList() {
 
   return (
     <aside className="flex h-full flex-col border-r border-slate-200 bg-sheet">
-      <div className="px-3 pt-4 pb-2 font-serif text-sm font-semibold text-ink">{t.scenarios}</div>
+      <div className="px-3 pt-4 pb-2 text-sm font-semibold text-ink">{t.scenarios}</div>
       <form onSubmit={submit} className="flex gap-1 px-3 pb-3">
         <input
           value={name}
@@ -42,7 +42,7 @@ export function ScenarioList() {
               onClick={() => open(s.id)}
               onKeyDown={(e) => e.key === "Enter" && open(s.id)}
               className={`group cursor-pointer border-l-4 px-3 py-2 ${
-                s.id === currentId ? "border-shu-500 bg-slate-100" : "border-transparent hover:bg-slate-50"
+                s.id === currentId ? "border-brand-500 bg-brand-50" : "border-transparent hover:bg-slate-50"
               }`}
             >
               <div className="truncate text-sm font-medium">{s.name}</div>
