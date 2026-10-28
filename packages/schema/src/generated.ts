@@ -510,6 +510,17 @@ export interface StepTypeDef {
    * clients get them from `get_step_schema` and can copy them.
    */
   examples?: unknown[];
+  /**
+   * Params that may take a registered secret,
+   * `{ "secret": "<name>", "field": "password" }`, instead of text.
+   * Secrets are rejected everywhere else.
+   */
+  secretParams?: string[];
+  /**
+   * Timeout when the step sets none (takes precedence over the
+   * scenario's default), for steps that wait on people (manual login).
+   */
+  defaultTimeoutMs?: number | null;
 }
 /**
  * Named child block of a control-flow step.
@@ -841,10 +852,35 @@ export type RunEventEnvelope1 =
       willRetry?: boolean;
     }
   | {
+      type: "variableChanged";
+      variable: string;
+      value: unknown;
+      /**
+       * The step that assigned it; absent for inputs and defaults.
+       */
+      stepId?: StepId | null;
+      /**
+       * Item index (from 0) of the concurrent `forEach` iteration that
+       * made the change, so interleaved iterations can be told apart.
+       */
+      iteration?: number | null;
+      secret?: boolean;
+      /**
+       * `value` is a preview: a long string cut short, or the start of
+       * a large array / object's JSON text.
+       */
+      truncated?: boolean;
+    }
+  | {
       type: "log";
       level: LogLevel;
       message: string;
       stepId?: StepId | null;
+    }
+  | {
+      type: "humanActionRequired";
+      stepId: StepId;
+      message: string;
     }
   | {
       type: "runFinished";

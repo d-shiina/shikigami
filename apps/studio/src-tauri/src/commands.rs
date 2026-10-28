@@ -11,6 +11,7 @@ use shikigami_core::{
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{RunEventEnvelope, RunOptions, RunSnapshot};
+use shikigami_secrets::{SecretInfo, SecretInput};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{ActiveRun, AppState};
@@ -337,4 +338,78 @@ pub fn run_status(state: State<'_, AppState>, run_id: RunId) -> CmdResult<Option
     Ok(runs
         .get(&run_id)
         .and_then(|r| r.snapshot.lock().ok().map(|s| s.clone())))
+}
+
+// -- secrets ------------------------------------------------------------------
+// Values go in (set_secret) but never come back out: the list has names,
+// user names and sites only.
+
+fn secret_err(e: shikigami_core::secret::SecretError) -> ErrorPayload {
+    ErrorPayload {
+        details: e.details(),
+        code: e.code,
+        message: e.message,
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecretList {
+    secrets: Vec<SecretInfo>,
+    /// Where the encryption key is kept (shown in the dialog).
+    key_location: String,
+    /// Secrets are registered but their key is not on this PC / Windows
+    /// user: only names are listed, and `reset_secrets` is the way out.
+    key_missing: bool,
+}
+
+#[tauri::command]
+pub fn list_secrets(state: State<'_, AppState>) -> CmdResult<SecretList> {
+    let vault = &state.vault;
+    let key_missing = vault.key_missing().map_err(secret_err)?;
+    let secrets = if key_missing {
+        vault
+            .summaries()
+            .map_err(secret_err)?
+            .into_iter()
+            .map(|s| SecretInfo {
+                name: s.name,
+                username: String::new(),
+                sites: s.sites,
+                fields: s.fields,
+                description: s.description,
+                updated_at: String::new(),
+            })
+            .collect()
+    } else {
+        vault.list().map_err(secret_err)?
+    };
+    Ok(SecretList {
+        secrets,
+        key_location: vault.key_location(),
+        key_missing,
+    })
+}
+
+#[tauri::command]
+pub fn reset_secrets(state: State<'_, AppState>) -> CmdResult<usize> {
+    state.vault.reset().map_err(secret_err)
+}
+
+#[tauri::command]
+pub fn set_secret(state: State<'_, AppState>, input: SecretInput) -> CmdResult<SecretInfo> {
+    state.vault.set(input).map_err(secret_err)
+}
+
+#[tauri::command]
+pub fn remove_secret(state: State<'_, AppState>, name: String) -> CmdResult<()> {
+    state.vault.remove(&name).map_err(secret_err)?;
+    // A saved login under the same name belongs to the secret.
+    state.vault.remove_session(&name).map_err(secret_err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn forget_login(state: State<'_, AppState>, session: String) -> CmdResult<bool> {
+    state.vault.remove_session(&session).map_err(secret_err)
 }

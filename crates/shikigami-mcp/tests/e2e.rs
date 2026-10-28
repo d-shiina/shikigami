@@ -148,6 +148,33 @@ async fn ai_builds_validates_and_runs_a_scenario() {
         .await;
     assert_eq!(more["events"], json!([]));
 
+    let sums = h
+        .ok(
+            "get_run_logs",
+            json!({ "runId": run_id, "variable": "sum" }),
+        )
+        .await;
+    let trace: Vec<(Value, Option<&str>)> = sums["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            assert_eq!(e["type"], "variableChanged");
+            (e["value"].clone(), e["stepId"].as_str())
+        })
+        .collect();
+    let set_id = added["scenario"]["steps"][0]["blocks"]["body"][0]["id"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        trace,
+        [
+            (json!(0), None),
+            (json!(10), Some(set_id)),
+            (json!(30), Some(set_id)),
+        ]
+    );
+
     let status = h.ok("get_run_status", json!({ "runId": run_id })).await;
     assert_eq!(status["active"], false);
     assert_eq!(status["report"]["status"], "succeeded");
@@ -310,7 +337,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 29);
+    assert_eq!(tools.len(), 30);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -439,5 +466,68 @@ async fn versions_diff_restore_and_bundle_round_trip() {
     assert_eq!(copy["mode"], "copied");
     assert_eq!(copy["versionsAdded"], 1);
     assert_ne!(copy["scenario"]["id"], id.as_str());
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn secrets_are_named_but_never_revealed() {
+    let h = start(ServerOptions::default()).await;
+    // The user registers a login in Studio (same workspace, other process).
+    shikigami_secrets::Vault::open(&h.root)
+        .set(shikigami_secrets::SecretInput {
+            name: "受注システム".into(),
+            username: Some("tanaka".into()),
+            password: Some("hunter2".into()),
+            sites: Some(vec!["https://orders.example.com/login".into()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+    let listed = h.ok("list_secrets", json!({})).await;
+    assert_eq!(listed["secrets"][0]["name"], "受注システム");
+    assert_eq!(
+        listed["secrets"][0]["sites"],
+        json!(["https://orders.example.com"])
+    );
+    assert_eq!(
+        listed["secrets"][0]["fields"],
+        json!(["username", "password"])
+    );
+    let text = listed.to_string();
+    assert!(!text.contains("hunter2") && !text.contains("tanaka"));
+
+    // Secrets may only be typed into input fields, never logged.
+    let (is_error, result) = h
+        .call(
+            "test_step",
+            json!({ "step": { "type": "log.message", "params": { "message": { "secret": "受注システム", "field": "password" } } } }),
+        )
+        .await;
+    assert!(is_error || result["status"] != "succeeded", "{result}");
+    assert!(
+        result.to_string().contains("SECRET_NOT_ALLOWED"),
+        "{result}"
+    );
+    assert!(!result.to_string().contains("hunter2"));
+
+    // Secret inputs cannot be passed through the AI client.
+    let created = h
+        .ok(
+            "create_scenario",
+            json!({
+                "name": "ログイン",
+                "variables": [{ "name": "pw", "type": "string", "direction": "input", "secret": true }]
+            }),
+        )
+        .await;
+    let id = created["scenario"]["id"].as_str().unwrap().to_owned();
+    let (is_error, result) = h
+        .call(
+            "run_scenario",
+            json!({ "scenarioId": id, "inputs": { "pw": "hunter2" } }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(result["code"], "SECRET_INPUT_REJECTED");
     h.client.cancel().await.unwrap();
 }

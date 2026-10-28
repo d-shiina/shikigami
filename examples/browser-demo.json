@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "scn_example_browser",
   "name": "受注システムで未処理の注文を出荷する（ブラウザのデモ）",
-  "description": "式神商事のデモサイト（pnpm demo:site）にログインし、未処理の注文を出荷済みにする。在庫係の式神が同時に在庫一覧を確認し、在庫切れを知らせる。",
+  "description": "式神商事のデモサイト（pnpm demo:site）にログインし、未処理の注文を出荷済みにする。在庫係の式神が同時に在庫一覧を確認し、在庫切れを知らせる。ログインはシークレット「デモ受注システム」を使い、2 回目からは保存したログイン状態で入る。",
   "revision": 1,
   "variables": [
     {
@@ -11,19 +11,6 @@
       "direction": "input",
       "default": "http://127.0.0.1:8787/",
       "description": "デモサイトの URL"
-    },
-    {
-      "name": "user",
-      "type": "string",
-      "direction": "input",
-      "default": "demo"
-    },
-    {
-      "name": "password",
-      "type": "string",
-      "direction": "input",
-      "default": "shikigami",
-      "secret": true
     },
     {
       "name": "shipped",
@@ -72,46 +59,88 @@
                 {
                   "id": "stp_fcd12aa70801354864eb9799a0966509",
                   "type": "browser.open",
-                  "name": "受注システムを開く",
+                  "name": "受注システムを開く（前回のログインを使う）",
                   "params": {
-                    "url": "{{ siteUrl }}",
-                    "context": "orders"
+                    "url": "{{ siteUrl }}orders.html",
+                    "context": "orders",
+                    "session": "デモ受注システム"
                   }
                 },
                 {
-                  "id": "stp_fdc18fd7b837216ec8dcef773a108218",
-                  "type": "browser.fill",
-                  "name": "ユーザー名を入力",
+                  "id": "stp_7d4c264133759a769a0a14ea936a5ea8",
+                  "type": "browser.isVisible",
+                  "name": "ログイン済みか確かめる",
                   "params": {
                     "target": {
-                      "label": "ユーザー名"
+                      "role": "heading",
+                      "name": "受注一覧"
                     },
-                    "value": "{{ user }}",
                     "context": "orders"
-                  }
+                  },
+                  "saveAs": "loggedIn"
                 },
                 {
-                  "id": "stp_e1954cb6bd6b8f63a18df7c2ca30793b",
-                  "type": "browser.fill",
-                  "name": "パスワードを入力",
+                  "id": "stp_d7b4fd3d485b1a73ee728435a258e9fc",
+                  "type": "control.if",
+                  "name": "未ログインのときだけログイン",
                   "params": {
-                    "target": {
-                      "label": "パスワード"
-                    },
-                    "value": "{{ password }}",
-                    "context": "orders"
-                  }
-                },
-                {
-                  "id": "stp_e5cc0b6dc9882e7bd4f995d04badedf2",
-                  "type": "browser.click",
-                  "name": "ログイン",
-                  "params": {
-                    "target": {
-                      "role": "button",
-                      "name": "ログイン"
-                    },
-                    "context": "orders"
+                    "condition": "!loggedIn"
+                  },
+                  "blocks": {
+                    "then": [
+                      {
+                        "id": "stp_fdc18fd7b837216ec8dcef773a108218",
+                        "type": "browser.fill",
+                        "name": "ユーザー名を入力",
+                        "params": {
+                          "target": {
+                            "label": "ユーザー名"
+                          },
+                          "value": {
+                            "secret": "デモ受注システム",
+                            "field": "username"
+                          },
+                          "context": "orders"
+                        }
+                      },
+                      {
+                        "id": "stp_e1954cb6bd6b8f63a18df7c2ca30793b",
+                        "type": "browser.fill",
+                        "name": "パスワードを入力",
+                        "params": {
+                          "target": {
+                            "label": "パスワード"
+                          },
+                          "value": {
+                            "secret": "デモ受注システム",
+                            "field": "password"
+                          },
+                          "context": "orders"
+                        }
+                      },
+                      {
+                        "id": "stp_e5cc0b6dc9882e7bd4f995d04badedf2",
+                        "type": "browser.click",
+                        "name": "ログイン",
+                        "params": {
+                          "target": {
+                            "role": "button",
+                            "name": "ログイン"
+                          },
+                          "context": "orders"
+                        }
+                      }
+                    ],
+                    "else": [
+                      {
+                        "id": "stp_79e68b2a639876b15818fe0a7a3dc3c9",
+                        "type": "log.message",
+                        "name": "保存済みのログインを使う",
+                        "params": {
+                          "message": "前回のログイン状態を使ったのでログイン画面を省きました"
+                        }
+                      }
+                    ]
                   }
                 },
                 {

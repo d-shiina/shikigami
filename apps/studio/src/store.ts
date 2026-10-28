@@ -19,7 +19,7 @@ import type {
   WorkspaceInfo,
 } from "@shikigami/schema";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { type Api, ApiError } from "./lib/api";
+import { type Api, ApiError, type SecretInfo, type SecretInput } from "./lib/api";
 import { t } from "./lib/i18n";
 
 export type Selection =
@@ -37,11 +37,47 @@ export type LogEntry = {
   stepId?: string | null;
 };
 
+/**
+ * One variable write reported by the Runtime (`variableChanged`). Declared
+ * here until the schema package carries the event; unknown fields are
+ * ignored, so the shape only needs to be a subset of what arrives.
+ */
+export type VariableChange = {
+  seq: number;
+  at: string;
+  variable: string;
+  value: unknown;
+  /** The step that wrote it; absent for inputs and defaults set at start. */
+  stepId?: string | null;
+  /** Element number inside a parallel forEach. */
+  iteration?: number | null;
+  /** The value is masked as "***". */
+  secret?: boolean;
+  /** The value is a shortened preview. */
+  truncated?: boolean;
+};
+
+function asVariableChange(env: RunEventEnvelope): VariableChange | null {
+  const e = env as unknown as { type: string } & Partial<VariableChange>;
+  if (e.type !== "variableChanged" || typeof e.variable !== "string") return null;
+  return {
+    seq: env.seq,
+    at: env.at,
+    variable: e.variable,
+    value: e.value,
+    stepId: e.stepId ?? null,
+    iteration: e.iteration ?? null,
+    secret: e.secret === true,
+    truncated: e.truncated === true,
+  };
+}
+
 export type RunState = {
   runId: string;
   status: RunStatus;
   steps: Record<string, StepRunState>;
   logs: LogEntry[];
+  changes: VariableChange[];
 };
 
 export type StudioState = {
@@ -65,6 +101,14 @@ export type StudioState = {
   workspace: WorkspaceInfo | null;
   /** A file whose scenario already exists, waiting for the user's choice. */
   pendingImport: { contents: string; name: string } | null;
+  /** Registered secrets (names, user names, sites; never values). */
+  secrets: SecretInfo[];
+  secretKeyLocation: string;
+  /** Secrets are listed by name only: their key is not on this PC / user. */
+  secretKeyMissing: boolean;
+  secretsOpen: boolean;
+  /** A running step waits for the person at the PC (manual login, MFA). */
+  human: { stepId: string; message: string } | null;
 
   init(): Promise<void>;
   refreshList(): Promise<void>;
@@ -102,6 +146,12 @@ export type StudioState = {
   importFile(contents: string, onConflict?: ImportConflict): Promise<void>;
   cancelImport(): void;
   setWorkspace(path: string, shared: boolean): Promise<void>;
+  loadSecrets(): Promise<void>;
+  /** Returns true when saved. */
+  saveSecret(input: SecretInput): Promise<boolean>;
+  removeSecret(name: string): Promise<void>;
+  resetSecrets(): Promise<void>;
+  setSecretsOpen(open: boolean): void;
 };
 
 export const isExternal = (entry: HistoryEntry) => entry.actor.kind !== "studio";
@@ -285,6 +335,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       versions: [],
       workspace: null,
       pendingImport: null,
+      secrets: [],
+      secretKeyLocation: "",
+      secretKeyMissing: false,
+      secretsOpen: false,
+      human: null,
 
       async init() {
         try {
@@ -294,6 +349,51 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         } catch (e) {
           set({ error: message(e) });
         }
+        await get().loadSecrets();
+      },
+
+      async loadSecrets() {
+        try {
+          const { secrets, keyLocation, keyMissing } = await api.listSecrets();
+          set({ secrets, secretKeyLocation: keyLocation, secretKeyMissing: keyMissing });
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      async saveSecret(input) {
+        try {
+          await api.setSecret(input);
+          await get().loadSecrets();
+          set({ notice: t.secretSaved(input.name), error: null });
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      },
+
+      async removeSecret(name) {
+        try {
+          await api.removeSecret(name);
+          await get().loadSecrets();
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      async resetSecrets() {
+        try {
+          await api.resetSecrets();
+          await get().loadSecrets();
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      setSecretsOpen(open) {
+        set({ secretsOpen: open });
+        if (open) void get().loadSecrets();
       },
 
       async refreshList() {
@@ -441,7 +541,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const runId = await api.run(scenario.id);
           set((s) => ({
             // Events may have arrived before the command returned.
-            run: s.run?.runId === runId ? s.run : { runId, status: "running", steps: {}, logs: [] },
+            run: s.run?.runId === runId ? s.run : { runId, status: "running", steps: {}, logs: [], changes: [] },
             error: null,
           }));
         } catch (e) {
@@ -461,13 +561,16 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       onRunEvent(env) {
         set((s) => {
+          let human = s.human;
           const run: RunState =
             s.run && s.run.runId === env.runId
               ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs }
-              : { runId: env.runId, status: "running", steps: {}, logs: [] };
+              : { runId: env.runId, status: "running", steps: {}, logs: [], changes: [] };
           const push = (level: LogLevel, msg: string, stepId?: string | null) => {
             run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
           };
+          const change = asVariableChange(env);
+          if (change) run.changes = [...run.changes, change];
           switch (env.type) {
             case "runStarted":
               run.status = "running";
@@ -476,7 +579,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             case "stepStarted":
               run.steps[env.stepId] = "running";
               break;
+            case "humanActionRequired":
+              human = { stepId: env.stepId, message: env.message };
+              push("warn", `${t.waitingForYou}: ${env.message}`, env.stepId);
+              break;
             case "stepFinished":
+              if (human?.stepId === env.stepId) human = null;
               run.steps[env.stepId] = env.outcome;
               if (env.error) {
                 push("error", `${env.error.code}: ${env.error.message}${env.willRetry ? "（リトライします）" : ""}`, env.stepId);
@@ -486,11 +594,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push(env.level, env.message, env.stepId);
               break;
             case "runFinished":
+              human = null;
               run.status = env.status;
               push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]} (${env.durationMs} ms)`);
               break;
           }
-          return { run };
+          return { run, human };
         });
       },
 

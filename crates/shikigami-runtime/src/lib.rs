@@ -22,6 +22,7 @@ use std::time::Instant;
 
 use serde_json::{Map, Value};
 use shikigami_core::registry::builtin as builtin_types;
+use shikigami_core::secret::SecretProvider;
 use shikigami_core::{OnError, RunId, Scenario, StepRegistry, StepTypeDef, Validator};
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
@@ -62,6 +63,8 @@ pub struct Runtime {
     run_finished_hooks: Arc<Vec<RunFinishedHook>>,
     validator: Arc<Validator>,
     resources: Arc<ResourceLocks>,
+    default_timeouts: Arc<HashMap<String, u64>>,
+    secrets: Option<Arc<dyn SecretProvider>>,
 }
 
 impl Runtime {
@@ -72,6 +75,13 @@ impl Runtime {
 
     pub fn builder() -> RuntimeBuilder {
         RuntimeBuilder::new()
+    }
+
+    /// Where steps look up registered secrets (`{ "secret": .., "field": .. }`
+    /// params) and saved browser logins: the workspace vault.
+    pub fn with_secrets(mut self, secrets: Arc<dyn SecretProvider>) -> Self {
+        self.secrets = Some(secrets);
+        self
     }
 
     /// Step types this runtime can execute. Use the same registry for the
@@ -108,6 +118,8 @@ impl Runtime {
                 run_id: run_id.clone(),
                 handlers: self.handlers.clone(),
                 resource_defs: self.resource_defs.clone(),
+                default_timeouts: self.default_timeouts.clone(),
+                secrets: self.secrets.clone(),
                 vars: Map::new(),
                 secret_vars: scenario
                     .variables
@@ -115,6 +127,7 @@ impl Runtime {
                     .filter(|v| v.secret)
                     .map(|v| v.name.clone())
                     .collect(),
+                iteration: None,
                 emitter: emitter.clone(),
                 cancel: cancel.clone(),
                 default_timeout_ms: exec::DEFAULT_TIMEOUT_MS,
@@ -123,10 +136,11 @@ impl Runtime {
                 resources: self.resources.clone(),
             },
         );
-        let init = init_variables(&scenario, &options.inputs, &mut executor);
+        let inputs = options.inputs;
 
         let task_run_id = run_id.clone();
         let version = options.version;
+        let secrets = self.secrets.clone();
         let hooks = if options.keep_adapter_state {
             Arc::new(Vec::new())
         } else {
@@ -142,6 +156,9 @@ impl Runtime {
                 revision: scenario.revision,
             });
 
+            // After `runStarted`, so the inputs' `variableChanged` events
+            // come first in the run.
+            let init = init_variables(&scenario, &inputs, &mut executor);
             let result = match init {
                 Ok(()) => executor.block(&scenario.steps).await,
                 Err(e) => Err(exec::Interrupt::Failed(e)),
@@ -158,7 +175,8 @@ impl Runtime {
                     let value = if v.secret {
                         Value::String("***".into())
                     } else {
-                        value
+                        // Also hides secrets a step happened to read back.
+                        emitter.mask_value(&value)
                     };
                     (v.name.clone(), value)
                 })
@@ -166,7 +184,11 @@ impl Runtime {
 
             // Release per-run adapter state (browser contexts, ...).
             for hook in hooks.iter() {
-                hook(task_run_id.clone()).await;
+                hook(RunEnd {
+                    run_id: task_run_id.clone(),
+                    secrets: secrets.clone(),
+                })
+                .await;
             }
 
             let duration_ms = u64::try_from(clock.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -211,7 +233,14 @@ impl Default for Runtime {
 }
 
 /// Called once when a run ends (after its last step, before `RunFinished`).
-pub type RunFinishedHook = Arc<dyn Fn(RunId) -> BoxFuture<'static, ()> + Send + Sync>;
+pub type RunFinishedHook = Arc<dyn Fn(RunEnd) -> BoxFuture<'static, ()> + Send + Sync>;
+
+/// What a [`RunFinishedHook`] gets.
+pub struct RunEnd {
+    pub run_id: RunId,
+    /// The Runtime's secret store, e.g. to save browser logins for reuse.
+    pub secrets: Option<Arc<dyn SecretProvider>>,
+}
 
 pub struct RuntimeBuilder {
     registry: StepRegistry,
@@ -268,6 +297,13 @@ impl RuntimeBuilder {
                     .collect(),
             ),
             resources: Arc::default(),
+            default_timeouts: Arc::new(
+                self.registry
+                    .iter()
+                    .filter_map(|def| Some((def.step_type.clone(), def.default_timeout_ms?)))
+                    .collect(),
+            ),
+            secrets: None,
             run_finished_hooks: Arc::new(self.run_finished_hooks),
             registry: self.registry,
         }
@@ -297,6 +333,7 @@ fn init_variables(
             ));
         }
     }
+    let mut values = Vec::with_capacity(scenario.variables.len());
     for var in &scenario.variables {
         let value = match inputs.get(&var.name) {
             Some(value) if var.direction.is_input() => {
@@ -319,7 +356,17 @@ fn init_variables(
                 None => Value::Null,
             },
         };
-        executor.set_var(&var.name, value);
+        values.push((var, value));
+    }
+    // Know every secret before the first value is reported, so a secret
+    // copied into an earlier-declared input is masked too.
+    for (var, value) in &values {
+        if var.secret {
+            executor.emitter.add_secret(value);
+        }
+    }
+    for (var, value) in values {
+        executor.set_var(&var.name, value, None);
     }
     Ok(())
 }

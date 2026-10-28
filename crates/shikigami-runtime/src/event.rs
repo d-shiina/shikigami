@@ -110,12 +110,43 @@ pub enum RunEvent {
         #[serde(default, skip_serializing_if = "is_false")]
         will_retry: bool,
     },
+    /// A variable was assigned: by `variable.set`, a step's `saveAs`, a
+    /// loop's item/index variable, `errorVar` / `lastError`, or (without
+    /// `stepId`) its input or default value when the run starts. Changes a
+    /// parallel branch makes are reported when the branch makes them, not
+    /// again when they are merged back.
+    ///
+    /// `value` is the new value: `"***"` for secret variables, other
+    /// secrets masked inside it, and cut to a preview when large (see
+    /// `truncated`).
+    VariableChanged {
+        variable: String,
+        // Documented above: a field doc would make the generated TypeScript
+        // type an object instead of `unknown`.
+        value: Value,
+        /// The step that assigned it; absent for inputs and defaults.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step_id: Option<StepId>,
+        /// Item index (from 0) of the concurrent `forEach` iteration that
+        /// made the change, so interleaved iterations can be told apart.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        iteration: Option<usize>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        secret: bool,
+        /// `value` is a preview: a long string cut short, or the start of
+        /// a large array / object's JSON text.
+        #[serde(default, skip_serializing_if = "is_false")]
+        truncated: bool,
+    },
     Log {
         level: LogLevel,
         message: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         step_id: Option<StepId>,
     },
+    /// A step waits for a person (e.g. to log in or approve MFA on the
+    /// screen). Studio shows `message` until the step finishes.
+    HumanActionRequired { step_id: StepId, message: String },
     RunFinished {
         status: RunStatus,
         #[serde(default, skip_serializing_if = "Option::is_none")]

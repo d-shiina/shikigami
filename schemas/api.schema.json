@@ -948,6 +948,22 @@
           "description": "Complete, valid step objects showing typical use (IDs omitted). AI\nclients get them from `get_step_schema` and can copy them.",
           "type": "array",
           "items": true
+        },
+        "secretParams": {
+          "description": "Params that may take a registered secret,\n`{ \"secret\": \"<name>\", \"field\": \"password\" }`, instead of text.\nSecrets are rejected everywhere else.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "defaultTimeoutMs": {
+          "description": "Timeout when the step sets none (takes precedence over the\nscenario's default), for steps that wait on people (manual login).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [

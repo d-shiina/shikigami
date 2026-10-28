@@ -257,7 +257,7 @@ Runtime::builder()
 | 実行 | `run_scenario` | `id, inputs` → `runId` | run |
 |  | `stop_scenario` | `runId` → ok | run |
 |  | `get_run_status` | `runId` → `RunSnapshot \| RunReport` | read |
-|  | `get_run_logs` | `runId, since?` → `RunEventEnvelope[]` | read |
+|  | `get_run_logs` | `runId, afterSeq?, variable?` → `RunEventEnvelope[]` | read |
 |  | `debug_scenario` | `id, breakpoints[]` → `runId`（ステップ実行） | run |
 |  | `test_step` | `Step`（単体）, 変数 → 実行結果（シナリオは変更しない） | ui.act |
 
@@ -323,6 +323,19 @@ Runtime::builder()
   shikigami.db                SQLite（Phase 2〜）
 ```
 
+`events.jsonl` には変数の代入も `variableChanged` として残るので、実行後に「どの変数に何が渡され、いつ・どのステップで変わったか」を追える（MCP は `get_run_logs(runId, variable)`、CLI は `shikigami run --vars`）。
+
+```json
+{ "seq": 7, "at": "…", "runId": "run_…", "type": "variableChanged",
+  "variable": "amount", "value": 13200, "stepId": "stp_…", "iteration": 0 }
+```
+
+- `stepId`：代入したステップ（`variable.set`、`saveAs`、`forEach` / `repeat` の item・index 変数、`errorVar` / `lastError`）。入力値・既定値は `runStarted` 直後に `stepId` なしで出る。
+- `iteration`：並列 `forEach`（`concurrency` 指定）の中の変更だけに付く要素番号（0 始まり）。同時に進む反復を見分けるため。
+- `secret: true` の変数は値が `"***"`。他の変数に紛れ込んだ機密値もマスクする。
+- 1000 文字を超える値はプレビューに切り詰め `truncated: true`（文字列は先頭、配列・オブジェクトは JSON テキストの先頭）。
+- `parallel` の各ブランチの変更はブランチ内で起きた時点で出し、合流時には再度出さない。順序は `seq` の通り。
+
 SQLite スキーマ（Phase 2 で導入予定）：
 
 ```sql
@@ -350,9 +363,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
   created_at TEXT NOT NULL, decided_at TEXT
 );
 
-CREATE TABLE credentials_index (          -- 値は OS の資格情報ストアに保存し、DB には参照のみ
-  name TEXT PRIMARY KEY, store_ref TEXT NOT NULL, created_at TEXT NOT NULL
-);
+-- シークレット（ログイン情報）は DB ではなく <workspace>/secrets/ に暗号化して保存する（docs/secrets.md）
 ```
 
 ## 9. エラー設計
@@ -379,14 +390,14 @@ CREATE TABLE credentials_index (          -- 値は OS の資格情報ストア�
 |---|---|---|
 | 任意コード実行 | シナリオに汎用スクリプト実行を持たせない。式言語は副作用なしの許可関数のみ（`len`, `contains` 等）。ネスト深さ制限で DoS も防止 | **P1 済** |
 | パス・トラバーサル | シナリオ/実行 ID は `[A-Za-z0-9_-]{1,128}` のみ受理し、ファイル名に使う前に検査 | **P1 済** |
-| ログへの機密混入 | `secret` 変数の値をログ・エラー・イベント・出力記録で `***` にマスク | **P1 済** |
+| ログへの機密混入 | `secret` 変数とシークレットの値をログ・エラー・イベント・出力記録で `***` にマスク。スクリーンショットのパスワード欄を塗りつぶし、AI に返すページ情報からも消す | **済** |
 | 誤操作の不可逆性 | シナリオ削除はゴミ箱へ移動。全変更をジャーナルに記録し Undo 可能 | **P1 済** |
 | Studio の権限 | Tauri capability は `core:default` のみ。ファイル・シェル系プラグインを有効にしない。CSP 設定 | **P1 済** |
 | MCP 接続のアクセス制御 | 既定 stdio（起動した AI クライアントのみ接続可）。HTTP は localhost＋トークン＋Origin 検証 | P2 |
 | ツール権限 | ツールを `read / write / run / ui.read / ui.act / dangerous` に分類し、ワークスペース設定でクライアントごとに許可。`dangerous`（削除、ファイル操作、許可リスト外アプリ起動）は Studio 上でのユーザー承認を要求 | P2 |
 | 操作対象の許可リスト | `launch_application` / `navigate_browser` は設定の許可リスト（実行ファイルパス・ドメイン）のみ。Runtime 実行時も同じリストで検査 | P2–P4 |
 | ファイル操作の制限 | ファイル系ステップはワークスペース設定で許可したディレクトリ配下のみ | P3 |
-| 認証情報 | 値は OS の資格情報ストア（Windows Credential Manager）に保存し、シナリオには参照名のみ | P3 |
+| 認証情報 | 人が Studio / CLI で名前を付けて登録。値は AES-256-GCM でワークスペースに暗号化保存し、鍵は Windows 資格情報マネージャーにワークスペースごと 1 件。シナリオと AI には名前だけ。登録サイト以外への入力を拒否。ログイン状態（セッション）も同じ鍵で暗号化（[secrets.md](secrets.md)） | **済** |
 | プロンプトインジェクション | `inspect_ui` / ページテキスト等の取得結果は「信頼できないデータ」として明示ラベル付きの構造化データで返し、指示として扱わないよう SKILL/ツール説明で明記。UI 操作ツールはシナリオを変更せず、シナリオ保存は別操作。危険操作は人間承認 | P2 |
 | 監査 | 全 MCP ツール呼び出し・承認・実行を `audit_log` に記録（シナリオ変更は P1 からジャーナル記録済み） | P2 |
 | 実行権限 | シナリオ単位で「MCP からの実行可否」「無人実行可否」を設定 | P2 |

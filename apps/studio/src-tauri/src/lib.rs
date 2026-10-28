@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use shikigami_core::{FileStore, RunId, ScenarioService};
 use shikigami_runtime::{RunSnapshot, Runtime};
+use shikigami_secrets::Vault;
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct ActiveRun {
@@ -23,6 +24,7 @@ pub(crate) struct AppState {
     pub service: Arc<ScenarioService>,
     pub runtime: Runtime,
     pub runs: Mutex<HashMap<RunId, ActiveRun>>,
+    pub vault: Arc<Vault>,
 }
 
 pub fn run() {
@@ -43,10 +45,12 @@ pub fn run() {
         }
     };
     let service = Arc::new(ScenarioService::new(store, runtime.registry().clone()));
+    let vault = Arc::new(Vault::open(service.store().root()));
     let state = AppState {
         service: service.clone(),
-        runtime,
+        runtime: runtime.with_secrets(vault.clone()),
         runs: Mutex::new(HashMap::new()),
+        vault,
     };
 
     let result = tauri::Builder::default()
@@ -79,6 +83,11 @@ pub fn run() {
             commands::run_scenario,
             commands::stop_run,
             commands::run_status,
+            commands::list_secrets,
+            commands::set_secret,
+            commands::remove_secret,
+            commands::reset_secrets,
+            commands::forget_login,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {
