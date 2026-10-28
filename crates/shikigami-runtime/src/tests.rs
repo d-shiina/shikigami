@@ -867,6 +867,18 @@ async fn runs_the_batch_example() {
     assert_eq!(report.outputs["taxed"][1], json!(165000));
 }
 
+/// Removes `durationMs` everywhere, so tests can search event text for values.
+fn drop_durations(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            map.remove("durationMs");
+            map.values_mut().for_each(drop_durations);
+        }
+        Value::Array(items) => items.iter_mut().for_each(drop_durations),
+        _ => {}
+    }
+}
+
 /// `(variable, value, stepId)` of every `variableChanged` event, in order.
 fn changes(events: &[RunEventEnvelope]) -> Vec<(String, Value, Option<String>)> {
     events
@@ -1219,8 +1231,17 @@ async fn variable_changes_mask_secrets_copied_anywhere() {
             change("id_copy", json!(7), Some("s3")),
         ]
     );
-    let all = serde_json::to_string(&events).expect("json");
-    assert!(!all.contains("s3cr3t") && !all.contains("4821"));
+    // Only what the events carry: the envelope's time and run id, and
+    // durations, are random and can contain the digits by chance.
+    let all = events
+        .iter()
+        .map(|e| {
+            let mut v = serde_json::to_value(&e.event).expect("json");
+            drop_durations(&mut v);
+            v.to_string()
+        })
+        .collect::<String>();
+    assert!(!all.contains("s3cr3t") && !all.contains("4821"), "{all}");
 }
 
 #[tokio::test]
