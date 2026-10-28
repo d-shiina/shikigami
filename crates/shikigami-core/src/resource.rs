@@ -26,7 +26,8 @@ pub enum ResourceDef {
 pub enum ResourceKind {
     /// A file path; normalised so different spellings of one file collide.
     File,
-    /// A window (title or handle).
+    /// A window: a title, or a desktop target `{ "window": { "process" | "title" } }`
+    /// (keyed by process when given, so all steps on one app take turns).
     Window,
     /// A browser context / profile.
     BrowserContext,
@@ -40,6 +41,15 @@ impl ResourceDef {
         Self::Param {
             key: key.into(),
             kind: ResourceKind::File,
+            default: None,
+        }
+    }
+
+    /// The window of the desktop target in `key`.
+    pub fn window(key: &str) -> Self {
+        Self::Param {
+            key: key.into(),
+            kind: ResourceKind::Window,
             default: None,
         }
     }
@@ -63,6 +73,9 @@ pub fn resource_keys(defs: &[ResourceDef], params: &Value) -> Vec<String> {
             ResourceDef::Static(name) => Some(name.clone()),
             ResourceDef::Param { key, kind, default } => {
                 let value = match params.get(key) {
+                    Some(value) if *kind == ResourceKind::Window && value.is_object() => {
+                        window_name(value)?
+                    }
                     Some(value) => value.as_str()?.trim(),
                     None => default.as_deref()?,
                 };
@@ -71,7 +84,10 @@ pub fn resource_keys(defs: &[ResourceDef], params: &Value) -> Vec<String> {
                 }
                 Some(match kind {
                     ResourceKind::File => format!("file:{}", normalize_path(value)),
-                    ResourceKind::Window => format!("window:{}", value.to_lowercase()),
+                    ResourceKind::Window => {
+                        let name = value.to_lowercase();
+                        format!("window:{}", name.strip_suffix(".exe").unwrap_or(&name))
+                    }
                     ResourceKind::BrowserContext => format!("browser:{value}"),
                 })
             }
@@ -80,6 +96,20 @@ pub fn resource_keys(defs: &[ResourceDef], params: &Value) -> Vec<String> {
     keys.sort_unstable();
     keys.dedup();
     keys
+}
+
+/// `billing.exe` from `{ "window": { "process": "Billing.exe" } }`, else
+/// the window title.
+fn window_name(target: &Value) -> Option<&str> {
+    let window = target.get("window")?;
+    let name = |key: &str| {
+        window
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    };
+    name("process").or_else(|| name("title"))
 }
 
 /// Whether `path` is absolute in Windows terms (`C:\…` or `\\server\…`).
@@ -199,6 +229,25 @@ mod tests {
             resource_keys(&defs, &json!({ "context": "sales" })),
             ["browser:sales", "desktop.input"]
         );
+    }
+
+    #[test]
+    fn desktop_targets_lock_their_app() {
+        let defs = [ResourceDef::window("target")];
+        let key = |target: Value| resource_keys(&defs, &json!({ "target": target }));
+        assert_eq!(
+            key(json!({ "window": { "process": "Billing.EXE", "title": "請求" } })),
+            ["window:billing"]
+        );
+        assert_eq!(
+            key(json!({ "window": { "process": "billing" } })),
+            ["window:billing"]
+        );
+        assert_eq!(
+            key(json!({ "window": { "title": "メモ帳" } })),
+            ["window:メモ帳"]
+        );
+        assert!(key(json!({ "window": {} })).is_empty());
     }
 
     #[test]

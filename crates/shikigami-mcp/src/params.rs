@@ -195,6 +195,21 @@ pub struct InspectPageParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct InspectUiParams {
+    /// The window to look into, e.g. { "process": "notepad.exe" } or { "title": "請求" }
+    /// (title matches partially). Omit to list the open windows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<Value>,
+    /// Limit the tree to one element and what is inside it, e.g. { "role": "table", "name": "明細" }.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub element: Option<Value>,
+    /// Most elements to list (default 1500).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_nodes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct TestStepParams {
     /// One step as it would appear in a scenario, e.g.
     /// { "type": "browser.click", "params": { "target": { "role": "button", "name": "ログイン" } } }.

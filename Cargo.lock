@@ -3752,6 +3752,7 @@ name = "shikigami-adapters"
 version = "0.1.0"
 dependencies = [
  "shikigami-browser",
+ "shikigami-desktop",
  "shikigami-runtime",
 ]
 
@@ -3803,6 +3804,20 @@ dependencies = [
  "time",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "shikigami-desktop"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "shikigami-core",
+ "shikigami-runtime",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "windows",
 ]
 
 [[package]]

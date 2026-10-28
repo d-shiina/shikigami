@@ -10,7 +10,10 @@ use shikigami_runtime::{Adapter, Runtime};
 
 /// The adapters available in this build.
 pub fn all() -> Vec<Arc<dyn Adapter>> {
-    vec![Arc::new(shikigami_browser::BrowserAdapter::discover())]
+    vec![
+        Arc::new(shikigami_browser::BrowserAdapter::discover()),
+        Arc::new(shikigami_desktop::DesktopAdapter::new()),
+    ]
 }
 
 /// A Runtime with the built-in steps plus every adapter's steps.
