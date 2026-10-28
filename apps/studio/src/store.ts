@@ -23,6 +23,8 @@ import type {
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { type Api, ApiError, type SecretInfo, type SecretInput } from "./lib/api";
 import { t } from "./lib/i18n";
+import { neighbor, outline } from "./lib/outline";
+import { summarize } from "./lib/review";
 
 export type Selection =
   | { kind: "step"; stepId: string }
@@ -107,6 +109,11 @@ export type StudioState = {
   timelines: Record<string, ReviewTimeline>;
   /** The review desk is open instead of the scenario list. */
   reviewing: boolean;
+  /** A step the canvas should bring into view; `seq` changes on every request. */
+  reveal: { stepId: string; seq: number } | null;
+  /** While running, keep the running step in view. */
+  followRun: boolean;
+  outlineOpen: boolean;
   paletteOpen: boolean;
   /** Named versions of the open scenario, newest first. */
   versions: VersionSummary[];
@@ -132,6 +139,14 @@ export type StudioState = {
   undo(): Promise<void>;
   redo(): Promise<void>;
   select(selection: Selection): void;
+  /** Selects a step and brings it into view. */
+  goTo(stepId: string): void;
+  /** Moves the selection to the previous / next step in reading order. */
+  stepBy(delta: number): void;
+  /** Moves to the previous / next step the AI changed (review desk). */
+  changeBy(delta: number): void;
+  setFollowRun(on: boolean): void;
+  setOutlineOpen(open: boolean): void;
   addStep(type: string): Promise<void>;
   moveSelected(delta: -1 | 1): Promise<void>;
   removeSelected(): Promise<void>;
@@ -263,6 +278,24 @@ export function touchedSteps(entry: HistoryEntry): string[] {
 }
 
 const REVIEWED_KEY = "shikigami.studio.reviewed";
+const OUTLINE_KEY = "shikigami.studio.outline";
+
+function loadFlag(key: string, fallback: boolean): boolean {
+  try {
+    const value = globalThis.localStorage?.getItem(key);
+    return value == null ? fallback : value === "1";
+  } catch {
+    return fallback;
+  }
+}
+
+function saveFlag(key: string, on: boolean) {
+  try {
+    globalThis.localStorage?.setItem(key, on ? "1" : "0");
+  } catch {
+    // Only a remembered preference.
+  }
+}
 
 function loadReviewed(): Record<string, number[]> {
   try {
@@ -389,6 +422,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       histories: {},
       timelines: {},
       reviewing: false,
+      reveal: null,
+      followRun: true,
+      outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
       versions: [],
       workspace: null,
@@ -525,6 +561,40 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ selection });
       },
 
+      goTo(stepId) {
+        set({ selection: { kind: "step", stepId }, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 } });
+      },
+
+      stepBy(delta) {
+        const { scenario, stepTypes, selection } = get();
+        const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
+        const ids = outline(scenario?.steps ?? [], defs).map((i) => i.id);
+        const next = neighbor(ids, selection?.kind === "step" ? selection.stepId : null, delta);
+        if (next) get().goTo(next);
+      },
+
+      changeBy(delta) {
+        const { scenario, stepTypes, selection } = get();
+        const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
+        const changed = summarize([...pendingReview(get())].reverse()).steps;
+        const all = outline(scenario?.steps ?? [], defs).map((i) => i.id);
+        const current = selection?.kind === "step" ? selection.stepId : null;
+        const at = current ? all.indexOf(current) : -1;
+        // The nearest changed step in that direction from wherever the selection is.
+        const ahead = at < 0 ? (delta > 0 ? all : [...all].reverse()) : delta > 0 ? all.slice(at + 1) : all.slice(0, at).reverse();
+        const next = ahead.find((id) => changed.has(id));
+        if (next) get().goTo(next);
+      },
+
+      setFollowRun(on) {
+        set({ followRun: on });
+      },
+
+      setOutlineOpen(open) {
+        saveFlag(OUTLINE_KEY, open);
+        set({ outlineOpen: open });
+      },
+
       async addStep(type) {
         const { scenario, selection } = get();
         if (!scenario) return;
@@ -607,6 +677,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             // Events may have arrived before the command returned.
             run: s.run?.runId === runId ? s.run : { runId, status: "running", steps: {}, logs: [], changes: [], starts: [] },
             error: null,
+            followRun: true,
           }));
         } catch (e) {
           set({ error: message(e) });

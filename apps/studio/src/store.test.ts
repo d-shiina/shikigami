@@ -34,6 +34,30 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
 }
 
 describe("studio store", () => {
+  it("moves the selection through the steps and asks the view to follow", async () => {
+    const steps = [
+      { id: "s1", type: "log.message" },
+      { id: "s2", type: "log.message" },
+      { id: "s3", type: "log.message" },
+    ];
+    const history: HistoryEntry[] = [
+      { kind: "edit", revision: 2, actor: { kind: "mcp", name: "AI" }, at: "2026-10-28T00:00:00Z", label: "update", ops: [{ op: "updateStep", stepId: "s3", patch: { name: "x" } }], inverse: [{ op: "updateStep", stepId: "s3", patch: { name: "" } }] },
+    ];
+    const store = createStudioStore(fakeApi({ getScenario: vi.fn(async () => scenario(2, steps)), history: vi.fn(async () => history) }));
+    await store.getState().open("scn_a");
+    store.getState().stepBy(1);
+    expect(store.getState().selection).toEqual({ kind: "step", stepId: "s1" });
+    store.getState().stepBy(1);
+    expect(store.getState().reveal).toEqual({ stepId: "s2", seq: 2 });
+    store.getState().stepBy(Infinity);
+    expect(store.getState().selection).toEqual({ kind: "step", stepId: "s3" });
+    store.getState().select({ kind: "step", stepId: "s1" });
+    store.getState().changeBy(1);
+    expect(store.getState().selection).toEqual({ kind: "step", stepId: "s3" });
+    store.getState().changeBy(1);
+    expect(store.getState().selection).toEqual({ kind: "step", stepId: "s3" });
+  });
+
   it("sends edits with the current revision and mirrors Core's result", async () => {
     const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) =>
       outcome(scenario(2, [{ id: "stp_new", type: "log.message" }])),

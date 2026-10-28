@@ -341,7 +341,7 @@ function ParamsEditor({
 /** Where this step's variables come from and go to, matching the links on the chart. */
 function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[]; vars: Map<string, string | undefined> }) {
   const scenario = useStudio((s) => s.scenario);
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   const incoming = links.filter((l) => l.to === stepId);
   const outgoing = links.filter((l) => l.from === stepId);
   if (incoming.length === 0 && outgoing.length === 0) return null;
@@ -359,7 +359,7 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
       {other.startsWith("@") ? (
         <span className="truncate text-slate-600">{nameOf(other)}</span>
       ) : (
-        <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => select({ kind: "step", stepId: other })}>
+        <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => goTo(other)}>
           {nameOf(other)}
         </button>
       )}

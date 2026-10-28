@@ -59,7 +59,7 @@ const VERB_STYLE: Record<ChangeLine["verb"], string> = {
 };
 
 export function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: boolean }) {
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   return (
     <ul className="space-y-1.5">
       {lines.map((line, i) => (
@@ -67,7 +67,7 @@ export function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: bool
           <button
             type="button"
             disabled={!line.stepId}
-            onClick={() => line.stepId && select({ kind: "step", stepId: line.stepId })}
+            onClick={() => line.stepId && goTo(line.stepId)}
             className="flex w-full items-center gap-1.5 text-left enabled:hover:text-brand-600"
           >
             <span className={`rounded px-1 text-[10px] font-semibold ${VERB_STYLE[line.verb]}`}>{verbLabel(line.verb)}</span>

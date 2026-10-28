@@ -1,5 +1,5 @@
 import type { HistoryEntry, Step, StepTypeDef, VariableDef } from "@shikigami/schema";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useStudio } from "../context";
 import { actorLabel, describe, formatValue, relativeTime } from "../lib/changes";
 import { t } from "../lib/i18n";
@@ -147,6 +147,7 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
       <div
         role="button"
         tabIndex={0}
+        data-step={id}
         onClick={() => select({ kind: "step", stepId: id })}
         onKeyDown={(e) => e.key === "Enter" && select({ kind: "step", stepId: id })}
         className={`group flex cursor-pointer gap-3 rounded-lg px-2.5 py-2 ${
@@ -226,6 +227,12 @@ export function StoryView() {
   const select = useStudio((s) => s.select);
   const pending = usePendingReview();
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
+  // Keyboard and outline jumps scroll the story to the step.
+  const reveal = useStudio((s) => s.reveal);
+  useEffect(() => {
+    if (!reveal) return;
+    document.querySelector(`[data-step="${CSS.escape(reveal.stepId)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [reveal]);
 
   const marks = useMemo(() => {
     const map: Marks = new Map();

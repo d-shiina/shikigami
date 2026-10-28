@@ -59,6 +59,7 @@ pub fn run() {
         .manage(state)
         .manage(updater::PendingUpdate::default())
         .setup(move |app| {
+            fit_to_screen(app);
             updater::on_startup(app.handle());
             watcher::spawn(app.handle().clone(), service.store().scenarios_dir());
             Ok(())
@@ -103,5 +104,23 @@ pub fn run() {
     if let Err(e) = result {
         tracing::error!(error = %e, "Studio exited with an error");
         std::process::exit(1);
+    }
+}
+
+/// The default window (1400x900) is taller than many laptop screens, which
+/// puts the bottom of the panels under the taskbar until the window is
+/// maximized. On a screen whose work area cannot hold it, start maximized.
+fn fit_to_screen(app: &tauri::App) {
+    use tauri::Manager;
+    for window in app.webview_windows().values() {
+        let (Ok(Some(monitor)), Ok(size)) = (window.current_monitor(), window.outer_size()) else {
+            continue;
+        };
+        let area = monitor.work_area().size;
+        if (size.width > area.width || size.height > area.height)
+            && let Err(e) = window.maximize()
+        {
+            tracing::warn!(error = %e, "cannot maximize the window");
+        }
     }
 }

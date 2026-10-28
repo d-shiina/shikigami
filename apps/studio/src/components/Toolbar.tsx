@@ -34,6 +34,8 @@ export function ScenarioHeader() {
   const run = useStudio((s) => s.run);
   const startRun = useStudio((s) => s.startRun);
   const stopRun = useStudio((s) => s.stopRun);
+  const followRun = useStudio((s) => s.followRun);
+  const setFollowRun = useStudio((s) => s.setFollowRun);
 
   if (!scenario) return <span className="flex-1" />;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
@@ -63,6 +65,14 @@ export function ScenarioHeader() {
             <span className="swirl h-2 w-2 animate-pulse rounded-full" />
             実行中
           </span>
+          <button
+            type="button"
+            onClick={() => setFollowRun(!followRun)}
+            title={followRun ? "動いている手順を画面で追っています（画面を動かすと止まります）" : "動いている手順を画面で追う"}
+            className={`flex h-full items-center gap-1 border-l border-slate-300 px-2.5 text-[12px] ${followRun ? "bg-brand-50 font-semibold text-brand-700" : "text-slate-500 hover:bg-slate-50"}`}
+          >
+            {followRun ? "◉" : "○"} 追う
+          </button>
           <button
             type="button"
             onClick={() => stopRun()}
@@ -108,20 +118,20 @@ export function CanvasDock() {
   const stepSelected = selection?.kind === "step";
 
   return (
-    <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-slate-200 bg-sheet/95 p-1 shadow-lg backdrop-blur">
+    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-full whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-lg backdrop-blur">
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}
         className="flex items-center gap-2 rounded-full bg-ink py-1.5 pr-2 pl-3 text-sm font-medium text-paper hover:bg-slate-700"
       >
-        ＋ {t.addStep}
-        <kbd className="rounded bg-white/15 px-1 font-sans text-[10px]">{t.shortcut}</kbd>
+        ＋ <span className="@max-[560px]:hidden">{t.addStep}</span>
+        <kbd className="rounded bg-white/15 px-1 font-sans text-[10px] @max-[560px]:hidden">{t.shortcut}</kbd>
       </button>
       <span className="mx-1 h-5 w-px bg-slate-200" />
-      <DockButton label={`${t.moveUp}`} onClick={() => moveSelected(-1)} disabled={!stepSelected}>
+      <DockButton label={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} disabled={!stepSelected}>
         ↑
       </DockButton>
-      <DockButton label={`${t.moveDown}`} onClick={() => moveSelected(1)} disabled={!stepSelected}>
+      <DockButton label={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} disabled={!stepSelected}>
         ↓
       </DockButton>
       <DockButton label={`${t.delete} (Delete)`} onClick={() => removeSelected()} disabled={!stepSelected}>

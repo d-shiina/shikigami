@@ -166,10 +166,11 @@ export function ReviewPanel() {
         <Section title="AIの試し実行">
           <TestRuns runs={runs} revision={scenario?.revision ?? 0} />
         </Section>
-        <div className="flex flex-wrap gap-1.5 text-[11px]">
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           <Legend color="#2f8a4c" label="AIが追加" />
           <Legend color="#f5872a" label="AIが変更" />
           {summary.removed.length > 0 && <Legend color="#e8501f" label="AIが削除（下に一覧）" />}
+          <ChangeStepper />
         </div>
         <section>
           <div className="mb-1.5 text-[11px] font-bold text-slate-500">変わったところ</div>
@@ -193,6 +194,23 @@ export function ReviewPanel() {
       </div>
       <ReviewActions />
     </div>
+  );
+}
+
+/** Walk the chart from one changed step to the next (N / Shift+N). */
+function ChangeStepper() {
+  const changeBy = useStudio((s) => s.changeBy);
+  const button = "grid h-6 w-6 place-items-center rounded-[4px] border border-slate-200 text-slate-600 hover:border-brand-500 hover:text-brand-700";
+  return (
+    <span className="ml-auto flex items-center gap-1 text-slate-500">
+      <button type="button" className={button} onClick={() => changeBy(-1)} title="前の変更（Shift+N）" aria-label="前の変更">
+        ‹
+      </button>
+      <button type="button" className={button} onClick={() => changeBy(1)} title="次の変更（N）" aria-label="次の変更">
+        ›
+      </button>
+      <kbd className="rounded bg-slate-100 px-1 text-[10px]">N</kbd>
+    </span>
   );
 }
 

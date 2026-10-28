@@ -13,8 +13,9 @@ import {
   Position,
   ReactFlow,
   useReactFlow,
+  useStore,
 } from "@xyflow/react";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { CHIP_ROOM, type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
@@ -38,6 +39,8 @@ type StepNodeProps = NodeProps<
 >;
 
 const MIN_READABLE_ZOOM = 0.85;
+/** Width of the outline panel plus its gap, from the canvas's left edge. */
+const OUTLINE_W = 284;
 
 const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: string }> = {
   added: { border: "border-moegi-500", tag: "bg-moegi-500", label: "AIが追加" },
@@ -420,6 +423,52 @@ function FocusOn({ id }: { id: string | undefined }) {
   return null;
 }
 
+/** Pans just enough to bring a step into view (centring it), keeping a readable zoom. */
+function useBringIntoView() {
+  const flow = useReactFlow();
+  const width = useStore((s) => s.width);
+  const height = useStore((s) => s.height);
+  // The outline covers the left edge of the chart while it is open.
+  const covered = useStudio((s) => (s.outlineOpen ? OUTLINE_W : 0));
+  return useCallback(
+    (id: string) => {
+      const node = flow.getInternalNode(id);
+      if (!node) return;
+      const { x, y } = node.internals.positionAbsolute;
+      const w = node.measured.width ?? NODE_W;
+      const h = node.measured.height ?? 80;
+      const view = flow.getViewport();
+      const margin = 48;
+      const left = x * view.zoom + view.x;
+      const top = y * view.zoom + view.y;
+      const inside =
+        left >= covered + margin && top >= margin && left + w * view.zoom <= width - margin && top + h * view.zoom <= height - margin;
+      if (inside && view.zoom >= MIN_READABLE_ZOOM) return;
+      const zoom = Math.max(view.zoom, MIN_READABLE_ZOOM);
+      // Centre in the part of the canvas the outline leaves free.
+      void flow.setCenter(x + w / 2 - covered / 2 / zoom, y + h / 2, { zoom, duration: 250 });
+    },
+    [flow, width, height, covered],
+  );
+}
+
+/** Follows keyboard / outline jumps, and the running step while a run is followed. */
+function Follow() {
+  const latest = useBringIntoView();
+  const bring = useRef(latest);
+  bring.current = latest;
+  const reveal = useStudio((s) => s.reveal);
+  const running = useStudio((s) => (s.run?.status === "running" && s.followRun ? s.run.starts.at(-1)?.stepId : undefined));
+  // Only a new request moves the view, not a resize or re-measure.
+  useEffect(() => {
+    if (reveal) bring.current(reveal.stepId);
+  }, [reveal]);
+  useEffect(() => {
+    if (running) bring.current(running);
+  }, [running]);
+  return null;
+}
+
 const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode };
 
 export function FlowCanvas() {
@@ -429,6 +478,7 @@ export function FlowCanvas() {
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
   const select = useStudio((s) => s.select);
+  const setFollowRun = useStudio((s) => s.setFollowRun);
   const pending = usePendingReview();
   const reviewing = useStudio((s) => s.reviewing);
   const feedback = useStudio((s) => (s.scenario ? s.timelines[s.scenario.id]?.openFeedback : undefined));
@@ -461,7 +511,6 @@ export function FlowCanvas() {
     return counts;
   }, [validation]);
 
-  const selectedStep = selection?.kind === "step" ? selection.stepId : undefined;
   const nodes: Node[] = layout.nodes.map((n) => {
     if (n.data.kind === "step") {
       const id = n.data.step.id ?? n.id;
@@ -576,11 +625,14 @@ export function FlowCanvas() {
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
       onPaneClick={() => select(null)}
+      // Dragging the view during a run means the person wants to look elsewhere.
+      onMoveStart={(event) => event && run?.status === "running" && setFollowRun(false)}
       onNodeMouseEnter={(_, node) => node.type === "step" && focus.set(node.id)}
       onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="#c3cedb" />
-      {reviewing && <FocusOn id={selectedStep ?? layout.nodes.find((n) => diffs.has(n.id))?.id} />}
+      <Follow />
+      {reviewing && <FocusOn id={layout.nodes.find((n) => diffs.has(n.id))?.id} />}
       <Controls showInteractive={false} />
     </ReactFlow>
   );

@@ -12,7 +12,7 @@ const LEVEL_STYLE = {
 export function RunLog() {
   const run = useStudio((s) => s.run);
   const clear = useStudio((s) => s.clearLog);
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   const end = useRef<HTMLDivElement>(null);
   const count = run?.logs.length ?? 0;
   useEffect(() => {
@@ -42,7 +42,7 @@ export function RunLog() {
               <button
                 type="button"
                 className="ml-auto shrink-0 text-slate-400 hover:text-brand-600"
-                onClick={() => entry.stepId && select({ kind: "step", stepId: entry.stepId })}
+                onClick={() => entry.stepId && goTo(entry.stepId)}
               >
                 {entry.stepId.slice(0, 12)}
               </button>

@@ -25,7 +25,7 @@ function Kind({ kind }: { kind: DiffKind }) {
 
 /** Differences from a version to the current content. */
 function DiffView({ diff, defs }: { diff: ScenarioDiff; defs: Map<string, StepTypeDef> }) {
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   if (diff.identical) return <p className="text-xs text-slate-500">{t.noDiff}</p>;
   return (
     <ul className="space-y-1.5 rounded border border-slate-200 bg-paper p-2 text-xs">
@@ -48,7 +48,7 @@ function DiffView({ diff, defs }: { diff: ScenarioDiff; defs: Map<string, StepTy
           <button
             type="button"
             disabled={s.kind === "removed"}
-            onClick={() => select({ kind: "step", stepId: s.stepId })}
+            onClick={() => goTo(s.stepId)}
             className="flex w-full items-baseline gap-1.5 text-left enabled:hover:text-brand-600"
           >
             <Kind kind={s.kind} />
