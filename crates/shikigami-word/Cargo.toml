@@ -1,0 +1,21 @@
+[package]
+name = "shikigami-word"
+description = "Word document steps for Shikigami (word.*): fill .docx templates and read their text directly, without Word"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+shikigami-core.workspace = true
+shikigami-runtime.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+zip = { version = "9.1.3", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

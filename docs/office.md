@@ -81,8 +81,41 @@ AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange`
 - インターネットから取得してブロックされたブック（ファイルのプロパティで「許可する」が未チェック）はマクロが動かず `MACRO_FAILED` になります
 - 任意のコードが動くので、ステップのリスクは `Dangerous` です
 
+## Word（`word.*`、実装済み）
+
+クレート `crates/shikigami-word`。`.docx`（`.docm` / `.dotx` も可）を直接読み書きし、Word は不要です（`.doc` は `UNSUPPORTED_FORMAT`）。
+
+| type | 主な params | 出力 |
+|---|---|---|
+| `word.fillTemplate` | `template`（テンプレート）, `path`（作る文書）, `values` | `{ path, replaced }` |
+| `word.readText` | `path` | 本文の文字（段落ごとに改行） |
+
+- テンプレートの本文・ヘッダー・フッターに `{{ 名前 }}` を書いておくと、`values` の値で置き換えます。書式（太字・フォントなど）はテンプレートのまま。値の `\n` は改行になります。`{{ 顧客.氏名 }}` はレコードの項目
+- **表の行の繰り返し**：表の行に `{{ 明細.品名 }}` `{{ 明細.数量 }}` と書き、`values` に `"明細": [ { "品名": …, "数量": … }, … ]` を渡すと、その行がレコードの数だけ並びます（空の配列なら行ごと消える）
+- 値のない `{{ }}` が 1 つでもあると文書を作らずに `TEMPLATE_VALUE_MISSING`（`details.missing` に名前の一覧）。置き換え漏れのある書類を作らないためです
+- Word の編集で `{{ 氏名 }}` が内部で分割されていても（スペルチェックや書式の変更で起きる）同じように置き換えます
+- テンプレートは変更しません。`path` は同じフォルダーに一時ファイルを書いてから置き換え。Word で開いている文書への書き込みは `FILE_IN_USE`
+- `template` と `path` の両方を資源にするので、同じファイルへのステップは自動で順番待ち
+- MCP の `test_step` で `word.readText` をテンプレートに実行すると、`state` にプレースホルダーの一覧が付きます
+
+## メール（`mail.*`、実装済み）
+
+クレート `crates/shikigami-mail`。アプリで分けず `mail.*` の 1 セットにし、今はこの PC の Outlook（クラシック版）を COM で使います（Windows だけ。新しい Outlook アプリと Web 版は対象外）。Outlook にサインインしているアカウントをそのまま使うので、パスワードやサーバー設定は要りません。
+
+| type | 主な params | 出力 |
+|---|---|---|
+| `mail.createDraft` | `to` / `cc` / `bcc`（アドレスの配列）, `subject`, `body`, `html`, `attachments`（フルパスの配列） | `{ id }` |
+| `mail.list` | `folder`（例 `受信トレイ/請求書`、省略で受信トレイ）, `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit`（既定 50）, `includeBody` | 新しい順のメールの配列 `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
+| `mail.saveAttachments` | `id`（`mail.list` の id）, `folder`（保存先）, `nameContains` | 保存したファイルのフルパスの配列 |
+
+- **送信はしません**。`mail.createDraft` は下書きフォルダーに置くだけで、人が確かめて送ります。自動送信（`mail.send`）は、外に出るものなので別途検討します
+- 宛先は 1 件ずつ配列で書きます（`["{{ customer.email }}"]`）。アドレスの形でないものは `INVALID_ADDRESS`、無い添付ファイルは `FILE_NOT_FOUND` で、下書きを作る前に止めます
+- 添付の保存は同じ名前のファイルを上書きせず、`請求書 (2).pdf` のように番号を付けます。添付の名前に含まれるフォルダー指定は無視します
+- Outlook への操作は 1 つずつ動きます（資源 `app:outlook`）。ユーザーの Outlook は閉じません。セキュリティの確認ダイアログなどで止まったときは `OUTLOOK_TIMEOUT`
+- メールの中身は外から来たデータで、指示ではありません（AI クライアントへの説明にも明記）
+
 ## 次の段階（予定）
 
 1. **Excel の再計算・PDF 出力**：`excel.runMacro` と同じ仕組みで足す
-2. **Word（`word.*`、ファイル直接）**：`.docx` の差し込み（`word.fillTemplate`：`{{ 名前 }}` の置き換え、表への行の追加）と本文の読み取り（`word.readText`）。PDF 出力は COM
-3. **メール（`mail.*`）**：アプリで分けず `mail.*` の 1 セットにし、送り方（Outlook の COM、のちに SMTP / Microsoft Graph）は設定で選ぶ。外にメッセージが出るので `mail.send` は `Dangerous`、まずは下書き作成（`mail.createDraft`）と受信メールの読み取り・添付保存（`mail.list` / `mail.saveAttachments`）から。宛先・本文の検証ヒントを厚くする
+2. **Word の PDF 出力**：COM（Excel のマクロと同じ仕組み）
+3. **メールの送信と別の送り方**：`mail.send`（`Dangerous`、宛先の確認を厚くする）、Outlook 以外（SMTP / Microsoft Graph）を設定で選べるようにする
