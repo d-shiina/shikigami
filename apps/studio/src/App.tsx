@@ -1,6 +1,7 @@
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CommandPalette } from "./components/CommandPalette";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
 import { IssuesPanel } from "./components/IssuesPanel";
 import { PropertyPanel } from "./components/PropertyPanel";
@@ -164,7 +165,9 @@ export function App() {
 
   return (
     <StudioContext.Provider value={store}>
-      <Shell />
+      <ErrorBoundary>
+        <Shell />
+      </ErrorBoundary>
     </StudioContext.Provider>
   );
 }

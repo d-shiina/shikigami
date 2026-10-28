@@ -15,7 +15,10 @@ export function RunLog() {
   const select = useStudio((s) => s.select);
   const end = useRef<HTMLDivElement>(null);
   const count = run?.logs.length ?? 0;
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [count]);
+  useEffect(() => {
+    // Braces matter: WebView2 returns a Promise here, which React would call as a cleanup.
+    end.current?.scrollIntoView({ block: "end" });
+  }, [count]);
 
   return (
     <section className="flex h-full flex-col border-t border-slate-200 bg-sheet">
