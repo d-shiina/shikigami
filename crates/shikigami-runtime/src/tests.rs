@@ -80,6 +80,7 @@ fn logs(events: &[RunEventEnvelope]) -> Vec<String> {
 /// Test adapter step type: fails until the given attempt, then returns the attempt number.
 fn flaky_def() -> StepTypeDef {
     StepTypeDef {
+        targets: Vec::new(),
         step_type: "test.flaky".into(),
         category: StepCategory::Other,
         label: "flaky".into(),
@@ -589,6 +590,7 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
         }
     }
     let def = StepTypeDef {
+        targets: Vec::new(),
         step_type: "test.click".into(),
         label: "click".into(),
         params_schema: json!({ "type": "object" }),
@@ -628,6 +630,7 @@ async fn steps_on_the_same_file_take_turns() {
         }
     }
     let def = StepTypeDef {
+        targets: Vec::new(),
         step_type: "test.writeFile".into(),
         label: "write".into(),
         params_schema: json!({ "type": "object", "properties": { "path": { "type": "string" } } }),
@@ -1008,6 +1011,7 @@ impl SecretProvider for MemorySecrets {
 /// log and the output, as a careless adapter might.
 fn typing_def() -> StepTypeDef {
     StepTypeDef {
+        targets: Vec::new(),
         step_type: "test.type".into(),
         params_schema: json!({ "type": "object", "properties": { "value": shikigami_core::secret::text_or_secret_schema("text") } }),
         has_output: true,
@@ -1621,4 +1625,61 @@ async fn errors_in_parallel_branches_pause_at_the_parallel_step() {
     .await;
     assert_eq!(pauses, vec![("s1".to_owned(), PauseReason::Error)]);
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+}
+
+/// A step that "opens" its `url` param: counts how often it really ran.
+fn opener_def() -> StepTypeDef {
+    StepTypeDef {
+        step_type: "test.open".into(),
+        params_schema: json!({ "type": "object", "properties": { "url": { "type": "string" } } }),
+        has_output: false,
+        targets: vec![shikigami_core::TargetDef::site("url")],
+        ..flaky_def()
+    }
+}
+
+#[tokio::test]
+async fn policy_sites_are_checked_after_templates_render() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = shikigami_core::Policy::path(dir.path());
+    std::fs::write(&path, r#"{ "sites": ["https://order.example.co.jp"] }"#).expect("write");
+    let opened = Arc::new(Flaky(AtomicU32::new(0)));
+    struct Shared(Arc<Flaky>);
+    impl ActionHandler for Shared {
+        fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+            self.0.execute(input)
+        }
+    }
+    let runtime = Runtime::builder()
+        .register(opener_def(), Shared(opened.clone()))
+        .build()
+        .with_policy(path.clone());
+    let mut s = scenario(vec![
+        Step::new("test.open").with_param("url", "https://order.example.co.jp/list"),
+        Step::new("test.open").with_param("url", "{{ next }}"),
+    ]);
+    s.variables.push(var(
+        "next",
+        VarType::String,
+        VarDirection::Input,
+        Some(json!("https://evil.example/steal")),
+    ));
+    let (report, _) = run(&runtime, s.clone(), json!({})).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let error = report.error.expect("error");
+    assert_eq!(error.code, "SITE_NOT_ALLOWED");
+    assert_eq!(error.step_id.as_ref().map(|s| s.as_str()), Some("s2"));
+    assert_eq!(
+        opened.0.load(Ordering::SeqCst),
+        1,
+        "the refused step never ran"
+    );
+
+    // A broken policy stops the run instead of allowing everything.
+    std::fs::write(&path, "{ not json").expect("write");
+    let e = runtime
+        .start(s, RunOptions::default())
+        .err()
+        .expect("refused");
+    assert_eq!(e.code, "POLICY_INVALID");
 }

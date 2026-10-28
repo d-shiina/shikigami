@@ -1,9 +1,12 @@
 // Studio state. All mutations go through the backend API as EditOps; the
 // store only mirrors what Core returns (scenario, validation, undo state).
 import type {
+  ApprovalRequest,
   DebugCommand,
   EditOp,
   EditOutcome,
+  Policy,
+  PublishedState,
   HistoryEntry,
   ImportConflict,
   LogLevel,
@@ -174,6 +177,13 @@ export type StudioState = {
   paletteOpen: boolean;
   /** Named versions of the open scenario, newest first. */
   versions: VersionSummary[];
+  /** The open scenario's published version (what unattended runs execute). */
+  published: PublishedState | null;
+  /** Requests from AI clients waiting for the person's approval, oldest first. */
+  approvals: ApprovalRequest[];
+  /** The workspace policy, while its dialog is open. */
+  policy: Policy | null;
+  policyOpen: boolean;
   /** The scenarios the open one calls, by id, for call nodes and their inputs. */
   called: Record<string, Scenario>;
   /** Call steps shown unfolded on the chart. */
@@ -244,6 +254,16 @@ export type StudioState = {
   markAllReviewed(): void;
   /** Keeps the open scenario's current revision: recorded in Core as approved. */
   approveAll(): Promise<void>;
+  /** The review desk's 「残して本番に使う」: approves the current revision and publishes it. */
+  approveAndPublish(): Promise<void>;
+  /** Publishes a version (default: the current content). */
+  publish(version?: number): Promise<void>;
+  unpublish(): Promise<void>;
+  loadApprovals(): Promise<void>;
+  decideApproval(id: string, approve: boolean): Promise<void>;
+  setPolicyOpen(open: boolean): void;
+  /** Returns true when saved. */
+  savePolicy(policy: Policy): Promise<boolean>;
   /** Sends the current revision back to the AI with a reason it reads over MCP. */
   sendBack(reason: string, steps: StepNote[]): Promise<boolean>;
   loadTimeline(id: string): Promise<void>;
@@ -518,6 +538,10 @@ function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+function publishMessage(e: unknown): string {
+  return e instanceof ApiError ? t.publishError(e.code, e.message) : message(e);
+}
+
 export function createStudioStore(api: Api): StoreApi<StudioState> {
   return createStore<StudioState>()((set, get) => {
     const applyOutcome = (outcome: EditOutcome) => {
@@ -535,7 +559,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       if (!id) return;
       const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
       set({ scenario, validation, canUndo: undo.canUndo, canRedo: undo.canRedo });
-      await Promise.all([get().loadHistory(), get().loadCalled()]);
+      await Promise.all([get().loadHistory(), get().loadCalled(), get().loadVersions()]);
     };
 
     /** Runs a mutation; on a revision conflict reloads and tells the user. */
@@ -581,6 +605,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
       versions: [],
+      published: null,
+      approvals: [],
+      policy: null,
+      policyOpen: false,
       called: {},
       unfolded: {},
       workspace: null,
@@ -712,6 +740,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             error: null,
             history: [],
             versions: [],
+            published: null,
             called: {},
           });
           await Promise.all([get().loadHistory(), get().loadVersions(), get().loadCalled()]);
@@ -1141,6 +1170,83 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         await get().loadTimeline(scenario.id);
       },
 
+      async approveAndPublish() {
+        const scenario = get().scenario;
+        if (!scenario) return;
+        try {
+          const published = await api.approveAndPublish(scenario.id, scenario.revision ?? 0);
+          get().markAllReviewed();
+          set({ notice: t.approvedPublished(published.version), published, error: null });
+          await get().loadVersions();
+        } catch (e) {
+          set({ error: publishMessage(e) });
+        }
+        await get().loadTimeline(scenario.id);
+      },
+
+      async publish(version) {
+        const scenario = get().scenario;
+        if (!scenario) return;
+        try {
+          const published = await api.publishScenario(
+            scenario.id,
+            version == null ? { expectedRevision: scenario.revision ?? 0, note: "" } : { version, note: "" },
+          );
+          set({ notice: t.publishDone(published.version), published, error: null });
+          await get().loadVersions();
+        } catch (e) {
+          set({ error: publishMessage(e) });
+        }
+      },
+
+      async unpublish() {
+        const scenario = get().scenario;
+        if (!scenario) return;
+        try {
+          await api.unpublishScenario(scenario.id);
+          set({ notice: t.unpublished, published: null, error: null });
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      async loadApprovals() {
+        try {
+          set({ approvals: await api.listApprovals() });
+        } catch {
+          // The banner is a convenience; the AI's call fails safe without an answer.
+        }
+      },
+
+      async decideApproval(id, approve) {
+        try {
+          await api.decideApproval(id, approve);
+          set({ notice: approve ? t.approvalApproved : t.approvalDenied, error: null });
+        } catch (e) {
+          set({ error: message(e) });
+        }
+        await get().loadApprovals();
+      },
+
+      setPolicyOpen(open) {
+        set(open ? { policyOpen: true } : { policyOpen: false, policy: null });
+        if (!open) return;
+        void api
+          .getPolicy()
+          .then((policy) => set({ policy }))
+          .catch((e) => set({ error: message(e), policyOpen: false }));
+      },
+
+      async savePolicy(policy) {
+        try {
+          set({ policy: await api.savePolicy(policy), notice: t.policySaved, error: null });
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      },
+
       async sendBack(reason, steps) {
         const scenario = get().scenario;
         if (!scenario) return false;
@@ -1231,8 +1337,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const id = get().scenario?.id;
         if (!id) return;
         try {
-          const versions = await api.listVersions(id);
-          if (get().scenario?.id === id) set({ versions });
+          const [versions, published] = await Promise.all([api.listVersions(id), api.publishedState(id)]);
+          if (get().scenario?.id === id) set({ versions, published });
         } catch {
           // Versions are secondary; editing keeps working without them.
         }

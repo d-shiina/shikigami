@@ -192,6 +192,27 @@ pub struct DeleteScenarioParams {
     /// Required: the revision you last read. Deleting moves the scenario to
     /// the workspace trash.
     pub expected_revision: u64,
+    #[serde(flatten)]
+    pub approval: ApprovalArgs,
+}
+
+/// Answering an approval request (when the workspace policy says a person
+/// must approve the action first).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalArgs {
+    /// The approvalId an earlier APPROVAL_REQUIRED error returned. Repeat the
+    /// exact same call with it after the user approved in Studio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_id: Option<String>,
+    /// Wait up to this many milliseconds (max 300000) for the user's answer
+    /// instead of failing at once with APPROVAL_REQUIRED.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_wait_ms: Option<u64>,
+    /// Why you need this, in a sentence (Japanese is fine). Shown to the user
+    /// with the request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -232,6 +253,12 @@ pub struct RunScenarioParams {
     /// and return its report. Omit or 0 to return immediately with the run ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait_ms: Option<u64>,
+    /// Run the published version (what unattended runs execute) instead of
+    /// the working content. Only when the user asks for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published: Option<bool>,
+    #[serde(flatten)]
+    pub approval: ApprovalArgs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -332,6 +359,8 @@ pub struct TestStepParams {
     /// { "type": "browser.click", "params": { "target": { "role": "button", "name": "ログイン" } } }.
     /// `id` may be omitted.
     pub step: Step,
+    #[serde(flatten)]
+    pub approval: ApprovalArgs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

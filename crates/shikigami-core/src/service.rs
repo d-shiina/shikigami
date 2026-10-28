@@ -12,16 +12,17 @@ use crate::error::{CoreError, CoreResult};
 use crate::ids::{ObservationId, ScenarioId, StepId};
 use crate::model::{Scenario, ScenarioSummary, Step, VariableDef, now};
 use crate::ops::{self, EditOp};
-use crate::registry::StepRegistry;
+use crate::registry::{RiskLevel, StepRegistry};
 use crate::review::{
     self, Evidence, EvidenceDetail, NewObservation, NewReview, Observation, ObservationContent,
     ObservationLink, ReviewTimeline, ReviewVerdict, TestRun,
 };
-use crate::store::{Actor, ChangeKind, FileStore, HistoryEntry, UNDO_LIMIT, UndoState};
+use crate::store::{Actor, ActorKind, ChangeKind, FileStore, HistoryEntry, UNDO_LIMIT, UndoState};
 use crate::validate::{ValidationReport, Validator};
 use crate::version::{
     self, BUNDLE_FORMAT, BUNDLE_FORMAT_VERSION, ImportConflict, ImportMode, NewVersion,
-    ScenarioBundle, ScenarioDiff, ScenarioVersion, SubscenarioImport, VersionSummary,
+    PublishInput, PublishRecord, PublishedState, ScenarioBundle, ScenarioDiff, ScenarioVersion,
+    SubscenarioImport, VersionSummary,
 };
 
 /// Input for creating a scenario.
@@ -95,6 +96,14 @@ pub struct ImportOutcome {
     pub subscenarios: Vec<ImportedSubscenario>,
     #[serde(flatten)]
     pub outcome: EditOutcome,
+}
+
+/// What an unattended run executes (see [`ScenarioService::published_run`]).
+#[derive(Debug, Clone)]
+pub struct PublishedRun {
+    pub scenario: Scenario,
+    pub version: u32,
+    pub subscenarios: Vec<Subscenario>,
 }
 
 /// Result of moving steps into a new sub-scenario.
@@ -233,7 +242,34 @@ impl ScenarioService {
         found
     }
 
-    /// Scenarios that call `id` directly.
+    /// The riskiest step `scenarios` contain (unknown step types count as
+    /// dangerous) and the step types at that level, for the policy's
+    /// per-risk rules. Control flow and calls themselves are safe.
+    pub fn risk_of<'a>(
+        &self,
+        scenarios: impl IntoIterator<Item = &'a Scenario>,
+    ) -> (RiskLevel, Vec<String>) {
+        let mut level = RiskLevel::Safe;
+        let mut types: Vec<String> = Vec::new();
+        for scenario in scenarios {
+            for step in scenario.walk() {
+                let risk = self
+                    .registry()
+                    .get(&step.step_type)
+                    .map_or(RiskLevel::Dangerous, |d| d.risk);
+                if risk > level {
+                    level = risk;
+                    types.clear();
+                }
+                if risk == level && risk > RiskLevel::Safe && !types.contains(&step.step_type) {
+                    types.push(step.step_type.clone());
+                }
+            }
+        }
+        (level, types)
+    }
+
+    /// Scenarios that call `id` directly.    /// Scenarios that call `id` directly.
     pub fn callers(&self, id: &ScenarioId) -> CoreResult<Vec<ScenarioSummary>> {
         Ok(self
             .store
@@ -391,6 +427,19 @@ impl ScenarioService {
         check_revision(expected_revision, current.revision)?;
         self.store.trash(id)?;
         self.store.remove_undo(id)?;
+        // A scenario in the trash no longer runs unattended.
+        if self.published_entry(id).ok().flatten().is_some() {
+            self.store.append_publish(
+                id,
+                &PublishRecord {
+                    version: None,
+                    uid: None,
+                    at: now(),
+                    by: actor.clone(),
+                    note: "deleted".into(),
+                },
+            )?;
+        }
         let entry = HistoryEntry {
             kind: ChangeKind::Delete,
             revision: current.revision,
@@ -685,6 +734,257 @@ impl ScenarioService {
             .load_versions(id)?
             .last()
             .map_or(1, |v| v.number + 1))
+    }
+
+    // -- publishing -------------------------------------------------------
+
+    /// The version unattended runs execute, if one is published.
+    pub fn published(&self, id: &ScenarioId) -> CoreResult<Option<PublishedState>> {
+        let Some((record, version)) = self.published_entry(id)? else {
+            return Ok(None);
+        };
+        let matches_current = self
+            .store
+            .load(id)
+            .is_ok_and(|current| version::same_content(&version.scenario, &current));
+        Ok(Some(PublishedState {
+            version: version.number,
+            name: version.name,
+            revision: version.revision,
+            published_at: record.at,
+            published_by: record.by,
+            note: record.note,
+            matches_current,
+        }))
+    }
+
+    /// Snapshot of the published version.
+    pub fn published_version(&self, id: &ScenarioId) -> CoreResult<Option<ScenarioVersion>> {
+        Ok(self.published_entry(id)?.map(|(_, v)| v))
+    }
+
+    fn published_entry(
+        &self,
+        id: &ScenarioId,
+    ) -> CoreResult<Option<(PublishRecord, ScenarioVersion)>> {
+        let Some(record) = self.store.read_publish_log(id)?.pop() else {
+            return Ok(None);
+        };
+        let Some(number) = record.version else {
+            return Ok(None);
+        };
+        match self.store.load_version(id, number) {
+            Ok(v) if record.uid.as_ref().is_none_or(|uid| *uid == v.uid) => Ok(Some((record, v))),
+            Ok(_) | Err(CoreError::VersionNotFound { .. }) => {
+                tracing::warn!(scenario = %id, number, "published version is missing");
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Makes a version the one unattended runs execute. Only people publish
+    /// (Studio, the CLI): an AI client gets `PUBLISH_NOT_ALLOWED`. Without
+    /// `input.version` the current content is published, saved as a new
+    /// version first unless one already matches it. The version must
+    /// validate, and every scenario it calls must be published already.
+    pub fn publish(
+        &self,
+        id: &ScenarioId,
+        input: PublishInput,
+        actor: Actor,
+    ) -> CoreResult<PublishedState> {
+        ensure_person(&actor, "publish a scenario")?;
+        let version = match input.version {
+            Some(number) => self.get_version(id, number)?,
+            None => {
+                let current = self.get(id)?;
+                check_revision(input.expected_revision, current.revision)?;
+                let existing = self
+                    .store
+                    .load_versions(id)?
+                    .into_iter()
+                    .rev()
+                    .find(|v| version::same_content(&v.scenario, &current));
+                match existing {
+                    Some(v) => v,
+                    None => {
+                        // Checked before a version is saved for nothing.
+                        self.check_publishable(&current)?;
+                        let name = input
+                            .name
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|n| !n.is_empty())
+                            .map_or_else(
+                                || self.next_version_number(id).map(|n| format!("v{n}")),
+                                |n| Ok(n.to_owned()),
+                            )?;
+                        let created = self.create_version(
+                            id,
+                            NewVersion {
+                                name,
+                                note: input.note.clone(),
+                            },
+                            Some(current.revision),
+                            actor.clone(),
+                        )?;
+                        self.get_version(id, created.number)?
+                    }
+                }
+            }
+        };
+        self.check_publishable(&version.scenario)?;
+        {
+            let _lock = self.store.lock()?;
+            self.store.append_publish(
+                id,
+                &PublishRecord {
+                    version: Some(version.number),
+                    uid: Some(version.uid.clone()),
+                    at: now(),
+                    by: actor,
+                    note: input.note.trim().to_owned(),
+                },
+            )?;
+        }
+        self.published(id)?.ok_or_else(|| {
+            CoreError::InvalidEdit("published version could not be read back".into())
+        })
+    }
+
+    /// Approves the current revision in review and publishes it, in one
+    /// step (Studio's review desk). Nothing is recorded when publishing
+    /// fails.
+    pub fn approve_and_publish(
+        &self,
+        id: &ScenarioId,
+        revision: u64,
+        reason: String,
+        input: PublishInput,
+        actor: Actor,
+    ) -> CoreResult<PublishedState> {
+        ensure_person(&actor, "approve and publish a scenario")?;
+        let published = self.publish(
+            id,
+            PublishInput {
+                version: None,
+                expected_revision: Some(revision),
+                ..input
+            },
+            actor.clone(),
+        )?;
+        self.submit_review(
+            id,
+            NewReview {
+                revision,
+                verdict: ReviewVerdict::Approved,
+                reason,
+                steps: Vec::new(),
+            },
+            actor,
+        )?;
+        Ok(published)
+    }
+
+    /// Stops unattended runs of a scenario until a version is published
+    /// again. People only, like [`Self::publish`].
+    pub fn unpublish(&self, id: &ScenarioId, note: String, actor: Actor) -> CoreResult<()> {
+        ensure_person(&actor, "withdraw a published scenario")?;
+        if self.published_entry(id)?.is_none() {
+            return Ok(());
+        }
+        let _lock = self.store.lock()?;
+        self.store.append_publish(
+            id,
+            &PublishRecord {
+                version: None,
+                uid: None,
+                at: now(),
+                by: actor,
+                note: note.trim().to_owned(),
+            },
+        )
+    }
+
+    /// Who published what, oldest first.
+    pub fn publish_log(&self, id: &ScenarioId) -> CoreResult<Vec<PublishRecord>> {
+        self.store.read_publish_log(id)
+    }
+
+    /// What an unattended run of `id` executes: the published version and
+    /// the published versions of every scenario it calls. Fails with
+    /// `NOT_PUBLISHED` / `SUBSCENARIO_NOT_PUBLISHED` rather than falling
+    /// back to working content nobody approved.
+    pub fn published_run(&self, id: &ScenarioId) -> CoreResult<PublishedRun> {
+        let Some(version) = self.published_version(id)? else {
+            if !self.store.exists(id) {
+                return Err(CoreError::ScenarioNotFound(id.clone()));
+            }
+            return Err(CoreError::Rejected {
+                code: "NOT_PUBLISHED",
+                message: format!("scenario {id} has no published version"),
+                hint: Some(
+                    "Unattended runs execute the published version only. A person approves and publishes it in Studio (レビュー台 → 承認して公開) or with `shikigami version publish <id>`; `shikigami run <id> --draft` runs the working content instead."
+                        .into(),
+                ),
+            });
+        };
+        let subscenarios = self.check_publishable(&version.scenario)?;
+        Ok(PublishedRun {
+            version: version.number,
+            scenario: version.scenario,
+            subscenarios,
+        })
+    }
+
+    /// The published versions of everything `scenario` calls, once it is
+    /// known to validate against them.
+    fn check_publishable(&self, scenario: &Scenario) -> CoreResult<Vec<Subscenario>> {
+        let mut found: Vec<Subscenario> = Vec::new();
+        let mut missing: Vec<ScenarioId> = Vec::new();
+        let mut queue: Vec<ScenarioId> = call::called_ids(scenario).into_iter().collect();
+        while let Some(next) = queue.pop() {
+            if next == scenario.id
+                || missing.contains(&next)
+                || found.iter().any(|s| s.scenario.id == next)
+            {
+                continue;
+            }
+            match self.published_version(&next)? {
+                Some(v) => {
+                    queue.extend(call::called_ids(&v.scenario));
+                    found.push(Subscenario {
+                        scenario: v.scenario,
+                        version: Some(v.number),
+                    });
+                }
+                None => missing.push(next),
+            }
+        }
+        if !missing.is_empty() {
+            missing.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+            let list: Vec<&str> = missing.iter().map(ScenarioId::as_str).collect();
+            return Err(CoreError::Rejected {
+                code: "SUBSCENARIO_NOT_PUBLISHED",
+                message: format!(
+                    "called scenario(s) have no published version: {}",
+                    list.join(", ")
+                ),
+                hint: Some("Publish the called scenarios first.".into()),
+            });
+        }
+        found.sort_by(|a, b| a.scenario.id.as_str().cmp(b.scenario.id.as_str()));
+        let report = self.validator.validate_with_calls(scenario, &|id| {
+            found
+                .iter()
+                .find(|s| &s.scenario.id == id)
+                .map(|s| s.scenario.clone())
+        });
+        if !report.valid {
+            return Err(CoreError::ValidationFailed(report));
+        }
+        Ok(found)
     }
 
     // -- review evidence --------------------------------------------------
@@ -1242,6 +1542,22 @@ fn parse_bundle(value: serde_json::Value) -> CoreResult<ScenarioBundle> {
     Ok(bundle)
 }
 
+/// Publishing is a person's decision: an AI client may prepare a version
+/// but never make it the one that runs unattended.
+fn ensure_person(actor: &Actor, what: &str) -> CoreResult<()> {
+    if actor.kind == ActorKind::Mcp {
+        return Err(CoreError::Rejected {
+            code: "PUBLISH_NOT_ALLOWED",
+            message: format!("only a person can {what}"),
+            hint: Some(
+                "Ask the user to review the changes in Shikigami Studio (レビュー台) and press 承認して公開."
+                    .into(),
+            ),
+        });
+    }
+    Ok(())
+}
+
 fn check_revision(expected: Option<u64>, actual: u64) -> CoreResult<()> {
     match expected {
         Some(expected) if expected != actual => {
@@ -1274,6 +1590,180 @@ mod tests {
 
     fn studio() -> Actor {
         Actor::new(ActorKind::Studio)
+    }
+
+    #[test]
+    fn unattended_runs_use_the_published_version_only() {
+        let (_dir, svc) = service();
+        let sub = svc
+            .create(
+                NewScenario {
+                    name: "部品".into(),
+                    steps: vec![Step::new("log.message").with_param("message", "sub")],
+                    ..NewScenario::default()
+                },
+                studio(),
+            )
+            .unwrap()
+            .scenario;
+        let main = svc
+            .create(
+                NewScenario {
+                    name: "本体".into(),
+                    steps: vec![
+                        Step::new("log.message").with_param("message", "one"),
+                        Step::new("scenario.call").with_param("scenario", sub.id.as_str()),
+                    ],
+                    ..NewScenario::default()
+                },
+                studio(),
+            )
+            .unwrap()
+            .scenario;
+
+        assert_eq!(
+            svc.published_run(&main.id).unwrap_err().code(),
+            "NOT_PUBLISHED"
+        );
+        assert_eq!(
+            svc.published_run(&ScenarioId::new("scn_missing"))
+                .unwrap_err()
+                .code(),
+            "SCENARIO_NOT_FOUND"
+        );
+        // An AI may prepare versions but never publish.
+        assert_eq!(
+            svc.publish(&main.id, PublishInput::default(), mcp())
+                .unwrap_err()
+                .code(),
+            "PUBLISH_NOT_ALLOWED"
+        );
+        // The called scenario has to be published first; nothing is saved meanwhile.
+        assert_eq!(
+            svc.publish(&main.id, PublishInput::default(), studio())
+                .unwrap_err()
+                .code(),
+            "SUBSCENARIO_NOT_PUBLISHED"
+        );
+        assert!(svc.list_versions(&main.id).unwrap().is_empty());
+
+        svc.publish(&sub.id, PublishInput::default(), studio())
+            .unwrap();
+        let published = svc
+            .publish(
+                &main.id,
+                PublishInput {
+                    expected_revision: Some(main.revision),
+                    note: "初回".into(),
+                    ..PublishInput::default()
+                },
+                studio(),
+            )
+            .unwrap();
+        assert_eq!((published.version, published.name.as_str()), (1, "v1"));
+        assert!(published.matches_current);
+
+        // Later edits stay out of unattended runs until published again.
+        svc.edit(&main.id, None, vec![add_log("two")], mcp())
+            .unwrap();
+        svc.edit(&sub.id, None, vec![add_log("sub two")], mcp())
+            .unwrap();
+        assert!(!svc.published(&main.id).unwrap().unwrap().matches_current);
+        let run = svc.published_run(&main.id).unwrap();
+        assert_eq!((run.version, run.scenario.steps.len()), (1, 2));
+        assert_eq!(run.subscenarios.len(), 1);
+        assert_eq!(run.subscenarios[0].scenario.steps.len(), 1);
+        assert_eq!(run.subscenarios[0].version, Some(1));
+
+        // Approving in review publishes the reviewed revision in one step.
+        let current = svc.get(&main.id).unwrap();
+        assert_eq!(
+            svc.approve_and_publish(
+                &main.id,
+                current.revision - 1,
+                String::new(),
+                PublishInput::default(),
+                studio()
+            )
+            .unwrap_err()
+            .code(),
+            "REVISION_CONFLICT"
+        );
+        let again = svc
+            .approve_and_publish(
+                &main.id,
+                current.revision,
+                "確認しました".into(),
+                PublishInput {
+                    name: Some("本番".into()),
+                    ..PublishInput::default()
+                },
+                studio(),
+            )
+            .unwrap();
+        assert_eq!((again.version, again.name.as_str()), (2, "本番"));
+        let timeline = svc.review_timeline(&main.id, None).unwrap();
+        assert_eq!(timeline.last_approval.unwrap().revision, current.revision);
+        // Publishing unchanged content reuses its version.
+        assert_eq!(
+            svc.publish(&main.id, PublishInput::default(), studio())
+                .unwrap()
+                .version,
+            2
+        );
+        assert_eq!(svc.list_versions(&main.id).unwrap().len(), 2);
+        // An older version can be put back in force.
+        let back = svc
+            .publish(
+                &main.id,
+                PublishInput {
+                    version: Some(1),
+                    ..PublishInput::default()
+                },
+                studio(),
+            )
+            .unwrap();
+        assert!(!back.matches_current);
+
+        svc.unpublish(&main.id, "止める".into(), Actor::new(ActorKind::Cli))
+            .unwrap();
+        assert!(svc.published(&main.id).unwrap().is_none());
+        assert_eq!(
+            svc.published_run(&main.id).unwrap_err().code(),
+            "NOT_PUBLISHED"
+        );
+        let log = svc.publish_log(&main.id).unwrap();
+        assert_eq!(
+            log.iter().map(|r| r.version).collect::<Vec<_>>(),
+            vec![Some(1), Some(2), Some(2), Some(1), None]
+        );
+
+        // A scenario moved to the trash stops running unattended.
+        let sub_rev = svc.get(&sub.id).unwrap().revision;
+        svc.edit(
+            &main.id,
+            None,
+            vec![EditOp::RemoveStep {
+                step_id: svc.get(&main.id).unwrap().steps[1].id.clone(),
+            }],
+            studio(),
+        )
+        .unwrap();
+        svc.delete(&sub.id, Some(sub_rev), studio()).unwrap();
+        assert!(svc.published(&sub.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn risk_counts_the_riskiest_step() {
+        let (_dir, svc) = service();
+        let mut s = Scenario::new("r");
+        s.steps = vec![Step::new("log.message"), Step::new("unknown.thing")];
+        assert_eq!(
+            svc.risk_of([&s]),
+            (RiskLevel::Dangerous, vec!["unknown.thing".to_owned()])
+        );
+        s.steps.pop();
+        assert_eq!(svc.risk_of([&s]), (RiskLevel::Safe, vec![]));
     }
 
     fn add_log(message: &str) -> EditOp {

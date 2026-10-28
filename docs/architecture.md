@@ -400,13 +400,14 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 | 誤操作の不可逆性 | シナリオ削除はゴミ箱へ移動。全変更をジャーナルに記録し Undo 可能 | **P1 済** |
 | Studio の権限 | Tauri capability は `core:default` のみ。ファイル・シェル系プラグインを有効にしない。CSP 設定 | **P1 済** |
 | MCP 接続のアクセス制御 | 既定 stdio（起動した AI クライアントのみ接続可）。HTTP は localhost＋トークン＋Origin 検証 | P2 |
-| ツール権限 | ツールを `read / write / run / ui.read / ui.act / dangerous` に分類し、ワークスペース設定でクライアントごとに許可。`dangerous`（削除、ファイル操作、許可リスト外アプリ起動）は Studio 上でのユーザー承認を要求 | P2 |
-| 操作対象の許可リスト | `launch_application` / `navigate_browser` は設定の許可リスト（実行ファイルパス・ドメイン）のみ。Runtime 実行時も同じリストで検査 | P2–P4 |
+| ツール権限 | `--allow read,write,run` でサーバー単位に公開するツールを制限。加えてワークスペースの `policy.json` の `ai` で、AI の `run_scenario` / `test_step`（ステップの危険度ごと）と `delete_scenario` を allow / ask / deny。ask は Studio に承認依頼を出し、人が許可した同じ内容だけを 1 回実行（[policy.md](policy.md)） | **済** |
+| 操作対象の許可リスト | `policy.json` の `sites`（`browser.open`・`http.request`・`inspect_page`）と `apps`（`desktop.launch`・`process.run`）。ステップ型が `targets` で対象の param を宣言し、Runtime がテンプレート展開後の値を全実行で検査 | **済** |
 | ファイル操作の制限 | ファイル系ステップはワークスペース設定で許可したディレクトリ配下のみ | P3 |
 | 認証情報 | 人が Studio / CLI で名前を付けて登録。値は AES-256-GCM でワークスペースに暗号化保存し、鍵は Windows 資格情報マネージャーにワークスペースごと 1 件。シナリオと AI には名前だけ。登録サイト以外への入力を拒否。ログイン状態（セッション）も同じ鍵で暗号化（[secrets.md](secrets.md)） | **済** |
 | プロンプトインジェクション | `inspect_ui` / ページテキスト等の取得結果は「信頼できないデータ」として明示ラベル付きの構造化データで返し、指示として扱わないよう SKILL/ツール説明で明記。UI 操作ツールはシナリオを変更せず、シナリオ保存は別操作。危険操作は人間承認 | P2 |
 | 監査 | 全 MCP ツール呼び出し・承認・実行を `audit_log` に記録（シナリオ変更は P1 からジャーナル記録済み） | P2 |
-| 実行権限 | シナリオ単位で「MCP からの実行可否」「無人実行可否」を設定 | P2 |
+| 実行権限 | 無人実行（`shikigami run <id>`）は人が承認・公開した版だけを動かす。シナリオ単位で「AI からの実行」（`scenarios.<id>.aiRun`）と「無人実行」（`unattended`）を設定 | **済** |
+| ファイル操作の許可フォルダ | `file.*` の操作先を許可したフォルダに限る | 未 |
 
 ## 10.5 並行実行
 
@@ -518,7 +519,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 - Windows 操作の SAP GUI Scripting・Java Access Bridge・画像認識、プロセス間の資源排他（§10.5）、ブラウザのダウンロード・アップロード
 - Studio のドラッグ＆ドロップ編集、ブレークポイント・ステップ実行、UI 要素インスペクター、差分表示（Phase 5）
-- SQLite、クライアント別のツール権限設定・削除時の人間承認、許可リスト、資格情報ストア連携、MCP の Streamable HTTP
+- SQLite、クライアント別のツール権限設定、ファイル操作の許可フォルダ、資格情報ストア連携、MCP の Streamable HTTP
 
 ### 既知の制約
 

@@ -10,6 +10,7 @@
 use std::sync::Arc;
 
 use serde_json::{Value, json};
+use shikigami_core::policy::TargetDef;
 use shikigami_core::registry::{RiskLevel, StepCategory, StepTypeDef};
 use shikigami_core::resource::ResourceDef;
 use shikigami_core::secret::text_or_secret_schema;
@@ -140,7 +141,13 @@ struct Def {
 
 impl From<Def> for StepTypeDef {
     fn from(d: Def) -> Self {
+        let targets = match d.step_type {
+            types::HTTP_REQUEST => vec![TargetDef::site("url")],
+            types::PROCESS_RUN => vec![TargetDef::app("program")],
+            _ => Vec::new(),
+        };
         StepTypeDef {
+            targets,
             step_type: d.step_type.into(),
             category: d.category,
             label: d.label.into(),

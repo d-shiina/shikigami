@@ -89,6 +89,13 @@ export type StepCategory =
  */
 export type RiskLevel = "safe" | "interactive" | "dangerous";
 /**
+ * What kind of target a step param names.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "TargetKind".
+ */
+export type TargetKind = "site" | "app";
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ChangeKind".
  */
@@ -203,6 +210,32 @@ export type ObservationSource = ("inspectPage" | "inspectUi" | "testStep") | "ru
  */
 export type ReviewVerdict = "approved" | "rejected";
 /**
+ * What happens when an AI asks for an action.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "Decision".
+ */
+export type Decision = ("allow" | "deny") | "ask";
+/**
+ * Identifier of a request for a person's approval of an AI action.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ApprovalId".
+ */
+export type ApprovalId = string;
+/**
+ * AI actions the policy can hold for approval.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "AiAction".
+ */
+export type AiAction = "runScenario" | "testStep" | "deleteScenario";
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ApprovalStatus".
+ */
+export type ApprovalStatus = ("pending" | "approved" | "denied") | "used";
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "VarType".
  */
@@ -241,6 +274,11 @@ export interface ShikigamiApi {
   evidence: Evidence;
   new_review: NewReview;
   observation_content: ObservationContent;
+  published_state: PublishedState;
+  publish_input: PublishInput;
+  publish_record: PublishRecord;
+  policy: Policy;
+  approval_request: ApprovalRequest;
 }
 /**
  * A scenario: the unit that AI clients, Studio and the Runtime share.
@@ -606,6 +644,12 @@ export interface StepTypeDef {
    */
   examples?: unknown[];
   /**
+   * Params that name a site or a program, checked against the
+   * workspace policy (`policy.json` `sites` / `apps`) before each run of
+   * the step.
+   */
+  targets?: TargetDef[];
+  /**
    * Params that may take a registered secret,
    * `{ "secret": "<name>", "field": "password" }`, instead of text.
    * Secrets are rejected everywhere else.
@@ -626,6 +670,17 @@ export interface StepTypeDef {
 export interface BlockDef {
   name: string;
   label: string;
+}
+/**
+ * A step param that names something outside the run, checked against the
+ * policy before the step executes.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "TargetDef".
+ */
+export interface TargetDef {
+  param: string;
+  kind: TargetKind;
 }
 /**
  * One committed change.
@@ -1090,6 +1145,186 @@ export interface ObservationLink {
   revision: number;
 }
 /**
+ * The published version of a scenario (what `shikigami run <id>` and
+ * other unattended runs execute).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PublishedState".
+ */
+export interface PublishedState {
+  version: number;
+  name: string;
+  /**
+   * Revision the version was taken from.
+   */
+  revision: number;
+  publishedAt: string;
+  publishedBy: Actor;
+  note?: string;
+  /**
+   * Whether the current (working) content equals the published version.
+   * `false` means there are changes that do not run unattended yet.
+   */
+  matchesCurrent: boolean;
+}
+/**
+ * Input for publishing.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PublishInput".
+ */
+export interface PublishInput {
+  /**
+   * Version to publish. Omitted: the current content, saved as a new
+   * version first unless one already matches it.
+   */
+  version?: number | null;
+  /**
+   * Name of the version created for the current content (default `v<n>`).
+   */
+  name?: string | null;
+  note?: string;
+  /**
+   * With `version` omitted: fail with REVISION_CONFLICT unless the
+   * current revision is this one (what the person reviewed).
+   */
+  expectedRevision?: number | null;
+}
+/**
+ * One line of `versions/<scenario-id>/publish.jsonl`: which version runs
+ * unattended from now on (`None`: none, the scenario was withdrawn). The
+ * last line is in force; earlier lines are the record of who published
+ * what, kept in the shared part of the workspace.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PublishRecord".
+ */
+export interface PublishRecord {
+  version?: number | null;
+  /**
+   * The version's `uid`, so a record never points at another snapshot.
+   */
+  uid?: string | null;
+  at: string;
+  by: Actor;
+  note?: string;
+}
+/**
+ * `policy.json`.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "Policy".
+ */
+export interface Policy {
+  formatVersion?: number;
+  /**
+   * Sites `browser.open`, `http.request` (and plugin steps that declare a
+   * site param) may reach: origins such as `https://order.example.co.jp`,
+   * or `https://*.example.co.jp` for every subdomain. Empty: any site.
+   */
+  sites?: string[];
+  /**
+   * Programs `desktop.launch` and `process.run` may start: a full path
+   * (`C:\Program Files\Billing\billing.exe`) or a file name that matches
+   * in any folder (`notepad.exe`). Empty: any program.
+   */
+  apps?: string[];
+  ai?: AiPolicy;
+  /**
+   * Per-scenario settings, keyed by scenario ID.
+   */
+  scenarios?: {
+    [k: string]: ScenarioPolicy;
+  };
+}
+/**
+ * What an AI client (MCP) may do. Studio and the CLI are people and are not
+ * asked.
+ */
+export interface AiPolicy {
+  runScenario?: ByRisk;
+  testStep?: ByRisk1;
+  /**
+   * `delete_scenario` (moves to the trash).
+   */
+  deleteScenario?: ("allow" | "deny") | "ask";
+}
+/**
+ * `run_scenario`, by the riskiest step the run may execute (including
+ * the scenarios it calls).
+ */
+export interface ByRisk {
+  /**
+   * What happens when an AI asks for an action.
+   */
+  safe?: ("allow" | "deny") | "ask";
+  /**
+   * What happens when an AI asks for an action.
+   */
+  interactive?: ("allow" | "deny") | "ask";
+  /**
+   * What happens when an AI asks for an action.
+   */
+  dangerous?: ("allow" | "deny") | "ask";
+}
+/**
+ * `test_step`, by the step's risk (a `scenario.call` counts as the
+ * riskiest step of the scenarios it calls).
+ */
+export interface ByRisk1 {
+  /**
+   * What happens when an AI asks for an action.
+   */
+  safe?: ("allow" | "deny") | "ask";
+  /**
+   * What happens when an AI asks for an action.
+   */
+  interactive?: ("allow" | "deny") | "ask";
+  /**
+   * What happens when an AI asks for an action.
+   */
+  dangerous?: ("allow" | "deny") | "ask";
+}
+/**
+ * Settings for one scenario.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ScenarioPolicy".
+ */
+export interface ScenarioPolicy {
+  /**
+   * Whether an AI may run or test this scenario. Overrides `ai.runScenario`
+   * (and `ai.testStep` for calls of it) when it is stricter.
+   */
+  aiRun?: Decision | null;
+  /**
+   * `false`: `shikigami run` (scheduled, unattended) refuses it; it only
+   * runs from Studio. Default `true`.
+   */
+  unattended?: boolean | null;
+}
+/**
+ * One request, `approvals/<id>.json`.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ApprovalRequest".
+ */
+export interface ApprovalRequest {
+  id: ApprovalId;
+  action: AiAction;
+  status: ApprovalStatus;
+  requestedAt: string;
+  requestedBy: Actor;
+  scenarioId?: ScenarioId | null;
+  scenarioName?: string | null;
+  risk: RiskLevel;
+  stepTypes?: string[];
+  subject: unknown;
+  reason?: string | null;
+  decidedAt?: string | null;
+  decidedBy?: Actor | null;
+}
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "Metadata".
  */
@@ -1098,6 +1333,41 @@ export interface Metadata1 {
   updatedAt?: string | null;
   tags?: string[];
   [k: string]: unknown;
+}
+/**
+ * What an AI client (MCP) may do. Studio and the CLI are people and are not
+ * asked.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "AiPolicy".
+ */
+export interface AiPolicy1 {
+  runScenario?: ByRisk;
+  testStep?: ByRisk1;
+  /**
+   * `delete_scenario` (moves to the trash).
+   */
+  deleteScenario?: ("allow" | "deny") | "ask";
+}
+/**
+ * A decision for each step risk level.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ByRisk".
+ */
+export interface ByRisk2 {
+  /**
+   * What happens when an AI asks for an action.
+   */
+  safe?: ("allow" | "deny") | "ask";
+  /**
+   * What happens when an AI asks for an action.
+   */
+  interactive?: ("allow" | "deny") | "ask";
+  /**
+   * What happens when an AI asks for an action.
+   */
+  dangerous?: ("allow" | "deny") | "ask";
 }
 
 /**

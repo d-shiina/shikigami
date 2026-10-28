@@ -8,10 +8,12 @@
 use schemars::{JsonSchema, schema_for};
 use serde_json::Value;
 
+use crate::approval::ApprovalRequest;
 use crate::error::ErrorPayload;
 use crate::model::Scenario;
 use crate::model::ScenarioSummary;
 use crate::ops::EditOp;
+use crate::policy::Policy;
 use crate::registry::StepTypeDef;
 use crate::review::{Evidence, NewReview, ObservationContent, ReviewTimeline};
 use crate::service::{
@@ -20,7 +22,8 @@ use crate::service::{
 use crate::store::{HistoryEntry, WorkspaceInfo};
 use crate::validate::ValidationReport;
 use crate::version::{
-    ImportConflict, NewVersion, ScenarioBundle, ScenarioDiff, ScenarioVersion, VersionSummary,
+    ImportConflict, NewVersion, PublishInput, PublishRecord, PublishedState, ScenarioBundle,
+    ScenarioDiff, ScenarioVersion, VersionSummary,
 };
 
 const SCHEMA_BASE: &str = "https://shikigami.dev/schemas";
@@ -74,6 +77,11 @@ struct Api {
     evidence: Evidence,
     new_review: NewReview,
     observation_content: ObservationContent,
+    published_state: PublishedState,
+    publish_input: PublishInput,
+    publish_record: PublishRecord,
+    policy: Policy,
+    approval_request: ApprovalRequest,
 }
 
 fn api_schema() -> Value {

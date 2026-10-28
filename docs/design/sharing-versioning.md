@@ -9,6 +9,7 @@
 - 差分はステップ ID 単位：`added` / `removed`（部分木の先頭だけ。`stepCount` に子を含む）、`changed`（変わった欄。params はキーごとに `params.url` のように出す）、`moved`（親・ブロックが変わったもの、または同じ並びの中で順序が入れ替わったもの。共通部分の最長部分列に入らないものだけを出すので、前に 1 つ挿入されただけでは移動扱いにならない）。変数は名前単位、シナリオの名前・説明・タグ・設定は欄単位。
 - 復元は「現在の内容を版に合わせる EditOp 列」を 1 回の編集として適用する。Undo で取り消せ、記録（タイムライン）にも残る。すでに同じ内容なら何もしない（冪等）。
 - 実行レポートには、実行した内容と一致する最新の版番号（`version`）を記録する。リビジョンは従来どおり。
+- **公開版**：版のうち 1 つを「公開中」にでき、無人実行（`shikigami run <id>`）は公開版だけを動かす。公開できるのは人だけ（Studio のレビュー台の「承認して公開」・「版」タブ、CLI の `version publish`）。記録は `versions/<id>/publish.jsonl`。詳しくは [policy.md](../policy.md)。
 
 | 操作 | MCP | CLI | Studio |
 |---|---|---|---|
@@ -16,6 +17,7 @@
 | 一覧・中身 | `list_versions` / `get_version` | `version list` / `version show` | 「版」タブ |
 | 差分 | `diff_versions`（既定：最新の版 → 現在） | `version diff <id> [from] [to]` | 「現在との差分」 |
 | 復元 | `restore_version` | `version restore <id> <n>` | 「この版に戻す」（2 回押し） |
+| 公開 | なし（人だけ。`get_scenario` の `published` で読む） | `version publish <id> [n]` / `version unpublish <id>` | レビュー台「承認して公開」、「版」タブ |
 
 ## 共有
 
@@ -35,7 +37,7 @@
   - ID がなければそのまま作成（ID を保つので、同じシナリオを何度でも受け渡せる）。
   - 同じ ID があれば `IMPORT_CONFLICT`。`onConflict: "update"` で既存を更新（1 回の編集・Undo 可）し、まだない版（`uid` で判定）を後ろに番号を振って追加。`"copy"` で新しい ID の別シナリオとして追加。
   - バンドルでない素のシナリオ文書も受け付ける。
-- `shikigami run <file>` はバンドルもそのまま実行できる。
+- `shikigami run <file>` はバンドルもそのまま実行できる（ファイルの内容をそのまま動かす。公開版の決まりはワークスペースのシナリオに対するもの）。
 
 | 操作 | MCP | CLI | Studio |
 |---|---|---|---|

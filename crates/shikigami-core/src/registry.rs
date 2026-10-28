@@ -12,6 +12,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::policy::TargetDef;
 use crate::resource::ResourceDef;
 
 /// Built-in control-flow step types (executed by the Runtime itself).
@@ -126,6 +127,11 @@ pub struct StepTypeDef {
     #[serde(skip)]
     #[schemars(skip)]
     pub resources: Vec<ResourceDef>,
+    /// Params that name a site or a program, checked against the
+    /// workspace policy (`policy.json` `sites` / `apps`) before each run of
+    /// the step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub targets: Vec<TargetDef>,
     /// Params that may take a registered secret,
     /// `{ "secret": "<name>", "field": "password" }`, instead of text.
     /// Secrets are rejected everywhere else.
@@ -231,6 +237,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
     let expression = json!({ "type": "string", "minLength": 1, "description": "式。{{ }} は付けない (例: count > 3 && status == 'OK')" });
     vec![
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::IF.into(),
             category: StepCategory::Control,
             label: "条件分岐".into(),
@@ -247,6 +254,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::WHILE.into(),
             category: StepCategory::Control,
             label: "条件ループ".into(),
@@ -269,6 +277,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::REPEAT.into(),
             category: StepCategory::Control,
             label: "回数ループ".into(),
@@ -291,6 +300,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::FOR_EACH.into(),
             category: StepCategory::Control,
             label: "繰り返し（リスト）".into(),
@@ -316,6 +326,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::TRY.into(),
             category: StepCategory::Control,
             label: "例外処理".into(),
@@ -332,6 +343,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::PARALLEL.into(),
             category: StepCategory::Control,
             label: "並行実行".into(),
@@ -351,6 +363,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::GROUP.into(),
             category: StepCategory::Control,
             label: "グループ".into(),
@@ -367,6 +380,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::BREAK.into(),
             category: StepCategory::Control,
             label: "ループを抜ける".into(),
@@ -383,6 +397,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::CONTINUE.into(),
             category: StepCategory::Control,
             label: "次の繰り返しへ".into(),
@@ -399,6 +414,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::FAIL.into(),
             category: StepCategory::Control,
             label: "エラーを発生".into(),
@@ -421,6 +437,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: builtin::VARIABLE_SET.into(),
             category: StepCategory::Variable,
             label: "変数に代入".into(),
@@ -447,6 +464,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: builtin::LOG_MESSAGE.into(),
             category: StepCategory::Log,
             label: "ログ出力".into(),
@@ -469,6 +487,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: control::WAIT_UNTIL.into(),
             category: StepCategory::Flow,
             label: "条件を待つ".into(),
@@ -491,6 +510,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: scenario::CALL.into(),
             category: StepCategory::Control,
             label: "サブシナリオを呼ぶ".into(),
@@ -527,6 +547,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            targets: Vec::new(),
             step_type: builtin::FLOW_DELAY.into(),
             category: StepCategory::Flow,
             label: "待機（時間指定）".into(),

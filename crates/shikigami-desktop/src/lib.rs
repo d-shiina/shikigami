@@ -21,6 +21,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
+use shikigami_core::policy::TargetDef;
 use shikigami_core::registry::{RiskLevel, StepCategory, StepTypeDef};
 use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef};
 use shikigami_core::secret::text_or_secret_schema;
@@ -653,7 +654,13 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             if d.input {
                 resources.push(ResourceDef::Static(DESKTOP_INPUT.into()));
             }
+            let targets = if d.step_type == LAUNCH {
+                vec![TargetDef::app("path")]
+            } else {
+                Vec::new()
+            };
             let def = StepTypeDef {
+                targets,
                 step_type: d.step_type.into(),
                 category: StepCategory::Windows,
                 label: d.label.into(),

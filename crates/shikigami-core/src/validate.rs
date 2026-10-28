@@ -997,6 +997,7 @@ mod tests {
     fn typing_registry() -> StepRegistry {
         let mut registry = StepRegistry::with_builtins();
         registry.register(crate::registry::StepTypeDef {
+            targets: Vec::new(),
             step_type: "test.type".into(),
             category: crate::registry::StepCategory::Other,
             label: "type".into(),

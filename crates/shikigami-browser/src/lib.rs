@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
+use shikigami_core::policy::TargetDef;
 use shikigami_core::registry::{RiskLevel, StepCategory, StepTypeDef};
 use shikigami_core::resource::ResourceDef;
 use shikigami_core::secret::{SecretProvider, text_or_secret_schema};
@@ -549,7 +550,13 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             if d.step_type == SCREENSHOT {
                 resources.push(ResourceDef::file("path"));
             }
+            let targets = if d.step_type == OPEN {
+                vec![TargetDef::site("url")]
+            } else {
+                Vec::new()
+            };
             let def = StepTypeDef {
+                targets,
                 step_type: d.step_type.into(),
                 category: StepCategory::Browser,
                 label: d.label.into(),

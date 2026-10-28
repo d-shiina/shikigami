@@ -134,3 +134,54 @@ fn watch_secret_requests(app: &AppHandle, dir: &Path) -> notify::Result<()> {
         }
     }
 }
+
+pub(crate) const APPROVALS_CHANGED: &str = "approvals-changed";
+
+/// Tells the frontend when an AI client files a request for approval (or a
+/// request is answered, used or expires). The frontend re-reads the list.
+pub(crate) fn spawn_approvals(app: AppHandle, dir: PathBuf) {
+    let spawned = std::thread::Builder::new()
+        .name("approval-watcher".into())
+        .spawn(move || {
+            if let Err(e) = watch_approvals(&app, &dir) {
+                tracing::error!(error = %e, dir = %dir.display(), "approval watcher stopped");
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::error!(error = %e, "failed to start approval watcher");
+    }
+}
+
+fn watch_approvals(app: &AppHandle, dir: &Path) -> notify::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let (tx, rx) = mpsc::channel();
+    let mut watcher = notify::recommended_watcher(tx)?;
+    watcher.watch(dir, RecursiveMode::NonRecursive)?;
+
+    let mut pending: Option<Instant> = None;
+    loop {
+        match rx.recv_timeout(DEBOUNCE) {
+            Ok(Ok(event)) => {
+                if matches!(event.kind, EventKind::Access(_)) {
+                    continue;
+                }
+                let relevant = event
+                    .paths
+                    .iter()
+                    .any(|p| p.extension().and_then(|e| e.to_str()) == Some("json"));
+                if relevant {
+                    pending = Some(Instant::now());
+                }
+            }
+            Ok(Err(e)) => tracing::warn!(error = %e, "watch error"),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),
+        }
+        if pending.is_some_and(|at| at.elapsed() >= DEBOUNCE) {
+            pending = None;
+            if let Err(e) = app.emit(APPROVALS_CHANGED, ()) {
+                tracing::warn!(error = %e, "failed to emit approval change");
+            }
+        }
+    }
+}

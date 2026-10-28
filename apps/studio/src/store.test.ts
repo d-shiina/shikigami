@@ -1,4 +1,14 @@
-import type { EditOp, EditOutcome, Evidence, HistoryEntry, ReviewTimeline, RunEventEnvelope, Scenario } from "@shikigami/schema";
+import type {
+  ApprovalRequest,
+  EditOp,
+  EditOutcome,
+  Evidence,
+  HistoryEntry,
+  PublishedState,
+  ReviewTimeline,
+  RunEventEnvelope,
+  Scenario,
+} from "@shikigami/schema";
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
@@ -414,6 +424,47 @@ describe("studio store", () => {
       );
       await store.getState().open("scn_a");
       expect(pendingReview(store.getState())).toEqual([]);
+    });
+
+    it("approves and publishes in one step, and keeps the review open when publishing fails", async () => {
+      const published = {
+        version: 3,
+        name: "v3",
+        revision: 1,
+        publishedAt: aiEdit.at,
+        publishedBy: { kind: "studio" },
+        matchesCurrent: true,
+      } as PublishedState;
+      const approveAndPublish = vi
+        .fn()
+        .mockRejectedValueOnce(new ApiError({ code: "SUBSCENARIO_NOT_PUBLISHED", message: "x" }))
+        .mockResolvedValueOnce(published);
+      const store = createStudioStore(
+        fakeApi({
+          history: vi.fn(async () => [aiEdit]),
+          approveAndPublish,
+          listVersions: vi.fn(async () => []),
+          publishedState: vi.fn(async () => null),
+        }),
+      );
+      await store.getState().open("scn_a");
+      await store.getState().approveAndPublish();
+      expect(approveAndPublish).toHaveBeenLastCalledWith("scn_a", 1);
+      expect(store.getState().error).toBe(t.publishError("SUBSCENARIO_NOT_PUBLISHED", "x"));
+      expect(pendingReview(store.getState()).map((e) => e.revision)).toEqual([2]);
+      await store.getState().approveAndPublish();
+      expect(store.getState().notice).toBe(t.approvedPublished(3));
+      expect(pendingReview(store.getState())).toEqual([]);
+    });
+
+    it("answers an AI's approval request and re-reads the list", async () => {
+      const decideApproval = vi.fn(async () => ({}) as ApprovalRequest);
+      const listApprovals = vi.fn(async () => [] as ApprovalRequest[]);
+      const store = createStudioStore(fakeApi({ decideApproval, listApprovals }));
+      await store.getState().decideApproval("apr_1", false);
+      expect(decideApproval).toHaveBeenCalledWith("apr_1", false);
+      expect(listApprovals).toHaveBeenCalled();
+      expect(store.getState().notice).toBe(t.approvalDenied);
     });
 
     it("records approval and sending back in Core for the current revision", async () => {

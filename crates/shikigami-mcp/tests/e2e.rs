@@ -340,7 +340,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 34);
+    assert_eq!(tools.len(), 35);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -764,5 +764,132 @@ async fn ai_asks_for_a_login_and_the_user_registers_it_in_studio() {
         .await;
     dismiss.await.unwrap();
     assert_eq!(declined["status"], "dismissed");
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn publishing_and_the_policy_keep_people_in_charge() {
+    use shikigami_core::{ApprovalId, ApprovalStore, Policy, PublishInput};
+
+    let h = start(ServerOptions::default()).await;
+    let created = h
+        .ok(
+            "create_scenario",
+            json!({ "name": "公開テスト", "steps": [ { "type": "log.message", "params": { "message": "hi" } } ] }),
+        )
+        .await;
+    let id = created["scenario"]["id"].as_str().unwrap().to_owned();
+    let studio = h.other_process();
+    let approvals = ApprovalStore::new(studio.store().local_root());
+    let person = || Actor::new(ActorKind::Studio);
+
+    // Nothing runs unattended until a person publishes.
+    let (is_error, e) = h
+        .call(
+            "run_scenario",
+            json!({ "scenarioId": id, "published": true }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(e["code"], "NOT_PUBLISHED");
+    studio
+        .publish(
+            &ScenarioId::new(id.as_str()),
+            PublishInput::default(),
+            person(),
+        )
+        .unwrap();
+    let got = h.ok("get_scenario", json!({ "scenarioId": id })).await;
+    assert_eq!(got["published"]["version"], 1);
+    assert_eq!(got["published"]["matchesCurrent"], true);
+    let out = h
+        .ok(
+            "run_scenario",
+            json!({ "scenarioId": id, "published": true, "waitMs": 10000 }),
+        )
+        .await;
+    assert_eq!(out["report"]["version"], 1);
+
+    // policy.json: a site list and stricter AI rules.
+    let policy_path = Policy::path(&h.root);
+    std::fs::write(
+        &policy_path,
+        r#"{ "sites": ["https://ok.example"], "ai": { "runScenario": { "safe": "deny" }, "testStep": { "safe": "ask" } } }"#,
+    )
+    .unwrap();
+    let policy = h.ok("get_policy", json!({})).await;
+    assert_eq!(policy["policy"]["sites"][0], "https://ok.example");
+    let (_, e) = h.call("run_scenario", json!({ "scenarioId": id })).await;
+    assert_eq!(e["code"], "POLICY_DENIED");
+    let (_, e) = h
+        .call("inspect_page", json!({ "url": "https://evil.example/" }))
+        .await;
+    assert_eq!(e["code"], "SITE_NOT_ALLOWED");
+
+    // "ask": the person approves exactly one action in Studio.
+    let step = json!({ "type": "variable.set", "params": { "name": "x", "expression": "1 + 2" } });
+    let (_, e) = h
+        .call(
+            "test_step",
+            json!({ "step": step, "approvalReason": "計算を確かめたい" }),
+        )
+        .await;
+    assert_eq!(e["code"], "APPROVAL_REQUIRED");
+    let approval = e["details"]["approvalId"].as_str().unwrap().to_owned();
+    let pending = approvals.pending().unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].reason.as_deref(), Some("計算を確かめたい"));
+    assert!(
+        approvals
+            .decide(
+                &ApprovalId::new(approval.as_str()),
+                true,
+                Actor::new(ActorKind::Mcp)
+            )
+            .is_err(),
+        "an AI cannot approve its own request"
+    );
+    approvals
+        .decide(&ApprovalId::new(approval.as_str()), true, person())
+        .unwrap();
+    let other = json!({ "type": "variable.set", "params": { "name": "x", "expression": "9" } });
+    let (_, e) = h
+        .call(
+            "test_step",
+            json!({ "step": other, "approvalId": approval }),
+        )
+        .await;
+    assert_eq!(e["code"], "APPROVAL_MISMATCH");
+    let out = h
+        .ok("test_step", json!({ "step": step, "approvalId": approval }))
+        .await;
+    assert_eq!(out["output"], 3);
+    let (_, e) = h
+        .call("test_step", json!({ "step": step, "approvalId": approval }))
+        .await;
+    assert_eq!(e["code"], "APPROVAL_USED");
+
+    // Deleting asks by default; a refusal is final.
+    std::fs::remove_file(&policy_path).unwrap();
+    let rev = got["scenario"]["revision"].as_u64().unwrap();
+    let (_, e) = h
+        .call(
+            "delete_scenario",
+            json!({ "scenarioId": id, "expectedRevision": rev }),
+        )
+        .await;
+    assert_eq!(e["code"], "APPROVAL_REQUIRED");
+    let approval = e["details"]["approvalId"].as_str().unwrap().to_owned();
+    approvals
+        .decide(&ApprovalId::new(approval.as_str()), false, person())
+        .unwrap();
+    let (_, e) = h
+        .call(
+            "delete_scenario",
+            json!({ "scenarioId": id, "expectedRevision": rev, "approvalId": approval }),
+        )
+        .await;
+    assert_eq!(e["code"], "APPROVAL_DENIED");
+    assert!(studio.get(&ScenarioId::new(id.as_str())).is_ok());
     h.client.cancel().await.unwrap();
 }
