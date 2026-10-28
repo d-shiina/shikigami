@@ -43,7 +43,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 | Invoke Workflow File | サブシナリオ（別スレッドで実装中） | 🔜 |
 | Comment | ステップの `name`・メモ | ✅ |
 | Get Credential / Get Asset | シークレット（`{ "secret": … }`） | ✅ |
-| Invoke Code / Invoke VBA / Invoke PowerShell | 任意コードは実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro`（Office スレッド） | 🔜 |
+| Invoke Code / Invoke VBA / Invoke PowerShell | 任意コードは実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro`（Office スレッド） | ✅ / 🔜 |
 
 ### 文字列（Text / String 系アクティビティと VB.NET の String メソッド）
 
@@ -127,7 +127,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 | UiPath | Shikigami | 状態 |
 |---|---|---|
-| HTTP Request | `http.request`（メソッド・ヘッダー・クエリ・JSON / フォーム本文、トークンはシークレット） | 🔜（次の PR） |
+| HTTP Request | `http.request`（メソッド・ヘッダー・クエリ・JSON / フォーム本文、トークンはシークレット） | ✅ |
 | Deserialize JSON / Serialize JSON | `parseJson` / `toJson`。`http.request` は JSON を自動で値にする | 🆕 |
 | Deserialize XML / Execute XPath | 需要を見て関数で追加 | 🔜（未定） |
 
@@ -135,9 +135,9 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 | UiPath | Shikigami | 状態 |
 |---|---|---|
-| Start Process / Kill Process | アプリは `desktop.launch` / `desktop.closeWindow`。コマンドは `process.run`（終了コード・標準出力を返す） | ✅ / 🔜 |
-| Get / Set From Clipboard | `clipboard.get` / `clipboard.set` | 🔜 |
-| Message Box / Input Dialog / Select File | `dialog.message` / `dialog.input` / `dialog.selectFile` | 🔜 |
+| Start Process / Kill Process | アプリは `desktop.launch` / `desktop.closeWindow`。コマンドは `process.run`（終了コード・標準出力を返す） | ✅ |
+| Get / Set From Clipboard | `clipboard.get` / `clipboard.set` | ✅ |
+| Message Box / Input Dialog / Select File | `dialog.message` / `dialog.input` / `dialog.selectFile` | ✅ |
 | Take Screenshot | `browser.screenshot`（デスクトップは未定） | ✅ / 🔜 |
 | Send Hotkey / Type Into | `desktop.press` / `desktop.type` / `desktop.setValue` | ✅ |
 
@@ -153,7 +153,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 1. **式の関数**（この PR）：文字列・正規表現・全角半角・数値・リスト（`x => …`）・オブジェクト・日付（和暦）・パス・JSON・`env`。MCP `list_step_types` が `functions` で一覧と例を返す。一覧：[../expressions.md](../expressions.md)
 2. **`file.*`**（[../files.md](../files.md)）：テキスト・CSV（Shift_JIS）・コピー/移動/削除・一覧・フォルダー作成・zip。ファイルのパスを資源キーにして同じファイルへの操作は自動で順番待ち
-3. **`http.request`・`process.run`・`clipboard.*`・`dialog.*`**
+3. **`http.request`・`process.run`・`clipboard.*`・`dialog.*`**（[../system.md](../system.md)）
 4. **`pdf.readText`**
 
 ## 式の言語に入れた拡張

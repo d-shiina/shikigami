@@ -52,6 +52,10 @@ pub enum StepCategory {
     Browser,
     Windows,
     File,
+    /// Web APIs (`http.*`).
+    Network,
+    /// Programs, the clipboard and dialogs (`process.*`, `clipboard.*`, `dialog.*`).
+    System,
     Other,
 }
 

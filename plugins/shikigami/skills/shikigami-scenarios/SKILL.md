@@ -70,6 +70,12 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 - CSV は見出しをキーにしたレコードの配列になり、セルは文字列（金額は `num()`）。加工は `filter` / `map` で行い、`writeCsv` の `rows` に `"{{ 変数 }}"` で渡す。Excel で開く CSV は `encoding: "utf-8-bom"` か `"shift_jis"`。
 - ファイルの到着を待つときは `wait.until` の `check` に `file.list`（`saveAs`）を入れ、`condition` で `len(files) > 0`。
 
+## Web API・プログラム・人とのやりとり
+
+- Web API は `http.request`（`json` / `form` / `body`、`query`）。応答が JSON なら `res.body` が値になる。トークンや API キーは `auth` に `{ "secret": "名前", "field": "password" }`（`authType`: `bearer` / `basic` / `header`）。シークレットに API のサイト（`https://api.example.com`）が登録されていないと送らない（`SECRET_SITE_*` なら `request_secret` で追加を頼む）。docs/system.md。
+- コマンドラインのプログラムは `process.run`（`args` は配列、成功の終了コードは `okExitCodes`）。画面のあるアプリは `desktop.launch`。
+- 人に確認・入力・ファイル選択をしてもらうときだけ `dialog.message` / `dialog.input` / `dialog.selectFile`（無人実行では使わない。パスワードは聞かない）。クリップボードは `clipboard.get` / `clipboard.set`。
+
 ## Windows のアプリを操作するシナリオ
 
 1. アプリの種類（普通の Windows アプリ、SAP GUI、Java など）に関係なく `desktop.*` で書く。`inspect_ui`（引数なし）で開いているウィンドウを見て、`inspect_ui`（`window: { "process": "billing.exe" }`）で部品の一覧を見る。

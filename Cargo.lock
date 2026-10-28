@@ -502,6 +502,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
+name = "clipboard-win"
+version = "5.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "052af7878466feccda12ba7a6a67d019d712f296809559b47c12c8cc196d3a9a"
+dependencies = [
+ "error-code",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -996,6 +1005,12 @@ dependencies = [
  "libc",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "error-code"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5343afd4a8365a643ac588dab4cf234a190c7f6c88c9f6dd6ffe00837661b7"
 
 [[package]]
 name = "fancy-regex"
@@ -3272,6 +3287,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "rfd"
+version = "0.17.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20dafead71c16a34e1ff357ddefc8afc11e7d51d6d2b9fbd07eaa48e3e540220"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "js-sys",
+ "libc",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "percent-encoding",
+ "raw-window-handle",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3810,6 +3848,7 @@ dependencies = [
  "shikigami-files",
  "shikigami-plugins",
  "shikigami-runtime",
+ "shikigami-system",
 ]
 
 [[package]]
@@ -3987,6 +4026,25 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "shikigami-system"
+version = "0.1.0"
+dependencies = [
+ "clipboard-win",
+ "encoding_rs",
+ "form_urlencoded",
+ "reqwest",
+ "rfd",
+ "rustls",
+ "serde_json",
+ "shikigami-core",
+ "shikigami-files",
+ "shikigami-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

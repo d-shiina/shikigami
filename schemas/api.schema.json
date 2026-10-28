@@ -996,16 +996,30 @@
       ]
     },
     "StepCategory": {
-      "type": "string",
-      "enum": [
-        "control",
-        "variable",
-        "log",
-        "flow",
-        "browser",
-        "windows",
-        "file",
-        "other"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "control",
+            "variable",
+            "log",
+            "flow",
+            "browser",
+            "windows",
+            "file",
+            "other"
+          ]
+        },
+        {
+          "description": "Web APIs (`http.*`).",
+          "type": "string",
+          "const": "network"
+        },
+        {
+          "description": "Programs, the clipboard and dialogs (`process.*`, `clipboard.*`, `dialog.*`).",
+          "type": "string",
+          "const": "system"
+        }
       ]
     },
     "BlockDef": {
