@@ -71,3 +71,50 @@ jobs:
       - run: pnpm -r test
       - name: Generated TypeScript types are up to date
         run: pnpm --filter @shikigami/schema exec node scripts/generate.mjs --check
+
+  contract:
+    name: Contract changes are in the changelog
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # schemas/ holds the public contracts (docs/compatibility.md); a change
+      # there must be written up for users.
+      - name: CHANGELOG.md is updated when schemas/ changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE"..."$HEAD")
+          if echo "$changed" | grep -q '^schemas/' && ! echo "$changed" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::schemas/ changed (a public contract). Add an entry under 未リリース in CHANGELOG.md; docs/compatibility.md says what is allowed."
+            exit 1
+          fi
+
+  dco:
+    name: DCO sign-off
+    # Outside contributors sign off every commit (CONTRIBUTING.md); the
+    # maintainers hold the copyright already.
+    if: >-
+      github.event_name == 'pull_request' &&
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Every commit has Signed-off-by
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          fail=0
+          for c in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            if ! git show -s --format=%B "$c" | grep -qE '^Signed-off-by: .+ <.+>$'; then
+              echo "::error::commit $(git show -s --format='%h %s' "$c") has no Signed-off-by line. Use git commit -s (see CONTRIBUTING.md)."
+              fail=1
+            fi
+          done
+          exit $fail

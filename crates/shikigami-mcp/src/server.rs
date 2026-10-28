@@ -92,6 +92,28 @@ pub const TOOLS: &[(&str, ToolClass)] = &[
     ("test_step", ToolClass::Run),
 ];
 
+/// The tool contract AI clients and scripts depend on: every tool's name,
+/// permission class, annotations and input/output schemas, without the
+/// prose. Committed as `schemas/contract/mcp-tools.json`; see
+/// docs/compatibility.md for what may change.
+pub fn tool_contract() -> Value {
+    let mut tools: Vec<Value> = ShikigamiMcp::tool_router()
+        .list_all()
+        .into_iter()
+        .map(|tool| {
+            let mut value = serde_json::to_value(&tool).unwrap_or(Value::Null);
+            if let Some(obj) = value.as_object_mut() {
+                obj.remove("description");
+                obj.insert("class".into(), class_of(&tool.name).as_str().into());
+            }
+            shikigami_core::schema::strip_docs(&mut value);
+            value
+        })
+        .collect();
+    tools.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    json!({ "tools": tools })
+}
+
 fn class_of(tool: &str) -> ToolClass {
     TOOLS
         .iter()
@@ -442,7 +464,7 @@ impl ShikigamiMcp {
             .registry()
             .iter()
             .map(|d| {
-                json!({
+                let mut entry = json!({
                     "type": d.step_type,
                     "category": d.category,
                     "label": d.label,
@@ -452,7 +474,15 @@ impl ShikigamiMcp {
                     "expressionParams": d.expression_params,
                     "bindsVariables": d.binds_variables,
                     "risk": d.risk,
-                })
+                });
+                // Only when set, so the common case stays short.
+                if let Some(deprecated) = &d.deprecated {
+                    entry["deprecated"] = json!(deprecated);
+                }
+                if let Some(plugin) = &d.plugin {
+                    entry["plugin"] = json!(plugin);
+                }
+                entry
             })
             .collect();
         self.finish(

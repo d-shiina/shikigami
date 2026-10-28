@@ -136,10 +136,11 @@ shikigami/
 
 ```jsonc
 {
-  "schemaVersion": 1,             // ファイル形式のバージョン
+  "schemaVersion": 2,             // ファイル形式のバージョン
   "id": "scn_…",                  // 安定ID（ファイル名にもなる）
   "name": "請求書の集計",
   "description": "…",
+  "requires": { "plugin:kintone": "^0.3.1" },  // 使うプラグインと版（Core が自動で管理。なければ省略）
   "revision": 12,                 // 変更ごとに+1。競合検出に使用
   "variables": [
     { "name": "invoices", "type": "array", "direction": "input", "default": [] },
@@ -166,7 +167,7 @@ shikigami/
 - **`params` は型ごとの JSON Schema で検証**（`StepRegistry` が保持）。新しいステップ型はスキーマ本体を変えずに追加できる。
 - **式言語**（§11 判断5）：条件は式（`count > 3 && status == 'OK'`）、文字列パラメーターは `{{ 式 }}` テンプレート。任意コード実行はできない。
 - **ステップ共通オプション**：`disabled`, `timeoutMs`, `retry`, `onError`（`fail`/`continue`）, `saveAs`（出力を変数へ）, `meta`（Studio 表示や AI の根拠情報。Runtime は解釈しない）。
-- **後方互換**：読み込み時に `schemaVersion` を見て段階的にマイグレーション（`migrate.rs`）。未来のバージョンは黙って切り捨てず `UNSUPPORTED_SCHEMA_VERSION` で拒否。`metadata` の未知キーは保持する。
+- **後方互換**：読み込み時に `schemaVersion` を見て段階的にマイグレーション（`migrate.rs`）。未来のバージョンは黙って切り捨てず `UNSUPPORTED_SCHEMA_VERSION` で拒否。`metadata` の未知キーは保持する。版を上げる条件、プラグインの `requires`、非推奨の扱い、MCP・CLI の互換は [compatibility.md](compatibility.md)。
 - **YAML** は将来のインポート/エクスポート形式として扱い、正規形式にはしない。
 
 ### 組み込みステップ型（Phase 1）

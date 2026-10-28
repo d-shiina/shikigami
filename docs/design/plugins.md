@@ -65,7 +65,7 @@ hello/
 |---|---|---|
 | `manifestVersion` | ○ | いまは `1` |
 | `name` | ○ | ステップ型の接頭辞（`hello` → `hello.greet`）。英小文字で始まる英小文字・数字（`^[a-z][a-z0-9]*$`、32 文字まで） |
-| `version` | ○ | プラグインのバージョン（表示用） |
+| `version` | ○ | プラグインのバージョン（semver、`0.1.0` の形）。シナリオの `requires` に記録される。params を互換でない形に変えたらメジャー版（0.x ならマイナー版）を上げる |
 | `label` / `description` | ○ / - | 表示名と説明 |
 | `command.program` | ○ | 起動するプログラム。`./` や `bin\` のように区切りを含むときはプラグインのフォルダからの相対、それ以外は PATH から探す。`node` はインストーラーに同梱の Node.js を優先するので、利用者の PC に Node.js がなくても動く |
 | `command.args` | - | 引数。作業フォルダはプラグインのフォルダ |
@@ -79,6 +79,7 @@ hello/
 | `steps[].secretParams` | - | 登録済みシークレットを受け取れる param（§5） |
 | `steps[].resources` | - | 排他する資源（§4） |
 | `steps[].defaultTimeoutMs` | - | `timeoutMs` 省略時の時間制限 |
+| `steps[].deprecated` | - | 使うのをやめてほしいステップ：`{ "note": "理由", "replacement": "hello.greet2" }`。動き続けるが、検証で `DEPRECATED_STEP_TYPE` の警告が出る |
 
 不明な項目はエラーにする（書き間違いに気づけるように）。
 
@@ -142,7 +143,7 @@ hello/
 1. 環境変数 `SHIKIGAMI_PLUGINS`（`;` 区切り）：プラグインのフォルダ、またはプラグインのフォルダを並べたフォルダ
 2. `%LOCALAPPDATA%\Shikigami\plugins\<名前>\`
 
-ワークスペースのフォルダからは読み込まない。共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動くのを避けるため（将来、シナリオが使うプラグインを記録し、足りないものを Studio が案内する）。
+ワークスペースのフォルダからは読み込まない。共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動くのを避けるため。代わりに、シナリオは使っているプラグインと版を `requires`（`{ "plugin:hello": "^0.1.0" }`）に記録し、入っていない PC では `PLUGIN_NOT_INSTALLED`、版が合わなければ `PLUGIN_VERSION_MISMATCH` で実行前に止まる（[compatibility.md](../compatibility.md) §4）。
 
 読み込めなかったプラグイン（マニフェストの誤り、組込や他のプラグインと名前が重なる、記述例が通らない）は飛ばして、理由を残す。`shikigami plugin list` で読み込んだものと問題を、`shikigami plugin check <フォルダ>` で作成中のプラグインの検査ができる。
 
@@ -150,7 +151,7 @@ hello/
 
 ## 8. まだやらないこと（順に検討）
 
-1. シナリオが使うプラグインと版の記録、足りないときの案内（Studio・`validate_scenario` のヒント）
+1. 足りないプラグインを Studio の画面で案内する（記録と検証のヒントは `requires` で対応済み）
 2. `shikigami plugin install <zip / Git URL>` と一覧（カタログ）
 3. 署名・発行元の確認、`dangerous` なプラグインを初回に人が許可する仕組み
 4. Studio でのプラグイン一覧画面

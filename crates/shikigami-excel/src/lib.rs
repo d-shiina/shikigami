@@ -519,6 +519,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 resources: vec![ResourceDef::file("path")],
                 secret_params: vec![],
                 default_timeout_ms: None,
+                deprecated: None,
+                plugin: None,
             };
             (def, d.kind)
         })
