@@ -8,7 +8,9 @@
  * slate so they sit next to the navy.
  */
 @theme {
-  --font-sans: "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  --font-sans: "Noto Sans JP Variable", "Yu Gothic UI", "Meiryo", sans-serif;
+  /* Latin from a code font; kana and kanji from the same Japanese font as the UI. */
+  --font-mono: "Cascadia Mono", Consolas, "Noto Sans JP Variable", "BIZ UDGothic", monospace;
 
   --color-paper: #f4f7fb;
   --color-sheet: #ffffff;
@@ -39,7 +41,16 @@ body,
 }
 
 body {
-  @apply bg-paper text-ink antialiased;
+  @apply bg-paper font-sans text-ink antialiased;
+}
+
+/* Form controls and React Flow otherwise pick their own fonts. */
+button,
+input,
+select,
+textarea,
+.react-flow {
+  font-family: inherit;
 }
 
 /* The swirl's colours, used for AI avatars and the review marker. */
