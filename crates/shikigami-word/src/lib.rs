@@ -12,16 +12,19 @@
 #![allow(clippy::result_large_err)]
 
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use serde_json::{Map, Value, json};
 use shikigami_core::registry::{RiskLevel, SINGLE_TEMPLATE_PATTERN, StepCategory, StepTypeDef};
-use shikigami_core::resource::ResourceDef;
+use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_runtime::{
     ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
 };
+use tokio_util::sync::CancellationToken;
 
 pub mod docx;
 
@@ -89,14 +92,36 @@ impl ActionHandler for WordStep {
     fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
         let kind = self.kind;
         let params = input.params;
+        let cancel = input.cancel;
         Box::pin(async move {
             blocking(move || match kind {
                 Kind::ReadText => Ok(Value::String(body(&read_parts(&string(&params, "path")?)?))),
-                Kind::FillTemplate => fill_template(&params),
+                Kind::FillTemplate => {
+                    // The Runtime's lock on the target ends with this future,
+                    // but a timed-out attempt's file work goes on in the
+                    // background: this lock keeps it and the next attempt apart.
+                    let lock = target_lock(&params);
+                    let _held = lock.lock().unwrap_or_else(|e| e.into_inner());
+                    fill_template(&params, &cancel)
+                }
             })
             .await
         })
     }
+}
+
+/// One lock per target document (by its resource key), held while a
+/// `word.fillTemplate` writes it.
+fn target_lock(params: &Value) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+    let key = resource_keys(&[ResourceDef::file("path")], params)
+        .pop()
+        .unwrap_or_default();
+    let mut locks = LOCKS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    locks.entry(key).or_default().clone()
 }
 
 async fn blocking(
@@ -210,7 +235,7 @@ fn body(parts: &[(String, String)]) -> String {
         .unwrap_or_default()
 }
 
-fn fill_template(params: &Value) -> Result<Value, StepError> {
+fn fill_template(params: &Value, cancel: &CancellationToken) -> Result<Value, StepError> {
     let template = string(params, "template")?;
     let path = string(params, "path")?;
     let values: Map<String, Value> = match params.get("values") {
@@ -241,8 +266,7 @@ fn fill_template(params: &Value) -> Result<Value, StepError> {
         entry
             .read_to_string(&mut xml)
             .map_err(|e| unreadable(source, e))?;
-        let xml = docx::expand_rows(&xml, &values, &mut replaced, &mut missing);
-        let (xml, n, gone) = docx::fill(&xml, &|name| docx::lookup(&values, name));
+        let (xml, n, gone) = docx::fill_part(&xml, &values);
         replaced += n;
         missing.extend(gone);
         filled.push((name, xml));
@@ -269,8 +293,17 @@ fn fill_template(params: &Value) -> Result<Value, StepError> {
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
     let written = write_document(&mut archive, &filled, &temp);
-    let result =
-        written.and_then(|()| std::fs::rename(&temp, target).map_err(|e| io_error(target, &e)));
+    // An attempt that was stopped or timed out meanwhile never replaces the
+    // target (a later attempt may already have written it).
+    let result = written.and_then(|()| {
+        if cancel.is_cancelled() {
+            return Err(StepError::new(
+                "CANCELLED",
+                "the step was stopped before the document was saved",
+            ));
+        }
+        std::fs::rename(&temp, target).map_err(|e| io_error(target, &e))
+    });
     if result.is_err() {
         let _ = std::fs::remove_file(&temp);
     }

@@ -166,3 +166,21 @@ async fn a_missing_value_names_every_placeholder_left() {
     .await;
     assert_eq!(report.error.unwrap().code, "UNSUPPORTED_FORMAT");
 }
+
+#[test]
+fn a_stopped_attempt_never_replaces_the_document() {
+    let dir = tempfile::tempdir().unwrap();
+    let template = template(&dir);
+    let out = dir.path().join("請求書.docx");
+    std::fs::write(&out, b"later attempt").unwrap();
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    let params = json!({ "template": template, "path": out.to_string_lossy(), "values": {
+        "宛名": "A", "金額": 1, "明細": []
+    } });
+    let err = fill_template(&params, &cancel).unwrap_err();
+    assert_eq!(err.code, "CANCELLED");
+    assert_eq!(std::fs::read(&out).unwrap(), b"later attempt");
+    // No temporary file is left behind.
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+}

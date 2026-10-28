@@ -209,16 +209,24 @@ fn rows(xml: &str) -> Vec<(usize, usize)> {
     out
 }
 
-/// Repeats each table row whose placeholders name a list in `values`
-/// (`{{ 明細.品名 }}` with `"明細": [ { "品名": … }, … ]`): once per
-/// record, filled from it. An empty list removes the row.
-pub fn expand_rows(
-    xml: &str,
-    values: &Map<String, Value>,
-    replaced: &mut usize,
-    missing: &mut BTreeSet<String>,
-) -> String {
+/// Fills a part from `values`, in one pass so that inserted text is never
+/// read as a placeholder again. Each table row whose placeholders name a
+/// list (`{{ 明細.品名 }}` with `"明細": [ { "品名": … }, … ]`) is repeated
+/// once per record and filled from it; an empty list removes the row.
+pub fn fill_part(xml: &str, values: &Map<String, Value>) -> (String, usize, BTreeSet<String>) {
+    let mut replaced = 0;
+    let mut missing = BTreeSet::new();
     let mut out = String::with_capacity(xml.len());
+    let global = |name: &str| lookup(values, name);
+    // Paragraphs never cross a row's edge, so the text between repeated
+    // rows can be filled on its own.
+    let plain =
+        |part: &str, out: &mut String, replaced: &mut usize, missing: &mut BTreeSet<String>| {
+            let (filled, n, gone) = fill(part, &global);
+            *replaced += n;
+            missing.extend(gone);
+            out.push_str(&filled);
+        };
     let mut at = 0;
     for (start, end) in rows(xml) {
         let row = &xml[start..end];
@@ -230,7 +238,7 @@ pub fn expand_rows(
             }
         });
         let Some((key, items)) = list else { continue };
-        out.push_str(&xml[at..start]);
+        plain(&xml[at..start], &mut out, &mut replaced, &mut missing);
         for item in items {
             let lookup = |name: &str| match name.split_once('.') {
                 Some((head, field)) if head.trim() == key => match item.get(field.trim()) {
@@ -240,14 +248,14 @@ pub fn expand_rows(
                 _ => lookup(values, name),
             };
             let (filled, n, gone) = fill(row, &lookup);
-            *replaced += n;
+            replaced += n;
             missing.extend(gone);
             out.push_str(&filled);
         }
         at = end;
     }
-    out.push_str(&xml[at..]);
-    out
+    plain(&xml[at..], &mut out, &mut replaced, &mut missing);
+    (out, replaced, missing)
 }
 
 fn text(value: &Value) -> Lookup {
@@ -408,11 +416,20 @@ mod tests {
         let v = values(
             json!({ "明細": [ { "品名": "りんご", "数量": 3 }, { "品名": "みかん", "数量": 5 } ], "空": [] }),
         );
-        let (mut replaced, mut missing) = (0, BTreeSet::new());
-        let out = expand_rows(&xml, &v, &mut replaced, &mut missing);
+        let (out, replaced, missing) = fill_part(&xml, &v);
         assert_eq!(replaced, 4);
         assert!(missing.is_empty());
         assert_eq!(plain_text(&out), "品名\n数量\nりんご\n3\nみかん\n5");
+    }
+
+    #[test]
+    fn inserted_text_is_not_filled_again() {
+        let xml = "<w:p><w:r><w:t>{{ a }}</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>{{ 行.x }}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>";
+        let v = values(json!({ "a": "{{ b }}", "b": "B", "行": [ { "x": "{{ b }}" } ] }));
+        let (out, replaced, missing) = fill_part(xml, &v);
+        assert_eq!(replaced, 2);
+        assert!(missing.is_empty());
+        assert_eq!(plain_text(&out), "{{ b }}\n{{ b }}");
     }
 
     #[test]
