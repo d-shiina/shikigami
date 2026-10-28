@@ -3798,7 +3798,9 @@ name = "shikigami-core"
 version = "0.1.0"
 dependencies = [
  "dirs",
+ "jiff",
  "jsonschema",
+ "regex",
  "schemars 1.2.3",
  "serde",
  "serde_json",

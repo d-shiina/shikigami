@@ -130,6 +130,7 @@ Shikigami Studio, and scenarios run later without you.\n\
 - A human reviews your changes in Studio. On every edit pass `summary` (what you changed and why, one or two sentences, Japanese is fine) and `observations`: the observationId values that inspect_page, inspect_ui and test_step returned for the screens the change is based on. Your run_scenario results are recorded against the revision they ran.\n\
 - When get_scenario returns `feedback`, the human sent the scenario back: read its reason and step notes (get_review shows the whole review), fix exactly that, and say in `summary` how you addressed it.\n\
 - Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
+- Text, numbers, dates, lists and JSON are handled with expression functions, not extra steps: list_step_types returns them under `functions` (signature + example), e.g. variable.set expression \"trim(replace(name, '　', ' '))\", \"sum(map(filter(rows, r => r.status == '済'), r => num(r.amount)))\", \"formatDate(today(), 'yyyyMMdd')\". Join text with + or a template.\n\
 - Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.\n\
 - Versions: when the user says a scenario works or is ready, offer create_version with a short name. diff_versions shows what changed since the latest version; restore_version is one undoable edit. Never restore without the user asking.\n\
 - Sharing: export_scenario returns a bundle (scenario + versions, secret defaults removed) that import_scenario accepts in another workspace. On IMPORT_CONFLICT ask the user whether to update the existing scenario or import a copy.\n\
@@ -416,7 +417,8 @@ impl ShikigamiMcp {
         )
     }
 
-    /// List available step types with their descriptions and child blocks.
+    /// List available step types with their descriptions and child blocks,
+    /// and the functions usable in expressions and templates.
     /// Use get_step_schema for the params schema of a type.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_step_types(&self, peer: Peer<RoleServer>) -> Result<CallToolResult, ErrorData> {
@@ -442,7 +444,10 @@ impl ShikigamiMcp {
             "list_step_types",
             &peer,
             None,
-            Ok(json!({ "stepTypes": types })),
+            Ok(json!({
+                "stepTypes": types,
+                "functions": shikigami_core::expr::FUNCTION_DOCS,
+            })),
         )
     }
 
