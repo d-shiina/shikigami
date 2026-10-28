@@ -171,13 +171,15 @@ shikigami/
 | `control.if` | `condition` / blocks: `then`, `else` |
 | `control.while` | `condition`, `maxIterations`（既定1000）/ `body` |
 | `control.repeat` | `count`, `indexVar` / `body` |
-| `control.forEach` | `items`（式）, `itemVar`, `indexVar` / `body` |
+| `control.forEach` | `items`（式）, `itemVar`, `indexVar`, `collect`（式。各回の値を `saveAs` に配列で返す）, `concurrency`（同時に回す数）/ `body` |
+| `control.parallel` / `control.group` | 並行実行（§10.5）/ 複数ステップを 1 ブランチにまとめる |
+| `wait.until` | `condition`（式）, `intervalMs` / `check`。条件が真になるまで待つ。上限は `timeoutMs`、超えたら `WAIT_TIMEOUT` |
 | `control.try` | `errorVar` / `try`, `catch`, `finally` |
 | `control.break` / `control.continue` | ループ制御（ループ外は検証エラー） |
 | `control.fail` | `message`, `code` で失敗させる |
 | `variable.set` | `name` に `value`（テンプレート可）または `expression` を代入 |
 | `log.message` | 実行ログ出力 |
-| `flow.delay` | 時間指定待機（UI 同期には状態待機を使う） |
+| `flow.delay` | 時間指定待機（完了待ちには `wait.until` を使う） |
 
 ## 5. Adapter Interface
 
@@ -392,12 +394,14 @@ CREATE TABLE credentials_index (          -- 値は OS の資格情報ストア�
 |---|---|---|
 | シナリオ間 | 複数のシナリオ（同じシナリオの複数実行を含む）を同時に実行。各実行は独立した非同期タスクで、変数・キャンセル・記録も実行ごとに独立 | **実装済み**（Runtime / MCP の `run_scenario` を複数呼べる） |
 | シナリオ内 | `control.parallel`（`branches` の各ステップを同時実行し全完了を待つ。1 つ失敗したら残りをキャンセル。`maxConcurrency` で同時数を制限）。複数ステップのブランチは `control.group` で包む | **実装済み** |
-| シナリオ内（ループ） | `control.forEach` の `concurrency`（「100 件を 5 並列」） | 設計済み・未実装（下記の変数規則だと集計用の変数が衝突するため、各回の結果を配列で受け取る `collectVar` と合わせて設計する） |
-| 資源の調停 | ハンドラーが `ActionHandler::exclusive_resources()` で使う資源を宣言し、Runtime が同じ資源のステップを同時に動かさない。`desktop.input`（実マウス・キーボード・前面ウィンドウ）は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み（同一プロセス内）**。Studio・CLI・MCP サーバーなど別プロセス間の排他は Phase 4 で Windows の名前付きミューテックスにより実装 |
+| シナリオ内（ループ） | `control.forEach` の `concurrency`（「100 件を 5 並列」）。各回は変数のコピーで動き、外へ出せるのは `collect` の値だけ（`saveAs` に `items` と同じ順の配列で入る）。集計はループ後に `sum(results)` などで行う。最初の失敗で残りをキャンセルし、エラーの `details.index` に何件目かを入れる | **実装済み** |
+| 資源の調停 | ステップ型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのステップを同時に動かさない。シナリオを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスは検証で `RELATIVE_PATH` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み（同一プロセス内）**。Studio・CLI・MCP サーバーなど別プロセス間の排他は Phase 4 で Windows の名前付きミューテックスにより実装 |
 
 - **デスクトップ操作は物理的に 1 組**：Windows のマウス・キーボード入力（SendInput）と前面ウィンドウは画面に 1 つしかないため、これらを使うステップは `desktop.input` の使用権を取得してから実行する（取得待ちの時間はタイムアウトに含めない）。UI Automation のパターン操作（Invoke / Value / SelectionItem など）はフォーカス不要なものが多く、使用権なしで並行実行できるよう Phase 4 で型ごとに宣言する。
 - **ブラウザは並列向き**：Playwright のブラウザコンテキストは独立しており、ヘッドレスなら多数を同時に動かせる（Phase 3）。
-- **変数の扱い**：各ブランチは開始時点の変数のコピーで動き、全ブランチ完了後に「ブランチが変更した変数」をブランチ順に書き戻す。2 つのブランチが同じ変数を異なる値に変えた場合は `PARALLEL_VARIABLE_CONFLICT` で失敗させる（実行タイミングで結果が変わる事態を防ぐ）。ブランチ内から外側のループへの `break` / `continue` は検証エラー（`NOT_IN_LOOP`）。
+- **変数の扱い**：各ブランチは開始時点の変数のコピーで動き、全ブランチ完了後に「ブランチが変更した変数」をブランチ順に書き戻す。2 つのブランチが同じ変数を異なる値に変えた場合は `PARALLEL_VARIABLE_CONFLICT` で失敗させる（実行タイミングで結果が変わる事態を防ぐ）。2 つ以上のブランチが同じ変数に書く場合は実行前の検証でも `PARALLEL_VARIABLE_CONFLICT` にする。ブランチ内から外側のループへの `break` / `continue` は検証エラー（`NOT_IN_LOOP`）。
+- **並列 forEach の検証**：本体で宣言済み変数に書く（`FOREACH_SHARED_WRITE`）・`break`（`FOREACH_BREAK_IN_CONCURRENT`）はエラー、自分の値から更新する変数（`total = total + x` 型、`FOREACH_ACCUMULATOR`）と `saveAs` のない `collect` は警告。いずれも直し方のヒント付き。
+- **待ち合わせ**：時間のかかる処理（Excel への転記など）を待つ専用の構文は作らず、`control.parallel` のブランチ完了待ちと `wait.until`（状態のポーリング）の 2 つで表す。AI が組み合わせを迷わないよう構文を増やさない（[design/ai-authoring.md](design/ai-authoring.md)）。
 - **さらに多くのデスクトップを動かす**には Windows のセッション（RDP / 仮想マシン）を複数使うしかない。これは将来の「ワーカー」機能として扱い、MVP の範囲外。
 
 ## 11. 重要な設計判断（採用理由・代替案・トレードオフ）
@@ -488,7 +492,7 @@ CREATE TABLE credentials_index (          -- 値は OS の資格情報ストア�
 
 ### 未実装（後続フェーズ）
 
-- ブラウザ操作（Phase 3）、Windows 操作（Phase 4）、forEach の並列化とプロセス間の資源排他（§10.5）
+- ブラウザ操作（Phase 3）、Windows 操作（Phase 4）、プロセス間の資源排他（§10.5）
 - Studio のドラッグ＆ドロップ編集、ブレークポイント・ステップ実行、UI 要素インスペクター、差分表示（Phase 5）
 - SQLite、クライアント別のツール権限設定・削除時の人間承認、許可リスト、資格情報ストア連携、MCP の Streamable HTTP
 

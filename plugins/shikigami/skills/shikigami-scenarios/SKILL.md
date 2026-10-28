@@ -10,13 +10,13 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 ## 基本の流れ
 
 1. **把握する**：`list_scenarios` → 対象があれば `get_scenario`。返ってきた `revision` を覚えておく。
-2. **使えるステップを調べる**：`list_step_types` で一覧、使う型ごとに `get_step_schema` で params の JSON Schema を確認する。スキーマにない params は書かない。
+2. **使えるステップを調べる**：`list_step_types` で一覧、使う型ごとに `get_step_schema` で params の JSON Schema と記述例（`examples`）を確認する。記述例をひな形にして書き、スキーマにない params は書かない。
 3. **小さく編集する**：
    - 新規は `create_scenario`（変数と最初のステップをまとめて渡してよい）。
    - 追加・変更・削除・移動は `add_step` / `update_step` / `remove_step` / `move_step`。
    - 関連する複数の変更は `update_scenario` の `ops` にまとめると 1 リビジョン（人間の Undo 1 回分）になる。
    - 書き込み系には毎回 `expectedRevision`（直前に読んだ値）を付ける。
-4. **検証する**：`validate_scenario` でエラーが 0 になるまで直す。下書きは不正でも保存されるが、エラーがあると実行できない（`VALIDATION_FAILED`）。
+4. **検証する**：`validate_scenario` でエラーが 0 になるまで直す。各 issue の `hint` に直し方（候補の名前、必須・使える params など）が書いてあるので、それに従う。下書きは不正でも保存されるが、エラーがあると実行できない（`VALIDATION_FAILED`）。
 5. **実行して確かめる**：`run_scenario`（`waitMs` を付けると完了まで待つ）→ 失敗したら `get_run_logs` で失敗ステップ ID とエラーコードを見て直す。
 6. **報告する**：何を変えたか（ステップ名・ID）、検証結果、実行結果をユーザーに伝える。
 
@@ -31,10 +31,12 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 
 - ステップの `id` は省略すれば Core が採番する。既存ステップを指すときは `get_scenario` で得た ID を使う。
 - 制御構文は子を `blocks` に持つ：`control.if`（`then` / `else`）、`control.while` / `control.repeat` / `control.forEach`（`body`）、`control.try`（`try` / `catch` / `finally`）。
-- 互いに独立した処理は `control.parallel`（`branches` の各ステップが同時に動く）で並行にできる。複数ステップのブランチは `control.group` で包む。ブランチ同士で同じ変数に別の値を書くと `PARALLEL_VARIABLE_CONFLICT` になるので、ブランチごとに別の変数へ結果を入れる。
-- 文字列 params はテンプレート：`"{{ invoice.amount * 1.1 }}"`。`expression` 系の params（`control.if` の `condition` など）は `{{ }}` なしの式をそのまま書く。
-- 式で使える関数は安全なものに限られる（`len`, `contains`, `round` など）。任意コードは実行できない。
-- 入出力は `variables` の `direction`（`input` / `output` / `internal`）で宣言する。パスワード等は `secret: true` にするとログで `***` に伏せられる。
+- 互いに独立した処理は `control.parallel`（`branches` の各ステップが同時に動く）で並行にできる。複数ステップのブランチは `control.group` で包む。2つ以上のブランチが同じ変数に書く（`saveAs`・`variable.set`・`onError: continue` の `lastError` を含む）と検証で `PARALLEL_VARIABLE_CONFLICT` になるので、ブランチごとに別の変数へ結果を入れ、並行ステップの後でまとめる。
+- 書き分けの規則は1つだけ：ステップ型の `expressionParams`（`list_step_types` に載っている。`control.if` の `condition` など）には `{{ }}` なしの式を書く。それ以外の文字列 params はすべてテンプレートで、`"合計 {{ total }} 円"` のように書く。文字列全体が1つの `{{ 式 }}` なら値の型（数値・配列など）がそのまま渡る。回数・待ち時間などの数値 params は `3` か `"{{ retryCount }}"`。
+- 式で使える関数は安全なものに限られる（`len`, `contains`, `startsWith`, `endsWith`, `lower`, `upper`, `trim`, `str`, `num`, `isEmpty`, `coalesce`, `join`, `split`, `sum`, `round`）。任意コードは実行できない。
+- 入出力は `variables` の `direction`（`input` / `output` / `inOut` / `local`。省略時は `local`）で宣言する。パスワード等は `secret: true` にするとログで `***` に伏せられる。
+- 要素ごとの処理は `control.forEach`。各回の結果は `collect`（式）で返すと `saveAs` に配列で入る。互いに独立した要素は `concurrency`（例 `4`）で同時に処理できるが、その場合は各回が変数のコピーで動くので、本体で外の変数に書かず（`FOREACH_SHARED_WRITE`）、`collect` + `saveAs` で受け取ってループ後に `sum(results)` などで集計する。
+- 時間のかかる処理の完了や状態の変化を待つときは `wait.until`（`condition` が真になるまで `intervalMs` ごとに確認。`check` ブロックで状態を読んで `saveAs` で変数に入れる。待つ上限は `timeoutMs`、超えると `WAIT_TIMEOUT`）。`flow.delay` の固定待ちや `retry` で代用しない。
 - 失敗し得るステップには `retry`（回数と間隔）や `timeoutMs`、`onError` を設定する。`onError: continue` のときエラー内容は変数 `lastError` に入る。
 - `name` には人間が Studio で読んで分かる日本語の説明を付ける（例：「請求書の合計を計算」）。
 

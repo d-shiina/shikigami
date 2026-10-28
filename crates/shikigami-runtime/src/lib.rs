@@ -29,7 +29,8 @@ use tokio_util::sync::CancellationToken;
 pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunReport, RunSnapshot, RunStatus, StepOutcome,
 };
-pub use handler::{ActionHandler, ActionInput, BoxFuture, DESKTOP_INPUT, StepError};
+pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
+pub use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef, ResourceKind};
 
 use exec::{Emitter, Executor, ResourceLocks};
 
@@ -47,6 +48,7 @@ pub struct RunOptions {
 pub struct Runtime {
     registry: StepRegistry,
     handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
+    resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
     validator: Arc<Validator>,
     resources: Arc<ResourceLocks>,
 }
@@ -94,6 +96,7 @@ impl Runtime {
             Executor {
                 run_id: run_id.clone(),
                 handlers: self.handlers.clone(),
+                resource_defs: self.resource_defs.clone(),
                 vars: Map::new(),
                 secret_vars: scenario
                     .variables
@@ -216,9 +219,16 @@ impl RuntimeBuilder {
     pub fn build(self) -> Runtime {
         Runtime {
             validator: Arc::new(Validator::new(self.registry.clone())),
-            registry: self.registry,
             handlers: Arc::new(self.handlers),
+            resource_defs: Arc::new(
+                self.registry
+                    .iter()
+                    .filter(|def| !def.resources.is_empty())
+                    .map(|def| (def.step_type.clone(), def.resources.clone()))
+                    .collect(),
+            ),
             resources: Arc::default(),
+            registry: self.registry,
         }
     }
 }

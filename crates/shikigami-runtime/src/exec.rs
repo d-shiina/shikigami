@@ -11,7 +11,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
 use shikigami_core::expr::{self, Expr};
-use shikigami_core::registry::{builtin, control};
+use shikigami_core::registry::{builtin, control, is_control_type};
+use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_core::validate::LAST_ERROR_VAR;
 use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, Step, StepId};
 use time::OffsetDateTime;
@@ -25,6 +26,7 @@ use crate::event::{
 use crate::handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
+const DEFAULT_WAIT_INTERVAL_MS: u64 = 500;
 const DEFAULT_MAX_ITERATIONS: u64 = 1000;
 const MASK: &str = "***";
 
@@ -192,12 +194,10 @@ impl ResourceLocks {
 
     /// Acquires all `names` in a fixed order so two steps needing the same
     /// set can never deadlock.
-    async fn acquire(&self, names: &[&str]) -> Vec<OwnedMutexGuard<()>> {
-        let mut sorted: Vec<&str> = names.to_vec();
-        sorted.sort_unstable();
-        sorted.dedup();
-        let mut guards = Vec::with_capacity(sorted.len());
-        for name in sorted {
+    /// `names` must be sorted and deduplicated (see `resource_keys`).
+    async fn acquire(&self, names: &[String]) -> Vec<OwnedMutexGuard<()>> {
+        let mut guards = Vec::with_capacity(names.len());
+        for name in names {
             guards.push(self.lock_for(name).lock_owned().await);
         }
         guards
@@ -229,6 +229,8 @@ type StepResult = Result<Flow, Interrupt>;
 pub(crate) struct Executor {
     pub run_id: RunId,
     pub handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
+    /// Exclusive resources per step type.
+    pub resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
     pub vars: Map<String, Value>,
     pub secret_vars: Vec<String>,
     pub emitter: Emitter,
@@ -272,6 +274,7 @@ impl Executor {
         Self {
             run_id: self.run_id.clone(),
             handlers: self.handlers.clone(),
+            resource_defs: self.resource_defs.clone(),
             vars: self.vars.clone(),
             secret_vars: self.secret_vars.clone(),
             emitter: self.emitter.clone(),
@@ -287,10 +290,13 @@ impl Executor {
         expr::evaluate(source, &self.vars).map_err(expr_error)
     }
 
-    /// Evaluates a param that may be a literal or an expression string.
+    /// Reads a numeric param: an integer literal or a `{{ expr }}` template
+    /// (strings are templates in every non-expression param).
     fn eval_number(&self, step: &Step, key: &str) -> Result<f64, RunError> {
         let value = match step.params.get(key) {
-            Some(Value::String(src)) => self.eval(src)?,
+            Some(text @ Value::String(_)) => {
+                expr::render_value(text, &self.vars).map_err(expr_error)?
+            }
             Some(other) => other.clone(),
             None => {
                 return Err(RunError::new(
@@ -351,7 +357,7 @@ impl Executor {
             s.steps_executed += 1;
         });
 
-        let is_control = step.step_type.starts_with("control.");
+        let is_control = is_control_type(&step.step_type);
         let started = Instant::now();
         if is_control {
             self.emitter.emit(RunEvent::StepStarted {
@@ -394,7 +400,11 @@ impl Executor {
                     will_retry: false,
                 });
             }
-            return result;
+            // A wait that times out may be skipped with onError: continue;
+            // other control steps only pass on their children's errors.
+            if step.step_type != control::WAIT_UNTIL {
+                return result;
+            }
         }
 
         match result {
@@ -476,36 +486,7 @@ impl Executor {
                 }
                 Ok(Flow::Next)
             }
-            control::FOR_EACH => {
-                let items = match self.eval(param_str(step, "items")?)? {
-                    Value::Array(items) => items,
-                    Value::Null => Vec::new(),
-                    other => {
-                        return Err(RunError::new(
-                            "EXPR_TYPE",
-                            format!("items must be an array, got {other}"),
-                        )
-                        .into());
-                    }
-                };
-                let item_var = param_str(step, "itemVar")?.to_owned();
-                let index_var = step
-                    .params
-                    .get("indexVar")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-                for (i, item) in items.into_iter().enumerate() {
-                    self.check_cancel()?;
-                    self.set_var(&item_var, item);
-                    if let Some(name) = &index_var {
-                        self.set_var(name, Value::from(i));
-                    }
-                    if let Flow::Break = self.block(step.block("body")).await? {
-                        break;
-                    }
-                }
-                Ok(Flow::Next)
-            }
+            control::FOR_EACH => self.for_each(step).await,
             control::TRY => {
                 let error_var = step
                     .params
@@ -537,6 +518,7 @@ impl Executor {
             }
             control::GROUP => self.block(step.block("body")).await,
             control::PARALLEL => self.parallel(step).await,
+            control::WAIT_UNTIL => self.wait_until(step).await,
             control::BREAK => Ok(Flow::Break),
             control::CONTINUE => Ok(Flow::Continue),
             control::FAIL => {
@@ -674,6 +656,188 @@ impl Executor {
         Ok(Flow::Next)
     }
 
+    async fn for_each(&mut self, step: &Step) -> StepResult {
+        let items = match self.eval(param_str(step, "items")?)? {
+            Value::Array(items) => items,
+            Value::Null => Vec::new(),
+            other => {
+                return Err(RunError::new(
+                    "EXPR_TYPE",
+                    format!("items must be an array, got {other}"),
+                )
+                .into());
+            }
+        };
+        let collect = match step.params.get("collect").and_then(Value::as_str) {
+            Some(source) => Some(Expr::parse(source).map_err(expr_error)?),
+            None => None,
+        };
+        let results = if step.params.contains_key("concurrency") {
+            let concurrency = self.eval_number(step, "concurrency")?;
+            if !(1.0..=64.0).contains(&concurrency) || concurrency.fract() != 0.0 {
+                return Err(RunError::new(
+                    "INVALID_PARAMS",
+                    "concurrency must be an integer between 1 and 64",
+                )
+                .into());
+            }
+            self.for_each_isolated(step, items, collect, concurrency as usize)
+                .await?
+        } else {
+            let mut results = Vec::with_capacity(items.len());
+            for (index, item) in items.into_iter().enumerate() {
+                self.check_cancel()?;
+                self.bind_item(step, index, item);
+                let flow = self.block(step.block("body")).await?;
+                if let Some(collect) = &collect {
+                    results.push(collect.eval(&self.vars).map_err(expr_error)?);
+                }
+                if let Flow::Break = flow {
+                    break;
+                }
+            }
+            results
+        };
+        if let Some(name) = &step.save_as {
+            self.set_var(name, Value::Array(results));
+        }
+        Ok(Flow::Next)
+    }
+
+    fn bind_item(&mut self, step: &Step, index: usize, item: Value) {
+        if let Some(name) = step.params.get("itemVar").and_then(Value::as_str) {
+            self.set_var(name, item);
+        }
+        if let Some(name) = step.params.get("indexVar").and_then(Value::as_str) {
+            self.set_var(name, Value::from(index));
+        }
+    }
+
+    /// Runs iterations on copies of the variables, at most `limit` at a
+    /// time, and returns the collected values in item order. Nothing else
+    /// leaves an iteration. The first failure cancels the rest.
+    async fn for_each_isolated(
+        &mut self,
+        step: &Step,
+        items: Vec<Value>,
+        collect: Option<Expr>,
+        limit: usize,
+    ) -> Result<Vec<Value>, Interrupt> {
+        let group = self.cancel.child_token();
+        let collect = Arc::new(collect);
+        let body: Arc<Vec<Step>> = Arc::new(step.block("body").to_vec());
+        let mut results = vec![Value::Null; items.len()];
+        let mut first_error: Option<Interrupt> = None;
+        let mut set = JoinSet::new();
+        let mut items = items.into_iter().enumerate();
+
+        loop {
+            // Start iterations lazily so a large list never holds more than
+            // `limit` copies of the variables.
+            while set.len() < limit && first_error.is_none() && !group.is_cancelled() {
+                let Some((index, item)) = items.next() else {
+                    break;
+                };
+                let mut executor = self.fork(group.child_token());
+                executor.bind_item(step, index, item);
+                let (body, collect, group) = (body.clone(), collect.clone(), group.clone());
+                set.spawn(async move {
+                    let mut result =
+                        executor
+                            .block(&body)
+                            .await
+                            .and_then(|_| match collect.as_ref() {
+                                Some(c) => c.eval(&executor.vars).map_err(|e| expr_error(e).into()),
+                                None => Ok(Value::Null),
+                            });
+                    if let Err(Interrupt::Failed(error)) = &mut result {
+                        let mut details = match error.details.take() {
+                            Some(Value::Object(map)) => map,
+                            Some(other) => Map::from_iter([("cause".to_owned(), other)]),
+                            None => Map::new(),
+                        };
+                        details.insert("index".into(), Value::from(index));
+                        error.details = Some(Value::Object(details));
+                        group.cancel();
+                    }
+                    (index, result)
+                });
+            }
+            let Some(joined) = set.join_next().await else {
+                break;
+            };
+            match joined {
+                Ok((index, Ok(value))) => results[index] = value,
+                Ok((_, Err(Interrupt::Cancelled))) if first_error.is_some() => {}
+                Ok((_, Err(interrupt))) => {
+                    group.cancel();
+                    first_error.get_or_insert(interrupt);
+                }
+                Err(e) => {
+                    group.cancel();
+                    first_error.get_or_insert(Interrupt::Failed(RunError::new(
+                        "INTERNAL",
+                        format!("forEach iteration panicked: {e}"),
+                    )));
+                }
+            }
+        }
+        if self.cancel.is_cancelled() {
+            return Err(Interrupt::Cancelled);
+        }
+        match first_error {
+            Some(interrupt) => Err(interrupt),
+            None => Ok(results),
+        }
+    }
+
+    /// Polls `condition` (after running `check`) until it holds or the
+    /// step's timeout passes. The last check happens at the deadline.
+    async fn wait_until(&mut self, step: &Step) -> StepResult {
+        let condition = Expr::parse(param_str(step, "condition")?).map_err(expr_error)?;
+        let interval_ms = if step.params.contains_key("intervalMs") {
+            let ms = self.eval_number(step, "intervalMs")?;
+            if !(50.0..=60_000.0).contains(&ms) {
+                return Err(RunError::new(
+                    "INVALID_PARAMS",
+                    "intervalMs must be between 50 and 60000",
+                )
+                .into());
+            }
+            ms as u64
+        } else {
+            DEFAULT_WAIT_INTERVAL_MS
+        };
+        let timeout_ms = step.timeout_ms.unwrap_or(self.default_timeout_ms);
+        let started = Instant::now();
+        let mut polls = 0u64;
+        loop {
+            self.check_cancel()?;
+            self.block(step.block("check")).await?;
+            polls += 1;
+            if expr::truthy(&condition.eval(&self.vars).map_err(expr_error)?) {
+                return Ok(Flow::Next);
+            }
+            let elapsed_ms = duration_ms(started);
+            if elapsed_ms >= timeout_ms {
+                return Err(RunError {
+                    details: Some(serde_json::json!({ "elapsedMs": elapsed_ms, "polls": polls })),
+                    ..RunError::new(
+                        "WAIT_TIMEOUT",
+                        format!("condition was still false after {elapsed_ms} ms ({polls} checks)"),
+                    )
+                }
+                .into());
+            }
+            let pause = interval_ms.min(timeout_ms - elapsed_ms);
+            tokio::select! {
+                biased;
+                () = self.cancel.cancelled() => return Err(Interrupt::Cancelled),
+                () = tokio::time::sleep(Duration::from_millis(pause)) => {}
+            }
+        }
+    }
+
     async fn action(&mut self, step: &Step) -> StepResult {
         if step.step_type == builtin::VARIABLE_SET {
             return self.variable_set(step);
@@ -712,14 +876,18 @@ impl Executor {
                 emitter: self.emitter.clone(),
             };
             // Wait for exclusive resources (not counted towards the timeout).
-            let resources = handler.exclusive_resources();
+            let resources = self
+                .resource_defs
+                .get(&step.step_type)
+                .map(|defs| resource_keys(defs, &params))
+                .unwrap_or_default();
             let _guards = if resources.is_empty() {
                 Vec::new()
             } else {
                 tokio::select! {
                     biased;
                     () = self.cancel.cancelled() => return Err(Interrupt::Cancelled),
-                    g = self.resources.acquire(resources) => g,
+                    g = self.resources.acquire(&resources) => g,
                 }
             };
             let outcome = tokio::select! {

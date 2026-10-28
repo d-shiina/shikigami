@@ -11,6 +11,7 @@ pub mod migrate;
 pub mod model;
 pub mod ops;
 pub mod registry;
+pub mod resource;
 pub mod schema;
 pub mod service;
 pub mod store;

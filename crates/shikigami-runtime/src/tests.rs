@@ -89,6 +89,8 @@ fn flaky_def() -> StepTypeDef {
         expression_params: vec![],
         binds_variables: vec![],
         risk: RiskLevel::Safe,
+        examples: vec![],
+        resources: vec![],
     }
 }
 
@@ -482,18 +484,34 @@ async fn parallel_branches_run_concurrently_and_merge_variables() {
 
 #[tokio::test]
 async fn parallel_branches_writing_the_same_variable_differently_conflict() {
-    let s = scenario(vec![parallel(vec![set("x", "1"), set("x", "2")])]);
-    let (report, _) = run(&Runtime::new(), s, json!({})).await;
-    assert_eq!(report.status, RunStatus::Failed);
-    let error = report.error.unwrap();
-    assert_eq!(error.code, "PARALLEL_VARIABLE_CONFLICT");
-    assert_eq!(error.details.unwrap()["variable"], "x");
+    // Rejected by validation before the run starts...
+    let s = scenario(vec![parallel(vec![
+        set("x", "1"),
+        group(vec![set("x", "2")]),
+    ])]);
+    let err = Runtime::new()
+        .start(s, RunOptions::default())
+        .err()
+        .expect("invalid");
+    assert!(
+        err.details
+            .unwrap()
+            .to_string()
+            .contains("PARALLEL_VARIABLE_CONFLICT")
+    );
 
-    // Writing the same value is not a conflict.
-    let mut s = scenario(vec![parallel(vec![set("x", "1"), set("x", "1")])]);
-    s.variables = outputs(&["x"]);
-    let (report, _) = run(&Runtime::new(), s, json!({})).await;
-    assert_eq!(report.outputs["x"], json!(1));
+    // Swallowed errors write `lastError`, so they count as writes too.
+    let fail = || {
+        let mut step = Step::new("test.flaky").with_param("succeedOn", 9);
+        step.on_error = Some(OnError::Continue);
+        step
+    };
+    let s = scenario(vec![parallel(vec![fail(), fail()])]);
+    let err = flaky_runtime()
+        .start(s, RunOptions::default())
+        .err()
+        .expect("invalid");
+    assert!(err.details.unwrap().to_string().contains("lastError"));
 }
 
 #[tokio::test]
@@ -553,10 +571,6 @@ impl ActionHandler for FakeMouse {
             Ok(Value::Null)
         })
     }
-
-    fn exclusive_resources(&self) -> &'static [&'static str] {
-        &[DESKTOP_INPUT]
-    }
 }
 
 #[tokio::test]
@@ -570,15 +584,13 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
         fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
             self.0.execute(input)
         }
-        fn exclusive_resources(&self) -> &'static [&'static str] {
-            self.0.exclusive_resources()
-        }
     }
     let def = StepTypeDef {
         step_type: "test.click".into(),
         label: "click".into(),
         params_schema: json!({ "type": "object" }),
         has_output: false,
+        resources: vec![ResourceDef::Static(DESKTOP_INPUT.into())],
         ..flaky_def()
     };
     let runtime = Runtime::builder()
@@ -596,6 +608,57 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
     assert_eq!(a.0.status, RunStatus::Succeeded);
     assert_eq!(b.0.status, RunStatus::Succeeded);
     assert_eq!(mouse.peak.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn steps_on_the_same_file_take_turns() {
+    let writer = Arc::new(FakeMouse {
+        active: AtomicU32::new(0),
+        peak: AtomicU32::new(0),
+    });
+    struct Shared(Arc<FakeMouse>);
+    impl ActionHandler for Shared {
+        fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+            self.0.execute(input)
+        }
+    }
+    let def = StepTypeDef {
+        step_type: "test.writeFile".into(),
+        label: "write".into(),
+        params_schema: json!({ "type": "object", "properties": { "path": { "type": "string" } } }),
+        has_output: false,
+        resources: vec![ResourceDef::file("path")],
+        ..flaky_def()
+    };
+    let runtime = Runtime::builder()
+        .register(def, Shared(writer.clone()))
+        .build();
+    let write = |path: &str| Step::new("test.writeFile").with_param("path", path);
+
+    // Different spellings of one file (one via a template) never overlap...
+    let mut s = scenario(vec![parallel(vec![
+        write(r"C:\Data\Book.xlsx"),
+        write("c:/data/./book.XLSX"),
+        write("{{ dir }}\\book.xlsx"),
+    ])]);
+    s.variables = vec![var(
+        "dir",
+        VarType::String,
+        VarDirection::Local,
+        Some(json!(r"C:\Data")),
+    )];
+    let (report, _) = run(&runtime, s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(writer.peak.load(Ordering::SeqCst), 1);
+
+    // ...while different files run at the same time.
+    let s = scenario(vec![parallel(vec![
+        write(r"C:\Data\a.xlsx"),
+        write(r"C:\Data\b.xlsx"),
+    ])]);
+    let (report, _) = run(&runtime, s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(writer.peak.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
@@ -623,4 +686,170 @@ async fn events_from_parallel_branches_arrive_in_seq_order() {
     let seqs: Vec<u64> = events.iter().map(|e| e.seq).collect();
     let expected: Vec<u64> = (0..seqs.len() as u64).collect();
     assert_eq!(seqs, expected);
+}
+
+#[tokio::test]
+async fn numeric_params_take_an_integer_or_a_template() {
+    let mut s = scenario(vec![
+        Step::new("control.repeat")
+            .with_param("count", "{{ n }}")
+            .with_block("body", vec![set("hits", "hits + 1")]),
+        delay(0).with_param("ms", "{{ n - 3 }}"),
+    ]);
+    s.variables = vec![
+        var("n", VarType::Number, VarDirection::Input, Some(json!(3))),
+        var(
+            "hits",
+            VarType::Number,
+            VarDirection::Output,
+            Some(json!(0)),
+        ),
+    ];
+    let (report, _) = run(&Runtime::new(), s.clone(), json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["hits"], json!(3));
+
+    // A bare expression is not a template: rejected before running, with a hint.
+    s.steps[0].params.insert("count".into(), json!("n"));
+    let err = Runtime::new()
+        .start(s, RunOptions::default())
+        .err()
+        .expect("invalid");
+    let details = err.details.unwrap().to_string();
+    assert!(details.contains("INVALID_PARAMS"));
+    assert!(details.contains("{{ retryCount }}"), "{details}");
+}
+
+fn wait_until(condition: &str, check: Vec<Step>) -> Step {
+    Step::new("wait.until")
+        .with_param("condition", condition)
+        .with_param("intervalMs", 50)
+        .with_block("check", check)
+}
+
+#[tokio::test]
+async fn wait_until_runs_the_check_until_the_condition_holds() {
+    let mut s = scenario(vec![wait_until("n >= 3", vec![set("n", "n + 1")])]);
+    s.variables = vec![var(
+        "n",
+        VarType::Number,
+        VarDirection::Output,
+        Some(json!(0)),
+    )];
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["n"], json!(3));
+}
+
+#[tokio::test]
+async fn wait_until_fails_with_wait_timeout_and_can_be_skipped() {
+    let mut wait = wait_until("false", vec![]);
+    wait.timeout_ms = Some(200);
+    let (report, _) = run(&Runtime::new(), scenario(vec![wait.clone()]), json!({})).await;
+    let error = report.error.expect("timeout");
+    assert_eq!(error.code, "WAIT_TIMEOUT");
+    let details = error.details.unwrap();
+    assert!(details["elapsedMs"].as_u64().unwrap() >= 200);
+    assert!(details["polls"].as_u64().unwrap() >= 3);
+
+    wait.on_error = Some(OnError::Continue);
+    let mut s = scenario(vec![wait, set("code", "lastError.code")]);
+    s.variables = vec![var("code", VarType::String, VarDirection::Output, None)];
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(report.outputs["code"], json!("WAIT_TIMEOUT"));
+}
+
+fn for_each(items: &str, body: Vec<Step>) -> Step {
+    Step::new("control.forEach")
+        .with_param("items", items)
+        .with_param("itemVar", "item")
+        .with_block("body", body)
+}
+
+#[tokio::test]
+async fn for_each_collects_one_value_per_item() {
+    let mut step = for_each(
+        "[1, 2, 3, 4]",
+        vec![
+            Step::new("control.if")
+                .with_param("condition", "item == 3")
+                .with_block(
+                    "then",
+                    vec![set("doubled", "0"), Step::new("control.continue")],
+                ),
+            set("doubled", "item * 2"),
+        ],
+    )
+    .with_param("collect", "doubled");
+    step.save_as = Some("out".into());
+    let mut s = scenario(vec![step]);
+    s.variables = outputs(&["out"]);
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"], json!([2, 4, 0, 8]));
+}
+
+#[tokio::test]
+async fn concurrent_for_each_runs_items_at_once_and_keeps_order() {
+    let mut step = for_each(
+        "[5, 4, 3, 2, 1, 0, 9, 8]",
+        vec![delay(100), set("doubled", "item * 2")],
+    )
+    .with_param("collect", "doubled")
+    .with_param("concurrency", "{{ workers }}");
+    step.save_as = Some("out".into());
+    let mut s = scenario(vec![step]);
+    s.variables = outputs(&["out"]);
+    s.variables.push(var(
+        "workers",
+        VarType::Number,
+        VarDirection::Input,
+        Some(json!(4)),
+    ));
+    let started = std::time::Instant::now();
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"], json!([10, 8, 6, 4, 2, 0, 18, 16]));
+    // 8 items x 100 ms with 4 at a time: about 200 ms, not 800 ms.
+    assert!(started.elapsed() < Duration::from_millis(600));
+}
+
+#[tokio::test]
+async fn concurrent_for_each_stops_at_the_first_failure() {
+    let s = scenario(vec![
+        for_each(
+            "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]",
+            vec![
+                Step::new("control.if")
+                    .with_param("condition", "item == 2")
+                    .with_block(
+                        "then",
+                        vec![Step::new("control.fail").with_param("message", "bad {{ item }}")],
+                    ),
+                delay(50),
+                log("done {{ item }}"),
+            ],
+        )
+        .with_param("concurrency", 2),
+    ]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let error = report.error.unwrap();
+    assert_eq!(error.message, "bad 2");
+    assert_eq!(error.details.unwrap()["index"], json!(2));
+    // Items after the failure never start.
+    assert!(!logs(&events).iter().any(|l| l == "done 9"));
+}
+
+#[tokio::test]
+async fn runs_the_batch_example() {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/batch-demo.json");
+    let text = std::fs::read_to_string(path).expect("example");
+    let s = shikigami_core::migrate::parse_scenario(&text).expect("parse");
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["total"], json!(348700));
+    assert_eq!(report.outputs["taxed"][1], json!(165000));
 }

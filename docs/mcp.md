@@ -60,7 +60,7 @@ args = ["mcp"]
 | read | `list_scenarios` | シナリオ一覧 |
 |  | `get_scenario` | シナリオ本体（ステップ ID 付き）と Undo/Redo の可否 |
 |  | `validate_scenario` | 保存済み（`scenarioId`）または未保存の文書（`scenario`）を検証。全エラーを JSON Pointer 付きで返す |
-|  | `list_step_types` / `get_step_schema` | 使えるステップ型と、その params の JSON Schema |
+|  | `list_step_types` / `get_step_schema` | 使えるステップ型と、その params の JSON Schema・コピーして使える記述例（`examples`） |
 |  | `get_history` | 誰が（Studio / MCP クライアント名 / CLI）いつ何を変えたか |
 |  | `get_run_status` / `get_run_logs` / `list_runs` | 実行中の状態・最終レポート・イベントログ（`afterSeq` で差分取得） |
 | write | `create_scenario` | 新規作成（ステップ ID は省略可） |
@@ -71,6 +71,7 @@ args = ["mcp"]
 | run | `run_scenario` | Runtime で実行（AI は実行に関与しない）。`waitMs` で完了まで待てる |
 |  | `stop_scenario` | 実行のキャンセル |
 
+- 検証結果の各 issue には直し方のヒント（`hint`：近い名前の候補、必須・使える params、式とテンプレートの書き分けなど）が付きます。AI が 1 回で直せるようにするためです。
 - 入力スキーマは Rust の型から自動生成しています。結果は `structuredContent`（JSON）で返します。
 - 失敗は MCP のツールエラー（`isError: true`）として `{ code, message, details }` を返すので、AI がエラーコードを見て対処できます。例：`REVISION_CONFLICT`（`details.actual` が現在のリビジョン）、`VALIDATION_FAILED`、`SCENARIO_NOT_FOUND`。
 - 書き込み系は `expectedRevision` を受け付けます。省略時は最新に適用、指定時は他者の変更と競合すると `REVISION_CONFLICT` になり、上書きしません。
