@@ -115,6 +115,11 @@ impl CoreError {
                 Some(serde_json::json!({ "expected": expected, "actual": actual }))
             }
             Self::ValidationFailed(report) => serde_json::to_value(report).ok(),
+            Self::UnsupportedSchemaVersion { found, supported } => Some(serde_json::json!({
+                "found": found,
+                "supported": supported,
+                "hint": "The file was saved by a newer Shikigami. Update Shikigami (Studio offers the update, or install the latest release) to open it.",
+            })),
             Self::StepNotFound(id) | Self::DuplicateStepId(id) => {
                 Some(serde_json::json!({ "step_id": id }))
             }

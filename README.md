@@ -20,6 +20,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ**
 | [docs/mcp.md](docs/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
 | [docs/policy.md](docs/policy.md) | 無人実行は承認・公開した版だけ、許可するサイト・アプリ、AI の操作の承認（`policy.json`） |
 | [docs/design/plugins.md](docs/design/plugins.md) | ノードのプラグイン：社内システムなど向けのステップを、本体を作り直さずに足す（マニフェスト + 別プロセス） |
+| [docs/compatibility.md](docs/compatibility.md) | 互換性の方針：シナリオ形式（`schemaVersion`・移行・`requires`）、MCP・CLI で何を壊さないか |
 | [docs/research.md](docs/research.md) | 採用ライブラリのバージョン・ライセンス・Windows 対応状況 |
 
 ## 構成
@@ -112,3 +113,7 @@ claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shiki
 この登録とプラグインを併用すると、プラグイン側の `shikigami` サーバー（PATH 上の `shikigami` を起動）は接続に失敗しますが、スキルは使えます。
 
 Codex / Cursor の設定例とツール一覧は [docs/mcp.md](docs/mcp.md) を参照してください。AI の変更は Studio に即座に反映され、Studio から元に戻せます。
+
+## ライセンス
+
+[Apache License 2.0](LICENSE)。貢献のしかたは [CONTRIBUTING.md](CONTRIBUTING.md)、脆弱性の報告は [SECURITY.md](SECURITY.md)、ファイル形式・MCP・CLI の互換方針は [docs/compatibility.md](docs/compatibility.md)、変更履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。

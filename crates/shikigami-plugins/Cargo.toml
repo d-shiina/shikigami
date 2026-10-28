@@ -16,6 +16,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 dirs.workspace = true
+semver.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

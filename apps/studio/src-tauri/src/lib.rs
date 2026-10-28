@@ -46,6 +46,7 @@ pub fn run() {
         )
         .init();
 
+    updater::on_startup();
     let adapters = shikigami_adapters::all();
     let runtime = shikigami_adapters::runtime(&adapters);
     let root = FileStore::default_root();
@@ -77,7 +78,6 @@ pub fn run() {
         .manage(agent::AgentLogin::default())
         .setup(move |app| {
             fit_to_screen(app);
-            updater::on_startup(app.handle());
             watcher::spawn(app.handle().clone(), service.store().scenarios_dir());
             watcher::spawn_secret_requests(
                 app.handle().clone(),

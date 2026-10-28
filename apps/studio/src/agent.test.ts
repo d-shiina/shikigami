@@ -49,7 +49,7 @@ describe("agent store", () => {
     expect(store.getState().turnId).toBeNull();
 
     await store.getState().send("ありがとう");
-    expect(api.send).toHaveBeenLastCalledWith({ message: "ありがとう", sessionId: "sess", scenario: undefined });
+    expect(api.send).toHaveBeenLastCalledWith({ message: "ありがとう", sessionId: "sess", scenario: null });
   });
 
   it("keeps events that arrive before the turn is known", async () => {
@@ -129,6 +129,11 @@ describe("agent store", () => {
     store.getState().onLoginEvent({ kind: "done", ok: true, message: null });
     await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
     expect(api.send).toHaveBeenLastCalledWith({ message: "ニュースをまとめて", sessionId: null, scenario: { id: "scn_a", name: "A" } });
+    // The message is shown once; the failed reply gives way to the new one.
+    const items = store.getState().items;
+    expect(items.filter((i) => i.role === "person")).toHaveLength(1);
+    expect(items).toHaveLength(2);
+    expect(items[1]).toMatchObject({ role: "ai", turnId: "turn_2", status: "running" });
     expect(store.getState().login).toEqual({ phase: "idle" });
   });
 

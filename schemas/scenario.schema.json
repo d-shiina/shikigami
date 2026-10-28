@@ -26,6 +26,13 @@
     "description": {
       "type": "string"
     },
+    "requires": {
+      "description": "Plugins the steps need, with the versions they were written for:\n`{ \"plugin:kintone\": \"^0.3.1\" }`. Kept up to date by Core when steps\nare added or removed, so authors normally leave it alone.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "revision": {
       "description": "Monotonic revision, incremented by every committed edit. Used for\noptimistic concurrency between Studio, MCP clients and the CLI.",
       "type": "integer",

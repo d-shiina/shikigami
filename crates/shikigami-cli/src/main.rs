@@ -3,6 +3,8 @@
 //! Uses exactly the same Scenario Core and Runtime as Studio and the MCP
 //! server; it is the reference for running scenarios without GUI or AI.
 
+mod contract;
+
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -442,8 +444,12 @@ fn real_main() -> Result<ExitCode> {
             std::fs::create_dir_all(dir)?;
             let mut schemas = shikigami_core::schema::all();
             schemas.push(("run-api.schema.json", shikigami_runtime::run_api_schema()));
+            schemas.extend(contract::files());
             for (name, schema) in schemas {
                 let path = dir.join(name);
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
                 std::fs::write(&path, serde_json::to_string_pretty(&schema)? + "\n")?;
                 println!("wrote {}", path.display());
             }

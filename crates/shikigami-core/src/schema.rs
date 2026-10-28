@@ -37,6 +37,23 @@ pub fn all() -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// Removes prose (`description` and `title` strings) from a
+/// schema, so a contract snapshot changes only when the shape does.
+/// Properties that happen to be called `description` stay: their value is
+/// a schema object, not a string.
+pub fn strip_docs(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            map.retain(|key, v| {
+                !(matches!(key.as_str(), "description" | "title") && v.is_string())
+            });
+            map.values_mut().for_each(strip_docs);
+        }
+        Value::Array(items) => items.iter_mut().for_each(strip_docs),
+        _ => {}
+    }
+}
+
 fn schema<T: JsonSchema>(name: &str) -> Value {
     let mut value = serde_json::to_value(schema_for!(T)).unwrap_or(Value::Null);
     if let Some(obj) = value.as_object_mut() {

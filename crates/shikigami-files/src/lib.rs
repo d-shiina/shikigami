@@ -321,6 +321,8 @@ fn def(
         resources,
         secret_params: vec![],
         default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
     }
 }
 

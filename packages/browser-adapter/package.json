@@ -2,6 +2,7 @@
   "name": "@shikigami/browser-adapter",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Browser automation adapter: Playwright driven by the Shikigami Runtime over JSON-RPC on stdio",
   "engines": {

@@ -4,7 +4,7 @@
 //! that Studio can highlight them and AI clients can fix them in one round.
 //! Errors block execution; warnings are advisory.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,7 @@ use crate::expr::{self, Expr};
 use crate::ids::StepId;
 use crate::model::{SCHEMA_VERSION, Scenario, Step};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
+use crate::requires::{self, PLUGIN_PREFIX};
 use crate::resource::{ResourceDef, ResourceKind, is_absolute_windows_path};
 use crate::secret::{self, SecretRef};
 
@@ -94,6 +95,7 @@ impl Validator {
             seen_ids: HashSet::new(),
             known_vars: known_variables(scenario, &self.registry),
             declared_vars: scenario.variables.iter().map(|v| v.name.clone()).collect(),
+            requires: scenario.requires.clone(),
         };
         cx.scenario(scenario);
         for issue in &mut cx.issues {
@@ -179,6 +181,7 @@ struct Cx<'a> {
     seen_ids: HashSet<StepId>,
     known_vars: BTreeSet<String>,
     declared_vars: BTreeSet<String>,
+    requires: BTreeMap<String, String>,
 }
 
 impl Cx<'_> {
@@ -215,6 +218,55 @@ impl Cx<'_> {
         self.push(Severity::Warning, code, message, path, step);
     }
 
+    /// `requires`: well-formed, and satisfied by the installed plugins.
+    /// Plugins that are missing altogether are reported on the steps that
+    /// use them (`PLUGIN_NOT_INSTALLED`).
+    fn requirements(&mut self) {
+        let entries: Vec<(String, String)> = self
+            .requires
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (key, range) in entries {
+            let path = format!("/requires/{}", key.replace('~', "~0").replace('/', "~1"));
+            match requires::check(&key, &range, &self.validator.registry) {
+                requires::Check::Ok | requires::Check::Missing => {}
+                requires::Check::BadKey => {
+                    self.error(
+                        "INVALID_REQUIREMENT",
+                        format!("'{key}' is not a plugin requirement"),
+                        path,
+                        None,
+                    );
+                    self.hint("Keys are `plugin:<name>`. Core fills `requires` from the steps; remove this entry.");
+                }
+                requires::Check::BadRange(reason) => {
+                    self.error(
+                        "INVALID_REQUIREMENT",
+                        format!("version range '{range}' of '{key}' is invalid: {reason}"),
+                        path,
+                        None,
+                    );
+                    self.hint("Write a semver range such as ^0.3.1 or >=1.2, <3.");
+                }
+                requires::Check::Mismatch { installed } => {
+                    let name = key.trim_start_matches(PLUGIN_PREFIX);
+                    self.error(
+                        "PLUGIN_VERSION_MISMATCH",
+                        format!(
+                            "the scenario needs plugin '{name}' {range}, but {installed} is installed"
+                        ),
+                        path,
+                        None,
+                    );
+                    self.hint(format!(
+                        "Install a version of '{name}' that matches {range}. If you checked that the steps work with {installed}, change the range with update_scenario (patch.requires)."
+                    ));
+                }
+            }
+        }
+    }
+
     fn scenario(&mut self, scenario: &Scenario) {
         if scenario.schema_version > SCHEMA_VERSION || scenario.schema_version == 0 {
             self.error(
@@ -243,6 +295,8 @@ impl Cx<'_> {
                 None,
             );
         }
+
+        self.requirements();
 
         let mut var_names = HashSet::new();
         for (i, var) in scenario.variables.iter().enumerate() {
@@ -346,6 +400,29 @@ impl Cx<'_> {
             );
         }
 
+        let namespace = requires::namespace(&step.step_type);
+        let required = self
+            .requires
+            .get(&format!("{PLUGIN_PREFIX}{namespace}"))
+            .cloned();
+        if self.validator.registry.get(&step.step_type).is_none()
+            && let Some(range) = required
+            && self.validator.registry.plugin(namespace).is_none()
+        {
+            let message = format!(
+                "step type '{}' comes from the plugin '{namespace}' ({range}), which is not installed on this PC",
+                step.step_type
+            );
+            self.error("PLUGIN_NOT_INSTALLED", message, format!("{path}/type"), id);
+            self.hint(format!(
+                "Install the '{namespace}' plugin ({range}) into %LOCALAPPDATA%\\Shikigami\\plugins\\{namespace}\\ and restart; `shikigami plugin list` shows what is installed. The step is kept as it is until then."
+            ));
+            for (name, children) in &step.blocks {
+                self.steps(children, &format!("{path}/blocks/{name}"), loop_depth);
+            }
+            return;
+        }
+
         let Some(def) = self.validator.registry.get(&step.step_type) else {
             self.error(
                 "UNKNOWN_STEP_TYPE",
@@ -371,6 +448,19 @@ impl Cx<'_> {
             }
             return;
         };
+
+        if let Some(deprecated) = &def.deprecated {
+            self.warn(
+                "DEPRECATED_STEP_TYPE",
+                format!("step type '{}' is deprecated", step.step_type),
+                format!("{path}/type"),
+                id,
+            );
+            self.hint(match &deprecated.replacement {
+                Some(replacement) => format!("Use '{replacement}' instead. {}", deprecated.note),
+                None => deprecated.note.clone(),
+            });
+        }
 
         self.params(step, def, path);
         self.file_paths(step, def, path);
@@ -885,7 +975,9 @@ fn generic_hint(code: &str) -> Option<&'static str> {
         "INVALID_RETRY" => "Set retry.maxAttempts to 1 or more (1 means no retry).",
         "EMPTY_NAME" => "Give the scenario a short descriptive name.",
         "INVALID_SCENARIO_ID" => "Omit `id` when creating a scenario; Core assigns one.",
-        "UNSUPPORTED_SCHEMA_VERSION" => "Use schemaVersion 1.",
+        "UNSUPPORTED_SCHEMA_VERSION" => {
+            "Omit schemaVersion (Core writes the current one). A file from a newer Shikigami needs that newer version to open."
+        }
         "EXPR_SYNTAX" => {
             "Check quotes and brackets. Strings use '...', comparisons ==, !=, <, >, logic &&, ||, !. In template params wrap expressions in {{ }}."
         }
@@ -1019,6 +1111,8 @@ mod tests {
             resources: vec![],
             secret_params: vec!["value".into()],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         });
         registry
     }
@@ -1342,5 +1436,69 @@ mod tests {
                 assert!(report.valid, "{}: {:?}", def.step_type, report.issues);
             }
         }
+    }
+
+    fn plugin_registry(version: &str) -> StepRegistry {
+        let mut registry = StepRegistry::with_builtins();
+        let mut def = registry.get("log.message").unwrap().clone();
+        def.step_type = "hello.greet".into();
+        def.plugin = Some(crate::registry::PluginInfo {
+            name: "hello".into(),
+            version: version.into(),
+        });
+        registry.register(def);
+        registry
+    }
+
+    fn greet_scenario(range: &str) -> Scenario {
+        let mut s = Scenario::new("plugins");
+        s.steps = vec![
+            Step::new("hello.greet")
+                .with_id("a")
+                .with_param("message", "hi"),
+        ];
+        s.requires.insert("plugin:hello".into(), range.into());
+        s
+    }
+
+    #[test]
+    fn missing_plugins_name_the_plugin_and_version() {
+        let report = validator().validate(&greet_scenario("^0.3.1"));
+        assert_eq!(codes(&report), ["PLUGIN_NOT_INSTALLED"]);
+        assert!(report.issues[0].message.contains("'hello' (^0.3.1)"));
+        assert!(hint_of(&report, "PLUGIN_NOT_INSTALLED").contains("plugins\\hello"));
+    }
+
+    #[test]
+    fn plugin_versions_are_checked_against_requires() {
+        let ok = Validator::new(plugin_registry("0.3.4")).validate(&greet_scenario("^0.3.1"));
+        assert!(ok.valid, "{ok:?}");
+        let newer = Validator::new(plugin_registry("1.0.0")).validate(&greet_scenario("^0.3.1"));
+        assert_eq!(codes(&newer), ["PLUGIN_VERSION_MISMATCH"]);
+        assert_eq!(newer.issues[0].path, "/requires/plugin:hello");
+        let bad = Validator::new(plugin_registry("0.3.4")).validate(&greet_scenario("latest"));
+        assert_eq!(codes(&bad), ["INVALID_REQUIREMENT"]);
+    }
+
+    #[test]
+    fn deprecated_step_types_warn_with_the_replacement() {
+        let mut registry = StepRegistry::with_builtins();
+        let mut def = registry.get("log.message").unwrap().clone();
+        def.step_type = "test.old".into();
+        def.deprecated = Some(crate::registry::Deprecation {
+            note: "It ignores `level`.".into(),
+            replacement: Some("log.message".into()),
+        });
+        registry.register(def);
+        let mut s = Scenario::new("old");
+        s.steps = vec![
+            Step::new("test.old")
+                .with_id("a")
+                .with_param("message", "hi"),
+        ];
+        let report = Validator::new(registry).validate(&s);
+        assert!(report.valid, "{report:?}");
+        assert_eq!(codes(&report), ["DEPRECATED_STEP_TYPE"]);
+        assert!(hint_of(&report, "DEPRECATED_STEP_TYPE").starts_with("Use 'log.message' instead."));
     }
 }

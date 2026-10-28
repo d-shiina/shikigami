@@ -299,6 +299,14 @@ export interface Scenario {
   name: string;
   description?: string;
   /**
+   * Plugins the steps need, with the versions they were written for:
+   * `{ "plugin:kintone": "^0.3.1" }`. Kept up to date by Core when steps
+   * are added or removed, so authors normally leave it alone.
+   */
+  requires?: {
+    [k: string]: string;
+  };
+  /**
    * Monotonic revision, incremented by every committed edit. Used for
    * optimistic concurrency between Studio, MCP clients and the CLI.
    */
@@ -535,6 +543,13 @@ export interface ScenarioPatch {
   description?: string | null;
   settings?: ScenarioSettings1 | null;
   tags?: string[] | null;
+  /**
+   * Replaces `requires` (plugin version ranges). Core still adds plugins
+   * that steps use and drops unused ones afterwards.
+   */
+  requires?: {
+    [k: string]: string;
+  } | null;
 }
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -660,6 +675,15 @@ export interface StepTypeDef {
    * scenario's default), for steps that wait on people (manual login).
    */
   defaultTimeoutMs?: number | null;
+  /**
+   * Set when the type should no longer be used in new steps. It keeps
+   * working; validation warns and points at the replacement.
+   */
+  deprecated?: Deprecation | null;
+  /**
+   * The plugin that provides this type (`None` for built-in types).
+   */
+  plugin?: PluginInfo | null;
 }
 /**
  * Named child block of a control-flow step.
@@ -681,6 +705,38 @@ export interface BlockDef {
 export interface TargetDef {
   param: string;
   kind: TargetKind;
+}
+/**
+ * Why a step type is deprecated and what to use instead.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "Deprecation".
+ */
+export interface Deprecation {
+  /**
+   * What to do instead, for people and AI clients.
+   */
+  note: string;
+  /**
+   * The step type that replaces this one, if any.
+   */
+  replacement?: string | null;
+}
+/**
+ * A plugin that provides step types, as installed on this PC.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PluginInfo".
+ */
+export interface PluginInfo {
+  /**
+   * The plugin's name, also the prefix of its step types.
+   */
+  name: string;
+  /**
+   * Installed version (semver).
+   */
+  version: string;
 }
 /**
  * One committed change.

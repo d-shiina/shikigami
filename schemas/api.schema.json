@@ -151,6 +151,13 @@
         "description": {
           "type": "string"
         },
+        "requires": {
+          "description": "Plugins the steps need, with the versions they were written for:\n`{ \"plugin:kintone\": \"^0.3.1\" }`. Kept up to date by Core when steps\nare added or removed, so authors normally leave it alone.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "revision": {
           "description": "Monotonic revision, incremented by every committed edit. Used for\noptimistic concurrency between Studio, MCP clients and the CLI.",
           "type": "integer",
@@ -842,6 +849,16 @@
           "items": {
             "type": "string"
           }
+        },
+        "requires": {
+          "description": "Replaces `requires` (plugin version ranges). Core still adds plugins\nthat steps use and drops unused ones afterwards.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false
@@ -1015,6 +1032,28 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "deprecated": {
+          "description": "Set when the type should no longer be used in new steps. It keeps\nworking; validation warns and points at the replacement.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Deprecation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plugin": {
+          "description": "The plugin that provides this type (`None` for built-in types).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1119,6 +1158,44 @@
           "type": "string",
           "const": "app"
         }
+      ]
+    },
+    "Deprecation": {
+      "description": "Why a step type is deprecated and what to use instead.",
+      "type": "object",
+      "properties": {
+        "note": {
+          "description": "What to do instead, for people and AI clients.",
+          "type": "string"
+        },
+        "replacement": {
+          "description": "The step type that replaces this one, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "note"
+      ]
+    },
+    "PluginInfo": {
+      "description": "A plugin that provides step types, as installed on this PC.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The plugin's name, also the prefix of its step types.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Installed version (semver).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
       ]
     },
     "HistoryEntry": {

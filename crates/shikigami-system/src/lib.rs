@@ -162,6 +162,8 @@ impl From<Def> for StepTypeDef {
             resources: d.resources,
             secret_params: d.secret_params,
             default_timeout_ms: d.default_timeout_ms,
+            deprecated: None,
+            plugin: None,
         }
     }
 }

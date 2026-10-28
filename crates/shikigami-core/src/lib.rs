@@ -14,6 +14,7 @@ pub mod model;
 pub mod ops;
 pub mod policy;
 pub mod registry;
+pub mod requires;
 pub mod resource;
 pub mod review;
 pub mod schema;
@@ -33,7 +34,7 @@ pub use model::{
 };
 pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
 pub use policy::{Decision, Policy, TargetDef, TargetKind};
-pub use registry::{RiskLevel, StepCategory, StepRegistry, StepTypeDef};
+pub use registry::{Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef};
 pub use review::{
     ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,
     ObservationContent, ObservationSource, ReviewTimeline, ReviewVerdict, StepNote, TestRun,

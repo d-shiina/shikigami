@@ -442,6 +442,16 @@
           "items": {
             "type": "string"
           }
+        },
+        "requires": {
+          "description": "Replaces `requires` (plugin version ranges). Core still adds plugins\nthat steps use and drops unused ones afterwards.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false

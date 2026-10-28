@@ -12,6 +12,7 @@ members = [
     "crates/shikigami-plugins",
     "crates/shikigami-files",
     "crates/shikigami-system",
+    "crates/shikigami-pdf",
     "crates/shikigami-excel",
     "apps/studio/src-tauri",
 ]
@@ -20,7 +21,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.90"
-license = "UNLICENSED"
+license = "Apache-2.0"
 repository = "https://github.com/d-shiina/shikigami"
 
 [workspace.dependencies]
@@ -34,6 +35,7 @@ shikigami-desktop = { path = "crates/shikigami-desktop" }
 shikigami-plugins = { path = "crates/shikigami-plugins" }
 shikigami-files = { path = "crates/shikigami-files" }
 shikigami-system = { path = "crates/shikigami-system" }
+shikigami-pdf = { path = "crates/shikigami-pdf" }
 shikigami-excel = { path = "crates/shikigami-excel" }
 
 serde = { version = "1.0.229", features = ["derive"] }
@@ -50,6 +52,7 @@ uuid = { version = "1.29.0", features = ["v7", "serde"] }
 time = { version = "0.3.55", features = ["serde", "formatting", "parsing", "macros"] }
 notify = "8.2.1"
 regex = "1.13.1"
+semver = "1.0.28"
 jiff = "0.2.38"
 clap = { version = "4.6.7", features = ["derive"] }
 tempfile = "3.27.0"
