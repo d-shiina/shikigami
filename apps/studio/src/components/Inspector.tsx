@@ -11,6 +11,7 @@ import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ActorMark, usePendingReview } from "./Timeline";
 import { VarIcon } from "./VarIcon";
+import { VariablesPanel } from "./VariablesPanel";
 
 type JsonSchema = {
   type?: string;
@@ -516,7 +517,8 @@ function siblingsFrom(steps: Step[], id: string): Step[] | null {
 }
 
 /** Moves this step (and the next few) into a new scenario called from here. */
-function ExtractSection({ step }: { step: Step }) {
+/** Moves the selected step (and the ones after it) into a new sub-scenario. Opened from the step's tools. */
+export function ExtractForm({ step }: { step: Step }) {
   const scenario = useStudio((s) => s.scenario);
   const extract = useStudio((s) => s.extract);
   const after = useMemo(() => siblingsFrom(scenario?.steps ?? [], step.id ?? "") ?? [step], [scenario, step]);
@@ -529,7 +531,8 @@ function ExtractSection({ step }: { step: Step }) {
   }, [step.id]);
   const picked = after.slice(0, Math.min(count, after.length));
   return (
-    <Section title={t.props.extract}>
+    <div className="w-[320px] p-3">
+      <div className="pb-1 text-[11px] font-bold tracking-wider text-slate-600">{t.props.extract}</div>
       <Row label={t.props.extractRange} hint={picked.map((s) => s.name || s.type).join(" → ")}>
         <select className={inputClass} value={count} onChange={(e) => setCount(Number(e.target.value))}>
           {after.map((_, i) => (
@@ -563,11 +566,11 @@ function ExtractSection({ step }: { step: Step }) {
       <p className="pt-1 text-[10px] leading-snug text-slate-400">
         {t.props.extractHint}
       </p>
-    </Section>
+    </div>
   );
 }
 
-export function PropertyPanel() {
+function StepInspector() {
   const scenario = useStudio((s) => s.scenario);
   const selection = useStudio((s) => s.selection);
   const stepTypes = useStudio((s) => s.stepTypes);
@@ -583,14 +586,8 @@ export function PropertyPanel() {
     return dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys()));
   }, [scenario, stepTypes, vars]);
 
-  if (!scenario || selection?.kind !== "step") {
-    return (
-      <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-xs text-slate-400">
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-lg">◇</span>
-        {t.selectStep}
-      </div>
-    );
-  }
+  if (!scenario) return null;
+  if (selection?.kind !== "step") return <ScenarioInspector />;
   const step = findStep(scenario.steps ?? [], selection.stepId);
   if (!step?.id) return <p className="p-4 text-sm text-slate-400">{t.selectStep}</p>;
   const id = step.id;
@@ -610,7 +607,9 @@ export function PropertyPanel() {
             <span className="text-sm font-bold" style={{ color }}>
               {stepLabel(step.type, def?.label)}
             </span>
-            <span className="ml-auto font-mono text-[10px] text-slate-400">{step.type}</span>
+            <span className="ml-auto font-mono text-[10px] text-slate-400" title={`ID: ${id}`}>
+              {step.type}
+            </span>
           </div>
           <div className="space-y-1 px-3 py-2">
             <div className="text-[13px] leading-snug">
@@ -655,17 +654,6 @@ export function PropertyPanel() {
         <Row label={t.stepName}>
           <CommitInput value={step.name ?? ""} onCommit={(name) => update({ name })} />
         </Row>
-        <Row label={t.disabled}>
-          <input
-            type="checkbox"
-            className="mt-1.5"
-            checked={step.disabled ?? false}
-            onChange={(e) => update({ disabled: e.target.checked })}
-          />
-        </Row>
-        <Row label="ID">
-          <span className="block truncate pt-1.5 font-mono text-[10px] text-slate-400">{id}</span>
-        </Row>
       </Section>
       {isCall ? (
         <CallEditor step={step} vars={vars} update={update} />
@@ -694,9 +682,12 @@ export function PropertyPanel() {
         </Section>
       )}
       <Connections stepId={id} links={links} vars={vars} />
-      <ExtractSection step={step} />
-      {!step.type.startsWith("control.") && (
-        <Section title={t.props.execution}>
+      <Section title={t.props.execution}>
+        <Row label={t.disabled}>
+          <input type="checkbox" className="mt-1.5" checked={step.disabled ?? false} onChange={(e) => update({ disabled: e.target.checked })} />
+        </Row>
+        {!step.type.startsWith("control.") && (
+          <>
           <Row label={t.timeoutMs}>
             <CommitInput
               value={step.timeoutMs?.toString() ?? ""}
@@ -727,8 +718,90 @@ export function PropertyPanel() {
               <option value="continue">{t.onErrorContinue}</option>
             </select>
           </Row>
-        </Section>
-      )}
+          </>
+        )}
+      </Section>
+      <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{id}</p>
     </div>
+  );
+}
+
+/** With nothing selected, the inspector shows the scenario itself: what it is, its variables, how it runs. */
+function ScenarioInspector() {
+  const scenario = useStudio((s) => s.scenario);
+  const updateScenario = useStudio((s) => s.updateScenario);
+  if (!scenario) return null;
+  const settings = scenario.settings ?? {};
+  const setSettings = (patch: Partial<typeof settings>) => updateScenario({ settings: { ...settings, ...patch } });
+  return (
+    <div className="pb-6">
+      <Section title={t.props.basics}>
+        <Row label={t.shell.name}>
+          <CommitInput value={scenario.name} onCommit={(name) => name.trim() && updateScenario({ name: name.trim() })} />
+        </Row>
+        <Row label={t.shell.description}>
+          <CommitInput multiline value={scenario.description ?? ""} placeholder={t.shell.descriptionPlaceholder} onCommit={(description) => updateScenario({ description })} />
+        </Row>
+      </Section>
+      <Section title={t.variables}>
+        <div className="-mx-4 -my-3">
+          <VariablesPanel />
+        </div>
+      </Section>
+      <Section title={t.shell.runSettings}>
+        <Row label={t.shell.defaultTimeout}>
+          <CommitInput
+            value={settings.defaultTimeoutMs?.toString() ?? ""}
+            placeholder="30000"
+            onCommit={(v) => setSettings({ defaultTimeoutMs: v.trim() === "" ? null : Number(v) })}
+          />
+        </Row>
+        <Row label={t.shell.onError}>
+          <select className={inputClass} value={settings.onError ?? ""} onChange={(e) => setSettings({ onError: (e.target.value || null) as typeof settings.onError })}>
+            <option value="">{t.shell.onErrorDefault}</option>
+            <option value="fail">{t.onErrorFail}</option>
+            <option value="continue">{t.onErrorContinue}</option>
+          </select>
+        </Row>
+      </Section>
+      <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{scenario.id}</p>
+    </div>
+  );
+}
+
+/**
+ * The inspector: the properties of what is selected, and nothing else. A
+ * step when one is selected, otherwise the scenario. The path at the top says
+ * which, and steps back up to the scenario.
+ */
+export function Inspector() {
+  const scenario = useStudio((s) => s.scenario);
+  const selection = useStudio((s) => s.selection);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const select = useStudio((s) => s.select);
+  if (!scenario) return null;
+  const step = selection?.kind === "step" ? findStep(scenario.steps ?? [], selection.stepId) : undefined;
+  const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
+  return (
+    <aside className="relative z-[1] flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 px-4 text-[12px]">
+        {step ? (
+          <>
+            <button type="button" onClick={() => select(null)} className="max-w-[45%] truncate text-slate-500 hover:text-ink hover:underline" title={t.shell.toScenario}>
+              {scenario.name}
+            </button>
+            <span className="text-slate-400">›</span>
+            <span className="truncate font-semibold">{step.name || stepLabel(step.type, def?.label)}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-slate-500">{t.shell.scenario}</span>
+            <span className="text-slate-400">›</span>
+            <span className="truncate font-semibold">{scenario.name}</span>
+          </>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{step ? <StepInspector /> : <ScenarioInspector />}</div>
+    </aside>
   );
 }

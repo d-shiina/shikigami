@@ -25,7 +25,7 @@ import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
 import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { stepLabel, t } from "../lib/i18n";
-import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
+import type { HistoryEntry, Scenario, Step, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
 import { useTheme } from "../lib/theme";
@@ -50,6 +50,7 @@ import { callKey, diveChain, type DiveLevel, revertBlocker, type StepRunState, t
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
+import { ExtractForm } from "./Inspector";
 import { valuesSeenBy } from "../lib/runValues";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
@@ -150,22 +151,40 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
 
 const STEP_TOOL = "grid h-6 w-6 place-items-center rounded-[3px] text-[13px] text-slate-600 hover:bg-slate-100 hover:text-ink";
 
-/** Move and delete, on the selected step itself: the pointer is already there. */
-function StepTools() {
+/** Move, delete and extract, on the selected step itself: the pointer is already there. */
+function StepTools({ step }: { step: Step }) {
   const moveSelected = useStudio((s) => s.moveSelected);
   const removeSelected = useStudio((s) => s.removeSelected);
+  const [extracting, setExtracting] = useState(false);
   return (
-    <div role="toolbar" aria-label={t.toolbar.stepTools} className="flex items-center gap-0.5 rounded-[3px] border border-slate-200 bg-sheet p-0.5 shadow-raised">
-      <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL}>
-        ↑
-      </button>
-      <button type="button" title={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} className={STEP_TOOL}>
-        ↓
-      </button>
-      <span className="mx-0.5 h-4 w-px bg-slate-200" />
-      <button type="button" title={`${t.delete} (Delete)`} onClick={() => removeSelected()} className={`${STEP_TOOL} hover:bg-shu-50! hover:text-shu-600!`}>
-        ✕
-      </button>
+    <div className="relative">
+      <div role="toolbar" aria-label={t.toolbar.stepTools} className="flex items-center gap-0.5 rounded-[3px] border border-slate-200 bg-sheet p-0.5 shadow-raised">
+        <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL}>
+          ↑
+        </button>
+        <button type="button" title={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} className={STEP_TOOL}>
+          ↓
+        </button>
+        <span className="mx-0.5 h-4 w-px bg-slate-200" />
+        <button
+          type="button"
+          title={t.shell.extractTitle}
+          onClick={() => setExtracting(!extracting)}
+          aria-expanded={extracting}
+          className={`h-6 rounded-[3px] px-1.5 text-[11px] ${extracting ? "bg-slate-200 text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
+        >
+          {t.shell.extract}
+        </button>
+        <span className="mx-0.5 h-4 w-px bg-slate-200" />
+        <button type="button" title={`${t.delete} (Delete)`} onClick={() => removeSelected()} className={`${STEP_TOOL} hover:bg-shu-50! hover:text-shu-600!`}>
+          ✕
+        </button>
+      </div>
+      {extracting && (
+        <div className="nodrag nopan absolute top-full left-0 z-20 mt-1 rounded-[4px] border border-slate-200 bg-sheet shadow-lifted">
+          <ExtractForm step={step} />
+        </div>
+      )}
     </div>
   );
 }
@@ -184,7 +203,8 @@ function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; co
   );
 }
 
-const FLOW_HANDLE = "!border-0 !bg-slate-300";
+// Flow handles only anchor the lines: nothing connects by hand, so they are not drawn.
+const FLOW_HANDLE = "!h-px !min-h-0 !w-px !min-w-0 !border-0 !bg-transparent";
 
 /** Where step-to-step flow enters (top) and leaves (bottom) a node. */
 function FlowHandles() {
@@ -218,10 +238,38 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
  * A step-to-step edge. Its block label ("forEach：…", "catch：…") sits just
  * above the step it leads to, not halfway, where sibling edges share a line.
  */
-function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd }: EdgeProps) {
-  // Top to bottom, turn right below the source so the label has the run down to the step to itself.
-  const centerY = label && sourcePosition === Position.Bottom ? sourceY + 12 : undefined;
-  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY });
+function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
+  const detourX = (data as { detourX?: number } | undefined)?.detourX;
+  if (detourX !== undefined) {
+    // Around a loop's body: out of the step, along to the side of the body,
+    // then back up into the loop's head (a back edge) or down into the next step.
+    const r = 4;
+    const outY = sourceY + 12;
+    const back = targetY < sourceY;
+    const toward = (from: number, to: number) => (to > from ? 1 : -1);
+    const sx = toward(sourceX, detourX);
+    const path = back
+      ? [
+          `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
+          `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
+          `V ${targetY + 12 + r} Q ${detourX} ${targetY + 12} ${detourX - sx * r} ${targetY + 12}`,
+          `H ${targetX + NODE_W / 2 + 2}`,
+        ].join(" ")
+      : [
+          `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
+          `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY + r}`,
+          `V ${targetY - 16 - r} Q ${detourX} ${targetY - 16} ${detourX - sx * r} ${targetY - 16}`,
+          `H ${targetX - toward(targetX, detourX) * r} Q ${targetX} ${targetY - 16} ${targetX} ${targetY - 16 + r}`,
+          `V ${targetY}`,
+        ].join(" ");
+    return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+  }
+  // Splits turn just below their step; joins turn just above the next step, so
+  // branches of different lengths meet on one line instead of at staggered heights.
+  const down = sourcePosition === Position.Bottom && targetY > sourceY;
+  const centerY = down && label ? sourceY + 12 : down && Math.abs(sourceX - targetX) > 1 ? targetY - 16 : undefined;
+  // The offset must not reach past the turn, or the line runs on below it and doubles back.
+  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset: centerY === undefined ? 20 : 12, borderRadius: 4 });
   return (
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
@@ -518,11 +566,12 @@ function StepNode({ data }: StepNodeProps) {
       }`}
     >
       {(latest || (data.selected && !data.readOnly)) && (
-        // At the top-right corner, clear of the flow line entering at the top centre.
-        <NodeToolbar isVisible position={Position.Top} align="end" offset={8}>
+        // Beside the step's head: the flow line runs through the top and bottom
+        // centres, and variable chips sit beside the rows below the head.
+        <NodeToolbar isVisible position={Position.Right} align="start" offset={8}>
           <div className="flex items-center gap-1.5">
             {latest && <ReviewToolbar entry={latest} />}
-            {data.selected && !data.readOnly && <StepTools />}
+            {data.selected && !data.readOnly && <StepTools step={data.step} />}
           </div>
         </NodeToolbar>
       )}
@@ -909,6 +958,7 @@ export function FlowCanvas() {
     sourceHandle: "flow",
     targetHandle: "flow",
     type: "block",
+    data: { detourX: e.detourX },
     animated: e.loop,
     style: { stroke: "var(--flow-edge)", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
     // A plain colour: the marker id is built from it, so no var().

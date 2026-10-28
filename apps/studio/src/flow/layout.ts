@@ -17,8 +17,16 @@ const GAP_Y = 56;
  * left edge, the ones it writes off its right.
  */
 export const CHIP_ROOM = 96;
-/** Between side-by-side lanes: one lane's write chips, the next one's read chips. */
-const GAP_X = CHIP_ROOM * 2;
+/**
+ * Beside a loop's body, on each side: room for the line that returns to the
+ * loop (right) and the line that leaves it for the next step (left), outside
+ * the body's value chips so the lines never run through steps or chips.
+ */
+const LOOP_ROOM = 24;
+/** How far outside a loop body's steps its detour lines run. */
+export const DETOUR = CHIP_ROOM + 12;
+/** Between side-by-side lanes: one lane's write chips, a loop's detour, the next one's read chips. */
+const GAP_X = CHIP_ROOM * 2 + LOOP_ROOM;
 
 export type StepNodeData = {
   kind: "step";
@@ -49,6 +57,11 @@ export type LayoutEdge = {
   target: string;
   label?: string;
   loop?: boolean;
+  /**
+   * For a loop's back edge and the edge leaving a loop: the x the line runs
+   * down or up at, beside the loop's body instead of through it.
+   */
+  detourX?: number;
 };
 
 export type Layout = { nodes: LayoutNode[]; edges: LayoutEdge[]; width: number; height: number };
@@ -113,7 +126,8 @@ function measure(step: Step, defs: Defs, extra: Extra): Size {
   const ms = ls.map((l) => measureList(l.steps, defs, extra));
   const w = ms.reduce((acc, m) => acc + m.w, 0) + GAP_X * (ms.length - 1);
   const h = own.h + GAP_Y + Math.max(...ms.map((m) => m.h));
-  return { w: Math.max(own.w, w), h };
+  const room = LOOP_TYPES.has(step.type) ? LOOP_ROOM * 2 : 0;
+  return { w: Math.max(own.w, w + room), h };
 }
 
 class Builder {
@@ -125,8 +139,11 @@ class Builder {
     private extra: Extra,
   ) {}
 
-  edge(source: string, target: string, label?: string, loop?: boolean) {
-    this.edges.push({ id: `${source}->${target}${label ? `:${label}` : ""}`, source, target, label, loop });
+  /** Left and right edges of each loop's body, by loop step id. */
+  bodies = new Map<string, { left: number; right: number }>();
+
+  edge(source: string, target: string, label?: string, loop?: boolean, detourX?: number) {
+    this.edges.push({ id: `${source}->${target}${label ? `:${label}` : ""}`, source, target, label, loop, detourX });
   }
 
   /** Places a list centred in [x, x + span); returns its entry node id and the ids that flow into the next step. */
@@ -156,7 +173,11 @@ class Builder {
     steps.forEach((step, index) => {
       const placed = this.step(step, cursor, x, span, parentId, block, start + index);
       if (index === 0) entry = placed.entry;
-      for (const p of previous) this.edge(p, placed.entry);
+      for (const p of previous) {
+        // Leaving a loop: down its body's left side, not through the body.
+        const body = this.bodies.get(p);
+        this.edge(p, placed.entry, undefined, undefined, body ? body.left - DETOUR : undefined);
+      }
       previous = placed.exits;
       cursor += measure(step, this.defs, this.extra).h + GAP_Y;
     });
@@ -189,12 +210,13 @@ class Builder {
     const exits: string[] = [];
     const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (ls.length - 1);
     let laneX = x + (span - total) / 2;
+    if (isLoop) this.bodies.set(id, { left: laneX, right: laneX + total });
     ls.forEach((lane, i) => {
       const size = sizes[i] ?? SLOT;
       const placed = this.list(lane.steps, y + own.h + GAP_Y, laneX, size.w, id, lane.name, lane.label, lane.start);
       this.edge(id, placed.entry, lane.label);
       if (isLoop) {
-        for (const e of placed.exits) this.edge(e, id, undefined, true);
+        for (const e of placed.exits) this.edge(e, id, undefined, true, laneX + size.w + DETOUR);
       } else {
         exits.push(...placed.exits);
       }

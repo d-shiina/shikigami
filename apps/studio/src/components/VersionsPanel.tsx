@@ -186,7 +186,6 @@ export function VersionsPanel() {
         <p className="text-[11px] leading-relaxed text-slate-500">{t.versionsHint}</p>
       </form>
       <section>
-        <h3 className="mb-3 text-sm font-semibold">{t.versions}</h3>
         {versions.length === 0 ? (
           <p className="text-sm text-slate-400">{t.versionsEmpty}</p>
         ) : (

@@ -68,7 +68,7 @@ function OutlineButton() {
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
         <path d="M1 2.5h10M3 6h8M3 9.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
-      {t.outline.toggle}
+      <span className="@max-[640px]/bar:hidden">{t.outline.toggle}</span>
     </button>
   );
 }
@@ -87,7 +87,8 @@ export function ScenarioBar({ view, onView }: { view: View; onView: (view: View)
   const followRun = useStudio((s) => s.followRun);
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const debug = useStudio((s) => s.debug);
-  const setSideTab = useStudio((s) => s.setSideTab);
+  const setBottom = useStudio((s) => s.setBottom);
+  const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
 
   if (!scenario) return null;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
@@ -95,23 +96,33 @@ export function ScenarioBar({ view, onView }: { view: View; onView: (view: View)
   const paused = run?.status === "paused";
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-sheet pr-2 pl-2">
+    // A container: on a narrow chart the secondary labels give way, never the run button.
+    <div className="@container/bar flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-sheet pr-2 pl-2">
       {view === "flow" && <OutlineButton />}
       <div className="flex min-w-0 flex-1 items-center gap-2 pl-1">
         <span className="truncate text-[14px] font-bold">{scenario.name}</span>
-        <span className="shrink-0 rounded-[3px] bg-slate-100 px-1.5 text-[11px] leading-5 text-slate-500">
-          {t.revision} {scenario.revision}
-        </span>
+        {/* The revision opens how the scenario got here: its record and versions. */}
         <button
           type="button"
-          onClick={() => setSideTab("issues")}
+          onClick={() => setHistoryOpen(true)}
+          title={t.shell.historyTitle}
+          className="flex h-6 shrink-0 items-center gap-1 rounded-[3px] bg-slate-100 px-1.5 text-[11px] text-slate-500 hover:bg-slate-200 hover:text-ink"
+        >
+          <span className="@max-[640px]/bar:hidden">{t.revision}</span> {scenario.revision}
+          <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
+            <path d="m1.5 3 2.5 2.5L6.5 3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={() => setBottom("issues")}
           className={`flex h-6 shrink-0 items-center gap-1 rounded-[3px] px-1.5 text-[12px] font-medium ${
             errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : "text-moegi-500 hover:bg-slate-100"
           }`}
           title={t.toolbar.issuesTitle}
         >
           {errors ? <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span> : <CheckIcon />}
-          {errors ? t.toolbar.errors(errors) : t.toolbar.valid}
+          <span className="@max-[640px]/bar:hidden">{errors ? t.toolbar.errors(errors) : t.toolbar.valid}</span>
         </button>
       </div>
       <ViewSwitch view={view} onChange={onView} />
@@ -159,7 +170,10 @@ export function ScenarioBar({ view, onView }: { view: View; onView: (view: View)
             title={t.toolbar.stepRunTitle}
             className="flex h-8 items-center gap-1 rounded-[4px] border border-slate-300 px-2.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
           >
-            {t.toolbar.stepRun}
+            <span className="@max-[520px]/bar:hidden">{t.toolbar.stepRun}</span>
+            <span className="hidden @max-[520px]/bar:inline" aria-hidden="true">
+              ⇥
+            </span>
           </button>
           <button
             type="button"

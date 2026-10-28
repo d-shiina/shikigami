@@ -54,7 +54,7 @@ export function AgentPane() {
     if (await send(draft, ref, context)) setDraft("");
   };
   return (
-    <aside className="fixed top-10 right-0 bottom-7 z-30 flex w-[380px] flex-col border-l border-slate-200 bg-sheet shadow-lifted">
+    <aside className="flex h-full min-h-0 w-[380px] flex-col border-l border-slate-200 bg-sheet">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5">
         <div className="min-w-0 flex-1 text-[13px] font-bold">{info?.name ?? "AI"}</div>
         <button
