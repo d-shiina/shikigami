@@ -7,7 +7,7 @@ function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { lab
     <button
       type="button"
       title={label}
-      className={`grid h-8 min-w-8 place-items-center rounded-full px-2 text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent ${className ?? ""}`}
+      className={`grid h-8 min-w-8 place-items-center rounded-[3px] px-2 text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent ${className ?? ""}`}
       {...rest}
     >
       {children}
@@ -34,6 +34,8 @@ export function ScenarioHeader() {
   const run = useStudio((s) => s.run);
   const startRun = useStudio((s) => s.startRun);
   const stopRun = useStudio((s) => s.stopRun);
+  const followRun = useStudio((s) => s.followRun);
+  const setFollowRun = useStudio((s) => s.setFollowRun);
 
   if (!scenario) return <span className="flex-1" />;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
@@ -49,7 +51,7 @@ export function ScenarioHeader() {
         </span>
       </div>
       <span
-        className={`flex h-7 items-center gap-1 rounded-[6px] px-2 text-[12px] font-medium ${
+        className={`flex h-7 items-center gap-1 rounded-[4px] px-2 text-[12px] font-medium ${
           errors ? "bg-shu-50 text-shu-600" : "text-moegi-500"
         }`}
         title={t.issues}
@@ -58,11 +60,19 @@ export function ScenarioHeader() {
         {errors ? `エラー ${errors} 件` : "検証OK"}
       </span>
       {running ? (
-        <div className="flex h-8 items-center overflow-hidden rounded-[6px] border border-slate-300 bg-sheet text-[13px]">
+        <div className="flex h-8 items-center overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-[13px]">
           <span className="flex items-center gap-2 px-3 font-medium text-ink">
-            <span className="swirl h-2 w-2 animate-pulse rounded-full" />
+            <span className="bg-accent-500 h-2 w-2 animate-pulse rounded-full" />
             実行中
           </span>
+          <button
+            type="button"
+            onClick={() => setFollowRun(!followRun)}
+            title={followRun ? "動いている手順を画面で追っています（画面を動かすと止まります）" : "動いている手順を画面で追う"}
+            className={`flex h-full items-center gap-1 border-l border-slate-300 px-2.5 text-[12px] ${followRun ? "bg-brand-50 font-semibold text-brand-700" : "text-slate-500 hover:bg-slate-50"}`}
+          >
+            {followRun ? "◉" : "○"} 追う
+          </button>
           <button
             type="button"
             onClick={() => stopRun()}
@@ -79,13 +89,13 @@ export function ScenarioHeader() {
           onClick={() => startRun()}
           disabled={errors > 0}
           title={errors > 0 ? "検証エラーを直すと実行できます" : `${t.run} (F5)`}
-          className="group flex h-8 items-center gap-2 rounded-[6px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-white shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
+          className="group flex h-8 items-center gap-2 rounded-[4px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-paper shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
         >
-          <span className="text-[#5fd08a] group-disabled:text-white">
+          <span className="text-[#5fd08a] group-disabled:text-paper dark:text-moegi-100">
             <PlayIcon />
           </span>
           {t.run}
-          <kbd className="rounded-[3px] bg-white/15 px-1 font-sans text-[10px] font-normal text-white/80">F5</kbd>
+          <kbd className="rounded-[3px] bg-paper/15 px-1 font-sans text-[10px] font-normal text-paper/80">F5</kbd>
         </button>
       )}
     </>
@@ -108,20 +118,20 @@ export function CanvasDock() {
   const stepSelected = selection?.kind === "step";
 
   return (
-    <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-slate-200 bg-sheet/95 p-1 shadow-lg backdrop-blur">
+    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-[4px] whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-raised backdrop-blur">
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}
-        className="flex items-center gap-2 rounded-full bg-ink py-1.5 pr-2 pl-3 text-sm font-medium text-paper hover:bg-slate-700"
+        className="flex items-center gap-2 rounded-[3px] bg-ink py-1.5 pr-2 pl-3 text-sm font-medium text-paper hover:bg-slate-700"
       >
-        ＋ {t.addStep}
-        <kbd className="rounded bg-white/15 px-1 font-sans text-[10px]">{t.shortcut}</kbd>
+        ＋ <span className="@max-[560px]:hidden">{t.addStep}</span>
+        <kbd className="rounded bg-paper/15 px-1 font-sans text-[10px] @max-[560px]:hidden">{t.shortcut}</kbd>
       </button>
       <span className="mx-1 h-5 w-px bg-slate-200" />
-      <DockButton label={`${t.moveUp}`} onClick={() => moveSelected(-1)} disabled={!stepSelected}>
+      <DockButton label={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} disabled={!stepSelected}>
         ↑
       </DockButton>
-      <DockButton label={`${t.moveDown}`} onClick={() => moveSelected(1)} disabled={!stepSelected}>
+      <DockButton label={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} disabled={!stepSelected}>
         ↓
       </DockButton>
       <DockButton label={`${t.delete} (Delete)`} onClick={() => removeSelected()} disabled={!stepSelected}>

@@ -50,6 +50,18 @@ export type SecretInput = {
   description?: string;
 };
 
+/** A login an AI asked the user for (request_secret): names and sites only. */
+export type SecretRequest = {
+  name: string;
+  sites: string[];
+  fields: SecretField[];
+  /** Written by the AI: shown as its words. */
+  reason?: string;
+  requestedAt: string;
+  /** What the registered secret (if any) still lacks. */
+  missing: { registered: boolean; fields: SecretField[]; sites: string[] };
+};
+
 export class ApiError extends Error {
   readonly code: string;
   readonly details: unknown;
@@ -116,6 +128,8 @@ export const api = {
   removeSecret: (name: string) => call<void>("remove_secret", { name }),
   resetSecrets: () => call<number>("reset_secrets"),
   forgetLogin: (session: string) => call<boolean>("forget_login", { session }),
+  listSecretRequests: () => call<SecretRequest[]>("list_secret_requests"),
+  dismissSecretRequest: (name: string) => call<boolean>("dismiss_secret_request", { name }),
 };
 
 export interface AppInfo {
@@ -192,4 +206,7 @@ export const events = {
     listen<{ scenarioId: string }>("scenario-changed", (e) => handler(e.payload.scenarioId)),
   onRunEvent: (handler: (event: RunEventEnvelope) => void): Promise<UnlistenFn> =>
     listen<RunEventEnvelope>("run-event", (e) => handler(e.payload)),
+  /** An AI asked for a login, or a request was answered or dismissed (any process). */
+  onSecretRequestsChanged: (handler: () => void): Promise<UnlistenFn> =>
+    listen("secret-requests-changed", () => handler()),
 };

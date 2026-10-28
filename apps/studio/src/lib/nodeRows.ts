@@ -121,10 +121,10 @@ export function knownVariables(variables: VariableDef[] | undefined, steps: Step
 
 /** Socket colour per variable type, from the logo's swirl. */
 export const TYPE_COLOR: Record<string, string> = {
-  string: "#12a7b4",
-  number: "#3f9a5a",
-  boolean: "#f5872a",
-  array: "#0a6fa8",
-  object: "#e0301e",
-  any: "#94a3b8",
+  string: "var(--cat-log)",
+  number: "var(--cat-variable)",
+  boolean: "var(--cat-flow)",
+  array: "var(--cat-browser)",
+  object: "var(--cat-windows)",
+  any: "var(--cat-other)",
 };

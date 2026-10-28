@@ -6,10 +6,11 @@ import { t } from "../lib/i18n";
 import { TYPE_COLOR } from "../lib/nodeRows";
 import { valueText } from "../lib/runValues";
 import { findStep, type VariableChange } from "../store";
+import { VarIcon } from "./VarIcon";
 
 const TYPES = Object.keys(t.varType) as VarType[];
 const DIRECTIONS = Object.keys(t.direction) as VarDirection[];
-const cell = "w-full rounded-md border border-slate-200 bg-sheet px-1.5 py-0.5 text-xs focus:border-brand-500 focus:outline-none";
+const cell = "w-full rounded-[4px] border border-slate-200 bg-sheet px-1.5 py-0.5 text-xs focus:border-brand-500 focus:outline-none";
 const row = "grid grid-cols-[64px_1fr] items-center gap-2";
 const rowLabel = "text-right text-[11px] text-slate-500";
 
@@ -32,7 +33,7 @@ const GROUPS: { title: string; directions: VarDirection[]; hint: string }[] = [
 /** How a variable changed during the last run: when, by which step, to what. */
 function RunTrace({ changes }: { changes: VariableChange[] }) {
   const scenario = useStudio((s) => s.scenario);
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   if (changes.length === 0) return <p className="text-[11px] text-slate-400">この実行では変わっていません</p>;
   const start = Date.parse(changes[0]?.at ?? "");
   return (
@@ -45,7 +46,7 @@ function RunTrace({ changes }: { changes: VariableChange[] }) {
             <span className="absolute top-1.5 -left-[16.5px] h-2 w-2 rounded-full border-2 border-white bg-brand-500" />
             <div className="flex items-baseline gap-1.5 text-slate-500">
               {c.stepId ? (
-                <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => c.stepId && select({ kind: "step", stepId: c.stepId })}>
+                <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => c.stepId && goTo(c.stepId)}>
                   {step?.name || step?.type || c.stepId}
                 </button>
               ) : (
@@ -85,13 +86,14 @@ function VariableRow({ variable }: { variable: VariableDef }) {
 
   return (
     <li
-      className={`rounded-lg ${open ? "bg-slate-50 ring-1 ring-slate-200" : "hover:bg-slate-50"}`}
+      className={`rounded-[4px] ${open ? "bg-slate-50 ring-1 ring-slate-200" : "hover:bg-slate-50"}`}
       // Lights up where the flow chart reads and writes this variable.
       onMouseEnter={() => focus.set(varFocus(variable.name))}
       onMouseLeave={() => focus.set(null)}
     >
       <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-2 py-1.5 text-left">
         {direction !== "output" && <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white" style={{ background: color }} />}
+        <VarIcon size={13} className="text-slate-400" />
         <span className="truncate font-mono text-[13px] font-semibold">{variable.name}</span>
         {variable.secret && <span className="rounded bg-slate-200 px-1 text-[9px] text-slate-600">{t.secret}</span>}
         <span className="ml-auto shrink-0 text-[10px] font-medium" style={{ color }}>
@@ -191,7 +193,7 @@ export function VariablesPanel() {
               <span className="ml-auto text-[10px] text-slate-400">{members.length}</span>
             </div>
             {members.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-slate-200 px-2 py-1.5 text-[11px] text-slate-400">なし</p>
+              <p className="rounded-[4px] border border-dashed border-slate-200 px-2 py-1.5 text-[11px] text-slate-400">なし</p>
             ) : (
               <ul className="space-y-0.5">
                 {members.map((v) => (
@@ -212,12 +214,12 @@ export function VariablesPanel() {
         }}
       >
         <input
-          className="min-w-0 flex-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none"
+          className="min-w-0 flex-1 rounded-[4px] border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none"
           placeholder={t.name}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <button type="submit" className="rounded-full bg-ink px-3 py-1 text-xs text-paper hover:bg-slate-700">
+        <button type="submit" className="rounded-[3px] bg-ink px-3 py-1 text-xs text-paper hover:bg-slate-700">
           {t.addVariable}
         </button>
       </form>

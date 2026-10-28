@@ -3,6 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use rmcp::model::{
     CallToolRequestParams, ClientCapabilities, ClientConfig, Implementation, JsonObject,
@@ -339,7 +340,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 32);
+    assert_eq!(tools.len(), 33);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -695,5 +696,73 @@ async fn changes_carry_summaries_evidence_and_review_feedback() {
     assert_eq!(review["sinceRevision"], 3);
     assert_eq!(review["changes"].as_array().map(Vec::len), Some(0));
     assert_eq!(review["lastApproval"]["verdict"], "approved");
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn ai_asks_for_a_login_and_the_user_registers_it_in_studio() {
+    let h = start(ServerOptions::default()).await;
+    let asked = h
+        .ok(
+            "request_secret",
+            json!({ "name": "Google", "sites": ["https://accounts.google.com/v3/signin"], "reason": "Google にログインするため" }),
+        )
+        .await;
+    assert_eq!(asked["status"], "waiting");
+    assert_eq!(asked["missing"]["registered"], false);
+    assert_eq!(
+        asked["request"]["sites"],
+        json!(["https://accounts.google.com"])
+    );
+
+    // Studio (another process) sees the request and the user fills the form.
+    let studio = shikigami_secrets::Vault::open(&h.root);
+    let pending = studio.requests().unwrap();
+    assert_eq!(pending[0].request.name, "Google");
+    assert_eq!(pending[0].request.reason, "Google にログインするため");
+    let root = h.root.clone();
+    let register = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        shikigami_secrets::Vault::open(&root)
+            .set(shikigami_secrets::SecretInput {
+                name: "Google".into(),
+                username: Some("me@example.com".into()),
+                password: Some("hunter2-google".into()),
+                sites: Some(vec!["https://accounts.google.com".into()]),
+                ..Default::default()
+            })
+            .unwrap();
+    });
+    let done = h
+        .ok(
+            "request_secret",
+            json!({ "name": "Google", "sites": ["https://accounts.google.com"], "waitMs": 10000 }),
+        )
+        .await;
+    register.await.unwrap();
+    assert_eq!(done["status"], "registered");
+    assert_eq!(done["secret"]["fields"], json!(["username", "password"]));
+    let text = done.to_string();
+    assert!(!text.contains("hunter2-google") && !text.contains("me@example.com"));
+    assert!(studio.requests().unwrap().is_empty());
+
+    // A request the user dismisses ends the wait.
+    let root = h.root.clone();
+    let dismiss = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(
+            shikigami_secrets::Vault::open(&root)
+                .dismiss_request("社内")
+                .unwrap()
+        );
+    });
+    let declined = h
+        .ok(
+            "request_secret",
+            json!({ "name": "社内", "fields": ["password"], "waitMs": 10000 }),
+        )
+        .await;
+    dismiss.await.unwrap();
+    assert_eq!(declined["status"], "dismissed");
     h.client.cancel().await.unwrap();
 }

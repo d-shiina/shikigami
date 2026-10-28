@@ -36,7 +36,7 @@ export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: nu
       style={{ width: size, height: size }}
       className={`grid shrink-0 place-items-center rounded-full text-[10px] font-bold ${
         entry.actor.kind === "mcp"
-          ? "swirl text-white"
+          ? "bg-brand-500 text-white"
           : external
             ? "bg-slate-300 text-slate-700"
             : "bg-ink text-paper"
@@ -59,7 +59,7 @@ const VERB_STYLE: Record<ChangeLine["verb"], string> = {
 };
 
 export function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: boolean }) {
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   return (
     <ul className="space-y-1.5">
       {lines.map((line, i) => (
@@ -67,7 +67,7 @@ export function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: bool
           <button
             type="button"
             disabled={!line.stepId}
-            onClick={() => line.stepId && select({ kind: "step", stepId: line.stepId })}
+            onClick={() => line.stepId && goTo(line.stepId)}
             className="flex w-full items-center gap-1.5 text-left enabled:hover:text-brand-600"
           >
             <span className={`rounded px-1 text-[10px] font-semibold ${VERB_STYLE[line.verb]}`}>{verbLabel(line.verb)}</span>
@@ -103,7 +103,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
   const lines = describe(entry, scenario, defs);
   const blocker = revertBlocker(entry, history);
   return (
-    <li className="rounded-lg border border-shu-100 bg-sheet p-3 shadow-[0_1px_0_rgba(15,27,42,.06)]">
+    <li className="rounded-[4px] border border-shu-100 bg-sheet p-3 shadow-sheet">
       <div className="mb-2 flex items-center gap-2">
         <ActorMark entry={entry} size={20} />
         <span className="text-xs font-semibold">{actorLabel(entry)}</span>
@@ -116,7 +116,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
         <button
           type="button"
           onClick={() => approve(entry.revision)}
-          className="flex-1 rounded-md bg-ink px-2 py-1 text-xs font-medium text-paper hover:bg-slate-700"
+          className="flex-1 rounded-[4px] bg-ink px-2 py-1 text-xs font-medium text-paper hover:bg-slate-700"
         >
           ✓ {t.approve}
         </button>
@@ -125,7 +125,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
           onClick={() => revert(entry)}
           disabled={blocker !== null}
           title={blocker ?? undefined}
-          className="flex-1 rounded-md border border-shu-500 px-2 py-1 text-xs font-medium text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
+          className="flex-1 rounded-[4px] border border-shu-500 px-2 py-1 text-xs font-medium text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
         >
           ↶ {t.revert}
         </button>
@@ -184,7 +184,7 @@ export function Timeline() {
       {pending.length > 0 && (
         <section>
           <div className="mb-1 flex items-center gap-2">
-            <span className="swirl h-2.5 w-2.5 rounded-full" />
+            <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
             <h3 className="text-sm font-semibold">
               {t.review}
               <span className="ml-1 text-shu-600">{pending.length}</span>

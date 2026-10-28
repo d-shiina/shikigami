@@ -107,6 +107,9 @@ pub struct SecretError {
     pub code: String,
     pub message: String,
     pub hint: Option<String>,
+    /// The secret the error is about, so Studio can offer to register or
+    /// fix it.
+    pub secret: Option<String>,
 }
 
 impl SecretError {
@@ -115,6 +118,7 @@ impl SecretError {
             code: code.to_owned(),
             message: message.into(),
             hint: None,
+            secret: None,
         }
     }
 
@@ -123,8 +127,20 @@ impl SecretError {
         self
     }
 
+    pub fn with_secret(mut self, name: impl Into<String>) -> Self {
+        self.secret = Some(name.into());
+        self
+    }
+
     pub fn details(&self) -> Option<Value> {
-        self.hint.as_ref().map(|hint| json!({ "hint": hint }))
+        let mut details = serde_json::Map::new();
+        if let Some(hint) = &self.hint {
+            details.insert("hint".into(), json!(hint));
+        }
+        if let Some(name) = &self.secret {
+            details.insert("secret".into(), json!(name));
+        }
+        (!details.is_empty()).then_some(Value::Object(details))
     }
 }
 
@@ -137,7 +153,7 @@ impl std::fmt::Display for SecretError {
 impl std::error::Error for SecretError {}
 
 /// Hint shown when a secret is missing.
-pub const REGISTER_HINT: &str = "Ask the user to register it in Shikigami Studio (シークレット) or with `shikigami secret set <name>`; list_secrets shows the registered names. Never ask for the password in chat.";
+pub const REGISTER_HINT: &str = "Call request_secret with this name and the site's address: Studio then asks the user to register it. Or ask the user to register it in Shikigami Studio (シークレット) or with `shikigami secret set <name>`; list_secrets shows the registered names. Never ask for the password in chat.";
 
 /// Where the Runtime looks secrets up. Implemented by the workspace vault
 /// (`shikigami-secrets`); tests use an in-memory one.

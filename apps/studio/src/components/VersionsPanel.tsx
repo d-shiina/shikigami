@@ -25,7 +25,7 @@ function Kind({ kind }: { kind: DiffKind }) {
 
 /** Differences from a version to the current content. */
 function DiffView({ diff, defs }: { diff: ScenarioDiff; defs: Map<string, StepTypeDef> }) {
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   if (diff.identical) return <p className="text-xs text-slate-500">{t.noDiff}</p>;
   return (
     <ul className="space-y-1.5 rounded border border-slate-200 bg-paper p-2 text-xs">
@@ -48,7 +48,7 @@ function DiffView({ diff, defs }: { diff: ScenarioDiff; defs: Map<string, StepTy
           <button
             type="button"
             disabled={s.kind === "removed"}
-            onClick={() => select({ kind: "step", stepId: s.stepId })}
+            onClick={() => goTo(s.stepId)}
             className="flex w-full items-baseline gap-1.5 text-left enabled:hover:text-brand-600"
           >
             <Kind kind={s.kind} />
@@ -98,7 +98,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
   return (
     <li className="group relative flex gap-3 pb-4 pl-1">
       <span className="absolute top-7 bottom-0 left-[16px] w-px bg-slate-200 group-last:hidden" />
-      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-ink px-1 font-serif text-[10px] font-bold text-paper">
+      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-[3px] bg-ink px-1 font-serif text-[10px] font-bold text-paper">
         v{version.number}
       </span>
       <div className="min-w-0 flex-1">
@@ -184,7 +184,7 @@ export function VersionsPanel() {
         <button
           type="submit"
           disabled={!name.trim()}
-          className="w-full rounded-md bg-ink px-2 py-1 text-sm font-medium text-paper hover:bg-slate-700 disabled:bg-slate-300"
+          className="w-full rounded-[4px] bg-ink px-2 py-1 text-sm font-medium text-paper hover:bg-slate-700 disabled:bg-slate-300"
         >
           {t.saveVersion}
         </button>
@@ -207,7 +207,7 @@ export function VersionsPanel() {
         <button
           type="button"
           onClick={() => void exportScenario()}
-          className="rounded-md border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100"
+          className="rounded-[4px] border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100"
         >
           {t.exportScenario}
         </button>

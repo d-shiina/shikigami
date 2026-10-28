@@ -10,6 +10,7 @@ import { findStep, revertBlocker, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ActorMark, usePendingReview } from "./Timeline";
+import { VarIcon } from "./VarIcon";
 
 type JsonSchema = {
   type?: string;
@@ -21,7 +22,7 @@ type JsonSchema = {
 };
 
 const inputClass =
-  "w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none";
+  "w-full rounded-[4px] border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none";
 
 /** Text field that commits on blur / Enter, so each edit is one undoable change. */
 function CommitInput(props: {
@@ -130,7 +131,7 @@ function TextOrSecretField({
             key={m}
             type="button"
             onClick={() => setMode(m)}
-            className={`rounded-full px-2 py-0.5 ${mode === m ? "bg-ink text-paper" : "text-slate-500 hover:bg-slate-100"}`}
+            className={`rounded-[3px] px-2 py-0.5 ${mode === m ? "bg-ink text-paper" : "text-slate-500 hover:bg-slate-100"}`}
           >
             {m === "text" ? t.secretText : `🔑 ${t.secretUse}`}
           </button>
@@ -302,7 +303,7 @@ function ParamsEditor({
           {error && <div className="text-xs text-shu-600">{error}</div>}
           <button
             type="button"
-            className="rounded-full bg-ink px-2.5 py-0.5 text-xs text-paper"
+            className="rounded-[3px] bg-ink px-2.5 py-0.5 text-xs text-paper"
             onClick={() => {
               try {
                 const parsed = JSON.parse(text) as Record<string, unknown>;
@@ -341,7 +342,7 @@ function ParamsEditor({
 /** Where this step's variables come from and go to, matching the links on the chart. */
 function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[]; vars: Map<string, string | undefined> }) {
   const scenario = useStudio((s) => s.scenario);
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   const incoming = links.filter((l) => l.to === stepId);
   const outgoing = links.filter((l) => l.from === stepId);
   if (incoming.length === 0 && outgoing.length === 0) return null;
@@ -353,13 +354,15 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
   };
   const item = (l: DataLink, other: string, arrow: string) => (
     <li key={`${l.from}${l.to}${l.variable}${l.toHandle}`} className="flex items-center gap-1.5 py-0.5 text-[11px]">
-      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: TYPE_COLOR[vars.get(l.variable) ?? "any"] }} />
+      <span style={{ color: TYPE_COLOR[vars.get(l.variable) ?? "any"] }}>
+        <VarIcon size={11} />
+      </span>
       <span className="font-mono font-semibold">{l.variable}</span>
       <span className="text-slate-400">{arrow}</span>
       {other.startsWith("@") ? (
         <span className="truncate text-slate-600">{nameOf(other)}</span>
       ) : (
-        <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => select({ kind: "step", stepId: other })}>
+        <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => goTo(other)}>
           {nameOf(other)}
         </button>
       )}
@@ -417,8 +420,8 @@ export function PropertyPanel() {
   return (
     <div className="pb-6">
       <div className="px-4 pt-4 pb-3">
-        <div className="overflow-hidden rounded-xl border border-slate-200">
-          <div className="flex items-center gap-2 px-3 py-2" style={{ background: `${color}1a` }}>
+        <div className="overflow-hidden rounded-[4px] border border-slate-200">
+          <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
             <span className="text-sm font-bold" style={{ color }}>
               {def?.label ?? step.type}
@@ -435,7 +438,7 @@ export function PropertyPanel() {
         {pending
           .filter((e) => touchedSteps(e).includes(id))
           .map((e) => (
-            <div key={e.revision} className="mt-2 flex items-center gap-2 rounded-lg border border-shu-100 bg-shu-50 px-2 py-1.5 text-xs">
+            <div key={e.revision} className="mt-2 flex items-center gap-2 rounded-[4px] border border-shu-100 bg-shu-50 px-2 py-1.5 text-xs">
               <ActorMark entry={e} size={18} />
               <span className="flex-1">
                 {t.actor[e.actor.kind]}が変更（rev {e.revision}・{t.unreviewed}）
@@ -455,7 +458,7 @@ export function PropertyPanel() {
             </div>
           ))}
         {issues.length > 0 && (
-          <ul className="mt-2 space-y-1 rounded-lg border border-shu-100 bg-shu-50 p-2 text-xs text-shu-600">
+          <ul className="mt-2 space-y-1 rounded-[4px] border border-shu-100 bg-shu-50 p-2 text-xs text-shu-600">
             {issues.map((i) => (
               <li key={`${i.code}${i.path}${i.message}`}>
                 {i.severity === "warning" ? "⚠" : "✕"} {i.message}

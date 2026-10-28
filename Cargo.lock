@@ -578,6 +578,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "core_detect"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48"
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -642,6 +648,27 @@ checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "csv"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52cd9d68cf7efc6ddfaaee42e7288d3a99d613d4b50f76ce9827ae0c6e14f938"
+dependencies = [
+ "csv-core",
+ "itoa",
+ "ryu",
+ "serde_core",
+]
+
+[[package]]
+name = "csv-core"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704a3c26996a80471189265814dbc2c257598b96b8a7feae2d31ace646bb9782"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -928,6 +955,20 @@ name = "embed_plist"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ef6b89e5b37196644d8796de5268852ff179b44e96276cf4290264843743bb7"
+
+[[package]]
+name = "encoding_rs"
+version = "0.8.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e985e0451871ad22fb8d2b6b076e2028a502a0d3950998c2c5c0a4f9b5d9679"
+dependencies = [
+ "cfg-if",
+ "core_detect",
+ "multiversion_no_op",
+ "rustversion",
+ "scopeguard",
+ "simdutf8",
+]
 
 [[package]]
 name = "equivalent"
@@ -2335,6 +2376,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "multiversion_no_op"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
+
+[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3404,6 +3451,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3751,8 +3804,11 @@ dependencies = [
 name = "shikigami-adapters"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "shikigami-browser",
  "shikigami-desktop",
+ "shikigami-files",
+ "shikigami-plugins",
  "shikigami-runtime",
 ]
 
@@ -3781,6 +3837,7 @@ dependencies = [
  "shikigami-adapters",
  "shikigami-core",
  "shikigami-mcp",
+ "shikigami-plugins",
  "shikigami-runtime",
  "shikigami-secrets",
  "tempfile",
@@ -3795,7 +3852,9 @@ name = "shikigami-core"
 version = "0.1.0"
 dependencies = [
  "dirs",
+ "jiff",
  "jsonschema",
+ "regex",
  "schemars 1.2.3",
  "serde",
  "serde_json",
@@ -3821,6 +3880,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "shikigami-files"
+version = "0.1.0"
+dependencies = [
+ "csv",
+ "encoding_rs",
+ "glob",
+ "jiff",
+ "serde_json",
+ "shikigami-core",
+ "shikigami-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "zip",
+]
+
+[[package]]
 name = "shikigami-mcp"
 version = "0.1.0"
 dependencies = [
@@ -3834,6 +3910,22 @@ dependencies = [
  "shikigami-secrets",
  "tempfile",
  "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "shikigami-plugins"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "jsonschema",
+ "serde",
+ "serde_json",
+ "shikigami-core",
+ "shikigami-runtime",
+ "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5931,12 +6023,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1156b39d142a34b999c2310a50455e0cb3760bf7efad0122f796d813bee26ccb"
 dependencies = [
  "crc32fast",
+ "flate2",
  "getrandom 0.4.3",
  "indexmap 2.14.2",
  "memchr",
  "nix",
  "typed-path",
  "windows-sys 0.61.2",
+ "zopfli",
 ]
 
 [[package]]
@@ -5950,3 +6044,15 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[package]]
+name = "zopfli"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaf7fc5d30c28483d93805c4a5e12b05bbb52407fa67c5f8bd552374cd01fb11"
+dependencies = [
+ "bumpalo",
+ "crc32fast",
+ "log",
+ "simd-adler32",
+]

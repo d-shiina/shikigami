@@ -61,6 +61,9 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Node plugins installed on this PC (step types from other programs).
+    #[command(subcommand)]
+    Plugin(PluginCmd),
     /// JSON Schema utilities.
     #[command(subcommand)]
     Schema(SchemaCmd),
@@ -222,6 +225,15 @@ enum SecretCmd {
 }
 
 #[derive(Subcommand)]
+enum PluginCmd {
+    /// Show the loaded plugins and the ones that could not be loaded.
+    List,
+    /// Check the plugin in DIR (manifest, schemas, examples) without
+    /// installing it.
+    Check { dir: PathBuf },
+}
+
+#[derive(Subcommand)]
 enum SchemaCmd {
     /// Write JSON Schemas to a directory (default: ./schemas).
     Export {
@@ -252,7 +264,8 @@ fn main() -> ExitCode {
 
 fn real_main() -> Result<ExitCode> {
     let cli = Cli::parse();
-    let adapters = shikigami_adapters::all();
+    let loaded = shikigami_adapters::load();
+    let adapters = loaded.adapters.clone();
     let runtime = shikigami_adapters::runtime(&adapters);
     let workspace = || {
         cli.workspace
@@ -316,6 +329,31 @@ fn real_main() -> Result<ExitCode> {
             } else {
                 for def in runtime.registry().iter() {
                     println!("{:<20} {}", def.step_type, def.label);
+                }
+            }
+        }
+        Command::Plugin(PluginCmd::List) => {
+            let problems: Vec<_> = loaded.problems.iter().map(|p| p.to_json()).collect();
+            let report = serde_json::json!({
+                "dirs": shikigami_plugins::default_dirs(),
+                "plugins": loaded.plugins,
+                "problems": problems,
+            });
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        Command::Plugin(PluginCmd::Check { dir }) => {
+            let builtin: Vec<String> = shikigami_adapters::builtin()
+                .iter()
+                .map(|a| a.name().to_owned())
+                .collect();
+            let taken: Vec<&str> = builtin.iter().map(String::as_str).collect();
+            match shikigami_plugins::Plugin::load(dir, &taken) {
+                Ok(plugin) => println!("{}", serde_json::to_string_pretty(&plugin.summary())?),
+                Err(problem) => {
+                    for line in &problem.problems {
+                        eprintln!("{line}");
+                    }
+                    return Ok(ExitCode::from(1));
                 }
             }
         }

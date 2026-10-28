@@ -53,7 +53,7 @@ export function ReviewInbox() {
       </div>
       <ul className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
         {inbox.filter((i) => !i.waiting).length === 0 && (
-          <li className="mx-1 rounded-[6px] border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
+          <li className="mx-1 rounded-[4px] border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
             確認待ちはありません
           </li>
         )}
@@ -67,9 +67,9 @@ export function ReviewInbox() {
               <button
                 type="button"
                 onClick={() => void open(item.scenarioId)}
-                className={`relative w-full rounded-[6px] px-2.5 py-2 text-left ${active ? "bg-sheet shadow-sm ring-1 ring-brand-100" : "hover:bg-sheet/70"}`}
+                className={`relative w-full rounded-[4px] px-2.5 py-2 text-left ${active ? "bg-sheet shadow-sheet ring-1 ring-brand-100" : "hover:bg-sheet/70"}`}
               >
-                {active && <span className="swirl absolute top-2 bottom-2 left-0 w-[3px] rounded-full" />}
+                {active && <span className="absolute top-2 bottom-2 left-0 w-[3px] rounded-[1px] bg-brand-500" />}
                 <div className="flex items-center gap-1.5">
                   {newest && <ActorMark entry={newest} size={18} />}
                   <span className="truncate text-[13px] font-bold">{item.name}</span>
@@ -135,7 +135,7 @@ export function ReviewPanel() {
           <button
             type="button"
             onClick={() => void open(next.scenarioId)}
-            className="mt-4 flex w-full items-center gap-2 rounded-[6px] border border-slate-200 px-3 py-2 text-left hover:border-brand-500"
+            className="mt-4 flex w-full items-center gap-2 rounded-[4px] border border-slate-200 px-3 py-2 text-left hover:border-brand-500"
           >
             <span className="text-[11px] text-slate-400">次</span>
             <span className="flex-1 truncate font-semibold">{next.name}</span>
@@ -166,10 +166,11 @@ export function ReviewPanel() {
         <Section title="AIの試し実行">
           <TestRuns runs={runs} revision={scenario?.revision ?? 0} />
         </Section>
-        <div className="flex flex-wrap gap-1.5 text-[11px]">
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           <Legend color="#2f8a4c" label="AIが追加" />
           <Legend color="#f5872a" label="AIが変更" />
           {summary.removed.length > 0 && <Legend color="#e8501f" label="AIが削除（下に一覧）" />}
+          <ChangeStepper />
         </div>
         <section>
           <div className="mb-1.5 text-[11px] font-bold text-slate-500">変わったところ</div>
@@ -196,9 +197,26 @@ export function ReviewPanel() {
   );
 }
 
+/** Walk the chart from one changed step to the next (N / Shift+N). */
+function ChangeStepper() {
+  const changeBy = useStudio((s) => s.changeBy);
+  const button = "grid h-6 w-6 place-items-center rounded-[4px] border border-slate-200 text-slate-600 hover:border-brand-500 hover:text-brand-700";
+  return (
+    <span className="ml-auto flex items-center gap-1 text-slate-500">
+      <button type="button" className={button} onClick={() => changeBy(-1)} title="前の変更（Shift+N）" aria-label="前の変更">
+        ‹
+      </button>
+      <button type="button" className={button} onClick={() => changeBy(1)} title="次の変更（N）" aria-label="次の変更">
+        ›
+      </button>
+      <kbd className="rounded bg-slate-100 px-1 text-[10px]">N</kbd>
+    </span>
+  );
+}
+
 function Legend({ color, label }: { color: string; label: string }) {
   return (
-    <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
+    <span className="flex items-center gap-1 rounded-[3px] bg-slate-100 px-2 py-0.5 text-slate-600">
       <span className="h-2 w-2 rounded-full" style={{ background: color }} />
       {label}
     </span>
@@ -240,14 +258,14 @@ export function ReviewActions() {
           type="button"
           onClick={() => setSending(true)}
           title="理由を書いてAIに直してもらいます（変更はそのまま残ります）"
-          className="h-9 flex-1 rounded-[6px] border border-shu-500/60 px-3 text-[13px] font-semibold text-shu-600 hover:bg-shu-50"
+          className="h-9 flex-1 rounded-[4px] border border-shu-500/60 px-3 text-[13px] font-semibold text-shu-600 hover:bg-shu-50"
         >
           差し戻す…
         </button>
         <button
           type="button"
           onClick={() => void approveAll()}
-          className="h-9 flex-[2] rounded-[6px] bg-ink px-4 text-[13px] font-semibold text-white hover:bg-brand-700"
+          className="h-9 flex-[2] rounded-[4px] bg-ink px-4 text-[13px] font-semibold text-paper hover:bg-brand-700"
         >
           ✓ 残して本番に使う
         </button>

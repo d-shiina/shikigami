@@ -1,26 +1,30 @@
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentContext, createAgentStore } from "./agent";
 import { AgentButton, AgentPane } from "./components/AgentPane";
-import { AppMenu } from "./components/AppMenu";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
 import { IssuesPanel } from "./components/IssuesPanel";
 import { PropertyPanel } from "./components/PropertyPanel";
 import { RunLog } from "./components/RunLog";
+import { OutlinePanel, OutlineToggle } from "./components/Outline";
 import { ReviewInbox, ReviewPanel, useInbox } from "./components/ReviewDesk";
 import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
+import { SecretAskBanner } from "./components/SecretAskBanner";
 import { SecretsDialog } from "./components/SecretsDialog";
+import { StatusBar } from "./components/StatusBar";
 import { Timeline, usePendingReview } from "./components/Timeline";
 import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
 import { VariablesPanel } from "./components/VariablesPanel";
 import { VersionsPanel } from "./components/VersionsPanel";
+import { WindowControls } from "./components/WindowControls";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
 import { t } from "./lib/i18n";
-import { createStudioStore } from "./store";
+import { createStudioStore, type StudioState } from "./store";
 
 type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
 
@@ -30,7 +34,7 @@ function HumanBanner() {
   if (!human) return null;
   return (
     <div className="flex items-center gap-2 border-b border-shu-100 bg-shu-50 px-4 py-2 text-sm font-medium text-shu-600">
-      <span className="swirl h-2 w-2 rounded-full" />
+      <span className="bg-shu-500 h-2 w-2 rounded-full" />
       <span>
         {t.waitingForYou}：{human.message}
       </span>
@@ -49,7 +53,7 @@ function Banner() {
         error ? "border-shu-100 bg-shu-50 text-shu-600" : "border-slate-200 bg-sheet text-slate-700"
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-shu-500" : "swirl"}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-shu-500" : "bg-brand-500"}`} />
       <span>{error ?? notice}</span>
       <button type="button" className="ml-auto text-xs text-slate-500 hover:underline" onClick={dismiss}>
         閉じる
@@ -84,7 +88,8 @@ function SidePanel() {
     ["issues", t.issues, issueCount],
   ];
   return (
-    <aside className="flex h-full flex-col border-l border-slate-200 bg-sheet">
+    // A sheet laid over the edge of the desk.
+    <aside className="relative z-[1] flex h-full flex-col border-l border-slate-200 bg-sheet shadow-sheet">
       <nav className="flex border-b border-slate-200 px-2">
         {tabs.map(([key, label, count]) => (
           <button
@@ -98,7 +103,7 @@ function SidePanel() {
             {label}
             {count > 0 && (
               <span
-                className={`rounded-full px-1.5 text-[10px] ${key === "timeline" || key === "review" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
+                className={`rounded-[3px] px-1.5 text-[10px] ${key === "timeline" || key === "review" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
               >
                 {count}
               </span>
@@ -137,7 +142,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => 
     ["story", t.viewStory],
   ];
   return (
-    <div className="absolute top-3 right-4 flex overflow-hidden rounded-full border border-slate-300 bg-sheet text-xs shadow-sm">
+    <div className="absolute top-3 right-4 flex overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-xs shadow-raised">
       {options.map(([key, label]) => (
         <button
           key={key}
@@ -159,7 +164,7 @@ function SecretsButton() {
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
+      className="flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
       title={t.secretsIntro}
     >
       <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
@@ -167,7 +172,7 @@ function SecretsButton() {
         <path d="M8 8h6.5M12 8v2.5M14 8v2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
       {t.secrets}
-      {count > 0 && <span className="rounded-full bg-slate-200 px-1.5 text-[10px]">{count}</span>}
+      {count > 0 && <span className="rounded-[3px] bg-slate-200 px-1.5 text-[10px]">{count}</span>}
     </button>
   );
 }
@@ -187,15 +192,15 @@ function ModeSwitch() {
     if (first && !inbox.some((i) => i.scenarioId === currentId)) void open(first.scenarioId);
   };
   const tab = (on: boolean) =>
-    `flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[12px] font-semibold ${on ? "bg-sheet text-ink shadow-sm" : "text-slate-500 hover:text-ink"}`;
+    `flex h-7 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-semibold ${on ? "bg-sheet text-ink shadow-sheet" : "text-slate-500 hover:text-ink"}`;
   return (
-    <div className="flex items-center gap-0.5 rounded-[7px] bg-slate-100 p-0.5">
+    <div className="flex items-center gap-0.5 rounded-[4px] bg-slate-100 p-0.5">
       <button type="button" className={tab(!reviewing)} onClick={() => setReviewing(false)}>
         シナリオ
       </button>
       <button type="button" className={tab(reviewing)} onClick={enterReview}>
         確認待ち
-        {inbox.length > 0 && <span className="rounded-full bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
+        {inbox.length > 0 && <span className="rounded-[3px] bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
       </button>
     </div>
   );
@@ -230,21 +235,27 @@ function Shell() {
     }
   };
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr] ${listOpen || reviewing ? "grid-cols-[248px_1fr_360px]" : "grid-cols-[44px_1fr_360px]"}`}>
-      <header className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4">
-        <img src="/mark.png" alt="" className="h-6 w-6" />
-        <span className="text-[15px] font-black tracking-wider">式神</span>
-        <span className="-ml-1.5 text-[10px] font-medium tracking-[.2em] text-slate-400">STUDIO</span>
+    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
+      {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
+      <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4 select-none">
+        <img data-tauri-drag-region src="/mark.png" alt="" className="h-6 w-6" draggable={false} />
+        <span data-tauri-drag-region className="text-[15px] font-black tracking-wider">
+          式神
+        </span>
+        <span data-tauri-drag-region className="-ml-1.5 text-[10px] font-medium tracking-[.2em] text-slate-400">
+          STUDIO
+        </span>
         <ModeSwitch />
         <ScenarioHeader />
         <span className="h-5 w-px bg-slate-200" />
         <AgentButton />
         <SecretsButton />
-        <AppMenu />
+        <WindowControls />
         <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
       </header>
       <div className="col-span-3">
         <HumanBanner />
+        <SecretAskBanner />
         <Banner />
       </div>
       <div className="min-h-0">
@@ -256,17 +267,24 @@ function Shell() {
           <ScenarioRail onExpand={() => setListOpen(true)} />
         )}
       </div>
-      <main className="flex min-h-0 flex-col">
-        <div className="relative min-h-0 flex-1">
+      <main className="flex min-h-0 min-w-0 flex-col">
+        <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
             <StoryView />
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
+              {hasScenario && (
+                <>
+                  <OutlineToggle />
+                  <OutlinePanel />
+                </>
+              )}
             </ReactFlowProvider>
           )}
           {hasScenario && <ViewToggle view={view} onChange={setView} />}
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+          {/* Clear of the zoom controls in the bottom-left corner. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
             <CanvasDock />
           </div>
         </div>
@@ -277,11 +295,45 @@ function Shell() {
         )}
       </main>
       <div className="min-h-0">{hasScenario && <SidePanel />}</div>
+      <StatusBar />
       <CommandPalette />
       <SecretsDialog />
       <AgentPane />
     </div>
   );
+}
+
+/**
+ * Moving around the flow chart without the mouse:
+ * ↑↓ / j k / Tab — previous / next step (Alt+↑↓ moves the step itself),
+ * Home / End — first / last, n / Shift+N — next / previous AI change,
+ * Esc — clear the selection, o — the outline.
+ */
+function navigate(e: KeyboardEvent, state: StudioState) {
+  if (!state.scenario || state.paletteOpen) return;
+  // Buttons and links keep Tab for moving focus; the canvas and the page do not need it.
+  const target = e.target as HTMLElement | null;
+  const onControl = target?.closest("button, a, [role=tab]") && !target.closest(".react-flow");
+  const key = e.key;
+  const step = (delta: number) => {
+    e.preventDefault();
+    state.stepBy(delta);
+  };
+  if (e.altKey && (key === "ArrowUp" || key === "ArrowDown")) {
+    e.preventDefault();
+    void state.moveSelected(key === "ArrowUp" ? -1 : 1);
+  } else if (e.altKey) {
+    return;
+  } else if (key === "ArrowDown" || key === "j") step(1);
+  else if (key === "ArrowUp" || key === "k") step(-1);
+  else if (key === "Tab" && !onControl) step(e.shiftKey ? -1 : 1);
+  else if (key === "Home") step(-Infinity);
+  else if (key === "End") step(Infinity);
+  else if (key === "n" || key === "N") {
+    e.preventDefault();
+    state.changeBy(e.shiftKey ? -1 : 1);
+  } else if (key === "Escape" && state.selection) state.select(null);
+  else if (key === "o") state.setOutlineOpen(!state.outlineOpen);
 }
 
 export function App() {
@@ -293,9 +345,21 @@ export function App() {
     const unlisten = [
       events.onScenarioChanged((id) => void store.getState().onExternalChange(id)),
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
+      events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
       agent.onEvent((e) => agentStore.getState().onEvent(e)),
     ];
     void agentStore.getState().init();
+    // Requests come from another process (the MCP server): re-read on refocus too.
+    const onFocus = () => void store.getState().loadSecretRequests();
+    window.addEventListener("focus", onFocus);
+    // A new request flashes Studio in the taskbar: the user is likely in the AI's chat.
+    const stopAttention = store.subscribe((s, prev) => {
+      if (s.secretRequests.some((r) => !prev.secretRequests.some((p) => p.name === r.name))) {
+        void getCurrentWindow()
+          .requestUserAttention(UserAttentionType.Informational)
+          .catch(() => {});
+      }
+    });
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
@@ -329,11 +393,15 @@ export function App() {
         void store.getState().redo();
       } else if (e.key === "Delete") {
         void store.getState().removeSelected();
+      } else if (!mod) {
+        navigate(e, store.getState());
       }
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("focus", onFocus);
+      stopAttention();
       for (const p of unlisten) void p.then((off) => off());
     };
   }, [store, agentStore]);
