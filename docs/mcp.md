@@ -16,7 +16,7 @@
 /plugin install shikigami --marketplace d-shiina/shikigami
 ```
 
-（Claude Code 2.1.275 より前は `/plugin marketplace add d-shiina/shikigami` のあと `/plugin install shikigami@shikigami`。リポジトリが Private の間は、GitHub でアクセス権のあるアカウントが必要です。）
+（Claude Code 2.1.275 より前は `/plugin marketplace add d-shiina/shikigami` のあと `/plugin install shikigami@shikigami`。）
 
 MCP サーバーだけを登録する場合：
 

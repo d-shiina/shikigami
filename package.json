@@ -8,6 +8,8 @@
     "test": "pnpm -r test",
     "studio:dev": "pnpm --filter @shikigami/studio tauri dev",
     "studio:build": "pnpm --filter @shikigami/studio tauri build",
+    "studio:bundle-cli": "node apps/studio/scripts/bundle-cli.mjs",
+    "studio:release": "pnpm studio:bundle-cli && pnpm --filter @shikigami/studio tauri build --config src-tauri/tauri.release.conf.json",
     "demo:site": "node packages/browser-adapter/src/demo-site.ts",
     "demo:browser": "node packages/browser-adapter/src/demo.ts"
   }

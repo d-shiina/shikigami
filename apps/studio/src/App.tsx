@@ -1,5 +1,6 @@
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AppMenu } from "./components/AppMenu";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
@@ -100,6 +101,7 @@ function Shell() {
         <span className="font-serif text-lg font-bold tracking-wider">式神</span>
         <span className="-ml-1 text-xs font-medium tracking-[.2em] text-slate-500">STUDIO</span>
         <ScenarioHeader />
+        <AppMenu />
       </header>
       <div className="col-span-3">
         <Banner />
