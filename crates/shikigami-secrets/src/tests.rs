@@ -374,3 +374,15 @@ fn tidying_keeps_requests_merged_with_more_than_is_registered() {
         ["https://b.example"]
     );
 }
+
+#[test]
+fn empty_fields_name_the_field() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    v.set(input("社内")).unwrap();
+    let e = v
+        .resolve(&reference("社内", SecretField::Totp))
+        .unwrap_err();
+    assert_eq!(e.code, "SECRET_FIELD_EMPTY");
+    assert_eq!(e.details().unwrap()["field"], "totp");
+}

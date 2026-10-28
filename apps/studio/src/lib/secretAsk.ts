@@ -30,7 +30,7 @@ const LOGIN: SecretField[] = ["username", "password"];
 /** The ask to show now: the oldest AI request first, then a failed run. */
 export function nextSecretAsk(
   requests: SecretRequest[],
-  fix: { name: string; code: string; site?: string } | null,
+  fix: { name: string; code: string; site?: string; field?: SecretField } | null,
   secrets: SecretInfo[],
 ): SecretAsk | null {
   const request = requests[0];
@@ -56,10 +56,11 @@ export function nextSecretAsk(
       return existing
         ? null // Registered since the run stopped.
         : { ...base, fields: LOGIN, needsSite: true, quick: true };
-    case "SECRET_FIELD_EMPTY": {
-      const fields = LOGIN.filter((f) => !existing?.fields.includes(f));
-      return { ...base, fields, needsSite: !existing?.sites.length, quick: fields.length > 0 };
-    }
+    case "SECRET_FIELD_EMPTY":
+      // Without the field the run named, only the full form can tell.
+      return fix.field
+        ? { ...base, fields: [fix.field], needsSite: false, quick: true }
+        : { ...base, fields: [], needsSite: false, quick: false };
     case "SECRET_SITE_NOT_SET":
       return { ...base, fields: [], needsSite: !existing?.sites.length, quick: !existing?.sites.length };
     default:

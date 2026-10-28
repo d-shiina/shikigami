@@ -25,7 +25,7 @@ function siteLabel(site: string) {
  * once and never reach the AI.
  */
 function AskForm({ ask }: { ask: SecretAsk }) {
-  const saveSecret = useStudio((s) => s.saveSecret);
+  const saveSecret = useStudio((s) => s.saveSecretAdding);
   const dismissRequest = useStudio((s) => s.dismissSecretRequest);
   const dismissFix = useStudio((s) => s.dismissSecretFix);
   const openForm = useStudio((s) => s.openSecretForm);
@@ -48,15 +48,16 @@ function AskForm({ ask }: { ask: SecretAsk }) {
       onSubmit={async (e) => {
         e.preventDefault();
         if (!ask.quick) return;
-        const sites = [...(ask.existing?.sites ?? []), ...ask.sites, ...(site.trim() ? [site.trim()] : [])];
         setSaving(true);
-        await saveSecret({
-          name: ask.name,
-          username: ask.fields.includes("username") ? (values.username ?? "") : undefined,
-          password: ask.fields.includes("password") ? values.password : undefined,
-          totp: ask.fields.includes("totp") ? values.totp : undefined,
-          sites,
-        });
+        await saveSecret(
+          {
+            name: ask.name,
+            username: ask.fields.includes("username") ? (values.username ?? "") : undefined,
+            password: ask.fields.includes("password") ? values.password : undefined,
+            totp: ask.fields.includes("totp") ? values.totp : undefined,
+          },
+          [...ask.sites, ...(site.trim() ? [site.trim()] : [])],
+        );
         setSaving(false);
       }}
     >

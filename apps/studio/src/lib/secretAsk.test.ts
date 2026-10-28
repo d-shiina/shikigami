@@ -60,9 +60,12 @@ describe("nextSecretAsk", () => {
       quick: true,
     });
     expect(nextSecretAsk([], { name: "Google", code: "SECRET_NOT_FOUND" }, [saved])).toBeNull();
-    expect(
-      nextSecretAsk([], { name: "Google", code: "SECRET_FIELD_EMPTY" }, [{ ...saved, fields: ["username"] }]),
-    ).toMatchObject({ fields: ["password"], needsSite: false, quick: true });
+    expect(nextSecretAsk([], { name: "Google", code: "SECRET_FIELD_EMPTY", field: "totp" }, [saved])).toMatchObject({
+      fields: ["totp"],
+      needsSite: false,
+      quick: true,
+    });
+    expect(nextSecretAsk([], { name: "Google", code: "SECRET_FIELD_EMPTY" }, [saved])?.quick).toBe(false);
     // A refused page is only shown: adding it takes the full form.
     expect(
       nextSecretAsk([], { name: "Google", code: "SECRET_SITE_MISMATCH", site: "https://evil.example" }, [saved]),
