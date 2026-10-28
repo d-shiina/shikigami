@@ -1,6 +1,7 @@
 {
   "name": "shikigami",
   "private": true,
+  "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.3",
   "scripts": {
     "schema:generate": "cargo run -q -p shikigami-cli -- schema export && pnpm --filter @shikigami/schema generate",
@@ -9,7 +10,8 @@
     "studio:dev": "pnpm --filter @shikigami/studio tauri dev",
     "studio:build": "pnpm --filter @shikigami/studio tauri build",
     "studio:bundle-cli": "node apps/studio/scripts/bundle-cli.mjs",
-    "studio:release": "pnpm studio:bundle-cli && node apps/studio/scripts/set-pubkey.mjs && pnpm --filter @shikigami/studio tauri build --config src-tauri/tauri.release.gen.json",
+    "studio:bundle-node": "node apps/studio/scripts/bundle-node.mjs",
+    "studio:release": "pnpm studio:bundle-cli && pnpm studio:bundle-node && node apps/studio/scripts/set-pubkey.mjs && pnpm --filter @shikigami/studio tauri build --config src-tauri/tauri.release.gen.json",
     "demo:site": "node packages/browser-adapter/src/demo-site.ts",
     "demo:browser": "node packages/browser-adapter/src/demo.ts",
     "release:setup": "node scripts/setup-release-signing.mjs"

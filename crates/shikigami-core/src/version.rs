@@ -41,6 +41,7 @@ pub struct ScenarioVersion {
     pub created_by: Actor,
     /// Scenario revision the snapshot was taken from.
     pub revision: u64,
+    #[serde(deserialize_with = "crate::migrate::deserialize")]
     pub scenario: Scenario,
 }
 
@@ -95,12 +96,17 @@ pub struct ScenarioBundle {
     #[serde(with = "time::serde::rfc3339")]
     #[schemars(with = "String")]
     pub exported_at: OffsetDateTime,
+    #[serde(deserialize_with = "crate::migrate::deserialize")]
     pub scenario: Scenario,
     #[serde(default)]
     pub versions: Vec<ScenarioVersion>,
     /// Every scenario `scenario` calls (directly or through others), without
     /// versions, so the bundle runs on its own.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "crate::migrate::deserialize_vec"
+    )]
     pub subscenarios: Vec<Scenario>,
 }
 
@@ -230,6 +236,7 @@ pub fn same_content(a: &Scenario, b: &Scenario) -> bool {
     a.name == b.name
         && a.description == b.description
         && a.metadata.tags == b.metadata.tags
+        && a.requires == b.requires
         && a.settings == b.settings
         && a.variables == b.variables
         && a.steps == b.steps
@@ -251,6 +258,9 @@ pub fn ops_to_match(current: &Scenario, target: &Scenario) -> Vec<EditOp> {
     }
     if current.metadata.tags != target.metadata.tags {
         patch.tags = Some(target.metadata.tags.clone());
+    }
+    if current.requires != target.requires {
+        patch.requires = Some(target.requires.clone());
     }
     if patch != ScenarioPatch::default() {
         ops.push(EditOp::UpdateScenario { patch });

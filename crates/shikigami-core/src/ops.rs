@@ -4,6 +4,8 @@
 //! an op returns its exact inverse, which powers undo/redo and makes every
 //! change reviewable as a diff (AI repair proposals are just op lists).
 
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
@@ -111,6 +113,10 @@ pub struct ScenarioPatch {
     pub settings: Option<ScenarioSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+    /// Replaces `requires` (plugin version ranges). Core still adds plugins
+    /// that steps use and drops unused ones afterwards.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -258,6 +264,9 @@ fn apply_inner(scenario: &mut Scenario, op: EditOp) -> CoreResult<EditOp> {
             }
             if let Some(tags) = patch.tags {
                 inverse.tags = Some(std::mem::replace(&mut scenario.metadata.tags, tags));
+            }
+            if let Some(requires) = patch.requires {
+                inverse.requires = Some(std::mem::replace(&mut scenario.requires, requires));
             }
             Ok(EditOp::UpdateScenario { patch: inverse })
         }

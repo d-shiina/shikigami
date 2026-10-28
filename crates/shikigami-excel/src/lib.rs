@@ -566,6 +566,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 resources: vec![ResourceDef::file("path")],
                 secret_params: vec![],
                 default_timeout_ms: d.excel_app.then_some(300_000),
+                deprecated: None,
+                plugin: None,
             };
             (def, d.kind)
         })

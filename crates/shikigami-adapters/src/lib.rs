@@ -17,6 +17,7 @@ pub fn builtin() -> Vec<Arc<dyn Adapter>> {
         Arc::new(shikigami_desktop::DesktopAdapter::new()),
         Arc::new(shikigami_files::FileAdapter::new()),
         Arc::new(shikigami_excel::ExcelAdapter::new()),
+        Arc::new(shikigami_pdf::PdfAdapter::new()),
     ];
     adapters.extend(shikigami_system::adapters());
     adapters

@@ -19,9 +19,10 @@ use time::OffsetDateTime;
 
 use crate::ids::{ScenarioId, StepId};
 
-/// Current scenario schema version. Bump when the file format changes in a
-/// way older readers cannot handle and add a migration in [`crate::migrate`].
-pub const SCHEMA_VERSION: u32 = 1;
+/// Current scenario schema version. Bump on every change to the file shape
+/// (readers reject unknown fields, so new optional fields count too) and add
+/// a migration in [`crate::migrate`]. See docs/compatibility.md.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// A scenario: the unit that AI clients, Studio and the Runtime share.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -37,6 +38,11 @@ pub struct Scenario {
     pub name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
+    /// Plugins the steps need, with the versions they were written for:
+    /// `{ "plugin:kintone": "^0.3.1" }`. Kept up to date by Core when steps
+    /// are added or removed, so authors normally leave it alone.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub requires: BTreeMap<String, String>,
     /// Monotonic revision, incremented by every committed edit. Used for
     /// optimistic concurrency between Studio, MCP clients and the CLI.
     #[serde(default)]
@@ -64,6 +70,7 @@ impl Scenario {
             id: ScenarioId::generate(),
             name: name.into(),
             description: String::new(),
+            requires: BTreeMap::new(),
             revision: 0,
             variables: Vec::new(),
             steps: Vec::new(),

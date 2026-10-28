@@ -135,6 +135,34 @@ pub struct StepTypeDef {
     /// scenario's default), for steps that wait on people (manual login).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_timeout_ms: Option<u64>,
+    /// Set when the type should no longer be used in new steps. It keeps
+    /// working; validation warns and points at the replacement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deprecated: Option<Deprecation>,
+    /// The plugin that provides this type (`None` for built-in types).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<PluginInfo>,
+}
+
+/// Why a step type is deprecated and what to use instead.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Deprecation {
+    /// What to do instead, for people and AI clients.
+    pub note: String,
+    /// The step type that replaces this one, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<String>,
+}
+
+/// A plugin that provides step types, as installed on this PC.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginInfo {
+    /// The plugin's name, also the prefix of its step types.
+    pub name: String,
+    /// Installed version (semver).
+    pub version: String,
 }
 
 impl StepTypeDef {
@@ -178,6 +206,14 @@ impl StepRegistry {
 
     pub fn get(&self, step_type: &str) -> Option<&StepTypeDef> {
         self.types.get(step_type)
+    }
+
+    /// The installed plugin called `name`, if any of its types is registered.
+    pub fn plugin(&self, name: &str) -> Option<&PluginInfo> {
+        self.types
+            .values()
+            .filter_map(|def| def.plugin.as_ref())
+            .find(|plugin| plugin.name == name)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &StepTypeDef> {
@@ -245,6 +281,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::WHILE.into(),
@@ -267,6 +305,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::REPEAT.into(),
@@ -289,6 +329,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::FOR_EACH.into(),
@@ -314,6 +356,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::TRY.into(),
@@ -330,6 +374,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::PARALLEL.into(),
@@ -349,6 +395,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::GROUP.into(),
@@ -365,6 +413,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::BREAK.into(),
@@ -381,6 +431,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::CONTINUE.into(),
@@ -397,6 +449,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::FAIL.into(),
@@ -419,6 +473,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: builtin::VARIABLE_SET.into(),
@@ -445,6 +501,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: builtin::LOG_MESSAGE.into(),
@@ -467,6 +525,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: control::WAIT_UNTIL.into(),
@@ -489,6 +549,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: scenario::CALL.into(),
@@ -525,6 +587,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
         StepTypeDef {
             step_type: builtin::FLOW_DELAY.into(),
@@ -544,6 +608,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
             secret_params: vec![],
             default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
         },
     ]
 }

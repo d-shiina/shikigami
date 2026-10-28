@@ -69,6 +69,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 - `file.*`：`readText` / `writeText`、`readCsv` / `writeCsv`、`list` / `exists`、`copy` / `move` / `delete` / `createFolder`、`zip` / `unzip`（docs/files.md）。
 - パスは絶対パスで書き、組み立ては `pathJoin(folder, name)`・`fileName(path)`。`copy` / `move` の `to` は新しいパスそのもの（フォルダーを渡さない）。
 - CSV は見出しをキーにしたレコードの配列になり、セルは文字列（金額は `num()`）。加工は `filter` / `map` で行い、`writeCsv` の `rows` に `"{{ 変数 }}"` で渡す。Excel で開く CSV は `encoding: "utf-8-bom"` か `"shift_jis"`。
+- PDF の文字は `pdf.readText`（出力 `{ text, pages }`）で読み、値は `regexFind(res.text, '請求金額\\s*([\\d,]+)', 1)` のように式で取り出す（JSON の中では `\\` を `\\\\` と書く）。スキャンした PDF は文字が空になる。パスワードは `password` にシークレットで渡す（docs/pdf.md）。
 - ファイルの到着を待つときは `wait.until` の `check` に `file.list`（`saveAs`）を入れ、`condition` で `len(files) > 0`。
 
 ## Web API・プログラム・人とのやりとり
