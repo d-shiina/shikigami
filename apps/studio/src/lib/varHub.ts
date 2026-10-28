@@ -1,12 +1,8 @@
-// The variable box: every variable gets one column in a strip above the
-// flow, and steps link to the box instead of to each other. Columns sit
-// above the steps that use them, so links run mostly straight up and down.
-// Display only.
+// The variable box: every variable gets one row in a box beside the flow,
+// and steps link to the box instead of to each other. Display only.
 import type { Step } from "@shikigami/schema";
 import { type DataLink, OUTPUT_NODE } from "./dataFlow";
 import { outputs } from "./nodeRows";
-
-export const HUB_COL_W = 140;
 
 export type HubLink =
   /** `step` writes `variable` into the box. */
@@ -32,26 +28,4 @@ export function hubLinks(steps: Step[], links: DataLink[]): HubLink[] {
     out.push({ kind: "read", step: l.to, variable: l.variable, handle: l.toHandle });
   }
   return out;
-}
-
-/**
- * Column positions (left edges) for each variable: ordered by where their
- * users are, nudged right so columns never overlap. Unused variables go last.
- */
-export function hubColumns(variables: string[], links: HubLink[], socketX: (l: HubLink) => number | undefined): Map<string, number> {
-  const want = new Map<string, number>();
-  for (const v of variables) {
-    const xs = links.filter((l) => l.variable === v).map(socketX).filter((x): x is number => x !== undefined);
-    want.set(v, xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length - HUB_COL_W / 2 : Number.POSITIVE_INFINITY);
-  }
-  const order = [...variables].sort((a, b) => (want.get(a) ?? 0) - (want.get(b) ?? 0));
-  const placed = new Map<string, number>();
-  let next = Number.NEGATIVE_INFINITY;
-  for (const v of order) {
-    const w = want.get(v) ?? 0;
-    const x = Math.max(Number.isFinite(w) ? w : next, next);
-    placed.set(v, x);
-    next = x + HUB_COL_W;
-  }
-  return placed;
 }

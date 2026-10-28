@@ -20,7 +20,7 @@ import { type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNo
 import { t } from "../lib/i18n";
 import type { HistoryEntry } from "@shikigami/schema";
 import { dataLinks, inHandle, outHandle } from "../lib/dataFlow";
-import { HUB_COL_W, type HubLink, hubColumns, hubLinks } from "../lib/varHub";
+import { hubLinks } from "../lib/varHub";
 import { actorLabel, describe, formatValue } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
@@ -145,9 +145,10 @@ function DataEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
   if (!data) return null;
   // Links of the step under the pointer (or else the selected one) light up.
   const focus = hoveredStep ?? data.selectedId;
-  const lit = focus !== null && (data.from === focus || data.to === focus);
-  const dim = focus !== null && !lit;
-  const strong = hover || lit;
+  const lit = focus !== null && (data.from === focus || data.to === focus || focus === varFocus(data.variable));
+  // With nothing in focus no links are drawn: a scenario with many
+  // variables would otherwise be a web of lines.
+  if (!lit) return null;
   const last = data.writes.at(-1);
   return (
     <>
@@ -156,10 +157,10 @@ function DataEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
           id={id}
           path={path}
           interactionWidth={12}
-          style={{ stroke: data.color, strokeWidth: strong ? 2.5 : 1.25, opacity: strong ? 1 : dim ? 0.12 : 0.35 }}
+          style={{ stroke: data.color, strokeWidth: hover ? 3 : 2, opacity: 1 }}
         />
       </g>
-      {last && !hover && lit && (
+      {last && !hover && (
         <EdgeLabelRenderer>
           {/* The last value that travelled along this link, always visible after a run. */}
           <div
@@ -305,41 +306,54 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean; d
   );
 }
 
-type HubColumn = { name: string; type: string; tag: string; x: number; value?: string };
-type HubNodeData = { kind: "hub"; columns: HubColumn[]; width: number };
+type HubRow = { name: string; type: string; tag: string; value?: string };
+type HubNodeData = { kind: "hub"; rows: HubRow[] };
 
 const HUB_ID = "@variables";
-const HUB_H = 74;
-const HUB_GAP = 96;
+const HUB_W = 220;
+const HUB_ROW_H = 46;
+const HUB_HEAD_H = 30;
+const HUB_GAP = 120;
 const writeHandle = (v: string) => `w:${v}`;
 const readHandle = (v: string) => `r:${v}`;
+/** Hover focus for a whole variable (its row in the box), as opposed to a step id. */
+const varFocus = (v: string) => `var:${v}`;
 
 /**
- * The variable box: one column per variable. Steps that write a variable
- * link up into its column; steps that read it get a link down from it.
+ * The variable box, a list down the left of the chart. Steps that write a
+ * variable and steps that read it link to its row, shown only for the step
+ * or variable under the pointer (or selected), so many variables never
+ * turn into a web of lines.
  */
 function HubNode({ data }: NodeProps<Node<HubNodeData>>) {
   return (
-    <div style={{ width: data.width, height: HUB_H }} className="relative rounded-[6px] border border-slate-300 bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)]">
-      <div className="absolute -top-6 left-0 flex items-center gap-1.5 text-[12px] font-bold text-ink">
+    <div style={{ width: HUB_W }} className="rounded-[6px] border border-slate-300 bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)]">
+      <div style={{ height: HUB_HEAD_H }} className="flex items-center gap-1.5 rounded-t-[5px] bg-ink px-3 text-[12px] font-bold text-paper">
         <span className="swirl h-2.5 w-2.5 rounded-full" />
         変数
-        <span className="font-normal text-slate-400">上から読み、下から書き込みます</span>
+        <span className="ml-auto font-normal text-paper/60">{data.rows.length}</span>
       </div>
-      {data.columns.map((c) => {
-        const color = TYPE_COLOR[c.type] ?? "#94a3b8";
+      {data.rows.map((r) => {
+        const color = TYPE_COLOR[r.type] ?? "#94a3b8";
         const handle = { width: 10, height: 10, border: "2px solid white", boxShadow: "0 0 0 1px rgba(15,27,42,.25)", background: color };
         return (
-          <div key={c.name} style={{ left: c.x, width: HUB_COL_W - 8 }} className="absolute top-2 bottom-2 flex flex-col items-center justify-center rounded-[4px] px-1" title={c.value}>
-            <div className="flex max-w-full items-center gap-1">
-              <span className="text-[10px] text-slate-400">{c.tag}</span>
+          <div
+            key={r.name}
+            style={{ height: HUB_ROW_H }}
+            className="relative flex flex-col justify-center border-t border-slate-100 px-3 hover:bg-brand-50"
+            title={r.value}
+            onMouseEnter={() => hovered.set(varFocus(r.name))}
+            onMouseLeave={() => hovered.set(null)}
+          >
+            <div className="flex items-baseline gap-1.5">
               <span className="truncate font-mono text-[13px] font-bold" style={{ color }}>
-                {c.name}
+                {r.name}
               </span>
+              <span className="ml-auto shrink-0 text-[10px] text-slate-400">{r.tag}</span>
             </div>
-            <div className="mt-0.5 max-w-full truncate rounded bg-slate-100 px-1.5 font-mono text-[11px] text-slate-600">{c.value ?? "—"}</div>
-            <Handle id={writeHandle(c.name)} type="target" position={Position.Bottom} isConnectable={false} style={{ ...handle, left: "38%" }} title={`${c.name} に書き込む`} />
-            <Handle id={readHandle(c.name)} type="source" position={Position.Bottom} isConnectable={false} style={{ ...handle, left: "62%" }} title={`${c.name} を読む`} />
+            <div className="truncate font-mono text-[11px] text-slate-500">{r.value ?? "—"}</div>
+            <Handle id={writeHandle(r.name)} type="target" position={Position.Right} isConnectable={false} style={{ ...handle, top: "35%" }} title={`${r.name} に書き込む`} />
+            <Handle id={readHandle(r.name)} type="source" position={Position.Right} isConnectable={false} style={{ ...handle, top: "65%" }} title={`${r.name} を読む`} />
           </div>
         );
       })}
@@ -436,20 +450,7 @@ export function FlowCanvas() {
     () => dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys())),
     [scenario, defs, vars],
   );
-  const hub = useMemo(() => {
-    const items = hubLinks(scenario?.steps ?? [], links);
-    const at = new Map(layout.nodes.map((n) => [n.id, n.position.x] as const));
-    // Writes leave from a step's right edge, reads enter at its left edge.
-    const socketX = (l: HubLink) => {
-      const x = at.get(l.step);
-      return x === undefined ? undefined : l.kind === "write" ? x + NODE_W : x;
-    };
-    const names = [...vars.keys()];
-    const cols = hubColumns(names, items, socketX);
-    const left = Math.min(0, ...cols.values());
-    const right = Math.max(layout.width, ...[...cols.values()].map((x) => x + HUB_COL_W));
-    return { items, cols, left, width: right - left };
-  }, [scenario, links, layout, vars]);
+  const hubItems = useMemo(() => hubLinks(scenario?.steps ?? [], links), [scenario, links]);
 
   const lastValue = (name: string) => {
     const last = run?.changes.filter((c) => c.variable === name).at(-1);
@@ -457,36 +458,40 @@ export function FlowCanvas() {
     const def = declared.find((v) => v.name === name);
     return def?.default === undefined ? undefined : formatValue(def.default);
   };
-  if (vars.size > 0) {
-    const tagOf = (name: string) => {
-      const d = declared.find((v) => v.name === name)?.direction;
-      return d === "input" ? "入力" : d === "output" ? "出力" : d === "inOut" ? "入出力" : d ? "内部" : "要素";
-    };
+  // Inputs first, then outputs, internal variables and loop elements.
+  const GROUPS: [string, (d?: string) => boolean][] = [
+    ["入力", (d) => d === "input" || d === "inOut"],
+    ["出力", (d) => d === "output"],
+    ["内部", (d) => d === "local"],
+  ];
+  const hubRows: HubRow[] = [];
+  for (const [tag, match] of GROUPS) {
+    for (const v of declared) if (match(v.direction ?? "local")) hubRows.push({ name: v.name, type: v.type ?? "any", tag, value: lastValue(v.name) });
+  }
+  for (const [name, type] of vars) {
+    if (!declared.some((v) => v.name === name)) hubRows.push({ name, type: type ?? "any", tag: "要素", value: lastValue(name) });
+  }
+  if (hubRows.length > 0) {
     nodes.push({
       id: HUB_ID,
       type: "hub",
       draggable: false,
       selectable: false,
-      position: { x: hub.left, y: -HUB_H - HUB_GAP },
-      data: {
-        kind: "hub",
-        width: hub.width,
-        columns: [...hub.cols].map(([name, x]) => ({
-          name,
-          x: x - hub.left + 4,
-          type: vars.get(name) ?? "any",
-          tag: tagOf(name),
-          value: lastValue(name),
-        })),
-      },
+      position: { x: -HUB_W - HUB_GAP, y: 0 },
+      data: { kind: "hub", rows: hubRows },
     });
   }
-  const top = vars.size > 0 ? -HUB_H - HUB_GAP - 32 : 0;
-  const bounds = { x: hub.left, width: hub.width, y: top, height: layout.height - top };
+  const hubHeight = hubRows.length > 0 ? HUB_HEAD_H + hubRows.length * HUB_ROW_H : 0;
+  const bounds = {
+    x: hubRows.length > 0 ? -HUB_W - HUB_GAP : 0,
+    width: layout.width + (hubRows.length > 0 ? HUB_W + HUB_GAP : 0),
+    y: 0,
+    height: Math.max(layout.height, hubHeight),
+  };
 
   // Links stay faint behind the chart; the hovered or selected step's own links light up.
   const selectedId = selection?.kind === "step" ? selection.stepId : null;
-  const dataEdges: Edge[] = hub.items.map((l) => {
+  const dataEdges: Edge[] = hubItems.map((l) => {
     const color = TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8";
     const all = run?.changes.filter((c) => c.variable === l.variable) ?? [];
     const write = l.kind === "write";
