@@ -331,14 +331,14 @@ function StepNode({ data }: StepNodeProps) {
     <div
       style={{ width: NODE_W }}
       // The selected step is lifted off the stack: two sheet edges and a deeper shadow.
-      className={`relative rounded-[4px] border bg-sheet transition-shadow ${data.selected ? "shadow-lifted" : "shadow-sheet hover:shadow-raised"} ${
+      className={`relative rounded-[4px] border bg-sheet transition-shadow ${data.selected ? "shadow-lifted" : "shadow-node hover:shadow-raised"} ${
         data.diff
           ? `border-2 ${DIFF_STYLE[data.diff].border}`
           : data.byAi
             ? "ai-border"
             : data.selected
               ? "border-brand-500"
-              : "border-slate-200"
+              : "border-slate-300"
       } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
         data.runState ? RUN_STYLE[data.runState] : ""
       }`}

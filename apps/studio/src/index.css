@@ -13,6 +13,8 @@
   --font-mono: "Cascadia Mono", Consolas, "Noto Sans JP Variable", "BIZ UDGothic", monospace;
 
   --color-paper: #f4f7fb;
+  /* The flow chart's desk: a shade under paper, so steps stand out on it. */
+  --color-desk: #e9eef4;
   --color-sheet: #ffffff;
   --color-ink: #0f1b2a;
 
@@ -36,7 +38,8 @@
   /*
    * 式神 are paper, laid out like Material Design: every surface is a sheet
    * at some height above the desk (paper), and its shadow says how high.
-   *   sheet  1dp   nodes, cards, panels resting on the desk
+   *   sheet  1dp   cards and panels resting on the desk
+   *   node   2dp   steps on the chart: the work itself, drawn crisply
    *   raised 4dp   toolbars and the outline floating over the chart
    *   lifted 8dp   what is picked up: the selected step, menus, popovers
    *   dialog 24dp  dialogs and the command palette, above everything
@@ -49,6 +52,7 @@
   --radius-xl: 4px;
   --radius-2xl: 4px;
   --shadow-sheet: 0 1px 3px rgb(15 27 42 / 0.12), 0 1px 2px rgb(15 27 42 / 0.16);
+  --shadow-node: 0 1px 2px rgb(15 27 42 / 0.2), 0 2px 6px rgb(15 27 42 / 0.1);
   --shadow-raised: 0 4px 8px rgb(15 27 42 / 0.12), 0 2px 4px rgb(15 27 42 / 0.12);
   --shadow-lifted: 0 10px 20px rgb(15 27 42 / 0.16), 0 6px 6px rgb(15 27 42 / 0.14);
   --shadow-dialog: 0 19px 38px rgb(15 27 42 / 0.28), 0 15px 12px rgb(15 27 42 / 0.18);
@@ -63,6 +67,7 @@
 
 :root[data-theme="dark"] {
   --color-paper: #0b1420;
+  --color-desk: #070d16;
   --color-sheet: #131e2c;
   --color-ink: #e4ebf3;
 
@@ -124,7 +129,7 @@
 
 /* React Flow's dark mode brings its own greys; keep the app's navy. */
 .react-flow.dark {
-  --xy-background-color: var(--color-paper);
+  --xy-background-color: var(--color-desk);
   --xy-controls-button-background-color: var(--color-sheet);
   --xy-controls-button-background-color-hover: var(--color-slate-100);
   --xy-controls-button-border-color: var(--color-slate-200);
@@ -176,7 +181,8 @@ textarea,
 }
 
 .canvas-bg {
-  background-color: var(--color-paper);
+  --xy-background-color: var(--color-desk);
+  background-color: var(--color-desk);
 }
 
 .react-flow__edge-text {
