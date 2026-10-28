@@ -60,24 +60,25 @@ function SidePanel() {
   ];
   return (
     <aside className="flex h-full flex-col border-l border-slate-200 bg-sheet">
-      <nav className="flex gap-1 px-3 pt-3">
+      <nav className="flex border-b border-slate-200 px-2">
         {tabs.map(([key, label, count]) => (
           <button
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${
-              tab === key ? "bg-ink text-paper" : "text-slate-500 hover:bg-slate-100 hover:text-ink"
+            className={`relative flex flex-1 items-center justify-center gap-1 py-2.5 text-xs font-medium ${
+              tab === key ? "text-ink" : "text-slate-500 hover:text-ink"
             }`}
           >
             {label}
             {count > 0 && (
               <span
-                className={`rounded-full px-1 text-[10px] ${key === "timeline" ? "bg-shu-500 text-white" : tab === key ? "bg-white/20" : "bg-slate-200"}`}
+                className={`rounded-full px-1.5 text-[10px] ${key === "timeline" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
               >
                 {count}
               </span>
             )}
+            {tab === key && <span className="swirl-line absolute inset-x-3 bottom-[-1px] h-[2px] rounded-full" />}
           </button>
         ))}
       </nav>
