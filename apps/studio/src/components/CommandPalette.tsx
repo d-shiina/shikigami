@@ -55,7 +55,9 @@ export function CommandPalette() {
       input.current?.focus();
     }
   }, [open]);
-  useEffect(() => setActive(0), [query]);
+  useEffect(() => {
+    setActive(0);
+  }, [query]);
 
   if (!open) return null;
 

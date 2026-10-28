@@ -26,7 +26,9 @@ function CommitInput(props: {
   multiline?: boolean;
 }) {
   const [draft, setDraft] = useState(props.value);
-  useEffect(() => setDraft(props.value), [props.value]);
+  useEffect(() => {
+    setDraft(props.value);
+  }, [props.value]);
   const commit = () => draft !== props.value && props.onCommit(draft);
   const common = {
     value: draft,
