@@ -13,7 +13,7 @@ export const ja = {
   secretTotp: "MFA の設定キー（任意）",
   secretTotpHint: "認証アプリ用の QR コードの横に出るキー、または otpauth:// の文字列。ワンタイムコードを自動で入力します",
   secretSites: "入力してよいサイト・アプリ（1 行に 1 つ）",
-  secretSitesHint: "例：https://example.com、デスクトップアプリは app:billing.exe。ここにない画面には入力しません",
+  secretSitesHint: "例：https://example.com、デスクトップアプリは app:billing.exe、プラグインは plugin:名前。ここにない先には渡しません",
   secretDescription: "メモ（任意）",
   secretSave: "保存",
   secretNew: "新しく登録",

@@ -1,0 +1,48 @@
+{
+  "manifestVersion": 1,
+  "name": "hello",
+  "version": "0.1.0",
+  "label": "サンプル",
+  "description": "プラグインの書き方を示すサンプル（Node.js、依存なし）",
+  "command": { "program": "node", "args": ["main.mjs"] },
+  "steps": [
+    {
+      "action": "greet",
+      "label": "あいさつ文を作る",
+      "description": "Returns a greeting for `name`, e.g. \"こんにちは、佐藤さん\". Use saveAs to keep it.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "description": "相手の名前" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "hasOutput": true,
+      "risk": "safe",
+      "examples": [
+        { "type": "hello.greet", "name": "あいさつ文を作る", "params": { "name": "{{ customer }}" }, "saveAs": "greeting" }
+      ]
+    },
+    {
+      "action": "appendLine",
+      "label": "ファイルに1行足す",
+      "description": "Appends `text` and a line break to the UTF-8 text file `path` (absolute; created when missing). Steps on the same file take turns; different files run in parallel. Output: the number of lines in the file.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "description": "書き込むファイル（絶対パス）" },
+          "text": { "type": "string", "description": "足す文字" }
+        },
+        "required": ["path", "text"],
+        "additionalProperties": false
+      },
+      "hasOutput": true,
+      "risk": "interactive",
+      "resources": [{ "kind": "file", "param": "path" }],
+      "examples": [
+        { "type": "hello.appendLine", "name": "記録する", "params": { "path": "C:\\data\\log.txt", "text": "{{ greeting }}" } }
+      ]
+    }
+  ]
+}

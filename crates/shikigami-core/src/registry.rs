@@ -307,7 +307,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             label: "例外処理".into(),
             description: "Runs `try`; on failure runs `catch` with the error bound to `errorVar` (default `error`); always runs `finally`.".into(),
             params_schema: object_schema(json!({ "errorVar": ident }), &[]),
-            blocks: vec![block("try", "試行"), block("catch", "エラー時"), block("finally", "最後に必ず")],
+            blocks: vec![block("try", "try：まず実行"), block("catch", "catch：失敗したら"), block("finally", "finally：成功でも失敗でも最後に")],
             has_output: false,
             expression_params: vec![],
             binds_variables: vec!["errorVar".into()],

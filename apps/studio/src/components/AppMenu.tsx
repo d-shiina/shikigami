@@ -19,7 +19,7 @@ function mcpCommand(cliPath: string): string {
   return `claude mcp add --scope user shikigami -- "${cliPath}" mcp`;
 }
 
-/** Version, online update and MCP setup, at the right end of the top bar. */
+/** Version, online update and MCP setup, at the right end of the status bar. */
 export function AppMenu() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [state, setState] = useState<UpdateState>({ kind: "idle" });
@@ -75,14 +75,14 @@ export function AppMenu() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+        className={`rounded-[3px] px-2 text-[11px] leading-5 font-medium ${
           available ? "bg-brand-500 text-white hover:bg-brand-600" : "text-slate-500 hover:bg-slate-100"
         }`}
       >
         {available ? `${t.updateAvailable} v${available.version}` : `v${info.version}`}
       </button>
       {open && (
-        <div className="absolute top-full right-0 z-30 mt-2 w-96 rounded-lg border border-slate-200 bg-sheet p-4 text-sm shadow-xl">
+        <div className="absolute right-0 bottom-full z-30 mb-2 w-96 rounded-[4px] border border-slate-200 bg-sheet p-4 text-sm shadow-lifted">
           <div className="flex items-baseline justify-between">
             <span className="font-serif font-semibold">{t.appName}</span>
             <span className="text-xs text-slate-500">v{info.version}</span>
@@ -106,7 +106,7 @@ export function AppMenu() {
                 <button
                   type="button"
                   onClick={() => void install(state.info)}
-                  className="mt-2 w-full rounded-md bg-brand-500 py-1.5 font-medium text-white hover:bg-brand-600"
+                  className="mt-2 w-full rounded-[4px] bg-brand-500 py-1.5 font-medium text-white hover:bg-brand-600"
                 >
                   {t.updateInstall}
                 </button>

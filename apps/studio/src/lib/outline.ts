@@ -1,6 +1,7 @@
 // Steps in reading order (the order they run, blocks in registry order), for
 // the outline and for moving between steps with the keyboard.
 import type { Step, StepTypeDef } from "@shikigami/schema";
+import { blockLabel } from "./keywords";
 
 export type OutlineItem = {
   id: string;
@@ -18,7 +19,7 @@ export function outline(steps: Step[], defs: Map<string, StepTypeDef>): OutlineI
       items.push({ id: step.id, step, depth, ...(i === 0 && block ? { block } : {}) });
       const declared = defs.get(step.type)?.blocks ?? [];
       const lanes = [
-        ...declared.map((b) => [b.name, b.label] as const),
+        ...declared.map((b) => [b.name, blockLabel(step, b.name, b.label)] as const),
         ...Object.keys(step.blocks ?? {})
           .filter((name) => !declared.some((b) => b.name === name))
           .map((name) => [name, name] as const),

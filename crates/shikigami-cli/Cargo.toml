@@ -14,6 +14,7 @@ path = "src/main.rs"
 shikigami-core.workspace = true
 shikigami-runtime.workspace = true
 shikigami-adapters.workspace = true
+shikigami-plugins.workspace = true
 shikigami-mcp.workspace = true
 shikigami-secrets.workspace = true
 rpassword = "7.5.4"

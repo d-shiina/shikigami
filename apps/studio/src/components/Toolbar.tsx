@@ -7,7 +7,7 @@ function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { lab
     <button
       type="button"
       title={label}
-      className={`grid h-8 min-w-8 place-items-center rounded-full px-2 text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent ${className ?? ""}`}
+      className={`grid h-8 min-w-8 place-items-center rounded-[3px] px-2 text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent ${className ?? ""}`}
       {...rest}
     >
       {children}
@@ -53,7 +53,7 @@ export function ScenarioHeader() {
         </span>
       </div>
       <span
-        className={`flex h-7 items-center gap-1 rounded-[6px] px-2 text-[12px] font-medium ${
+        className={`flex h-7 items-center gap-1 rounded-[4px] px-2 text-[12px] font-medium ${
           errors ? "bg-shu-50 text-shu-600" : "text-moegi-500"
         }`}
         title={t.issues}
@@ -62,9 +62,9 @@ export function ScenarioHeader() {
         {errors ? `エラー ${errors} 件` : "検証OK"}
       </span>
       {running ? (
-        <div className="flex h-8 items-center overflow-hidden rounded-[6px] border border-slate-300 bg-sheet text-[13px]">
+        <div className="flex h-8 items-center overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-[13px]">
           <span className="flex items-center gap-2 px-3 font-medium text-ink">
-            <span className={`h-2 w-2 rounded-full ${paused ? (run?.pause?.reason === "error" ? "bg-shu-500" : "bg-mizu-500") : "swirl animate-pulse"}`} />
+            <span className={`h-2 w-2 rounded-full ${paused ? (run?.pause?.reason === "error" ? "bg-shu-500" : "bg-mizu-500") : "bg-accent-500 animate-pulse"}`} />
             {paused ? "一時停止中" : "実行中"}
           </span>
           {!paused && (
@@ -101,7 +101,7 @@ export function ScenarioHeader() {
           onClick={() => startRun()}
           disabled={errors > 0}
           title={errors > 0 ? "検証エラーを直すと実行できます" : `${t.run} (F5)`}
-          className="group flex h-8 items-center gap-2 rounded-[6px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-paper shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
+          className="group flex h-8 items-center gap-2 rounded-[4px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-paper shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
         >
           <span className="text-[#5fd08a] group-disabled:text-paper dark:text-moegi-100">
             <PlayIcon />
@@ -141,11 +141,11 @@ export function CanvasDock() {
   const stepSelected = selection?.kind === "step";
 
   return (
-    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-full whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-lg backdrop-blur">
+    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-[4px] whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-raised backdrop-blur">
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}
-        className="flex items-center gap-2 rounded-full bg-ink py-1.5 pr-2 pl-3 text-sm font-medium text-paper hover:bg-slate-700"
+        className="flex items-center gap-2 rounded-[3px] bg-ink py-1.5 pr-2 pl-3 text-sm font-medium text-paper hover:bg-slate-700"
       >
         ＋ <span className="@max-[560px]:hidden">{t.addStep}</span>
         <kbd className="rounded bg-paper/15 px-1 font-sans text-[10px] @max-[560px]:hidden">{t.shortcut}</kbd>

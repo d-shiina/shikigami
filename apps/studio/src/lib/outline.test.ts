@@ -16,8 +16,8 @@ describe("outline", () => {
     expect(items.map((i) => [i.id, i.depth, i.block])).toEqual([
       ["a", 0, undefined],
       ["b", 0, undefined],
-      ["c", 1, "条件が真"],
-      ["d", 1, "条件が偽"],
+      ["c", 1, "then：条件が成り立つとき"],
+      ["d", 1, "else：成り立たないとき"],
       ["e", 0, undefined],
     ]);
   });
