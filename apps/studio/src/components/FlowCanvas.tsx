@@ -109,6 +109,18 @@ function DataEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
           style={{ stroke: data.color, strokeWidth: strong ? 2.5 : 1.5, opacity: strong ? 1 : data.dim ? 0.15 : 0.45 }}
         />
       </g>
+      {last && !hover && !data.dim && (
+        <EdgeLabelRenderer>
+          {/* The last value that travelled along this link, always visible after a run. */}
+          <div
+            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, borderColor: data.color }}
+            className="nodrag nopan pointer-events-none absolute max-w-[150px] truncate rounded-[3px] border bg-sheet px-1 font-mono text-[10px] leading-[16px] text-ink shadow-sm"
+          >
+            {valueText(last)}
+            {data.writes.length > 1 && <span className="ml-1 text-slate-400">×{data.writes.length}</span>}
+          </div>
+        </EdgeLabelRenderer>
+      )}
       {hover && (
         <EdgeLabelRenderer>
           <div
