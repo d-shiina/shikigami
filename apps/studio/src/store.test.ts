@@ -277,6 +277,22 @@ describe("studio store", () => {
     expect(store.getState().run!.failure).toBeNull();
   });
 
+  it("does not resume onto AI edits nobody has reviewed", async () => {
+    const debugRun = vi.fn(async () => ({ revision: 2, updated: true }));
+    const history: HistoryEntry[] = [
+      { kind: "edit", revision: 2, actor: { kind: "mcp", name: "AI" }, at: "2026-10-28T00:00:00Z", label: "update", ops: [{ op: "updateStep", stepId: "s1", patch: { name: "x" } }], inverse: [{ op: "updateStep", stepId: "s1", patch: { name: "" } }] },
+    ];
+    const store = createStudioStore(fakeApi({ debugRun, getScenario: vi.fn(async () => scenario(2)), history: vi.fn(async () => history) }));
+    await store.getState().open("scn_a");
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "s1", stepType: "log.message", reason: "error", variables: {}, revision: 1 });
+    expect(await store.getState().debug({ action: "retry" })).toBe(false);
+    expect(debugRun).not.toHaveBeenCalled();
+    // Ending the run needs no review.
+    expect(await store.getState().debug({ action: "abort" })).toBe(true);
+  });
+
   it("explains a resume that the fix made impossible", async () => {
     const debugRun = vi.fn(async () => {
       throw new ApiError({ code: "RESUME_INCOMPATIBLE", message: "moved" });

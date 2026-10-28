@@ -151,6 +151,8 @@ struct State {
     /// A step to run without pausing before it once more: the one a pause
     /// just resumed, read again from the current revision.
     skip_once: Option<StepId>,
+    /// Time spent paused, in ms.
+    paused_ms: u64,
     /// An error the person chose to let end the run; the steps it passes
     /// through on the way out must not pause on it again.
     given_up: Option<RunError>,
@@ -186,6 +188,7 @@ impl Debugger {
                 scenario: Arc::new(scenario),
                 updated: false,
                 skip_once: None,
+                paused_ms: 0,
                 given_up: None,
             }),
             wake: Notify::new(),
@@ -310,6 +313,21 @@ impl Debugger {
         }
     }
 
+    pub(crate) fn paused_ms(&self) -> u64 {
+        self.state().paused_ms
+    }
+
+    pub(crate) fn add_paused(&self, ms: u64) {
+        let mut state = self.state();
+        state.paused_ms = state.paused_ms.saturating_add(ms);
+    }
+
+    /// Whether `step` is in block `key` of the current revision.
+    pub(crate) fn in_block(&self, key: &BlockKey, step: &StepId) -> bool {
+        let scenario = self.scenario();
+        block_of(&scenario, key).is_some_and(|steps| steps.iter().any(|s| &s.id == step))
+    }
+
     /// Runs `step` without pausing before it when it comes next.
     pub(crate) fn skip_pause_once(&self, step: StepId) {
         self.state().skip_once = Some(step);
@@ -423,6 +441,17 @@ fn check_position(old: &Scenario, new: &Scenario, frames: &[Frame]) -> Result<()
                     "step '{parent}', which the run is inside of, was moved"
                 )));
             }
+        }
+        // The step running or paused at may be removed, but not moved to
+        // another block: the run could not tell where to go on from.
+        if let Some(current) = &frame.current
+            && new.find_step(current).is_some()
+            && !block_of(new, &frame.key)
+                .is_some_and(|steps| steps.iter().any(|s| &s.id == current))
+        {
+            return Err(mismatch(format!(
+                "step '{current}', where the run is, was moved to another block"
+            )));
         }
         if let Some(prev) = &frame.prev {
             let present =

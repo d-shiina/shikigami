@@ -860,6 +860,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async debug(command) {
         const run = get().run;
         if (!run || !isActive(run)) return false;
+        // Resuming runs the stored revision: never with AI edits nobody has looked at.
+        const resumes = !["pause", "setBreakpoints", "abort"].includes(command.action);
+        if (resumes && run.pause && get().scenario?.revision !== run.pause.revision && pendingReview(get()).length > 0) {
+          set({ error: "AIの修正を確認してから再開できます" });
+          return false;
+        }
         try {
           const outcome = await api.debugRun(run.runId, command);
           if (outcome.updated) set({ notice: `リビジョン ${outcome.revision} の内容で続けます` });

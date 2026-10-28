@@ -1365,6 +1365,60 @@ async fn retry_runs_steps_inserted_before_the_failed_one() {
 }
 
 #[tokio::test]
+async fn skipping_a_step_the_fix_removed_goes_on_with_the_rest() {
+    let s = scenario(vec![log("a"), fail("boom"), log("c"), log("d")]);
+    let mut fixed = s.clone();
+    fixed.revision += 1;
+    fixed.steps.remove(1);
+    let (report, events, _) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {
+        Answer::Swap(Box::new(fixed.clone()), DebugCommand::Skip)
+    })
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(
+        logs(&events)
+            .iter()
+            .filter(|l| *l == "c" || *l == "d")
+            .count(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn time_paused_inside_a_wait_does_not_count_towards_its_timeout() {
+    let mut wait = Step::new("wait.until")
+        .with_param("condition", "n >= 2")
+        .with_block("check", vec![set("n", "n + 1")]);
+    wait.timeout_ms = Some(100);
+    let mut s = scenario(vec![wait]);
+    s.variables = vec![var(
+        "n",
+        VarType::Number,
+        VarDirection::Local,
+        Some(json!(0)),
+    )];
+    let mut handle = Runtime::new()
+        .start(s, debug_options(&["s2"]))
+        .expect("start");
+    let control = handle.debug_control().expect("control");
+    while let Some(event) = handle.next_event().await {
+        match event.event {
+            RunEvent::Paused {
+                reason: PauseReason::Error,
+                ..
+            } => control.send(DebugCommand::Abort).expect("abort"),
+            RunEvent::Paused { .. } => {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                control.send(DebugCommand::Continue).expect("continue");
+            }
+            _ => {}
+        }
+    }
+    let report = handle.wait().await.expect("wait");
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+}
+
+#[tokio::test]
 async fn skip_leaves_the_failed_step_undone() {
     let s = scenario(vec![fail("boom"), log("after")]);
     let (report, events, _) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {

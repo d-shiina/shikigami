@@ -466,6 +466,9 @@ impl Executor {
                 };
                 debug.set_current(Some(step.id.clone()));
                 match self.step(&step).await {
+                    // A step the new revision removed (skipped while paused)
+                    // leaves the cursor where it was.
+                    Ok(Flow::Next) if !debug.in_block(&key, &step.id) => {}
                     Ok(Flow::Next) => {
                         debug.finished(step.id.clone());
                         prev = Some(step.id);
@@ -543,6 +546,7 @@ impl Executor {
             variables: self.variable_values(),
             revision: debug.scenario().revision,
         });
+        let waited = Instant::now();
         let command = tokio::select! {
             biased;
             () = self.cancel.cancelled() => {
@@ -551,6 +555,7 @@ impl Executor {
             }
             command = debug.wait() => command,
         };
+        debug.add_paused(duration_ms(waited));
         let updated = debug.take_updated();
         if updated {
             self.adopt(&debug.scenario());
@@ -597,6 +602,11 @@ impl Executor {
             .unwrap_or(DEFAULT_TIMEOUT_MS);
         self.default_retry = scenario.settings.default_retry;
         self.default_on_error = scenario.settings.on_error.unwrap_or(OnError::Fail);
+    }
+
+    /// Total time this run has spent paused so far.
+    fn paused_ms(&self) -> u64 {
+        self.debug.as_ref().map_or(0, |d| d.paused_ms())
     }
 
     fn skipped(&self, step: &Step) {
@@ -1152,6 +1162,8 @@ impl Executor {
         };
         let timeout_ms = step.timeout_ms.unwrap_or(self.default_timeout_ms);
         let started = Instant::now();
+        // Time spent paused inside the check does not count towards the timeout.
+        let paused_before = self.paused_ms();
         let mut polls = 0u64;
         loop {
             self.check_cancel()?;
@@ -1161,7 +1173,7 @@ impl Executor {
             if expr::truthy(&condition.eval(&self.vars).map_err(expr_error)?) {
                 return Ok(Flow::Next);
             }
-            let elapsed_ms = duration_ms(started);
+            let elapsed_ms = duration_ms(started).saturating_sub(self.paused_ms() - paused_before);
             if elapsed_ms >= timeout_ms {
                 return Err(RunError {
                     details: Some(serde_json::json!({ "elapsedMs": elapsed_ms, "polls": polls })),
