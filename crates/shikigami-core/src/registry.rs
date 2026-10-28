@@ -12,6 +12,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::resource::ResourceDef;
+
 /// Built-in control-flow step types (executed by the Runtime itself).
 pub mod control {
     pub const IF: &str = "control.if";
@@ -98,6 +100,11 @@ pub struct StepTypeDef {
     /// clients get them from `get_step_schema` and can copy them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub examples: Vec<Value>,
+    /// Exclusive resources, derived from params at run time. Internal to the
+    /// Runtime: scenario authors never name locks.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub resources: Vec<ResourceDef>,
 }
 
 impl StepTypeDef {
@@ -205,6 +212,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::WHILE.into(),
@@ -224,6 +232,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::REPEAT.into(),
@@ -243,6 +252,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec!["indexVar".into()],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::FOR_EACH.into(),
@@ -259,6 +269,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec!["itemVar".into(), "indexVar".into()],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::TRY.into(),
@@ -272,6 +283,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec!["errorVar".into()],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::PARALLEL.into(),
@@ -288,6 +300,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::GROUP.into(),
@@ -301,6 +314,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::BREAK.into(),
@@ -314,6 +328,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::CONTINUE.into(),
@@ -327,6 +342,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: control::FAIL.into(),
@@ -346,6 +362,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: builtin::VARIABLE_SET.into(),
@@ -369,6 +386,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec!["name".into()],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: builtin::LOG_MESSAGE.into(),
@@ -388,6 +406,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
         StepTypeDef {
             step_type: builtin::FLOW_DELAY.into(),
@@ -404,6 +423,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             binds_variables: vec![],
             risk: RiskLevel::Safe,
             examples: vec![],
+            resources: vec![],
         },
     ]
 }

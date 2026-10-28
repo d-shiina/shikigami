@@ -14,6 +14,7 @@ use crate::expr::{self, Expr};
 use crate::ids::StepId;
 use crate::model::{SCHEMA_VERSION, Scenario, Step};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
+use crate::resource::{ResourceDef, ResourceKind, is_absolute_windows_path};
 
 /// Name of the implicit variable holding the last error when `onError: continue`.
 pub const LAST_ERROR_VAR: &str = "lastError";
@@ -330,6 +331,7 @@ impl Cx<'_> {
         };
 
         self.params(step, def, path);
+        self.file_paths(step, def, path);
 
         if let Some(save_as) = &step.save_as {
             if !is_identifier(save_as) {
@@ -391,6 +393,35 @@ impl Cx<'_> {
                 });
             }
             self.steps(children, &block_path, child_depth);
+        }
+    }
+
+    /// File locks and later re-runs depend on where the scenario is started
+    /// from when a path is relative.
+    fn file_paths(&mut self, step: &Step, def: &StepTypeDef, path: &str) {
+        for resource in &def.resources {
+            let ResourceDef::Param {
+                key,
+                kind: ResourceKind::File,
+            } = resource
+            else {
+                continue;
+            };
+            let Some(Value::String(value)) = step.params.get(key) else {
+                continue;
+            };
+            if value.contains("{{") || is_absolute_windows_path(value) {
+                continue;
+            }
+            self.warn(
+                "RELATIVE_PATH",
+                format!("'{key}' is a relative path: {value}"),
+                format!("{path}/params/{key}"),
+                Some(&step.id),
+            );
+            self.hint(format!(
+                "Use an absolute path (e.g. C:\\work\\{value}) or build one from a variable: \"{{{{ baseDir }}}}\\{value}\"."
+            ));
         }
     }
 
@@ -787,6 +818,37 @@ mod tests {
             .find(|i| i.code == code)
             .and_then(|i| i.hint.as_deref())
             .unwrap_or_else(|| panic!("no hint for {code}: {report:?}"))
+    }
+
+    #[test]
+    fn relative_file_paths_are_warned() {
+        let mut registry = StepRegistry::with_builtins();
+        let mut def = registry.get("log.message").unwrap().clone();
+        def.step_type = "test.write".into();
+        def.resources = vec![ResourceDef::file("message")];
+        registry.register(def);
+        let write = |id: &str, path: &str| {
+            Step::new("test.write")
+                .with_id(id)
+                .with_param("message", path)
+        };
+        let mut s = Scenario::new("paths");
+        s.steps = vec![
+            write("a", "book.xlsx"),
+            write("b", r"C:\work\book.xlsx"),
+            write("c", "{{ dir }}\\book.xlsx"),
+        ];
+        s.variables.push(VariableDef::new("dir", VarType::String));
+        let report = Validator::new(registry).validate(&s);
+        assert_eq!(report.error_count(), 0, "{report:?}");
+        let warned: Vec<_> = report
+            .issues
+            .iter()
+            .filter(|i| i.code == "RELATIVE_PATH")
+            .map(|i| i.step_id.as_ref().map(ToString::to_string))
+            .collect();
+        assert_eq!(warned, [Some("a".to_owned())]);
+        assert!(hint_of(&report, "RELATIVE_PATH").contains("baseDir"));
     }
 
     #[test]

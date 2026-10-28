@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Map, Value};
 use shikigami_core::expr::{self, Expr};
 use shikigami_core::registry::{builtin, control};
+use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_core::validate::LAST_ERROR_VAR;
 use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, Step, StepId};
 use time::OffsetDateTime;
@@ -192,12 +193,10 @@ impl ResourceLocks {
 
     /// Acquires all `names` in a fixed order so two steps needing the same
     /// set can never deadlock.
-    async fn acquire(&self, names: &[&str]) -> Vec<OwnedMutexGuard<()>> {
-        let mut sorted: Vec<&str> = names.to_vec();
-        sorted.sort_unstable();
-        sorted.dedup();
-        let mut guards = Vec::with_capacity(sorted.len());
-        for name in sorted {
+    /// `names` must be sorted and deduplicated (see `resource_keys`).
+    async fn acquire(&self, names: &[String]) -> Vec<OwnedMutexGuard<()>> {
+        let mut guards = Vec::with_capacity(names.len());
+        for name in names {
             guards.push(self.lock_for(name).lock_owned().await);
         }
         guards
@@ -229,6 +228,8 @@ type StepResult = Result<Flow, Interrupt>;
 pub(crate) struct Executor {
     pub run_id: RunId,
     pub handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
+    /// Exclusive resources per step type.
+    pub resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
     pub vars: Map<String, Value>,
     pub secret_vars: Vec<String>,
     pub emitter: Emitter,
@@ -272,6 +273,7 @@ impl Executor {
         Self {
             run_id: self.run_id.clone(),
             handlers: self.handlers.clone(),
+            resource_defs: self.resource_defs.clone(),
             vars: self.vars.clone(),
             secret_vars: self.secret_vars.clone(),
             emitter: self.emitter.clone(),
@@ -715,14 +717,18 @@ impl Executor {
                 emitter: self.emitter.clone(),
             };
             // Wait for exclusive resources (not counted towards the timeout).
-            let resources = handler.exclusive_resources();
+            let resources = self
+                .resource_defs
+                .get(&step.step_type)
+                .map(|defs| resource_keys(defs, &params))
+                .unwrap_or_default();
             let _guards = if resources.is_empty() {
                 Vec::new()
             } else {
                 tokio::select! {
                     biased;
                     () = self.cancel.cancelled() => return Err(Interrupt::Cancelled),
-                    g = self.resources.acquire(resources) => g,
+                    g = self.resources.acquire(&resources) => g,
                 }
             };
             let outcome = tokio::select! {

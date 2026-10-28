@@ -90,6 +90,7 @@ fn flaky_def() -> StepTypeDef {
         binds_variables: vec![],
         risk: RiskLevel::Safe,
         examples: vec![],
+        resources: vec![],
     }
 }
 
@@ -570,10 +571,6 @@ impl ActionHandler for FakeMouse {
             Ok(Value::Null)
         })
     }
-
-    fn exclusive_resources(&self) -> &'static [&'static str] {
-        &[DESKTOP_INPUT]
-    }
 }
 
 #[tokio::test]
@@ -587,15 +584,13 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
         fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
             self.0.execute(input)
         }
-        fn exclusive_resources(&self) -> &'static [&'static str] {
-            self.0.exclusive_resources()
-        }
     }
     let def = StepTypeDef {
         step_type: "test.click".into(),
         label: "click".into(),
         params_schema: json!({ "type": "object" }),
         has_output: false,
+        resources: vec![ResourceDef::Static(DESKTOP_INPUT.into())],
         ..flaky_def()
     };
     let runtime = Runtime::builder()
@@ -613,6 +608,57 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
     assert_eq!(a.0.status, RunStatus::Succeeded);
     assert_eq!(b.0.status, RunStatus::Succeeded);
     assert_eq!(mouse.peak.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn steps_on_the_same_file_take_turns() {
+    let writer = Arc::new(FakeMouse {
+        active: AtomicU32::new(0),
+        peak: AtomicU32::new(0),
+    });
+    struct Shared(Arc<FakeMouse>);
+    impl ActionHandler for Shared {
+        fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+            self.0.execute(input)
+        }
+    }
+    let def = StepTypeDef {
+        step_type: "test.writeFile".into(),
+        label: "write".into(),
+        params_schema: json!({ "type": "object", "properties": { "path": { "type": "string" } } }),
+        has_output: false,
+        resources: vec![ResourceDef::file("path")],
+        ..flaky_def()
+    };
+    let runtime = Runtime::builder()
+        .register(def, Shared(writer.clone()))
+        .build();
+    let write = |path: &str| Step::new("test.writeFile").with_param("path", path);
+
+    // Different spellings of one file (one via a template) never overlap...
+    let mut s = scenario(vec![parallel(vec![
+        write(r"C:\Data\Book.xlsx"),
+        write("c:/data/./book.XLSX"),
+        write("{{ dir }}\\book.xlsx"),
+    ])]);
+    s.variables = vec![var(
+        "dir",
+        VarType::String,
+        VarDirection::Local,
+        Some(json!(r"C:\Data")),
+    )];
+    let (report, _) = run(&runtime, s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(writer.peak.load(Ordering::SeqCst), 1);
+
+    // ...while different files run at the same time.
+    let s = scenario(vec![parallel(vec![
+        write(r"C:\Data\a.xlsx"),
+        write(r"C:\Data\b.xlsx"),
+    ])]);
+    let (report, _) = run(&runtime, s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(writer.peak.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
