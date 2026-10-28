@@ -30,9 +30,17 @@ pub mod control {
     pub const WAIT_UNTIL: &str = "wait.until";
 }
 
+/// Running another scenario as one step (a sub-scenario).
+pub mod scenario {
+    /// Runs another scenario, mapping `inputs` and `outputs` explicitly.
+    pub const CALL: &str = "scenario.call";
+}
+
 /// Whether the Runtime interprets the step itself (no adapter handler).
 pub fn is_control_type(step_type: &str) -> bool {
-    step_type.starts_with("control.") || step_type == control::WAIT_UNTIL
+    step_type.starts_with("control.")
+        || step_type == control::WAIT_UNTIL
+        || step_type == scenario::CALL
 }
 
 /// Built-in action step types that need no external adapter.
@@ -477,6 +485,42 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             default_timeout_ms: None,
         },
         StepTypeDef {
+            step_type: scenario::CALL.into(),
+            category: StepCategory::Control,
+            label: "サブシナリオを呼ぶ".into(),
+            description: "Runs another scenario (by its id from list_scenarios) as one step. `inputs` maps each input variable of the called scenario to a value (templates allowed: \"{{ invoice }}\" keeps the type). `outputs` maps each output variable of the called scenario to the variable of this scenario that receives it. Both maps are keyed by the called scenario's variable names. The called scenario has its own variables: nothing else goes in or out, and `saveAs` / `retry` are not used. It always runs the called scenario's current content. `timeoutMs` (optional) limits the whole call. Use extract_subscenario to turn existing steps into a sub-scenario.".into(),
+            params_schema: object_schema(
+                json!({
+                    "scenario": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                        "description": "呼び出すシナリオの ID（list_scenarios の id）",
+                    },
+                    "inputs": {
+                        "type": "object",
+                        "propertyNames": { "pattern": IDENT_PATTERN },
+                        "description": "呼ばれる側の入力変数 → 渡す値（テンプレート可）",
+                    },
+                    "outputs": {
+                        "type": "object",
+                        "propertyNames": { "pattern": IDENT_PATTERN },
+                        "additionalProperties": ident,
+                        "description": "呼ばれる側の出力変数 → 受け取るこのシナリオの変数",
+                    },
+                }),
+                &["scenario"],
+            ),
+            blocks: vec![],
+            has_output: false,
+            expression_params: vec![],
+            binds_variables: vec![],
+            risk: RiskLevel::Interactive,
+            examples: vec![],
+            resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
+        },
+        StepTypeDef {
             step_type: builtin::FLOW_DELAY.into(),
             category: StepCategory::Flow,
             label: "待機（時間指定）".into(),
@@ -601,6 +645,15 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
             ] }
         })],
         builtin::FLOW_DELAY => vec![json!({ "type": "flow.delay", "params": { "ms": 1000 } })],
+        scenario::CALL => vec![json!({
+            "type": "scenario.call",
+            "name": "請求書を 1 件登録する",
+            "params": {
+                "scenario": "scn_01a1814aaad57038862e86f745a5310a",
+                "inputs": { "invoice": "{{ invoice }}", "dryRun": false },
+                "outputs": { "registeredNo": "invoiceNo" }
+            }
+        })],
         _ => Vec::new(),
     }
 }

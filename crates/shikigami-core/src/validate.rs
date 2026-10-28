@@ -108,6 +108,22 @@ impl Validator {
         }
     }
 
+    /// [`Self::validate`] plus the checks that need the scenarios it calls
+    /// (`scenario.call`): that they exist, are valid, do not call back, and
+    /// take the inputs and give the outputs the call maps.
+    pub fn validate_with_calls(
+        &self,
+        scenario: &Scenario,
+        lookup: &dyn Fn(&crate::ids::ScenarioId) -> Option<Scenario>,
+    ) -> ValidationReport {
+        let mut report = self.validate(scenario);
+        report
+            .issues
+            .extend(crate::call::check_calls(self, scenario, lookup));
+        report.valid = !report.issues.iter().any(|i| i.severity == Severity::Error);
+        report
+    }
+
     /// Structural integrity only (IDs and tree shape). Edits that break these
     /// invariants are rejected; other issues are allowed in drafts.
     pub fn structural_errors(&self, scenario: &Scenario) -> Vec<ValidationIssue> {
@@ -142,8 +158,19 @@ fn known_variables(scenario: &Scenario, registry: &StepRegistry) -> BTreeSet<Str
                 }
             }
         }
+        names.extend(call_output_targets(step));
     }
     names
+}
+
+/// Variables of the calling scenario that a `scenario.call` writes (the
+/// values of its `outputs` map).
+pub(crate) fn call_output_targets(step: &Step) -> impl Iterator<Item = String> + '_ {
+    (step.step_type == crate::registry::scenario::CALL)
+        .then(|| step.params.get("outputs").and_then(Value::as_object))
+        .flatten()
+        .into_iter()
+        .flat_map(|map| map.values().filter_map(Value::as_str).map(str::to_owned))
 }
 
 struct Cx<'a> {
@@ -348,6 +375,9 @@ impl Cx<'_> {
         self.params(step, def, path);
         self.file_paths(step, def, path);
 
+        if step.step_type == crate::registry::scenario::CALL {
+            self.call_options(step, path);
+        }
         if let Some(save_as) = &step.save_as {
             if !is_identifier(save_as) {
                 self.error(
@@ -357,7 +387,7 @@ impl Cx<'_> {
                     id,
                 );
             }
-            if !def.has_output {
+            if !def.has_output && step.step_type != crate::registry::scenario::CALL {
                 self.warn(
                     "NO_OUTPUT",
                     format!("'{}' produces no output for saveAs", def.step_type),
@@ -425,6 +455,29 @@ impl Cx<'_> {
                 });
             }
             self.steps(children, &block_path, child_depth);
+        }
+    }
+
+    /// A call returns values only through `outputs`, and is not retried as
+    /// a whole (its steps have their own retries).
+    fn call_options(&mut self, step: &Step, path: &str) {
+        if step.save_as.is_some() {
+            self.error(
+                "CALL_SAVE_AS",
+                "scenario.call returns values through `outputs`, not `saveAs`".into(),
+                format!("{path}/saveAs"),
+                Some(&step.id),
+            );
+            self.hint("Remove `saveAs` and add \"outputs\": { \"<output of the called scenario>\": \"<variable here>\" }.");
+        }
+        if step.retry.is_some() {
+            self.error(
+                "CALL_RETRY",
+                "a sub-scenario call is not retried as a whole".into(),
+                format!("{path}/retry"),
+                Some(&step.id),
+            );
+            self.hint("Remove `retry`. Put `retry` on the steps inside the called scenario that may fail, or wrap the call in control.try.");
         }
     }
 
@@ -713,7 +766,6 @@ impl Cx<'_> {
     }
 }
 
-/// Variables a step (and its children) may assign.
 fn find_secret_refs(value: &Value, path: &str, out: &mut Vec<String>) {
     match value {
         Value::Object(map) => {
@@ -734,7 +786,8 @@ fn find_secret_refs(value: &Value, path: &str, out: &mut Vec<String>) {
     }
 }
 
-fn collect_writes(step: &Step, registry: &StepRegistry, out: &mut BTreeSet<String>) {
+/// Variables one step assigns itself (not counting its children).
+pub(crate) fn own_writes(step: &Step, registry: &StepRegistry, out: &mut BTreeSet<String>) {
     if let Some(save_as) = &step.save_as {
         out.insert(save_as.clone());
     }
@@ -748,6 +801,12 @@ fn collect_writes(step: &Step, registry: &StepRegistry, out: &mut BTreeSet<Strin
             }
         }
     }
+    out.extend(call_output_targets(step));
+}
+
+/// Variables a step and its children may assign.
+pub(crate) fn collect_writes(step: &Step, registry: &StepRegistry, out: &mut BTreeSet<String>) {
+    own_writes(step, registry, out);
     if step.step_type == control::FOR_EACH && step.params.contains_key("concurrency") {
         return; // iterations work on copies; only `saveAs` leaves the loop
     }
@@ -881,7 +940,10 @@ fn params_hint(def: &StepTypeDef) -> String {
 }
 
 /// The candidate closest to `name` by edit distance, if reasonably close.
-fn closest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+pub(crate) fn closest<'a>(
+    name: &str,
+    candidates: impl Iterator<Item = &'a str>,
+) -> Option<&'a str> {
     let max = (name.chars().count() / 3).max(2);
     candidates
         .map(|c| (edit_distance(&name.to_lowercase(), &c.to_lowercase()), c))

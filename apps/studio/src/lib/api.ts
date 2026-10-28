@@ -6,6 +6,7 @@ import type {
   EditOutcome,
   ErrorPayload,
   Evidence,
+  ExtractOutcome,
   HistoryEntry,
   ImportConflict,
   ImportOutcome,
@@ -108,6 +109,9 @@ export const api = {
     call<void>("delete_scenario", { id, expectedRevision }),
   edit: (id: string, expectedRevision: number, ops: EditOp[]) =>
     call<EditOutcome>("edit_scenario", { id, expectedRevision, ops }),
+  /** Moves neighbouring steps into a new scenario and calls it from where they were. */
+  extractSubscenario: (id: string, expectedRevision: number, stepIds: string[], name: string) =>
+    call<ExtractOutcome>("extract_subscenario", { id, expectedRevision, stepIds, name }),
   undo: (id: string, expectedRevision: number) =>
     call<EditOutcome>("undo", { id, expectedRevision }),
   redo: (id: string, expectedRevision: number) =>
