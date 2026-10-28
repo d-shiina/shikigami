@@ -630,12 +630,11 @@ function useBringIntoView() {
 }
 
 /** Inside an entered call: keeps its running step in view while a run is followed. */
-function FollowInside({ states }: { states: Record<string, StepRunState> }) {
+function FollowInside({ path }: { path: string }) {
   const latest = useBringIntoView();
   const bring = useRef(latest);
   bring.current = latest;
-  const follow = useStudio((s) => s.run?.status === "running" && s.followRun);
-  const running = follow ? Object.entries(states).find(([, state]) => state === "running")?.[0] : undefined;
+  const running = useStudio((s) => (s.run?.status === "running" && s.followRun ? s.run.innerLatest[path] : undefined));
   useEffect(() => {
     if (running) bring.current(running);
   }, [running]);
@@ -942,7 +941,7 @@ export function FlowCanvas() {
       onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="var(--color-slate-300)" />
-      {inside ? <FollowInside states={states} /> : <Follow />}
+      {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
       {inside && (
         // Below the outline and view buttons.
         <Panel position="top-center" style={{ marginTop: 52 }}>

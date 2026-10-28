@@ -122,6 +122,8 @@ export type RunState = {
    * what an unfolded or entered call shows. Their events never touch `steps`.
    */
   inner: Record<string, Record<string, StepRunState>>;
+  /** The step each call path started last (a control step stays running while its blocks run). */
+  innerLatest: Record<string, string>;
 };
 
 /** The `scenario.call` steps a run event happened inside (outermost first). */
@@ -449,6 +451,7 @@ const newRun = (runId: string, scenarioId: string | null = null): RunState => ({
   changes: [],
   starts: [],
   inner: {},
+  innerLatest: {},
 });
 const OUTLINE_KEY = "shikigami.studio.outline";
 
@@ -1063,7 +1066,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             const call = path[0]!;
             const key = callKey(path);
             const states = { ...(run.inner[key] ?? {}) };
-            if (env.type === "stepStarted") states[env.stepId] = "running";
+            if (env.type === "stepStarted") {
+              states[env.stepId] = "running";
+              run.innerLatest = { ...run.innerLatest, [key]: env.stepId };
+            }
             if (env.type === "stepFinished") {
               states[env.stepId] = env.outcome;
               // A failure reaches the call step itself and is logged there.

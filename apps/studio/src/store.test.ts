@@ -339,6 +339,8 @@ describe("studio store", () => {
     expect(run.inner.c1).toEqual({ t1: "succeeded" });
     // A call inside the call keeps its own steps, for when the chart enters it.
     expect(run.inner["c1/t9"]).toEqual({ u1: "running" });
+    // What an entered call follows: the step started last, not an enclosing loop still running.
+    expect(run.innerLatest).toEqual({ c1: "t1", "c1/t9": "u1" });
     // The callee's variables are not the caller's.
     expect(run.changes.map((c) => c.variable)).not.toContain("scratch");
   });
