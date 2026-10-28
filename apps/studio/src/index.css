@@ -32,6 +32,25 @@
   --color-shu-500: #e8501f;
   --color-shu-600: #c73d12;
   --color-accent-500: #f5872a;
+
+  /*
+   * 式神 are paper: every surface is a sheet laid on the desk (paper). A
+   * sheet shows the edge of the one under it; one lifted off the desk
+   * (menus, dialogs, the selected step) shows two and casts a softer shadow.
+   * Corners stay nearly square.
+   */
+  --color-edge: #d3dce7;
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+  --shadow-sheet:
+    3px 3px 0 -1px var(--color-sheet), 3px 3px 0 0 var(--color-edge), 0 8px 14px -10px rgb(15 27 42 / 0.3);
+  --shadow-lifted:
+    4px 4px 0 -1px var(--color-sheet), 4px 4px 0 0 var(--color-edge), 8px 8px 0 -1px var(--color-sheet),
+    8px 8px 0 0 var(--color-edge), 0 20px 34px -14px rgb(15 27 42 / 0.4);
 }
 
 /*
@@ -45,6 +64,7 @@
   --color-paper: #0b1420;
   --color-sheet: #131e2c;
   --color-ink: #e4ebf3;
+  --color-edge: #2a3a50;
 
   --color-slate-50: #182434;
   --color-slate-100: #1f2d40;
@@ -77,7 +97,7 @@
   --color-amber-700: #f2bd66;
 }
 
-/* Step categories and variable types, and the chart's own surfaces. */
+/* Step categories and variable types, and the chart's edges. */
 :root {
   --cat-control: #0f3a66;
   --cat-variable: #3f9a5a;
@@ -87,9 +107,6 @@
   --cat-windows: #e0301e;
   --cat-file: #64748b;
   --cat-other: #94a3b8;
-  --frame-0: #eaf1f8;
-  --frame-1: #e2ebf5;
-  --frame-2: #d9e5f2;
   --flow-edge: #5b6b80;
 }
 
@@ -102,9 +119,6 @@
   --cat-windows: #ff6e4f;
   --cat-file: #9aa9bb;
   --cat-other: #8193a8;
-  --frame-0: #111c2a;
-  --frame-1: #152233;
-  --frame-2: #1a283b;
   --flow-edge: #8193a8;
 }
 
@@ -185,4 +199,12 @@ textarea,
 /* Variable links can't be selected, but still take hover for their value tip. */
 .react-flow__edge.data-link {
   pointer-events: visibleStroke;
+}
+
+/* The zoom buttons are a small sheet too. */
+.react-flow__controls {
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow-sheet);
 }

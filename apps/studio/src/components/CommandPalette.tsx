@@ -73,7 +73,7 @@ export function CommandPalette() {
       onMouseDown={() => setOpen(false)}
     >
       <div
-        className="w-[520px] overflow-hidden rounded-xl border border-slate-300 bg-sheet shadow-2xl"
+        className="w-[520px] overflow-hidden rounded-[4px] border border-slate-300 bg-sheet shadow-lifted"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
@@ -108,7 +108,7 @@ export function CommandPalette() {
                 type="button"
                 onMouseEnter={() => setActive(i)}
                 onClick={() => choose(def)}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left ${i === active ? "bg-slate-100" : ""}`}
+                className={`flex w-full items-center gap-3 rounded-[4px] px-3 py-2 text-left ${i === active ? "bg-slate-100" : ""}`}
               >
                 <span className="h-7 w-1 rounded-full" style={{ background: CATEGORY_COLOR[def.category] }} />
                 <span className="min-w-0 flex-1">

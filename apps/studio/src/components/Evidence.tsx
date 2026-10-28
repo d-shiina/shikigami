@@ -55,11 +55,11 @@ export function Section({ title, tone = "text-slate-500", children }: { title: s
 /** The last time someone sent this scenario back, and whether the AI has acted on it since. */
 export function FeedbackBox({ feedback, fixedAfter }: { feedback: Review; fixedAfter: boolean }) {
   return (
-    <div className="rounded-[6px] border border-shu-100 bg-shu-50/60 px-3 py-2">
+    <div className="rounded-[4px] border border-shu-100 bg-shu-50/60 px-3 py-2">
       <div className="flex items-center gap-2 text-[11px]">
         <span className="font-bold text-shu-600">前回の差し戻し</span>
         <span className="text-slate-400">版 {feedback.revision} ・ {relativeTime(feedback.at)}</span>
-        <span className={`ml-auto rounded-full px-1.5 font-semibold ${fixedAfter ? "bg-moegi-100 text-moegi-500" : "bg-slate-200 text-slate-600"}`}>
+        <span className={`ml-auto rounded-[3px] px-1.5 font-semibold ${fixedAfter ? "bg-moegi-100 text-moegi-500" : "bg-slate-200 text-slate-600"}`}>
           {fixedAfter ? "このあとAIが直しました" : "AIの修正待ち"}
         </span>
       </div>
@@ -87,7 +87,7 @@ export function Explanations({ entries }: { entries: HistoryEntry[] }) {
   return (
     <ul className="space-y-1.5">
       {said.map((e) => (
-        <li key={e.revision} className="rounded-[6px] border-l-[3px] border-brand-300 bg-brand-50/50 px-2.5 py-1.5">
+        <li key={e.revision} className="rounded-[4px] border-l-[3px] border-brand-300 bg-brand-50/50 px-2.5 py-1.5">
           <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap text-ink">{e.summary}</p>
           {(e.stepIds ?? []).length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
@@ -112,7 +112,7 @@ const RUN_STATUS: Record<string, { mark: string; label: string; style: string }>
 export function TestRuns({ runs, revision }: { runs: TestRun[]; revision: number }) {
   if (runs.length === 0) {
     return (
-      <p className="rounded-[6px] bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">
+      <p className="rounded-[4px] bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">
         AIはこの変更をまだ試していません。
       </p>
     );
@@ -123,9 +123,9 @@ export function TestRuns({ runs, revision }: { runs: TestRun[]; revision: number
         const status = RUN_STATUS[run.status] ?? { mark: "・", label: run.status, style: "bg-slate-100 text-slate-600" };
         const current = run.revision === revision;
         return (
-          <li key={run.runId} className={`rounded-[6px] border px-2.5 py-1.5 ${i === 0 ? "border-slate-200 bg-sheet" : "border-transparent"}`}>
+          <li key={run.runId} className={`rounded-[4px] border px-2.5 py-1.5 ${i === 0 ? "border-slate-200 bg-sheet" : "border-transparent"}`}>
             <div className="flex items-center gap-2 text-[12px]">
-              <span className={`rounded-full px-1.5 text-[11px] font-bold ${status.style}`}>
+              <span className={`rounded-[3px] px-1.5 text-[11px] font-bold ${status.style}`}>
                 {status.mark} {status.label}
               </span>
               <span className={current ? "text-slate-600" : "text-amber-700"}>
@@ -190,7 +190,7 @@ export function Observations({ items }: { items: Observed[] }) {
             <button
               type="button"
               onClick={() => setOpenId(o.observationId)}
-              className="w-full overflow-hidden rounded-[6px] border border-slate-200 bg-sheet text-left hover:border-brand-500"
+              className="w-full overflow-hidden rounded-[4px] border border-slate-200 bg-sheet text-left hover:border-brand-500"
             >
               <Thumb item={o} />
               <div className="px-2 py-1">
@@ -230,7 +230,7 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-6" onClick={onClose}>
       <div
         lang="ja"
-        className="flex max-h-full w-[min(1100px,100%)] flex-col overflow-hidden rounded-[8px] bg-sheet shadow-xl"
+        className="flex max-h-full w-[min(1100px,100%)] flex-col overflow-hidden rounded-[4px] bg-sheet shadow-lifted"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5">
@@ -240,13 +240,13 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
               AIが{SOURCE[item.source]}で見た画面 ・ 版 {item.revision} ・ {relativeTime(item.at)}
             </div>
           </div>
-          <div className="flex rounded-[6px] bg-slate-100 p-0.5 text-[12px]">
+          <div className="flex rounded-[4px] bg-slate-100 p-0.5 text-[12px]">
             {item.hasScreenshot && (
-              <button type="button" onClick={() => setTab("shot")} className={`rounded-[4px] px-2.5 py-1 ${tab === "shot" ? "bg-sheet font-semibold shadow-sm" : "text-slate-500"}`}>
+              <button type="button" onClick={() => setTab("shot")} className={`rounded-[4px] px-2.5 py-1 ${tab === "shot" ? "bg-sheet font-semibold shadow-sheet" : "text-slate-500"}`}>
                 画面
               </button>
             )}
-            <button type="button" onClick={() => setTab("tree")} className={`rounded-[4px] px-2.5 py-1 ${tab === "tree" ? "bg-sheet font-semibold shadow-sm" : "text-slate-500"}`}>
+            <button type="button" onClick={() => setTab("tree")} className={`rounded-[4px] px-2.5 py-1 ${tab === "tree" ? "bg-sheet font-semibold shadow-sheet" : "text-slate-500"}`}>
               部品の一覧
             </button>
           </div>
@@ -309,10 +309,10 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
         onChange={(e) => setReason(e.target.value)}
         rows={3}
         placeholder="何が違うか、どうしてほしいか（AIが次に読みます）"
-        className="w-full resize-y rounded-[6px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500"
+        className="w-full resize-y rounded-[4px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500"
       />
       {notes.map((n, i) => (
-        <div key={n.stepId} className="rounded-[6px] border border-slate-200 bg-paper p-1.5">
+        <div key={n.stepId} className="rounded-[4px] border border-slate-200 bg-paper p-1.5">
           <div className="flex items-center gap-1">
             <StepLink id={n.stepId} />
             <button
@@ -338,19 +338,19 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
         type="button"
         disabled={!canNote}
         onClick={() => selected && setNotes([...notes, { stepId: selected, note: "" }])}
-        className="w-full truncate rounded-[6px] border border-dashed border-slate-300 px-2 py-1 text-left text-[12px] text-slate-600 enabled:hover:border-brand-500 enabled:hover:text-brand-700 disabled:text-slate-400"
+        className="w-full truncate rounded-[4px] border border-dashed border-slate-300 px-2 py-1 text-left text-[12px] text-slate-600 enabled:hover:border-brand-500 enabled:hover:text-brand-700 disabled:text-slate-400"
       >
         ＋ {hint}
       </button>
       <div className="flex gap-2 pt-1">
-        <button type="button" onClick={onCancel} className="h-9 rounded-[6px] px-3 text-[13px] text-slate-500 hover:bg-slate-100">
+        <button type="button" onClick={onCancel} className="h-9 rounded-[4px] px-3 text-[13px] text-slate-500 hover:bg-slate-100">
           やめる
         </button>
         <button
           type="button"
           disabled={!ready || busy}
           onClick={() => void submit()}
-          className="h-9 flex-1 rounded-[6px] bg-shu-500 px-3 text-[13px] font-semibold text-white enabled:hover:bg-shu-600 disabled:bg-slate-200 disabled:text-slate-400"
+          className="h-9 flex-1 rounded-[4px] bg-shu-500 px-3 text-[13px] font-semibold text-white enabled:hover:bg-shu-600 disabled:bg-slate-200 disabled:text-slate-400"
         >
           AIに差し戻す
         </button>

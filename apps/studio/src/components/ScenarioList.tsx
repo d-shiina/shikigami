@@ -48,62 +48,6 @@ function ImportBox({ input }: { input: React.RefObject<HTMLInputElement | null> 
   );
 }
 
-/** Where scenarios are stored, and switching to another (e.g. shared) folder. */
-function WorkspaceFooter() {
-  const workspace = useStudio((s) => s.workspace);
-  const setWorkspace = useStudio((s) => s.setWorkspace);
-  const [editing, setEditing] = useState(false);
-  const [path, setPath] = useState("");
-  const [shared, setShared] = useState(false);
-  if (!workspace) return null;
-
-  return (
-    <div className="border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
-      <div className="flex items-center gap-1">
-        <span>{t.workspace}</span>
-        {workspace.shared && <span className="rounded bg-mizu-100 px-1 text-mizu-500">{t.workspaceShared}</span>}
-        <button
-          type="button"
-          className="ml-auto hover:text-ink"
-          onClick={() => {
-            setPath(workspace.root);
-            setShared(workspace.shared);
-            setEditing(!editing);
-          }}
-        >
-          {t.changeWorkspace}
-        </button>
-      </div>
-      <div className="truncate font-mono" title={workspace.root}>
-        {workspace.root}
-      </div>
-      {editing && (
-        <form
-          className="mt-2 space-y-1.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (path.trim()) void setWorkspace(path.trim(), shared);
-          }}
-        >
-          <input
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            placeholder={t.workspacePath}
-            className="w-full rounded border border-slate-300 px-1.5 py-0.5 font-mono text-[11px] text-ink focus:border-ink focus:outline-none"
-          />
-          <label className="flex items-center gap-1">
-            <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
-            {t.workspaceSharedLabel}
-          </label>
-          <button type="submit" className="w-full rounded bg-ink px-2 py-1 text-paper hover:bg-slate-700">
-            {t.workspaceApply}
-          </button>
-        </form>
-      )}
-    </div>
-  );
-}
-
 const OPEN_KEY = "shikigami.studio.closedGroups";
 const SORT_KEY = "shikigami.studio.sort";
 const NO_TAG = "タグなし";
@@ -170,7 +114,7 @@ function ScenarioItem({ summary, active, query }: { summary: ScenarioSummary; ac
         title={detail}
         onClick={() => open(summary.id)}
         onKeyDown={(e) => e.key === "Enter" && open(summary.id)}
-        className={`group relative flex h-8 cursor-pointer items-center gap-2 rounded-[5px] pr-1.5 pl-2 ${
+        className={`group relative flex h-8 cursor-pointer items-center gap-2 rounded-[4px] pr-1.5 pl-2 ${
           active ? "bg-brand-50 text-ink" : "text-slate-700 hover:bg-slate-100"
         }`}
       >
@@ -306,12 +250,12 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
           <button
             type="button"
             onClick={() => setMenu(!menu)}
-            className="flex h-6 items-center gap-1 rounded-[5px] bg-ink px-2 text-[11px] font-semibold text-paper hover:bg-brand-700"
+            className="flex h-6 items-center gap-1 rounded-[4px] bg-ink px-2 text-[11px] font-semibold text-paper hover:bg-brand-700"
           >
             ＋ 追加
           </button>
           {menu && (
-            <div className="absolute top-full right-0 z-20 mt-1 w-44 overflow-hidden rounded-[6px] border border-slate-200 bg-sheet py-1 text-[12px] shadow-lg">
+            <div className="absolute top-full right-0 z-20 mt-1 w-44 overflow-hidden rounded-[4px] border border-slate-200 bg-sheet py-1 text-[12px] shadow-lifted">
               <button
                 type="button"
                 className="block w-full px-3 py-1.5 text-left hover:bg-slate-100"
@@ -342,7 +286,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
           type="button"
           onClick={onCollapse}
           title="一覧をたたむ"
-          className="grid h-6 w-6 place-items-center rounded-[5px] text-slate-400 hover:bg-slate-200 hover:text-ink"
+          className="grid h-6 w-6 place-items-center rounded-[4px] text-slate-400 hover:bg-slate-200 hover:text-ink"
         >
           «
         </button>
@@ -356,16 +300,16 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
             onKeyDown={(e) => e.key === "Escape" && setCreating(false)}
             onBlur={() => !name && setCreating(false)}
             placeholder={t.newScenarioPrompt}
-            className="min-w-0 flex-1 rounded-[5px] border border-brand-500 bg-sheet px-2 py-1 text-[12px] focus:outline-none"
+            className="min-w-0 flex-1 rounded-[4px] border border-brand-500 bg-sheet px-2 py-1 text-[12px] focus:outline-none"
           />
-          <button type="submit" className="rounded-[5px] bg-ink px-2 text-[11px] text-paper">
+          <button type="submit" className="rounded-[4px] bg-ink px-2 text-[11px] text-paper">
             作る
           </button>
         </form>
       )}
       <ImportBox input={picker} />
       <div className="flex items-center gap-1 px-3 pb-2">
-        <div className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-[5px] border border-slate-200 bg-sheet px-2 focus-within:border-brand-500">
+        <div className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-[4px] border border-slate-200 bg-sheet px-2 focus-within:border-brand-500">
           <svg viewBox="0 0 16 16" className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true">
             <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
             <path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -383,7 +327,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
           value={sort}
           onChange={(e) => setSort(e.target.value as Sort)}
           title="並び順"
-          className="h-7 rounded-[5px] border border-slate-200 bg-sheet px-1 text-[11px] text-slate-600 focus:outline-none"
+          className="h-7 rounded-[4px] border border-slate-200 bg-sheet px-1 text-[11px] text-slate-600 focus:outline-none"
         >
           <option value="updated">更新順</option>
           <option value="name">名前順</option>
@@ -391,7 +335,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
       </div>
       <ul className="flex-1 overflow-y-auto px-2 pb-3">
         {summaries.length === 0 && (
-          <li className="mx-1 rounded-[6px] border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
+          <li className="mx-1 rounded-[4px] border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
             {t.noScenarios}
             <br />
             ＋追加 から作るか、AIに頼んでください
@@ -423,7 +367,6 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
           </li>
         )}
       </ul>
-      <WorkspaceFooter />
     </aside>
   );
 }
@@ -437,7 +380,7 @@ export function ScenarioRail({ onExpand }: { onExpand: () => void }) {
         type="button"
         onClick={onExpand}
         title="シナリオ一覧を開く"
-        className="grid h-7 w-7 place-items-center rounded-[5px] text-slate-500 hover:bg-slate-200 hover:text-ink"
+        className="grid h-7 w-7 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-200 hover:text-ink"
       >
         »
       </button>

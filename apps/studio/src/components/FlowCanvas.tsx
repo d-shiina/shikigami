@@ -21,7 +21,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { KEYWORD } from "../lib/keywords";
-import { CHIP_ROOM, type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
+import { VarIcon } from "./VarIcon";
+import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
 import type { HistoryEntry } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
@@ -39,7 +40,7 @@ import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; dir: Direction }>
+  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string }>
 >;
 
 const MIN_READABLE_ZOOM = 0.85;
@@ -71,10 +72,10 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   const blocker = revertBlocker(entry, history);
   const scope = entryScope(describe(entry, scenario, defs));
   return (
-    <div title={scope.title} className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-md">
+    <div title={scope.title} className="flex items-center gap-1.5 rounded-[3px] border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-lifted">
       <ActorMark entry={entry} size={18} />
       <span className="text-slate-600">{actorLabel(entry)}の変更</span>
-      <button type="button" onClick={() => approve(entry.revision)} className="rounded-full bg-ink px-2 py-0.5 text-paper hover:bg-slate-700">
+      <button type="button" onClick={() => approve(entry.revision)} className="rounded-[3px] bg-ink px-2 py-0.5 text-paper hover:bg-slate-700">
         {t.approve}
         {scope.suffix}
       </button>
@@ -83,7 +84,7 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
         onClick={() => revert(entry)}
         disabled={blocker !== null}
         title={blocker ?? scope.title}
-        className="rounded-full border border-shu-500 px-2 py-0.5 text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
+        className="rounded-[3px] border border-shu-500 px-2 py-0.5 text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
       >
         {t.revert}
         {scope.suffix}
@@ -108,17 +109,12 @@ function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; co
 
 const FLOW_HANDLE = "!border-0 !bg-slate-300";
 
-/**
- * Where step-to-step flow enters and leaves a node. Left to right, it uses
- * the header's height on the side edges, clear of the variable sockets below.
- */
-function FlowHandles({ dir, atHeader = true }: { dir: Direction; atHeader?: boolean }) {
-  const across = dir === "horizontal";
-  const style = across && atHeader ? { top: 12 } : undefined;
+/** Where step-to-step flow enters (top) and leaves (bottom) a node. */
+function FlowHandles() {
   return (
     <>
-      <Handle id="flow" type="target" position={across ? Position.Left : Position.Top} style={style} className={FLOW_HANDLE} />
-      <Handle id="flow" type="source" position={across ? Position.Right : Position.Bottom} style={style} className={FLOW_HANDLE} />
+      <Handle id="flow" type="target" position={Position.Top} className={FLOW_HANDLE} />
+      <Handle id="flow" type="source" position={Position.Bottom} className={FLOW_HANDLE} />
     </>
   );
 }
@@ -187,7 +183,7 @@ function ValuePopover({ name, color, values, side, anchor }: { name: string; col
     <div
       // Above the chip, or below it when there is no room up top.
       style={{ left: anchor.left + anchor.width / 2, top: below ? anchor.bottom + 6 : anchor.top - 6 }}
-      className={`pointer-events-none fixed z-50 max-w-[480px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lg`}
+      className={`pointer-events-none fixed z-50 max-w-[480px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lifted`}
     >
       <div className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
@@ -228,7 +224,7 @@ function VarChip({ name, color, values, side, owner }: { name: string; color: st
   const last = values.at(-1);
   return (
     <span
-      className={`nodrag flex h-[20px] max-w-[72px] shrink-0 items-center gap-1 rounded-[3px] border bg-sheet px-1.5 font-mono text-[11px] leading-none shadow-sm ${
+      className={`nodrag flex h-[20px] max-w-[80px] shrink-0 items-center gap-1 rounded-[3px] border bg-sheet px-1.5 font-mono text-[11px] leading-none shadow-sheet ${
         focused ? "ring-2 ring-offset-1" : ""
       }`}
       style={{ borderColor: color, color, ["--tw-ring-color" as string]: color }}
@@ -245,7 +241,10 @@ function VarChip({ name, color, values, side, owner }: { name: string; color: st
       {side === "out" && last ? (
         <span className="truncate text-ink">{changeText(last)}</span>
       ) : (
-        <span className="truncate font-semibold">{name}</span>
+        <>
+          <VarIcon size={10} />
+          <span className="truncate font-semibold">{name}</span>
+        </>
       )}
       {anchor && <ValuePopover name={name} color={color} values={values} side={side} anchor={anchor} />}
     </span>
@@ -277,8 +276,9 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
     return (
       <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${color} 12%, transparent)` : undefined }} className="relative flex items-center justify-end gap-2 px-3 text-[12px]">
         <span className="text-slate-500">{row.label}</span>
-        <span className="truncate font-mono font-semibold" style={{ color }}>
-          {row.variable}
+        <span className="flex min-w-0 items-center gap-1 font-mono font-semibold" style={{ color }}>
+          <VarIcon size={11} />
+          <span className="truncate">{row.variable}</span>
         </span>
         <Socket side="out" id={outHandle(row.variable)} color={color} title={`${row.variable} に書き込む`} />
         <Chips side="out" color={color}>
@@ -330,15 +330,16 @@ function StepNode({ data }: StepNodeProps) {
   return (
     <div
       style={{ width: NODE_W }}
-      className={`relative rounded-[4px] border bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)] ${
+      // The selected step is lifted off the stack: two sheet edges and a deeper shadow.
+      className={`relative rounded-[4px] border bg-sheet transition-shadow ${data.selected ? "shadow-lifted" : "shadow-sheet"} ${
         data.diff
-          ? `border-2 ${DIFF_STYLE[data.diff].border} ${data.selected ? "ring-4 ring-brand-100" : ""}`
+          ? `border-2 ${DIFF_STYLE[data.diff].border}`
           : data.byAi
             ? "ai-border"
             : data.selected
-              ? "border-brand-500 ring-4 ring-brand-100"
+              ? "border-brand-500"
               : "border-slate-200"
-      } ${data.selected && data.byAi ? "ring-4 ring-brand-100" : ""} ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
+      } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
         data.runState ? RUN_STYLE[data.runState] : ""
       }`}
     >
@@ -347,7 +348,7 @@ function StepNode({ data }: StepNodeProps) {
           <ReviewToolbar entry={latest} />
         </NodeToolbar>
       )}
-      <FlowHandles dir={data.dir} />
+      <FlowHandles />
       {data.note && (
         <span
           title={data.note}
@@ -357,7 +358,7 @@ function StepNode({ data }: StepNodeProps) {
         </span>
       )}
       {data.diff && (
-        <span className={`absolute -top-2.5 right-2 z-10 rounded-full px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
+        <span className={`absolute -top-2.5 right-2 z-10 rounded-[3px] px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
           {DIFF_STYLE[data.diff].label}
         </span>
       )}
@@ -379,12 +380,12 @@ function StepNode({ data }: StepNodeProps) {
         )}
         {data.step.name && <span className="truncate text-[12px] text-slate-500">{data.step.name}</span>}
         {data.byAi && (
-          <span className="swirl ml-auto shrink-0 rounded-full px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
+          <span className="swirl ml-auto shrink-0 rounded-[3px] px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
             AI
           </span>
         )}
         {data.issueCount > 0 && (
-          <span className={`${data.byAi ? "" : "ml-auto"} shrink-0 rounded-full bg-shu-100 px-1.5 text-[10px] font-semibold text-shu-600`}>
+          <span className={`${data.byAi ? "" : "ml-auto"} shrink-0 rounded-[3px] bg-shu-100 px-1.5 text-[10px] font-semibold text-shu-600`}>
             ! {data.issueCount}
           </span>
         )}
@@ -405,7 +406,7 @@ function StepNode({ data }: StepNodeProps) {
   );
 }
 
-function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean; dir: Direction }>>) {
+function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
@@ -413,28 +414,9 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean; d
         data.selected ? "border-brand-500 bg-brand-50 text-brand-600" : "border-slate-300 text-slate-400"
       }`}
     >
-      <FlowHandles dir={data.dir} atHeader={false} />
-      {/* Top to bottom, the edge into the slot already carries the block's label. */}
-      {data.parentId ? `${data.dir === "vertical" ? "" : `${data.label}：`}空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
-    </div>
-  );
-}
-
-/** Shades for nested blocks, lightest outside. */
-const FRAME_TINT = ["var(--frame-0)", "var(--frame-1)", "var(--frame-2)"];
-
-/** The box behind a step's block, labelled like the block ("条件が真", "要素ごとの処理"). */
-function FrameNode({ data }: NodeProps<Node<FrameNodeData>>) {
-  return (
-    <div
-      style={{ width: data.width, height: data.height, background: FRAME_TINT[data.depth % FRAME_TINT.length] }}
-      className="pointer-events-none rounded-[6px] border border-slate-300/70"
-    >
-      <div className="flex items-center gap-1 px-2.5 pt-1 text-[11px] font-bold tracking-wide text-slate-500">
-        {data.loop && <span className="text-[13px] leading-none text-brand-600">↻</span>}
-        {data.label}
-        {data.loop && <span className="font-normal text-slate-400">（くり返す）</span>}
-      </div>
+      <FlowHandles />
+      {/* The edge into the slot already carries the block's label. */}
+      {data.parentId ? `空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
     </div>
   );
 }
@@ -500,7 +482,7 @@ function Follow() {
   return null;
 }
 
-const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode };
+const nodeTypes = { step: StepNode, slot: SlotNode };
 
 export function FlowCanvas() {
   const scenario = useStudio((s) => s.scenario);
@@ -532,8 +514,7 @@ export function FlowCanvas() {
 
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const wrapper = useRef<HTMLDivElement>(null);
-  const direction = useStudio((s) => s.flowDirection);
-  const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs, direction), [scenario, defs, direction]);
+  const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs), [scenario, defs]);
   const vars = useMemo(() => knownVariables(scenario?.variables, scenario?.steps ?? []), [scenario]);
 
   const issueCounts = useMemo(() => {
@@ -552,7 +533,6 @@ export function FlowCanvas() {
         draggable: false,
         data: {
           ...n.data,
-          dir: layout.direction,
           runState: run?.steps[id],
           issueCount: issueCounts.get(id) ?? 0,
           selected: selection?.kind === "step" && selection.stepId === id,
@@ -565,16 +545,12 @@ export function FlowCanvas() {
         },
       };
     }
-    if (n.data.kind === "frame") {
-      return { ...n, draggable: false, selectable: false, focusable: false, zIndex: -1 };
-    }
     const slot = n.data;
     return {
       ...n,
       draggable: false,
       data: {
         ...slot,
-        dir: layout.direction,
         selected: selection?.kind === "slot" && selection.parentId === slot.parentId && selection.block === slot.block,
       },
     };
@@ -609,8 +585,6 @@ export function FlowCanvas() {
     ...e,
     sourceHandle: "flow",
     targetHandle: "flow",
-    // Left to right, the frames carry the block names.
-    label: layout.direction === "horizontal" ? undefined : e.label,
     type: "block",
     animated: e.loop,
     style: { stroke: "var(--flow-edge)", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
@@ -639,7 +613,7 @@ export function FlowCanvas() {
       ref={wrapper}
       onInit={(flow) => {
         // Fit the chart, but never shrink it below reading size: a long
-        // scenario starts at its beginning (left, or top) and scrolls instead.
+        // scenario starts at its top and scrolls instead.
         const box = wrapper.current;
         if (!box) return;
         const pad = 64;
@@ -647,14 +621,13 @@ export function FlowCanvas() {
         const fitH = (box.clientHeight - pad) / bounds.height;
         const zoom = Math.max(Math.min(fitW, fitH, 1), MIN_READABLE_ZOOM);
         const x = zoom > fitW ? pad / 2 : (box.clientWidth - bounds.width * zoom) / 2;
-        const y = zoom > fitH || layout.direction === "horizontal" ? pad / 2 : (box.clientHeight - bounds.height * zoom) / 2;
+        const y = pad / 2;
         void flow.setViewport({ x: x - bounds.x * zoom, y: y - bounds.y * zoom, zoom });
 
       }}
       minZoom={0.2}
       onNodeClick={(_, node) => {
-        const data = node.data as StepNodeData | SlotNodeData | FrameNodeData;
-        if (data.kind === "frame") return;
+        const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}

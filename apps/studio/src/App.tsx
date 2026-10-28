@@ -1,7 +1,6 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AppMenu } from "./components/AppMenu";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
@@ -14,15 +13,16 @@ import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
 import { SecretAskBanner } from "./components/SecretAskBanner";
 import { SecretsDialog } from "./components/SecretsDialog";
+import { StatusBar } from "./components/StatusBar";
 import { Timeline, usePendingReview } from "./components/Timeline";
 import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
 import { VariablesPanel } from "./components/VariablesPanel";
 import { VersionsPanel } from "./components/VersionsPanel";
+import { WindowControls } from "./components/WindowControls";
 import { StudioContext, useStudio } from "./context";
 import { api, events } from "./lib/api";
 import { t } from "./lib/i18n";
 import { createStudioStore, type StudioState } from "./store";
-import { setTheme, type ThemeChoice, useTheme } from "./lib/theme";
 
 type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
 
@@ -86,7 +86,8 @@ function SidePanel() {
     ["issues", t.issues, issueCount],
   ];
   return (
-    <aside className="flex h-full flex-col border-l border-slate-200 bg-sheet">
+    // A sheet laid over the edge of the desk.
+    <aside className="relative z-[1] flex h-full flex-col border-l border-slate-200 bg-sheet shadow-[-2px_0_0_-1px_var(--color-sheet),-2px_0_0_0_var(--color-edge),-10px_0_18px_-14px_rgb(15_27_42/.35)]">
       <nav className="flex border-b border-slate-200 px-2">
         {tabs.map(([key, label, count]) => (
           <button
@@ -100,7 +101,7 @@ function SidePanel() {
             {label}
             {count > 0 && (
               <span
-                className={`rounded-full px-1.5 text-[10px] ${key === "timeline" || key === "review" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
+                className={`rounded-[3px] px-1.5 text-[10px] ${key === "timeline" || key === "review" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
               >
                 {count}
               </span>
@@ -133,76 +134,24 @@ function loadView(): View {
   }
 }
 
-function Segmented<K extends string>({ value, options, onChange }: { value: K; options: [K, string, string?][]; onChange: (key: K) => void }) {
+function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
+  const options: [View, string][] = [
+    ["flow", t.viewFlow],
+    ["story", t.viewStory],
+  ];
   return (
-    <div className="flex overflow-hidden rounded-full border border-slate-300 bg-sheet text-xs shadow-sm">
-      {options.map(([key, label, title]) => (
+    <div className="absolute top-3 right-4 flex overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-xs shadow-sheet">
+      {options.map(([key, label]) => (
         <button
           key={key}
           type="button"
-          title={title}
           onClick={() => onChange(key)}
-          className={`px-3 py-1 ${value === key ? "bg-ink text-paper" : "text-slate-600 hover:bg-slate-100"}`}
+          className={`px-3 py-1 ${view === key ? "bg-ink text-paper" : "text-slate-600 hover:bg-slate-100"}`}
         >
           {label}
         </button>
       ))}
     </div>
-  );
-}
-
-function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
-  const direction = useStudio((s) => s.flowDirection);
-  const setDirection = useStudio((s) => s.setFlowDirection);
-  return (
-    <div className="absolute top-3 right-4 flex gap-2">
-      {view === "flow" && (
-        <Segmented
-          value={direction}
-          onChange={setDirection}
-          options={[
-            ["vertical", "縦", "上から下へ流れる"],
-            ["horizontal", "横", "左から右へ流れる"],
-          ]}
-        />
-      )}
-      <Segmented
-        value={view}
-        onChange={onChange}
-        options={[
-          ["flow", t.viewFlow],
-          ["story", t.viewStory],
-        ]}
-      />
-    </div>
-  );
-}
-
-const THEME_NEXT: Record<ThemeChoice, ThemeChoice> = { system: "light", light: "dark", dark: "system" };
-const THEME_LABEL: Record<ThemeChoice, string> = { system: "PCの設定に合わせる", light: "ライト", dark: "ダーク" };
-
-/** Cycles PCの設定 → ライト → ダーク. */
-function ThemeButton() {
-  const { choice, mode } = useTheme();
-  return (
-    <button
-      type="button"
-      onClick={() => setTheme(THEME_NEXT[choice])}
-      title={`表示：${THEME_LABEL[choice]}（クリックで${THEME_LABEL[THEME_NEXT[choice]]}）`}
-      className="relative grid h-8 w-8 place-items-center rounded-[6px] text-slate-500 hover:bg-slate-100 hover:text-ink"
-    >
-      {mode === "dark" ? (
-        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7Z" fill="currentColor" />
-        </svg>
-      ) : (
-        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
-          <circle cx="8" cy="8" r="3.2" fill="currentColor" />
-          <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
-      )}
-      {choice === "system" && <span className="absolute right-1 bottom-1 text-[7px] leading-none font-bold">A</span>}
-    </button>
   );
 }
 
@@ -213,7 +162,7 @@ function SecretsButton() {
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
+      className="flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
       title={t.secretsIntro}
     >
       <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
@@ -221,7 +170,7 @@ function SecretsButton() {
         <path d="M8 8h6.5M12 8v2.5M14 8v2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
       {t.secrets}
-      {count > 0 && <span className="rounded-full bg-slate-200 px-1.5 text-[10px]">{count}</span>}
+      {count > 0 && <span className="rounded-[3px] bg-slate-200 px-1.5 text-[10px]">{count}</span>}
     </button>
   );
 }
@@ -241,15 +190,15 @@ function ModeSwitch() {
     if (first && !inbox.some((i) => i.scenarioId === currentId)) void open(first.scenarioId);
   };
   const tab = (on: boolean) =>
-    `flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[12px] font-semibold ${on ? "bg-sheet text-ink shadow-sm" : "text-slate-500 hover:text-ink"}`;
+    `flex h-7 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-semibold ${on ? "bg-sheet text-ink shadow-sheet" : "text-slate-500 hover:text-ink"}`;
   return (
-    <div className="flex items-center gap-0.5 rounded-[7px] bg-slate-100 p-0.5">
+    <div className="flex items-center gap-0.5 rounded-[4px] bg-slate-100 p-0.5">
       <button type="button" className={tab(!reviewing)} onClick={() => setReviewing(false)}>
         シナリオ
       </button>
       <button type="button" className={tab(reviewing)} onClick={enterReview}>
         確認待ち
-        {inbox.length > 0 && <span className="rounded-full bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
+        {inbox.length > 0 && <span className="rounded-[3px] bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
       </button>
     </div>
   );
@@ -284,17 +233,21 @@ function Shell() {
     }
   };
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
-      <header className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4">
-        <img src="/mark.png" alt="" className="h-6 w-6" />
-        <span className="text-[15px] font-black tracking-wider">式神</span>
-        <span className="-ml-1.5 text-[10px] font-medium tracking-[.2em] text-slate-400">STUDIO</span>
+    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
+      {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
+      <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4 select-none">
+        <img data-tauri-drag-region src="/mark.png" alt="" className="h-6 w-6" draggable={false} />
+        <span data-tauri-drag-region className="text-[15px] font-black tracking-wider">
+          式神
+        </span>
+        <span data-tauri-drag-region className="-ml-1.5 text-[10px] font-medium tracking-[.2em] text-slate-400">
+          STUDIO
+        </span>
         <ModeSwitch />
         <ScenarioHeader />
         <span className="h-5 w-px bg-slate-200" />
         <SecretsButton />
-        <ThemeButton />
-        <AppMenu />
+        <WindowControls />
         <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
       </header>
       <div className="col-span-3">
@@ -339,6 +292,7 @@ function Shell() {
         )}
       </main>
       <div className="min-h-0">{hasScenario && <SidePanel />}</div>
+      <StatusBar />
       <CommandPalette />
       <SecretsDialog />
     </div>
