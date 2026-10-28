@@ -16,7 +16,7 @@
 |---|---|
 | 名前 | シナリオと AI に伝える名前。1〜64 文字 |
 | ユーザー名 / パスワード | ログインに使う値。編集時、パスワード欄を空のままにすると前の値を残す |
-| 入力してよいサイト | 1 行に 1 つ。`https://example.com/login` と書いても `https://example.com`（オリジン）として扱う |
+| 入力してよいサイト・アプリ | 1 行に 1 つ。`https://example.com/login` と書いても `https://example.com`（オリジン）として扱う。デスクトップアプリは `app:billing.exe`（実行ファイル名、[desktop.md](desktop.md)） |
 | MFA の設定キー | 任意。認証アプリ用 QR コードの横に出るキー（base32）か `otpauth://` の文字列。ワンタイムコードを自動入力する |
 
 ### CLI
@@ -94,6 +94,7 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 | `SECRET_FIELD_EMPTY` | その項目（パスワード・MFA キーなど）が未設定 |
 | `SECRET_SITE_NOT_SET` | 入力してよいサイトが未登録。サイトを追加する |
 | `SECRET_SITE_MISMATCH` | いまのページが登録サイトではない。URL を確認し、正しければサイトを追加する |
+| `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | デスクトップアプリ（`app:xxx.exe`）が未登録、または別のアプリに入力しようとした |
 | `SECRET_KEY_MISSING` | この PC / Windows ユーザーに鍵がない。Studio か `shikigami secret reset --yes` でリセットして登録し直す |
 | `SECRETS_UNAVAILABLE` | シークレットのない Runtime で実行した（Studio・CLI・MCP から実行する） |
 | `HUMAN_REQUIRED` / `HUMAN_TIMEOUT` | 人の操作が必要だが画面がない／時間内に終わらなかった |

@@ -143,6 +143,12 @@ fn sites_are_normalized_to_origins() {
         normalize_site("http://127.0.0.1:8787/").unwrap(),
         "http://127.0.0.1:8787"
     );
+    assert_eq!(
+        normalize_site(" app:Billing.EXE ").unwrap(),
+        "app:billing.exe"
+    );
+    assert!(normalize_site("app:").is_err());
+    assert!(normalize_site(r"app:C:\x\a.exe").is_err());
     assert!(normalize_site("example.com").is_err());
     assert!(normalize_site("file:///c:/x").is_err());
     let dir = tempfile::tempdir().unwrap();

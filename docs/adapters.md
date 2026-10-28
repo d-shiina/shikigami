@@ -1,6 +1,8 @@
 # アプリを追加する（アダプター）
 
-Shikigami が操作できるアプリは「アダプター」単位で増やします。ブラウザ（`browser.*`）が最初の 1 つで、Excel や業務アプリも同じ形で足します。
+Shikigami が操作できるアプリは「アダプター」単位で増やします。いまはブラウザ（`browser.*`、[browser.md](browser.md)）と Windows のデスクトップアプリ（`desktop.*`、[desktop.md](desktop.md)）があり、Excel なども同じ形で足します。
+
+アダプターは「操作の対象」ごとに作り、アプリの作りの違い（Win32 / WPF / SAP GUI / Java など）では分けません。デスクトップアプリは `desktop.*` の 1 セットで書き、どの技術でアプリの中を見るかはアダプターの中で対象のウィンドウから決めます（`crates/shikigami-desktop/src/engine.rs`）。AI が覚える書き方を増やさないためです。
 
 ## アダプターが用意するもの
 
@@ -26,4 +28,8 @@ Playwright（Node.js）のように Rust 以外のライブラリを使うとき
 ## Excel の予定
 
 - **ファイル操作**（`excel.*`、Excel 不要）：xlsx を直接読み書き。速く、並列・無人実行向き。ブックのパスを資源にするので同じブックは自動で順番待ち
-- **Excel アプリ操作**（COM）：マクロや既存の数式をそのまま使いたい場合。Windows 操作（Phase 4）と同じ専用スレッドの設計で作る
+- **Excel アプリ操作**（COM）：マクロや既存の数式をそのまま使いたい場合。デスクトップ操作（`crates/shikigami-desktop/src/uia.rs`）と同じ専用スレッドの設計で作る
+
+## Windows API を使うアダプター
+
+ワークスペースは `unsafe` を禁止しています。Windows API を呼ぶクレートは Cargo.toml の `[lints]` を自前で持ち（`unsafe_code = "deny"`）、API を呼ぶ 1 つのモジュールだけで `#![allow(unsafe_code)]` にします（例：`shikigami-desktop` の `uia.rs`）。Windows 以外ではそのモジュールを `#[cfg(windows)]` で外し、ステップは `PLATFORM_UNSUPPORTED` を返すようにして、定義・検証・テストは Linux の CI でも回します。

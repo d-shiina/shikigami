@@ -96,7 +96,7 @@ shikigami/
 │  ├─ shikigami-cli/          CLI（`shikigami` バイナリ）
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
 │  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
-│  └─ shikigami-adapter-windows/  [Phase 4] UI Automation
+│  └─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React（src/ がフロント、src-tauri/ が Rust）
 ├─ packages/
@@ -223,7 +223,8 @@ Runtime::builder()
 - `windows` クレートで IUIAutomation を直接利用。`uiautomation` クレートは単独メンテのため依存せず参考に留める。
 - **専用ワーカースレッド**（ウィンドウを持たない）で `CoInitializeEx(COINIT_MULTITHREADED)`。全 UIA 呼び出しをこのスレッドへの要求キュー経由にする（Microsoft の推奨）。
 - 要素はリクエスト内でのみ保持し、スレッド外へ生ポインタを出さない。シナリオには Target（意味情報）だけを保存し、実行時に毎回解決する。
-- `IUIAutomation6` の接続・トランザクションタイムアウトで応答停止アプリから保護。権限差（管理者権限のアプリは非管理者から操作不可）は専用エラー `ELEVATION_REQUIRED` で返す。
+- `IUIAutomation2` の接続・トランザクションタイムアウトで応答停止アプリから保護。権限差（管理者権限のアプリは非管理者から操作不可）は専用エラー `ELEVATION_REQUIRED` で返す。
+- **実装済み**（[desktop.md](desktop.md)）：クレート `shikigami-desktop`、ステップ型 `desktop.*` 11 種、MCP の `inspect_ui`。ステップはアプリの技術（Win32 / WPF / SAP GUI / Java）で分けず 1 セットとし、掴み方はウィンドウから自動で選ぶ（今は UI Automation のみ。SAP GUI と Java のウィンドウは判別して注記する）。
 
 ### 4.2 Browser Adapter
 
@@ -413,7 +414,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 | シナリオ内（ループ） | `control.forEach` の `concurrency`（「100 件を 5 並列」）。各回は変数のコピーで動き、外へ出せるのは `collect` の値だけ（`saveAs` に `items` と同じ順の配列で入る）。集計はループ後に `sum(results)` などで行う。最初の失敗で残りをキャンセルし、エラーの `details.index` に何件目かを入れる | **実装済み** |
 | 資源の調停 | ステップ型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのステップを同時に動かさない。シナリオを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスは検証で `RELATIVE_PATH` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み（同一プロセス内）**。Studio・CLI・MCP サーバーなど別プロセス間の排他は Phase 4 で Windows の名前付きミューテックスにより実装 |
 
-- **デスクトップ操作は物理的に 1 組**：Windows のマウス・キーボード入力（SendInput）と前面ウィンドウは画面に 1 つしかないため、これらを使うステップは `desktop.input` の使用権を取得してから実行する（取得待ちの時間はタイムアウトに含めない）。UI Automation のパターン操作（Invoke / Value / SelectionItem など）はフォーカス不要なものが多く、使用権なしで並行実行できるよう Phase 4 で型ごとに宣言する。
+- **デスクトップ操作は物理的に 1 組**：Windows のマウス・キーボード入力（SendInput）と前面ウィンドウは画面に 1 つしかないため、これらを使うステップは `desktop.input` の使用権を取得してから実行する（取得待ちの時間はタイムアウトに含めない）。UI Automation のパターン操作（Invoke / Value / SelectionItem など）はフォーカス不要なものが多く、使用権なしで並行実行できるよう型ごとに宣言する（実装済み：`desktop.click` / `setValue` などは使用権なし、`desktop.mouseClick` / `type` / `press` は使用権あり。どれも同じアプリ（`window:<process>`）へは 1 つずつ）。
 - **ブラウザは並列向き**：Playwright のブラウザコンテキストは独立しており、ヘッドレスなら多数を同時に動かせる（Phase 3）。
 - **変数の扱い**：各ブランチは開始時点の変数のコピーで動き、全ブランチ完了後に「ブランチが変更した変数」をブランチ順に書き戻す。2 つのブランチが同じ変数を異なる値に変えた場合は `PARALLEL_VARIABLE_CONFLICT` で失敗させる（実行タイミングで結果が変わる事態を防ぐ）。2 つ以上のブランチが同じ変数に書く場合は実行前の検証でも `PARALLEL_VARIABLE_CONFLICT` にする。ブランチ内から外側のループへの `break` / `continue` は検証エラー（`NOT_IN_LOOP`）。
 - **並列 forEach の検証**：本体で宣言済み変数に書く（`FOREACH_SHARED_WRITE`）・`break`（`FOREACH_BREAK_IN_CONCURRENT`）はエラー、自分の値から更新する変数（`total = total + x` 型、`FOREACH_ACCUMULATOR`）と `saveAs` のない `collect` は警告。いずれも直し方のヒント付き。
@@ -504,11 +505,12 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 - CLI：`scenario list/show/create/import/edit/undo/redo/delete/history`、`run`（入力指定・JSON 出力・Ctrl+C でキャンセル）、`validate`、`step-types`、`schema export`
 - Studio（Tauri 2 + React）：シナリオ一覧・作成・複製・削除、フローチャート表示（木から自動レイアウト）、ステップ追加・削除・上下移動、スキーマから生成するプロパティフォーム、変数編集、検証結果表示、Undo/Redo（Ctrl+Z / Ctrl+Y）、実行・停止・実行ログ・ステップ状態のハイライト、**外部（MCP / CLI）変更のリアルタイム反映**、競合時の自動再読込
 - MCP サーバー（Phase 2）：`shikigami mcp`（stdio）、シナリオ・ステップ・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
+- デスクトップアプリ操作（Phase 4）：`desktop.*` 11 種（UI Automation の専用 MTA スレッド、自動待ち、マウスなし操作と `desktop.input` を取る操作の区別、アプリ単位の排他、`app:` で登録したアプリにだけ入力するシークレット）と MCP の `inspect_ui`（[desktop.md](desktop.md)）
 - Claude Code プラグイン：`plugins/shikigami`（MCP 設定＋スキル `shikigami-scenarios`）とマーケットプレイス定義。`claude plugin validate` 合格
 
 ### 未実装（後続フェーズ）
 
-- Windows 操作（Phase 4）、プロセス間の資源排他（§10.5）、ブラウザのダウンロード・アップロード
+- Windows 操作の SAP GUI Scripting・Java Access Bridge・画像認識、プロセス間の資源排他（§10.5）、ブラウザのダウンロード・アップロード
 - Studio のドラッグ＆ドロップ編集、ブレークポイント・ステップ実行、UI 要素インスペクター、差分表示（Phase 5）
 - SQLite、クライアント別のツール権限設定・削除時の人間承認、許可リスト、資格情報ストア連携、MCP の Streamable HTTP
 

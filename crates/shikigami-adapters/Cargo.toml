@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 shikigami-runtime.workspace = true
 shikigami-browser.workspace = true
+shikigami-desktop.workspace = true
 
 [lints]
 workspace = true
