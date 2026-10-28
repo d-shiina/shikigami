@@ -53,7 +53,7 @@ export function AgentButton() {
       title={`${name}（Ctrl+J）`}
       className={`flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] font-semibold ${open ? "bg-ink text-sheet" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
     >
-      <span className={`h-2 w-2 rounded-full ${busy ? "swirl animate-pulse" : open ? "bg-sheet" : "swirl"}`} />
+      {busy && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />}
       {name}
     </button>
   );
@@ -87,7 +87,6 @@ export function AgentPane() {
   return (
     <aside className="fixed top-12 right-0 bottom-7 z-30 flex w-[380px] flex-col border-l border-slate-200 bg-sheet shadow-xl">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5">
-        <span className="swirl h-2.5 w-2.5 rounded-full" />
         <div className="min-w-0 flex-1 text-[13px] font-bold">{info?.name ?? "AI"}</div>
         <button
           type="button"
@@ -186,7 +185,7 @@ function Item({ item }: { item: ChatItem }) {
       ))}
       {item.status === "running" && (
         <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-          <span className="swirl h-1.5 w-1.5 animate-pulse rounded-full" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
           作業中
         </div>
       )}
