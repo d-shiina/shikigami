@@ -160,20 +160,6 @@ textarea,
   font-family: inherit;
 }
 
-/* The swirl's colours, used for AI avatars and the review marker. */
-.swirl {
-  background: conic-gradient(from 200deg, #0f3a66, #0a6fa8, #12c2cc, #3f9a5a, #f5872a, #e0301e, #0f3a66);
-}
-
-/* The same colours as a straight band: header rule, primary actions. */
-.swirl-line {
-  background: linear-gradient(90deg, #0f3a66, #0a6fa8 20%, #12c2cc 40%, #3f9a5a 60%, #f5872a 80%, #e0301e);
-}
-
-.warm {
-  background: linear-gradient(135deg, #f5a03a, #f0702a 55%, #e0301e);
-}
-
 /*
  * Cards an AI changed and nobody reviewed yet: a solid blue edge. The swirl's
  * full gradient muddies at this size, so AI marks use its blue alone.

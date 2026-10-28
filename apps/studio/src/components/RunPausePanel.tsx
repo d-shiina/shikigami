@@ -23,7 +23,7 @@ function Button({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "primary" | "danger" | "plain" | "ai"; keys?: string }) {
   const tones = {
     primary: "bg-ink text-paper hover:bg-brand-700 disabled:bg-slate-300",
-    ai: "swirl text-white hover:brightness-110 disabled:opacity-50",
+    ai: "bg-brand-500 text-paper hover:bg-brand-600 disabled:opacity-50",
     danger: "text-shu-600 hover:bg-shu-50 disabled:text-slate-300",
     plain: "border border-slate-300 bg-sheet text-ink hover:bg-slate-50 disabled:text-slate-300",
   } as const;
@@ -239,7 +239,7 @@ export function RunPausePanel() {
 
       {unreviewed > 0 && (
         <div className="mt-2 flex items-center gap-2 rounded-[6px] bg-brand-50 px-3 py-1.5 text-[13px] text-brand-700">
-          <span className="swirl h-2 w-2 shrink-0 rounded-full" />
+          <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
           AIの修正が届きました（未確認 {unreviewed} 件）。確認して承認すると、止まったところから再開できます。
           {!reviewing && (
             <button type="button" className="ml-auto shrink-0 font-semibold underline" onClick={() => setReviewing(true)}>
@@ -250,7 +250,7 @@ export function RunPausePanel() {
       )}
       {told && !unreviewed && pause && (
         <div className="mt-2 flex items-center gap-2 text-[12px] text-slate-600">
-          <span className="swirl h-1.5 w-1.5 shrink-0 rounded-full" />
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
           {told}
           <button type="button" className="ml-auto shrink-0 text-slate-400 hover:underline" onClick={() => setTold(null)}>
             閉じる
