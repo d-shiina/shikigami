@@ -40,6 +40,16 @@ claude -p --output-format stream-json --verbose
 
 システムプロンプト（`agent.rs` の `SYSTEM_PROMPT`）で決めていること：MCP ツールだけを使う／編集には `summary` を付ける／差し戻しは `get_scenario` の `feedback` を読んで直す／パスワードを尋ねずシークレット名で参照する／日本語で短く返す。
 
+## ログイン（ペインの中で完結）
+
+Claude Code のログインが切れている・未ログインのとき（`Failed to authenticate` / `Not logged in` など）は、エラー文を出す代わりにペインに「<AI 名> のログインが切れています ［ログイン］」を出す。
+
+1. ［ログイン］で `claude auth login` を窓なしで起動する（`agent_login`）。Claude Code が自分でブラウザのサインイン画面を開く。stdout に出る URL は `agent-login` イベントでペインに渡し、「ブラウザが開かないときはここから開く」に使う（開けるのは claude.com / claude.ai などの Anthropic のページだけ）。
+2. サインイン画面がコードを表示する流れのときは、ペインの欄に貼り付けると `claude auth login` の stdin に渡す（`agent_login_code`）。
+3. 終わったら `claude auth status --json` の `loggedIn` で確かめ、ログインできていれば止まったメッセージを自動でもう一度送る。
+
+トークンは Claude Code が自分の場所に保存する。Studio はアカウント情報もコードも保存しない。
+
 ## 差し戻し → そのまま AI が直す
 
 確認待ちの「差し戻す…」に「<AI 名> がすぐ直す」（既定オン、AI が使えるときだけ表示）を追加。

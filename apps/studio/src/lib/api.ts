@@ -206,7 +206,7 @@ export type AgentEvent = { turnId: string } & (
   | { kind: "text"; text: string }
   | { kind: "tool"; name: string; detail: string | null }
   | { kind: "toolFailed"; message: string }
-  | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null }
+  | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null; needsLogin: boolean }
 );
 
 // Kept apart from `api` like `updates`: the scenario store never talks to the AI.
@@ -215,11 +215,21 @@ export const agent = {
   /** Returns the turn id; progress arrives through `onEvent`. */
   send: (input: AgentRequest) => call<string>("agent_send", { input }),
   stop: (turnId: string) => call<void>("agent_stop", { turnId }),
+  /** Starts Claude Code's sign-in; progress arrives through `onLogin`. */
+  login: () => call<void>("agent_login"),
+  /** The code the sign-in page shows when it cannot return by itself. */
+  loginCode: (code: string) => call<void>("agent_login_code", { code }),
+  cancelLogin: () => call<void>("agent_login_cancel"),
+  openUrl: (url: string) => call<void>("agent_open_url", { url }),
   onEvent: (handler: (e: AgentEvent) => void): Promise<UnlistenFn> =>
     listen<AgentEvent>("agent-event", (e) => handler(e.payload)),
+  onLogin: (handler: (e: LoginEvent) => void): Promise<UnlistenFn> =>
+    listen<LoginEvent>("agent-login", (e) => handler(e.payload)),
 };
 
-export type AgentApi = Omit<typeof agent, "onEvent">;
+export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: boolean; message: string | null };
+
+export type AgentApi = Omit<typeof agent, "onEvent" | "onLogin">;
 
 export const events = {
   onScenarioChanged: (handler: (scenarioId: string) => void): Promise<UnlistenFn> =>
