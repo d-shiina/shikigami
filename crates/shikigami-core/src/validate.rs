@@ -332,7 +332,12 @@ impl Cx<'_> {
             );
         }
 
-        let child_depth = loop_depth + usize::from(def.is_loop());
+        // A branch of `control.parallel` cannot break out of an enclosing loop.
+        let child_depth = if step.step_type == control::PARALLEL {
+            0
+        } else {
+            loop_depth + usize::from(def.is_loop())
+        };
         for (name, children) in &step.blocks {
             let block_path = format!("{path}/blocks/{name}");
             if !def.allows_block(name) {

@@ -16,13 +16,14 @@ use shikigami_core::registry::{builtin, control};
 use shikigami_core::validate::LAST_ERROR_VAR;
 use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, Step, StepId};
 use time::OffsetDateTime;
-use tokio::sync::mpsc;
+use tokio::sync::{OwnedMutexGuard, Semaphore, mpsc};
+use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 use crate::event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunSnapshot, RunStatus, StepOutcome,
 };
-use crate::handler::{ActionHandler, ActionInput, StepError};
+use crate::handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_MAX_ITERATIONS: u64 = 1000;
@@ -167,6 +168,37 @@ impl Emitter {
 }
 
 // ---------------------------------------------------------------------------
+// Exclusive resources shared by every run of one Runtime
+
+#[derive(Default)]
+pub(crate) struct ResourceLocks {
+    locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+}
+
+impl ResourceLocks {
+    fn lock_for(&self, name: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = match self.locks.lock() {
+            Ok(locks) => locks,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        locks.entry(name.to_owned()).or_default().clone()
+    }
+
+    /// Acquires all `names` in a fixed order so two steps needing the same
+    /// set can never deadlock.
+    async fn acquire(&self, names: &[&str]) -> Vec<OwnedMutexGuard<()>> {
+        let mut sorted: Vec<&str> = names.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        let mut guards = Vec::with_capacity(sorted.len());
+        for name in sorted {
+            guards.push(self.lock_for(name).lock_owned().await);
+        }
+        guards
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Interpreter
 
 pub(crate) enum Flow {
@@ -198,6 +230,7 @@ pub(crate) struct Executor {
     pub default_timeout_ms: u64,
     pub default_retry: Option<RetryPolicy>,
     pub default_on_error: OnError,
+    pub resources: Arc<ResourceLocks>,
 }
 
 fn expr_error(e: expr::ExprError) -> RunError {
@@ -225,6 +258,22 @@ impl Executor {
             default_retry: scenario.settings.default_retry.or(base.default_retry),
             default_on_error: scenario.settings.on_error.unwrap_or(base.default_on_error),
             ..base
+        }
+    }
+
+    /// An executor for a parallel branch: same run, own copy of the variables.
+    fn fork(&self, cancel: CancellationToken) -> Self {
+        Self {
+            run_id: self.run_id.clone(),
+            handlers: self.handlers.clone(),
+            vars: self.vars.clone(),
+            secret_vars: self.secret_vars.clone(),
+            emitter: self.emitter.clone(),
+            cancel,
+            default_timeout_ms: self.default_timeout_ms,
+            default_retry: self.default_retry,
+            default_on_error: self.default_on_error,
+            resources: self.resources.clone(),
         }
     }
 
@@ -264,14 +313,18 @@ impl Executor {
         }
     }
 
-    pub(crate) async fn block(&mut self, steps: &[Step]) -> StepResult {
-        for step in steps {
-            match Box::pin(self.step(step)).await? {
-                Flow::Next => {}
-                flow => return Ok(flow),
+    // Boxed with an explicit `Send` bound: the interpreter is recursive and
+    // parallel branches are spawned onto the Tokio runtime.
+    pub(crate) fn block<'a>(&'a mut self, steps: &'a [Step]) -> BoxFuture<'a, StepResult> {
+        Box::pin(async move {
+            for step in steps {
+                match self.step(step).await? {
+                    Flow::Next => {}
+                    flow => return Ok(flow),
+                }
             }
-        }
-        Ok(Flow::Next)
+            Ok(Flow::Next)
+        })
     }
 
     async fn step(&mut self, step: &Step) -> StepResult {
@@ -476,6 +529,8 @@ impl Executor {
                     other => other,
                 }
             }
+            control::GROUP => self.block(step.block("body")).await,
+            control::PARALLEL => self.parallel(step).await,
             control::BREAK => Ok(Flow::Break),
             control::CONTINUE => Ok(Flow::Continue),
             control::FAIL => {
@@ -497,6 +552,110 @@ impl Executor {
             )
             .into()),
         }
+    }
+
+    /// Runs every branch concurrently. Each branch works on a copy of the
+    /// variables; afterwards the variables each branch changed are merged
+    /// back. The first failure cancels the remaining branches.
+    async fn parallel(&mut self, step: &Step) -> StepResult {
+        let branches = step.block("branches");
+        if branches.is_empty() {
+            return Ok(Flow::Next);
+        }
+        let limit = step
+            .params
+            .get("maxConcurrency")
+            .and_then(Value::as_u64)
+            .and_then(|n| usize::try_from(n).ok())
+            .unwrap_or(branches.len())
+            .clamp(1, branches.len());
+        let permits = Arc::new(Semaphore::new(limit));
+        let group = self.cancel.child_token();
+        let base = self.vars.clone();
+
+        let mut set = JoinSet::new();
+        for (index, branch) in branches.iter().enumerate() {
+            let mut executor = self.fork(group.child_token());
+            let branch = branch.clone();
+            let permits = permits.clone();
+            set.spawn(async move {
+                let permit = tokio::select! {
+                    () = executor.cancel.cancelled() => return (index, Err(Interrupt::Cancelled), executor.vars),
+                    p = permits.acquire_owned() => p,
+                };
+                // Break/continue cannot cross the branch boundary (the
+                // validator rejects them), so the flow result is dropped.
+                let result = executor
+                    .block(std::slice::from_ref(&branch))
+                    .await
+                    .map(|_| Flow::Next);
+                drop(permit);
+                (index, result, executor.vars)
+            });
+        }
+
+        let mut first_error: Option<Interrupt> = None;
+        let mut finished: Vec<(usize, Map<String, Value>)> = Vec::new();
+        while let Some(joined) = set.join_next().await {
+            let (index, result, vars) = match joined {
+                Ok(done) => done,
+                Err(e) => {
+                    group.cancel();
+                    first_error.get_or_insert(Interrupt::Failed(RunError::new(
+                        "INTERNAL",
+                        format!("parallel branch panicked: {e}"),
+                    )));
+                    continue;
+                }
+            };
+            match result {
+                Ok(_) => finished.push((index, vars)),
+                Err(Interrupt::Cancelled) if first_error.is_some() => {}
+                Err(interrupt) => {
+                    group.cancel();
+                    first_error.get_or_insert(interrupt);
+                }
+            }
+        }
+        if self.cancel.is_cancelled() {
+            return Err(Interrupt::Cancelled);
+        }
+        if let Some(interrupt) = first_error {
+            return Err(interrupt);
+        }
+
+        // Merge in branch order so the result does not depend on timing.
+        finished.sort_by_key(|(index, _)| *index);
+        let mut changed: HashMap<String, (usize, Value)> = HashMap::new();
+        for (index, vars) in finished {
+            for (name, value) in vars {
+                if base.get(&name) == Some(&value) {
+                    continue;
+                }
+                if let Some((other, previous)) = changed.get(&name)
+                    && previous != &value
+                {
+                    return Err(RunError {
+                        details: Some(serde_json::json!({
+                            "variable": name,
+                            "branches": [other, index],
+                        })),
+                        ..RunError::new(
+                            "PARALLEL_VARIABLE_CONFLICT",
+                            format!(
+                                "branches {other} and {index} set variable '{name}' to different values"
+                            ),
+                        )
+                    }
+                    .into());
+                }
+                changed.insert(name, (index, value));
+            }
+        }
+        for (name, (_, value)) in changed {
+            self.set_var(&name, value);
+        }
+        Ok(Flow::Next)
     }
 
     async fn action(&mut self, step: &Step) -> StepResult {
@@ -536,11 +695,23 @@ impl Executor {
                 cancel: attempt_cancel.clone(),
                 emitter: self.emitter.clone(),
             };
+            // Wait for exclusive resources (not counted towards the timeout).
+            let resources = handler.exclusive_resources();
+            let _guards = if resources.is_empty() {
+                Vec::new()
+            } else {
+                tokio::select! {
+                    biased;
+                    () = self.cancel.cancelled() => return Err(Interrupt::Cancelled),
+                    g = self.resources.acquire(resources) => g,
+                }
+            };
             let outcome = tokio::select! {
                 biased;
                 () = self.cancel.cancelled() => None,
                 r = tokio::time::timeout(Duration::from_millis(timeout_ms), handler.execute(input)) => Some(r),
             };
+            drop(_guards);
             attempt_cancel.cancel();
             let result: Result<Value, StepError> = match outcome {
                 None => return Err(Interrupt::Cancelled),

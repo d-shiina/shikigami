@@ -440,3 +440,160 @@ fn committed_run_schema_is_up_to_date() {
         "schemas/run-api.schema.json is outdated; run `pnpm schema:generate`"
     );
 }
+
+fn delay(ms: u64) -> Step {
+    Step::new("flow.delay").with_param("ms", ms)
+}
+
+fn group(steps: Vec<Step>) -> Step {
+    Step::new("control.group").with_block("body", steps)
+}
+
+fn parallel(branches: Vec<Step>) -> Step {
+    Step::new("control.parallel").with_block("branches", branches)
+}
+
+fn outputs(names: &[&str]) -> Vec<VariableDef> {
+    names
+        .iter()
+        .map(|n| var(n, VarType::Any, VarDirection::Output, None))
+        .collect()
+}
+
+#[tokio::test]
+async fn parallel_branches_run_concurrently_and_merge_variables() {
+    let mut s = scenario(vec![
+        set("shared", "1"),
+        parallel(vec![
+            group(vec![delay(200), set("a", "shared + 1")]),
+            group(vec![delay(200), set("b", "shared + 2")]),
+            set("c", "3"),
+        ]),
+        set("sum", "a + b + c"),
+    ]);
+    s.variables = outputs(&["a", "b", "c", "sum"]);
+    let started = std::time::Instant::now();
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    let elapsed = started.elapsed();
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["sum"], json!(8));
+    assert!(elapsed < Duration::from_millis(380), "took {elapsed:?}");
+}
+
+#[tokio::test]
+async fn parallel_branches_writing_the_same_variable_differently_conflict() {
+    let s = scenario(vec![parallel(vec![set("x", "1"), set("x", "2")])]);
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let error = report.error.unwrap();
+    assert_eq!(error.code, "PARALLEL_VARIABLE_CONFLICT");
+    assert_eq!(error.details.unwrap()["variable"], "x");
+
+    // Writing the same value is not a conflict.
+    let mut s = scenario(vec![parallel(vec![set("x", "1"), set("x", "1")])]);
+    s.variables = outputs(&["x"]);
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.outputs["x"], json!(1));
+}
+
+#[tokio::test]
+async fn a_failing_branch_cancels_the_others() {
+    let s = scenario(vec![parallel(vec![
+        Step::new("control.fail").with_param("message", "boom"),
+        group(vec![delay(5_000), log("late")]),
+    ])]);
+    let started = std::time::Instant::now();
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    assert_eq!(report.error.unwrap().message, "boom");
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert!(!logs(&events).contains(&"late".to_owned()));
+}
+
+#[tokio::test]
+async fn max_concurrency_limits_branches() {
+    let s = scenario(vec![
+        parallel(vec![delay(150), delay(150)]).with_param("maxConcurrency", 1),
+    ]);
+    let started = std::time::Instant::now();
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert!(started.elapsed() >= Duration::from_millis(300));
+}
+
+#[tokio::test]
+async fn break_cannot_leave_a_parallel_branch() {
+    let s = scenario(vec![
+        Step::new("control.repeat")
+            .with_param("count", 3)
+            .with_block("body", vec![parallel(vec![Step::new("control.break")])]),
+    ]);
+    let err = Runtime::new()
+        .start(s, RunOptions::default())
+        .err()
+        .expect("must not start");
+    assert_eq!(err.code, "VALIDATION_FAILED");
+    assert!(err.details.unwrap().to_string().contains("NOT_IN_LOOP"));
+}
+
+/// Test adapter that pretends to move the real mouse: records how many
+/// instances run at the same time.
+struct FakeMouse {
+    active: AtomicU32,
+    peak: AtomicU32,
+}
+
+impl ActionHandler for FakeMouse {
+    fn execute<'a>(&'a self, _input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+        Box::pin(async move {
+            let now = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+            self.peak.fetch_max(now, Ordering::SeqCst);
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            self.active.fetch_sub(1, Ordering::SeqCst);
+            Ok(Value::Null)
+        })
+    }
+
+    fn exclusive_resources(&self) -> &'static [&'static str] {
+        &[DESKTOP_INPUT]
+    }
+}
+
+#[tokio::test]
+async fn desktop_input_is_exclusive_across_branches_and_runs() {
+    let mouse = Arc::new(FakeMouse {
+        active: AtomicU32::new(0),
+        peak: AtomicU32::new(0),
+    });
+    struct Shared(Arc<FakeMouse>);
+    impl ActionHandler for Shared {
+        fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+            self.0.execute(input)
+        }
+        fn exclusive_resources(&self) -> &'static [&'static str] {
+            self.0.exclusive_resources()
+        }
+    }
+    let def = StepTypeDef {
+        step_type: "test.click".into(),
+        label: "click".into(),
+        params_schema: json!({ "type": "object" }),
+        has_output: false,
+        ..flaky_def()
+    };
+    let runtime = Runtime::builder()
+        .register(def, Shared(mouse.clone()))
+        .build();
+    let click = || Step::new("test.click");
+    let s = || {
+        scenario(vec![parallel(vec![
+            click(),
+            click(),
+            group(vec![click(), delay(10)]),
+        ])])
+    };
+    let (a, b) = tokio::join!(run(&runtime, s(), json!({})), run(&runtime, s(), json!({})));
+    assert_eq!(a.0.status, RunStatus::Succeeded);
+    assert_eq!(b.0.status, RunStatus::Succeeded);
+    assert_eq!(mouse.peak.load(Ordering::SeqCst), 1);
+}

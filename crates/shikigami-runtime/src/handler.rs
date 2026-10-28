@@ -96,4 +96,16 @@ impl ActionInput {
 
 pub trait ActionHandler: Send + Sync + 'static {
     fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>>;
+
+    /// Resources this step type uses exclusively, e.g. [`DESKTOP_INPUT`] for
+    /// real mouse and keyboard input. Steps that need the same resource never
+    /// run at the same time, even across parallel branches and concurrent
+    /// runs of one [`crate::Runtime`]. Waiting for a resource does not count
+    /// towards the step timeout.
+    fn exclusive_resources(&self) -> &'static [&'static str] {
+        &[]
+    }
 }
+
+/// The physical mouse, keyboard and foreground window: one per desktop.
+pub const DESKTOP_INPUT: &str = "desktop.input";
