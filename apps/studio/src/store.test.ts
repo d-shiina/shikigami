@@ -2,7 +2,7 @@ import type { EditOp, EditOutcome, HistoryEntry, RunEventEnvelope, Scenario } fr
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
-import { createStudioStore, locate, pendingReview, touchedSteps } from "./store";
+import { createStudioStore, locate, pendingReview, revertBlocker, touchedSteps } from "./store";
 
 const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({
   schemaVersion: 1,
@@ -137,6 +137,16 @@ describe("studio store", () => {
       expect(edit).toHaveBeenCalledWith("scn_a", 1, aiEdit.inverse);
       expect(pendingReview(store.getState())).toEqual([]);
       expect(store.getState().notice).toBe(t.reverted);
+    });
+
+    it("refuses to revert when a later edit touched the same step", async () => {
+      const edit = vi.fn(async () => outcome(scenario(4)));
+      const store = createStudioStore(fakeApi({ edit, history: vi.fn(async () => [aiEdit, ownEdit]) }));
+      await store.getState().open("scn_a");
+      expect(revertBlocker(aiEdit, [aiEdit, ownEdit])).toBe(t.revertBlocked);
+      await store.getState().revert(aiEdit);
+      expect(edit).not.toHaveBeenCalled();
+      expect(store.getState().error).toBe(t.revertBlocked);
     });
   });
 });

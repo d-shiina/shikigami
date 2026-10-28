@@ -85,6 +85,8 @@ export const ja = {
   revertThis: "この変更を取り消す",
   reverted: "変更を差し戻しました（新しい変更として記録されています）。",
   unreviewed: "未確認",
+  revertBlocked: "この後に同じ対象が変更されているため、自動では差し戻せません。後の変更から順に取り消してください。",
+  revertUnsupported: "この変更は差し戻せません。",
   you: "あなた",
   paletteTitle: "ステップを呼び出す",
   palettePlaceholder: "やりたいことを入力（例: 待機、ログ、繰り返し）",

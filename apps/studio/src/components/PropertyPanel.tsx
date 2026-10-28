@@ -2,7 +2,7 @@ import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { findStep, touchedSteps } from "../store";
+import { findStep, revertBlocker, touchedSteps } from "../store";
 import { ActorMark, usePendingReview } from "./Timeline";
 
 type JsonSchema = {
@@ -203,6 +203,7 @@ export function PropertyPanel() {
   const approve = useStudio((s) => s.approve);
   const revert = useStudio((s) => s.revert);
   const pending = usePendingReview();
+  const history = useStudio((s) => s.history);
 
   if (!scenario || selection?.kind !== "step") {
     return <p className="p-4 text-sm text-slate-400">{t.selectStep}</p>;
@@ -235,7 +236,13 @@ export function PropertyPanel() {
             <button type="button" className="font-medium hover:underline" onClick={() => approve(e.revision)}>
               {t.approve}
             </button>
-            <button type="button" className="font-medium text-shu-600 hover:underline" onClick={() => revert(e)}>
+            <button
+              type="button"
+              className="font-medium text-shu-600 enabled:hover:underline disabled:text-slate-400"
+              disabled={revertBlocker(e, history) !== null}
+              title={revertBlocker(e, history) ?? undefined}
+              onClick={() => revert(e)}
+            >
               {t.revert}
             </button>
           </div>

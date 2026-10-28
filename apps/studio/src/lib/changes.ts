@@ -72,7 +72,9 @@ export function describe(
   defs: ReadonlyMap<string, StepTypeDef>,
 ): ChangeLine[] {
   const inverse = entry.inverse ?? [];
-  return (entry.ops ?? []).map((op): ChangeLine => {
+  return (entry.ops ?? []).map((op, index): ChangeLine => {
+    // Core records one inverse per op, in reverse order.
+    const paired = inverse.length === (entry.ops ?? []).length ? inverse[inverse.length - 1 - index] : undefined;
     switch (op.op) {
       case "addStep":
         return {
@@ -82,7 +84,7 @@ export function describe(
           diffs: Object.entries(op.step.params ?? {}).map(([field, after]) => ({ field, before: undefined, after })),
         };
       case "updateStep": {
-        const inv = inverse.find((i) => i.op === "updateStep" && i.stepId === op.stepId);
+        const inv = paired ?? inverse.find((i) => i.op === "updateStep" && i.stepId === op.stepId);
         return {
           verb: "update",
           stepId: op.stepId,
@@ -91,7 +93,7 @@ export function describe(
         };
       }
       case "removeStep": {
-        const restored = inverse.find((i) => i.op === "addStep" && i.step.id === op.stepId);
+        const restored = paired ?? inverse.find((i) => i.op === "addStep" && i.step.id === op.stepId);
         return { verb: "remove", subject: stepName(op.stepId, scenario, defs, restored), diffs: [] };
       }
       case "moveStep":

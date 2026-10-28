@@ -94,6 +94,37 @@ export const isExternal = (entry: HistoryEntry) => entry.actor.kind !== "studio"
 export const isRevertible = (entry: HistoryEntry) =>
   entry.kind !== "create" && entry.kind !== "delete" && (entry.inverse?.length ?? 0) > 0;
 
+/** What an entry's ops touch; "*" when they rewrite the whole step tree. */
+function targets(entry: HistoryEntry): Set<string> {
+  const keys = new Set<string>();
+  for (const op of entry.ops ?? []) {
+    if (op.op === "addStep") keys.add(`step:${op.step.id}`);
+    else if (op.op === "updateStep" || op.op === "removeStep" || op.op === "moveStep") keys.add(`step:${op.stepId}`);
+    else if (op.op === "setVariable") keys.add(`var:${op.variable.name}`);
+    else if (op.op === "removeVariable") keys.add(`var:${op.name}`);
+    else if (op.op === "updateScenario") keys.add("scenario");
+    else keys.add("*");
+  }
+  return keys;
+}
+
+/**
+ * Why an entry cannot be reverted safely, or null. Core's inverse ops restore
+ * whole previous values (e.g. all params), so sending them after a later edit
+ * to the same step or variable would silently undo that later edit too.
+ */
+export function revertBlocker(entry: HistoryEntry, history: HistoryEntry[]): string | null {
+  if (!isRevertible(entry)) return t.revertUnsupported;
+  const mine = targets(entry);
+  for (const later of history) {
+    if (later.revision <= entry.revision) continue;
+    for (const key of targets(later)) {
+      if (key === "*" || mine.has("*") || mine.has(key)) return t.revertBlocked;
+    }
+  }
+  return null;
+}
+
 /** External edits the user has not reviewed yet, newest first. */
 export function pendingReview(state: Pick<StudioState, "history" | "reviewed" | "scenario">): HistoryEntry[] {
   const seen = new Set(state.reviewed[state.scenario?.id ?? ""] ?? []);
@@ -465,7 +496,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async revert(entry) {
-        if (!isRevertible(entry)) return;
+        const blocker = revertBlocker(entry, get().history);
+        if (blocker) {
+          set({ error: blocker });
+          return;
+        }
         const ok = await get().applyOps(entry.inverse ?? []);
         if (ok) {
           get().approve(entry.revision);

@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useStudio } from "../context";
 import { actorLabel, type ChangeLine, describe, formatValue, relativeTime, verbLabel } from "../lib/changes";
 import { t } from "../lib/i18n";
-import { isExternal, isRevertible, pendingReview } from "../store";
+import { isExternal, pendingReview, revertBlocker } from "../store";
 
 /** Unreviewed external edits, memoised so selectors stay referentially stable. */
 export function usePendingReview(): HistoryEntry[] {
@@ -82,8 +82,10 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
   const stepTypes = useStudio((s) => s.stepTypes);
   const approve = useStudio((s) => s.approve);
   const revert = useStudio((s) => s.revert);
+  const history = useStudio((s) => s.history);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const lines = describe(entry, scenario, defs);
+  const blocker = revertBlocker(entry, history);
   return (
     <li className="rounded-lg border border-shu-100 bg-sheet p-3 shadow-[0_1px_0_#e3d9c7]">
       <div className="mb-2 flex items-center gap-2">
@@ -105,7 +107,9 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
         <button
           type="button"
           onClick={() => revert(entry)}
-          className="flex-1 rounded-md border border-shu-500 px-2 py-1 text-xs font-medium text-shu-600 hover:bg-shu-50"
+          disabled={blocker !== null}
+          title={blocker ?? undefined}
+          className="flex-1 rounded-md border border-shu-500 px-2 py-1 text-xs font-medium text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
         >
           ↶ {t.revert}
         </button>
@@ -118,6 +122,7 @@ function Entry({ entry, pending }: { entry: HistoryEntry; pending: boolean }) {
   const scenario = useStudio((s) => s.scenario);
   const stepTypes = useStudio((s) => s.stepTypes);
   const revert = useStudio((s) => s.revert);
+  const history = useStudio((s) => s.history);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const lines = describe(entry, scenario, defs);
   return (
@@ -136,7 +141,7 @@ function Entry({ entry, pending }: { entry: HistoryEntry; pending: boolean }) {
               {entry.kind === "create" ? "シナリオを作成" : entry.kind === "delete" ? "シナリオを削除" : entry.label}
             </span>}
         </div>
-        {isRevertible(entry) && (
+        {revertBlocker(entry, history) === null && (
           <button
             type="button"
             onClick={() => revert(entry)}
