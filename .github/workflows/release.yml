@@ -38,8 +38,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # The installer ships the CLI (MCP server) next to Studio.
+      # The installer ships the CLI (MCP server), Node.js and the browser
+      # adapter next to Studio, so browser steps work without Node.js.
       - run: pnpm studio:bundle-cli
+      - run: pnpm studio:bundle-node
       - run: node apps/studio/scripts/set-pubkey.mjs
         env:
           TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}

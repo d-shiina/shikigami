@@ -81,7 +81,7 @@ Windows SDK は C++ Build Tools の「Desktop development with C++」ワーク�
 ### Playwright
 
 - Node.js 版 1.64.1、Node 20 以上が必要。Windows / macOS / Linux を公式サポート。
-- **製品配布時に Node.js ランタイムとブラウザバイナリをどう同梱するか** は未決（Phase 3 の課題として記録）。
+- 製品配布：Node.js の実行ファイルとアダプターをインストーラーに同梱し、ブラウザは Windows の Edge を使う（同梱しない）と決定。詳細は [release.md](release.md#nodejs-とブラウザアダプターの同梱)。
 
 ## 4. MCP
 

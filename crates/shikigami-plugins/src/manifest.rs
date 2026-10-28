@@ -70,7 +70,8 @@ pub struct Manifest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CommandManifest {
     /// Relative to the plugin folder when it contains a path separator,
-    /// otherwise looked up on PATH (`node`, `python`, ...).
+    /// otherwise looked up on PATH (`node`, `python`, ...). `node` is the
+    /// Node.js shipped with Shikigami when there is one.
     pub program: String,
     #[serde(default)]
     pub args: Vec<String>,

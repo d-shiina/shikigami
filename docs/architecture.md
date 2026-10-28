@@ -475,7 +475,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 - **採用理由**：公式 Playwright（Node.js）が最も成熟し、要件でも優先指定。プロセス分離で Node 側のクラッシュが Runtime を巻き込まない。
 - **代替案**：Rust から CDP を直接操作（chromiumoxide 等）。単一バイナリになるが、Playwright のオートウェイトやロケーターの品質を再実装することになる。
-- **トレードオフ**：Node.js とブラウザの同梱で配布サイズが増える（Phase 3 で同梱方式を決定）。
+- **トレードオフ**：Node.js の同梱で配布サイズが増える。インストーラーに `node.exe` とアダプターを入れ、ブラウザは Windows の Edge を使う（[release.md](release.md#nodejs-とブラウザアダプターの同梱)）。
 
 ### 判断9：Windows 特化（OS の抽象化レイヤーは作らない）
 

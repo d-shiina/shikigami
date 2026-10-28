@@ -14,6 +14,7 @@ pub mod debug;
 pub mod event;
 mod exec;
 pub mod handler;
+pub mod node;
 pub mod record;
 pub mod sidecar;
 

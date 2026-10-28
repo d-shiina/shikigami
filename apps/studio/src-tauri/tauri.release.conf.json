@@ -4,6 +4,10 @@
     "createUpdaterArtifacts": true,
     "externalBin": [
       "binaries/shikigami"
-    ]
+    ],
+    "resources": {
+      "bundled/node": "node",
+      "bundled/browser-adapter": "browser-adapter"
+    }
   }
 }
