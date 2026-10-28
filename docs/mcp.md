@@ -77,7 +77,7 @@ args = ["mcp"]
 |  | `create_version` / `restore_version` | 版を保存／版の内容に戻す（Undo できる 1 回の編集） |
 |  | `import_scenario` | バンドルかシナリオ文書を取り込む。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブシナリオもいっしょに取り込む |
 |  | `extract_subscenario` | 同じブロックに並んだステップを新しいシナリオに切り出し、`scenario.call` 1 つに置き換える。読み書きする変数は入力・出力として受け渡すので動きは変わらない（[設計](design/subscenarios.md)） |
-|  | `request_secret` | ログイン情報をユーザーに求める。Studio に「式神がログイン情報を求めています」と出て、名前とサイトが入った登録フォームが開く。値は Studio でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
+|  | `request_secret` | ログイン情報をユーザーに求める。Studio に「ログイン情報が必要です」と出て、名前とサイトが入った登録フォームが開く。値は Studio でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
 | run | `run_scenario` | Runtime で実行（AI は実行に関与しない）。`waitMs` で完了まで待てる。`secret: true` の入力変数には値を渡せない |
 |  | `stop_scenario` | 実行のキャンセル |
 | ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)）。証跡としてツリーとスクリーンショットを保存し `observationId` を返す |

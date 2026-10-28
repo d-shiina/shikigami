@@ -1707,7 +1707,7 @@ const SECRET_POLL: Duration = Duration::from_millis(500);
 impl ServerHandler for ShikigamiMcp {
     fn get_info(&self) -> ServerConfig {
         let mut server_info = Implementation::new("shikigami", env!("CARGO_PKG_VERSION"));
-        server_info.title = Some("Shikigami（式神）".into());
+        server_info.title = Some("Shikigami".into());
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(server_info)
             .with_instructions(INSTRUCTIONS)

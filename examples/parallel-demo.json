@@ -21,7 +21,7 @@
       "type": "log.message",
       "name": "開始",
       "params": {
-        "message": "3体の式神を同時に召喚"
+        "message": "3 つの作業を同時に始めます"
       }
     },
     {
@@ -33,7 +33,7 @@
           {
             "id": "stp_01a180c4add372189e030d59e5b608dc",
             "type": "control.group",
-            "name": "式神A：請求書",
+            "name": "請求書",
             "blocks": {
               "body": [
                 {
@@ -59,7 +59,7 @@
           {
             "id": "stp_01a180c4add372189e030d5c89bd2360",
             "type": "control.group",
-            "name": "式神B：受注",
+            "name": "受注",
             "blocks": {
               "body": [
                 {
@@ -85,7 +85,7 @@
           {
             "id": "stp_01a180c4add372189e030d5f8d92cc49",
             "type": "log.message",
-            "name": "式神C：通知",
+            "name": "通知",
             "params": {
               "message": "通知を送信"
             }

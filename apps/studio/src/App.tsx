@@ -236,13 +236,7 @@ function Shell() {
     <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
       {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
       <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4 select-none">
-        <img data-tauri-drag-region src="/mark.png" alt="" className="h-6 w-6" draggable={false} />
-        <span data-tauri-drag-region className="text-[15px] font-black tracking-wider">
-          式神
-        </span>
-        <span data-tauri-drag-region className="-ml-1.5 text-[10px] font-medium tracking-[.2em] text-slate-400">
-          STUDIO
-        </span>
+        <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
         <ModeSwitch />
         <ScenarioHeader />
         <span className="h-5 w-px bg-slate-200" />
