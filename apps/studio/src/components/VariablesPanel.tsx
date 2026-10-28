@@ -32,7 +32,7 @@ const GROUPS: { title: string; directions: VarDirection[]; hint: string }[] = [
 /** How a variable changed during the last run: when, by which step, to what. */
 function RunTrace({ changes }: { changes: VariableChange[] }) {
   const scenario = useStudio((s) => s.scenario);
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   if (changes.length === 0) return <p className="text-[11px] text-slate-400">この実行では変わっていません</p>;
   const start = Date.parse(changes[0]?.at ?? "");
   return (
@@ -45,7 +45,7 @@ function RunTrace({ changes }: { changes: VariableChange[] }) {
             <span className="absolute top-1.5 -left-[16.5px] h-2 w-2 rounded-full border-2 border-white bg-brand-500" />
             <div className="flex items-baseline gap-1.5 text-slate-500">
               {c.stepId ? (
-                <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => c.stepId && select({ kind: "step", stepId: c.stepId })}>
+                <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => c.stepId && goTo(c.stepId)}>
                   {step?.name || step?.type || c.stepId}
                 </button>
               ) : (

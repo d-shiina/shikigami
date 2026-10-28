@@ -30,11 +30,11 @@ export function useStepLabel(): (id: string) => string {
 
 function StepLink({ id }: { id: string }) {
   const label = useStepLabel();
-  const select = useStudio((s) => s.select);
+  const goTo = useStudio((s) => s.goTo);
   return (
     <button
       type="button"
-      onClick={() => select({ kind: "step", stepId: id })}
+      onClick={() => goTo(id)}
       className="max-w-full truncate rounded-[4px] bg-slate-100 px-1.5 text-left text-[11px] text-slate-600 hover:bg-brand-50 hover:text-brand-700"
       title="フロー図でこの手順を見る"
     >

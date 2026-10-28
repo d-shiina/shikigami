@@ -7,6 +7,7 @@ import { FlowCanvas } from "./components/FlowCanvas";
 import { IssuesPanel } from "./components/IssuesPanel";
 import { PropertyPanel } from "./components/PropertyPanel";
 import { RunLog } from "./components/RunLog";
+import { OutlinePanel, OutlineToggle } from "./components/Outline";
 import { ReviewInbox, ReviewPanel, useInbox } from "./components/ReviewDesk";
 import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
@@ -18,7 +19,7 @@ import { VersionsPanel } from "./components/VersionsPanel";
 import { StudioContext, useStudio } from "./context";
 import { api, events } from "./lib/api";
 import { t } from "./lib/i18n";
-import { createStudioStore } from "./store";
+import { createStudioStore, type StudioState } from "./store";
 
 type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
 
@@ -228,7 +229,7 @@ function Shell() {
     }
   };
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr] ${listOpen || reviewing ? "grid-cols-[248px_1fr_360px]" : "grid-cols-[44px_1fr_360px]"}`}>
+    <div className={`grid h-full grid-rows-[auto_auto_1fr] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
       <header className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4">
         <img src="/mark.png" alt="" className="h-6 w-6" />
         <span className="text-[15px] font-black tracking-wider">式神</span>
@@ -253,17 +254,24 @@ function Shell() {
           <ScenarioRail onExpand={() => setListOpen(true)} />
         )}
       </div>
-      <main className="flex min-h-0 flex-col">
-        <div className="relative min-h-0 flex-1">
+      <main className="flex min-h-0 min-w-0 flex-col">
+        <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
             <StoryView />
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
+              {hasScenario && (
+                <>
+                  <OutlineToggle />
+                  <OutlinePanel />
+                </>
+              )}
             </ReactFlowProvider>
           )}
           {hasScenario && <ViewToggle view={view} onChange={setView} />}
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+          {/* Clear of the zoom controls in the bottom-left corner. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
             <CanvasDock />
           </div>
         </div>
@@ -278,6 +286,39 @@ function Shell() {
       <SecretsDialog />
     </div>
   );
+}
+
+/**
+ * Moving around the flow chart without the mouse:
+ * ↑↓ / j k / Tab — previous / next step (Alt+↑↓ moves the step itself),
+ * Home / End — first / last, n / Shift+N — next / previous AI change,
+ * Esc — clear the selection, o — the outline.
+ */
+function navigate(e: KeyboardEvent, state: StudioState) {
+  if (!state.scenario || state.paletteOpen) return;
+  // Buttons and links keep Tab for moving focus; the canvas and the page do not need it.
+  const target = e.target as HTMLElement | null;
+  const onControl = target?.closest("button, a, [role=tab]") && !target.closest(".react-flow");
+  const key = e.key;
+  const step = (delta: number) => {
+    e.preventDefault();
+    state.stepBy(delta);
+  };
+  if (e.altKey && (key === "ArrowUp" || key === "ArrowDown")) {
+    e.preventDefault();
+    void state.moveSelected(key === "ArrowUp" ? -1 : 1);
+  } else if (e.altKey) {
+    return;
+  } else if (key === "ArrowDown" || key === "j") step(1);
+  else if (key === "ArrowUp" || key === "k") step(-1);
+  else if (key === "Tab" && !onControl) step(e.shiftKey ? -1 : 1);
+  else if (key === "Home") step(-Infinity);
+  else if (key === "End") step(Infinity);
+  else if (key === "n" || key === "N") {
+    e.preventDefault();
+    state.changeBy(e.shiftKey ? -1 : 1);
+  } else if (key === "Escape" && state.selection) state.select(null);
+  else if (key === "o") state.setOutlineOpen(!state.outlineOpen);
 }
 
 export function App() {
@@ -317,6 +358,8 @@ export function App() {
         void store.getState().redo();
       } else if (e.key === "Delete") {
         void store.getState().removeSelected();
+      } else if (!mod) {
+        navigate(e, store.getState());
       }
     };
     window.addEventListener("keydown", onKey);
