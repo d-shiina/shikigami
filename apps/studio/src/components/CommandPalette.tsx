@@ -16,14 +16,14 @@ export const CATEGORY_LABEL: Record<string, string> = {
 
 /** Category colour, taken from the logo swirl. Used for node stripes too. */
 export const CATEGORY_COLOR: Record<string, string> = {
-  control: "#0f3a66",
-  variable: "#3f9a5a",
-  log: "#12a7b4",
-  flow: "#f5872a",
-  browser: "#0a6fa8",
-  windows: "#e0301e",
-  file: "#64748b",
-  other: "#94a3b8",
+  control: "var(--cat-control)",
+  variable: "var(--cat-variable)",
+  log: "var(--cat-log)",
+  flow: "var(--cat-flow)",
+  browser: "var(--cat-browser)",
+  windows: "var(--cat-windows)",
+  file: "var(--cat-file)",
+  other: "var(--cat-other)",
 };
 
 function matches(def: StepTypeDef, query: string): boolean {

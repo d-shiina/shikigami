@@ -418,7 +418,7 @@ export function PropertyPanel() {
     <div className="pb-6">
       <div className="px-4 pt-4 pb-3">
         <div className="overflow-hidden rounded-xl border border-slate-200">
-          <div className="flex items-center gap-2 px-3 py-2" style={{ background: `${color}1a` }}>
+          <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
             <span className="text-sm font-bold" style={{ color }}>
               {def?.label ?? step.type}
