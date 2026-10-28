@@ -62,6 +62,10 @@ pub enum StepCategory {
     // Excel and other Office documents (`excel.*`).
     Office,
     File,
+    /// Web APIs (`http.*`).
+    Network,
+    /// Programs, the clipboard and dialogs (`process.*`, `clipboard.*`, `dialog.*`).
+    System,
     Other,
 }
 

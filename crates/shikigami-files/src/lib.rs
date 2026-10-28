@@ -11,11 +11,13 @@
 // move the allocation.
 #![allow(clippy::result_large_err)]
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use serde_json::{Value, json};
 use shikigami_core::registry::{RiskLevel, StepCategory, StepTypeDef};
-use shikigami_core::resource::ResourceDef;
+use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_runtime::{
     ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
 };
@@ -91,9 +93,16 @@ impl ActionHandler for FileStep {
         let params = input.params;
         let cancel = input.cancel;
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || run_step(kind, &params, &cancel))
-                .await
-                .map_err(|e| StepError::permanent("INTERNAL", e.to_string()))?
+            tokio::task::spawn_blocking(move || {
+                let locks = file_locks(&params);
+                let _held: Vec<_> = locks
+                    .iter()
+                    .map(|l| l.lock().unwrap_or_else(|e| e.into_inner()))
+                    .collect();
+                run_step(kind, &params, &cancel)
+            })
+            .await
+            .map_err(|e| StepError::permanent("INTERNAL", e.to_string()))?
         })
     }
 }
@@ -128,15 +137,29 @@ fn shown(path: &Path) -> Value {
     json!(path.display().to_string())
 }
 
-/// Refuses to change files once the attempt was stopped or timed out.
-fn check_cancel(cancel: &CancellationToken) -> Result<(), StepError> {
-    if cancel.is_cancelled() {
-        return Err(StepError::new(
-            "CANCELLED",
-            "the step was stopped before it changed any file",
-        ));
-    }
-    Ok(())
+use ops::check_cancel;
+
+/// Locks for the files a step names, held by the blocking task itself: an
+/// attempt that timed out keeps running in the background until its next
+/// cancellation check, and must not overlap the retry on the same files.
+fn file_locks(params: &Value) -> Vec<Arc<Mutex<()>>> {
+    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+    let keys = resource_keys(
+        &[
+            ResourceDef::file("path"),
+            ResourceDef::file("from"),
+            ResourceDef::file("to"),
+        ],
+        params,
+    );
+    let mut locks = LOCKS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    // resource_keys sorts and dedups, so every step locks in the same order.
+    keys.into_iter()
+        .map(|key| locks.entry(key).or_default().clone())
+        .collect()
 }
 
 fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Value, StepError> {
@@ -155,7 +178,13 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
                 .map(shikigami_core::expr::to_display)
                 .unwrap_or_default();
             check_cancel(cancel)?;
-            ops::write_text(&path, &text, &write_encoding, flag(params, "append", false))?;
+            ops::write_text(
+                &path,
+                &text,
+                &write_encoding,
+                flag(params, "append", false),
+                cancel,
+            )?;
             Ok(shown(&path))
         }
         Kind::ReadCsv => {
@@ -195,6 +224,7 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
                 header: flag(params, "header", true),
                 append: flag(params, "append", false),
                 encoding: &write_encoding,
+                cancel,
             })?;
             Ok(json!(written))
         }
@@ -218,9 +248,9 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
             check_cancel(cancel)?;
             let overwrite = flag(params, "overwrite", false);
             if kind == Kind::Copy {
-                ops::copy(&from, &to, overwrite)?;
+                ops::copy(&from, &to, overwrite, cancel)?;
             } else {
-                ops::rename(&from, &to, overwrite)?;
+                ops::rename(&from, &to, overwrite, cancel)?;
             }
             Ok(shown(&to))
         }
@@ -245,14 +275,14 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
             };
             let to = path(params, "to")?;
             check_cancel(cancel)?;
-            ops::zip(&sources, &to, flag(params, "overwrite", false))?;
+            ops::zip(&sources, &to, flag(params, "overwrite", false), cancel)?;
             Ok(shown(&to))
         }
         Kind::Unzip => {
             let path = path(params, "path")?;
             let to = self::path(params, "to")?;
             check_cancel(cancel)?;
-            ops::unzip(&path, &to, flag(params, "overwrite", false))
+            ops::unzip(&path, &to, flag(params, "overwrite", false), cancel)
         }
     }
 }
