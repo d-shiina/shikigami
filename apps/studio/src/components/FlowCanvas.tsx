@@ -18,12 +18,13 @@ import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useStudio } from "../context";
 import { type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
-import type { HistoryEntry, VariableDef } from "@shikigami/schema";
-import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
-import { actorLabel, describe } from "../lib/changes";
+import type { HistoryEntry } from "@shikigami/schema";
+import { dataLinks, inHandle, outHandle } from "../lib/dataFlow";
+import { HUB_COL_W, type HubLink, hubColumns, hubLinks } from "../lib/varHub";
+import { actorLabel, describe, formatValue } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
-import { valueText, writesFrom } from "../lib/runValues";
+import { valueText } from "../lib/runValues";
 import { revertBlocker, type StepRunState, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
@@ -304,39 +305,47 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean; d
   );
 }
 
-type IoNodeData = { kind: "io"; side: "input" | "output"; variables: VariableDef[] };
+type HubColumn = { name: string; type: string; tag: string; x: number; value?: string };
+type HubNodeData = { kind: "hub"; columns: HubColumn[]; width: number };
 
-/** The scenario's own inputs (starting values) or returned outputs, like Blender's group input/output. */
-function IoNode({ data }: NodeProps<Node<IoNodeData>>) {
-  const input = data.side === "input";
+const HUB_ID = "@variables";
+const HUB_H = 74;
+const HUB_GAP = 96;
+const writeHandle = (v: string) => `w:${v}`;
+const readHandle = (v: string) => `r:${v}`;
+
+/**
+ * The variable box: one column per variable. Steps that write a variable
+ * link up into its column; steps that read it get a link down from it.
+ */
+function HubNode({ data }: NodeProps<Node<HubNodeData>>) {
   return (
-    <div style={{ width: IO_W }} className="rounded-[4px] border border-slate-300 bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)]">
-      <div style={{ height: 24 }} className="flex items-center gap-1.5 rounded-t-[3px] bg-ink px-3 text-[11px] font-bold text-paper">
-        <span className="swirl h-2 w-2 rounded-full" />
-        {input ? "シナリオ入力" : "シナリオ出力"}
+    <div style={{ width: data.width, height: HUB_H }} className="relative rounded-[6px] border border-slate-300 bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)]">
+      <div className="absolute -top-6 left-0 flex items-center gap-1.5 text-[12px] font-bold text-ink">
+        <span className="swirl h-2.5 w-2.5 rounded-full" />
+        変数
+        <span className="font-normal text-slate-400">上から読み、下から書き込みます</span>
       </div>
-      <div style={{ paddingTop: 4, paddingBottom: NODE_PAD_B }}>
-        {data.variables.map((v) => {
-          const color = TYPE_COLOR[v.type ?? "any"] ?? TYPE_COLOR.any ?? "#94a3b8";
-          const tag = input ? (v.direction === "input" || v.direction === "inOut" ? "入力" : "初期値") : "返す";
-          return (
-            <div key={v.name} style={{ height: ROW_H }} className={`relative flex items-center gap-2 px-3 text-[11px] ${input ? "justify-end" : ""}`}>
-              {!input && <Socket side="in" id={inHandle(v.name)} color={color} title={`${v.name} を返す`} />}
-              <span className="text-[10px] text-slate-400">{tag}</span>
-              <span className="truncate font-mono font-semibold" style={{ color }}>
-                {v.name}
+      {data.columns.map((c) => {
+        const color = TYPE_COLOR[c.type] ?? "#94a3b8";
+        const handle = { width: 10, height: 10, border: "2px solid white", boxShadow: "0 0 0 1px rgba(15,27,42,.25)", background: color };
+        return (
+          <div key={c.name} style={{ left: c.x, width: HUB_COL_W - 8 }} className="absolute top-2 bottom-2 flex flex-col items-center justify-center rounded-[4px] px-1" title={c.value}>
+            <div className="flex max-w-full items-center gap-1">
+              <span className="text-[10px] text-slate-400">{c.tag}</span>
+              <span className="truncate font-mono text-[13px] font-bold" style={{ color }}>
+                {c.name}
               </span>
-              {input && <Socket side="out" id={outHandle(v.name)} color={color} title={`${v.name} の${tag}`} />}
             </div>
-          );
-        })}
-      </div>
+            <div className="mt-0.5 max-w-full truncate rounded bg-slate-100 px-1.5 font-mono text-[11px] text-slate-600">{c.value ?? "—"}</div>
+            <Handle id={writeHandle(c.name)} type="target" position={Position.Bottom} isConnectable={false} style={{ ...handle, left: "38%" }} title={`${c.name} に書き込む`} />
+            <Handle id={readHandle(c.name)} type="source" position={Position.Bottom} isConnectable={false} style={{ ...handle, left: "62%" }} title={`${c.name} を読む`} />
+          </div>
+        );
+      })}
     </div>
   );
 }
-
-const IO_W = 180;
-const IO_GAP = 72;
 
 /** Shades for nested blocks, lightest outside. */
 const FRAME_TINT = ["#eaf1f8", "#e2ebf5", "#d9e5f2"];
@@ -357,7 +366,7 @@ function FrameNode({ data }: NodeProps<Node<FrameNodeData>>) {
   );
 }
 
-const nodeTypes = { step: StepNode, slot: SlotNode, io: IoNode, frame: FrameNode };
+const nodeTypes = { step: StepNode, slot: SlotNode, hub: HubNode, frame: FrameNode };
 
 export function FlowCanvas() {
   const scenario = useStudio((s) => s.scenario);
@@ -423,53 +432,82 @@ export function FlowCanvas() {
   });
 
   const declared = scenario?.variables ?? [];
-  const returned = declared.filter((v) => v.direction === "output" || v.direction === "inOut");
   const links = useMemo(
     () => dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys())),
     [scenario, defs, vars],
   );
-  if (declared.length > 0) {
-    nodes.push({
-      id: INPUT_NODE,
-      type: "io",
-      draggable: false,
-      selectable: false,
-      position: { x: -IO_W - IO_GAP, y: 0 },
-      data: { kind: "io", side: "input", variables: declared },
-    });
-  }
-  if (returned.length > 0) {
-    nodes.push({
-      id: OUTPUT_NODE,
-      type: "io",
-      draggable: false,
-      selectable: false,
-      // Below the last step, so review buttons beside nodes never cover it.
-      position: layout.direction === "horizontal" ? { x: layout.width + IO_GAP, y: 0 } : { x: layout.width + IO_GAP, y: layout.height + 16 },
-      data: { kind: "io", side: "output", variables: returned },
-    });
-  }
-  const bounds = {
-    x: declared.length > 0 ? -IO_W - IO_GAP : 0,
-    width: layout.width + (declared.length > 0 ? IO_W + IO_GAP : 0) + (returned.length > 0 ? IO_W + IO_GAP : 0),
-  };
+  const hub = useMemo(() => {
+    const items = hubLinks(scenario?.steps ?? [], links);
+    const at = new Map(layout.nodes.map((n) => [n.id, n.position.x] as const));
+    // Writes leave from a step's right edge, reads enter at its left edge.
+    const socketX = (l: HubLink) => {
+      const x = at.get(l.step);
+      return x === undefined ? undefined : l.kind === "write" ? x + NODE_W : x;
+    };
+    const names = [...vars.keys()];
+    const cols = hubColumns(names, items, socketX);
+    const left = Math.min(0, ...cols.values());
+    const right = Math.max(layout.width, ...[...cols.values()].map((x) => x + HUB_COL_W));
+    return { items, cols, left, width: right - left };
+  }, [scenario, links, layout, vars]);
 
-  // Links stay faint behind the chart; the selected step's own links light up.
+  const lastValue = (name: string) => {
+    const last = run?.changes.filter((c) => c.variable === name).at(-1);
+    if (last) return valueText(last);
+    const def = declared.find((v) => v.name === name);
+    return def?.default === undefined ? undefined : formatValue(def.default);
+  };
+  if (vars.size > 0) {
+    const tagOf = (name: string) => {
+      const d = declared.find((v) => v.name === name)?.direction;
+      return d === "input" ? "入力" : d === "output" ? "出力" : d === "inOut" ? "入出力" : d ? "内部" : "要素";
+    };
+    nodes.push({
+      id: HUB_ID,
+      type: "hub",
+      draggable: false,
+      selectable: false,
+      position: { x: hub.left, y: -HUB_H - HUB_GAP },
+      data: {
+        kind: "hub",
+        width: hub.width,
+        columns: [...hub.cols].map(([name, x]) => ({
+          name,
+          x: x - hub.left + 4,
+          type: vars.get(name) ?? "any",
+          tag: tagOf(name),
+          value: lastValue(name),
+        })),
+      },
+    });
+  }
+  const top = vars.size > 0 ? -HUB_H - HUB_GAP - 32 : 0;
+  const bounds = { x: hub.left, width: hub.width, y: top, height: layout.height - top };
+
+  // Links stay faint behind the chart; the hovered or selected step's own links light up.
   const selectedId = selection?.kind === "step" ? selection.stepId : null;
-  const dataEdges: Edge[] = links.map((l) => {
+  const dataEdges: Edge[] = hub.items.map((l) => {
     const color = TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8";
-    const writes = run ? writesFrom(run.changes, l.variable, l.from) : [];
+    const all = run?.changes.filter((c) => c.variable === l.variable) ?? [];
+    const write = l.kind === "write";
     return {
-      id: `data:${l.from}:${l.variable}->${l.to}:${l.toHandle}`,
-      source: l.from,
-      sourceHandle: outHandle(l.variable),
-      target: l.to,
-      targetHandle: l.toHandle,
+      id: write ? `data:${l.step}:${l.variable}->hub` : `data:hub:${l.variable}->${l.step}:${l.handle}`,
+      source: write ? l.step : HUB_ID,
+      sourceHandle: write ? outHandle(l.variable) : readHandle(l.variable),
+      target: write ? HUB_ID : l.step,
+      targetHandle: write ? writeHandle(l.variable) : l.handle,
       type: "data",
       className: "data-link",
       selectable: false,
       focusable: false,
-      data: { variable: l.variable, color, writes, from: l.from, to: l.to, selectedId },
+      data: {
+        variable: l.variable,
+        color,
+        writes: write ? all.filter((c) => c.stepId === l.step) : all,
+        from: write ? l.step : HUB_ID,
+        to: write ? HUB_ID : l.step,
+        selectedId,
+      },
       // Always beneath the steps, so a highlighted link never takes a click meant for a step.
       zIndex: 0,
     };
@@ -513,16 +551,16 @@ export function FlowCanvas() {
         if (!box) return;
         const pad = 64;
         const fitW = (box.clientWidth - pad) / bounds.width;
-        const fitH = (box.clientHeight - pad) / layout.height;
+        const fitH = (box.clientHeight - pad) / bounds.height;
         const zoom = Math.max(Math.min(fitW, fitH, 1), MIN_READABLE_ZOOM);
         const x = zoom > fitW ? pad / 2 : (box.clientWidth - bounds.width * zoom) / 2;
-        const y = zoom > fitH || layout.direction === "horizontal" ? pad / 2 + 24 : (box.clientHeight - layout.height * zoom) / 2;
-        void flow.setViewport({ x: x - bounds.x * zoom, y, zoom });
+        const y = zoom > fitH || layout.direction === "horizontal" ? pad / 2 : (box.clientHeight - bounds.height * zoom) / 2;
+        void flow.setViewport({ x: x - bounds.x * zoom, y: y - bounds.y * zoom, zoom });
       }}
       minZoom={0.2}
       onNodeClick={(_, node) => {
-        const data = node.data as StepNodeData | SlotNodeData | IoNodeData;
-        if (data.kind === "io") return;
+        const data = node.data as StepNodeData | SlotNodeData | HubNodeData | FrameNodeData;
+        if (data.kind === "hub" || data.kind === "frame") return;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
