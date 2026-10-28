@@ -58,7 +58,7 @@
       "type": "log.message",
       "name": "開始",
       "params": {
-        "message": "{{ len(invoices) }} 件を 3 体の式神で転記します"
+        "message": "{{ len(invoices) }} 件を 3 並列で転記します"
       }
     },
     {

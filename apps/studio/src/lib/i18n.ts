@@ -2,7 +2,7 @@
 // only display strings live here so that an English dictionary can be added
 // without touching components.
 export const ja = {
-  appName: "式神 Studio",
+  appName: "Shikigami Studio",
   secrets: "シークレット",
   secretsIntro:
     "ログインに使う ID・パスワードを名前を付けて登録します。シナリオと AI には名前だけが渡り、値は登録したサイトの入力欄にだけ入力されます。",
@@ -33,8 +33,8 @@ export const ja = {
   secretRegister: "登録",
   secretFieldLabel: "項目",
   secretField: { username: "ユーザー名", password: "パスワード", totp: "ワンタイムコード" },
-  waitingForYou: "式神があなたの操作を待っています",
-  secretAsked: "式神がログイン情報を求めています",
+  waitingForYou: "操作を待っています",
+  secretAsked: "ログイン情報が必要です",
   secretAskMore: (name: string) => `シークレット「${name}」に足りないものがあります`,
   secretAskMissing: "足りないもの",
   secretAskFrom: "AI からのメッセージ",
