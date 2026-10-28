@@ -3,6 +3,7 @@
 //! ```text
 //! <workspace>/secrets/vault.json            names, sites and encrypted values
 //! <workspace>/secrets/sessions/<hash>.json  saved browser logins (encrypted)
+//! <workspace>/secrets/requests.json         logins an AI asked the user for
 //! ```
 //!
 //! Values are encrypted with AES-256-GCM. The key is kept outside the
@@ -35,6 +36,9 @@ pub use keys::{Key, KeyStore, MemoryKeyStore, platform_key_store};
 const VAULT_FILE: &str = "vault.json";
 const SESSIONS_DIR: &str = "sessions";
 const LOCK_FILE: &str = ".lock";
+const REQUESTS_FILE: &str = "requests.json";
+/// Longest `reason` kept on a [`SecretRequest`].
+const MAX_REASON_LEN: usize = 300;
 
 /// A secret as Studio and the CLI list it (no password or TOTP key).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -80,6 +84,69 @@ pub struct SecretInput {
     pub sites: Option<Vec<String>>,
     #[serde(default)]
     pub description: Option<String>,
+}
+
+/// A login an AI client asked the user to register in Studio, or to
+/// complete (a missing field or site). Holds names and sites only: the user
+/// types the values in Studio, so they never pass through the AI.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SecretRequest {
+    pub name: String,
+    /// Origins (or `app:<exe>`) the secret should be typed into.
+    pub sites: Vec<String>,
+    pub fields: Vec<SecretField>,
+    /// Why the AI needs it, shown to the user. Written by the AI: Studio
+    /// shows it as the AI's words, never as an instruction from Shikigami.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reason: String,
+    pub requested_at: String,
+}
+
+/// Asks the user for a login (see [`Vault::request`]).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NewSecretRequest {
+    pub name: String,
+    #[serde(default)]
+    pub sites: Vec<String>,
+    /// Defaults to username and password.
+    #[serde(default)]
+    pub fields: Vec<SecretField>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// What a registered secret still lacks for a request.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Missing {
+    /// False when no secret has the name yet.
+    pub registered: bool,
+    pub fields: Vec<SecretField>,
+    pub sites: Vec<String>,
+}
+
+impl Missing {
+    pub fn is_empty(&self) -> bool {
+        self.registered && self.fields.is_empty() && self.sites.is_empty()
+    }
+}
+
+/// A request Studio still has to show, with what is missing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingSecretRequest {
+    #[serde(flatten)]
+    pub request: SecretRequest,
+    pub missing: Missing,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestsFile {
+    version: u32,
+    requests: Vec<SecretRequest>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -144,6 +211,7 @@ fn io_error(e: impl std::fmt::Display) -> SecretError {
 fn not_found(name: &str) -> SecretError {
     SecretError::new("SECRET_NOT_FOUND", format!("no secret named '{name}'"))
         .with_hint(REGISTER_HINT)
+        .with_secret(name)
 }
 
 fn now() -> String {
@@ -317,7 +385,149 @@ impl Vault {
             None => file.entries.push(entry),
         }
         self.write(&file)?;
+        // A request this answers is done. Failing to tidy the requests
+        // never fails the registration.
+        if let Err(e) = self.prune_requests(&file) {
+            tracing::warn!(error = %e, "could not update secret requests");
+        }
         Ok(info)
+    }
+
+    // -- requests from AI clients ----------------------------------------------
+
+    /// What the secret `name` lacks to be typed as `fields` into `sites`.
+    /// Needs no key.
+    pub fn missing(
+        &self,
+        name: &str,
+        sites: &[String],
+        fields: &[SecretField],
+    ) -> Result<Missing, SecretError> {
+        Ok(missing_in(&self.read()?, name, sites, fields))
+    }
+
+    /// Asks the user (through Studio) to register a login, or to complete
+    /// one. A request for a name already asked for is merged into it.
+    pub fn request(&self, input: NewSecretRequest) -> Result<SecretRequest, SecretError> {
+        secret::check_name(&input.name).map_err(|m| SecretError::new("INVALID_SECRET_NAME", m))?;
+        let mut sites = input
+            .sites
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| normalize_site(s))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut fields = if input.fields.is_empty() {
+            vec![SecretField::Username, SecretField::Password]
+        } else {
+            input.fields
+        };
+        let mut reason: String = input
+            .reason
+            .unwrap_or_default()
+            .trim()
+            .chars()
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .take(MAX_REASON_LEN)
+            .collect();
+        let _guard = self.lock()?;
+        let mut file = self.read_requests()?;
+        let previous = file.requests.iter().position(|r| r.name == input.name);
+        if let Some(i) = previous {
+            let old = file.requests.remove(i);
+            sites = merge(old.sites, sites);
+            fields = merge(old.fields, fields);
+            if reason.is_empty() {
+                reason = old.reason;
+            }
+        }
+        sites = merge(Vec::new(), sites);
+        fields = merge(Vec::new(), fields);
+        let request = SecretRequest {
+            name: input.name,
+            sites,
+            fields,
+            reason,
+            requested_at: now(),
+        };
+        file.requests.push(request.clone());
+        self.write_requests(&file)?;
+        Ok(request)
+    }
+
+    /// Requests Studio should show, oldest first: those a registered secret
+    /// already answers are left out.
+    pub fn requests(&self) -> Result<Vec<PendingSecretRequest>, SecretError> {
+        let vault = self.read()?;
+        Ok(self
+            .read_requests()?
+            .requests
+            .into_iter()
+            .filter_map(|request| {
+                let missing = missing_in(&vault, &request.name, &request.sites, &request.fields);
+                (!missing.is_empty()).then_some(PendingSecretRequest { request, missing })
+            })
+            .collect())
+    }
+
+    /// Whether a request for `name` is still waiting (not dismissed and not
+    /// answered by a registration).
+    pub fn is_requested(&self, name: &str) -> Result<bool, SecretError> {
+        Ok(self.requests()?.iter().any(|r| r.request.name == name))
+    }
+
+    /// The user declined a request (or will handle it later). Returns false
+    /// when there was none.
+    pub fn dismiss_request(&self, name: &str) -> Result<bool, SecretError> {
+        let _guard = self.lock()?;
+        let mut file = self.read_requests()?;
+        let before = file.requests.len();
+        file.requests.retain(|r| r.name != name);
+        if file.requests.len() == before {
+            return Ok(false);
+        }
+        self.write_requests(&file)?;
+        Ok(true)
+    }
+
+    /// Drops the requests the registered secrets answer, each checked
+    /// against its current (possibly merged) requirements.
+    pub fn tidy_requests(&self) -> Result<(), SecretError> {
+        let _guard = self.lock()?;
+        let vault = self.read()?;
+        self.prune_requests(&vault)
+    }
+
+    /// Drops the requests `vault` answers. Called with the lock held.
+    fn prune_requests(&self, vault: &VaultFile) -> Result<(), SecretError> {
+        let mut file = self.read_requests()?;
+        let before = file.requests.len();
+        file.requests
+            .retain(|r| !missing_in(vault, &r.name, &r.sites, &r.fields).is_empty());
+        if file.requests.len() != before {
+            self.write_requests(&file)?;
+        }
+        Ok(())
+    }
+
+    fn read_requests(&self) -> Result<RequestsFile, SecretError> {
+        match std::fs::read(self.dir.join(REQUESTS_FILE)) {
+            Ok(bytes) => serde_json::from_slice(&bytes)
+                .map_err(|e| io_error(format!("secrets/{REQUESTS_FILE} is damaged: {e}"))),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(RequestsFile {
+                version: 1,
+                ..RequestsFile::default()
+            }),
+            Err(e) => Err(io_error(e)),
+        }
+    }
+
+    fn write_requests(&self, file: &RequestsFile) -> Result<(), SecretError> {
+        let file = RequestsFile {
+            version: 1,
+            requests: file.requests.clone(),
+        };
+        let bytes = serde_json::to_vec_pretty(&file).map_err(io_error)?;
+        write_atomic(&self.dir.join(REQUESTS_FILE), &bytes)
     }
 
     pub fn remove(&self, name: &str) -> Result<(), SecretError> {
@@ -459,7 +669,8 @@ impl SecretProvider for Vault {
                     reference.field.as_str()
                 ),
             )
-            .with_hint("Ask the user to fill it in Studio (シークレット).")
+            .with_hint("Call request_secret with this name and the missing field: Studio then asks the user to fill it in. Never ask for it in chat.")
+            .with_secret(&reference.secret)
         };
         let value = match reference.field {
             SecretField::Username => values.username,
@@ -509,6 +720,39 @@ impl SecretProvider for Vault {
         let bytes = serde_json::to_vec(&sealed).map_err(io_error)?;
         write_atomic(&self.session_path(name), &bytes)
     }
+}
+
+fn missing_in(vault: &VaultFile, name: &str, sites: &[String], fields: &[SecretField]) -> Missing {
+    let Some(entry) = vault.entries.iter().find(|e| e.name == name) else {
+        return Missing {
+            registered: false,
+            fields: fields.to_vec(),
+            sites: sites.to_vec(),
+        };
+    };
+    Missing {
+        registered: true,
+        fields: fields
+            .iter()
+            .filter(|f| !entry.fields.contains(f))
+            .copied()
+            .collect(),
+        sites: sites
+            .iter()
+            .filter(|s| !entry.sites.contains(s))
+            .cloned()
+            .collect(),
+    }
+}
+
+/// `a` followed by the items of `b` it lacks.
+fn merge<T: PartialEq>(mut a: Vec<T>, b: Vec<T>) -> Vec<T> {
+    for item in b {
+        if !a.contains(&item) {
+            a.push(item);
+        }
+    }
+    a
 }
 
 /// `https://example.com/login` → `https://example.com` (what browsers call

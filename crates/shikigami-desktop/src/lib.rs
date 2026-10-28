@@ -361,7 +361,8 @@ fn text(input: &ActionInput, key: &str) -> Result<Text, StepError> {
             format!("secret '{}' has no desktop app it may be typed into", secret.name),
         )
         .with_details(json!({
-            "hint": "Ask the user to add the app to this secret's sites in Studio (シークレット), written as app:<exe name>, e.g. app:billing.exe."
+            "secret": secret.name,
+            "hint": "Call request_secret with this name and the app, written as app:<exe name> (e.g. app:billing.exe): Studio then asks the user to add it to this secret's sites."
         })));
     }
     Ok(Text {

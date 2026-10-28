@@ -241,3 +241,134 @@ fn a_copied_workspace_can_be_reset_and_registered_again() {
         "hunter2"
     );
 }
+
+fn ask(name: &str, sites: &[&str], fields: &[SecretField]) -> NewSecretRequest {
+    NewSecretRequest {
+        name: name.into(),
+        sites: sites.iter().map(|s| (*s).to_owned()).collect(),
+        fields: fields.to_vec(),
+        reason: Some("ログイン画面が出たため".into()),
+    }
+}
+
+#[test]
+fn requests_are_listed_until_a_registration_answers_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    let request = v
+        .request(ask("Google", &["https://accounts.google.com/signin"], &[]))
+        .unwrap();
+    assert_eq!(request.sites, ["https://accounts.google.com"]);
+    assert_eq!(
+        request.fields,
+        [SecretField::Username, SecretField::Password]
+    );
+
+    let pending = v.requests().unwrap();
+    assert_eq!(pending.len(), 1);
+    assert!(!pending[0].missing.registered);
+    assert!(v.is_requested("Google").unwrap());
+
+    // Registered without the site: still asked for.
+    v.set(SecretInput {
+        name: "Google".into(),
+        username: Some("me".into()),
+        password: Some("hunter2".into()),
+        ..SecretInput::default()
+    })
+    .unwrap();
+    let pending = v.requests().unwrap();
+    assert_eq!(pending[0].missing.sites, ["https://accounts.google.com"]);
+    assert!(pending[0].missing.fields.is_empty());
+
+    v.set(SecretInput {
+        name: "Google".into(),
+        sites: Some(vec!["https://accounts.google.com".into()]),
+        ..SecretInput::default()
+    })
+    .unwrap();
+    assert!(v.requests().unwrap().is_empty());
+    let raw = std::fs::read_to_string(dir.path().join("secrets/requests.json")).unwrap();
+    assert!(!raw.contains("Google"));
+}
+
+#[test]
+fn requests_merge_and_can_be_dismissed() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    v.request(ask(
+        "社内",
+        &["https://a.example"],
+        &[SecretField::Password],
+    ))
+    .unwrap();
+    let merged = v
+        .request(NewSecretRequest {
+            reason: None,
+            ..ask(
+                "社内",
+                &["https://b.example", "https://a.example"],
+                &[SecretField::Totp],
+            )
+        })
+        .unwrap();
+    assert_eq!(merged.sites, ["https://a.example", "https://b.example"]);
+    assert_eq!(merged.fields, [SecretField::Password, SecretField::Totp]);
+    assert_eq!(merged.reason, "ログイン画面が出たため");
+    assert_eq!(v.requests().unwrap().len(), 1);
+
+    assert!(v.dismiss_request("社内").unwrap());
+    assert!(!v.dismiss_request("社内").unwrap());
+    assert!(!v.is_requested("社内").unwrap());
+}
+
+#[test]
+fn requests_hold_no_values_and_check_their_input() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    assert_eq!(
+        v.request(ask("{{ x }}", &[], &[])).unwrap_err().code,
+        "INVALID_SECRET_NAME"
+    );
+    assert_eq!(
+        v.request(ask("x", &["javascript:alert(1)"], &[]))
+            .unwrap_err()
+            .code,
+        "INVALID_SITE"
+    );
+    let long = v
+        .request(NewSecretRequest {
+            reason: Some(format!("a\nb{}", "c".repeat(400))),
+            ..ask("x", &[], &[])
+        })
+        .unwrap();
+    assert!(long.reason.starts_with("a b"));
+    assert_eq!(long.reason.chars().count(), 300);
+}
+
+#[test]
+fn missing_secrets_name_themselves() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    let e = v
+        .resolve(&reference("Google", SecretField::Password))
+        .unwrap_err();
+    assert_eq!(e.code, "SECRET_NOT_FOUND");
+    assert_eq!(e.details().unwrap()["secret"], "Google");
+}
+
+#[test]
+fn tidying_keeps_requests_merged_with_more_than_is_registered() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    v.set(input("社内")).unwrap();
+    // One call asks for what is registered, another for one more site.
+    v.request(ask("社内", &["http://127.0.0.1:8787"], &[]))
+        .unwrap();
+    v.request(ask("社内", &["https://b.example"], &[])).unwrap();
+    v.tidy_requests().unwrap();
+    assert_eq!(
+        v.requests().unwrap()[0].missing.sites,
+        ["https://b.example"]
+    );
+}
