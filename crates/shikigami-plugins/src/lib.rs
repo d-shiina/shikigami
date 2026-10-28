@@ -97,6 +97,9 @@ impl Plugin {
         let defs = manifest.step_defs().map_err(problem)?;
         let program = if manifest.command.program.contains(['/', '\\']) {
             dir.join(&manifest.command.program)
+        } else if shikigami_runtime::node::is_node(&manifest.command.program) {
+            // The Node.js shipped with Shikigami when there is one.
+            shikigami_runtime::node::node_program()
         } else {
             PathBuf::from(&manifest.command.program)
         };

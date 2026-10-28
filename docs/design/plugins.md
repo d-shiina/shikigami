@@ -67,7 +67,7 @@ hello/
 | `name` | ○ | ステップ型の接頭辞（`hello` → `hello.greet`）。英小文字で始まる英小文字・数字（`^[a-z][a-z0-9]*$`、32 文字まで） |
 | `version` | ○ | プラグインのバージョン（表示用） |
 | `label` / `description` | ○ / - | 表示名と説明 |
-| `command.program` | ○ | 起動するプログラム。`./` や `bin\` のように区切りを含むときはプラグインのフォルダからの相対、それ以外は PATH から探す |
+| `command.program` | ○ | 起動するプログラム。`./` や `bin\` のように区切りを含むときはプラグインのフォルダからの相対、それ以外は PATH から探す。`node` はインストーラーに同梱の Node.js を優先するので、利用者の PC に Node.js がなくても動く |
 | `command.args` | - | 引数。作業フォルダはプラグインのフォルダ |
 | `inspect` | - | `true` なら MCP の `test_step` が実行後に `inspect` を呼び、アプリの状態を AI に返す |
 | `steps[].action` | ○ | 操作名（`^[a-z][A-Za-z0-9]*$`）。JSON-RPC のメソッド名にもなる |
