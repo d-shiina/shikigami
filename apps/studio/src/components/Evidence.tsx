@@ -175,6 +175,7 @@ const SOURCE: Record<Observed["source"], string> = {
   inspectPage: "ブラウザ",
   inspectUi: "アプリ",
   testStep: "1手順の試し",
+  runPause: "止まった画面",
 };
 
 /** Screens the AI looked at before changing things, as thumbnails. */
@@ -237,7 +238,7 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
           <div className="min-w-0 flex-1">
             <div className="truncate text-[14px] font-bold">{item.title}</div>
             <div className="text-[11px] text-slate-500">
-              AIが{SOURCE[item.source]}で見た画面 ・ 版 {item.revision} ・ {relativeTime(item.at)}
+              {item.source === "runPause" ? "実行が止まったときの画面" : `AIが${SOURCE[item.source]}で見た画面`} ・ 版 {item.revision} ・ {relativeTime(item.at)}
             </div>
           </div>
           <div className="flex rounded-[6px] bg-slate-100 p-0.5 text-[12px]">

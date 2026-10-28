@@ -1,7 +1,7 @@
 //! Tauri commands. Arguments arrive camelCased from the frontend; results
 //! and errors use the shared types generated into `@shikigami/schema`.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use shikigami_core::{
     Actor, ActorKind, EditOp, EditOutcome, ErrorPayload, Evidence, FileStore, HistoryEntry,
@@ -10,7 +10,7 @@ use shikigami_core::{
     StepTypeDef, UserConfig, ValidationReport, VersionSummary, WorkspaceInfo, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
-use shikigami_runtime::{RunEventEnvelope, RunOptions, RunSnapshot};
+use shikigami_runtime::{DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunSnapshot};
 use shikigami_secrets::{PendingSecretRequest, SecretInfo, SecretInput};
 use tauri::{AppHandle, Emitter, State};
 
@@ -274,15 +274,30 @@ pub fn get_observation(
     Ok(state.service.get_observation(&id)?)
 }
 
+/// How a Studio run pauses (see `shikigami_runtime::debug`).
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebugSettings {
+    #[serde(default)]
+    breakpoints: Vec<shikigami_core::StepId>,
+    /// Pause before the first step.
+    #[serde(default)]
+    step: bool,
+}
+
 /// Starts a run of the stored scenario. Events are emitted as `run-event`
-/// and recorded under `<workspace>/runs/<run-id>/`.
+/// and recorded under `<workspace>/runs/<run-id>/`. Studio runs are
+/// interactive: they pause on unhandled errors and at `debug.breakpoints`
+/// (see `debug_run`).
 #[tauri::command]
 pub async fn run_scenario(
     app: AppHandle,
     state: State<'_, AppState>,
     id: ScenarioId,
     inputs: Option<Map<String, Value>>,
+    debug: Option<DebugSettings>,
 ) -> CmdResult<RunId> {
+    let debug = debug.unwrap_or_default();
     let scenario = state.service.get_runnable(&id)?;
     let version = state.service.matching_version(&scenario).ok().flatten();
     let handle = state
@@ -293,6 +308,11 @@ pub async fn run_scenario(
                 inputs: inputs.unwrap_or_default(),
                 run_id: None,
                 version,
+                debug: Some(DebugOptions {
+                    pause_on_error: true,
+                    breakpoints: debug.breakpoints,
+                    pause_at_start: debug.step,
+                }),
                 ..RunOptions::default()
             },
         )
@@ -311,6 +331,8 @@ pub async fn run_scenario(
             ActiveRun {
                 cancel: handle.cancel_token(),
                 snapshot: handle.snapshot_cell(),
+                scenario_id: id.clone(),
+                debug: handle.debug_control(),
             },
         );
     }
@@ -325,6 +347,22 @@ pub async fn run_scenario(
                 }
                 if let Err(e) = emit_app.emit(RUN_EVENT, event) {
                     tracing::warn!(error = %e, "failed to emit run event");
+                }
+                if let RunEvent::Paused {
+                    reason: shikigami_runtime::PauseReason::Error,
+                    step_id,
+                    step_type,
+                    ..
+                } = &event.event
+                {
+                    crate::debug::capture_pause(
+                        emit_app.clone(),
+                        event.run_id.clone(),
+                        id.clone(),
+                        step_id.clone(),
+                        step_type.clone(),
+                        event.seq,
+                    );
                 }
             })
             .await;

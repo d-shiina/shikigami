@@ -1849,11 +1849,20 @@
     },
     "ObservationSource": {
       "description": "What produced an observation.",
-      "type": "string",
-      "enum": [
-        "inspectPage",
-        "inspectUi",
-        "testStep"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "inspectPage",
+            "inspectUi",
+            "testStep"
+          ]
+        },
+        {
+          "description": "The screen when an interactive run in Studio paused on an error.",
+          "type": "string",
+          "const": "runPause"
+        }
       ]
     },
     "ReviewVerdict": {

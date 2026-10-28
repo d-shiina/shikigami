@@ -236,6 +236,76 @@ describe("studio store", () => {
     expect(run.logs.map((l) => l.message)).toContain("hello");
   });
 
+  it("pauses on an error, keeps the evidence and resumes", async () => {
+    const debugRun = vi.fn(async () => ({ revision: 2, updated: true }));
+    const store = createStudioStore(fakeApi({ debugRun }));
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({
+      ...base,
+      seq: 3,
+      type: "paused",
+      stepId: "s2",
+      stepType: "browser.click",
+      reason: "error",
+      error: { code: "ELEMENT_NOT_FOUND", message: "no button", stepId: "s2" },
+      variables: { n: 41 },
+      revision: 1,
+    });
+    let run = store.getState().run!;
+    expect(run.status).toBe("paused");
+    expect(run.steps.s2).toBe("failed");
+    expect(run.pause).toMatchObject({ stepId: "s2", reason: "error", variables: { n: 41 } });
+    expect(store.getState().reveal?.stepId).toBe("s2");
+    // Evidence for an older pause is dropped.
+    store.getState().onRunEvidence({ runId: "run_1", seq: 1, stepId: "s2", problem: "x" });
+    expect(store.getState().run!.evidence).toBeNull();
+    store.getState().onRunEvidence({ runId: "run_1", seq: 3, stepId: "s2", problem: "no page" });
+    expect(store.getState().run!.evidence?.problem).toBe("no page");
+
+    expect(await store.getState().debug({ action: "retry" })).toBe(true);
+    expect(debugRun).toHaveBeenCalledWith("run_1", { action: "retry" });
+    expect(store.getState().notice).toContain("リビジョン 2");
+    store.getState().onRunEvent({ ...base, seq: 4, type: "resumed", action: "retry", revision: 2 });
+    run = store.getState().run!;
+    expect(run.status).toBe("running");
+    expect(run.pause).toBeNull();
+    expect(run.evidence).toBeNull();
+    store.getState().onRunEvent({ ...base, seq: 5, type: "runFinished", status: "failed", error: { code: "X", message: "gave up" }, durationMs: 3 });
+    expect(store.getState().run!.failure?.message).toBe("gave up");
+    store.getState().dismissFailure();
+    expect(store.getState().run!.failure).toBeNull();
+  });
+
+  it("explains a resume that the fix made impossible", async () => {
+    const debugRun = vi.fn(async () => {
+      throw new ApiError({ code: "RESUME_INCOMPATIBLE", message: "moved" });
+    });
+    const store = createStudioStore(fakeApi({ debugRun }));
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "s1", stepType: "log.message", reason: "step", variables: {}, revision: 1 });
+    expect(store.getState().run!.steps.s1).toBe("paused");
+    expect(await store.getState().debug({ action: "continue" })).toBe(false);
+    expect(store.getState().error).toContain("最初から");
+  });
+
+  it("keeps breakpoints per scenario and passes them to runs", async () => {
+    const run = vi.fn(async () => "run_1");
+    const debugRun = vi.fn(async () => ({ revision: 1, updated: false }));
+    const store = createStudioStore(fakeApi({ run, debugRun }));
+    await store.getState().open("scn_a");
+    store.getState().toggleBreakpoint("s1");
+    store.getState().toggleBreakpoint("s2");
+    store.getState().toggleBreakpoint("s1");
+    expect(store.getState().breakpoints).toEqual({ scn_a: ["s2"] });
+    await store.getState().startRun({ step: true });
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: true });
+    // A running run of this scenario picks up changes at once.
+    store.getState().toggleBreakpoint("s3");
+    expect(debugRun).toHaveBeenCalledWith("run_1", { action: "setBreakpoints", stepIds: ["s2", "s3"] });
+  });
+
   it("records variable changes the Runtime reports", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };

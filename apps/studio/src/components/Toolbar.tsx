@@ -36,10 +36,12 @@ export function ScenarioHeader() {
   const stopRun = useStudio((s) => s.stopRun);
   const followRun = useStudio((s) => s.followRun);
   const setFollowRun = useStudio((s) => s.setFollowRun);
+  const debug = useStudio((s) => s.debug);
 
   if (!scenario) return <span className="flex-1" />;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
-  const running = run?.status === "running";
+  const running = run?.status === "running" || run?.status === "paused";
+  const paused = run?.status === "paused";
 
   return (
     <>
@@ -62,9 +64,19 @@ export function ScenarioHeader() {
       {running ? (
         <div className="flex h-8 items-center overflow-hidden rounded-[6px] border border-slate-300 bg-sheet text-[13px]">
           <span className="flex items-center gap-2 px-3 font-medium text-ink">
-            <span className="swirl h-2 w-2 animate-pulse rounded-full" />
-            実行中
+            <span className={`h-2 w-2 rounded-full ${paused ? (run?.pause?.reason === "error" ? "bg-shu-500" : "bg-mizu-500") : "swirl animate-pulse"}`} />
+            {paused ? "一時停止中" : "実行中"}
           </span>
+          {!paused && (
+            <button
+              type="button"
+              onClick={() => void debug({ action: "pause" })}
+              title="次の手順の前で一時停止する"
+              className="flex h-full items-center gap-1 border-l border-slate-300 px-2.5 text-[12px] text-slate-600 hover:bg-slate-50"
+            >
+              ❚❚ 一時停止
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setFollowRun(!followRun)}
@@ -96,6 +108,17 @@ export function ScenarioHeader() {
           </span>
           {t.run}
           <kbd className="rounded-[3px] bg-paper/15 px-1 font-sans text-[10px] font-normal text-paper/80">F5</kbd>
+        </button>
+      )}
+      {!running && (
+        <button
+          type="button"
+          onClick={() => startRun({ step: true })}
+          disabled={errors > 0}
+          title="最初の手順の前で止めて、1手順ずつ実行する (F10)"
+          className="flex h-8 items-center gap-1 rounded-[6px] border border-slate-300 px-2.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
+        >
+          ステップ実行
         </button>
       )}
     </>

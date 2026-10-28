@@ -185,7 +185,7 @@ export type RunId = string;
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ObservationSource".
  */
-export type ObservationSource = "inspectPage" | "inspectUi" | "testStep";
+export type ObservationSource = ("inspectPage" | "inspectUi" | "testStep") | "runPause";
 /**
  * A human's verdict on a revision.
  *

@@ -17,6 +17,7 @@ const RUN_RING: Record<StepRunState, string> = {
   succeeded: "border-moegi-500 text-moegi-500",
   failed: "border-shu-500 bg-shu-500 text-white",
   skipped: "border-slate-300 text-slate-300",
+  paused: "border-mizu-500 bg-mizu-500 text-white",
 };
 
 export function Sentence({ parts }: { parts: Part[] }) {

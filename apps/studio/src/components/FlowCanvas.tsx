@@ -36,7 +36,7 @@ import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; dir: Direction }>
+  Node<StepNodeData & { runState?: StepRunState; breakpoint: boolean; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; dir: Direction }>
 >;
 
 const MIN_READABLE_ZOOM = 0.85;
@@ -54,9 +54,28 @@ const DirContext = createContext<Direction>("horizontal");
 const RUN_STYLE: Record<StepRunState, string> = {
   running: "ring-2 ring-accent-500 animate-pulse",
   succeeded: "ring-2 ring-moegi-500/60",
-  failed: "ring-2 ring-shu-500",
+  failed: "ring-[3px] ring-shu-500 shadow-[0_0_0_9px_color-mix(in_srgb,var(--color-shu-500)_18%,transparent)]",
   skipped: "opacity-60",
+  paused: "ring-[3px] ring-mizu-500 shadow-[0_0_0_9px_color-mix(in_srgb,var(--color-mizu-500)_18%,transparent)]",
 };
+
+/** Click target left of a step's header: a red dot when the run pauses before it. */
+function BreakpointDot({ stepId, on }: { stepId: string; on: boolean }) {
+  const toggle = useStudio((s) => s.toggleBreakpoint);
+  return (
+    <button
+      type="button"
+      title={on ? "ブレークポイントを外す (F9)" : "ここで一時停止する（ブレークポイント, F9）"}
+      onClick={(e) => {
+        e.stopPropagation();
+        toggle(stepId);
+      }}
+      className={`nodrag absolute -top-[7px] -left-[7px] z-10 h-[14px] w-[14px] rounded-full border-2 ${
+        on ? "border-sheet bg-shu-500 shadow" : "border-transparent bg-transparent group-hover:border-shu-500/60 group-hover:bg-sheet"
+      }`}
+    />
+  );
+}
 
 /** 残す / 取り消す for an unreviewed AI edit, floating beside its node. */
 function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
@@ -306,7 +325,7 @@ function StepNode({ data }: StepNodeProps) {
   return (
     <div
       style={{ width: NODE_W }}
-      className={`relative rounded-[4px] border bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)] ${
+      className={`group relative rounded-[4px] border bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)] ${
         data.diff
           ? `border-2 ${DIFF_STYLE[data.diff].border} ${data.selected ? "ring-4 ring-brand-100" : ""}`
           : data.byAi
@@ -324,6 +343,16 @@ function StepNode({ data }: StepNodeProps) {
         </NodeToolbar>
       )}
       <FlowHandles dir={data.dir} />
+      <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} />
+      {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
+        <span
+          className={`absolute top-full left-1 z-10 mt-1.5 rounded-[4px] px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
+            data.runState === "failed" ? "bg-shu-500" : "bg-mizu-500"
+          }`}
+        >
+          {data.runState === "failed" ? "✕ ここで止まっています" : "❚❚ ここで一時停止中"}
+        </span>
+      )}
       {data.note && (
         <span
           title={data.note}
@@ -471,6 +500,7 @@ function Follow() {
 }
 
 const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode };
+const NO_BREAKPOINTS: string[] = [];
 
 export function FlowCanvas() {
   const scenario = useStudio((s) => s.scenario);
@@ -478,6 +508,7 @@ export function FlowCanvas() {
   const selection = useStudio((s) => s.selection);
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
+  const breakpoints = useStudio((s) => (s.scenario ? s.breakpoints[s.scenario.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const theme = useTheme().mode;
@@ -523,6 +554,8 @@ export function FlowCanvas() {
           ...n.data,
           dir: layout.direction,
           runState: run?.steps[id],
+          breakpoint: breakpoints.includes(id),
+          pausedHere: run?.pause?.stepId === id,
           issueCount: issueCounts.get(id) ?? 0,
           selected: selection?.kind === "step" && selection.stepId === id,
           byAi: !reviewing && reviews.has(id),

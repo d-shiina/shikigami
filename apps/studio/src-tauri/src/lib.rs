@@ -5,20 +5,25 @@
 //! the GUI does is exactly what MCP clients and the CLI can do.
 
 mod commands;
+mod debug;
 mod updater;
 mod watcher;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use shikigami_core::ScenarioId;
 use shikigami_core::{FileStore, RunId, ScenarioService};
-use shikigami_runtime::{RunSnapshot, Runtime};
+use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime};
 use shikigami_secrets::Vault;
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct ActiveRun {
     pub cancel: CancellationToken,
     pub snapshot: Arc<Mutex<RunSnapshot>>,
+    pub scenario_id: ScenarioId,
+    /// Studio runs are interactive: they pause on errors and breakpoints.
+    pub debug: Option<DebugControl>,
 }
 
 pub(crate) struct AppState {
@@ -26,6 +31,8 @@ pub(crate) struct AppState {
     pub runtime: Runtime,
     pub runs: Mutex<HashMap<RunId, ActiveRun>>,
     pub vault: Arc<Vault>,
+    /// For looking at the screen where a run paused.
+    pub adapters: Vec<Arc<dyn Adapter>>,
 }
 
 pub fn run() {
@@ -36,7 +43,8 @@ pub fn run() {
         )
         .init();
 
-    let runtime = shikigami_adapters::runtime(&shikigami_adapters::all());
+    let adapters = shikigami_adapters::all();
+    let runtime = shikigami_adapters::runtime(&adapters);
     let root = FileStore::default_root();
     let store = match FileStore::open(&root) {
         Ok(store) => store,
@@ -52,6 +60,7 @@ pub fn run() {
         runtime: runtime.with_secrets(vault.clone()),
         runs: Mutex::new(HashMap::new()),
         vault,
+        adapters,
     };
 
     let result = tauri::Builder::default()
@@ -95,6 +104,7 @@ pub fn run() {
             commands::run_scenario,
             commands::stop_run,
             commands::run_status,
+            debug::debug_run,
             updater::app_info,
             updater::check_update,
             updater::install_update,

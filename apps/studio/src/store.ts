@@ -1,12 +1,15 @@
 // Studio state. All mutations go through the backend API as EditOps; the
 // store only mirrors what Core returns (scenario, validation, undo state).
 import type {
+  DebugCommand,
   EditOp,
   EditOutcome,
   HistoryEntry,
   ImportConflict,
   LogLevel,
+  PauseReason,
   ReviewTimeline,
+  RunError,
   RunEventEnvelope,
   RunStatus,
   Scenario,
@@ -24,6 +27,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import {
   type Api,
   ApiError,
+  type RunEvidence,
   type SecretField,
   type SecretInfo,
   type SecretInput,
@@ -38,7 +42,21 @@ export type Selection =
   | { kind: "slot"; parentId: string | null; block: string | null }
   | null;
 
-export type StepRunState = "running" | "succeeded" | "failed" | "skipped";
+export type StepRunState = "running" | "succeeded" | "failed" | "skipped" | "paused";
+
+/** Where an interactive run waits for the person (the Runtime's `paused` event). */
+export type Pause = {
+  seq: number;
+  stepId: string;
+  stepType: string;
+  reason: PauseReason;
+  /** Set when it paused because the step failed. */
+  error: RunError | null;
+  /** Every variable's value at that point (masked, previews for large ones). */
+  variables: Record<string, unknown>;
+  /** The scenario revision the run executes. */
+  revision: number;
+};
 
 export type LogEntry = {
   seq: number;
@@ -85,7 +103,14 @@ function asVariableChange(env: RunEventEnvelope): VariableChange | null {
 
 export type RunState = {
   runId: string;
+  /** The scenario being run (known from `runStarted`). */
+  scenarioId: string | null;
   status: RunStatus;
+  pause: Pause | null;
+  /** The screen at an error pause, once Studio has looked at it. */
+  evidence: RunEvidence | null;
+  /** Why the run failed, until the person closes the notice. */
+  failure: RunError | null;
   steps: Record<string, StepRunState>;
   logs: LogEntry[];
   changes: VariableChange[];
@@ -120,6 +145,8 @@ export type StudioState = {
   reveal: { stepId: string; seq: number } | null;
   /** While running, keep the running step in view. */
   followRun: boolean;
+  /** Steps to pause before, per scenario (this PC only). */
+  breakpoints: Record<string, string[]>;
   outlineOpen: boolean;
   paletteOpen: boolean;
   /** Named versions of the open scenario, newest first. */
@@ -167,9 +194,16 @@ export type StudioState = {
   setVariable(variable: VariableDef): Promise<void>;
   removeVariable(name: string): Promise<void>;
   onExternalChange(scenarioId: string): Promise<void>;
-  startRun(): Promise<void>;
+  /** `step`: pause before the first step. */
+  startRun(options?: { step?: boolean }): Promise<void>;
   stopRun(): Promise<void>;
+  /** Step command for the paused (or running) run; false when it was refused. */
+  debug(command: DebugCommand): Promise<boolean>;
+  toggleBreakpoint(stepId: string): void;
   onRunEvent(event: RunEventEnvelope): void;
+  onRunEvidence(evidence: RunEvidence): void;
+  /** Closes the notice about a failed run. */
+  dismissFailure(): void;
   clearLog(): void;
   dismiss(): void;
   loadHistory(): Promise<void>;
@@ -319,6 +353,39 @@ export function touchedSteps(entry: HistoryEntry): string[] {
 }
 
 const REVIEWED_KEY = "shikigami.studio.reviewed";
+const BREAKPOINTS_KEY = "shikigami.studio.breakpoints";
+
+function loadBreakpoints(): Record<string, string[]> {
+  try {
+    return JSON.parse(globalThis.localStorage?.getItem(BREAKPOINTS_KEY) ?? "{}") as Record<string, string[]>;
+  } catch {
+    return {};
+  }
+}
+
+function saveBreakpoints(breakpoints: Record<string, string[]>) {
+  try {
+    globalThis.localStorage?.setItem(BREAKPOINTS_KEY, JSON.stringify(breakpoints));
+  } catch {
+    // Breakpoints are a convenience on this PC.
+  }
+}
+
+/** A run that has not ended yet (running or paused). */
+export const isActive = (run: RunState | null) => run?.status === "running" || run?.status === "paused" || run?.status === "pending";
+
+const newRun = (runId: string, scenarioId: string | null = null): RunState => ({
+  runId,
+  scenarioId,
+  status: "running",
+  pause: null,
+  evidence: null,
+  failure: null,
+  steps: {},
+  logs: [],
+  changes: [],
+  starts: [],
+});
 const OUTLINE_KEY = "shikigami.studio.outline";
 
 function loadFlag(key: string, fallback: boolean): boolean {
@@ -403,6 +470,16 @@ export function newStepId(): string {
   return `stp_${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
+const RESUME_LABEL: Record<string, string> = {
+  continue: "続行",
+  stepOver: "次のステップへ",
+  stepInto: "中に入る",
+  stepOut: "ブロックの外へ",
+  retry: "もう一度",
+  skip: "飛ばして続行",
+  abort: "終了",
+};
+
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -465,6 +542,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       reviewing: false,
       reveal: null,
       followRun: true,
+      breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
       versions: [],
@@ -751,14 +829,15 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
-      async startRun() {
+      async startRun(options) {
         const scenario = get().scenario;
         if (!scenario) return;
         try {
-          const runId = await api.run(scenario.id);
+          const breakpoints = get().breakpoints[scenario.id] ?? [];
+          const runId = await api.run(scenario.id, undefined, { breakpoints, step: options?.step ?? false });
           set((s) => ({
             // Events may have arrived before the command returned.
-            run: s.run?.runId === runId ? s.run : { runId, status: "running", steps: {}, logs: [], changes: [], starts: [] },
+            run: s.run?.runId === runId ? s.run : newRun(runId, scenario.id),
             error: null,
             followRun: true,
           }));
@@ -777,14 +856,56 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
+      async debug(command) {
+        const run = get().run;
+        if (!run || !isActive(run)) return false;
+        try {
+          const outcome = await api.debugRun(run.runId, command);
+          if (outcome.updated) set({ notice: `リビジョン ${outcome.revision} の内容で続けます` });
+          return true;
+        } catch (e) {
+          set({
+            error:
+              e instanceof ApiError && e.code === "RESUME_INCOMPATIBLE"
+                ? "止まっている場所が変更で無くなったため、ここからは再開できません。止めて最初から実行してください。"
+                : message(e),
+          });
+          return false;
+        }
+      },
+
+      toggleBreakpoint(stepId) {
+        const id = get().scenario?.id;
+        if (!id) return;
+        const current = get().breakpoints[id] ?? [];
+        const next = current.includes(stepId) ? current.filter((s) => s !== stepId) : [...current, stepId];
+        const breakpoints = { ...get().breakpoints, [id]: next };
+        if (next.length === 0) delete breakpoints[id];
+        saveBreakpoints(breakpoints);
+        set({ breakpoints });
+        const run = get().run;
+        if (run && isActive(run) && run.scenarioId === id) {
+          void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: next }).catch(() => {});
+        }
+      },
+
+      onRunEvidence(evidence) {
+        set((s) =>
+          s.run && s.run.runId === evidence.runId && s.run.pause?.seq === evidence.seq ? { run: { ...s.run, evidence } } : s,
+        );
+      },
+
+      dismissFailure() {
+        set((s) => (s.run ? { run: { ...s.run, failure: null } } : s));
+      },
+
       onRunEvent(env) {
         set((s) => {
           let human = s.human;
           let secretFix = s.secretFix;
+          let reveal = s.reveal;
           const run: RunState =
-            s.run && s.run.runId === env.runId
-              ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs }
-              : { runId: env.runId, status: "running", steps: {}, logs: [], changes: [], starts: [] };
+            s.run && s.run.runId === env.runId ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs } : newRun(env.runId);
           const push = (level: LogLevel, msg: string, stepId?: string | null) => {
             run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
           };
@@ -794,6 +915,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             case "runStarted":
               secretFix = null;
               run.status = "running";
+              run.scenarioId = env.scenarioId;
               push("info", `▶ ${env.scenarioName} (rev ${env.revision})`);
               break;
             case "stepStarted":
@@ -815,13 +937,41 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             case "log":
               push(env.level, env.message, env.stepId);
               break;
+            case "paused": {
+              run.status = "paused";
+              run.pause = {
+                seq: env.seq,
+                stepId: env.stepId,
+                stepType: env.stepType,
+                reason: env.reason,
+                error: env.error ?? null,
+                variables: env.variables,
+                revision: env.revision,
+              };
+              run.evidence = null;
+              run.steps[env.stepId] = env.reason === "error" ? "failed" : "paused";
+              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? "❚❚ エラーで一時停止しました" : "❚❚ 一時停止", env.stepId);
+              reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
+              break;
+            }
+            case "resumed": {
+              const pause = run.pause;
+              run.status = "running";
+              run.pause = null;
+              run.evidence = null;
+              if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
+              push("info", `▶ ${RESUME_LABEL[env.action]}${env.revision != null ? `（リビジョン ${env.revision} の内容で）` : ""}`);
+              break;
+            }
             case "runFinished":
               human = null;
               run.status = env.status;
+              run.pause = null;
+              run.failure = env.status === "failed" ? (env.error ?? null) : null;
               push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]} (${env.durationMs} ms)`);
               break;
           }
-          return { run, human, secretFix };
+          return { run, human, secretFix, reveal };
         });
       },
 

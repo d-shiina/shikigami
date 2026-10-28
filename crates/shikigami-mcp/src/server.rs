@@ -1158,7 +1158,8 @@ fn observation_title(source: ObservationSource, request: &Value, state: &Value) 
     let text = |v: Option<&Value>| v.and_then(Value::as_str).unwrap_or_default().to_owned();
     match source {
         ObservationSource::InspectUi => text(state.pointer("/window/title")),
-        ObservationSource::InspectPage => {
+        // Studio records RunPause itself; it is never made here.
+        ObservationSource::InspectPage | ObservationSource::RunPause => {
             let title = text(state.get("title"));
             let url = text(state.get("url"));
             if title.is_empty() {
