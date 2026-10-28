@@ -29,14 +29,6 @@ jobs:
             exit 1
           fi
 
-      - name: Updater public key is configured
-        shell: bash
-        run: |
-          if grep -q '"pubkey": ""' apps/studio/src-tauri/tauri.conf.json; then
-            echo "::error::plugins.updater.pubkey in tauri.conf.json is empty (see docs/release.md)"
-            exit 1
-          fi
-
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v4
@@ -48,6 +40,9 @@ jobs:
 
       # The installer ships the CLI (MCP server) next to Studio.
       - run: pnpm studio:bundle-cli
+      - run: node apps/studio/scripts/set-pubkey.mjs
+        env:
+          TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
 
       - uses: tauri-apps/tauri-action@v1
         env:
@@ -57,7 +52,7 @@ jobs:
         with:
           projectPath: apps/studio
           tauriScript: pnpm tauri
-          args: --config src-tauri/tauri.release.conf.json
+          args: --config src-tauri/tauri.release.gen.json
           tagName: v__VERSION__
           releaseName: Shikigami Studio v__VERSION__
           releaseBody: See the commits since the previous release.

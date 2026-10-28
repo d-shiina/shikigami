@@ -4,7 +4,7 @@
 
 - 配布先：このリポジトリの GitHub Releases（`latest.json` とインストーラー）
 - 確認先：`https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
-- 改ざん防止：インストーラーは専用の署名鍵で署名し、Studio は `tauri.conf.json` の公開鍵で検証してから入れ替える
+- 改ざん防止：インストーラーは専用の署名鍵で署名し、Studio はリリース時に埋め込んだ公開鍵で検証してから入れ替える
 - インストーラー：NSIS（ユーザー単位、管理者権限不要）。MSI も Releases に置くが、自動更新は NSIS 版で行う
 - 開発版（`pnpm studio:dev`）は確認しない
 
@@ -22,22 +22,20 @@ Claude Code が MCP サーバーを動かしている最中でも更新できま
 
 ## 最初の準備（1 回だけ）
 
-1. 署名鍵を作る（自分の PC で。パスワードを聞かれます）
+リポジトリのフォルダーで次を実行します。
 
-   ```powershell
-   pnpm --filter @shikigami/studio tauri signer generate -w $HOME\.tauri\shikigami.key
-   ```
+```powershell
+pnpm release:setup
+```
 
-   `shikigami.key`（秘密鍵）と `shikigami.key.pub`（公開鍵）ができます。**秘密鍵をなくすと、インストール済みの Studio に更新を届けられなくなります。** パスワードと一緒に安全な場所へ保管してください。
+署名鍵（パスワードなし）を `~\.tauri\shikigami.key` に作り、GitHub に登録します。
 
-2. GitHub の Settings → Secrets and variables → Actions に登録する
+- 秘密鍵 → Actions Secret `TAURI_SIGNING_PRIVATE_KEY`
+- 公開鍵 → Actions Variable `TAURI_UPDATER_PUBKEY`（リリースのワークフローがアプリに埋め込みます）
 
-   | 名前 | 値 |
-   | --- | --- |
-   | `TAURI_SIGNING_PRIVATE_KEY` | `shikigami.key` の中身 |
-   | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 鍵を作ったときのパスワード |
+GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` がなければ、値をクリップボードに入れて登録ページを開くので、貼り付けて保存するだけです（2 回）。
 
-3. 公開鍵を `apps/studio/src-tauri/tauri.conf.json` の `plugins.updater.pubkey` に貼ってコミットする（`shikigami.key.pub` の中身をそのまま 1 行で）。空のままだとリリースのワークフローが止まります。
+**秘密鍵をなくすと、インストール済みの Studio に更新を届けられなくなります。** `shikigami.key` はバックアップしておいてください。鍵にパスワードを付けたい場合は自分で作り、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` も Secret に登録します。
 
 ## リリースの手順
 
@@ -57,9 +55,10 @@ Claude Code が MCP サーバーを動かしている最中でも更新できま
 
 ```powershell
 $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw $HOME\.tauri\shikigami.key
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<パスワード>"
 pnpm studio:release
 ```
+
+公開鍵は `~\.tauri\shikigami.key.pub` から読みます。
 
 `pnpm studio:build` は CLI を同梱せず署名もしない、試し用のビルドです。
 
