@@ -109,7 +109,7 @@ function SidePanel() {
                 {count}
               </span>
             )}
-            {tab === key && <span className="swirl-line absolute inset-x-3 bottom-[-1px] h-[2px] rounded-full" />}
+            {tab === key && <span className="absolute inset-x-3 bottom-[-1px] h-[2px] rounded-full bg-ink" />}
           </button>
         ))}
       </nav>
@@ -238,7 +238,7 @@ function Shell() {
   return (
     <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
       {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
-      <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4 select-none">
+      <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 border-b border-slate-200 bg-sheet px-4 select-none">
         <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
         <ModeSwitch />
         <ScenarioHeader />
@@ -246,7 +246,6 @@ function Shell() {
         <AgentButton />
         <SecretsButton />
         <WindowControls />
-        <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
       </header>
       <div className="col-span-3">
         <HumanBanner />
