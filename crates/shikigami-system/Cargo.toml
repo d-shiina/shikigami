@@ -26,3 +26,4 @@ workspace = true
 
 [target."cfg(windows)".dependencies]
 clipboard-win = "5.4.3"
+win32job = "2.0.3"

@@ -37,6 +37,56 @@ async fn read_all(stream: Option<impl tokio::io::AsyncRead + Unpin>) -> Vec<u8> 
     out
 }
 
+/// Ends every process the program started when the attempt ends (finished,
+/// stopped or timed out), so a cancelled attempt leaves nothing running
+/// that could change files under a retry. `kill_on_drop` alone reaches
+/// only the direct child.
+struct ProcessTree {
+    #[cfg(windows)]
+    _job: Option<win32job::Job>,
+    #[cfg(unix)]
+    group: Option<u32>,
+}
+
+impl ProcessTree {
+    /// Puts the child in a job object (Windows) whose closing kills it and
+    /// all its descendants. On Unix the child leads its own process group.
+    fn adopt(child: &tokio::process::Child) -> Self {
+        #[cfg(windows)]
+        {
+            let job = child.raw_handle().and_then(|handle| {
+                let mut info = win32job::ExtendedLimitInfo::new();
+                info.limit_kill_on_job_close();
+                let job = win32job::Job::create_with_limit_info(&info).ok()?;
+                job.assign_process(handle as isize).ok()?;
+                Some(job)
+            });
+            Self { _job: job }
+        }
+        #[cfg(unix)]
+        {
+            Self { group: child.id() }
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            let _ = child;
+            Self {}
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ProcessTree {
+    fn drop(&mut self) {
+        if let Some(group) = self.group {
+            let _ = std::process::Command::new("kill")
+                .args(["-KILL", "--", &format!("-{group}")])
+                .stderr(Stdio::null())
+                .status();
+        }
+    }
+}
+
 pub async fn run(input: &ActionInput) -> Result<Value, StepError> {
     let params = &input.params;
     let program = params
@@ -66,6 +116,8 @@ pub async fn run(input: &ActionInput) -> Result<Value, StepError> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    #[cfg(unix)]
+    command.process_group(0);
     #[cfg(windows)]
     {
         // No console window flashing up for command-line tools.
@@ -91,6 +143,7 @@ pub async fn run(input: &ActionInput) -> Result<Value, StepError> {
             "hint": "Give the full path of the program (e.g. C:\\Tools\\export.exe), or run a command through cmd: program \"cmd\", args [\"/c\", \"...\"].",
         }))
     })?;
+    let _tree = ProcessTree::adopt(&child);
     let stdin_text = params
         .get("stdin")
         .filter(|v| !v.is_null())

@@ -341,3 +341,32 @@ async fn process_streams_large_stdin_through_a_filter() {
         big.len()
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_timed_out_process_takes_its_children_with_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("target.txt");
+    let mut s = Scenario::new("system");
+    let mut step = Step::new(types::PROCESS_RUN)
+        .with_param("program", json!("sh"))
+        .with_param(
+            "args",
+            json!([
+                "-c",
+                format!("(sleep 1; echo changed > '{}') & wait", target.display())
+            ]),
+        );
+    step.timeout_ms = Some(200);
+    shikigami_core::ops::assign_missing_ids(&mut step);
+    s.steps = vec![step];
+    let report = runtime()
+        .start(s, RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    assert_eq!(report.status, RunStatus::Failed);
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    assert!(!target.exists(), "a background child outlived the step");
+}
