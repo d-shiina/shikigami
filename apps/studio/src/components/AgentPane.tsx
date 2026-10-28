@@ -43,33 +43,49 @@ const toolLabel = (name: string) => TOOL_LABELS[name] ?? name;
 const WIDTH_KEY = "shikigami.agentWidth";
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 720;
-// The flow chart keeps at least this much of the window when the pane is dragged wider.
-const CANVAS_ROOM = 640;
+// The flow chart keeps at least this much beside the other columns.
+const CANVAS_ROOM = 400;
+/** Below this window width the scenario list folds to its rail while the pane is open. */
+export const AGENT_ROOMY = 1600;
 
-const clampWidth = (width: number) =>
-  Math.round(Math.max(MIN_WIDTH, Math.min(width, MAX_WIDTH, (globalThis.innerWidth ?? 1600) - CANVAS_ROOM)));
+/** The window's width, kept current on resize. */
+export function useWindowWidth() {
+  const [width, setWidth] = useState(() => globalThis.innerWidth ?? 1600);
+  useEffect(() => {
+    const onResize = () => setWidth(globalThis.innerWidth);
+    globalThis.addEventListener("resize", onResize);
+    return () => globalThis.removeEventListener("resize", onResize);
+  }, []);
+  return width;
+}
+
+const clampWidth = (width: number, max: number) => Math.round(Math.max(MIN_WIDTH, Math.min(width, MAX_WIDTH, max)));
 
 function loadWidth() {
   try {
     const saved = Number(globalThis.localStorage?.getItem(WIDTH_KEY));
-    if (saved > 0) return clampWidth(saved);
+    if (saved > 0) return saved;
   } catch {
     // Only a remembered preference.
   }
   return 380;
 }
 
-/** Drag the pane's left edge; the width is remembered. */
-function useWidth() {
-  const [width, setWidth] = useState(loadWidth);
+/**
+ * Drag the pane's left edge; the width is remembered. `reserved` is what the
+ * other columns take, so the flow chart never gets squeezed out.
+ */
+function useWidth(reserved: number) {
+  const [wanted, setWanted] = useState(loadWidth);
+  const max = useWindowWidth() - reserved - CANVAS_ROOM;
+  const width = clampWidth(wanted, max);
   const startDrag = (e: ReactPointerEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = width;
     let next = width;
     const move = (ev: PointerEvent) => {
-      next = clampWidth(startWidth + startX - ev.clientX);
-      setWidth(next);
+      next = clampWidth(width + startX - ev.clientX, max);
+      setWanted(next);
     };
     const up = () => {
       globalThis.removeEventListener("pointermove", move);
@@ -107,7 +123,7 @@ export function AgentButton() {
   );
 }
 
-export function AgentPane() {
+export function AgentPane({ reserved }: { reserved: number }) {
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
   const info = useAgent((s) => s.info);
@@ -121,7 +137,7 @@ export function AgentPane() {
   const selection = useStudio((s) => s.selection);
   const [draft, setDraft] = useState("");
   const end = useRef<HTMLDivElement>(null);
-  const [width, startDrag] = useWidth();
+  const [width, startDrag] = useWidth(reserved);
   useEffect(() => {
     // Newer WebView2 returns a promise here; an effect must not.
     void end.current?.scrollIntoView({ block: "end" });

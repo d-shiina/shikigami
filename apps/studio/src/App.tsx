@@ -1,8 +1,8 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AgentContext, createAgentStore } from "./agent";
-import { AgentButton, AgentPane } from "./components/AgentPane";
+import { AgentContext, createAgentStore, useAgent } from "./agent";
+import { AGENT_ROOMY, AgentButton, AgentPane, useWindowWidth } from "./components/AgentPane";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
@@ -235,8 +235,13 @@ function Shell() {
       // Only a remembered preference.
     }
   };
+  // On a narrower window the agent pane takes the scenario list's room, not the flow chart's.
+  const agentOpen = useAgent((s) => s.open);
+  const setAgentOpen = useAgent((s) => s.setOpen);
+  const roomy = useWindowWidth() >= AGENT_ROOMY;
+  const showList = reviewing || (listOpen && (roomy || !agentOpen));
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px_auto]" : "grid-cols-[44px_minmax(0,1fr)_360px_auto]"}`}>
+    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${showList ? "grid-cols-[248px_minmax(0,1fr)_360px_auto]" : "grid-cols-[44px_minmax(0,1fr)_360px_auto]"}`}>
       {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
       <header data-tauri-drag-region className="relative col-span-full flex h-12 items-center gap-3 border-b border-slate-200 bg-sheet px-4 select-none">
         <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
@@ -255,10 +260,16 @@ function Shell() {
       <div className="min-h-0">
         {reviewing ? (
           <ReviewInbox />
-        ) : listOpen ? (
+        ) : showList ? (
           <ScenarioList onCollapse={() => setListOpen(false)} />
         ) : (
-          <ScenarioRail onExpand={() => setListOpen(true)} />
+          <ScenarioRail
+            onExpand={() => {
+              // Asking for the list back on a narrow window makes room by closing the pane.
+              if (!roomy) setAgentOpen(false);
+              setListOpen(true);
+            }}
+          />
         )}
       </div>
       <main className="flex min-h-0 min-w-0 flex-col">
@@ -291,7 +302,7 @@ function Shell() {
       </main>
       <div className="min-h-0">{hasScenario && <SidePanel />}</div>
       {/* Its own column, so the properties and the record stay in view beside it. */}
-      <AgentPane />
+      <AgentPane reserved={(showList ? 248 : 44) + 360} />
       <StatusBar />
       <CommandPalette />
       <SecretsDialog />
