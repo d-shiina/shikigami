@@ -1,101 +1,103 @@
-# ブラウザ操作（Phase 3）
+# Browser automation (Phase 3)
 
-Shikigami のシナリオから Web ページを操作します。Rust の Runtime が Node.js + Playwright のブラウザアダプター（`packages/browser-adapter`）を子プロセスとして起動し、改行区切りの JSON-RPC 2.0（stdio）で指示します。シナリオの実行に AI は関わりません。
+English | [日本語](ja/browser.md)
 
-## 必要なもの
+Shikigami scenarios drive web pages. The Rust Runtime starts the Node.js + Playwright browser adapter (`packages/browser-adapter`) as a child process and talks to it with newline-delimited JSON-RPC 2.0 over stdio. No AI is involved in running a scenario.
 
-- Node.js 22.18 以降（TypeScript をそのまま実行します）
-- リポジトリで `pnpm install`（`playwright-core` が入ります）
-- ブラウザ：Windows では **Microsoft Edge をそのまま使う** ので追加のダウンロードは不要です。Chrome を使うときは `SHIKIGAMI_BROWSER_CHANNEL=chrome`、任意の実行ファイルは `SHIKIGAMI_BROWSER_PATH`
+## Requirements
 
-| 環境変数 | 意味 |
+- Node.js 22.18 or later (runs the TypeScript directly)
+- `pnpm install` in the repository (installs `playwright-core`)
+- A browser: on Windows **the installed Microsoft Edge is used**, so nothing else is downloaded. For Chrome set `SHIKIGAMI_BROWSER_CHANNEL=chrome`; for any other executable, `SHIKIGAMI_BROWSER_PATH`
+
+| Environment variable | Meaning |
 |---|---|
-| `SHIKIGAMI_BROWSER_CHANNEL` | `msedge`（Windows の既定）/ `chrome` など |
-| `SHIKIGAMI_BROWSER_PATH` | ブラウザの実行ファイル |
-| `SHIKIGAMI_BROWSER_HEADLESS` | `1` で常に画面なし（無人実行・CI 向け） |
-| `SHIKIGAMI_BROWSER_SLOWMO` | 操作ごとの待ち（ミリ秒）。デモで動きを見せるとき |
-| `SHIKIGAMI_BROWSER_ADAPTER` | アダプター `main.ts` の場所（通常は自動で見つける） |
-| `SHIKIGAMI_NODE` | Node.js の実行ファイル（既定は PATH 上の `node`） |
+| `SHIKIGAMI_BROWSER_CHANNEL` | `msedge` (default on Windows) / `chrome` and so on |
+| `SHIKIGAMI_BROWSER_PATH` | The browser executable |
+| `SHIKIGAMI_BROWSER_HEADLESS` | `1` to always run without a window (unattended runs, CI) |
+| `SHIKIGAMI_BROWSER_SLOWMO` | Delay per action (ms), to show the moves in a demo |
+| `SHIKIGAMI_BROWSER_ADAPTER` | Location of the adapter's `main.ts` (normally found automatically) |
+| `SHIKIGAMI_NODE` | The Node.js executable (default: `node` on PATH) |
 
-## デモ
+## Demo
 
 ```powershell
 pnpm demo:browser
 ```
 
-デモ用の業務サイト「サンプル商事 受注管理システム」（`examples/web`）を `http://127.0.0.1:8787/` で起動し、`examples/browser-demo.json` を CLI で実行します。デモ用アカウントは最初にシークレット「デモ受注システム」として登録するので、シナリオにパスワードは書かれていません（Studio の「🔑 シークレット」にも出ます）。
+This starts a demo business site, an order management system for a sample trading company (`examples/web`), at `http://127.0.0.1:8787/` and runs `examples/browser-demo.json` with the CLI. The demo account is first registered as a secret, so the scenario contains no password (it also shows under 🔑 Secrets in Studio).
 
-1. 受注係と在庫係が **同時に** 作業する：受注係がログインして受注一覧を読み、在庫係は別のウィンドウで在庫一覧を読む（`control.parallel` と別々の `context`）
-2. 未処理の注文ごとに「出荷する」を押し、処理完了の表示を待つ（`control.forEach` + `control.if`）
-3. 出荷した注文番号・合計金額・在庫切れの商品を出力する
-4. ログイン状態を `session` で保存するので、**2 回目の実行ではログイン画面を飛ばす**
+1. An order clerk and a stock clerk work **at the same time**: the order clerk logs in and reads the order list while the stock clerk reads the stock list in another window (`control.parallel` with separate `context`s)
+2. For each open order, press "Ship" and wait for the confirmation (`control.forEach` + `control.if`)
+3. Output the shipped order numbers, the total amount and the out-of-stock items
+4. The login is kept with `session`, so **the second run skips the login page**
 
-CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\shikigami.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Studio からも同じシナリオを読み込んで実行できます。
+The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Studio can load and run the same scenario.
 
-## ステップ
+## Steps
 
-| type | 主な params | 出力 |
+| type | Main params | Output |
 |---|---|---|
-| `browser.open` | `url`, `headless`, `session`（ログイン状態を保存・再利用する名前） | `{ url, title }` |
+| `browser.open` | `url`, `headless`, `session` (name under which the login state is saved and reused) | `{ url, title }` |
 | `browser.click` | `target` | – |
-| `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`） | – |
-| `browser.select` | `target`, `value`（表示名、または配列） | – |
-| `browser.press` | `key`（`Enter` など）, `target`（省略時はページ） | – |
-| `browser.getText` | `target`, `all`（`true` で全一致の配列） | 文字列 / 配列 |
-| `browser.getTable` | `target`（省略時は最初の表） | 見出しをキーにしたオブジェクトの配列 |
-| `browser.waitFor` | `target`, `state`（`visible` / `hidden` / `attached` / `detached`） | – |
-| `browser.screenshot` | `path`（絶対パス）, `fullPage` | 保存先 |
-| `browser.isVisible` | `target`, `waitMs`（既定 2000） | `true` / `false`（見つからなくても失敗しない） |
-| `browser.waitForHuman` | `message`, `until`（人の操作が終わると出る要素） | – |
+| `browser.fill` | `target`, `value` (text, or a registered secret `{ "secret": "name", "field": "password" }`) | – |
+| `browser.select` | `target`, `value` (visible label, or a list) | – |
+| `browser.press` | `key` (`Enter` and so on), `target` (the page when omitted) | – |
+| `browser.getText` | `target`, `all` (`true` for a list of every match) | text / list |
+| `browser.getTable` | `target` (the first table when omitted) | list of objects keyed by the header cells |
+| `browser.waitFor` | `target`, `state` (`visible` / `hidden` / `attached` / `detached`) | – |
+| `browser.screenshot` | `path` (absolute), `fullPage` | the path |
+| `browser.isVisible` | `target`, `waitMs` (default 2000) | `true` / `false` (never fails when missing) |
+| `browser.waitForHuman` | `message`, `until` (an element that appears when the person is done) | – |
 | `browser.close` | – | – |
 
-すべてのステップに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、**同じ `context` のステップは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、シナリオにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
+Every step has a `context` (default `default`). Each `context` has its own cookies and tabs; **steps on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so scenarios never declare locks). Contexts opened by a run are closed when it ends.
 
-ログイン・パスワード・MFA の扱いは [secrets.md](secrets.md) を見てください。
+For logins, passwords and MFA, see [secrets.md](secrets.md).
 
-### 要素の指定（`target`）
+### Choosing elements (`target`)
 
-意味で指定します。CSS は最後の手段です。
+By meaning; CSS is the last resort.
 
 ```jsonc
-{ "role": "button", "name": "ログイン" }        // ボタン・リンク・見出し・セルなど（第一候補）
-{ "label": "ユーザー名" }                        // 入力欄
-{ "text": "A-1001 を出荷しました" }              // 表示されている文字
-{ "placeholder": "例：青葉商店" } / { "testId": "submit" } / { "css": "#q" }
-// 共通：exact（完全一致）, nth（複数一致したときの 0 始まりの番号）
+{ "role": "button", "name": "Log in" }        // buttons, links, headings, cells… (first choice)
+{ "label": "Username" }                        // input fields
+{ "text": "Shipped A-1001" }                   // visible text
+{ "placeholder": "e.g. Aoba Store" } / { "testId": "submit" } / { "css": "#q" }
+// common: exact (exact match), nth (0-based index when several match)
 ```
 
-待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。待つ上限はステップの `timeoutMs`（既定 30 秒）で、アダプター側の操作もその直前で止まるため、タイムアウトしたクリックが再試行の後で遅れて実行されることはありません。
+Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the step's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
 
-### エラー
+### Errors
 
-| コード | 意味 | 再試行 |
+| Code | Meaning | Retried |
 |---|---|---|
-| `ELEMENT_NOT_FOUND` | 要素が見つからない。`details.page` にそのときのページ（アクセシビリティツリー）と直し方のヒント | する |
-| `OPTION_NOT_FOUND` | `browser.select` の値が選択肢の表示名にも値にもない。`details.options` に選択肢 | しない |
-| `ELEMENT_AMBIGUOUS` | 複数の要素に一致。`exact` / `nth` で絞る | しない |
-| `BROWSER_NOT_OPEN` | 同じ `context` の `browser.open` がない | しない |
-| `NAVIGATION_FAILED` | ページを開けない | する |
-| `BROWSER_LAUNCH_FAILED` | ブラウザを起動できない | しない |
-| `ADAPTER_UNAVAILABLE` | Node.js かアダプターが見つからない | しない |
-| `ADAPTER_CRASHED` | アダプターが異常終了。次の要求で自動的に再起動 | する |
+| `ELEMENT_NOT_FOUND` | No such element. `details.page` holds the page at that moment (accessibility tree) and hints for fixing it | yes |
+| `OPTION_NOT_FOUND` | The `browser.select` value is neither a label nor a value of the options. `details.options` lists them | no |
+| `ELEMENT_AMBIGUOUS` | Several elements match. Narrow it with `exact` / `nth` | no |
+| `BROWSER_NOT_OPEN` | No `browser.open` for that `context` | no |
+| `NAVIGATION_FAILED` | The page cannot be opened | yes |
+| `BROWSER_LAUNCH_FAILED` | The browser cannot be started | no |
+| `ADAPTER_UNAVAILABLE` | Node.js or the adapter was not found | no |
+| `ADAPTER_CRASHED` | The adapter died. It restarts on the next request | yes |
 
-## AI からシナリオを作る（MCP）
+## Building scenarios from AI (MCP)
 
-MCP サーバーに 2 つのツールがあります（権限区分は `run`）。
+The MCP server has two tools for this (class `run`):
 
-- `inspect_page`：ページを開いて（または開いているページの）アクセシビリティツリーを返す。`- button "ログイン"` と出ていれば `{ "role": "button", "name": "ログイン" }` がそのまま `target` になる
-- `test_step`：ステップを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのステップでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。シナリオは変更しない
+- `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is
+- `test_step`: runs one step on the spot and returns its output and the page after it (works for steps of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario
 
-AI はこれでサイトを確かめながらステップを組み、`validate_scenario` → `run_scenario` で AI なしの実行を確認します。
+With these the AI checks the site while it builds the steps, then confirms an AI-free run with `validate_scenario` → `run_scenario`.
 
-## 仕組み
+## How it works
 
 ```text
 Runtime ──(JSON-RPC over stdio)──▶ node packages/browser-adapter/src/main.ts ──▶ Playwright ──▶ Edge / Chrome
-  browser.* ステップ                   実行 × context ごとに BrowserContext
+  browser.* steps                       one BrowserContext per run × context
 ```
 
-- ブラウザ対応は「アダプター」の 1 つです。ほかのアプリを足す方法は [adapters.md](adapters.md)。
-- アダプターは最初のブラウザステップで起動し、全実行で共有します。異常終了すると実行中のステップは `ADAPTER_CRASHED` で失敗し、次の要求で起動し直します。
-- アダプターの stderr は Rust の tracing（`shikigami_browser::adapter`）に流れます。
+- Browser support is one "adapter". To add other apps, see [adapters.md](adapters.md).
+- The adapter starts with the first browser step and is shared by every run. If it dies, the running step fails with `ADAPTER_CRASHED` and the adapter restarts on the next request.
+- The adapter's stderr goes to Rust's tracing (`shikigami_browser::adapter`).

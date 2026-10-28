@@ -1,42 +1,44 @@
-# Shikigamiアーキテクチャ設計
+# Shikigami architecture
 
-> MCP ネイティブなデスクトップ RPA。AI と人間が **同じシナリオ** を作成・編集・実行・保守する。
+English | [日本語](ja/architecture.md)
+
+> MCP-native desktop RPA. AI and people create, edit, run and maintain **the same scenarios**.
 >
-> 本書は設計の正本。実装状況は [§13](#13-phase-1-の実装状況と制約) を参照。技術調査は [research.md](research.md)。
+> This document is the reference design. For what is implemented, see [§13](#13-implementation-status-and-limits). Library research: [research.md](research.md) (Japanese).
 
-## 0. 設計原則
+## 0. Design principles
 
-1. **Scenario Core が唯一の正規データ管理層。** GUI・MCP・CLI・Runtime はすべて Core の API（`ScenarioService`）を通じてのみシナリオを読み書きする。シナリオ処理ロジックを重複実装しない。
-2. **すべての変更は EditOp。** 変更は逆操作を持つ `EditOp` の列として表現する。Undo/Redo、競合検出、変更履歴、AI 修正案の差分提示はすべてこの上に成り立つ。
-3. **実行に AI も GUI も要らない。** Runtime はヘッドレスのライブラリで、CLI・Studio・MCP サーバーから同じものを使う。
-4. **ローカルファースト。** データはローカルのワークスペース（ファイル）に置き、クラウドに依存しない。
-5. **小さく始める。** マイクロサービス化しない。プロセスを分けるのは技術的に必要な箇所（MCP の stdio、Playwright の Node.js）だけ。
-6. **Windows 特化。** 製品の対象 OS は Windows 10/11（x64）のみ。macOS / Linux 向けの配布・OS 抽象化・動作確認は行わない（[判断9](#判断9windows-特化os-の抽象化レイヤーは作らない)）。
+1. **Scenario Core is the only data layer for scenarios.** The GUI, MCP, CLI and Runtime read and write scenarios only through Core's API (`ScenarioService`). Scenario logic is never implemented twice.
+2. **Every change is an EditOp.** Changes are sequences of `EditOp`s that have inverses. Undo/Redo, conflict detection, history and showing AI fixes as diffs are all built on this.
+3. **Running needs neither AI nor GUI.** The Runtime is a headless library used by the CLI, Studio and the MCP server alike.
+4. **Local first.** Data lives in a local workspace (files), with no dependence on a cloud.
+5. **Start small.** No microservices. Processes are split only where technically required (MCP's stdio, Playwright's Node.js).
+6. **Windows only.** The product targets Windows 10/11 (x64) only. No macOS / Linux distribution, OS abstraction or testing ([decision 9](#decision-9-windows-only-no-os-abstraction-layer)).
 
-## 1. システムアーキテクチャ
+## 1. System architecture
 
 ```mermaid
 flowchart LR
-  subgraph clients[AIクライアント]
+  subgraph clients[AI clients]
     CC[Claude Code]
     CX[Codex]
     CU[Cursor]
   end
 
-  subgraph local[ユーザーのPC]
+  subgraph local[The user's PC]
     MCP["shikigami mcp<br/>(Rust, stdio)"]
     STUDIO["Shikigami Studio<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
-    subgraph libs[共有ライブラリ（Rust）]
+    subgraph libs[Shared libraries (Rust)]
       CORE["shikigami-core<br/>Scenario Core"]
       RT["shikigami-runtime<br/>RPA Runtime"]
-      WIN["shikigami-adapter-windows<br/>(UIA, 専用MTAスレッド)"]
-      BRC["shikigami-adapter-browser<br/>(Node子プロセスのクライアント)"]
+      WIN["shikigami-adapter-windows<br/>(UIA, dedicated MTA thread)"]
+      BRC["shikigami-adapter-browser<br/>(client of a Node child process)"]
     end
 
     NODE["browser-adapter<br/>(Node.js + Playwright)"]
-    WS[("ワークスペース<br/>scenarios/*.json<br/>history/ runs/<br/>shikigami.db")]
+    WS[("Workspace<br/>scenarios/*.json<br/>history/ runs/<br/>shikigami.db")]
   end
 
   CC & CX & CU -- MCP stdio --> MCP
@@ -47,99 +49,99 @@ flowchart LR
   BRC -- "JSON-RPC (stdio)" --> NODE
   CORE <--> WS
   RT --> WS
-  STUDIO -. ファイル監視 .-> WS
+  STUDIO -. file watching .-> WS
 ```
 
-### プロセスモデル
+### Process model
 
-| プロセス | 起動者 | 役割 |
+| Process | Started by | Role |
 |---|---|---|
-| `shikigami-studio` | ユーザー | GUI。Core/Runtime をライブラリとして内包 |
-| `shikigami mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作。CLI と同じ実行ファイルのサブコマンド（配布物を 1 つにするため） |
-| `shikigami` (CLI) | ユーザー / スケジューラー | ヘッドレス実行・管理 |
-| `browser-adapter` (Node) | Runtime | Playwright 操作。必要時のみ起動 |
+| `shikigami-studio` | The user | GUI. Embeds Core/Runtime as libraries |
+| `shikigami mcp` | The AI client (stdio child process) | Provides the MCP tools. Runs on its own, without a GUI. A subcommand of the CLI executable (so there is one thing to distribute) |
+| `shikigami` (CLI) | The user / a scheduler | Headless runs and management |
+| `browser-adapter` (Node) | The Runtime | Playwright operations. Started only when needed |
 
-Studio と MCP サーバーは **別プロセスで同じワークスペースを共有** する。同期は §7 の「ファイルを正とした楽観的並行制御＋変更通知」で行う。
+Studio and the MCP server are **separate processes sharing the same workspace**. They stay in sync with §7's "optimistic concurrency with the files as the source of truth, plus change notifications".
 
-### 処理の流れ：AI によるシナリオ生成（§6 のフロー）
+### Flow: AI building a scenario (the flow of §6)
 
 ```mermaid
 sequenceDiagram
-  participant AI as AIクライアント
+  participant AI as AI client
   participant M as shikigami mcp
   participant C as Scenario Core
   participant A as Adapter
   participant S as Studio
   AI->>M: inspect_ui / capture_screen
-  M->>A: UI要素を取得（Role/AutomationId 等）
-  AI->>M: click_element / type_text（試行）
-  M->>A: 実操作して結果を返す
-  AI->>M: create_scenario / add_step（検証済みの操作を記録）
-  M->>C: EditOp を適用（revision+1, 履歴保存）
-  C-->>S: ファイル変更通知 → 再読込
+  M->>A: Get UI elements (Role/AutomationId…)
+  AI->>M: click_element / type_text (try)
+  M->>A: Operate for real and return the result
+  AI->>M: create_scenario / add_step (record verified operations)
+  M->>C: Apply EditOps (revision+1, history saved)
+  C-->>S: File change notification → reload
   AI->>M: validate_scenario → run_scenario
-  Note over M: Runtime が AI なしで再実行
+  Note over M: The Runtime runs it again without AI
 ```
 
-**AI の操作（探索）とシナリオの保存は別ツール。** `click_element` 等の UI 操作ツールはシナリオを変更しない。シナリオに残すには明示的に `add_step` する。
+**AI operations (exploring) and saving the scenario are separate tools.** UI tools such as `click_element` never change the scenario. To keep a step, the AI calls `add_step` explicitly.
 
-## 2. Monorepo 構成
+## 2. Monorepo layout
 
 ```text
 shikigami/
-├─ Cargo.toml                 Rust ワークスペース
-├─ package.json               pnpm ワークスペース（scripts のみ）
+├─ Cargo.toml                 Rust workspace
+├─ package.json               pnpm workspace (scripts only)
 ├─ pnpm-workspace.yaml
 ├─ crates/
-│  ├─ shikigami-core/         Scenario Core（モデル・式・検証・EditOp・履歴・保存・Schema出力）
-│  ├─ shikigami-runtime/      RPA Runtime（インタプリタ・Handler IF・実行記録）
-│  ├─ shikigami-cli/          CLI（`shikigami` バイナリ）
-│  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
-│  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
-│  ├─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
-│  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き）
-│  ├─ shikigami-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
+│  ├─ shikigami-core/         Scenario Core (model, expressions, validation, EditOp, history, storage, schema output)
+│  ├─ shikigami-runtime/      RPA Runtime (interpreter, handler interface, run records)
+│  ├─ shikigami-cli/          CLI (the `shikigami` binary)
+│  ├─ shikigami-mcp/          MCP server (rmcp, started with `shikigami mcp`)
+│  ├─ shikigami-adapter-browser/  [Phase 3] client of the Node sidecar
+│  ├─ shikigami-desktop/  [Phase 4] desktop.* (UI Automation)
+│  ├─ shikigami-excel/    excel.* (reads and writes xlsx directly)
+│  ├─ shikigami-files/    file.* (text, CSV, copy/move/delete, zip)
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
-│  └─ shikigami-plugins/  ノードのプラグイン（マニフェストで宣言、別プロセスで実行）
+│  └─ shikigami-plugins/  node plugins (declared in a manifest, run in a separate process)
 ├─ apps/
-│  └─ studio/                 Tauri 2 + React（src/ がフロント、src-tauri/ が Rust）
+│  └─ studio/                 Tauri 2 + React (src/ is the frontend, src-tauri/ the Rust side)
 ├─ packages/
-│  ├─ schema/                 @shikigami/schema：Rust から生成した TS 型
+│  ├─ schema/                 @shikigami/schema: TS types generated from Rust
 │  └─ browser-adapter/        [Phase 3] Node.js + Playwright
-├─ plugins/shikigami/        Claude Code プラグイン（MCP 設定＋スキル）
-├─ schemas/                   生成された JSON Schema（コミット対象、CI でズレ検出）
-├─ examples/                  サンプルシナリオ（テストでも使用）
-└─ docs/                      設計書・調査・アセット
+├─ plugins/shikigami/        Claude Code plugin (MCP settings + skill)
+├─ schemas/                   Generated JSON Schema (committed; CI detects drift)
+├─ examples/                  Sample scenarios (also used in tests)
+└─ docs/                      Design, research, assets
 ```
 
-**型の流れ：** Rust 型 → (`schemars`) → `schemas/*.schema.json` → (`json-schema-to-typescript`) → `packages/schema/src/generated.ts`。Rust と TS の型ズレは、Rust 側テスト（`committed_schemas_are_up_to_date`）と TS 側テスト（`generated types match`）の両方で CI が検出する。
+**How types flow:** Rust types → (`schemars`) → `schemas/*.schema.json` → (`json-schema-to-typescript`) → `packages/schema/src/generated.ts`. CI detects drift between Rust and TS both in a Rust test (`committed_schemas_are_up_to_date`) and a TS test (`generated types match`).
 
-## 3. Rust Workspace 構成
+## 3. Rust workspace
 
-| クレート | 依存 | 主な公開 API |
+| Crate | Depends on | Main public API |
 |---|---|---|
 | `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Scenario`, `Step`, `EditOp`, `ScenarioService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
 | `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
 | `shikigami-cli` | core, runtime, mcp, clap | `shikigami scenario/run/validate/step-types/schema/mcp` |
-| `shikigami-studio` | core, runtime, tauri, notify | Tauri コマンド（§7.1） |
-| `shikigami-mcp` | core, runtime, rmcp | `ShikigamiMcp`（MCP ツール、§6）, `serve_stdio` |
-| `shikigami-adapter-*` (P3/P4) | runtime | `StepTypeDef` + `ActionHandler` の組 |
+| `shikigami-studio` | core, runtime, tauri, notify | Tauri commands (§7.1) |
+| `shikigami-mcp` | core, runtime, rmcp | `ShikigamiMcp` (MCP tools, §6), `serve_stdio` |
+| `shikigami-adapter-*` (P3/P4) | runtime | Pairs of `StepTypeDef` + `ActionHandler` |
 
-依存方向は **core ← runtime ← adapters ← (studio | mcp | cli)** の一方向。core は tokio にも Tauri にも依存しない（同期 API、どこからでも使える）。
+Dependencies go one way: **core ← runtime ← adapters ← (studio | mcp | cli)**. Core depends on neither tokio nor Tauri (a synchronous API usable from anywhere).
 
-コード品質ルール：`unsafe_code = "forbid"`（Windows Adapter のみ例外として局所的に許可予定）、`clippy::unwrap_used/expect_used/panic = warn`（CI では `-D warnings`）。
+Code quality rules: `unsafe_code = "forbid"` (locally allowed only in the Windows adapter), `clippy::unwrap_used/expect_used/panic = warn` (`-D warnings` in CI).
 
-## 4. Scenario Schema
+## 4. Scenario schema
 
-正規形式は JSON（`schemas/scenario.schema.json`）。例：[examples/invoice-summary.json](../examples/invoice-summary.json)。
+The canonical format is JSON (`schemas/scenario.schema.json`). Example: [examples/invoice-summary.json](../examples/invoice-summary.json).
 
 ```jsonc
 {
-  "schemaVersion": 1,             // ファイル形式のバージョン
-  "id": "scn_…",                  // 安定ID（ファイル名にもなる）
-  "name": "請求書の集計",
+  "schemaVersion": 1,             // file format version
+  "id": "scn_…",                  // stable ID (also the file name)
+  "name": "Invoice summary",
   "description": "…",
-  "revision": 12,                 // 変更ごとに+1。競合検出に使用
+  "revision": 12,                 // +1 on every change; used to detect conflicts
   "variables": [
     { "name": "invoices", "type": "array", "direction": "input", "default": [] },
     { "name": "password", "type": "string", "direction": "input", "secret": true }
@@ -149,52 +151,52 @@ shikigami/
       "params": { "items": "invoices", "itemVar": "invoice" },
       "blocks": { "body": [
         { "id": "stp_…", "type": "browser.fill",
-          "params": { "target": { "role": "textbox", "name": "請求番号" }, "value": "{{ invoice.no }}" },
+          "params": { "target": { "role": "textbox", "name": "Invoice number" }, "value": "{{ invoice.no }}" },
           "retry": { "maxAttempts": 3 }, "timeoutMs": 10000, "onError": "fail" }
       ] } }
   ],
   "settings": { "defaultTimeoutMs": 30000, "onError": "fail" },
-  "metadata": { "createdAt": "…", "updatedAt": "…", "tags": ["経理"] }
+  "metadata": { "createdAt": "…", "updatedAt": "…", "tags": ["accounting"] }
 }
 ```
 
-### 設計のポイント
+### Key points
 
-- **全ステップが同一形状**（`id` / `type` / `params` / `blocks` / 共通オプション）。制御フローは `blocks` に名前付きの子リストを持つ木構造。
-- **ステップ参照は常に安定 ID。** 位置（index）は参照に使わないため、追加・削除・移動で他の参照が壊れない。ID は `stp_` + UUIDv7。
-- **`params` は型ごとの JSON Schema で検証**（`StepRegistry` が保持）。新しいステップ型はスキーマ本体を変えずに追加できる。
-- **式言語**（§11 判断5）：条件は式（`count > 3 && status == 'OK'`）、文字列パラメーターは `{{ 式 }}` テンプレート。任意コード実行はできない。
-- **ステップ共通オプション**：`disabled`, `timeoutMs`, `retry`, `onError`（`fail`/`continue`）, `saveAs`（出力を変数へ）, `meta`（Studio 表示や AI の根拠情報。Runtime は解釈しない）。
-- **後方互換**：読み込み時に `schemaVersion` を見て段階的にマイグレーション（`migrate.rs`）。未来のバージョンは黙って切り捨てず `UNSUPPORTED_SCHEMA_VERSION` で拒否。`metadata` の未知キーは保持する。
-- **YAML** は将来のインポート/エクスポート形式として扱い、正規形式にはしない。
+- **Every step has the same shape** (`id` / `type` / `params` / `blocks` / common options). Control flow is a tree, with named child lists in `blocks`.
+- **Steps are always referenced by stable ID.** Positions (indexes) are never used as references, so adding, removing or moving steps does not break other references. IDs are `stp_` + UUIDv7.
+- **`params` are validated with a JSON Schema per type** (held by `StepRegistry`). New step types can be added without changing the scenario schema itself.
+- **Expression language** (§11 decision 5): conditions are expressions (`count > 3 && status == 'OK'`), string params are `{{ expression }}` templates. No arbitrary code can run.
+- **Common step options**: `disabled`, `timeoutMs`, `retry`, `onError` (`fail`/`continue`), `saveAs` (output into a variable), `meta` (for Studio display and the AI's evidence; the Runtime ignores it).
+- **Backward compatibility**: on load, `schemaVersion` drives step-by-step migration (`migrate.rs`). Future versions are rejected with `UNSUPPORTED_SCHEMA_VERSION` rather than silently truncated. Unknown keys in `metadata` are kept.
+- **YAML** is a possible future import/export format, not the canonical one.
 
-### 組み込みステップ型（Phase 1）
+### Built-in step types (Phase 1)
 
-| type | 内容 |
+| type | Contents |
 |---|---|
 | `control.if` | `condition` / blocks: `then`, `else` |
-| `control.while` | `condition`, `maxIterations`（既定1000）/ `body` |
+| `control.while` | `condition`, `maxIterations` (default 1000) / `body` |
 | `control.repeat` | `count`, `indexVar` / `body` |
-| `control.forEach` | `items`（式）, `itemVar`, `indexVar`, `collect`（式。各回の値を `saveAs` に配列で返す）, `concurrency`（同時に回す数）/ `body` |
-| `control.parallel` / `control.group` | 並行実行（§10.5）/ 複数ステップを 1 ブランチにまとめる |
-| `wait.until` | `condition`（式）, `intervalMs` / `check`。条件が真になるまで待つ。上限は `timeoutMs`、超えたら `WAIT_TIMEOUT` |
+| `control.forEach` | `items` (expression), `itemVar`, `indexVar`, `collect` (expression; each iteration's value is returned in `saveAs` as a list), `concurrency` (how many run at once) / `body` |
+| `control.parallel` / `control.group` | Run in parallel (§10.5) / group several steps into one branch |
+| `wait.until` | `condition` (expression), `intervalMs` / `check`. Waits until the condition is true. Limited by `timeoutMs`; past it, `WAIT_TIMEOUT` |
 | `control.try` | `errorVar` / `try`, `catch`, `finally` |
-| `control.break` / `control.continue` | ループ制御（ループ外は検証エラー） |
-| `control.fail` | `message`, `code` で失敗させる |
-| `variable.set` | `name` に `value`（テンプレート可）または `expression` を代入 |
-| `log.message` | 実行ログ出力 |
-| `scenario.call` | `scenario`（ID）, `inputs`, `outputs` で別のシナリオを 1 ステップとして呼ぶ（[設計](design/subscenarios.md)） |
-| `flow.delay` | 時間指定待機（完了待ちには `wait.until` を使う） |
+| `control.break` / `control.continue` | Loop control (a validation error outside a loop) |
+| `control.fail` | Fails with `message`, `code` |
+| `variable.set` | Assigns `value` (templates allowed) or `expression` to `name` |
+| `log.message` | Writes to the run log |
+| `scenario.call` | Calls another scenario as one step, with `scenario` (ID), `inputs`, `outputs` ([design](design/subscenarios.md), Japanese) |
+| `flow.delay` | Waits for a fixed time (use `wait.until` to wait for something to finish) |
 
-## 5. Adapter Interface
+## 5. Adapter interface
 
-アダプターは **ステップ型定義（メタデータ）＋ハンドラー（実行）** の組を Runtime に登録する。
+An adapter registers pairs of **step type definition (metadata) + handler (execution)** with the Runtime.
 
 ```rust
 pub trait ActionHandler: Send + Sync + 'static {
     fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>>;
 }
-// ActionInput: run_id, step_id, step_type, attempt, params(テンプレート展開済み), cancel(CancellationToken), log()
+// ActionInput: run_id, step_id, step_type, attempt, params (templates expanded), cancel (CancellationToken), log()
 // StepError:   code, message, details, retryable
 
 Runtime::builder()
@@ -203,146 +205,146 @@ Runtime::builder()
     .build();
 ```
 
-- ハンドラーは **シナリオ変数に直接触れない**。入力は展開済み `params`、出力は戻り値（`saveAs` で変数へ）。アダプターがシナリオ状態に依存しないため単体テストしやすい。
-- タイムアウト・リトライ・キャンセル・`onError` は Runtime 側で一律に処理する。ハンドラーは `cancel` を監視して長い処理を中断する。
-- `StepError::retryable=false`（例：パラメーター不正）はリトライしない。
-- 失敗時の証跡（UI 要素スナップショット、スクリーンショットのパス、期待状態と実状態）は `StepError.details` に入れ、実行記録と MCP から AI が取得できる（§8 / §6）。
+- Handlers **never touch scenario variables directly**. Input is the expanded `params`; output is the return value (into a variable with `saveAs`). Adapters do not depend on scenario state, so they are easy to unit test.
+- Timeouts, retries, cancellation and `onError` are handled uniformly by the Runtime. Handlers watch `cancel` to stop long work.
+- `StepError::retryable=false` (e.g. invalid params) is not retried.
+- Evidence on failure (UI element snapshot, screenshot path, expected and actual state) goes in `StepError.details`, so the AI can get it from run records and MCP (§8 / §6).
 
-### 要素の指定（Target）
+### Choosing elements (Target)
 
-意味的な情報を優先し、座標はフォールバック。
+Semantic information first; coordinates as a fallback.
 
 ```jsonc
-// ブラウザ
-{ "role": "button", "name": "ログイン" }          // 第一候補（アクセシビリティ）
-{ "label": "メールアドレス" } | { "text": "送信" } | { "testId": "submit" }
-{ "css": "…" }                                     // 最終手段
+// Browser
+{ "role": "button", "name": "Log in" }            // first choice (accessibility)
+{ "label": "Email" } | { "text": "Send" } | { "testId": "submit" }
+{ "css": "…" }                                     // last resort
 // Windows
-{ "window": { "title": "請求システム", "process": "billing.exe" },
-  "automationId": "btnSave", "name": "保存", "controlType": "Button" }
-{ "point": { "x": 120, "y": 340 }, "relativeTo": "window" }   // フォールバック（検証で警告）
+{ "window": { "title": "Billing", "process": "billing.exe" },
+  "automationId": "btnSave", "name": "Save", "controlType": "Button" }
+{ "point": { "x": 120, "y": 340 }, "relativeTo": "window" }   // fallback (validation warns)
 ```
 
-### 4.1 Windows Adapter
+### 4.1 Windows adapter
 
-- `windows` クレートで IUIAutomation を直接利用。`uiautomation` クレートは単独メンテのため依存せず参考に留める。
-- **専用ワーカースレッド**（ウィンドウを持たない）で `CoInitializeEx(COINIT_MULTITHREADED)`。全 UIA 呼び出しをこのスレッドへの要求キュー経由にする（Microsoft の推奨）。
-- 要素はリクエスト内でのみ保持し、スレッド外へ生ポインタを出さない。シナリオには Target（意味情報）だけを保存し、実行時に毎回解決する。
-- `IUIAutomation2` の接続・トランザクションタイムアウトで応答停止アプリから保護。権限差（管理者権限のアプリは非管理者から操作不可）は専用エラー `ELEVATION_REQUIRED` で返す。
-- **実装済み**（[desktop.md](desktop.md)）：クレート `shikigami-desktop`、ステップ型 `desktop.*` 11 種、MCP の `inspect_ui`。ステップはアプリの技術（Win32 / WPF / SAP GUI / Java）で分けず 1 セットとし、掴み方はウィンドウから自動で選ぶ（今は UI Automation のみ。SAP GUI と Java のウィンドウは判別して注記する）。
+- Uses IUIAutomation directly through the `windows` crate. The `uiautomation` crate has a single maintainer, so it is a reference only, not a dependency.
+- `CoInitializeEx(COINIT_MULTITHREADED)` on a **dedicated worker thread** (with no window). Every UIA call goes through a request queue to this thread (Microsoft's recommendation).
+- Elements are held only within a request; raw pointers never leave the thread. Scenarios store only Targets (semantic information), resolved again on every run.
+- `IUIAutomation2` connection and transaction timeouts protect against hung apps. Privilege differences (an elevated app cannot be operated from a non-elevated process) give the dedicated error `ELEVATION_REQUIRED`.
+- **Implemented** ([desktop.md](desktop.md)): crate `shikigami-desktop`, 11 `desktop.*` step types, MCP's `inspect_ui`. Steps are one set regardless of the app's technology (Win32 / WPF / SAP GUI / Java); how to grab elements is chosen from the window automatically (currently UI Automation only; SAP GUI and Java windows are detected and noted).
 
-### 4.2 Browser Adapter
+### 4.2 Browser adapter
 
-- Node.js + Playwright を **子プロセス** として起動し、stdin/stdout の改行区切り JSON-RPC 2.0 で通信（§7.3）。
-- 待機は Playwright のオートウェイト / `locator.waitFor` / `page.waitForLoadState` を使い、固定 sleep を使わない。
-- 子プロセスの異常終了は Rust 側で検知し、実行中ステップを `ADAPTER_CRASHED` で失敗させ、次回要求時に再起動する。
-- **実装済み**（[browser.md](browser.md)）：クレート `shikigami-browser`（子プロセス管理・`browser.*` ステップ 10 種）、`packages/browser-adapter`（Node 22.18+ で TypeScript を直接実行）。ブラウザは Windows 既定で Edge を使い、同梱しない。ページは「実行 × `context` 名」ごとの BrowserContext に分け、実行終了時に閉じる。
+- Starts Node.js + Playwright as a **child process** and talks newline-delimited JSON-RPC 2.0 over stdin/stdout (§7.3).
+- Waiting uses Playwright's auto-waiting / `locator.waitFor` / `page.waitForLoadState`, never fixed sleeps.
+- The Rust side detects a crashed child process, fails the running step with `ADAPTER_CRASHED`, and restarts it on the next request.
+- **Implemented** ([browser.md](browser.md)): crate `shikigami-browser` (child process management, 10 `browser.*` steps), `packages/browser-adapter` (runs TypeScript directly on Node 22.18+). The browser is Edge by default on Windows and is not bundled. Pages are split into one BrowserContext per "run × `context` name" and closed when the run ends.
 
-## 6. MCP Tool Interface（Phase 2）
+## 6. MCP tool interface (Phase 2)
 
-> **実装状況**：シナリオ・ステップ・実行の各ツール（UI 操作系と `debug_scenario` / `test_step` を除く）は実装済み。`get_history`、`list_runs`、`undo` / `redo` を追加し、実行ログは `get_run_logs(runId, afterSeq?)` とした。使い方・クライアント別の設定は [mcp.md](mcp.md)。UI 操作系は Phase 3 / 4。
+> **Status**: the scenario, step and run tools (except the UI tools and `debug_scenario` / `test_step`) are implemented. `get_history`, `list_runs` and `undo` / `redo` were added, and run logs are `get_run_logs(runId, afterSeq?)`. Usage and per-client settings: [mcp.md](mcp.md). The UI tools are Phase 3 / 4.
 
-全ツールは Core / Runtime / Adapter を呼ぶだけの薄い層。入力スキーマは Rust 型から自動生成し、出力は構造化 JSON（`structuredContent`）で返す。エラーは §9 の `ErrorPayload` をそのまま返す。
+Every tool is a thin layer that only calls Core / Runtime / adapters. Input schemas are generated from Rust types; output is structured JSON (`structuredContent`). Errors are §9's `ErrorPayload` as is.
 
-| 分類 | ツール | 主な入力 → 出力 | 権限区分 |
+| Class | Tool | Main input → output | Permission class |
 |---|---|---|---|
-| シナリオ | `list_scenarios` | → `ScenarioSummary[]` | read |
+| Scenarios | `list_scenarios` | → `ScenarioSummary[]` | read |
 |  | `get_scenario` | `id` → `Scenario` | read |
 |  | `create_scenario` | `NewScenario` → `EditOutcome` | write |
 |  | `update_scenario` | `id, expectedRevision?, patch \| ops[]` → `EditOutcome` | write |
-|  | `delete_scenario` | `id, expectedRevision` → ok（ゴミ箱へ） | write・**要承認** |
+|  | `delete_scenario` | `id, expectedRevision` → ok (to the trash) | write, **needs approval** |
 |  | `validate_scenario` | `id \| scenario` → `ValidationReport` | read |
-| ステップ | `add_step` / `update_step` / `remove_step` / `move_step` | 各 `EditOp` + `expectedRevision?` → `EditOutcome` | write |
+| Steps | `add_step` / `update_step` / `remove_step` / `move_step` | each `EditOp` + `expectedRevision?` → `EditOutcome` | write |
 |  | `list_step_types` | → `StepTypeDef[]` | read |
 |  | `get_step_schema` | `type` → params JSON Schema | read |
-| UI 操作 | `inspect_ui` | 対象（window/page）, 深さ → 要素ツリー（意味情報＋推奨 Target） | ui.read |
-|  | `capture_screen` | 対象 → 画像（MCP image content） | ui.read |
-|  | `click_element` / `type_text` / `select_element` | Target, 値 → 結果＋事後状態 | ui.act |
-|  | `wait_for_element` | Target, 状態, timeout → 結果 | ui.read |
-|  | `launch_application` / `navigate_browser` | パス・URL → 結果 | ui.act・許可リスト |
-| 実行 | `run_scenario` | `id, inputs` → `runId` | run |
+| UI | `inspect_ui` | target (window/page), depth → element tree (semantic info + suggested Target) | ui.read |
+|  | `capture_screen` | target → image (MCP image content) | ui.read |
+|  | `click_element` / `type_text` / `select_element` | Target, value → result + state after | ui.act |
+|  | `wait_for_element` | Target, state, timeout → result | ui.read |
+|  | `launch_application` / `navigate_browser` | path, URL → result | ui.act, allowlist |
+| Runs | `run_scenario` | `id, inputs` → `runId` | run |
 |  | `stop_scenario` | `runId` → ok | run |
 |  | `get_run_status` | `runId` → `RunSnapshot \| RunReport` | read |
 |  | `get_run_logs` | `runId, afterSeq?, variable?` → `RunEventEnvelope[]` | read |
-|  | `debug_scenario` | `id, breakpoints[]` → `runId`（ステップ実行） | run |
-|  | `test_step` | `Step`（単体）, 変数 → 実行結果（シナリオは変更しない） | ui.act |
+|  | `debug_scenario` | `id, breakpoints[]` → `runId` (step through) | run |
+|  | `test_step` | `Step` (single), variables → result (does not change the scenario) | ui.act |
 
-- **書き込み系は `expectedRevision` を受け付ける**。省略時は最新に適用（AI の利便性）、指定時は競合で `REVISION_CONFLICT`。
-- **`update_scenario` は ops 配列も受け付ける**（複数変更を1リビジョンで原子的に適用）。
-- 修復提案（Phase 6）は `propose_fix`（ops 配列を提案として保存）→ ユーザー承認 → `apply_proposal`。直接は適用しない（§8）。
-- 同梱の **Claude Code プラグイン**（MCP 設定＋スキル `SKILL.md`）で、AI に「UI を調べる → 意味的 Target を使う → validate → AI なし実行で確認」という作法を教える。
+- **Write tools accept `expectedRevision`.** Without it the edit applies to the latest revision (convenient for AI); with it, a conflict gives `REVISION_CONFLICT`.
+- **`update_scenario` also accepts an ops array** (several changes applied atomically as one revision).
+- Repair proposals (Phase 6) go `propose_fix` (saves an ops array as a proposal) → user approval → `apply_proposal`. They are never applied directly (§8).
+- The bundled **Claude Code plugin** (MCP settings + skill `SKILL.md`) teaches the AI the practice "look at the UI → use semantic Targets → validate → confirm with a run without AI".
 
-## 7. IPC 設計
+## 7. IPC
 
-### 7.1 Studio（Tauri Commands / Events）
+### 7.1 Studio (Tauri commands / events)
 
-フロントは `@tauri-apps/api` の `invoke` で Rust コマンドを呼ぶ。コマンド名と引数は `apps/studio/src/lib/api.ts` が型付きで一元管理する。
+The frontend calls Rust commands with `invoke` from `@tauri-apps/api`. Command names and arguments are typed in one place, `apps/studio/src/lib/api.ts`.
 
-| コマンド | 対応する Core / Runtime API |
+| Command | Core / Runtime API |
 |---|---|
 | `list_scenarios`, `get_scenario`, `create_scenario`, `duplicate_scenario`, `delete_scenario` | `ScenarioService::{list,get,create,duplicate,delete}` |
 | `edit_scenario(id, expectedRevision, ops)` | `ScenarioService::edit` |
 | `undo`, `redo`, `undo_state` | `ScenarioService::{undo,redo,undo_state}` |
-| `validate_scenario`, `list_step_types`, `scenario_history` | 同名 API |
+| `validate_scenario`, `list_step_types`, `scenario_history` | The API of the same name |
 | `run_scenario`, `stop_run`, `run_status` | `Runtime::start`, `RunHandle::cancel`, `RunSnapshot` |
 
-イベント：`scenario-changed { scenarioId }`（ファイル監視、他プロセスの変更も含む）、`run-event`（`RunEventEnvelope`）。
+Events: `scenario-changed { scenarioId }` (file watching, including changes by other processes), `run-event` (`RunEventEnvelope`).
 
-### 7.2 プロセス間のシナリオ同期（Studio ⇔ MCP ⇔ CLI）
+### 7.2 Scenario sync between processes (Studio ⇔ MCP ⇔ CLI)
 
-- 正はワークスペースのファイル。全変更は「排他ロック（`.lock`）→ 再読込 → `revision` 照合 → 適用 → 一時ファイルへ書いて rename」。読み手は書きかけを見ない。
-- 変更通知は OS のファイル監視（`notify`）。Studio は通知を受けて Core から再取得し、表示中なら差し替えて「外部での変更を反映しました」と表示。
-- Studio の編集は常に `expectedRevision` 付き。AI が先に変更していれば `REVISION_CONFLICT` → 自動で再読込し、ユーザーに知らせる（上書きしない）。
-- Undo/Redo スタックはシナリオごとにワークスペースへ保存（`history/<id>/undo.json`）するので、**AI の変更を Studio から元に戻せる**。スタックは自身が対応する `revision` を記録しており、`git checkout` 等の外部変更で不整合になったら破棄する。
+- The workspace files are the source of truth. Every change goes "exclusive lock (`.lock`) → reload → check `revision` → apply → write a temporary file and rename". Readers never see half-written files.
+- Change notifications use OS file watching (`notify`). Studio reloads from Core on a notification and, if the scenario is open, swaps it in and says it picked up an outside change.
+- Studio's edits always carry `expectedRevision`. If the AI changed it first, `REVISION_CONFLICT` → reload automatically and tell the user (never overwrite).
+- The Undo/Redo stack is saved per scenario in the workspace (`history/<id>/undo.json`), so **AI changes can be undone from Studio**. The stack records the `revision` it belongs to and is discarded if an outside change such as `git checkout` makes it inconsistent.
 
-### 7.3 Runtime ⇔ Browser Adapter（Phase 3）
+### 7.3 Runtime ⇔ browser adapter (Phase 3)
 
-- 改行区切り JSON-RPC 2.0 over stdio。要求：`{"jsonrpc":"2.0","id":1,"method":"click","params":{...}}`。
-- メソッド（実装済み）：`open`, `click`, `fill`, `select`, `press`, `getText`, `getTable`, `waitFor`, `screenshot`, `snapshot`（アクセシビリティツリー）, `close`, `closeRun`, `ping`, `shutdown`。`download` / `upload` は未実装。
-- ハートビート（`ping`）と子プロセス終了監視で異常終了を検知。stderr は tracing に転送。
-- プロトコルの型も `@shikigami/schema` に生成し、Rust/TS で共有する。
+- Newline-delimited JSON-RPC 2.0 over stdio. Request: `{"jsonrpc":"2.0","id":1,"method":"click","params":{...}}`.
+- Methods (implemented): `open`, `click`, `fill`, `select`, `press`, `getText`, `getTable`, `waitFor`, `screenshot`, `snapshot` (accessibility tree), `close`, `closeRun`, `ping`, `shutdown`. `download` / `upload` are not implemented.
+- A heartbeat (`ping`) and child process exit monitoring detect crashes. stderr is forwarded to tracing.
+- The protocol types are also generated into `@shikigami/schema` and shared by Rust and TS.
 
-### 7.4 MCP（Phase 2）
+### 7.4 MCP (Phase 2)
 
-- 既定は **stdio**（AI クライアントが子プロセスとして起動。ポートを開かない）。
-- オプションで Streamable HTTP（127.0.0.1 のみ、起動時に生成するトークン必須、Origin 検証）。
+- **stdio** by default (the AI client starts it as a child process; no port is opened).
+- Optionally Streamable HTTP (127.0.0.1 only, a token generated at startup required, Origin checked).
 
-## 8. データベース設計
+## 8. Database
 
-**シナリオは JSON ファイル、運用データは SQLite** に分ける（§11 判断3）。Phase 1 は実行記録もファイル（JSONL）で実装済み。SQLite は Phase 2 で検索・一覧の高速化と監査ログのために導入し、ファイルを正とした索引として扱う。
+**Scenarios are JSON files; operational data goes in SQLite** (§11 decision 3). In Phase 1 run records are files (JSONL) too. SQLite comes in Phase 2 to speed up search and listing and for the audit log, as an index over the files, which stay the source of truth.
 
-ワークスペース配置：
+Workspace layout:
 
-共有ワークスペースでは `history/`・`runs/` を各 PC 側に置く（[design/sharing-versioning.md](design/sharing-versioning.md)）。
+In a shared workspace, `history/` and `runs/` are kept on each PC ([design/sharing-versioning.md](design/sharing-versioning.md), Japanese).
 
 ```text
-<workspace>/            既定: SHIKIGAMI_HOME > config.json の workspace > %APPDATA%\Shikigami\workspace
-  workspace.json        任意。{"shared": true} なら共有ワークスペース
-  scenarios/<id>.json   シナリオ（正）
-  versions/<id>/<n>.json  名前付きの版（不変のスナップショット）
-  history/<id>/journal.jsonl  変更ジャーナル（追記のみ・監査）
-  history/<id>/undo.json      Undo/Redo スタック
-  runs/<run-id>/events.jsonl  実行イベント（機密値マスク済み）
-  runs/<run-id>/report.json   実行結果
-  runs/<run-id>/artifacts/    スクリーンショット等（Phase 3〜）
-  trash/                      削除済みシナリオ
-  shikigami.db                SQLite（Phase 2〜）
+<workspace>/            default: SHIKIGAMI_HOME > workspace in config.json > %APPDATA%\Shikigami\workspace
+  workspace.json        optional. {"shared": true} makes it a shared workspace
+  scenarios/<id>.json   scenarios (source of truth)
+  versions/<id>/<n>.json  named versions (immutable snapshots)
+  history/<id>/journal.jsonl  change journal (append-only, audit)
+  history/<id>/undo.json      Undo/Redo stack
+  runs/<run-id>/events.jsonl  run events (secrets masked)
+  runs/<run-id>/report.json   run result
+  runs/<run-id>/artifacts/    screenshots etc. (Phase 3 on)
+  trash/                      deleted scenarios
+  shikigami.db                SQLite (Phase 2 on)
 ```
 
-`events.jsonl` には変数の代入も `variableChanged` として残るので、実行後に「どの変数に何が渡され、いつ・どのステップで変わったか」を追える（MCP は `get_run_logs(runId, variable)`、CLI は `shikigami run --vars`）。
+`events.jsonl` also records variable assignments as `variableChanged`, so after a run you can trace which value went into which variable, and when and in which step it changed (MCP: `get_run_logs(runId, variable)`, CLI: `shikigami run --vars`).
 
 ```json
 { "seq": 7, "at": "…", "runId": "run_…", "type": "variableChanged",
   "variable": "amount", "value": 13200, "stepId": "stp_…", "iteration": 0 }
 ```
 
-- `stepId`：代入したステップ（`variable.set`、`saveAs`、`forEach` / `repeat` の item・index 変数、`errorVar` / `lastError`）。入力値・既定値は `runStarted` 直後に `stepId` なしで出る。
-- `iteration`：並列 `forEach`（`concurrency` 指定）の中の変更だけに付く要素番号（0 始まり）。同時に進む反復を見分けるため。
-- `secret: true` の変数は値が `"***"`。他の変数に紛れ込んだ機密値もマスクする。
-- 1000 文字を超える値はプレビューに切り詰め `truncated: true`（文字列は先頭、配列・オブジェクトは JSON テキストの先頭）。
-- `parallel` の各ブランチの変更はブランチ内で起きた時点で出し、合流時には再度出さない。順序は `seq` の通り。
+- `stepId`: the step that assigned it (`variable.set`, `saveAs`, `forEach` / `repeat` item and index variables, `errorVar` / `lastError`). Inputs and defaults appear right after `runStarted` without a `stepId`.
+- `iteration`: present only on changes inside a parallel `forEach` (with `concurrency`), the element number (from 0), to tell concurrent iterations apart.
+- Variables with `secret: true` have the value `"***"`. Secret values that slipped into other variables are masked too.
+- Values over 1000 characters are cut to a preview with `truncated: true` (the start of strings; the start of the JSON text for lists and objects).
+- Changes in each `parallel` branch are emitted when they happen in the branch, not again when the branches join. The order is that of `seq`.
 
-SQLite スキーマ（Phase 2 で導入予定）：
+SQLite schema (planned for Phase 2):
 
 ```sql
 CREATE TABLE runs (
@@ -352,179 +354,179 @@ CREATE TABLE runs (
 );
 CREATE INDEX runs_by_scenario ON runs(scenario_id, started_at DESC);
 
-CREATE TABLE run_failures (               -- AI エラー解析用（§8 要件）
+CREATE TABLE run_failures (               -- for AI error analysis (§8 requirement)
   run_id TEXT PRIMARY KEY REFERENCES runs(run_id),
   step_id TEXT NOT NULL, error_code TEXT NOT NULL, message TEXT NOT NULL,
   ui_snapshot_path TEXT, screenshot_path TEXT, expected_state TEXT, actual_state TEXT
 );
 
-CREATE TABLE audit_log (                  -- 操作監査（MCP ツール呼び出し・承認・実行）
+CREATE TABLE audit_log (                  -- audit (MCP tool calls, approvals, runs)
   id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_kind TEXT NOT NULL, actor_name TEXT,
   action TEXT NOT NULL, target TEXT, decision TEXT, details TEXT
 );
 
-CREATE TABLE proposals (                  -- AI 修復案（承認後に適用）
+CREATE TABLE proposals (                  -- AI repair proposals (applied after approval)
   id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, base_revision INTEGER NOT NULL,
   ops TEXT NOT NULL, rationale TEXT, status TEXT NOT NULL,  -- pending | applied | rejected
   created_at TEXT NOT NULL, decided_at TEXT
 );
 
--- シークレット（ログイン情報）は DB ではなく <workspace>/secrets/ に暗号化して保存する（docs/secrets.md）
+-- Secrets (login details) are not in the DB but encrypted under <workspace>/secrets/ (docs/secrets.md)
 ```
 
-## 9. エラー設計
+## 9. Errors
 
-- すべてのエラーは **安定したコード（SCREAMING_SNAKE_CASE）＋英語メッセージ＋構造化 details**。UI はコードで日本語化する。
-- 共通の伝送形：`ErrorPayload { code, message, details? }`（Tauri / MCP / CLI 共通）。
+- Every error is a **stable code (SCREAMING_SNAKE_CASE) + English message + structured details**. The UI localizes by code.
+- One wire format: `ErrorPayload { code, message, details? }` (shared by Tauri / MCP / CLI).
 
-| 層 | 型 | 代表コード |
+| Layer | Type | Typical codes |
 |---|---|---|
 | Core | `CoreError` | `SCENARIO_NOT_FOUND`, `REVISION_CONFLICT`, `VALIDATION_FAILED`, `STEP_NOT_FOUND`, `DUPLICATE_STEP_ID`, `INVALID_EDIT`, `UNSUPPORTED_SCHEMA_VERSION`, `STORAGE_ERROR` |
-| 検証 | `ValidationIssue`（error / warning, JSON Pointer 付き） | `UNKNOWN_STEP_TYPE`, `INVALID_PARAMS`, `EXPR_SYNTAX`, `UNKNOWN_BLOCK`, `NOT_IN_LOOP`, `UNDEFINED_VARIABLE`(warning) |
-| 式 | `ExprError` | `EXPR_SYNTAX`, `EXPR_UNDEFINED_VARIABLE`, `EXPR_UNKNOWN_FUNCTION`, `EXPR_TYPE` |
+| Validation | `ValidationIssue` (error / warning, with JSON Pointer) | `UNKNOWN_STEP_TYPE`, `INVALID_PARAMS`, `EXPR_SYNTAX`, `UNKNOWN_BLOCK`, `NOT_IN_LOOP`, `UNDEFINED_VARIABLE` (warning) |
+| Expressions | `ExprError` | `EXPR_SYNTAX`, `EXPR_UNDEFINED_VARIABLE`, `EXPR_UNKNOWN_FUNCTION`, `EXPR_TYPE` |
 | Runtime | `RunError { code, message, stepId, stepType, details }` | `STEP_TIMEOUT`, `RUN_CANCELLED`, `LOOP_LIMIT_EXCEEDED`, `MISSING_INPUT`, `INVALID_INPUT`, `UNSUPPORTED_STEP_TYPE` |
 | Adapter | `StepError { code, message, details, retryable }` | `ELEMENT_NOT_FOUND`, `ELEMENT_NOT_INTERACTABLE`, `NAVIGATION_FAILED`, `ADAPTER_CRASHED`, `ELEVATION_REQUIRED`, `APP_NOT_ALLOWED` |
 
-- **検証は「全件報告」**。最初のエラーで止めず、Studio と AI が一度に直せるようにする。
-- **下書きの許容**：編集途中の不完全なシナリオ（`if` の条件未入力など）は保存できる。ただし ID 重複・不正 ID などの **構造破壊は拒否**。実行は検証エラーがあると開始しない。
-- 失敗時は失敗ステップ ID・型・コード・メッセージ・details を `RunReport` とイベントに必ず残す。`control.try` の `errorVar` / `onError: continue` の `lastError` にも同じ構造が入る。
-- Rust 内部では `unwrap` / `panic` を使わず `Result` で伝播（clippy で警告、CI で拒否）。
+- **Validation reports everything.** It does not stop at the first error, so Studio and the AI can fix it all at once.
+- **Drafts are allowed**: incomplete scenarios mid-edit (an `if` without a condition, etc.) can be saved. **Structural breakage** such as duplicate or invalid IDs is rejected. Runs do not start while there are validation errors.
+- On failure, the failing step ID, type, code, message and details are always kept in `RunReport` and the events. `control.try`'s `errorVar` and `onError: continue`'s `lastError` get the same structure.
+- Inside Rust, no `unwrap` / `panic`; errors propagate as `Result` (clippy warns, CI rejects).
 
-## 10. セキュリティ設計
+## 10. Security
 
-| 脅威 / 要件 | 対策 | 実装時期 |
+| Threat / requirement | Measure | When |
 |---|---|---|
-| 任意コード実行 | シナリオに汎用スクリプト実行を持たせない。式言語は副作用なしの許可関数のみ（`len`, `contains` 等）。ネスト深さ制限で DoS も防止 | **P1 済** |
-| パス・トラバーサル | シナリオ/実行 ID は `[A-Za-z0-9_-]{1,128}` のみ受理し、ファイル名に使う前に検査 | **P1 済** |
-| ログへの機密混入 | `secret` 変数とシークレットの値をログ・エラー・イベント・出力記録で `***` にマスク。スクリーンショットのパスワード欄を塗りつぶし、AI に返すページ情報からも消す | **済** |
-| 誤操作の不可逆性 | シナリオ削除はゴミ箱へ移動。全変更をジャーナルに記録し Undo 可能 | **P1 済** |
-| Studio の権限 | Tauri capability は `core:default` のみ。ファイル・シェル系プラグインを有効にしない。CSP 設定 | **P1 済** |
-| MCP 接続のアクセス制御 | 既定 stdio（起動した AI クライアントのみ接続可）。HTTP は localhost＋トークン＋Origin 検証 | P2 |
-| ツール権限 | ツールを `read / write / run / ui.read / ui.act / dangerous` に分類し、ワークスペース設定でクライアントごとに許可。`dangerous`（削除、ファイル操作、許可リスト外アプリ起動）は Studio 上でのユーザー承認を要求 | P2 |
-| 操作対象の許可リスト | `launch_application` / `navigate_browser` は設定の許可リスト（実行ファイルパス・ドメイン）のみ。Runtime 実行時も同じリストで検査 | P2–P4 |
-| ファイル操作の制限 | ファイル系ステップはワークスペース設定で許可したディレクトリ配下のみ | P3 |
-| 認証情報 | 人が Studio / CLI で名前を付けて登録。値は AES-256-GCM でワークスペースに暗号化保存し、鍵は Windows 資格情報マネージャーにワークスペースごと 1 件。シナリオと AI には名前だけ。登録サイト以外への入力を拒否。ログイン状態（セッション）も同じ鍵で暗号化（[secrets.md](secrets.md)） | **済** |
-| プロンプトインジェクション | `inspect_ui` / ページテキスト等の取得結果は「信頼できないデータ」として明示ラベル付きの構造化データで返し、指示として扱わないよう SKILL/ツール説明で明記。UI 操作ツールはシナリオを変更せず、シナリオ保存は別操作。危険操作は人間承認 | P2 |
-| 監査 | 全 MCP ツール呼び出し・承認・実行を `audit_log` に記録（シナリオ変更は P1 からジャーナル記録済み） | P2 |
-| 実行権限 | シナリオ単位で「MCP からの実行可否」「無人実行可否」を設定 | P2 |
+| Arbitrary code execution | Scenarios have no general script execution. The expression language allows only side-effect-free functions (`len`, `contains`…). Nesting depth limits prevent DoS too | **P1 done** |
+| Path traversal | Scenario/run IDs accept only `[A-Za-z0-9_-]{1,128}`, checked before use as file names | **P1 done** |
+| Secrets in logs | Values of `secret` variables and secrets are masked as `***` in logs, errors, events and output records. Password fields are blacked out in screenshots and removed from page information returned to AI | **Done** |
+| Irreversible mistakes | Deleting a scenario moves it to the trash. Every change is journaled and can be undone | **P1 done** |
+| Studio permissions | Tauri capabilities are `core:default` only. No file or shell plugins. CSP set | **P1 done** |
+| MCP access control | stdio by default (only the AI client that started it can connect). HTTP is localhost + token + Origin check | P2 |
+| Tool permissions | Tools are classed as `read / write / run / ui.read / ui.act / dangerous` and allowed per client in workspace settings. `dangerous` (deletion, file operations, starting apps outside the allowlist) needs user approval in Studio | P2 |
+| Allowlist of targets | `launch_application` / `navigate_browser` only for the allowlist in settings (executable paths, domains). The Runtime checks the same list when running | P2–P4 |
+| File operation limits | File steps only under directories allowed in workspace settings | P3 |
+| Credentials | People register them by name in Studio / the CLI. Values are encrypted with AES-256-GCM in the workspace; the key is one entry per workspace in Windows Credential Manager. Scenarios and AI get only the name. Input to unregistered sites is refused. Sign-in states (sessions) are encrypted with the same key ([secrets.md](secrets.md)) | **Done** |
+| Prompt injection | Results such as `inspect_ui` and page text are returned as structured data clearly labeled "untrusted data", and SKILL / tool descriptions say not to treat them as instructions. UI tools do not change scenarios; saving is a separate operation. Dangerous operations need human approval | P2 |
+| Audit | Every MCP tool call, approval and run in `audit_log` (scenario changes are journaled since P1) | P2 |
+| Run permissions | Per scenario: "may run from MCP", "may run unattended" | P2 |
 
-## 10.5 並行実行
+## 10.5 Parallel execution
 
-複数の処理を同時に動かせることを製品の特徴にする。段階は 3 つ。
+Running several things at once is meant to be a feature of the product. There are three levels.
 
-| 段階 | 内容 | 状況 |
+| Level | Contents | Status |
 |---|---|---|
-| シナリオ間 | 複数のシナリオ（同じシナリオの複数実行を含む）を同時に実行。各実行は独立した非同期タスクで、変数・キャンセル・記録も実行ごとに独立 | **実装済み**（Runtime / MCP の `run_scenario` を複数呼べる） |
-| シナリオ内 | `control.parallel`（`branches` の各ステップを同時実行し全完了を待つ。1 つ失敗したら残りをキャンセル。`maxConcurrency` で同時数を制限）。複数ステップのブランチは `control.group` で包む | **実装済み** |
-| シナリオ内（ループ） | `control.forEach` の `concurrency`（「100 件を 5 並列」）。各回は変数のコピーで動き、外へ出せるのは `collect` の値だけ（`saveAs` に `items` と同じ順の配列で入る）。集計はループ後に `sum(results)` などで行う。最初の失敗で残りをキャンセルし、エラーの `details.index` に何件目かを入れる | **実装済み** |
-| 資源の調停 | ステップ型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのステップを同時に動かさない。シナリオを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスは検証で `RELATIVE_PATH` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み（同一プロセス内）**。Studio・CLI・MCP サーバーなど別プロセス間の排他は Phase 4 で Windows の名前付きミューテックスにより実装 |
+| Between scenarios | Several scenarios (including several runs of the same one) at once. Each run is an independent async task with its own variables, cancellation and records | **Implemented** (call the Runtime / MCP `run_scenario` several times) |
+| Within a scenario | `control.parallel` (runs each step of `branches` at once and waits for all; if one fails the rest are cancelled; `maxConcurrency` limits how many). Wrap multi-step branches in `control.group` | **Implemented** |
+| Within a scenario (loops) | `control.forEach`'s `concurrency` ("100 items, 5 at a time"). Each iteration works on a copy of the variables; only the `collect` value comes out (in `saveAs`, as a list in the order of `items`). Aggregate after the loop, e.g. `sum(results)`. The first failure cancels the rest, with the item number in the error's `details.index` | **Implemented** |
+| Resource arbitration | Step type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs steps with the same key at once. People and AI writing scenarios never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths give the `RELATIVE_PATH` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented (within one process)**. Exclusion between processes (Studio, CLI, MCP server) comes in Phase 4 with Windows named mutexes |
 
-- **デスクトップ操作は物理的に 1 組**：Windows のマウス・キーボード入力（SendInput）と前面ウィンドウは画面に 1 つしかないため、これらを使うステップは `desktop.input` の使用権を取得してから実行する（取得待ちの時間はタイムアウトに含めない）。UI Automation のパターン操作（Invoke / Value / SelectionItem など）はフォーカス不要なものが多く、使用権なしで並行実行できるよう型ごとに宣言する（実装済み：`desktop.click` / `setValue` などは使用権なし、`desktop.mouseClick` / `type` / `press` は使用権あり。どれも同じアプリ（`window:<process>`）へは 1 つずつ）。
-- **ブラウザは並列向き**：Playwright のブラウザコンテキストは独立しており、ヘッドレスなら多数を同時に動かせる（Phase 3）。
-- **変数の扱い**：各ブランチは開始時点の変数のコピーで動き、全ブランチ完了後に「ブランチが変更した変数」をブランチ順に書き戻す。2 つのブランチが同じ変数を異なる値に変えた場合は `PARALLEL_VARIABLE_CONFLICT` で失敗させる（実行タイミングで結果が変わる事態を防ぐ）。2 つ以上のブランチが同じ変数に書く場合は実行前の検証でも `PARALLEL_VARIABLE_CONFLICT` にする。ブランチ内から外側のループへの `break` / `continue` は検証エラー（`NOT_IN_LOOP`）。
-- **並列 forEach の検証**：本体で宣言済み変数に書く（`FOREACH_SHARED_WRITE`）・`break`（`FOREACH_BREAK_IN_CONCURRENT`）はエラー、自分の値から更新する変数（`total = total + x` 型、`FOREACH_ACCUMULATOR`）と `saveAs` のない `collect` は警告。いずれも直し方のヒント付き。
-- **待ち合わせ**：時間のかかる処理（Excel への転記など）を待つ専用の構文は作らず、`control.parallel` のブランチ完了待ちと `wait.until`（状態のポーリング）の 2 つで表す。AI が組み合わせを迷わないよう構文を増やさない（[design/ai-authoring.md](design/ai-authoring.md)）。
-- **さらに多くのデスクトップを動かす**には Windows のセッション（RDP / 仮想マシン）を複数使うしかない。これは将来の「ワーカー」機能として扱い、MVP の範囲外。
+- **Desktop operations are physically one set**: Windows has only one mouse/keyboard input (SendInput) and one foreground window, so steps using them take the `desktop.input` right before running (time spent waiting for it does not count toward the timeout). Many UI Automation pattern operations (Invoke / Value / SelectionItem…) need no focus, so each type declares whether it can run in parallel without the right (implemented: `desktop.click` / `setValue` etc. do not take it; `desktop.mouseClick` / `type` / `press` do; all go one at a time to the same app, `window:<process>`).
+- **Browsers suit parallel work**: Playwright browser contexts are independent, and many can run at once headless (Phase 3).
+- **Variables**: each branch works on a copy of the variables at its start; after all branches finish, the variables each branch changed are written back in branch order. If two branches change the same variable to different values, it fails with `PARALLEL_VARIABLE_CONFLICT` (so results never depend on timing). Two or more branches writing the same variable is also `PARALLEL_VARIABLE_CONFLICT` in validation before the run. `break` / `continue` from a branch to an outer loop is a validation error (`NOT_IN_LOOP`).
+- **Validating parallel forEach**: writing to declared variables in the body (`FOREACH_SHARED_WRITE`) and `break` (`FOREACH_BREAK_IN_CONCURRENT`) are errors; variables updated from their own value (`total = total + x`, `FOREACH_ACCUMULATOR`) and `collect` without `saveAs` are warnings. All come with hints for fixing them.
+- **Waiting**: there is no dedicated construct for waiting on slow work (such as copying into Excel). It is expressed with two things: waiting for `control.parallel` branches, and `wait.until` (polling a state). No extra constructs, so the AI does not have to choose between them ([design/ai-authoring.md](design/ai-authoring.md), Japanese).
+- **Driving more desktops** needs several Windows sessions (RDP / virtual machines). That is a future "worker" feature, outside the MVP.
 
-## 11. 重要な設計判断（採用理由・代替案・トレードオフ）
+## 11. Key design decisions (reasons, alternatives, trade-offs)
 
-### 判断1：シナリオは「ステップ木（ブロック構造）」で表現する
+### Decision 1: scenarios are a step tree (block structure)
 
-- **採用理由**：AI が読み書きしやすく（JSON の入れ子がそのまま処理構造）、検証が容易（break がループ内か等）。ID 参照なので編集で壊れない。フローチャートは木から自動レイアウトで描ける。
-- **代替案**：ノード＋エッジのグラフ（BPMN 的）。任意の分岐・合流が書ける。
-- **トレードオフ**：goto 的な任意の遷移は表現できない。代わりに構造化された制御（if / loop / try / break / continue）に限定され、保守性が高い。将来グラフ表現が必要になっても、木 → グラフへの変換は可能。
+- **Reason**: easy for AI to read and write (JSON nesting is the processing structure), easy to validate (is a break inside a loop?). References are by ID, so edits do not break them. Flowcharts are drawn from the tree with automatic layout.
+- **Alternative**: a graph of nodes and edges (BPMN-like). Any branching and joining can be written.
+- **Trade-off**: arbitrary goto-like jumps cannot be expressed. Control is limited to structured forms (if / loop / try / break / continue), which keeps scenarios maintainable. If a graph is ever needed, a tree converts to a graph.
 
-### 判断2：Studio と MCP の同期は「ファイルを正とした楽観的並行制御」
+### Decision 2: Studio and MCP sync by optimistic concurrency with the files as the source of truth
 
-- **採用理由**：MCP サーバーは AI クライアントが stdio で起動する別プロセスであり、GUI なしでも動く必要がある。共有デーモンなしで、ロック＋リビジョン照合＋アトミック書き込み＋ファイル監視だけで双方向編集が成立する。git での差分管理とも相性がよい。
-- **代替案A**：Studio 内に MCP サーバーを内蔵 → GUI 必須になり要件違反。
-- **代替案B**：常駐デーモン（ローカル RPC）を正とし、Studio/MCP はそのクライアント → 一貫性は強いが、プロセス管理・起動順・認証が増える。
-- **トレードオフ**：ファイル監視の遅延（数百 ms）があり、大量シナリオの一覧はファイル走査になる。同時編集は「後勝ち」ではなく「競合検出→再読込」なので安全。将来の複数ユーザー・リモート管理では B に移行できるよう、すべてのアクセスを `ScenarioService` に閉じ込めている。
+- **Reason**: the MCP server is a separate process started over stdio by the AI client, and must work without a GUI. Without a shared daemon, a lock + revision check + atomic writes + file watching are enough for two-way editing. It also works well with diffs in git.
+- **Alternative A**: embed the MCP server in Studio → a GUI becomes required, against the requirements.
+- **Alternative B**: a resident daemon (local RPC) as the source of truth, with Studio/MCP as its clients → stronger consistency, but more process management, start order and authentication.
+- **Trade-off**: file watching has latency (hundreds of ms), and listing many scenarios scans files. Concurrent edits are not "last write wins" but "detect the conflict → reload", which is safe. All access is confined to `ScenarioService` so that a move to B for multiple users or remote management stays possible.
 
-### 判断3：シナリオは JSON ファイル、運用データは SQLite
+### Decision 3: scenarios as JSON files, operational data in SQLite
 
-- **採用理由**：シナリオは人間・AI・git が直接扱える可読なテキストであるべき。実行履歴や監査ログは件数が増え、検索が必要なので DB が適する。
-- **代替案**：すべて SQLite。トランザクションは単純になるが、シナリオの差分レビュー・共有・バックアップがしにくい。
-- **トレードオフ**：2 種類の永続化を持つ。Phase 1 はファイルのみで開始し、SQLite は必要になった時点（Phase 2）で導入する。
+- **Reason**: scenarios should be readable text that people, AI and git handle directly. Run history and audit logs grow and need searching, which suits a DB.
+- **Alternative**: everything in SQLite. Transactions get simpler, but reviewing scenario diffs, sharing and backup get harder.
+- **Trade-off**: two kinds of persistence. Phase 1 starts with files only; SQLite comes when needed (Phase 2).
 
-### 判断4：編集はすべて逆操作付きの EditOp
+### Decision 4: every edit is an EditOp with an inverse
 
-- **採用理由**：Undo/Redo、競合検出、変更履歴、AI 修正案の差分提示、承認後適用を一つの仕組みで実現できる。MCP の `add_step` 等もそのまま EditOp に対応する。
-- **代替案**：スナップショット差分（JSON Patch）での履歴。汎用だが意味（「ステップ移動」等）が失われ、AI や人がレビューしにくい。
-- **トレードオフ**：新しい編集種別ごとに逆操作の実装とテストが必要（全 op に往復テストを用意済み）。
+- **Reason**: Undo/Redo, conflict detection, history, showing AI fixes as diffs and applying them after approval all come from one mechanism. MCP's `add_step` and the like map directly to EditOps.
+- **Alternative**: history as snapshot diffs (JSON Patch). General, but loses meaning ("moved a step"), making review harder for AI and people.
+- **Trade-off**: every new kind of edit needs an inverse and tests (round-trip tests exist for every op).
 
-### 判断5：式言語を自作する
+### Decision 5: our own expression language
 
-- **採用理由**：任意コード実行を排除しつつ、条件・テンプレートを書ける必要がある。候補だった evalexpr は AGPL に変更されていた。必要な機能は小さい（比較・論理・算術・パス参照・少数の純関数）。
-- **代替案**：JavaScript エンジン（QuickJS / Boa）埋め込み、Rhai 等のスクリプト言語。表現力は高いが、サンドボックス設計・依存サイズ・セキュリティ審査の負担が大きい。
-- **トレードオフ**：高度な変換処理は書けない。必要になったら、許可制の「データ変換ステップ」を個別に追加する方針。
+- **Reason**: conditions and templates must be writable without allowing arbitrary code. The candidate evalexpr had moved to AGPL. What is needed is small (comparison, logic, arithmetic, path access, a few pure functions).
+- **Alternative**: embed a JavaScript engine (QuickJS / Boa) or a scripting language such as Rhai. More expressive, but heavy on sandbox design, dependency size and security review.
+- **Trade-off**: advanced transformations cannot be written. When needed, individual allowlisted "data transformation steps" are added.
 
-### 判断6：Rust 型を唯一の型定義源にする
+### Decision 6: Rust types are the only source of type definitions
 
-- **採用理由**：Core が正規データ層なので、型も Core に置く。schemars で JSON Schema、そこから TS 型を生成。
-- **代替案**：JSON Schema を手書きして Rust/TS 両方を生成（typify 等）、または ts-rs / specta で直接 TS 生成。
-- **トレードオフ**：生成 TS 型は一部が冗長（`Position1` のような重複名）。可読性より一貫性を優先。生成物のズレは CI で検出。
+- **Reason**: Core is the canonical data layer, so the types live in Core. schemars produces JSON Schema, from which TS types are generated.
+- **Alternative**: hand-written JSON Schema generating both Rust and TS (typify etc.), or generating TS directly with ts-rs / specta.
+- **Trade-off**: some generated TS types are redundant (duplicate names like `Position1`). Consistency over readability. CI detects drift in generated files.
 
-### 判断7：Runtime はツリー直接解釈のインタプリタ
+### Decision 7: the Runtime is an interpreter that walks the tree directly
 
-- **採用理由**：実行イベントのステップ ID が編集中のシナリオと 1:1 で対応し、Studio でのハイライト・デバッグ・AI のエラー解析が単純になる。
-- **代替案**：バイトコード / 状態機械へのコンパイル。中断・再開（永続化）に有利。
-- **トレードオフ**：長時間実行の途中再開（クラッシュ後のレジューム）は現状できない。必要になれば実行位置（ステップ ID のスタック）を記録する形で拡張する。
+- **Reason**: step IDs in run events match the scenario being edited one to one, which keeps highlighting and debugging in Studio and AI error analysis simple.
+- **Alternative**: compile to bytecode / a state machine. Better for pausing and resuming (persistence).
+- **Trade-off**: long runs cannot currently resume midway (after a crash). If needed, it can be extended by recording the run position (a stack of step IDs).
 
-### 判断8：Browser Adapter は Node.js 子プロセス
+### Decision 8: the browser adapter is a Node.js child process
 
-- **採用理由**：公式 Playwright（Node.js）が最も成熟し、要件でも優先指定。プロセス分離で Node 側のクラッシュが Runtime を巻き込まない。
-- **代替案**：Rust から CDP を直接操作（chromiumoxide 等）。単一バイナリになるが、Playwright のオートウェイトやロケーターの品質を再実装することになる。
-- **トレードオフ**：Node.js とブラウザの同梱で配布サイズが増える（Phase 3 で同梱方式を決定）。
+- **Reason**: the official Playwright (Node.js) is the most mature and was preferred in the requirements. Process isolation keeps a Node crash from taking down the Runtime.
+- **Alternative**: drive CDP directly from Rust (chromiumoxide etc.). A single binary, but it would mean re-implementing the quality of Playwright's auto-waiting and locators.
+- **Trade-off**: bundling Node.js and a browser grows the distribution (bundling decided in Phase 3).
 
-### 判断9：Windows 特化（OS の抽象化レイヤーは作らない）
+### Decision 9: Windows only (no OS abstraction layer)
 
-- **採用理由**：日本の業務 RPA の操作対象はほぼ Windows の業務アプリとブラウザ。対象を絞ることで、資格情報マネージャー / DPAPI、タスクスケジューラーによる無人実行、UI Automation 前提のインスペクターなど Windows 固有機能を遠慮なく使え、テスト・配布・サポートのコストも下がる。
-- **代替案**：macOS / Linux も対象にし、デスクトップ操作を OS 共通インターフェースで抽象化する。
-- **トレードオフ**：他 OS の需要には応えない。なお Core / Runtime / MCP サーバーが OS 非依存なのは「将来の移植のため」ではなく、GUI なし動作・UIA の専用スレッドへの隔離・高速なテストという Windows 特化でも必要な理由による。Linux の CI はコアのテストを速く安く回すためだけに使い、製品の動作対象とはしない。配布物は NSIS / MSI のみ。
+- **Reason**: business RPA in Japan targets almost entirely Windows business apps and browsers. Narrowing the target lets us use Windows features freely (Credential Manager / DPAPI, unattended runs through Task Scheduler, an inspector built on UI Automation) and lowers the cost of testing, distribution and support.
+- **Alternative**: also target macOS / Linux and abstract desktop operations behind a common OS interface.
+- **Trade-off**: no answer for demand on other OSes. Core / Runtime / the MCP server being OS-independent is not "for a future port" but for reasons a Windows-only product still needs: running without a GUI, isolating UIA on its dedicated thread, and fast tests. Linux CI is used only to run core tests quickly and cheaply, not as a product target. Distribution is NSIS / MSI only.
 
-## 12. MVP の受け入れ基準
+## 12. MVP acceptance criteria
 
-最初の製品マイルストーン：**MCP クライアントから自然言語で Web 操作シナリオを作成し、GUI で確認・編集した後、AI なしの Runtime で同じ処理を再実行できる。**
+The first product milestone: **create a web scenario from an MCP client in natural language, check and edit it in the GUI, then run the same work again with the Runtime and no AI.**
 
-| # | 基準 | 確認方法 |
+| # | Criterion | How it is checked |
 |---|---|---|
-| A1 | Claude Code / Codex から `shikigami mcp` に stdio 接続し、ツール一覧が取得できる | 手動 E2E（各クライアントの設定例を docs に記載） |
-| A2 | AI が `navigate_browser` → `inspect_ui` で要素を取得し、Role/Label ベースの Target で `click_element` / `type_text` できる | 自動 E2E（ローカルのテスト用 Web アプリ）＋手動 |
-| A3 | AI が `create_scenario` / `add_step` でシナリオを保存し、`validate_scenario` がエラー 0 を返す | 自動 E2E |
-| A4 | Studio を起動していれば、AI の変更が 1 秒以内に画面へ反映される | 自動（ファイル監視テスト）＋手動 |
-| A5 | Studio でステップを編集・追加・削除・移動でき、Undo/Redo できる。その結果を MCP の `get_scenario` で即座に取得できる | 自動（Core テスト）＋手動 |
-| A6 | Studio と AI が同時に編集しても内容が失われない（競合時は検出して再読込） | 自動（Core テスト） |
-| A7 | `shikigami run <id>`（AI なし・GUI なし）で同じ Web 操作が成功し、終了コード 0 | 自動 E2E |
-| A8 | 失敗時、失敗ステップ ID・エラーコード・スクリーンショット・UI 情報が保存され、MCP の `get_run_logs` で取得できる | 自動 E2E |
-| A9 | 機密変数の値がログ・記録ファイルに出力されない | 自動 |
-| A10 | **Windows 11 実機** で、インストーラー（NSIS / MSI）から導入した Studio / CLI / MCP サーバーにより A1〜A9 の E2E が通る | 手動 E2E（必須）＋ CI（windows-latest でのビルド・テスト） |
+| A1 | Claude Code / Codex connect to `shikigami mcp` over stdio and get the tool list | Manual E2E (settings for each client in the docs) |
+| A2 | The AI gets elements with `navigate_browser` → `inspect_ui` and can `click_element` / `type_text` with Role/Label Targets | Automated E2E (a local test web app) + manual |
+| A3 | The AI saves a scenario with `create_scenario` / `add_step` and `validate_scenario` returns 0 errors | Automated E2E |
+| A4 | With Studio running, AI changes show up on screen within 1 second | Automated (file watching test) + manual |
+| A5 | Studio can edit, add, delete and move steps, with Undo/Redo, and MCP's `get_scenario` returns the result immediately | Automated (Core tests) + manual |
+| A6 | Nothing is lost when Studio and the AI edit at the same time (conflicts are detected and reloaded) | Automated (Core tests) |
+| A7 | `shikigami run <id>` (no AI, no GUI) does the same web work successfully, exit code 0 | Automated E2E |
+| A8 | On failure, the failing step ID, error code, screenshot and UI information are saved and available from MCP's `get_run_logs` | Automated E2E |
+| A9 | Secret variable values never appear in logs or record files | Automated |
+| A10 | On **a real Windows 11 machine**, A1–A9 E2E pass with Studio / CLI / MCP server installed from the installer (NSIS / MSI) | Manual E2E (required) + CI (build and test on windows-latest) |
 
-## 13. 実装状況と制約
+## 13. Implementation status and limits
 
-### 実装済み（テストあり）
+### Implemented (with tests)
 
-- Rust ワークスペース、pnpm ワークスペース、CI（Linux / Windows で fmt・clippy・test、TS の型チェック・テスト・生成物ズレ検出）
-- Scenario Core：モデル、JSON Schema 出力、検証（全件報告・JSON Pointer）、式言語、EditOp（全種の逆操作）、Undo/Redo（永続・プロセス間共有）、変更ジャーナル、ファイルストア（ロック・アトミック書き込み・リビジョン競合検出）、スキーマバージョン移行の枠組み
-- Runtime：制御フロー全種、変数・入出力、テンプレート展開、タイムアウト、リトライ（指数バックオフ）、キャンセル、`onError`、機密値マスク、実行イベント・実行記録（JSONL）、ライブ状態（スナップショット）
-- CLI：`scenario list/show/create/import/edit/undo/redo/delete/history`、`run`（入力指定・JSON 出力・Ctrl+C でキャンセル）、`validate`、`step-types`、`schema export`
-- Studio（Tauri 2 + React）：シナリオ一覧・作成・複製・削除、フローチャート表示（木から自動レイアウト）、ステップ追加・削除・上下移動、スキーマから生成するプロパティフォーム、変数編集、検証結果表示、Undo/Redo（Ctrl+Z / Ctrl+Y）、実行・停止・実行ログ・ステップ状態のハイライト、**外部（MCP / CLI）変更のリアルタイム反映**、競合時の自動再読込
-- MCP サーバー（Phase 2）：`shikigami mcp`（stdio）、シナリオ・ステップ・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
-- デスクトップアプリ操作（Phase 4）：`desktop.*` 11 種（UI Automation の専用 MTA スレッド、自動待ち、マウスなし操作と `desktop.input` を取る操作の区別、アプリ単位の排他、`app:` で登録したアプリにだけ入力するシークレット）と MCP の `inspect_ui`（[desktop.md](desktop.md)）
-- Excel（`excel.*` 8 種）：xlsx / xlsm を Excel なしで直接読み書き（表を行ごとに読む・行を追加・セル / 範囲の読み書き・シート一覧 / 追加）。ブックのパスで自動排他、一時ファイル経由の保存、Excel で開いているブックへの書き込みは `FILE_IN_USE`（[office.md](office.md)）
-- Claude Code プラグイン：`plugins/shikigami`（MCP 設定＋スキル `shikigami-scenarios`）とマーケットプレイス定義。`claude plugin validate` 合格
+- Rust workspace, pnpm workspace, CI (fmt, clippy, test on Linux / Windows; TS typecheck, tests, generated-file drift)
+- Scenario Core: model, JSON Schema output, validation (reports everything, JSON Pointer), expression language, EditOp (inverses for every kind), Undo/Redo (persistent, shared between processes), change journal, file store (lock, atomic writes, revision conflict detection), schema version migration framework
+- Runtime: every kind of control flow, variables and inputs/outputs, template expansion, timeouts, retries (exponential backoff), cancellation, `onError`, secret masking, run events and records (JSONL), live state (snapshots)
+- CLI: `scenario list/show/create/import/edit/undo/redo/delete/history`, `run` (inputs, JSON output, Ctrl+C cancels), `validate`, `step-types`, `schema export`
+- Studio (Tauri 2 + React): scenario list, create, duplicate, delete; flowchart (automatic layout from the tree); add, delete and move steps; property forms generated from schemas; variable editing; validation results; Undo/Redo (Ctrl+Z / Ctrl+Y); run, stop, run log and step state highlighting; **live updates from outside changes (MCP / CLI)**; automatic reload on conflict; Japanese / English UI
+- MCP server (Phase 2): `shikigami mcp` (stdio), 20 tools for scenarios, steps, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
+- Desktop apps (Phase 4): 11 `desktop.*` types (dedicated UI Automation MTA thread, automatic waiting, separating mouse-free operations from those taking `desktop.input`, per-app exclusion, secrets typed only into apps registered with `app:`) and MCP's `inspect_ui` ([desktop.md](desktop.md))
+- Excel (8 `excel.*` types): reads and writes xlsx / xlsm directly without Excel (read a table row by row, append rows, read and write cells / ranges, list / add sheets). Automatic exclusion by workbook path, saving through a temporary file, `FILE_IN_USE` when writing a workbook open in Excel ([office.md](office.md))
+- Claude Code plugin: `plugins/shikigami` (MCP settings + skill `shikigami-scenarios`) and the marketplace definition. Passes `claude plugin validate`
 
-### 未実装（後続フェーズ）
+### Not implemented (later phases)
 
-- Windows 操作の SAP GUI Scripting・Java Access Bridge・画像認識、プロセス間の資源排他（§10.5）、ブラウザのダウンロード・アップロード
-- Studio のドラッグ＆ドロップ編集、ブレークポイント・ステップ実行、UI 要素インスペクター、差分表示（Phase 5）
-- SQLite、クライアント別のツール権限設定・削除時の人間承認、許可リスト、資格情報ストア連携、MCP の Streamable HTTP
+- SAP GUI Scripting, Java Access Bridge and image recognition for Windows; resource exclusion between processes (§10.5); browser downloads and uploads
+- Drag-and-drop editing in Studio, breakpoints and stepping, a UI element inspector, diff view (Phase 5)
+- SQLite, per-client tool permissions and human approval of deletion, allowlists, credential store integration, MCP's Streamable HTTP
 
-### 既知の制約
+### Known limits
 
-- Undo/Redo はシナリオ単位で **全クライアント共通の 1 本のスタック**（AI の変更を Studio から戻せる反面、ユーザーごとの Undo ではない）。
-- 変数スコープはフラット（ループ変数もシナリオ全体で 1 つ）。多くの RPA 製品と同じ挙動。
-- `control.try` の `finally` はキャンセル時には実行しない。
-- 実行の途中再開（プロセス再起動後のレジューム）は未対応。
-- Studio のフローチャートは表示用の自動レイアウトで、ノード位置は保存しない。
-- 開発中の確認として Linux 上で Studio を Xvfb 起動し、編集・実行・外部変更の反映を確認済み（Linux は製品対象外）。**Windows 実機での Studio 起動は未確認**（CI でビルドとテストのみ確認）。
+- Undo/Redo is **one stack per scenario shared by all clients** (AI changes can be undone from Studio, but it is not per user).
+- Variable scope is flat (loop variables are one per scenario too), like most RPA products.
+- `control.try`'s `finally` does not run on cancellation.
+- Runs cannot resume midway (after a process restart).
+- Studio's flowchart is an automatic display layout; node positions are not saved.
+- During development, Studio was started on Linux under Xvfb to check editing, running and live updates (Linux is not a product target). **Starting Studio on a real Windows machine is unconfirmed** (CI confirms build and tests only).

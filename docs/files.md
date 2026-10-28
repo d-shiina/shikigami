@@ -1,38 +1,40 @@
-# ファイル・フォルダーの操作（`file.*`）
+# Files and folders (`file.*`)
 
-クレート `shikigami-files`。何もインストールせずに動き、Windows 以外でもテストできます。値の加工（パスの組み立て、行の絞り込みなど）はステップではなく式の関数で書きます（[expressions.md](expressions.md)）。
+English | [日本語](ja/files.md)
 
-| ステップ | 内容 | 出力 |
+Crate `shikigami-files`. Works without installing anything and is tested off Windows too. Value processing (building paths, filtering rows…) is written with expression functions, not steps ([expressions.md](expressions.md)).
+
+| Step | What it does | Output |
 |---|---|---|
-| `file.readText` | テキストファイルを丸ごと読む | 文字列 |
-| `file.writeText` | 書く（`append: true` で末尾に追加）。フォルダーがなければ作る | パス |
-| `file.readCsv` | CSV / TSV を読む。1 行目を見出しにしたレコードの配列（セルはすべて文字列） | レコードの配列 |
-| `file.writeCsv` | レコード（またはセルの配列）を書く。見出し付き、改行は CRLF | 書いた行数 |
-| `file.exists` | ファイルかフォルダーがあるか | true / false |
-| `file.list` | フォルダーの中を一覧（`pattern` は `*.csv` など、大文字小文字は区別しない） | `{ path, name, isFolder, size, modified }` の配列 |
-| `file.copy` / `file.move` | コピー / 移動・名前の変更。`to` は新しいパスそのもの（フォルダーではない） | 新しいパス |
-| `file.delete` | 削除（ごみ箱には入らない）。中身のあるフォルダーは `recursive: true` | 削除したか |
-| `file.createFolder` | フォルダーを作る（途中のフォルダーも。既にあってもよい） | パス |
-| `file.zip` / `file.unzip` | zip に圧縮 / 展開 | zip のパス / 展開したファイルの配列 |
+| `file.readText` | Reads a whole text file | text |
+| `file.writeText` | Writes (`append: true` adds to the end). Creates missing folders | the path |
+| `file.readCsv` | Reads CSV / TSV into records keyed by the first row (every cell is text) | list of records |
+| `file.writeCsv` | Writes records (or lists of cells), with a header row and CRLF line breaks | rows written |
+| `file.exists` | Whether the file or folder exists | true / false |
+| `file.list` | Lists a folder (`pattern` like `*.csv`, case-insensitive) | list of `{ path, name, isFolder, size, modified }` |
+| `file.copy` / `file.move` | Copy / move or rename. `to` is the new path itself (not a folder) | the new path |
+| `file.delete` | Deletes (not to the Recycle Bin). Folders with contents need `recursive: true` | whether it deleted |
+| `file.createFolder` | Creates a folder (and the ones above it; an existing folder is fine) | the path |
+| `file.zip` / `file.unzip` | Compress into a zip / extract | the zip path / list of extracted files |
 
-## 文字コード
+## Encodings
 
-- 読むとき（`encoding`、既定 `auto`）：BOM → UTF-8 → Shift_JIS の順に判定する。`utf-8` / `shift_jis` を指定すると、合わないとき `ENCODING_MISMATCH`。
-- 書くとき（既定 `utf-8`）：Excel で開く CSV は `utf-8-bom` か `shift_jis`。Shift_JIS で表せない文字（絵文字など）があると `UNENCODABLE_TEXT`（どの文字かを `details.characters` に入れる）。追記では BOM を付け直さない。
-- Windows のエクスプローラーで作った zip の日本語ファイル名（Shift_JIS）も正しく展開する。
+- Reading (`encoding`, default `auto`): BOM, then UTF-8, then Shift_JIS. With `utf-8` / `shift_jis` given, a mismatch gives `ENCODING_MISMATCH`.
+- Writing (default `utf-8`): for CSVs opened in Excel use `utf-8-bom` or `shift_jis`. Characters Shift_JIS cannot represent (emoji…) give `UNENCODABLE_TEXT` (`details.characters` says which). Appending never adds a second BOM.
+- Japanese file names (Shift_JIS) in zips made by Windows Explorer extract correctly.
 
-## 振る舞い
+## Behavior
 
-- 上書きは既定で禁止（`FILE_EXISTS`）。`overwrite: true` で置き換える。`file.unzip` は 1 つでも上書きになるなら何も展開せずに止まる。
-- 書き込みは一時ファイルに書いてから置き換えるので、途中の状態のファイルは残らない（追記を除く）。止められた・時間切れになった試行はファイルを変えない。
-- `path` / `from` / `to` がロックになる。同じファイルへの操作は順番に、別のファイルは並行に動く。
-- `writeCsv` の追記は既存ファイルの見出しの順に列を合わせ、見出しは書き直さない。
-- 展開先の外に出る zip の項目（`../`）は `ZIP_INVALID` で拒否する。
-- エラーコード：`FILE_NOT_FOUND`、`FILE_EXISTS`、`FILE_ACCESS_DENIED`、`FILE_IN_USE`（Excel などで開いている。再試行で直ることがある）、`FOLDER_NOT_EMPTY`、`NOT_A_FOLDER`、`CSV_INVALID`、`ZIP_INVALID`。
+- Overwriting is refused by default (`FILE_EXISTS`); `overwrite: true` replaces. `file.unzip` extracts nothing if even one file would be overwritten.
+- Writes go to a temporary file that then replaces the target, so no half-written files are left (except when appending). Attempts that were stopped or timed out leave the file unchanged.
+- `path` / `from` / `to` act as locks: actions on the same file run in turn, different files in parallel.
+- Appending with `writeCsv` lines the columns up with the existing header and does not write the header again.
+- Zip entries that would land outside the destination (`../`) are refused with `ZIP_INVALID`.
+- Error codes: `FILE_NOT_FOUND`, `FILE_EXISTS`, `FILE_ACCESS_DENIED`, `FILE_IN_USE` (open in Excel or similar; a retry may succeed), `FOLDER_NOT_EMPTY`, `NOT_A_FOLDER`, `CSV_INVALID`, `ZIP_INVALID`.
 
-## 例
+## Example
 
-ダウンロードを待って、CSV の 1 万円以上の行だけを税込にして書き出す：
+Wait for a download, keep the CSV rows of 10,000 or more with tax added, and write them out:
 
 ```json
 [
@@ -40,7 +42,7 @@
     "blocks": { "check": [ { "type": "file.list", "params": { "folder": "C:\\work\\dl", "pattern": "*.csv" }, "saveAs": "files" } ] } },
   { "type": "file.readCsv", "params": { "path": "{{ files[0].path }}" }, "saveAs": "orders" },
   { "type": "variable.set", "params": { "name": "big",
-      "expression": "map(filter(orders, r => num(r.金額) >= 10000), r => { 番号: r.注文番号, 税込: round(num(r.金額) * 1.1) })" } },
+      "expression": "map(filter(orders, r => num(r.Amount) >= 10000), r => { no: r.OrderNo, withTax: round(num(r.Amount) * 1.1) })" } },
   { "type": "file.writeCsv", "params": { "path": "C:\\work\\out\\{{ formatDate(today(), 'yyyyMMdd') }}.csv", "rows": "{{ big }}", "encoding": "utf-8-bom" } },
   { "type": "file.move", "params": { "from": "{{ files[0].path }}", "to": "{{ pathJoin('C:\\\\work\\\\done', files[0].name) }}", "overwrite": true } }
 ]

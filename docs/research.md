@@ -58,7 +58,7 @@
 
 ## 3. Windows 対応状況
 
-製品の対象 OS は Windows 10/11（x64）のみ（[architecture.md 判断9](architecture.md#判断9windows-特化os-の抽象化レイヤーは作らない)）。
+製品の対象 OS は Windows 10/11（x64）のみ（[architecture.md 判断9](ja/architecture.md#判断9windows-特化os-の抽象化レイヤーは作らない)）。
 
 ### Tauri 2 の Windows 前提条件（公式 Prerequisites ページで確認）
 
@@ -76,7 +76,7 @@ Windows SDK は C++ Build Tools の「Desktop development with C++」ワーク�
 - イベントハンドラーの登録・解除は同じ MTA スレッドで行う。複数スレッドから同時に登録・解除しない。
 - 64bit 環境で他スレッドへマーシャリングした要素は、元のアパートメント終了で無効化されうるため、エラーを前提に扱う。
 
-→ Phase 4 の Windows Adapter は「専用 MTA ワーカースレッド＋要求キュー」方式とする（[architecture.md](architecture.md#41-windows-adapter)）。
+→ Phase 4 の Windows Adapter は「専用 MTA ワーカースレッド＋要求キュー」方式とする（[architecture.md](ja/architecture.md#41-windows-adapter)）。
 
 ### Playwright
 

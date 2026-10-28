@@ -1,68 +1,70 @@
-# リリースとオンラインアップデート
+# Releases and online updates
 
-インストール版の Studio は、起動時に新しいバージョンがないか確認し、右上のバージョン表示から「更新して再起動」で更新できます。仕組みは Tauri 公式の updater です。
+English | [日本語](ja/release.md)
 
-- 配布先：このリポジトリの GitHub Releases（`latest.json` とインストーラー）
-- 確認先：`https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
-- 改ざん防止：インストーラーは専用の署名鍵で署名し、Studio はリリース時に埋め込んだ公開鍵で検証してから入れ替える
-- インストーラー：NSIS（ユーザー単位、管理者権限不要）。MSI も Releases に置くが、自動更新は NSIS 版で行う
-- 開発版（`pnpm studio:dev`）は確認しない
+The installed Studio checks for a new version at startup and updates with "Update and restart" from the version menu at the bottom right. It uses the official Tauri updater.
 
-## CLI（MCP サーバー）も一緒に更新される
+- Distribution: this repository's GitHub Releases (`latest.json` and the installers)
+- Checked at: `https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
+- Tamper protection: installers are signed with a dedicated signing key, and Studio verifies them with the public key embedded at release time before replacing itself
+- Installer: NSIS (per user, no administrator rights). An MSI is also on Releases, but automatic updates use the NSIS one
+- Development builds (`pnpm studio:dev`) do not check
 
-リリース版のインストーラーには `shikigami.exe`（CLI・MCP サーバー）が Studio と同じフォルダーに入ります。Claude Code にはこの `shikigami.exe` を登録しておけば、Studio を更新するたびに MCP サーバーも新しくなり、パスも変わりません。登録コマンドは Studio 右上のバージョン表示を開くとコピーできます。
+## The CLI (MCP server) is updated too
+
+The release installer puts `shikigami.exe` (CLI and MCP server) in the same folder as Studio. Register this `shikigami.exe` with Claude Code and the MCP server is updated with every Studio update, at the same path. Copy the registration command from the version menu at the bottom right of Studio.
 
 ```powershell
-claude mcp add --scope user shikigami -- "<インストール先>\shikigami.exe" mcp
+claude mcp add --scope user shikigami -- "<install folder>\shikigami.exe" mcp
 ```
 
-Claude Code が MCP サーバーを動かしている最中でも更新できます。Windows は実行中の exe を上書きできませんが名前の変更はできるので、Studio はインストーラーを起動する直前に `shikigami.exe` を `shikigami-<旧バージョン>.exe.old` に移します。動いているサーバーは古いファイルのまま動き続け、次に起動したときから新しい版になります（Claude Code では `/mcp` から再接続）。残った `.old` は次回の Studio 起動時に消します。インストールが取り消された場合は元に戻します。
+Updating works even while Claude Code runs the MCP server. Windows cannot overwrite a running exe but can rename it, so right before starting the installer Studio renames `shikigami.exe` to `shikigami-<old version>.exe.old`. The running server keeps going on the old file, and the next start uses the new version (in Claude Code, reconnect from `/mcp`). Leftover `.old` files are removed the next time Studio starts. If the installation is cancelled, the file is put back.
 
-リポジトリから開発していて `target\debug\shikigami.exe` を登録している場合は、これまでどおり `cargo build -p shikigami-cli` で更新されます。
+When developing from the repository with `target\debug\shikigami.exe` registered, `cargo build -p shikigami-cli` keeps updating it as before.
 
-## 最初の準備（1 回だけ）
+## One-time setup
 
-リポジトリのフォルダーで次を実行します。
+In the repository folder, run:
 
 ```powershell
 pnpm release:setup
 ```
 
-署名鍵（パスワードなし）を `~\.tauri\shikigami.key` に作り、GitHub に登録します。
+It creates a signing key (without a password) at `~\.tauri\shikigami.key` and registers it with GitHub:
 
-- 秘密鍵 → Actions Secret `TAURI_SIGNING_PRIVATE_KEY`
-- 公開鍵 → Actions Variable `TAURI_UPDATER_PUBKEY`（リリースのワークフローがアプリに埋め込みます）
+- Private key → Actions secret `TAURI_SIGNING_PRIVATE_KEY`
+- Public key → Actions variable `TAURI_UPDATER_PUBKEY` (the release workflow embeds it in the app)
 
-GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` がなければ、値をクリップボードに入れて登録ページを開くので、貼り付けて保存するだけです（2 回）。
+If the GitHub CLI (`gh`) is signed in, this happens automatically. Without `gh`, the value is put on the clipboard and the registration page opens; paste and save (twice).
 
-**秘密鍵をなくすと、インストール済みの Studio に更新を届けられなくなります。** `shikigami.key` はバックアップしておいてください。鍵にパスワードを付けたい場合は自分で作り、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` も Secret に登録します。
+**If the private key is lost, installed copies of Studio can no longer receive updates.** Back up `shikigami.key`. To protect the key with a password, create it yourself and also register `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as a secret.
 
-## リリースの手順
+## Releasing
 
-1. ルートの `Cargo.toml` の `[workspace.package]` の `version` を上げる（Studio・CLI・MCP サーバーはこの 1 か所でバージョンが決まります）。`cargo check` で `Cargo.lock` も更新してコミット
-2. 同じバージョンのタグを push する
+1. Raise `version` under `[workspace.package]` in the root `Cargo.toml` (this one place sets the version of Studio, the CLI and the MCP server). Run `cargo check` to update `Cargo.lock`, and commit
+2. Push a tag with the same version
 
    ```sh
    git tag v0.2.0
    git push origin v0.2.0
    ```
 
-3. `Release` ワークフロー（`.github/workflows/release.yml`）が Windows でビルドし、Release を公開します。タグと `Cargo.toml` のバージョンが違うと止まります
+3. The `Release` workflow (`.github/workflows/release.yml`) builds on Windows and publishes the release. It stops if the tag and the `Cargo.toml` version differ
 
-公開した時点で、インストール済みの Studio は次の起動時に更新を見つけます。
+Once published, installed copies of Studio find the update the next time they start.
 
-## 手元でリリース版を作る
+## Building a release locally
 
 ```powershell
 $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw $HOME\.tauri\shikigami.key
 pnpm studio:release
 ```
 
-公開鍵は `~\.tauri\shikigami.key.pub` から読みます。
+The public key is read from `~\.tauri\shikigami.key.pub`.
 
-`pnpm studio:build` は CLI を同梱せず署名もしない、試し用のビルドです。
+`pnpm studio:build` is a trial build that neither bundles the CLI nor signs.
 
-## 注意
+## Notes
 
-- インストーラーはコード署名（Authenticode）をしていないため、初回インストール時に SmartScreen の警告が出ます。更新は Studio 内で行うので警告は出ません
-- 最初の 1 回（更新機能の入った版）は Releases からインストーラーを手で入れてください
+- Installers are not code-signed (Authenticode), so the first installation shows a SmartScreen warning. Updates happen inside Studio and show none
+- The first version with the updater has to be installed by hand from Releases

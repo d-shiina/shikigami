@@ -1,36 +1,38 @@
-# アプリを追加する（アダプター）
+# Adding apps (adapters)
 
-Shikigami が操作できるアプリは「アダプター」単位で増やします。いまはブラウザ（`browser.*`、[browser.md](browser.md)）、Windows のデスクトップアプリ（`desktop.*`、[desktop.md](desktop.md)）、ファイル・フォルダー（`file.*`、[files.md](files.md)）、Excel のブック（`excel.*`、[office.md](office.md)）、Web API・プログラム・クリップボード・ダイアログ（`http.*` / `process.*` / `clipboard.*` / `dialog.*`、[system.md](system.md)）があります。
+English | [日本語](ja/adapters.md)
 
-本体を作り直さずに足したいとき（社内システムや個別の SaaS など）は、組込のアダプターではなく**プラグイン**にします。フォルダにマニフェスト（`shikigami-plugin.json`）とプログラムを置くだけで、言語は自由です。仕組みは [design/plugins.md](design/plugins.md)、例は `examples/plugins/hello`。
+The apps Shikigami can drive grow by "adapter". Today there are browsers (`browser.*`, [browser.md](browser.md)), Windows desktop apps (`desktop.*`, [desktop.md](desktop.md)), files and folders (`file.*`, [files.md](files.md)), Excel workbooks (`excel.*`, [office.md](office.md)), and web APIs, programs, the clipboard and dialogs (`http.*` / `process.*` / `clipboard.*` / `dialog.*`, [system.md](system.md)).
 
-アダプターは「操作の対象」ごとに作り、アプリの作りの違い（Win32 / WPF / SAP GUI / Java など）では分けません。デスクトップアプリは `desktop.*` の 1 セットで書き、どの技術でアプリの中を見るかはアダプターの中で対象のウィンドウから決めます（`crates/shikigami-desktop/src/engine.rs`）。AI が覚える書き方を増やさないためです。
+To add steps without rebuilding Shikigami (in-house systems, a particular SaaS…), write a **plugin** instead of a built-in adapter: a folder with a manifest (`shikigami-plugin.json`) and a program, in any language. How it works: [design/plugins.md](design/plugins.md) (Japanese); example: `examples/plugins/hello`.
 
-## アダプターが用意するもの
+Adapters are made per thing being operated, not per app technology (Win32 / WPF / SAP GUI / Java…). Desktop apps are written with one set of `desktop.*` steps, and the adapter decides from the target window which technology to look inside it with (`crates/shikigami-desktop/src/engine.rs`). That keeps the number of ways the AI has to learn small.
 
-1. **ステップ型の定義**（`StepTypeDef`）：型名は `<アダプター名>.<操作>`（例 `excel.writeCell`）。
-   - params の JSON Schema と説明（AI が読む英語の説明でよい）
-   - コピーして使える記述例（`examples`）
-   - 資源の宣言（`resources`）：どの params がファイル・ウィンドウ・ブラウザの作業領域を指すか。たとえば `ResourceDef::file("path")` と書けば、同じブックへの操作は自動で 1 つずつになり、別のブックは並行に動く
-2. **ハンドラー**（`ActionHandler`）：テンプレート展開済みの params を受け取って操作し、値を返すだけ。タイムアウト・リトライ・キャンセル・`onError` は Runtime が一律に処理する。失敗は `StepError`（コード・再試行可否・`details` に直し方のヒント）で返す
-3. **`Adapter` の実装**（`crates/shikigami-runtime/src/adapter.rs`）
-   - `name()`：型名の接頭辞
-   - `install()`：ステップ型とハンドラーの登録、実行終了時の後片付け（`on_run_finished`）
-   - `inspect()`（任意）：いまアプリに何が映っているかを AI 向けに返す。MCP の `test_step` は実行後にこれを付けて返す
-4. **一覧への登録**：`crates/shikigami-adapters/src/lib.rs` の `all()` に 1 行足す。CLI・MCP サーバー・Studio はすべてここから Runtime を作るので、ほかに触る場所はない
+## What an adapter provides
 
-これだけで、検証とヒント、`list_step_types` / `get_step_schema`（AI 向けの一覧と記述例）、`test_step`、Studio の入力フォームが自動で付きます。
+1. **Step type definitions** (`StepTypeDef`): type names are `<adapter>.<action>` (e.g. `excel.writeCell`).
+   - The JSON Schema of the params, with descriptions (English the AI reads is fine)
+   - Examples to copy (`examples`)
+   - Resource declarations (`resources`): which params point at a file, a window or a browser context. For example `ResourceDef::file("path")` makes actions on the same workbook run one at a time while different workbooks run in parallel
+2. **A handler** (`ActionHandler`): receives the params with templates expanded, does the work, and returns a value. Timeouts, retries, cancellation and `onError` are handled uniformly by the Runtime. Failures are returned as a `StepError` (code, whether it is retryable, hints for fixing it in `details`)
+3. **An `Adapter` implementation** (`crates/shikigami-runtime/src/adapter.rs`)
+   - `name()`: the type name prefix
+   - `install()`: registers the step types and handlers, and cleanup when a run ends (`on_run_finished`)
+   - `inspect()` (optional): what the app shows right now, for the AI. MCP's `test_step` attaches it after running a step
+4. **Registration**: add one line to `all()` in `crates/shikigami-adapters/src/lib.rs`. The CLI, the MCP server and Studio all build their Runtime from there, so nothing else needs touching
 
-## 別の言語のライブラリを使う（サイドカー）
+With that, validation and hints, `list_step_types` / `get_step_schema` (the list and examples for the AI), `test_step` and Studio's input forms come for free.
 
-Playwright（Node.js）のように Rust 以外のライブラリを使うときは、子プロセスとして動かして改行区切りの JSON-RPC 2.0 で話します。通信・異常終了の検知・自動再起動は `shikigami_runtime::sidecar::SidecarClient` が持っているので、アダプター側は起動方法（`SidecarConfig`）とメソッドの対応を書くだけです。エラーは `error.data = { code, retryable, details }` で返すと、そのままステップのエラーになります。
+## Using a library in another language (sidecar)
 
-例：`crates/shikigami-browser`（Rust 側、約 400 行）と `packages/browser-adapter`（Node.js 側）。
+For non-Rust libraries such as Playwright (Node.js), run them as a child process and talk newline-delimited JSON-RPC 2.0. `shikigami_runtime::sidecar::SidecarClient` handles the transport, crash detection and automatic restarts, so the adapter only describes how to start it (`SidecarConfig`) and maps the methods. Errors returned as `error.data = { code, retryable, details }` become step errors as they are.
 
-## Office（Excel など）
+Example: `crates/shikigami-browser` (the Rust side, about 400 lines) and `packages/browser-adapter` (the Node.js side).
 
-Excel は `excel.*`（`crates/shikigami-excel`）で、xlsx を直接読み書きします。Excel 不要で速く、並列・無人実行向きです。ブックのパスを資源にするので同じブックは自動で順番待ちになります。マクロの実行など Excel 本体が要る操作だけを COM で足します。方式と予定（Word・メール）は [office.md](office.md)。
+## Office (Excel and others)
 
-## Windows API を使うアダプター
+Excel is `excel.*` (`crates/shikigami-excel`), which reads and writes xlsx directly: no Excel needed, fast, and suited to parallel and unattended runs. The workbook path is a resource, so the same workbook queues up automatically. Only what needs Excel itself, such as running macros, goes through COM. Approach and plans (Word, mail): [office.md](office.md).
 
-ワークスペースは `unsafe` を禁止しています。Windows API を呼ぶクレートは Cargo.toml の `[lints]` を自前で持ち（`unsafe_code = "deny"`）、API を呼ぶ 1 つのモジュールだけで `#![allow(unsafe_code)]` にします（例：`shikigami-desktop` の `uia.rs`）。Windows 以外ではそのモジュールを `#[cfg(windows)]` で外し、ステップは `PLATFORM_UNSUPPORTED` を返すようにして、定義・検証・テストは Linux の CI でも回します。
+## Adapters that call Windows APIs
+
+The workspace forbids `unsafe`. A crate that calls Windows APIs carries its own `[lints]` in Cargo.toml (`unsafe_code = "deny"`) and allows `#![allow(unsafe_code)]` in the single module that calls the API (e.g. `uia.rs` in `shikigami-desktop`). Off Windows that module is left out with `#[cfg(windows)]` and the steps return `PLATFORM_UNSUPPORTED`, so definitions, validation and tests still run in Linux CI.
