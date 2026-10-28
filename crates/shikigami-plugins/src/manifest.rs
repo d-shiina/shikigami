@@ -31,6 +31,12 @@ pub const RESERVED_NAMES: &[&str] = &[
     "outlook",
     "office",
     "file",
+    "http",
+    "process",
+    "clipboard",
+    "dialog",
+    "mail",
+    "pdf",
     "sap",
     "shikigami",
 ];

@@ -104,12 +104,12 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 
 | UiPath | Shikigami | 状態 |
 |---|---|---|
-| Read Text File / Write Text File / Append Line | `file.readText` / `file.writeText`（`append`）。Shift_JIS 指定可 | 🔜（次の PR） |
-| Read CSV / Write CSV / Append To CSV | `file.readCsv` / `file.writeCsv`（Shift_JIS・BOM 付き UTF-8） | 🔜（次の PR） |
-| Copy File / Move File / Rename / Delete | `file.copy` / `file.move` / `file.delete` | 🔜（次の PR） |
-| Create Folder / Path Exists / Get Files | `file.createFolder` / `file.exists` / `file.list` | 🔜（次の PR） |
-| Compress / Extract Files | `file.zip` / `file.unzip` | 🔜（次の PR） |
-| Wait for Download / File Change Trigger | `wait.until` + `file.list` | 🔜（file.* と同時） |
+| Read Text File / Write Text File / Append Line | `file.readText` / `file.writeText`（`append`）。Shift_JIS 指定可 | ✅ |
+| Read CSV / Write CSV / Append To CSV | `file.readCsv` / `file.writeCsv`（Shift_JIS・BOM 付き UTF-8） | ✅ |
+| Copy File / Move File / Rename / Delete | `file.copy` / `file.move` / `file.delete` | ✅ |
+| Create Folder / Path Exists / Get Files | `file.createFolder` / `file.exists` / `file.list` | ✅ |
+| Compress / Extract Files | `file.zip` / `file.unzip` | ✅ |
+| Wait for Download / File Change Trigger | `wait.until` + `file.list` | ✅ |
 | Path.Combine / GetFileName / GetExtension | `pathJoin` / `fileName` / `baseName` / `extName` / `dirName` | 🆕 |
 | Get Environment Variable / Environment.SpecialFolder | `env('USERPROFILE')` | 🆕 |
 
@@ -152,7 +152,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 ## 実装順
 
 1. **式の関数**（この PR）：文字列・正規表現・全角半角・数値・リスト（`x => …`）・オブジェクト・日付（和暦）・パス・JSON・`env`。MCP `list_step_types` が `functions` で一覧と例を返す。一覧：[../expressions.md](../expressions.md)
-2. **`file.*`**：テキスト・CSV（Shift_JIS）・コピー/移動/削除・一覧・フォルダー作成・zip。ファイルのパスを資源キーにして同じファイルへの操作は自動で順番待ち
+2. **`file.*`**（[../files.md](../files.md)）：テキスト・CSV（Shift_JIS）・コピー/移動/削除・一覧・フォルダー作成・zip。ファイルのパスを資源キーにして同じファイルへの操作は自動で順番待ち
 3. **`http.request`・`process.run`・`clipboard.*`・`dialog.*`**
 4. **`pdf.readText`**
 
