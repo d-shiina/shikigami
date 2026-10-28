@@ -13,6 +13,7 @@ use serde_json::{Map, Value};
 use shikigami_core::expr::{self, Expr};
 use shikigami_core::registry::{builtin, control, is_control_type};
 use shikigami_core::resource::{ResourceDef, resource_keys};
+use shikigami_core::secret::SecretProvider;
 use shikigami_core::validate::LAST_ERROR_VAR;
 use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, Step, StepId};
 use time::OffsetDateTime;
@@ -160,6 +161,13 @@ impl Emitter {
         let _ = self.inner.tx.send(envelope);
     }
 
+    pub(crate) fn human_action_required(&self, message: String, step_id: StepId) {
+        self.emit(RunEvent::HumanActionRequired {
+            step_id,
+            message: self.mask(&message),
+        });
+    }
+
     pub(crate) fn log(&self, level: LogLevel, message: String, step_id: Option<StepId>) {
         self.emit(RunEvent::Log {
             level,
@@ -231,6 +239,9 @@ pub(crate) struct Executor {
     pub handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
     /// Exclusive resources per step type.
     pub resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
+    /// Step types with their own default timeout.
+    pub default_timeouts: Arc<HashMap<String, u64>>,
+    pub secrets: Option<Arc<dyn SecretProvider>>,
     pub vars: Map<String, Value>,
     pub secret_vars: Vec<String>,
     pub emitter: Emitter,
@@ -275,6 +286,8 @@ impl Executor {
             run_id: self.run_id.clone(),
             handlers: self.handlers.clone(),
             resource_defs: self.resource_defs.clone(),
+            default_timeouts: self.default_timeouts.clone(),
+            secrets: self.secrets.clone(),
             vars: self.vars.clone(),
             secret_vars: self.secret_vars.clone(),
             emitter: self.emitter.clone(),
@@ -854,7 +867,10 @@ impl Executor {
         let retry = step.retry.or(self.default_retry);
         let max_attempts = retry.map_or(1, |r| r.max_attempts.max(1));
         let mut delay_ms = retry.map_or(0, |r| r.backoff_ms) as f64;
-        let timeout_ms = step.timeout_ms.unwrap_or(self.default_timeout_ms);
+        let timeout_ms = step
+            .timeout_ms
+            .or_else(|| self.default_timeouts.get(&step.step_type).copied())
+            .unwrap_or(self.default_timeout_ms);
 
         let mut attempt = 1;
         loop {
@@ -875,6 +891,7 @@ impl Executor {
                 cancel: attempt_cancel.clone(),
                 timeout_ms,
                 emitter: self.emitter.clone(),
+                secrets: self.secrets.clone(),
             };
             // Wait for exclusive resources (not counted towards the timeout).
             let resources = self

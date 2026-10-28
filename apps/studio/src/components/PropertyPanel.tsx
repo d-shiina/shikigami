@@ -1,6 +1,7 @@
 import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
+import type { SecretField } from "../lib/api";
 import { t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
@@ -94,12 +95,100 @@ function Section({ title, children, aside }: { title: string; children: React.Re
   );
 }
 
+type SecretRef = { secret: string; field: SecretField };
+
+const isSecretRef = (v: unknown): v is SecretRef =>
+  typeof v === "object" && v !== null && "secret" in v && "field" in v;
+
+/**
+ * Text, or a registered secret picked by name. The value itself is never
+ * shown or stored in the scenario: only `{ secret, field }`.
+ */
+function TextOrSecretField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const secrets = useStudio((s) => s.secrets);
+  const openSecrets = useStudio((s) => s.setSecretsOpen);
+  const ref = isSecretRef(value) ? value : null;
+  const [mode, setMode] = useState<"text" | "secret">(ref ? "secret" : "text");
+  useEffect(() => setMode(ref ? "secret" : "text"), [ref]);
+  const fields: SecretField[] = ["username", "password", "totp"];
+
+  // A <div>, not Field's <label>: a label would forward clicks to its first button.
+  return (
+    <div className="space-y-1">
+      <span className="text-xs font-medium text-slate-600">{label}</span>
+      <div className="flex gap-1 text-xs">
+        {(["text", "secret"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={`rounded-full px-2 py-0.5 ${mode === m ? "bg-ink text-paper" : "text-slate-500 hover:bg-slate-100"}`}
+          >
+            {m === "text" ? t.secretText : `🔑 ${t.secretUse}`}
+          </button>
+        ))}
+      </div>
+      {mode === "text" ? (
+        <CommitInput value={typeof value === "string" ? value : ""} onCommit={(text) => onChange(text === "" ? null : text)} />
+      ) : (
+        <div className="flex items-center gap-1">
+          <select
+            className={inputClass}
+            aria-label={t.secretUse}
+            value={ref?.secret ?? ""}
+            onChange={(e) =>
+              e.target.value && onChange({ secret: e.target.value, field: ref?.field ?? "password" })
+            }
+          >
+            <option value="">{t.secretChoose}</option>
+            {secrets.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.name}
+              </option>
+            ))}
+            {ref && !secrets.some((s) => s.name === ref.secret) && <option value={ref.secret}>{ref.secret}（未登録）</option>}
+          </select>
+          <select
+            className={`${inputClass} w-36`}
+            aria-label={t.secretFieldLabel}
+            value={ref?.field ?? "password"}
+            disabled={!ref}
+            onChange={(e) => ref && onChange({ secret: ref.secret, field: e.target.value as SecretField })}
+          >
+            {fields.map((f) => (
+              <option key={f} value={f}>
+                {t.secretField[f]}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="whitespace-nowrap text-xs text-brand-600 hover:underline"
+            onClick={() => openSecrets(true)}
+          >
+            ＋{t.secretRegister}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ParamField({
   name,
   schema,
   value,
   required,
   socket,
+  secretCapable,
   onChange,
 }: {
   name: string;
@@ -107,9 +196,13 @@ function ParamField({
   value: unknown;
   required: boolean;
   socket?: string;
+  secretCapable: boolean;
   onChange: (value: unknown) => void;
 }) {
   const label = `${paramLabel(name)}${required ? " *" : ""}`;
+  if (secretCapable) {
+    return <TextOrSecretField label={label} value={value} onChange={onChange} />;
+  }
   let hint = schema.description;
   let editor: React.ReactNode;
   if (schema.enum) {
@@ -234,6 +327,7 @@ function ParamsEditor({
               value={params[key]}
               required={schema.required?.includes(key) ?? false}
               socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}
+              secretCapable={def?.secretParams?.includes(key) ?? false}
               // JSON Merge Patch: null removes the key.
               onChange={(value) => update({ params: { [key]: value } })}
             />

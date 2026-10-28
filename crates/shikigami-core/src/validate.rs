@@ -15,6 +15,7 @@ use crate::ids::StepId;
 use crate::model::{SCHEMA_VERSION, Scenario, Step};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
 use crate::resource::{ResourceDef, ResourceKind, is_absolute_windows_path};
+use crate::secret::{self, SecretRef};
 
 /// Name of the implicit variable holding the last error when `onError: continue`.
 pub const LAST_ERROR_VAR: &str = "lastError";
@@ -234,6 +235,18 @@ impl Cx<'_> {
                     format!("{path}/name"),
                     None,
                 );
+            }
+            if var.secret && var.default.is_some() {
+                self.error(
+                    "SECRET_DEFAULT",
+                    format!(
+                        "secret variable '{}' has a default value, which is stored as plain text in the scenario",
+                        var.name
+                    ),
+                    format!("{path}/default"),
+                    None,
+                );
+                self.hint("Remove `default`. For passwords, register a secret (Studio → シークレット) and type it with { \"secret\": \"<name>\", \"field\": \"password\" } as the value of browser.fill.");
             }
             if let Some(default) = &var.default
                 && !var.var_type.accepts(default)
@@ -580,6 +593,8 @@ impl Cx<'_> {
             None => {}
         }
 
+        self.secrets(step, def, path);
+
         for (key, value) in &step.params {
             let param_path = format!("{path}/params/{key}");
             if def.expression_params.contains(key) {
@@ -610,6 +625,58 @@ impl Cx<'_> {
                         self.expr_hint(&e);
                     }
                 }
+            }
+        }
+    }
+
+    /// Secret references are only allowed as the whole value of the params
+    /// a step type lists in `secretParams`, and must name a secret literally.
+    fn secrets(&mut self, step: &Step, def: &StepTypeDef, path: &str) {
+        let id = Some(&step.id);
+        for (key, value) in &step.params {
+            let param_path = format!("{path}/params/{key}");
+            if def.secret_params.contains(key)
+                && let Some(reference) = SecretRef::from_value(value)
+            {
+                match reference {
+                    Ok(r) => {
+                        if let Err(message) = secret::check_name(&r.secret) {
+                            self.error(
+                                "INVALID_SECRET_REF",
+                                message,
+                                format!("{param_path}/secret"),
+                                id,
+                            );
+                            self.hint("Write the registered name as it is, e.g. \"受注システム\" (list_secrets shows the names).");
+                        }
+                    }
+                    Err(message) => {
+                        self.error("INVALID_SECRET_REF", message, param_path, id);
+                        self.hint("Write { \"secret\": \"<registered name>\", \"field\": \"username\" | \"password\" | \"totp\" }.");
+                    }
+                }
+                continue;
+            }
+            let mut found = Vec::new();
+            find_secret_refs(value, &param_path, &mut found);
+            for pointer in found {
+                self.error(
+                    "SECRET_NOT_ALLOWED",
+                    format!("'{}' cannot take a secret here", def.step_type),
+                    pointer,
+                    id,
+                );
+                self.hint(if def.secret_params.is_empty() {
+                    format!(
+                        "Secrets can only be typed into input fields (e.g. the `value` of browser.fill), never used in '{}'.",
+                        def.step_type
+                    )
+                } else {
+                    format!(
+                        "Use the secret as the whole value of {} only.",
+                        def.secret_params.join(", ")
+                    )
+                });
             }
         }
     }
@@ -647,6 +714,26 @@ impl Cx<'_> {
 }
 
 /// Variables a step (and its children) may assign.
+fn find_secret_refs(value: &Value, path: &str, out: &mut Vec<String>) {
+    match value {
+        Value::Object(map) => {
+            if map.contains_key("secret") && map.contains_key("field") {
+                out.push(path.to_owned());
+                return;
+            }
+            for (key, child) in map {
+                find_secret_refs(child, &format!("{path}/{key}"), out);
+            }
+        }
+        Value::Array(items) => {
+            for (i, child) in items.iter().enumerate() {
+                find_secret_refs(child, &format!("{path}/{i}"), out);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn collect_writes(step: &Step, registry: &StepRegistry, out: &mut BTreeSet<String>) {
     if let Some(save_as) = &step.save_as {
         out.insert(save_as.clone());
@@ -843,6 +930,83 @@ mod tests {
 
     fn codes(report: &ValidationReport) -> Vec<&str> {
         report.issues.iter().map(|i| i.code.as_str()).collect()
+    }
+
+    fn typing_registry() -> StepRegistry {
+        let mut registry = StepRegistry::with_builtins();
+        registry.register(crate::registry::StepTypeDef {
+            step_type: "test.type".into(),
+            category: crate::registry::StepCategory::Other,
+            label: "type".into(),
+            description: String::new(),
+            params_schema: json!({
+                "type": "object",
+                "properties": {
+                    "value": crate::secret::text_or_secret_schema("text"),
+                    "label": { "type": "string" }
+                },
+                "additionalProperties": false
+            }),
+            blocks: vec![],
+            has_output: false,
+            expression_params: vec![],
+            binds_variables: vec![],
+            risk: crate::registry::RiskLevel::Interactive,
+            examples: vec![],
+            resources: vec![],
+            secret_params: vec!["value".into()],
+            default_timeout_ms: None,
+        });
+        registry
+    }
+
+    #[test]
+    fn secrets_are_only_typed_and_never_stored() {
+        let v = Validator::new(typing_registry());
+        let mut s = Scenario::new("t");
+        let mut pw = VariableDef::new("pw", VarType::String);
+        pw.secret = true;
+        pw.default = Some(json!("hunter2"));
+        s.variables.push(pw);
+        s.steps = vec![
+            Step::new("test.type")
+                .with_param("value", json!({ "secret": "受注", "field": "password" })),
+            Step::new("test.type").with_param(
+                "value",
+                json!({ "secret": "{{ name }}", "field": "password" }),
+            ),
+            Step::new("test.type").with_param("value", json!({ "secret": "受注", "field": "pin" })),
+            Step::new("log.message")
+                .with_param("message", json!({ "secret": "受注", "field": "password" })),
+        ];
+        for (i, step) in s.steps.iter_mut().enumerate() {
+            step.id = format!("s{i}").into();
+        }
+        let report = v.validate(&s);
+        let found: Vec<(&str, Option<&str>)> = report
+            .issues
+            .iter()
+            .filter(|i| i.code.starts_with("SECRET") || i.code == "INVALID_SECRET_REF")
+            .map(|i| (i.code.as_str(), i.step_id.as_ref().map(|id| id.as_str())))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("SECRET_DEFAULT", None),
+                ("INVALID_SECRET_REF", Some("s1")),
+                ("INVALID_SECRET_REF", Some("s2")),
+                ("SECRET_NOT_ALLOWED", Some("s3")),
+            ]
+        );
+        assert!(hint_of(&report, "SECRET_DEFAULT").contains("browser.fill"));
+        assert!(hint_of(&report, "SECRET_NOT_ALLOWED").contains("input fields"));
+        // The well-formed reference on s0 is accepted.
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.step_id.as_ref().is_some_and(|id| id.as_str() == "s0"))
+        );
     }
 
     #[test]

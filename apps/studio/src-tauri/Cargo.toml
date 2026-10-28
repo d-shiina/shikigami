@@ -17,6 +17,7 @@ tauri-build = { version = "2.7.4", features = [] }
 shikigami-core.workspace = true
 shikigami-runtime.workspace = true
 shikigami-adapters.workspace = true
+shikigami-secrets.workspace = true
 tauri = { version = "2.12.5", features = [] }
 serde.workspace = true
 serde_json.workspace = true

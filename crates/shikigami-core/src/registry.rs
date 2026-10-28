@@ -112,6 +112,15 @@ pub struct StepTypeDef {
     #[serde(skip)]
     #[schemars(skip)]
     pub resources: Vec<ResourceDef>,
+    /// Params that may take a registered secret,
+    /// `{ "secret": "<name>", "field": "password" }`, instead of text.
+    /// Secrets are rejected everywhere else.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secret_params: Vec<String>,
+    /// Timeout when the step sets none (takes precedence over the
+    /// scenario's default), for steps that wait on people (manual login).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_timeout_ms: Option<u64>,
 }
 
 impl StepTypeDef {
@@ -220,6 +229,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::WHILE.into(),
@@ -240,6 +251,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::REPEAT.into(),
@@ -260,6 +273,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::FOR_EACH.into(),
@@ -283,6 +298,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::TRY.into(),
@@ -297,6 +314,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::PARALLEL.into(),
@@ -314,6 +333,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::GROUP.into(),
@@ -328,6 +349,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::BREAK.into(),
@@ -342,6 +365,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::CONTINUE.into(),
@@ -356,6 +381,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::FAIL.into(),
@@ -376,6 +403,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: builtin::VARIABLE_SET.into(),
@@ -400,6 +429,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: builtin::LOG_MESSAGE.into(),
@@ -420,6 +451,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: control::WAIT_UNTIL.into(),
@@ -440,6 +473,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
         StepTypeDef {
             step_type: builtin::FLOW_DELAY.into(),
@@ -457,6 +492,8 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             risk: RiskLevel::Safe,
             examples: vec![],
             resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
         },
     ]
 }

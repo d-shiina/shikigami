@@ -23,11 +23,12 @@ Shikigami のシナリオから Web ページを操作します。Rust の Runti
 pnpm demo:browser
 ```
 
-デモ用の業務サイト「式神商事 受注管理システム」（`examples/web`）を `http://127.0.0.1:8787/` で起動し、`examples/browser-demo.json` を CLI で実行します。
+デモ用の業務サイト「式神商事 受注管理システム」（`examples/web`）を `http://127.0.0.1:8787/` で起動し、`examples/browser-demo.json` を CLI で実行します。デモ用アカウントは最初にシークレット「デモ受注システム」として登録するので、シナリオにパスワードは書かれていません（Studio の「🔑 シークレット」にも出ます）。
 
 1. 2 体の式神が **同時に** 作業する：受注係がログインして受注一覧を読み、在庫係は別のウィンドウで在庫一覧を読む（`control.parallel` と別々の `context`）
 2. 未処理の注文ごとに「出荷する」を押し、処理完了の表示を待つ（`control.forEach` + `control.if`）
 3. 出荷した注文番号・合計金額・在庫切れの商品を出力する
+4. ログイン状態を `session` で保存するので、**2 回目の実行ではログイン画面を飛ばす**
 
 CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\shikigami.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Studio からも同じシナリオを読み込んで実行できます。
 
@@ -35,18 +36,22 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 
 | type | 主な params | 出力 |
 |---|---|---|
-| `browser.open` | `url`, `headless` | `{ url, title }` |
+| `browser.open` | `url`, `headless`, `session`（ログイン状態を保存・再利用する名前） | `{ url, title }` |
 | `browser.click` | `target` | – |
-| `browser.fill` | `target`, `value` | – |
+| `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`） | – |
 | `browser.select` | `target`, `value`（表示名、または配列） | – |
 | `browser.press` | `key`（`Enter` など）, `target`（省略時はページ） | – |
 | `browser.getText` | `target`, `all`（`true` で全一致の配列） | 文字列 / 配列 |
 | `browser.getTable` | `target`（省略時は最初の表） | 見出しをキーにしたオブジェクトの配列 |
 | `browser.waitFor` | `target`, `state`（`visible` / `hidden` / `attached` / `detached`） | – |
 | `browser.screenshot` | `path`（絶対パス）, `fullPage` | 保存先 |
+| `browser.isVisible` | `target`, `waitMs`（既定 2000） | `true` / `false`（見つからなくても失敗しない） |
+| `browser.waitForHuman` | `message`, `until`（人の操作が終わると出る要素） | – |
 | `browser.close` | – | – |
 
 すべてのステップに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、**同じ `context` のステップは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、シナリオにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
+
+ログイン・パスワード・MFA の扱いは [secrets.md](secrets.md) を見てください。
 
 ### 要素の指定（`target`）
 
