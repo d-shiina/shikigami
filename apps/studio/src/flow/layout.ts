@@ -55,6 +55,10 @@ export type Layout = { nodes: LayoutNode[]; edges: LayoutEdge[]; width: number; 
 
 type Defs = ReadonlyMap<string, StepTypeDef>;
 
+/** Extra height a step's node needs (a call shown unfolded), by step id. */
+export type Extra = ReadonlyMap<string, number>;
+const NO_EXTRA: Extra = new Map();
+
 const LOOP_TYPES = new Set(["control.while", "control.repeat", "control.forEach"]);
 /** Blocks whose children run at the same time: each child gets its own lane. */
 const FAN_OUT_BLOCKS: Record<string, string> = { "control.parallel": "branches" };
@@ -86,27 +90,27 @@ type Size = { w: number; h: number };
 
 const SLOT: Size = { w: NODE_W, h: SLOT_H };
 
-function nodeSize(step: Step, defs: Defs): Size {
-  return { w: NODE_W, h: nodeHeight(step, defs.get(step.type)) };
+function nodeSize(step: Step, defs: Defs, extra: Extra): Size {
+  return { w: NODE_W, h: nodeHeight(step, defs.get(step.type), extra.get(step.id ?? "") ?? 0) };
 }
 
-function measureList(steps: Step[], defs: Defs): Size {
+function measureList(steps: Step[], defs: Defs, extra: Extra): Size {
   if (steps.length === 0) return SLOT;
   let w = 0;
   let h = 0;
   for (const s of steps) {
-    const m = measure(s, defs);
+    const m = measure(s, defs, extra);
     w = Math.max(w, m.w);
     h += m.h;
   }
   return { w, h: h + GAP_Y * (steps.length - 1) };
 }
 
-function measure(step: Step, defs: Defs): Size {
+function measure(step: Step, defs: Defs, extra: Extra): Size {
   const ls = lanes(step, defs);
-  const own = nodeSize(step, defs);
+  const own = nodeSize(step, defs, extra);
   if (ls.length === 0) return own;
-  const ms = ls.map((l) => measureList(l.steps, defs));
+  const ms = ls.map((l) => measureList(l.steps, defs, extra));
   const w = ms.reduce((acc, m) => acc + m.w, 0) + GAP_X * (ms.length - 1);
   const h = own.h + GAP_Y + Math.max(...ms.map((m) => m.h));
   return { w: Math.max(own.w, w), h };
@@ -116,7 +120,10 @@ class Builder {
   nodes: LayoutNode[] = [];
   edges: LayoutEdge[] = [];
 
-  constructor(private defs: Defs) {}
+  constructor(
+    private defs: Defs,
+    private extra: Extra,
+  ) {}
 
   edge(source: string, target: string, label?: string, loop?: boolean) {
     this.edges.push({ id: `${source}->${target}${label ? `:${label}` : ""}`, source, target, label, loop });
@@ -151,7 +158,7 @@ class Builder {
       if (index === 0) entry = placed.entry;
       for (const p of previous) this.edge(p, placed.entry);
       previous = placed.exits;
-      cursor += measure(step, this.defs).h + GAP_Y;
+      cursor += measure(step, this.defs, this.extra).h + GAP_Y;
     });
     return { entry, exits: previous };
   }
@@ -167,7 +174,7 @@ class Builder {
   ): { entry: string; exits: string[] } {
     const id = step.id ?? `anon-${this.nodes.length}`;
     const def = this.defs.get(step.type);
-    const own = nodeSize(step, this.defs);
+    const own = nodeSize(step, this.defs, this.extra);
     this.nodes.push({
       id,
       type: "step",
@@ -177,7 +184,7 @@ class Builder {
     const ls = lanes(step, this.defs);
     if (ls.length === 0) return { entry: id, exits: [id] };
 
-    const sizes = ls.map((l) => measureList(l.steps, this.defs));
+    const sizes = ls.map((l) => measureList(l.steps, this.defs, this.extra));
     const isLoop = LOOP_TYPES.has(step.type);
     const exits: string[] = [];
     const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (ls.length - 1);
@@ -197,9 +204,9 @@ class Builder {
   }
 }
 
-export function layoutScenario(steps: Step[], defs: Defs): Layout {
-  const builder = new Builder(defs);
-  const size = measureList(steps, defs);
+export function layoutScenario(steps: Step[], defs: Defs, extra: Extra = NO_EXTRA): Layout {
+  const builder = new Builder(defs, extra);
+  const size = measureList(steps, defs, extra);
   builder.list(steps, 0, 0, size.w, null, null, "");
   return { nodes: builder.nodes, edges: builder.edges, width: size.w, height: size.h };
 }

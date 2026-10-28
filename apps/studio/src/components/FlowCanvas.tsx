@@ -24,12 +24,26 @@ import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
 import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
-import type { HistoryEntry } from "@shikigami/schema";
+import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
 import { useTheme } from "../lib/theme";
 import { actorLabel, describe } from "../lib/changes";
-import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
+import {
+  CALL,
+  CALL_BAR_H,
+  INNER_LINE_H,
+  INNER_PAD,
+  innerHeight,
+  NODE_HEAD_H,
+  NODE_PAD_B,
+  nodeRows,
+  knownVariables,
+  ROW_H,
+  type Row,
+  TYPE_COLOR,
+} from "../lib/nodeRows";
+import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence } from "../lib/sentence";
 import { revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
@@ -39,9 +53,28 @@ import { valuesSeenBy } from "../lib/runValues";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
+/** What a `scenario.call` node shows about the scenario it runs. */
+type CallView = {
+  /** The call step itself. */
+  stepId: string;
+  /** Id of the called scenario (empty when not chosen yet). */
+  target: string;
+  /** The called scenario, when it exists in this workspace. */
+  callee?: Scenario;
+  unfolded: boolean;
+  /** Its steps in reading order, when unfolded (cut to MAX_INNER_LINES). */
+  lines: OutlineItem[];
+  hidden: number;
+  /** How its steps went in the current run. */
+  states: Record<string, StepRunState>;
+};
+
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; breakpoint: boolean; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string }>
+  Node<StepNodeData & { runState?: StepRunState; breakpoint: boolean; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
+
+/** Lines an unfolded call lists before the rest fold into "…ほか n". */
+const MAX_INNER_LINES = 24;
 
 const MIN_READABLE_ZOOM = 0.85;
 /** Width of the outline panel plus its gap, from the canvas's left edge. */
@@ -339,6 +372,99 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
   );
 }
 
+const INNER_MARK: Record<StepRunState, { text: string; className: string }> = {
+  running: { text: "●", className: "text-accent-500 animate-pulse" },
+  succeeded: { text: "✓", className: "text-moegi-600" },
+  paused: { text: "❚❚", className: "text-mizu-500" },
+  failed: { text: "✕", className: "text-shu-600" },
+  skipped: { text: "–", className: "text-slate-400" },
+};
+
+/**
+ * Under a call's head: which scenario it runs, and the buttons to unfold its
+ * steps here or open it.
+ */
+function CallBar({ call }: { call: CallView }) {
+  const toggle = useStudio((s) => s.toggleUnfolded);
+  const open = useStudio((s) => s.open);
+  const missing = call.target !== "" && !call.callee;
+  const count = call.callee ? outline(call.callee.steps ?? [], new Map()).length : 0;
+  const button = "nodrag nopan rounded-[3px] px-1.5 leading-[18px] text-[11px] font-medium";
+  return (
+    <div style={{ height: CALL_BAR_H }} className="flex items-center gap-1.5 border-t border-slate-100 px-3 text-[11px]">
+      {call.target === "" ? (
+        <span className="text-slate-400">右のパネルで呼ぶシナリオを選びます</span>
+      ) : missing ? (
+        <span className="truncate font-semibold text-shu-600">呼ぶシナリオが見つかりません</span>
+      ) : (
+        <span className="truncate text-slate-500">{count} ステップ</span>
+      )}
+      {call.callee && (
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            className={`${button} border border-slate-300 text-slate-600 hover:bg-slate-100`}
+            aria-expanded={call.unfolded}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle(call.stepId);
+            }}
+            data-call-toggle
+          >
+            {call.unfolded ? "たたむ ▴" : "中を見る ▾"}
+          </button>
+          <button
+            type="button"
+            className={`${button} bg-ink text-paper hover:bg-slate-700`}
+            title={`「${call.callee.name}」を開く`}
+            onClick={(e) => {
+              e.stopPropagation();
+              void open(call.target);
+            }}
+          >
+            開く ↗
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** A call's steps, read-only, unfolded inside its node. */
+function InnerSteps({ call, defs }: { call: CallView; defs: Map<string, StepTypeDef> }) {
+  const lines = call.lines.length + (call.hidden > 0 ? 1 : 0);
+  return (
+    <div
+      style={{ height: innerHeight(lines), paddingTop: INNER_PAD, paddingBottom: INNER_PAD }}
+      className="rounded-b-[3px] border-t border-slate-200 bg-paper px-2"
+    >
+      {call.lines.map((item) => {
+        const def = defs.get(item.step.type);
+        const color = CATEGORY_COLOR[def?.category ?? item.step.type.split(".")[0] ?? "other"] ?? CATEGORY_COLOR.other;
+        const state = call.states[item.id];
+        const text = item.step.name || plain(sentence(item.step, def));
+        return (
+          <div key={item.id} style={{ height: INNER_LINE_H, paddingLeft: item.depth * 12 }} className="flex items-center gap-1.5 text-[12px]" title={text}>
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
+            {KEYWORD[item.step.type] && (
+              <span className="shrink-0 font-mono text-[10px] font-bold" style={{ color }}>
+                {KEYWORD[item.step.type]}
+              </span>
+            )}
+            <span className={`truncate ${item.step.disabled ? "text-slate-400 line-through" : "text-slate-700"}`}>{text}</span>
+            {state && <span className={`ml-auto shrink-0 text-[11px] ${INNER_MARK[state].className}`}>{INNER_MARK[state].text}</span>}
+          </div>
+        );
+      })}
+      {call.hidden > 0 && (
+        <div style={{ height: INNER_LINE_H }} className="flex items-center text-[11px] text-slate-400">
+          …ほか {call.hidden} ステップ（「開く」で全体を見る）
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StepNode({ data }: StepNodeProps) {
   const category = data.def?.category ?? data.step.type.split(".")[0] ?? "other";
   const color = CATEGORY_COLOR[category] ?? CATEGORY_COLOR.other;
@@ -424,6 +550,7 @@ function StepNode({ data }: StepNodeProps) {
           <Sentence parts={parts} />
         </span>
       </div>
+      {data.call && <CallBar call={data.call} />}
       {rows.length > 0 && (
         <div style={{ paddingBottom: NODE_PAD_B }} className="border-t border-dashed border-slate-200">
           {rows.map((row, i) => (
@@ -431,6 +558,7 @@ function StepNode({ data }: StepNodeProps) {
           ))}
         </div>
       )}
+      {data.call?.unfolded && <InnerSteps call={data.call} defs={data.defs} />}
     </div>
   );
 }
@@ -553,7 +681,43 @@ export function FlowCanvas() {
 
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const wrapper = useRef<HTMLDivElement>(null);
-  const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs), [scenario, defs]);
+  const called = useStudio((s) => s.called);
+  const unfolded = useStudio((s) => s.unfolded);
+  // What each call node shows, and the room its unfolded steps take.
+  const calls = useMemo(() => {
+    const map = new Map<string, Omit<CallView, "states">>();
+    const walk = (list: NonNullable<Scenario["steps"]>) => {
+      for (const step of list) {
+        if (step.type === CALL && step.id) {
+          const target = typeof step.params?.scenario === "string" ? step.params.scenario : "";
+          const callee = called[target];
+          const open = Boolean(unfolded[step.id] && callee);
+          const all = open && callee ? outline(callee.steps ?? [], defs) : [];
+          map.set(step.id, {
+            stepId: step.id,
+            target,
+            callee,
+            unfolded: open,
+            lines: all.slice(0, MAX_INNER_LINES),
+            hidden: Math.max(0, all.length - MAX_INNER_LINES),
+          });
+        }
+        for (const children of Object.values(step.blocks ?? {})) walk(children);
+      }
+    };
+    walk(scenario?.steps ?? []);
+    return map;
+  }, [scenario, called, unfolded, defs]);
+  const extra = useMemo(
+    () =>
+      new Map(
+        [...calls]
+          .filter(([, c]) => c.unfolded)
+          .map(([id, c]) => [id, innerHeight(c.lines.length + (c.hidden > 0 ? 1 : 0))] as const),
+      ),
+    [calls],
+  );
+  const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs, extra), [scenario, defs, extra]);
   const vars = useMemo(() => knownVariables(scenario?.variables, scenario?.steps ?? []), [scenario]);
 
   const issueCounts = useMemo(() => {
@@ -583,6 +747,8 @@ export function FlowCanvas() {
           note: reviewing ? notes.get(id) : undefined,
           vars,
           run: run ? { changes: run.changes, starts: run.starts } : NO_RUN,
+          defs,
+          call: calls.has(id) ? { ...calls.get(id)!, states: run?.inner[id] ?? {} } : undefined,
         },
       };
     }

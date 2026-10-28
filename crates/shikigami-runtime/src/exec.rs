@@ -10,12 +10,13 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
+use shikigami_core::call::MAX_CALL_DEPTH;
 use shikigami_core::expr::{self, Expr};
-use shikigami_core::registry::{builtin, control, is_control_type};
+use shikigami_core::registry::{builtin, control, is_control_type, scenario};
 use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_core::secret::SecretProvider;
 use shikigami_core::validate::LAST_ERROR_VAR;
-use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, Step, StepId};
+use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, ScenarioId, Step, StepId};
 use time::OffsetDateTime;
 use tokio::sync::{OwnedMutexGuard, Semaphore, mpsc};
 use tokio::task::JoinSet;
@@ -42,6 +43,8 @@ const MIN_SECRET_PART_CHARS: usize = 4;
 #[derive(Clone)]
 pub struct Emitter {
     inner: Arc<EmitterInner>,
+    /// `scenario.call` steps this emitter reports from inside.
+    call_path: Arc<[StepId]>,
 }
 
 struct EmitterInner {
@@ -68,7 +71,23 @@ impl Emitter {
                 secrets: RwLock::new(Vec::new()),
                 snapshot,
             }),
+            call_path: Arc::from([]),
         }
+    }
+
+    /// The same run, reporting from inside the scenario `call` runs.
+    fn nested(&self, call: &StepId) -> Self {
+        let mut path = self.call_path.to_vec();
+        path.push(call.clone());
+        Self {
+            inner: self.inner.clone(),
+            call_path: Arc::from(path),
+        }
+    }
+
+    /// How many calls deep this emitter reports from.
+    fn call_depth(&self) -> usize {
+        self.call_path.len()
     }
 
     pub(crate) fn add_secret(&self, value: &Value) {
@@ -187,6 +206,7 @@ impl Emitter {
             run_id: self.inner.run_id.clone(),
             seq: *seq,
             at: OffsetDateTime::now_utc(),
+            call_path: self.call_path.to_vec(),
             event,
         };
         *seq += 1;
@@ -345,6 +365,8 @@ pub(crate) struct Executor {
     /// How many enclosing steps handle an error (a `try` with a `catch`, a
     /// `wait.until` with `onError: continue`): errors there do not pause.
     pub handled_depth: u32,
+    /// Scenarios `scenario.call` can run, as they were when the run started.
+    pub library: Arc<HashMap<ScenarioId, Arc<Scenario>>>,
 }
 
 fn expr_error(e: expr::ExprError) -> RunError {
@@ -394,6 +416,7 @@ impl Executor {
             resources: self.resources.clone(),
             debug: None,
             handled_depth: 0,
+            library: self.library.clone(),
         }
     }
 
@@ -665,8 +688,12 @@ impl Executor {
                 _ => {}
             }
         }
+        // Inside a call the snapshot keeps showing the call step.
+        let top_level = self.emitter.call_depth() == 0;
         self.emitter.update_snapshot(|s| {
-            s.current_step = Some(step.id.clone());
+            if top_level {
+                s.current_step = Some(step.id.clone());
+            }
             s.steps_executed += 1;
         });
 
@@ -713,9 +740,13 @@ impl Executor {
                     will_retry: false,
                 });
             }
-            // A wait that times out may be skipped with onError: continue;
-            // other control steps only pass on their children's errors.
-            if step.step_type != control::WAIT_UNTIL {
+            // A wait that times out or a call that fails may be skipped
+            // with onError: continue; other control steps only pass on
+            // their children's errors.
+            if !matches!(
+                step.step_type.as_str(),
+                control::WAIT_UNTIL | scenario::CALL
+            ) {
                 return self.on_failure(step, result).await;
             }
         }
@@ -869,6 +900,7 @@ impl Executor {
             control::GROUP => self.sub_block(step, "body").await,
             control::PARALLEL => self.parallel(step).await,
             control::WAIT_UNTIL => self.wait_until(step).await,
+            scenario::CALL => self.call(step).await,
             control::BREAK => Ok(Flow::Break),
             control::CONTINUE => Ok(Flow::Continue),
             control::FAIL => {
@@ -1141,6 +1173,113 @@ impl Executor {
             Some(interrupt) => Err(interrupt),
             None => Ok(results),
         }
+    }
+
+    /// Runs the called scenario on its own variables: `inputs` (rendered
+    /// here) start them, `outputs` copy its output variables back. A
+    /// failure inside becomes this step's failure, with where it happened
+    /// in `details.subScenario`.
+    async fn call(&mut self, step: &Step) -> StepResult {
+        let target = ScenarioId::new(param_str(step, "scenario")?);
+        let Some(callee) = self.library.get(&target).cloned() else {
+            return Err(RunError::new(
+                "CALL_TARGET_NOT_FOUND",
+                format!("scenario '{target}' was not provided to this run"),
+            )
+            .into());
+        };
+        if self.emitter.call_depth() >= MAX_CALL_DEPTH {
+            return Err(RunError::new(
+                "CALL_TOO_DEEP",
+                format!("calls are nested more than {MAX_CALL_DEPTH} deep"),
+            )
+            .into());
+        }
+        let inputs = match step.params.get("inputs") {
+            Some(value) => match expr::render_value(value, &self.vars).map_err(expr_error)? {
+                Value::Object(map) => map,
+                _ => Map::new(),
+            },
+            None => Map::new(),
+        };
+
+        let cancel = self.cancel.child_token();
+        let mut child = self.fork(cancel.clone());
+        child.vars = Map::new();
+        child.secret_vars = callee
+            .variables
+            .iter()
+            .filter(|v| v.secret)
+            .map(|v| v.name.clone())
+            .collect();
+        child.iteration = None;
+        child.emitter = self.emitter.nested(&step.id);
+        child.default_timeout_ms = callee
+            .settings
+            .default_timeout_ms
+            .unwrap_or(DEFAULT_TIMEOUT_MS);
+        child.default_retry = callee.settings.default_retry;
+        child.default_on_error = callee.settings.on_error.unwrap_or(OnError::Fail);
+        crate::init_variables(&callee, &inputs, &mut child)?;
+        let initial = child.vars.clone();
+
+        let result = match step.timeout_ms {
+            None => child.block(&callee.steps).await,
+            Some(ms) => {
+                let run =
+                    tokio::time::timeout(Duration::from_millis(ms), child.block(&callee.steps));
+                match run.await {
+                    Ok(result) => result,
+                    Err(_) => Err(Interrupt::Failed(RunError::new(
+                        "STEP_TIMEOUT",
+                        format!("the called scenario did not finish within {ms} ms"),
+                    ))),
+                }
+            }
+        };
+        cancel.cancel();
+        // Outputs come back even when the call fails, but only those it
+        // assigned: like steps run in place, whatever they wrote before the
+        // failure stays visible to the caller's catch / onError: continue.
+        let failed = result.is_err();
+        let outputs = step.params.get("outputs").and_then(Value::as_object);
+        for (name, target) in outputs.into_iter().flatten() {
+            let Some(target) = target.as_str() else {
+                continue;
+            };
+            let value = child.vars.get(name).cloned().unwrap_or(Value::Null);
+            if failed && initial.get(name) == Some(&value) {
+                continue;
+            }
+            self.set_var(target, value, Some(&step.id));
+        }
+        match result {
+            Ok(_) => {}
+            Err(Interrupt::Cancelled) => return Err(Interrupt::Cancelled),
+            Err(Interrupt::Failed(mut error)) if error.step_id.is_some() => {
+                let mut details = match error.details.take() {
+                    Some(Value::Object(map)) => map,
+                    Some(other) => Map::from_iter([("cause".to_owned(), other)]),
+                    None => Map::new(),
+                };
+                // A nested call already said where inside it failed.
+                details.entry("subScenario").or_insert_with(|| {
+                    serde_json::json!({
+                        "scenarioId": callee.id,
+                        "scenarioName": callee.name,
+                        "stepId": error.step_id,
+                        "stepType": error.step_type,
+                    })
+                });
+                error.details = Some(Value::Object(details));
+                error.step_id = Some(step.id.clone());
+                error.step_type = Some(step.step_type.clone());
+                return Err(error.into());
+            }
+            // The call itself failed (timeout): no step inside to point at.
+            Err(interrupt) => return Err(interrupt),
+        }
+        Ok(Flow::Next)
     }
 
     /// Polls `condition` (after running `check`) until it holds or the

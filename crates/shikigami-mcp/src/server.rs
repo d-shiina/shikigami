@@ -83,6 +83,7 @@ pub const TOOLS: &[(&str, ToolClass)] = &[
     ("create_version", ToolClass::Write),
     ("restore_version", ToolClass::Write),
     ("import_scenario", ToolClass::Write),
+    ("extract_subscenario", ToolClass::Write),
     ("request_secret", ToolClass::Write),
     ("run_scenario", ToolClass::Run),
     ("stop_scenario", ToolClass::Run),
@@ -381,6 +382,19 @@ impl ShikigamiMcp {
             let scenario = self.svc().get(&id)?;
             let (can_undo, can_redo) = self.svc().undo_state(&id)?;
             let mut out = json!({ "scenario": scenario, "canUndo": can_undo, "canRedo": can_redo });
+            let called = self.called_summaries(&scenario);
+            if !called.is_empty() {
+                out["subscenarios"] = Value::Array(called);
+            }
+            let callers = self.svc().callers(&id)?;
+            if !callers.is_empty() {
+                out["calledBy"] = Value::Array(
+                    callers
+                        .iter()
+                        .map(|c| json!({ "id": c.id, "name": c.name }))
+                        .collect(),
+                );
+            }
             if let Some(feedback) = self.svc().open_feedback(&id)? {
                 out["feedback"] = to_value(&feedback);
             }
@@ -968,6 +982,44 @@ impl ShikigamiMcp {
         self.finish("import_scenario", &peer, id.as_deref(), outcome)
     }
 
+    /// Move steps that sit next to each other in one block into a new scenario and replace them
+    /// with one scenario.call step, so a long flow reads as a few named parts. The call passes
+    /// the variables the steps read as inputs and writes back the ones they change, so the
+    /// scenario behaves as before. Returns both scenarios and the new step's ID.
+    #[tool(annotations(
+        read_only_hint = false,
+        destructive_hint = false,
+        open_world_hint = false
+    ))]
+    async fn extract_subscenario(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(p): Parameters<ExtractSubscenarioParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let ids: Vec<StepId> = p.step_ids.iter().map(StepId::new).collect();
+        let outcome = self
+            .svc()
+            .extract_subscenario(
+                &ScenarioId::new(p.scenario_id.as_str()),
+                p.expected_revision,
+                &ids,
+                &p.name,
+                actor(&peer),
+                change_note(p.summary, Vec::new()),
+            )
+            .map(|o| {
+                json!({
+                    "scenario": o.caller.scenario,
+                    "validation": o.caller.validation,
+                    "subscenario": o.subscenario.scenario,
+                    "subscenarioValidation": o.subscenario.validation,
+                    "callStepId": o.call_step_id,
+                })
+            })
+            .map_err(Into::into);
+        self.finish("extract_subscenario", &peer, Some(&p.scenario_id), outcome)
+    }
+
     // -- run ----------------------------------------------------------------
 
     /// Run a stored scenario with the Runtime (no AI involved during the run). The scenario must
@@ -1278,6 +1330,25 @@ impl ShikigamiMcp {
                 ..shikigami_core::VariableDef::new(OUTPUT, shikigami_core::VarType::Any)
             });
         }
+        // A call's outputs become outputs of the test run, returned as `output`.
+        let call_outputs: Vec<String> = step
+            .params
+            .get("outputs")
+            .and_then(Value::as_object)
+            .filter(|_| step.step_type == shikigami_core::registry::scenario::CALL)
+            .map(|m| {
+                m.values()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        for name in &call_outputs {
+            scenario.variables.push(shikigami_core::VariableDef {
+                direction: shikigami_core::VarDirection::Output,
+                ..shikigami_core::VariableDef::new(name.clone(), shikigami_core::VarType::Any)
+            });
+        }
         shikigami_core::ops::assign_missing_ids(&mut step);
         let context = step.params.get("context").cloned();
         let window = step
@@ -1290,6 +1361,7 @@ impl ShikigamiMcp {
             .split_once('.')
             .map(|(prefix, _)| prefix.to_owned());
         scenario.steps = vec![step];
+        let subscenarios = self.svc().subscenarios(&scenario)?;
 
         let handle = self
             .inner
@@ -1299,6 +1371,7 @@ impl ShikigamiMcp {
                 RunOptions {
                     run_id: Some(self.inner.session.clone()),
                     keep_adapter_state: true,
+                    subscenarios,
                     ..RunOptions::default()
                 },
             )
@@ -1312,10 +1385,12 @@ impl ShikigamiMcp {
             .await
             .map_err(|e| err("INTERNAL", e.message))?;
 
-        let mut result = json!({
-            "status": report.status,
-            "output": report.outputs.get(OUTPUT).cloned().unwrap_or(Value::Null),
-        });
+        let output = if call_outputs.is_empty() {
+            report.outputs.get(OUTPUT).cloned().unwrap_or(Value::Null)
+        } else {
+            Value::Object(report.outputs.clone())
+        };
+        let mut result = json!({ "status": report.status, "output": output });
         if report.status != RunStatus::Succeeded {
             result["error"] = json!(report.error);
         }
@@ -1343,6 +1418,46 @@ impl ShikigamiMcp {
             }
         }
         Ok(result)
+    }
+
+    /// The scenarios `scenario` calls directly, with the variables a call
+    /// maps, so an AI client can write `inputs` / `outputs` without
+    /// fetching each one.
+    fn called_summaries(&self, scenario: &shikigami_core::Scenario) -> Vec<Value> {
+        shikigami_core::call::called_ids(scenario)
+            .iter()
+            .map(|id| match self.svc().get(id) {
+                Ok(s) => {
+                    let vars = |input: bool| -> Vec<Value> {
+                        s.variables
+                            .iter()
+                            .filter(|v| {
+                                if input {
+                                    v.direction.is_input()
+                                } else {
+                                    v.direction.is_output()
+                                }
+                            })
+                            .map(|v| {
+                                let mut entry = json!({ "name": v.name, "type": v.var_type });
+                                if input {
+                                    entry["required"] = json!(v.default.is_none());
+                                }
+                                entry
+                            })
+                            .collect()
+                    };
+                    json!({
+                        "id": s.id,
+                        "name": s.name,
+                        "revision": s.revision,
+                        "inputs": vars(true),
+                        "outputs": vars(false),
+                    })
+                }
+                Err(_) => json!({ "id": id, "missing": true }),
+            })
+            .collect()
     }
 
     fn run_status(&self, id: &RunId) -> Outcome {
@@ -1406,6 +1521,7 @@ impl ShikigamiMcp {
     ) -> Result<(RunId, RunHandle, RunRecorder), ErrorPayload> {
         let id = RunId::generate();
         let version = self.svc().matching_version(&scenario).ok().flatten();
+        let subscenarios = self.svc().subscenarios(&scenario)?;
         let root = self.svc().store().local_root();
         let recorder = RunRecorder::create(root, &id).map_err(io_err)?;
         let mut runs = self
@@ -1419,6 +1535,7 @@ impl ShikigamiMcp {
                 inputs: p.inputs.clone(),
                 run_id: Some(id.clone()),
                 version,
+                subscenarios,
                 ..RunOptions::default()
             },
         ) {

@@ -196,6 +196,11 @@ pub struct RunEventEnvelope {
     #[serde(with = "time::serde::rfc3339")]
     #[schemars(with = "String")]
     pub at: OffsetDateTime,
+    /// The `scenario.call` steps (outermost first) the event happened
+    /// inside; empty for the scenario that was started. Step IDs in the
+    /// event belong to the innermost called scenario.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub call_path: Vec<StepId>,
     #[serde(flatten)]
     pub event: RunEvent,
 }
@@ -222,6 +227,22 @@ pub struct RunReport {
     pub error: Option<RunError>,
     /// Values of output variables (secret outputs are masked when recorded).
     pub outputs: Map<String, Value>,
+    /// The scenarios `scenario.call` steps could run, as they were when the
+    /// run started.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subscenarios: Vec<SubscenarioRef>,
+}
+
+/// A called scenario's content as used by a run.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscenarioRef {
+    pub scenario_id: ScenarioId,
+    pub scenario_name: String,
+    pub revision: u64,
+    /// Named version its content matches, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
 }
 
 /// Live state of a run, for `get_run_status` while it is executing.

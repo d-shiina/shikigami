@@ -4,7 +4,7 @@ import { useStudio } from "../context";
 import type { SecretField } from "../lib/api";
 import { t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
-import { knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
+import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { sentence } from "../lib/sentence";
 import { findStep, revertBlocker, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
@@ -384,6 +384,189 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
   );
 }
 
+/** Which scenario a call runs, what it passes in and where its outputs go. */
+function CallEditor({
+  step,
+  vars,
+  update,
+}: {
+  step: Step;
+  vars: Map<string, string | undefined>;
+  update: (p: StepPatch) => void;
+}) {
+  const scenario = useStudio((s) => s.scenario);
+  const summaries = useStudio((s) => s.summaries);
+  const called = useStudio((s) => s.called);
+  const open = useStudio((s) => s.open);
+  const target = typeof step.params?.scenario === "string" ? step.params.scenario : "";
+  const callee = called[target];
+  const inputs = callMap(step, "inputs");
+  const outs = callMap(step, "outputs");
+  const known = new Set(vars.keys());
+  const choices = summaries.filter((s) => s.id !== scenario?.id);
+  const calleeVars = callee?.variables ?? [];
+  const ins = calleeVars.filter((v) => v.direction === "input" || v.direction === "inOut");
+  const results = calleeVars.filter((v) => v.direction === "output" || v.direction === "inOut");
+  return (
+    <>
+      <Section
+        title="呼ぶシナリオ"
+        aside={
+          callee && (
+            <button
+              type="button"
+              className="text-[10px] text-brand-600 hover:underline"
+              onClick={(e) => {
+                e.preventDefault();
+                void open(target);
+              }}
+            >
+              開く ↗
+            </button>
+          )
+        }
+      >
+        <Row label="シナリオ *" hint={target !== "" && !callee ? "このワークスペースに見つかりません" : undefined}>
+          <select
+            className={inputClass}
+            value={target}
+            // Inputs and outputs belong to the old target: start over.
+            onChange={(e) => update({ replaceParams: { scenario: e.target.value } })}
+          >
+            <option value="">（選んでください）</option>
+            {target !== "" && !choices.some((c) => c.id === target) && <option value={target}>{target}</option>}
+            {choices.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Row>
+      </Section>
+      {callee && (
+        <Section title="渡す値">
+          {ins.length === 0 && <p className="py-1 text-[11px] text-slate-400">入力はありません</p>}
+          {ins.map((v) => {
+            const value = inputs[v.name];
+            const ref = referencedVariables(value, known)[0];
+            const required = v.default === undefined || v.default === null;
+            return (
+              <Row
+                key={v.name}
+                label={`${v.name}${required ? " *" : ""}`}
+                title={v.description ?? v.name}
+                socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : TYPE_COLOR[v.type ?? "any"]}
+                hint={v.secret ? "秘密の値：secret 変数から {{ 名前 }} で渡す" : required ? undefined : `省略時: ${JSON.stringify(v.default)}`}
+              >
+                <CommitInput
+                  mono
+                  value={value === undefined ? "" : typeof value === "string" ? value : JSON.stringify(value)}
+                  placeholder={`{{ ${v.name} }}`}
+                  onCommit={(text) => {
+                    const trimmed = text.trim();
+                    let next: unknown = trimmed === "" ? null : trimmed;
+                    if (trimmed !== "" && !trimmed.includes("{{")) {
+                      try {
+                        next = JSON.parse(trimmed);
+                      } catch {
+                        next = trimmed;
+                      }
+                    }
+                    update({ params: { inputs: { [v.name]: next } } });
+                  }}
+                />
+              </Row>
+            );
+          })}
+        </Section>
+      )}
+      {callee && (
+        <Section title="受け取る変数">
+          {results.length === 0 && <p className="py-1 text-[11px] text-slate-400">出力はありません</p>}
+          {results.map((v) => {
+            const into = typeof outs[v.name] === "string" ? (outs[v.name] as string) : "";
+            return (
+              <Row key={v.name} label={v.name} title={v.description ?? v.name} socket={into ? TYPE_COLOR[vars.get(into) ?? v.type ?? "any"] : undefined}>
+                <CommitInput
+                  mono
+                  value={into}
+                  placeholder="受け取らない"
+                  onCommit={(text) => update({ params: { outputs: { [v.name]: text.trim() === "" ? null : text.trim() } } })}
+                />
+              </Row>
+            );
+          })}
+        </Section>
+      )}
+    </>
+  );
+}
+
+/** The selected step and the ones after it, in the same block. */
+function siblingsFrom(steps: Step[], id: string): Step[] | null {
+  const i = steps.findIndex((s) => s.id === id);
+  if (i >= 0) return steps.slice(i);
+  for (const step of steps) {
+    for (const children of Object.values(step.blocks ?? {})) {
+      const found = siblingsFrom(children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** Moves this step (and the next few) into a new scenario called from here. */
+function ExtractSection({ step }: { step: Step }) {
+  const scenario = useStudio((s) => s.scenario);
+  const extract = useStudio((s) => s.extract);
+  const after = useMemo(() => siblingsFrom(scenario?.steps ?? [], step.id ?? "") ?? [step], [scenario, step]);
+  const [count, setCount] = useState(1);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setCount(1);
+    setName("");
+  }, [step.id]);
+  const picked = after.slice(0, Math.min(count, after.length));
+  return (
+    <Section title="サブシナリオにまとめる">
+      <Row label="まとめる範囲" hint={picked.map((s) => s.name || s.type).join(" → ")}>
+        <select className={inputClass} value={count} onChange={(e) => setCount(Number(e.target.value))}>
+          {after.map((_, i) => (
+            <option key={i} value={i + 1}>
+              {i === 0 ? "このステップだけ" : `ここから ${i + 1} ステップ`}
+            </option>
+          ))}
+        </select>
+      </Row>
+      <Row label="新しい名前">
+        <input className={inputClass} value={name} placeholder="例: 請求書を 1 件登録する" onChange={(e) => setName(e.target.value)} />
+      </Row>
+      <div className="flex justify-end pt-1">
+        <button
+          type="button"
+          disabled={busy || name.trim() === ""}
+          className="rounded-[3px] bg-ink px-2.5 py-0.5 text-xs text-paper disabled:opacity-40"
+          onClick={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            await extract(
+              picked.map((s) => s.id ?? ""),
+              name.trim(),
+            );
+            setBusy(false);
+          }}
+        >
+          まとめる
+        </button>
+      </div>
+      <p className="pt-1 text-[10px] leading-snug text-slate-400">
+        選んだステップを新しいシナリオに移し、ここをその呼び出しに置き換えます。読み書きする変数は入力・出力として受け渡すので、動きは変わりません。
+      </p>
+    </Section>
+  );
+}
+
 export function PropertyPanel() {
   const scenario = useStudio((s) => s.scenario);
   const selection = useStudio((s) => s.selection);
@@ -416,6 +599,7 @@ export function PropertyPanel() {
   const issues = validation?.issues.filter((i) => i.stepId === id) ?? [];
   const color = CATEGORY_COLOR[def?.category ?? step.type.split(".")[0] ?? "other"] ?? CATEGORY_COLOR.other;
   const outs = outputs(step);
+  const isCall = step.type === CALL;
 
   return (
     <div className="pb-6">
@@ -483,8 +667,12 @@ export function PropertyPanel() {
           <span className="block truncate pt-1.5 font-mono text-[10px] text-slate-400">{id}</span>
         </Row>
       </Section>
-      <ParamsEditor step={step} def={def} vars={vars} update={update} />
-      {(outs.length > 0 || def?.hasOutput) && (
+      {isCall ? (
+        <CallEditor step={step} vars={vars} update={update} />
+      ) : (
+        <ParamsEditor step={step} def={def} vars={vars} update={update} />
+      )}
+      {!isCall && (outs.length > 0 || def?.hasOutput) && (
         <Section title="出力">
           {def?.hasOutput && (
             <Row label={t.saveAs} socket={step.saveAs ? TYPE_COLOR[vars.get(step.saveAs) ?? "any"] : undefined}>
@@ -506,25 +694,28 @@ export function PropertyPanel() {
         </Section>
       )}
       <Connections stepId={id} links={links} vars={vars} />
+      <ExtractSection step={step} />
       {!step.type.startsWith("control.") && (
         <Section title="実行の設定">
           <Row label={t.timeoutMs}>
             <CommitInput
               value={step.timeoutMs?.toString() ?? ""}
-              placeholder="30000"
+              placeholder={isCall ? "なし（呼び出し全体の上限）" : "30000"}
               onCommit={(v) => update({ timeoutMs: v.trim() === "" ? null : Number(v) })}
             />
           </Row>
-          <Row label={t.retry}>
-            <CommitInput
-              value={step.retry?.maxAttempts?.toString() ?? ""}
-              placeholder="1"
-              onCommit={(v) => {
-                const n = Number(v);
-                update({ retry: v.trim() === "" || n <= 1 ? null : { maxAttempts: n, backoffMs: 1000, backoffMultiplier: 2 } });
-              }}
-            />
-          </Row>
+          {!isCall && (
+            <Row label={t.retry}>
+              <CommitInput
+                value={step.retry?.maxAttempts?.toString() ?? ""}
+                placeholder="1"
+                onCommit={(v) => {
+                  const n = Number(v);
+                  update({ retry: v.trim() === "" || n <= 1 ? null : { maxAttempts: n, backoffMs: 1000, backoffMultiplier: 2 } });
+                }}
+              />
+            </Row>
+          )}
           <Row label={t.onError}>
             <select
               className={inputClass}

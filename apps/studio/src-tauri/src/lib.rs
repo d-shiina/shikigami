@@ -92,6 +92,7 @@ pub fn run() {
             commands::duplicate_scenario,
             commands::delete_scenario,
             commands::edit_scenario,
+            commands::extract_subscenario,
             commands::undo,
             commands::redo,
             commands::undo_state,

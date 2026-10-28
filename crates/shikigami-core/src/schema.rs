@@ -14,7 +14,9 @@ use crate::model::ScenarioSummary;
 use crate::ops::EditOp;
 use crate::registry::StepTypeDef;
 use crate::review::{Evidence, NewReview, ObservationContent, ReviewTimeline};
-use crate::service::{ChangeEvent, ChangeNote, EditOutcome, ImportOutcome, NewScenario};
+use crate::service::{
+    ChangeEvent, ChangeNote, EditOutcome, ExtractOutcome, ImportOutcome, NewScenario,
+};
 use crate::store::{HistoryEntry, WorkspaceInfo};
 use crate::validate::ValidationReport;
 use crate::version::{
@@ -64,6 +66,7 @@ struct Api {
     scenario_diff: ScenarioDiff,
     scenario_bundle: ScenarioBundle,
     import_outcome: ImportOutcome,
+    extract_outcome: ExtractOutcome,
     import_conflict: ImportConflict,
     workspace_info: WorkspaceInfo,
     change_note: ChangeNote,

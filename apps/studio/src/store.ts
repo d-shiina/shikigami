@@ -36,6 +36,7 @@ import {
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
 import { summarize } from "./lib/review";
+import { setScenarioNames } from "./lib/sentence";
 
 export type Selection =
   | { kind: "step"; stepId: string }
@@ -116,7 +117,29 @@ export type RunState = {
   changes: VariableChange[];
   /** When each step began, in run order (retries not counted), to tell what a step saw. */
   starts: StepStart[];
+  /**
+   * Steps of called scenarios, by the top-level call step they ran under:
+   * what an unfolded call shows. Their events never touch `steps`.
+   */
+  inner: Record<string, Record<string, StepRunState>>;
 };
+
+/** The `scenario.call` steps a run event happened inside (outermost first). */
+const callPathOf = (env: RunEventEnvelope): string[] => (env as { callPath?: string[] }).callPath ?? [];
+
+/** Scenarios a step tree calls directly. */
+export function calledIds(steps: Step[]): string[] {
+  const ids = new Set<string>();
+  const walk = (list: Step[]) => {
+    for (const step of list) {
+      const target = step.type === "scenario.call" ? step.params?.scenario : undefined;
+      if (typeof target === "string" && target) ids.add(target);
+      for (const children of Object.values(step.blocks ?? {})) walk(children);
+    }
+  };
+  walk(steps);
+  return [...ids];
+}
 
 export type StepStart = { stepId: string; seq: number };
 
@@ -151,6 +174,10 @@ export type StudioState = {
   paletteOpen: boolean;
   /** Named versions of the open scenario, newest first. */
   versions: VersionSummary[];
+  /** The scenarios the open one calls, by id, for call nodes and their inputs. */
+  called: Record<string, Scenario>;
+  /** Call steps shown unfolded on the chart. */
+  unfolded: Record<string, boolean>;
   workspace: WorkspaceInfo | null;
   /** A file whose scenario already exists, waiting for the user's choice. */
   pendingImport: { contents: string; name: string } | null;
@@ -194,6 +221,10 @@ export type StudioState = {
   updateStep(stepId: string, patch: StepPatch): Promise<void>;
   setVariable(variable: VariableDef): Promise<void>;
   removeVariable(name: string): Promise<void>;
+  loadCalled(): Promise<void>;
+  toggleUnfolded(stepId: string): void;
+  /** Moves neighbouring steps into a new scenario; returns true when done. */
+  extract(stepIds: string[], name: string): Promise<boolean>;
   onExternalChange(scenarioId: string): Promise<void>;
   /** `step`: pause before the first step. */
   startRun(options?: { step?: boolean }): Promise<void>;
@@ -386,6 +417,7 @@ const newRun = (runId: string, scenarioId: string | null = null): RunState => ({
   logs: [],
   changes: [],
   starts: [],
+  inner: {},
 });
 const OUTLINE_KEY = "shikigami.studio.outline";
 
@@ -459,6 +491,7 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "log.message": { message: "" },
   "flow.delay": { ms: 1000 },
   "wait.until": { condition: "true" },
+  "scenario.call": { scenario: "" },
   "browser.open": { url: "https://" },
   "browser.click": { target: { role: "button", name: "" } },
   "browser.fill": { target: { label: "" }, value: "" },
@@ -502,7 +535,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       if (!id) return;
       const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
       set({ scenario, validation, canUndo: undo.canUndo, canRedo: undo.canRedo });
-      await get().loadHistory();
+      await Promise.all([get().loadHistory(), get().loadCalled()]);
     };
 
     /** Runs a mutation; on a revision conflict reloads and tells the user. */
@@ -513,6 +546,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         applyOutcome(await fn(scenario.id, scenario.revision ?? 0));
         void get().refreshList();
         void get().loadHistory();
+        void get().loadCalled();
         return true;
       } catch (e) {
         if (e instanceof ApiError && e.code === "REVISION_CONFLICT") {
@@ -547,6 +581,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
       versions: [],
+      called: {},
+      unfolded: {},
       workspace: null,
       pendingImport: null,
       secrets: [],
@@ -561,6 +597,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async init() {
         try {
           const [stepTypes, summaries] = await Promise.all([api.listStepTypes(), api.listScenarios()]);
+          setScenarioNames(new Map(summaries.map((s) => [s.id, s.name] as const)));
           set({ stepTypes, summaries });
           void get().loadInbox();
           set({ workspace: await api.workspaceInfo() });
@@ -655,7 +692,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async refreshList() {
         try {
-          set({ summaries: await api.listScenarios() });
+          const summaries = await api.listScenarios();
+          setScenarioNames(new Map(summaries.map((s) => [s.id, s.name] as const)));
+          set({ summaries });
         } catch (e) {
           set({ error: message(e) });
         }
@@ -673,8 +712,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             error: null,
             history: [],
             versions: [],
+            called: {},
           });
-          await Promise.all([get().loadHistory(), get().loadVersions()]);
+          await Promise.all([get().loadHistory(), get().loadVersions(), get().loadCalled()]);
         } catch (e) {
           set({ error: message(e) });
         }
@@ -711,7 +751,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           if (current?.id === id) set({ scenario: null, validation: null, selection: null });
           await get().refreshList();
         } catch (e) {
-          set({ error: message(e) });
+          if (e instanceof ApiError && e.code === "SCENARIO_IN_USE") {
+            const callers = ((e.details as { callers?: { name?: string }[] } | undefined)?.callers ?? []).map((c) => c.name ?? "");
+            set({ error: t.inUse(callers) });
+          } else {
+            set({ error: message(e) });
+          }
         }
       },
 
@@ -803,7 +848,49 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         await get().applyOps([{ op: "removeVariable", name }]);
       },
 
+      async loadCalled() {
+        const scenario = get().scenario;
+        if (!scenario) return;
+        const ids = calledIds(scenario.steps ?? []).filter((id) => id !== scenario.id);
+        const pairs = await Promise.all(
+          ids.map((id) =>
+            api
+              .getScenario(id)
+              .then((s) => [id, s] as const)
+              .catch(() => null),
+          ),
+        );
+        // Ignore a late answer for a scenario that is no longer open.
+        if (get().scenario?.id !== scenario.id) return;
+        set({ called: Object.fromEntries(pairs.filter((p) => p !== null)) });
+      },
+
+      toggleUnfolded(stepId) {
+        set((s) => ({ unfolded: { ...s.unfolded, [stepId]: !s.unfolded[stepId] } }));
+      },
+
+      async extract(stepIds, name) {
+        const scenario = get().scenario;
+        if (!scenario || stepIds.length === 0) return false;
+        try {
+          const outcome = await api.extractSubscenario(scenario.id, scenario.revision ?? 0, stepIds, name);
+          applyOutcome(outcome.caller);
+          set({ selection: { kind: "step", stepId: outcome.callStepId }, notice: t.extracted(outcome.subscenario.scenario.name) });
+          await Promise.all([get().refreshList(), get().loadHistory(), get().loadCalled()]);
+          return true;
+        } catch (e) {
+          if (e instanceof ApiError && e.code === "REVISION_CONFLICT") {
+            await reloadCurrent();
+            set({ notice: t.reloadedByConflict });
+          } else {
+            set({ error: message(e) });
+          }
+          return false;
+        }
+      },
+
       async onExternalChange(scenarioId) {
+        if (get().called[scenarioId]) void get().loadCalled();
         await get().refreshList();
         void api
           .history(scenarioId)
@@ -916,6 +1003,26 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const push = (level: LogLevel, msg: string, stepId?: string | null) => {
             run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
           };
+          const path = callPathOf(env);
+          if (path.length > 0) {
+            // Inside a called scenario: its steps and variables are not the
+            // chart's. Steps directly inside a top-level call show when it is unfolded.
+            const call = path[0]!;
+            const states = path.length === 1 ? { ...(run.inner[call] ?? {}) } : null;
+            if (env.type === "stepStarted" && states) states[env.stepId] = "running";
+            if (env.type === "stepFinished") {
+              if (states) states[env.stepId] = env.outcome;
+              // A failure reaches the call step itself and is logged there.
+              if (human?.stepId === call) human = null;
+            }
+            if (env.type === "log") push(env.level, env.message, call);
+            if (env.type === "humanActionRequired") {
+              human = { stepId: call, message: env.message };
+              push("warn", `${t.waitingForYou}: ${env.message}`, call);
+            }
+            if (states) run.inner = { ...run.inner, [call]: states };
+            return { run, human, secretFix };
+          }
           const change = asVariableChange(env);
           if (change) run.changes = [...run.changes, change];
           switch (env.type) {

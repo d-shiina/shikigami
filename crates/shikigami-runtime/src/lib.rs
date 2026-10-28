@@ -24,7 +24,9 @@ use std::time::Instant;
 use serde_json::{Map, Value};
 use shikigami_core::registry::builtin as builtin_types;
 use shikigami_core::secret::SecretProvider;
-use shikigami_core::{OnError, RunId, Scenario, StepRegistry, StepTypeDef, Validator};
+use shikigami_core::{
+    OnError, RunId, Scenario, ScenarioId, StepRegistry, StepTypeDef, Subscenario, Validator,
+};
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -34,6 +36,7 @@ pub use adapter::Adapter;
 pub use debug::{DebugCommand, DebugControl, DebugOptions, PauseReason, ResumeAction};
 pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunReport, RunSnapshot, RunStatus, StepOutcome,
+    SubscenarioRef,
 };
 pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 pub use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef, ResourceKind};
@@ -57,6 +60,10 @@ pub struct RunOptions {
     /// Make this an interactive run that can pause (Studio). Unattended
     /// runs leave it unset and fail as usual. See [`debug`].
     pub debug: Option<DebugOptions>,
+    /// The scenarios its `scenario.call` steps may run (see
+    /// `ScenarioService::subscenarios`). The run uses them as given, so
+    /// edits made while it runs do not affect it.
+    pub subscenarios: Vec<Subscenario>,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -97,7 +104,14 @@ impl Runtime {
 
     /// Validates and starts a run on the current Tokio runtime.
     pub fn start(&self, scenario: Scenario, options: RunOptions) -> Result<RunHandle, RunError> {
-        let report = self.validator.validate(&scenario);
+        let library: HashMap<ScenarioId, Arc<Scenario>> = options
+            .subscenarios
+            .iter()
+            .map(|s| (s.scenario.id.clone(), Arc::new(s.scenario.clone())))
+            .collect();
+        let report = self
+            .validator
+            .validate_with_calls(&scenario, &|id| library.get(id).map(|s| (**s).clone()));
         if !report.valid {
             return Err(RunError {
                 details: serde_json::to_value(&report).ok(),
@@ -148,9 +162,20 @@ impl Runtime {
                 resources: self.resources.clone(),
                 debug: debugger.clone(),
                 handled_depth: 0,
+                library: Arc::new(library),
             },
         );
         let inputs = options.inputs;
+        let subscenarios: Vec<SubscenarioRef> = options
+            .subscenarios
+            .iter()
+            .map(|s| SubscenarioRef {
+                scenario_id: s.scenario.id.clone(),
+                scenario_name: s.scenario.name.clone(),
+                revision: s.scenario.revision,
+                version: s.version,
+            })
+            .collect();
 
         let task_run_id = run_id.clone();
         let version = options.version;
@@ -227,6 +252,7 @@ impl Runtime {
                 finished_at: OffsetDateTime::now_utc(),
                 error,
                 outputs,
+                subscenarios,
             }
         });
 
@@ -334,7 +360,7 @@ impl Default for RuntimeBuilder {
     }
 }
 
-fn init_variables(
+pub(crate) fn init_variables(
     scenario: &Scenario,
     inputs: &Map<String, Value>,
     executor: &mut Executor,
@@ -452,6 +478,10 @@ impl RunHandle {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod call_tests;
 
 /// JSON Schema of the run API types (events, reports, snapshots), exported
 /// next to the core schemas for TypeScript generation.

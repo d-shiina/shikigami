@@ -181,6 +181,7 @@ shikigami/
 | `control.fail` | `message`, `code` で失敗させる |
 | `variable.set` | `name` に `value`（テンプレート可）または `expression` を代入 |
 | `log.message` | 実行ログ出力 |
+| `scenario.call` | `scenario`（ID）, `inputs`, `outputs` で別のシナリオを 1 ステップとして呼ぶ（[設計](design/subscenarios.md)） |
 | `flow.delay` | 時間指定待機（完了待ちには `wait.until` を使う） |
 
 ## 5. Adapter Interface

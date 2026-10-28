@@ -4,10 +4,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use shikigami_core::{
-    Actor, ActorKind, EditOp, EditOutcome, ErrorPayload, Evidence, FileStore, HistoryEntry,
-    ImportConflict, ImportOutcome, NewReview, NewScenario, NewVersion, ObservationContent,
-    ObservationId, ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId, ScenarioSummary,
-    StepTypeDef, UserConfig, ValidationReport, VersionSummary, WorkspaceInfo, WorkspaceManifest,
+    Actor, ActorKind, ChangeNote, EditOp, EditOutcome, ErrorPayload, Evidence, ExtractOutcome,
+    FileStore, HistoryEntry, ImportConflict, ImportOutcome, NewReview, NewScenario, NewVersion,
+    ObservationContent, ObservationId, ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId,
+    ScenarioSummary, StepId, StepTypeDef, UserConfig, ValidationReport, VersionSummary,
+    WorkspaceInfo, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunSnapshot};
@@ -180,6 +181,25 @@ pub fn delete_scenario(
     Ok(state.service.delete(&id, expected_revision, studio())?)
 }
 
+/// Moves neighbouring steps into a new scenario called from where they were.
+#[tauri::command]
+pub fn extract_subscenario(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    expected_revision: Option<u64>,
+    step_ids: Vec<StepId>,
+    name: String,
+) -> CmdResult<ExtractOutcome> {
+    Ok(state.service.extract_subscenario(
+        &id,
+        expected_revision,
+        &step_ids,
+        &name,
+        studio(),
+        ChangeNote::default(),
+    )?)
+}
+
 #[tauri::command]
 pub fn edit_scenario(
     state: State<'_, AppState>,
@@ -300,6 +320,7 @@ pub async fn run_scenario(
     let debug = debug.unwrap_or_default();
     let scenario = state.service.get_runnable(&id)?;
     let version = state.service.matching_version(&scenario).ok().flatten();
+    let subscenarios = state.service.subscenarios(&scenario)?;
     let handle = state
         .runtime
         .start(
@@ -313,6 +334,7 @@ pub async fn run_scenario(
                     breakpoints: debug.breakpoints,
                     pause_at_start: debug.step,
                 }),
+                subscenarios,
                 ..RunOptions::default()
             },
         )

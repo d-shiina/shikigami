@@ -52,6 +52,9 @@
     "import_outcome": {
       "$ref": "#/$defs/ImportOutcome"
     },
+    "extract_outcome": {
+      "$ref": "#/$defs/ExtractOutcome"
+    },
     "import_conflict": {
       "$ref": "#/$defs/ImportConflict"
     },
@@ -91,6 +94,7 @@
     "scenario_diff",
     "scenario_bundle",
     "import_outcome",
+    "extract_outcome",
     "import_conflict",
     "workspace_info",
     "change_note",
@@ -1519,6 +1523,13 @@
             "$ref": "#/$defs/ScenarioVersion"
           },
           "default": []
+        },
+        "subscenarios": {
+          "description": "Every scenario `scenario` calls (directly or through others), without\nversions, so the bundle runs on its own.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Scenario"
+          }
         }
       },
       "required": [
@@ -1540,6 +1551,13 @@
           "type": "integer",
           "format": "uint",
           "minimum": 0
+        },
+        "subscenarios": {
+          "description": "The bundle's sub-scenarios and what happened to each.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImportedSubscenario"
+          }
         },
         "scenario": {
           "$ref": "#/$defs/Scenario"
@@ -1570,6 +1588,69 @@
         "created",
         "updated",
         "copied"
+      ]
+    },
+    "ImportedSubscenario": {
+      "description": "One sub-scenario of an imported bundle.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/SubscenarioImport"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "mode"
+      ]
+    },
+    "SubscenarioImport": {
+      "description": "What importing a bundle did with one of its sub-scenarios.",
+      "oneOf": [
+        {
+          "description": "It was not in the workspace and was added with the same ID.",
+          "type": "string",
+          "const": "created"
+        },
+        {
+          "description": "It existed and was updated (`onConflict: \"update\"`).",
+          "type": "string",
+          "const": "updated"
+        },
+        {
+          "description": "It existed and was left as it is.",
+          "type": "string",
+          "const": "kept"
+        }
+      ]
+    },
+    "ExtractOutcome": {
+      "description": "Result of moving steps into a new sub-scenario.",
+      "type": "object",
+      "properties": {
+        "subscenario": {
+          "description": "The new scenario holding the steps.",
+          "$ref": "#/$defs/EditOutcome"
+        },
+        "caller": {
+          "description": "The calling scenario, with the steps replaced by one `scenario.call`.",
+          "$ref": "#/$defs/EditOutcome"
+        },
+        "callStepId": {
+          "description": "ID of the new `scenario.call` step.",
+          "$ref": "#/$defs/StepId"
+        }
+      },
+      "required": [
+        "subscenario",
+        "caller",
+        "callStepId"
       ]
     },
     "ImportConflict": {

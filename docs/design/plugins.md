@@ -146,7 +146,7 @@ hello/
 
 読み込めなかったプラグイン（マニフェストの誤り、組込や他のプラグインと名前が重なる、記述例が通らない）は飛ばして、理由を残す。`shikigami plugin list` で読み込んだものと問題を、`shikigami plugin check <フォルダ>` で作成中のプラグインの検査ができる。
 
-予約済みの名前（プラグインに使えない）：`control` `variable` `log` `flow` `wait` `browser` `desktop` `excel` `word` `outlook` `office` `file` `sap` `shikigami`、および組込アダプターの名前。
+予約済みの名前（プラグインに使えない）：`control` `variable` `log` `flow` `scenario` `wait` `browser` `desktop` `excel` `word` `outlook` `office` `file` `sap` `shikigami`、および組込アダプターの名前。
 
 ## 8. まだやらないこと（順に検討）
 
