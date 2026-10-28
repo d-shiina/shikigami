@@ -5,8 +5,8 @@ import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
 import { formatValue } from "./changes";
 import { targetText } from "./sentence";
 
-export const NODE_HEAD_H = 54;
-export const ROW_H = 24;
+export const NODE_HEAD_H = 58;
+export const ROW_H = 26;
 export const NODE_PAD_B = 8;
 export const MAX_PARAM_ROWS = 5;
 

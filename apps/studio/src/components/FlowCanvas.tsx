@@ -14,9 +14,9 @@ import {
   Position,
   ReactFlow,
 } from "@xyflow/react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useStudio } from "../context";
-import { type Direction, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
+import { type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
 import type { HistoryEntry, VariableDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
@@ -33,7 +33,7 @@ type StepNodeProps = NodeProps<
   Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; dir: Direction }>
 >;
 
-const MIN_READABLE_ZOOM = 0.8;
+const MIN_READABLE_ZOOM = 0.85;
 
 const RUN_STYLE: Record<StepRunState, string> = {
   running: "ring-2 ring-accent-500 animate-pulse",
@@ -105,14 +105,48 @@ function FlowHandles({ dir, atHeader = true }: { dir: Direction; atHeader?: bool
   );
 }
 
-type DataEdgeData = { variable: string; color: string; writes: VariableChange[]; lit: boolean; dim: boolean };
+type DataEdgeData = {
+  variable: string;
+  color: string;
+  writes: VariableChange[];
+  from: string;
+  to: string;
+  selectedId: string | null;
+};
+
+/**
+ * The step under the pointer. Kept outside React state so hovering only
+ * re-renders the links: re-rendering the whole canvas mid-click swallowed
+ * the click that selects a step.
+ */
+const hovered = (() => {
+  let id: string | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    set(next: string | null) {
+      if (next === id) return;
+      id = next;
+      for (const l of listeners) l();
+    },
+    get: () => id,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+})();
 
 /** A variable link. Hovering it shows the values that travelled along it in the last run. */
 function DataEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<DataEdgeData>>) {
   const [hover, setHover] = useState(false);
+  const hoveredStep = useSyncExternalStore(hovered.subscribe, hovered.get);
   const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   if (!data) return null;
-  const strong = hover || data.lit;
+  // Links of the step under the pointer (or else the selected one) light up.
+  const focus = hoveredStep ?? data.selectedId;
+  const lit = focus !== null && (data.from === focus || data.to === focus);
+  const dim = focus !== null && !lit;
+  const strong = hover || lit;
   const last = data.writes.at(-1);
   return (
     <>
@@ -121,10 +155,10 @@ function DataEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
           id={id}
           path={path}
           interactionWidth={12}
-          style={{ stroke: data.color, strokeWidth: strong ? 2.5 : 1.5, opacity: strong ? 1 : data.dim ? 0.15 : 0.45 }}
+          style={{ stroke: data.color, strokeWidth: strong ? 2.5 : 1.25, opacity: strong ? 1 : dim ? 0.12 : 0.35 }}
         />
       </g>
-      {last && !hover && !data.dim && (
+      {last && !hover && lit && (
         <EdgeLabelRenderer>
           {/* The last value that travelled along this link, always visible after a run. */}
           <div
@@ -175,7 +209,7 @@ function NodeRow({ row, vars }: { row: Row; vars: Map<string, string | undefined
   }
   if (row.kind === "output") {
     return (
-      <div style={{ height: ROW_H }} className="relative flex items-center justify-end gap-2 px-3 text-[11px]">
+      <div style={{ height: ROW_H }} className="relative flex items-center justify-end gap-2 px-3 text-[12px]">
         <span className="text-slate-500">{row.label}</span>
         <span className="truncate font-mono font-semibold" style={{ color: typeColor(row.variable) }}>
           {row.variable}
@@ -185,12 +219,12 @@ function NodeRow({ row, vars }: { row: Row; vars: Map<string, string | undefined
     );
   }
   return (
-    <div style={{ height: ROW_H }} className="relative flex items-center gap-2 px-3 text-[11px]">
+    <div style={{ height: ROW_H }} className="relative flex items-center gap-2 px-3 text-[12px]">
       {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={typeColor(row.refs[0] ?? "")} title={`読む変数: ${row.refs.join(", ")}`} />}
       <span className="w-16 shrink-0 truncate text-slate-500" title={row.key}>
         {row.label}
       </span>
-      <span className="h-[18px] min-w-0 flex-1 truncate rounded bg-slate-100 px-1.5 leading-[18px] text-ink" title={row.value}>
+      <span className="h-[20px] min-w-0 flex-1 truncate rounded bg-slate-100 px-1.5 leading-[20px] text-ink" title={row.value}>
         {row.value}
       </span>
     </div>
@@ -224,10 +258,10 @@ function StepNode({ data }: StepNodeProps) {
         className="flex items-center gap-1.5 rounded-t-[3px] border-b border-slate-100 px-3"
       >
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-        <span className="truncate text-[11px] font-bold" style={{ color }}>
+        <span className="truncate text-[12px] font-bold" style={{ color }}>
           {data.def?.label ?? data.step.type}
         </span>
-        {data.step.name && <span className="truncate text-[11px] text-slate-500">{data.step.name}</span>}
+        {data.step.name && <span className="truncate text-[12px] text-slate-500">{data.step.name}</span>}
         {data.byAi && (
           <span className="swirl ml-auto shrink-0 rounded-full px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
             AI
@@ -239,7 +273,7 @@ function StepNode({ data }: StepNodeProps) {
           </span>
         )}
       </div>
-      <div style={{ height: NODE_HEAD_H - 24 }} className="flex items-center px-3 text-[12.5px]" title={plain(parts)}>
+      <div style={{ height: NODE_HEAD_H - 24 }} className="flex items-center px-3 text-[14px]" title={plain(parts)}>
         <span className="truncate">
           <Sentence parts={parts} />
         </span>
@@ -304,7 +338,26 @@ function IoNode({ data }: NodeProps<Node<IoNodeData>>) {
 const IO_W = 180;
 const IO_GAP = 72;
 
-const nodeTypes = { step: StepNode, slot: SlotNode, io: IoNode };
+/** Shades for nested blocks, lightest outside. */
+const FRAME_TINT = ["#eaf1f8", "#e2ebf5", "#d9e5f2"];
+
+/** The box behind a step's block, labelled like the block ("条件が真", "要素ごとの処理"). */
+function FrameNode({ data }: NodeProps<Node<FrameNodeData>>) {
+  return (
+    <div
+      style={{ width: data.width, height: data.height, background: FRAME_TINT[data.depth % FRAME_TINT.length] }}
+      className="pointer-events-none rounded-[6px] border border-slate-300/70"
+    >
+      <div className="flex items-center gap-1 px-2.5 pt-1 text-[11px] font-bold tracking-wide text-slate-500">
+        {data.loop && <span className="text-[13px] leading-none text-brand-600">↻</span>}
+        {data.label}
+        {data.loop && <span className="font-normal text-slate-400">（くり返す）</span>}
+      </div>
+    </div>
+  );
+}
+
+const nodeTypes = { step: StepNode, slot: SlotNode, io: IoNode, frame: FrameNode };
 
 export function FlowCanvas() {
   const scenario = useStudio((s) => s.scenario);
@@ -354,6 +407,9 @@ export function FlowCanvas() {
         },
       };
     }
+    if (n.data.kind === "frame") {
+      return { ...n, draggable: false, selectable: false, focusable: false, zIndex: -1 };
+    }
     const slot = n.data;
     return {
       ...n,
@@ -402,7 +458,6 @@ export function FlowCanvas() {
   const selectedId = selection?.kind === "step" ? selection.stepId : null;
   const dataEdges: Edge[] = links.map((l) => {
     const color = TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8";
-    const lit = selectedId !== null && (l.from === selectedId || l.to === selectedId);
     const writes = run ? writesFrom(run.changes, l.variable, l.from) : [];
     return {
       id: `data:${l.from}:${l.variable}->${l.to}:${l.toHandle}`,
@@ -414,8 +469,9 @@ export function FlowCanvas() {
       className: "data-link",
       selectable: false,
       focusable: false,
-      data: { variable: l.variable, color, writes, lit, dim: selectedId !== null && !lit },
-      zIndex: lit ? 1 : 0,
+      data: { variable: l.variable, color, writes, from: l.from, to: l.to, selectedId },
+      // Always beneath the steps, so a highlighted link never takes a click meant for a step.
+      zIndex: 0,
     };
   });
 
@@ -423,10 +479,12 @@ export function FlowCanvas() {
     ...e,
     sourceHandle: "flow",
     targetHandle: "flow",
+    // Left to right, the frames carry the block names.
+    label: layout.direction === "horizontal" ? undefined : e.label,
     type: "smoothstep",
     animated: e.loop,
-    style: e.loop ? { strokeDasharray: "4 4" } : undefined,
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
+    style: { stroke: "#5b6b80", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "#5b6b80" },
     labelBgPadding: [4, 2],
   }));
   edges.push(...dataEdges);
@@ -469,6 +527,8 @@ export function FlowCanvas() {
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
       onPaneClick={() => select(null)}
+      onNodeMouseEnter={(_, node) => node.type === "step" && hovered.set(node.id)}
+      onNodeMouseLeave={() => hovered.set(null)}
     >
       <Background gap={24} size={1.2} color="#c3cedb" />
       <Controls showInteractive={false} />

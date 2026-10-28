@@ -4,7 +4,7 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { nodeHeight } from "../lib/nodeRows";
 
-export const NODE_W = 260;
+export const NODE_W = 290;
 export const SLOT_H = 40;
 const GAP_X = 48;
 const GAP_Y = 36;
@@ -12,6 +12,9 @@ const GAP_Y = 36;
 const GAP_MAIN_H = 72;
 /** How far a block's steps start to the right of the step that owns them. */
 const LANE_INDENT = 48;
+/** Space inside a block's frame around its steps, and the frame's title strip. */
+const FRAME_PAD = 14;
+const FRAME_LABEL = 20;
 
 export type StepNodeData = {
   kind: "step";
@@ -29,11 +32,23 @@ export type SlotNodeData = {
   label: string;
 };
 
+/** A labelled box drawn behind one block of a step, e.g. "条件が真" or a loop body. */
+export type FrameNodeData = {
+  kind: "frame";
+  label: string;
+  width: number;
+  height: number;
+  /** How deep the block is nested, for shading. */
+  depth: number;
+  /** The block repeats (a loop body). */
+  loop: boolean;
+};
+
 export type LayoutNode = {
   id: string;
-  type: "step" | "slot";
+  type: "step" | "slot" | "frame";
   position: { x: number; y: number };
-  data: StepNodeData | SlotNodeData;
+  data: StepNodeData | SlotNodeData | FrameNodeData;
 };
 
 export type LayoutEdge = {
@@ -128,6 +143,9 @@ function measureList(steps: Step[], axes: Axes, defs: Defs): Size {
   return { main: main + axes.mainGap * (steps.length - 1), cross };
 }
 
+/** A lane's contents plus the frame drawn around them. */
+const frameBox = (m: Size): Size => ({ main: m.main + FRAME_PAD * 2, cross: m.cross + FRAME_PAD * 2 + FRAME_LABEL });
+
 function measure(step: Step, axes: Axes, defs: Defs): Size {
   const ls = lanes(step, defs);
   const own = axes.node(step);
@@ -137,9 +155,10 @@ function measure(step: Step, axes: Axes, defs: Defs): Size {
     // Blocks hang below their step, one under another, so the top row reads
     // as the scenario's main line, nesting grows downwards, and each lane's
     // exit runs right on its own row instead of through a sibling lane.
-    const lanesCross = ms.reduce((acc, m) => acc + m.cross, 0) + axes.crossGap * (ms.length - 1);
+    const boxes = ms.map(frameBox);
+    const lanesCross = boxes.reduce((acc, m) => acc + m.cross, 0) + axes.crossGap * (boxes.length - 1);
     return {
-      main: Math.max(own.main, LANE_INDENT + Math.max(...ms.map((m) => m.main))),
+      main: Math.max(own.main, LANE_INDENT + Math.max(...boxes.map((m) => m.main))),
       cross: own.cross + axes.crossGap + lanesCross,
     };
   }
@@ -153,6 +172,7 @@ class Builder {
   edges: LayoutEdge[] = [];
   private defs: Defs;
   private axes: Axes;
+  private depth = 0;
 
   constructor(defs: Defs, axes: Axes) {
     this.defs = defs;
@@ -223,6 +243,9 @@ class Builder {
     const exits: string[] = [];
     const attach = (placed: { entry: string; exits: string[] }, lane: Lane) => {
       this.edge(id, placed.entry, lane.label);
+      // Left to right, a loop's frame says it repeats; back-edges would only
+      // wrap the frame in a second outline.
+      if (isLoop && this.axes.dir === "horizontal") return;
       if (isLoop) {
         for (const e of placed.exits) this.edge(e, id, undefined, true);
       } else {
@@ -233,8 +256,28 @@ class Builder {
       let laneCross = cross + own.cross + this.axes.crossGap;
       ls.forEach((lane, i) => {
         const size = sizes[i] ?? this.axes.slot;
-        attach(this.list(lane.steps, main + LANE_INDENT, laneCross, size.cross, id, lane.name, lane.label, lane.start), lane);
-        laneCross += size.cross + this.axes.crossGap;
+        const box = frameBox(size);
+        const laneMain = main + LANE_INDENT;
+        this.nodes.push({
+          id: `frame:${id}:${lane.name}:${lane.start}`,
+          type: "frame",
+          position: this.axes.point(laneMain, laneCross),
+          data: { kind: "frame", label: lane.label, width: box.main, height: box.cross, depth: this.depth, loop: isLoop },
+        });
+        this.depth++;
+        const placed = this.list(
+          lane.steps,
+          laneMain + FRAME_PAD,
+          laneCross + FRAME_PAD + FRAME_LABEL,
+          size.cross,
+          id,
+          lane.name,
+          lane.label,
+          lane.start,
+        );
+        this.depth--;
+        attach(placed, lane);
+        laneCross += box.cross + this.axes.crossGap;
       });
       return { entry: id, exits: isLoop ? [id] : exits };
     }
