@@ -72,7 +72,7 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   const blocker = revertBlocker(entry, history);
   const scope = entryScope(describe(entry, scenario, defs));
   return (
-    <div title={scope.title} className="flex items-center gap-1.5 rounded-[3px] border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-lifted">
+    <div title={scope.title} className="flex items-center gap-1.5 rounded-[3px] border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-sheet">
       <ActorMark entry={entry} size={18} />
       <span className="text-slate-600">{actorLabel(entry)}の変更</span>
       <button type="button" onClick={() => approve(entry.revision)} className="rounded-[3px] bg-ink px-2 py-0.5 text-paper hover:bg-slate-700">

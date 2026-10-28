@@ -118,7 +118,7 @@ export function CanvasDock() {
   const stepSelected = selection?.kind === "step";
 
   return (
-    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-[4px] whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-lifted backdrop-blur">
+    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-[4px] whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-sheet backdrop-blur">
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}

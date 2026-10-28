@@ -35,8 +35,9 @@
 
   /*
    * 式神 are paper: every surface is a sheet laid on the desk (paper). A
-   * sheet shows the edge of the one under it; one lifted off the desk
-   * (menus, dialogs, the selected step) shows two and casts a softer shadow.
+   * sheet shows the edge of the one under it, toolbars and panels included.
+   * Only what is picked up for a moment (the selected step, menus, dialogs)
+   * shows two edges and casts a deeper shadow.
    * Corners stay nearly square.
    */
   --color-edge: #d3dce7;
