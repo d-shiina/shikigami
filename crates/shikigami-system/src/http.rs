@@ -9,20 +9,40 @@ use shikigami_runtime::{ActionInput, StepError};
 /// Most of a response body kept in error details.
 const ERROR_BODY_CHARS: usize = 2000;
 
-fn client() -> Result<&'static reqwest::Client, StepError> {
-    static CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
-    CLIENT
-        .get_or_init(|| {
-            // reqwest is built without its own crypto provider (the same
-            // TLS stack as Studio's updater); use ring for this process.
-            let _ = rustls::crypto::ring::default_provider().install_default();
+/// The shared clients: one that follows redirects anywhere, and one for
+/// requests carrying a secret that follows them only within the original
+/// origin (a redirect elsewhere comes back as the 3xx response), so a
+/// token in a custom header never reaches another site.
+fn client(with_secret: bool) -> Result<&'static reqwest::Client, StepError> {
+    static CLIENTS: OnceLock<Result<[reqwest::Client; 2], String>> = OnceLock::new();
+    let clients = CLIENTS.get_or_init(|| {
+        // reqwest is built without its own crypto provider (the same
+        // TLS stack as Studio's updater); use ring for this process.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let build = |policy| {
             reqwest::Client::builder()
                 .user_agent(concat!("Shikigami/", env!("CARGO_PKG_VERSION")))
+                .redirect(policy)
                 .build()
                 .map_err(|e| e.to_string())
-        })
-        .as_ref()
-        .map_err(|e| StepError::permanent("HTTP_UNAVAILABLE", e.clone()))
+        };
+        let same_origin = reqwest::redirect::Policy::custom(|attempt| {
+            let first = attempt.previous().first().map(reqwest::Url::origin);
+            if attempt.previous().len() > 10 || first != Some(attempt.url().origin()) {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        });
+        Ok([
+            build(reqwest::redirect::Policy::limited(10))?,
+            build(same_origin)?,
+        ])
+    });
+    match clients {
+        Ok(clients) => Ok(&clients[usize::from(with_secret)]),
+        Err(e) => Err(StepError::permanent("HTTP_UNAVAILABLE", e.clone())),
+    }
 }
 
 fn text_param(params: &Value, key: &str) -> Option<String> {
@@ -170,7 +190,8 @@ pub async fn request(input: &ActionInput) -> Result<Value, StepError> {
     let method = reqwest::Method::from_bytes(method_name.as_bytes()).map_err(|_| {
         StepError::permanent("INVALID_PARAMS", format!("unknown method {method_name}"))
     })?;
-    let mut request = client()?.request(method, url.clone());
+    let with_secret = params.get("auth").is_some_and(|v| !v.is_null());
+    let mut request = client(with_secret)?.request(method, url.clone());
     if let Some(headers) = params.get("headers").and_then(Value::as_object) {
         for (name, value) in headers {
             request = request.header(name.as_str(), shikigami_core::expr::to_display(value));
@@ -243,13 +264,7 @@ pub async fn request(input: &ActionInput) -> Result<Value, StepError> {
     }
 
     let body = if let Some(path) = text_param(params, "saveTo") {
-        if input.cancel.is_cancelled() {
-            return Err(StepError::new(
-                "CANCELLED",
-                "the step was stopped before the file was saved",
-            ));
-        }
-        shikigami_files::ops::write_atomic(Path::new(&path), &bytes)?;
+        shikigami_files::ops::write_atomic(Path::new(&path), &bytes, &input.cancel)?;
         json!(path)
     } else {
         let text = decode(&bytes, &content_type);

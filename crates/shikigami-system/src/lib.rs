@@ -103,10 +103,12 @@ impl ActionHandler for SystemStep {
                 Kind::ClipboardSet => blocking(move || desktop::clipboard_set(&params)).await,
                 Kind::DialogMessage | Kind::DialogInput | Kind::DialogSelectFile => {
                     input.request_human("Shikigami のダイアログに答えてください");
+                    // Each dialog is its own process: a stop or timeout kills
+                    // it and closes the window.
                     match kind {
-                        Kind::DialogMessage => blocking(move || desktop::message(&params)).await,
+                        Kind::DialogMessage => desktop::message(&params).await,
                         Kind::DialogInput => desktop::input(&params).await,
-                        _ => blocking(move || desktop::select_file(&params)).await,
+                        _ => desktop::select_file(&params).await,
                     }
                 }
             }

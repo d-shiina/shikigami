@@ -139,9 +139,14 @@ fn build(
 /// with `Z` or an offset), `2026/10/28 9:30`, `2026.10.28`, `2026年10月28日`.
 pub fn parse(source: &str) -> Result<When, ExprError> {
     let s = source.trim();
-    if (s.ends_with('Z') || s.get(19..).is_some_and(|tail| tail.contains(['+', '-'])))
-        && let Ok(ts) = s.parse::<jiff::Timestamp>()
-    {
+    // A UTC offset or `Z` after the time: convert to local time.
+    let time = s.split_once(['T', ' ']).map(|(_, t)| t);
+    if time.is_some_and(|t| t.ends_with(['Z', 'z']) || t.contains(['+', '-'])) {
+        let ts = s.parse::<jiff::Timestamp>().map_err(|_| {
+            err(format!(
+                "not a valid date: '{source}' (offsets look like +09:00)"
+            ))
+        })?;
         return Ok(When {
             at: ts.to_zoned(jiff::tz::TimeZone::system()).datetime(),
             has_time: true,
@@ -353,6 +358,11 @@ mod tests {
             "2026-10-28T09:30:15"
         );
         assert!(parse("10/28").is_err());
+        let utc = d("2026-10-28T00:30Z").at;
+        let offset = d("2026-10-28T09:30+09:00").at;
+        assert_eq!(utc, offset);
+        assert_eq!(d("2026-10-28T09:30-09:00").at, d("2026-10-28T18:30:00Z").at);
+        assert!(parse("2026-10-28T09:30+9").is_err());
         assert!(parse("2026-02-30").is_err());
         assert_eq!(
             parse_with("令和8年10月28日", "gge年M月d日")

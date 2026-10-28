@@ -17,6 +17,7 @@
 - 応答が JSON なら `body` は値になる（`res.body.items` のように使える）。それ以外はテキスト（charset を見て、なければ UTF-8 / Shift_JIS を判定）。`saveTo` を付けるとファイルに保存し、`body` は保存先のパス。
 - 状態コード 400 以上は `HTTP_ERROR`（`details.status` と `details.body`）。5xx・429・408 は `retry` で再試行される。404 を「無い」として扱うなら `control.try` で包む。
 - 認証：`auth` に登録済みのシークレット `{ "secret": "受注API", "field": "password" }`。`authType` は `bearer`（既定。`Authorization: Bearer …`）、`basic`（シークレットのユーザー名とパスワード）、`header`（`authHeader` の名前のヘッダーに入れる。API キー向け）。シークレットに登録したサイト（`https://api.example.com` の形）以外には送らない（`SECRET_SITE_MISMATCH`）。
+- シークレットを付けた要求は、別のサイトへのリダイレクトをたどらない（3xx の応答をそのまま返す）。キーが別サイトに渡らないようにするため。
 - プロキシは OS の設定に従う。証明書は Windows の証明書ストアで検証する（社内 CA もそのまま使える）。
 
 ## `process.run`
@@ -29,5 +30,6 @@
 ## クリップボードとダイアログ
 
 - Windows のみ。ほかの OS では `PLATFORM_UNSUPPORTED`（定義と検証はどこでも使える）。
+- ダイアログは 1 つずつ別の PowerShell プロセス（Windows フォーム）で出す。止めたり時間切れになったりするとプロセスごと閉じる。
 - ダイアログは人が見ている実行でだけ使う。既定で 10 分待ち（`timeoutMs` で変更）、無人実行ではタイムアウトまで止まる。待っている間は Studio に「ダイアログに答えてください」と出る。
 - パスワードを `dialog.input` で聞かない（シークレットを使う）。

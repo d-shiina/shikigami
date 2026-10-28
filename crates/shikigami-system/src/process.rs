@@ -18,10 +18,21 @@ fn tail(text: &str) -> String {
         .collect()
 }
 
+/// Reads a stream to its end, keeping at most [`MAX_OUTPUT`] bytes. The
+/// rest is read and dropped, so the program never blocks on a full pipe or
+/// dies of a broken one.
 async fn read_all(stream: Option<impl tokio::io::AsyncRead + Unpin>) -> Vec<u8> {
     let mut out = Vec::new();
-    if let Some(stream) = stream {
-        let _ = stream.take(MAX_OUTPUT as u64).read_to_end(&mut out).await;
+    let Some(mut stream) = stream else {
+        return out;
+    };
+    let mut chunk = vec![0u8; 64 * 1024];
+    while let Ok(n) = stream.read(&mut chunk).await {
+        if n == 0 {
+            break;
+        }
+        let room = MAX_OUTPUT.saturating_sub(out.len());
+        out.extend_from_slice(&chunk[..n.min(room)]);
     }
     out
 }
@@ -80,17 +91,22 @@ pub async fn run(input: &ActionInput) -> Result<Value, StepError> {
             "hint": "Give the full path of the program (e.g. C:\\Tools\\export.exe), or run a command through cmd: program \"cmd\", args [\"/c\", \"...\"].",
         }))
     })?;
-    if let Some(mut stdin) = child.stdin.take() {
-        if let Some(text) = params.get("stdin").filter(|v| !v.is_null()) {
-            let _ = stdin
-                .write_all(shikigami_core::expr::to_display(text).as_bytes())
-                .await;
+    let stdin_text = params
+        .get("stdin")
+        .filter(|v| !v.is_null())
+        .map(shikigami_core::expr::to_display);
+    let stdin = child.stdin.take();
+    // Feed stdin while draining stdout/stderr, so a program that writes as
+    // it reads never deadlocks on a full pipe.
+    let feed = async move {
+        if let (Some(mut stdin), Some(text)) = (stdin, stdin_text) {
+            let _ = stdin.write_all(text.as_bytes()).await;
         }
-        drop(stdin);
-    }
+    };
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let (out, err, status) = tokio::join!(read_all(stdout), read_all(stderr), child.wait());
+    let ((), out, err, status) =
+        tokio::join!(feed, read_all(stdout), read_all(stderr), child.wait());
     let status = status.map_err(|e| StepError::new("PROCESS_FAILED", e.to_string()))?;
     let decode = |bytes: &[u8]| {
         shikigami_files::encoding::decode(bytes, encoding, program)

@@ -300,3 +300,44 @@ async fn desktop_steps_need_windows() {
     let report = run(&runtime(), types::DIALOG_MESSAGE, json!({ "message": "x" })).await;
     assert_eq!(report.error.unwrap().code, "PLATFORM_UNSUPPORTED");
 }
+
+#[tokio::test]
+async fn secrets_do_not_follow_redirects_to_other_sites() {
+    let (other, other_seen) = serve("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").await;
+    let redirect: &'static str = Box::leak(
+        format!("HTTP/1.1 302 Found\r\nLocation: {other}/steal\r\nContent-Length: 0\r\n\r\n")
+            .into_boxed_str(),
+    );
+    let (base, _) = serve(redirect).await;
+    let report = run(
+        &runtime().with_secrets(Arc::new(ApiToken(vec![base.clone()]))),
+        types::HTTP_REQUEST,
+        json!({
+            "url": base,
+            "auth": { "secret": "受注API", "field": "password" },
+            "authType": "header",
+            "authHeader": "X-API-Key",
+        }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["status"], 302);
+    assert!(other_seen.lock().unwrap().is_empty());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn process_streams_large_stdin_through_a_filter() {
+    let big = "あ".repeat(1_000_000);
+    let report = run(
+        &runtime(),
+        types::PROCESS_RUN,
+        json!({ "program": "cat", "stdin": big }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(
+        report.outputs["out"]["stdout"].as_str().unwrap().len(),
+        big.len()
+    );
+}

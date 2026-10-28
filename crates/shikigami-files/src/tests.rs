@@ -325,3 +325,115 @@ async fn a_scenario_filters_a_csv_with_expressions() {
         "番号,税込\r\nA,1320\r\nC,5500\r\n"
     );
 }
+
+#[test]
+fn copy_and_move_never_destroy_the_source() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = p(&dir, "a.csv");
+    run(Kind::WriteText, json!({ "path": a, "text": "keep" })).unwrap();
+    for kind in [Kind::Copy, Kind::Move] {
+        let err = run(kind, json!({ "from": a, "to": a, "overwrite": true })).unwrap_err();
+        assert_eq!(err.code, "SAME_PATH");
+        let alias = dir.path().join(".").join("a.csv").display().to_string();
+        let err = run(kind, json!({ "from": a, "to": alias, "overwrite": true })).unwrap_err();
+        assert_eq!(err.code, "SAME_PATH");
+    }
+    assert_eq!(fs::read_to_string(&a).unwrap(), "keep");
+    let folder = p(&dir, "f");
+    run(
+        Kind::WriteText,
+        json!({ "path": p(&dir, "f/x.txt"), "text": "x" }),
+    )
+    .unwrap();
+    let err = run(
+        Kind::Copy,
+        json!({ "from": folder, "to": p(&dir, "f/sub/copy") }),
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "SAME_PATH");
+    assert!(!dir.path().join("f/sub").exists());
+}
+
+#[test]
+fn a_cancelled_attempt_changes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = p(&dir, "a.txt");
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    let err = run_step(
+        Kind::WriteText,
+        &json!({ "path": path, "text": "x" }),
+        &cancel,
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "CANCELLED");
+    assert!(!dir.path().join("a.txt").exists());
+}
+
+#[test]
+fn appending_csv_follows_the_file_header_over_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = p(&dir, "a.csv");
+    run(
+        Kind::WriteCsv,
+        json!({ "path": out, "rows": [{ "a": 1, "b": 2 }] }),
+    )
+    .unwrap();
+    run(
+        Kind::WriteCsv,
+        json!({ "path": out, "rows": [{ "a": 3, "b": 4 }], "columns": ["b", "a"], "append": true }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(Kind::ReadCsv, json!({ "path": out })).unwrap(),
+        json!([{ "a": "1", "b": "2" }, { "a": "3", "b": "4" }])
+    );
+}
+
+#[test]
+fn zipping_a_folder_into_itself_skips_the_archive() {
+    let dir = tempfile::tempdir().unwrap();
+    run(
+        Kind::WriteText,
+        json!({ "path": p(&dir, "src/a.txt"), "text": "a" }),
+    )
+    .unwrap();
+    let to = p(&dir, "src/out.zip");
+    run(Kind::Zip, json!({ "from": p(&dir, "src"), "to": to })).unwrap();
+    run(
+        Kind::Zip,
+        json!({ "from": p(&dir, "src"), "to": to, "overwrite": true }),
+    )
+    .unwrap();
+    let mut archive = zip::ZipArchive::new(fs::File::open(&to).unwrap()).unwrap();
+    let names: Vec<String> = (0..archive.len())
+        .map(|i| archive.by_index(i).unwrap().name().unwrap().into_owned())
+        .collect();
+    assert_eq!(names, ["src/", "src/a.txt"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn unzip_refuses_to_follow_links_out_of_the_destination() {
+    let dir = tempfile::tempdir().unwrap();
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    let dest = dir.path().join("dest");
+    fs::create_dir_all(&dest).unwrap();
+    std::os::unix::fs::symlink(&outside, dest.join("link")).unwrap();
+    let zip_path = dir.path().join("evil.zip");
+    {
+        let mut w = zip::ZipWriter::new(fs::File::create(&zip_path).unwrap());
+        w.start_file("link/new.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut w, b"x").unwrap();
+        w.finish().unwrap();
+    }
+    let err = run(
+        Kind::Unzip,
+        json!({ "path": zip_path.display().to_string(), "to": dest.display().to_string() }),
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "ZIP_INVALID");
+    assert!(!outside.join("new.txt").exists());
+}
