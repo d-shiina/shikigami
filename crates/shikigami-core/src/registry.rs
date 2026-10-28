@@ -22,6 +22,8 @@ pub mod control {
     pub const BREAK: &str = "control.break";
     pub const CONTINUE: &str = "control.continue";
     pub const FAIL: &str = "control.fail";
+    pub const PARALLEL: &str = "control.parallel";
+    pub const GROUP: &str = "control.group";
 }
 
 /// Built-in action step types that need no external adapter.
@@ -244,6 +246,33 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             has_output: false,
             expression_params: vec![],
             binds_variables: vec!["errorVar".into()],
+            risk: RiskLevel::Safe,
+        },
+        StepTypeDef {
+            step_type: control::PARALLEL.into(),
+            category: StepCategory::Control,
+            label: "並行実行".into(),
+            description: "Runs each step in `branches` at the same time and waits for all of them. Use `control.group` as a branch to run several steps in sequence. Each branch starts from a copy of the variables; variables changed by a branch are merged back afterwards, and two branches changing the same variable to different values fail with PARALLEL_VARIABLE_CONFLICT. When one branch fails, the others are cancelled. `maxConcurrency` (optional) limits how many branches run at once.".into(),
+            params_schema: object_schema(
+                json!({ "maxConcurrency": { "type": "integer", "minimum": 1, "maximum": 64 } }),
+                &[],
+            ),
+            blocks: vec![block("branches", "同時に実行")],
+            has_output: false,
+            expression_params: vec![],
+            binds_variables: vec![],
+            risk: RiskLevel::Safe,
+        },
+        StepTypeDef {
+            step_type: control::GROUP.into(),
+            category: StepCategory::Control,
+            label: "グループ".into(),
+            description: "Runs `body` in order. Use it to name a set of steps or as one branch of `control.parallel`.".into(),
+            params_schema: object_schema(json!({}), &[]),
+            blocks: vec![block("body", "処理")],
+            has_output: false,
+            expression_params: vec![],
+            binds_variables: vec![],
             risk: RiskLevel::Safe,
         },
         StepTypeDef {

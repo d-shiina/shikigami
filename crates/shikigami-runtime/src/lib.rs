@@ -29,9 +29,9 @@ use tokio_util::sync::CancellationToken;
 pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunReport, RunSnapshot, RunStatus, StepOutcome,
 };
-pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
+pub use handler::{ActionHandler, ActionInput, BoxFuture, DESKTOP_INPUT, StepError};
 
-use exec::{Emitter, Executor};
+use exec::{Emitter, Executor, ResourceLocks};
 
 /// Options for a single run.
 #[derive(Debug, Clone, Default)]
@@ -48,6 +48,7 @@ pub struct Runtime {
     registry: StepRegistry,
     handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
     validator: Arc<Validator>,
+    resources: Arc<ResourceLocks>,
 }
 
 impl Runtime {
@@ -105,6 +106,7 @@ impl Runtime {
                 default_timeout_ms: exec::DEFAULT_TIMEOUT_MS,
                 default_retry: None,
                 default_on_error: OnError::Fail,
+                resources: self.resources.clone(),
             },
         );
         let init = init_variables(&scenario, &options.inputs, &mut executor);
@@ -216,6 +218,7 @@ impl RuntimeBuilder {
             validator: Arc::new(Validator::new(self.registry.clone())),
             registry: self.registry,
             handlers: Arc::new(self.handlers),
+            resources: Arc::default(),
         }
     }
 }

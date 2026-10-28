@@ -31,6 +31,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 
 - ステップの `id` は省略すれば Core が採番する。既存ステップを指すときは `get_scenario` で得た ID を使う。
 - 制御構文は子を `blocks` に持つ：`control.if`（`then` / `else`）、`control.while` / `control.repeat` / `control.forEach`（`body`）、`control.try`（`try` / `catch` / `finally`）。
+- 互いに独立した処理は `control.parallel`（`branches` の各ステップが同時に動く）で並行にできる。複数ステップのブランチは `control.group` で包む。ブランチ同士で同じ変数に別の値を書くと `PARALLEL_VARIABLE_CONFLICT` になるので、ブランチごとに別の変数へ結果を入れる。
 - 文字列 params はテンプレート：`"{{ invoice.amount * 1.1 }}"`。`expression` 系の params（`control.if` の `condition` など）は `{{ }}` なしの式をそのまま書く。
 - 式で使える関数は安全なものに限られる（`len`, `contains`, `round` など）。任意コードは実行できない。
 - 入出力は `variables` の `direction`（`input` / `output` / `internal`）で宣言する。パスワード等は `secret: true` にするとログで `***` に伏せられる。
