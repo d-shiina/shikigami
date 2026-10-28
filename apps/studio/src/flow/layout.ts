@@ -2,9 +2,9 @@
 // scenario: positions are computed, never stored, so AI edits and GUI edits
 // always render identically and no layout data leaks into scenario files.
 import type { Step, StepTypeDef } from "@shikigami/schema";
+import { nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 260;
-export const NODE_H = 68;
 export const SLOT_H = 40;
 const GAP_X = 48;
 const GAP_Y = 36;
@@ -85,10 +85,11 @@ function measureList(steps: Step[], defs: Defs): { w: number; h: number } {
 
 function measure(step: Step, defs: Defs): { w: number; h: number } {
   const ls = lanes(step, defs);
-  if (ls.length === 0) return { w: NODE_W, h: NODE_H };
+  const own = nodeHeight(step, defs.get(step.type));
+  if (ls.length === 0) return { w: NODE_W, h: own };
   const ms = ls.map((l) => measureList(l.steps, defs));
   const w = ms.reduce((acc, m) => acc + m.w, 0) + GAP_X * (ms.length - 1);
-  const h = NODE_H + GAP_Y + Math.max(...ms.map((m) => m.h));
+  const h = own + GAP_Y + Math.max(...ms.map((m) => m.h));
   return { w: Math.max(NODE_W, w), h };
 }
 
@@ -166,7 +167,7 @@ class Builder {
     const isLoop = LOOP_TYPES.has(step.type);
     ls.forEach((lane, i) => {
       const size = sizes[i] ?? { w: NODE_W, h: SLOT_H };
-      const placed = this.list(lane.steps, laneX, y + NODE_H + GAP_Y, size.w, id, lane.name, lane.label, lane.start);
+      const placed = this.list(lane.steps, laneX, y + nodeHeight(step, def) + GAP_Y, size.w, id, lane.name, lane.label, lane.start);
       this.edge(id, placed.entry, lane.label);
       if (isLoop) {
         for (const e of placed.exits) this.edge(e, id, undefined, true);

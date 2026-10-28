@@ -34,11 +34,47 @@ export type LogEntry = {
   stepId?: string | null;
 };
 
+/**
+ * One variable write reported by the Runtime (`variableChanged`). Declared
+ * here until the schema package carries the event; unknown fields are
+ * ignored, so the shape only needs to be a subset of what arrives.
+ */
+export type VariableChange = {
+  seq: number;
+  at: string;
+  variable: string;
+  value: unknown;
+  /** The step that wrote it; absent for inputs and defaults set at start. */
+  stepId?: string | null;
+  /** Element number inside a parallel forEach. */
+  iteration?: number | null;
+  /** The value is masked as "***". */
+  secret?: boolean;
+  /** The value is a shortened preview. */
+  truncated?: boolean;
+};
+
+function asVariableChange(env: RunEventEnvelope): VariableChange | null {
+  const e = env as unknown as { type: string } & Partial<VariableChange>;
+  if (e.type !== "variableChanged" || typeof e.variable !== "string") return null;
+  return {
+    seq: env.seq,
+    at: env.at,
+    variable: e.variable,
+    value: e.value,
+    stepId: e.stepId ?? null,
+    iteration: e.iteration ?? null,
+    secret: e.secret === true,
+    truncated: e.truncated === true,
+  };
+}
+
 export type RunState = {
   runId: string;
   status: RunStatus;
   steps: Record<string, StepRunState>;
   logs: LogEntry[];
+  changes: VariableChange[];
 };
 
 export type StudioState = {
@@ -476,7 +512,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const runId = await api.run(scenario.id);
           set((s) => ({
             // Events may have arrived before the command returned.
-            run: s.run?.runId === runId ? s.run : { runId, status: "running", steps: {}, logs: [] },
+            run: s.run?.runId === runId ? s.run : { runId, status: "running", steps: {}, logs: [], changes: [] },
             error: null,
           }));
         } catch (e) {
@@ -500,10 +536,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const run: RunState =
             s.run && s.run.runId === env.runId
               ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs }
-              : { runId: env.runId, status: "running", steps: {}, logs: [] };
+              : { runId: env.runId, status: "running", steps: {}, logs: [], changes: [] };
           const push = (level: LogLevel, msg: string, stepId?: string | null) => {
             run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
           };
+          const change = asVariableChange(env);
+          if (change) run.changes = [...run.changes, change];
           switch (env.type) {
             case "runStarted":
               run.status = "running";

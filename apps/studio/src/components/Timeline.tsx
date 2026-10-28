@@ -13,6 +13,18 @@ export function usePendingReview(): HistoryEntry[] {
   return useMemo(() => pendingReview({ history, reviewed, scenario }), [history, reviewed, scenario]);
 }
 
+/**
+ * Approve/revert act on a whole journal entry. When the entry changed more
+ * than the step a button sits beside, say so and list everything it covers.
+ */
+export function entryScope(lines: ChangeLine[]): { suffix: string; title?: string } {
+  if (lines.length <= 1) return { suffix: "" };
+  return {
+    suffix: `（${lines.length}件まとめて）`,
+    title: `${t.wholeEntry}\n${lines.map((l) => `・${verbLabel(l.verb)} ${l.subject}`).join("\n")}`,
+  };
+}
+
 export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: number }) {
   const external = isExternal(entry);
   return (
@@ -23,7 +35,7 @@ export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: nu
           ? "swirl text-white"
           : external
             ? "bg-slate-300 text-slate-700"
-            : "bg-ink font-serif text-paper"
+            : "bg-ink text-paper"
       }`}
       title={actorLabel(entry)}
     >
@@ -87,7 +99,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
   const lines = describe(entry, scenario, defs);
   const blocker = revertBlocker(entry, history);
   return (
-    <li className="rounded-lg border border-shu-100 bg-sheet p-3 shadow-[0_1px_0_#e3d9c7]">
+    <li className="rounded-lg border border-shu-100 bg-sheet p-3 shadow-[0_1px_0_rgba(15,27,42,.06)]">
       <div className="mb-2 flex items-center gap-2">
         <ActorMark entry={entry} size={20} />
         <span className="text-xs font-semibold">{actorLabel(entry)}</span>
@@ -169,7 +181,7 @@ export function Timeline() {
         <section>
           <div className="mb-1 flex items-center gap-2">
             <span className="swirl h-2.5 w-2.5 rounded-full" />
-            <h3 className="font-serif text-sm font-semibold">
+            <h3 className="text-sm font-semibold">
               {t.review}
               <span className="ml-1 text-shu-600">{pending.length}</span>
             </h3>
@@ -188,7 +200,7 @@ export function Timeline() {
         </section>
       )}
       <section>
-        <h3 className="mb-3 font-serif text-sm font-semibold">{t.timeline}</h3>
+        <h3 className="mb-3 text-sm font-semibold">{t.timeline}</h3>
         {entries.length === 0 ? (
           <p className="text-sm text-slate-400">{t.timelineEmpty}</p>
         ) : (

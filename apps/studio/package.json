@@ -12,6 +12,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource-variable/noto-sans-jp": "5.3.1",
     "@shikigami/schema": "workspace:*",
     "@tauri-apps/api": "2.12.4",
     "@xyflow/react": "12.12.0",
