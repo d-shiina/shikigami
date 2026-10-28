@@ -25,7 +25,7 @@ import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
 import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { stepLabel, t } from "../lib/i18n";
-import type { HistoryEntry, Scenario, Step, StepTypeDef } from "@shikigami/schema";
+import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
 import { useTheme } from "../lib/theme";
@@ -50,7 +50,7 @@ import { callKey, diveChain, type DiveLevel, revertBlocker, type StepRunState, t
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
-import { ExtractForm } from "./Inspector";
+import { StepTools } from "./StepTools";
 import { valuesSeenBy } from "../lib/runValues";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
@@ -145,46 +145,6 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
         {t.revert}
         {scope.suffix}
       </button>
-    </div>
-  );
-}
-
-const STEP_TOOL = "grid h-6 w-6 place-items-center rounded-[3px] text-[13px] text-slate-600 hover:bg-slate-100 hover:text-ink";
-
-/** Move, delete and extract, on the selected step itself: the pointer is already there. */
-function StepTools({ step }: { step: Step }) {
-  const moveSelected = useStudio((s) => s.moveSelected);
-  const removeSelected = useStudio((s) => s.removeSelected);
-  const [extracting, setExtracting] = useState(false);
-  return (
-    <div className="relative">
-      <div role="toolbar" aria-label={t.toolbar.stepTools} className="flex items-center gap-0.5 rounded-[3px] border border-slate-200 bg-sheet p-0.5 shadow-raised">
-        <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL}>
-          ↑
-        </button>
-        <button type="button" title={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} className={STEP_TOOL}>
-          ↓
-        </button>
-        <span className="mx-0.5 h-4 w-px bg-slate-200" />
-        <button
-          type="button"
-          title={t.shell.extractTitle}
-          onClick={() => setExtracting(!extracting)}
-          aria-expanded={extracting}
-          className={`h-6 rounded-[3px] px-1.5 text-[11px] ${extracting ? "bg-slate-200 text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
-        >
-          {t.shell.extract}
-        </button>
-        <span className="mx-0.5 h-4 w-px bg-slate-200" />
-        <button type="button" title={`${t.delete} (Delete)`} onClick={() => removeSelected()} className={`${STEP_TOOL} hover:bg-shu-50! hover:text-shu-600!`}>
-          ✕
-        </button>
-      </div>
-      {extracting && (
-        <div className="nodrag nopan absolute top-full left-0 z-20 mt-1 rounded-[4px] border border-slate-200 bg-sheet shadow-lifted">
-          <ExtractForm step={step} />
-        </div>
-      )}
     </div>
   );
 }
