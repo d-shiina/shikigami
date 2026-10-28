@@ -1,5 +1,8 @@
 import {
   Background,
+  BaseEdge,
+  type EdgeProps,
+  getBezierPath,
   Controls,
   type Edge,
   Handle,
@@ -16,7 +19,7 @@ import { useStudio } from "../context";
 import { CHIP_ROOM, type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
 import type { HistoryEntry } from "@shikigami/schema";
-import { inHandle, outHandle } from "../lib/dataFlow";
+import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
 import { actorLabel, describe } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
@@ -106,6 +109,26 @@ function FlowHandles({ dir, atHeader = true }: { dir: Direction; atHeader?: bool
   );
 }
 
+type LinkEdgeData = { variable: string; color: string; from: string; to: string; selectedId: string | null };
+
+/**
+ * Which node a value goes to: drawn only for the variable or step in focus
+ * (hovered, or else the selected step), from the writer's output socket to
+ * each reader's input socket. Hidden otherwise, so many variables never
+ * become a web of lines.
+ */
+function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<LinkEdgeData>>) {
+  const hovered = useFocus();
+  if (!data) return null;
+  const focused = hovered ?? data.selectedId;
+  const lit = focused !== null && (focused === data.from || focused === data.to || focused === varFocus(data.variable));
+  if (!lit) return null;
+  const [path] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+  return <BaseEdge id={id} path={path} style={{ stroke: data.color, strokeWidth: 2.5 }} />;
+}
+
+const edgeTypes = { link: LinkEdge };
+
 const NO_CHANGES: VariableChange[] = [];
 /** Chips shown per input before the rest fold into "+n". */
 const MAX_CHIPS = 2;
@@ -145,7 +168,7 @@ function ValuePopover({ name, color, values, anchor }: { name: string; color: st
  * right beside the socket it feeds, so no line ever crosses the chart.
  * Hovering one lights every chip and row of the same variable.
  */
-function VarChip({ name, color, values, side }: { name: string; color: string; values: VariableChange[]; side: "in" | "out" }) {
+function VarChip({ name, color, values, side, owner }: { name: string; color: string; values: VariableChange[]; side: "in" | "out"; owner: string }) {
   const focused = useFocus() === varFocus(name);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const last = values.at(-1);
@@ -160,7 +183,8 @@ function VarChip({ name, color, values, side }: { name: string; color: string; v
         setAnchor(e.currentTarget.getBoundingClientRect());
       }}
       onMouseLeave={() => {
-        focus.set(null);
+        // Back to the step the chip belongs to; leaving the step clears it.
+        focus.set(owner);
         setAnchor(null);
       }}
     >
@@ -208,6 +232,7 @@ function NodeRow({ row, vars, changes, stepId }: { row: Row; vars: Map<string, s
           <Chips side="out" color={color}>
             <VarChip
               side="out"
+              owner={stepId}
               name={row.variable}
               color={color}
               values={changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
@@ -225,7 +250,7 @@ function NodeRow({ row, vars, changes, stepId }: { row: Row; vars: Map<string, s
       {across && row.refs.length > 0 && (
         <Chips side="in" color={first}>
           {row.refs.slice(0, MAX_CHIPS).map((r) => (
-            <VarChip key={r} side="in" name={r} color={typeColor(r)} values={changes.filter((c) => c.variable === r)} />
+            <VarChip key={r} side="in" owner={stepId} name={r} color={typeColor(r)} values={changes.filter((c) => c.variable === r)} />
           ))}
           {row.refs.length > MAX_CHIPS && (
             <span className="text-[10px] text-slate-400" title={row.refs.slice(MAX_CHIPS).join(", ")}>
@@ -408,6 +433,27 @@ export function FlowCanvas() {
   const chips = layout.direction === "horizontal" ? CHIP_ROOM : 0;
   const bounds = { x: -chips, y: 0, width: layout.width + chips * 2, height: layout.height };
 
+  const selectedId = selection?.kind === "step" ? selection.stepId : null;
+  const links = useMemo(
+    () => dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys())),
+    [scenario, defs, vars],
+  );
+  const linkEdges: Edge[] = links
+    .filter((l) => l.from !== INPUT_NODE && l.to !== OUTPUT_NODE)
+    .map((l) => ({
+      id: `link:${l.from}:${l.variable}->${l.to}:${l.toHandle}`,
+      source: l.from,
+      sourceHandle: outHandle(l.variable),
+      target: l.to,
+      targetHandle: l.toHandle,
+      type: "link",
+      selectable: false,
+      focusable: false,
+      data: { variable: l.variable, color: TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8", from: l.from, to: l.to, selectedId },
+      // Beneath the steps, so a lit link never takes a click meant for a step.
+      zIndex: 0,
+    }));
+
   const edges: Edge[] = layout.edges.map((e) => ({
     ...e,
     sourceHandle: "flow",
@@ -420,6 +466,7 @@ export function FlowCanvas() {
     markerEnd: { type: MarkerType.ArrowClosed, color: "#5b6b80" },
     labelBgPadding: [4, 2],
   }));
+  edges.push(...linkEdges);
 
   if (!scenario) {
     return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
@@ -435,6 +482,7 @@ export function FlowCanvas() {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       nodesConnectable={false}
       ref={wrapper}
       onInit={(flow) => {
@@ -458,6 +506,8 @@ export function FlowCanvas() {
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
       onPaneClick={() => select(null)}
+      onNodeMouseEnter={(_, node) => node.type === "step" && focus.set(node.id)}
+      onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="#c3cedb" />
       <Controls showInteractive={false} />
