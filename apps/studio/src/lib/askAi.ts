@@ -1,5 +1,5 @@
-// Hands a request to the AI. Until Studio talks to the AI itself, the text
-// goes to the clipboard for the person to paste into their AI client.
+// Hands a request to the AI when Studio cannot start the agent itself (see
+// agent.ts): the text goes to the clipboard to paste into an AI client.
 
 export type AskAi = {
   /** Shown on the button, e.g. "AI". */

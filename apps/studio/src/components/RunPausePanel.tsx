@@ -4,6 +4,7 @@
 // a run that ended in failure instead of letting it end quietly.
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { useAgent } from "../agent";
 import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
 import { fixRequest } from "../lib/fixRequest";
@@ -96,6 +97,10 @@ export function RunPausePanel() {
   const setReviewing = useStudio((s) => s.setReviewing);
   const reviewing = useStudio((s) => s.reviewing);
   const pending = usePendingReview();
+  const agentAvailable = useAgent((s) => s.info?.available === true);
+  const agentBusy = useAgent((s) => s.turnId !== null || s.sending);
+  const agentName = useAgent((s) => s.info?.name ?? "AI");
+  const askAgent = useAgent((s) => s.send);
   const [asking, setAsking] = useState(false);
   const [told, setTold] = useState<string | null>(null);
 
@@ -120,7 +125,13 @@ export function RunPausePanel() {
     setAsking(true);
     try {
       const text = fixRequest({ scenario, runId: run.runId, pause, evidence: run.evidence, defs: stepTypes });
-      setTold(await clipboardAi.ask(text));
+      if (agentAvailable) {
+        // Straight to the AI pane; its edits come back through the review queue.
+        const sent = await askAgent(text, { id: scenario.id, name: scenario.name, stepId: pause.stepId }, `${scenario.name} ・ 実行エラーの修正`);
+        setTold(sent ? `${agentName} に修正を頼みました。直した内容を確認して承認すると、ここから再開できます。` : `${agentName} に送れませんでした。AI のパネルを確認してください。`);
+      } else {
+        setTold(await clipboardAi.ask(text));
+      }
     } catch (e) {
       setTold(`依頼できませんでした: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -159,8 +170,19 @@ export function RunPausePanel() {
         <span className="flex-1" />
         {pause && onError && (
           <>
-            <Button tone="ai" onClick={askAi} disabled={asking} title="エラーと止まった画面・変数を添えて AI に修正を頼みます">
-              ✦ AIに直してもらう
+            <Button
+              tone="ai"
+              onClick={askAi}
+              disabled={asking || (agentAvailable && agentBusy)}
+              title={
+                agentAvailable && agentBusy
+                  ? `${agentName} がほかの依頼に取り組んでいます`
+                  : agentAvailable
+                    ? `エラーと止まった画面・変数を添えて ${agentName} に修正を頼みます`
+                    : "エラーと止まった画面・変数を添えた依頼文をコピーします（AI のパネルが使えないため）"
+              }
+            >
+              ✦ {agentAvailable ? `${agentName}に直してもらう` : "AIに直してもらう"}
             </Button>
             <Button
               tone="primary"
