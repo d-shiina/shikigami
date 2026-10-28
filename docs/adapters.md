@@ -1,6 +1,6 @@
 # アプリを追加する（アダプター）
 
-Shikigami が操作できるアプリは「アダプター」単位で増やします。いまはブラウザ（`browser.*`、[browser.md](browser.md)）と Windows のデスクトップアプリ（`desktop.*`、[desktop.md](desktop.md)）があり、Excel なども同じ形で足します。
+Shikigami が操作できるアプリは「アダプター」単位で増やします。いまはブラウザ（`browser.*`、[browser.md](browser.md)）、Windows のデスクトップアプリ（`desktop.*`、[desktop.md](desktop.md)）、Excel のブック（`excel.*`、[office.md](office.md)）があります。
 
 アダプターは「操作の対象」ごとに作り、アプリの作りの違い（Win32 / WPF / SAP GUI / Java など）では分けません。デスクトップアプリは `desktop.*` の 1 セットで書き、どの技術でアプリの中を見るかはアダプターの中で対象のウィンドウから決めます（`crates/shikigami-desktop/src/engine.rs`）。AI が覚える書き方を増やさないためです。
 
@@ -25,10 +25,9 @@ Playwright（Node.js）のように Rust 以外のライブラリを使うとき
 
 例：`crates/shikigami-browser`（Rust 側、約 400 行）と `packages/browser-adapter`（Node.js 側）。
 
-## Excel の予定
+## Office（Excel など）
 
-- **ファイル操作**（`excel.*`、Excel 不要）：xlsx を直接読み書き。速く、並列・無人実行向き。ブックのパスを資源にするので同じブックは自動で順番待ち
-- **Excel アプリ操作**（COM）：マクロや既存の数式をそのまま使いたい場合。デスクトップ操作（`crates/shikigami-desktop/src/uia.rs`）と同じ専用スレッドの設計で作る
+Excel は `excel.*`（`crates/shikigami-excel`）で、xlsx を直接読み書きします。Excel 不要で速く、並列・無人実行向きです。ブックのパスを資源にするので同じブックは自動で順番待ちになります。マクロの実行など Excel 本体が要る操作だけを COM で足します。方式と予定（Word・メール）は [office.md](office.md)。
 
 ## Windows API を使うアダプター
 

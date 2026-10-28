@@ -13,6 +13,7 @@ pub fn all() -> Vec<Arc<dyn Adapter>> {
     vec![
         Arc::new(shikigami_browser::BrowserAdapter::discover()),
         Arc::new(shikigami_desktop::DesktopAdapter::new()),
+        Arc::new(shikigami_excel::ExcelAdapter::new()),
     ]
 }
 

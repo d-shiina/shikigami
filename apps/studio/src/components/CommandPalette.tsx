@@ -10,6 +10,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   flow: "フロー",
   browser: "ブラウザ",
   windows: "Windows",
+  office: "Office",
   file: "ファイル",
   other: "その他",
 };
@@ -22,6 +23,7 @@ export const CATEGORY_COLOR: Record<string, string> = {
   flow: "#f5872a",
   browser: "#0a6fa8",
   windows: "#e0301e",
+  office: "#1f8a4c",
   file: "#64748b",
   other: "#94a3b8",
 };
