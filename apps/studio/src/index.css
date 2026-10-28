@@ -84,3 +84,8 @@ body {
 .react-flow__attribution {
   background: transparent;
 }
+
+/* Variable links are a view: they never take clicks from the steps under them. */
+.react-flow__edge.data-link {
+  pointer-events: none;
+}

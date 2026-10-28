@@ -2,6 +2,7 @@ import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
+import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { sentence } from "../lib/sentence";
 import { findStep, revertBlocker, touchedSteps } from "../store";
@@ -243,6 +244,49 @@ function ParamsEditor({
   );
 }
 
+/** Where this step's variables come from and go to, matching the links on the chart. */
+function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[]; vars: Map<string, string | undefined> }) {
+  const scenario = useStudio((s) => s.scenario);
+  const select = useStudio((s) => s.select);
+  const incoming = links.filter((l) => l.to === stepId);
+  const outgoing = links.filter((l) => l.from === stepId);
+  if (incoming.length === 0 && outgoing.length === 0) return null;
+  const nameOf = (id: string) => {
+    if (id === INPUT_NODE) return "シナリオ入力";
+    if (id === OUTPUT_NODE) return "シナリオ出力";
+    const s = findStep(scenario?.steps ?? [], id);
+    return s?.name || s?.type || id;
+  };
+  const item = (l: DataLink, other: string, arrow: string) => (
+    <li key={`${l.from}${l.to}${l.variable}${l.toHandle}`} className="flex items-center gap-1.5 py-0.5 text-[11px]">
+      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: TYPE_COLOR[vars.get(l.variable) ?? "any"] }} />
+      <span className="font-mono font-semibold">{l.variable}</span>
+      <span className="text-slate-400">{arrow}</span>
+      {other.startsWith("@") ? (
+        <span className="truncate text-slate-600">{nameOf(other)}</span>
+      ) : (
+        <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => select({ kind: "step", stepId: other })}>
+          {nameOf(other)}
+        </button>
+      )}
+    </li>
+  );
+  return (
+    <Section title="変数のつながり">
+      {incoming.length > 0 && (
+        <Row label="受け取る">
+          <ul className="pt-1">{incoming.map((l) => item(l, l.from, "←"))}</ul>
+        </Row>
+      )}
+      {outgoing.length > 0 && (
+        <Row label="渡す">
+          <ul className="pt-1">{outgoing.map((l) => item(l, l.to, "→"))}</ul>
+        </Row>
+      )}
+    </Section>
+  );
+}
+
 export function PropertyPanel() {
   const scenario = useStudio((s) => s.scenario);
   const selection = useStudio((s) => s.selection);
@@ -254,6 +298,10 @@ export function PropertyPanel() {
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
   const vars = useMemo(() => knownVariables(scenario?.variables, scenario?.steps ?? []), [scenario]);
+  const links = useMemo(() => {
+    const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
+    return dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys()));
+  }, [scenario, stepTypes, vars]);
 
   if (!scenario || selection?.kind !== "step") {
     return (
@@ -360,6 +408,7 @@ export function PropertyPanel() {
             ))}
         </Section>
       )}
+      <Connections stepId={id} links={links} vars={vars} />
       {!step.type.startsWith("control.") && (
         <Section title="実行の設定">
           <Row label={t.timeoutMs}>

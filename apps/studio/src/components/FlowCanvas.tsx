@@ -14,7 +14,8 @@ import { useMemo, useRef } from "react";
 import { useStudio } from "../context";
 import { layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
-import type { HistoryEntry } from "@shikigami/schema";
+import type { HistoryEntry, VariableDef } from "@shikigami/schema";
+import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { actorLabel, describe } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
@@ -27,7 +28,7 @@ type StepNodeProps = NodeProps<
   Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined> }>
 >;
 
-const MIN_READABLE_ZOOM = 0.85;
+const MIN_READABLE_ZOOM = 0.8;
 
 const RUN_STYLE: Record<StepRunState, string> = {
   running: "ring-2 ring-accent-500 animate-pulse",
@@ -68,18 +69,21 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   );
 }
 
-/** A variable socket on the node's edge, coloured by the variable's type. */
-function Socket({ side, color, title }: { side: "in" | "out"; color: string; title: string }) {
+/** A variable socket on the node's edge, coloured by the variable's type. Links attach here. */
+function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; color: string; title: string }) {
   return (
-    <span
+    <Handle
+      id={id}
+      type={side === "in" ? "target" : "source"}
+      position={side === "in" ? Position.Left : Position.Right}
       title={title}
-      className={`absolute top-1/2 h-[11px] w-[11px] -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(15,27,42,.25)] ${
-        side === "in" ? "-left-[6px]" : "-right-[6px]"
-      }`}
-      style={{ background: color }}
+      isConnectable={false}
+      style={{ background: color, width: 11, height: 11, border: "2px solid white", boxShadow: "0 0 0 1px rgba(15,27,42,.25)" }}
     />
   );
 }
+
+const FLOW_HANDLE = "!border-0 !bg-slate-300";
 
 function NodeRow({ row, vars }: { row: Row; vars: Map<string, string | undefined> }) {
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "#94a3b8";
@@ -93,13 +97,13 @@ function NodeRow({ row, vars }: { row: Row; vars: Map<string, string | undefined
         <span className="truncate font-mono font-semibold" style={{ color: typeColor(row.variable) }}>
           {row.variable}
         </span>
-        <Socket side="out" color={typeColor(row.variable)} title={`${row.variable} に書き込む`} />
+        <Socket side="out" id={outHandle(row.variable)} color={typeColor(row.variable)} title={`${row.variable} に書き込む`} />
       </div>
     );
   }
   return (
     <div style={{ height: ROW_H }} className="relative flex items-center gap-2 px-3 text-[11px]">
-      {row.refs.length > 0 && <Socket side="in" color={typeColor(row.refs[0] ?? "")} title={`読む変数: ${row.refs.join(", ")}`} />}
+      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={typeColor(row.refs[0] ?? "")} title={`読む変数: ${row.refs.join(", ")}`} />}
       <span className="w-16 shrink-0 truncate text-slate-500" title={row.key}>
         {row.label}
       </span>
@@ -131,7 +135,7 @@ function StepNode({ data }: StepNodeProps) {
           <ReviewToolbar entry={latest} />
         </NodeToolbar>
       )}
-      <Handle type="target" position={Position.Top} className="!border-0 !bg-slate-300" />
+      <Handle id="flow" type="target" position={Position.Top} className={FLOW_HANDLE} />
       <div
         style={{ height: 24, background: `${color}1a` }}
         className="flex items-center gap-1.5 rounded-t-[11px] border-b border-slate-100 px-3"
@@ -164,7 +168,7 @@ function StepNode({ data }: StepNodeProps) {
           ))}
         </div>
       )}
-      <Handle type="source" position={Position.Bottom} className="!border-0 !bg-slate-300" />
+      <Handle id="flow" type="source" position={Position.Bottom} className={FLOW_HANDLE} />
     </div>
   );
 }
@@ -177,14 +181,48 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
         data.selected ? "border-brand-500 bg-brand-50 text-brand-600" : "border-slate-300 text-slate-400"
       }`}
     >
-      <Handle type="target" position={Position.Top} className="!border-0 !bg-slate-300" />
+      <Handle id="flow" type="target" position={Position.Top} className={FLOW_HANDLE} />
       {data.parentId ? `${data.label}：空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
-      <Handle type="source" position={Position.Bottom} className="!border-0 !bg-slate-300" />
+      <Handle id="flow" type="source" position={Position.Bottom} className={FLOW_HANDLE} />
     </div>
   );
 }
 
-const nodeTypes = { step: StepNode, slot: SlotNode };
+type IoNodeData = { kind: "io"; side: "input" | "output"; variables: VariableDef[] };
+
+/** The scenario's own inputs (starting values) or returned outputs, like Blender's group input/output. */
+function IoNode({ data }: NodeProps<Node<IoNodeData>>) {
+  const input = data.side === "input";
+  return (
+    <div style={{ width: IO_W }} className="rounded-xl border border-slate-300 bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)]">
+      <div style={{ height: 24 }} className="flex items-center gap-1.5 rounded-t-[11px] bg-ink px-3 text-[11px] font-bold text-paper">
+        <span className="swirl h-2 w-2 rounded-full" />
+        {input ? "シナリオ入力" : "シナリオ出力"}
+      </div>
+      <div style={{ paddingTop: 4, paddingBottom: NODE_PAD_B }}>
+        {data.variables.map((v) => {
+          const color = TYPE_COLOR[v.type ?? "any"] ?? TYPE_COLOR.any ?? "#94a3b8";
+          const tag = input ? (v.direction === "input" || v.direction === "inOut" ? "入力" : "初期値") : "返す";
+          return (
+            <div key={v.name} style={{ height: ROW_H }} className={`relative flex items-center gap-2 px-3 text-[11px] ${input ? "justify-end" : ""}`}>
+              {!input && <Socket side="in" id={inHandle(v.name)} color={color} title={`${v.name} を返す`} />}
+              <span className="text-[10px] text-slate-400">{tag}</span>
+              <span className="truncate font-mono font-semibold" style={{ color }}>
+                {v.name}
+              </span>
+              {input && <Socket side="out" id={outHandle(v.name)} color={color} title={`${v.name} の${tag}`} />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const IO_W = 180;
+const IO_GAP = 72;
+
+const nodeTypes = { step: StepNode, slot: SlotNode, io: IoNode };
 
 export function FlowCanvas() {
   const scenario = useStudio((s) => s.scenario);
@@ -244,14 +282,70 @@ export function FlowCanvas() {
     };
   });
 
+  const declared = scenario?.variables ?? [];
+  const returned = declared.filter((v) => v.direction === "output" || v.direction === "inOut");
+  const links = useMemo(
+    () => dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys())),
+    [scenario, defs, vars],
+  );
+  if (declared.length > 0) {
+    nodes.push({
+      id: INPUT_NODE,
+      type: "io",
+      draggable: false,
+      selectable: false,
+      position: { x: -IO_W - IO_GAP, y: 0 },
+      data: { kind: "io", side: "input", variables: declared },
+    });
+  }
+  if (returned.length > 0) {
+    nodes.push({
+      id: OUTPUT_NODE,
+      type: "io",
+      draggable: false,
+      selectable: false,
+      // Below the last step, so review buttons beside nodes never cover it.
+      position: { x: layout.width + IO_GAP, y: layout.height + 16 },
+      data: { kind: "io", side: "output", variables: returned },
+    });
+  }
+  const bounds = {
+    x: declared.length > 0 ? -IO_W - IO_GAP : 0,
+    width: layout.width + (declared.length > 0 ? IO_W + IO_GAP : 0) + (returned.length > 0 ? IO_W + IO_GAP : 0),
+  };
+
+  // Links stay faint behind the chart; the selected step's own links light up.
+  const selectedId = selection?.kind === "step" ? selection.stepId : null;
+  const dataEdges: Edge[] = links.map((l) => {
+    const color = TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8";
+    const lit = selectedId !== null && (l.from === selectedId || l.to === selectedId);
+    return {
+      id: `data:${l.from}:${l.variable}->${l.to}:${l.toHandle}`,
+      source: l.from,
+      sourceHandle: outHandle(l.variable),
+      target: l.to,
+      targetHandle: l.toHandle,
+      type: "default",
+      className: "data-link",
+      selectable: false,
+      focusable: false,
+      interactionWidth: 0,
+      style: { stroke: color, strokeWidth: lit ? 2.5 : 1.5, opacity: lit ? 1 : selectedId ? 0.15 : 0.45 },
+      zIndex: lit ? 1 : 0,
+    };
+  });
+
   const edges: Edge[] = layout.edges.map((e) => ({
     ...e,
+    sourceHandle: "flow",
+    targetHandle: "flow",
     type: "smoothstep",
     animated: e.loop,
     style: e.loop ? { strokeDasharray: "4 4" } : undefined,
     markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
     labelBgPadding: [4, 2],
   }));
+  edges.push(...dataEdges);
 
   if (!scenario) {
     return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
@@ -275,14 +369,15 @@ export function FlowCanvas() {
         const box = wrapper.current;
         if (!box) return;
         const pad = 64;
-        const fit = Math.min((box.clientWidth - pad) / layout.width, (box.clientHeight - pad) / layout.height, 1);
+        const fit = Math.min((box.clientWidth - pad) / bounds.width, (box.clientHeight - pad) / layout.height, 1);
         const zoom = Math.max(fit, MIN_READABLE_ZOOM);
         const top = zoom > fit ? pad / 2 : (box.clientHeight - layout.height * zoom) / 2;
-        void flow.setViewport({ x: (box.clientWidth - layout.width * zoom) / 2, y: top, zoom });
+        void flow.setViewport({ x: (box.clientWidth - bounds.width * zoom) / 2 - bounds.x * zoom, y: top, zoom });
       }}
       minZoom={0.2}
       onNodeClick={(_, node) => {
-        const data = node.data as StepNodeData | SlotNodeData;
+        const data = node.data as StepNodeData | SlotNodeData | IoNodeData;
+        if (data.kind === "io") return;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
