@@ -54,6 +54,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install Chromium for the browser adapter tests
+        run: pnpm --filter @shikigami/browser-adapter exec playwright-core install --with-deps chromium
       - run: pnpm -r typecheck
       - run: pnpm -r test
       - name: Generated TypeScript types are up to date

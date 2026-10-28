@@ -196,6 +196,12 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "log.message": { message: "" },
   "flow.delay": { ms: 1000 },
   "wait.until": { condition: "true" },
+  "browser.open": { url: "https://" },
+  "browser.click": { target: { role: "button", name: "" } },
+  "browser.fill": { target: { label: "" }, value: "" },
+  "browser.waitFor": { target: { text: "" } },
+  "browser.getText": { target: { text: "" } },
+  "browser.press": { key: "Enter" },
 };
 
 export function newStepId(): string {

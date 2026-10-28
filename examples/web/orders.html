@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>式神商事 受注管理システム - 受注一覧</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><strong>式神商事 受注管理システム</strong><span id="who"></span></header>
+  <main>
+    <nav><a href="orders.html">受注一覧</a><a href="stock.html">在庫一覧</a></nav>
+    <h1>受注一覧</h1>
+    <label for="q">顧客名で絞り込み</label>
+    <input id="q" placeholder="例：青葉商店">
+    <table aria-label="受注">
+      <thead><tr><th>注文番号</th><th>顧客</th><th>商品</th><th>金額（円）</th><th>状態</th><th>操作</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="message" role="status"></p>
+  </main>
+  <script src="app.js"></script>
+  <script>
+    const user = requireLogin();
+    document.getElementById("who").textContent = user ? `${user} さん` : "";
+    let orders = loadOrders();
+
+    function render() {
+      const q = document.getElementById("q").value.trim();
+      const tbody = document.getElementById("rows");
+      tbody.innerHTML = "";
+      for (const o of orders.filter((o) => !q || o.customer.includes(q))) {
+        const tr = document.createElement("tr");
+        const done = o.status === "出荷済み";
+        tr.innerHTML = `<td>${o.no}</td><td>${o.customer}</td><td>${o.item}</td>` +
+          `<td class="num">${yen(o.amount)}</td>` +
+          `<td class="${done ? "status-done" : "status-todo"}">${o.status}</td><td></td>`;
+        if (!done) {
+          const b = document.createElement("button");
+          b.textContent = "出荷する";
+          b.setAttribute("aria-label", `${o.no} を出荷`);
+          b.addEventListener("click", () => {
+            b.disabled = true;
+            b.textContent = "処理中…";
+            // A slow back end: the RPA has to wait for the result.
+            setTimeout(() => {
+              o.status = "出荷済み";
+              saveOrders(orders);
+              document.getElementById("message").textContent = `${o.no} を出荷しました`;
+              render();
+            }, 500);
+          });
+          tr.lastElementChild.appendChild(b);
+        }
+        tbody.appendChild(tr);
+      }
+    }
+    document.getElementById("q").addEventListener("input", render);
+    render();
+  </script>
+</body>
+</html>

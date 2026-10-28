@@ -5,6 +5,7 @@ members = [
     "crates/shikigami-runtime",
     "crates/shikigami-cli",
     "crates/shikigami-mcp",
+    "crates/shikigami-browser",
     "apps/studio/src-tauri",
 ]
 
@@ -19,6 +20,7 @@ repository = "https://github.com/d-shiina/shikigami"
 shikigami-core = { path = "crates/shikigami-core" }
 shikigami-runtime = { path = "crates/shikigami-runtime" }
 shikigami-mcp = { path = "crates/shikigami-mcp" }
+shikigami-browser = { path = "crates/shikigami-browser" }
 
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }

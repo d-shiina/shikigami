@@ -13,8 +13,13 @@ use serde_json::Value;
 pub enum ResourceDef {
     /// Always the same resource, e.g. [`DESKTOP_INPUT`].
     Static(String),
-    /// The resource named by a param (after template rendering).
-    Param { key: String, kind: ResourceKind },
+    /// The resource named by a param (after template rendering), or
+    /// `default` when the param is omitted.
+    Param {
+        key: String,
+        kind: ResourceKind,
+        default: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +40,16 @@ impl ResourceDef {
         Self::Param {
             key: key.into(),
             kind: ResourceKind::File,
+            default: None,
+        }
+    }
+
+    /// A browser context named by `key`, `"default"` when omitted.
+    pub fn browser_context(key: &str) -> Self {
+        Self::Param {
+            key: key.into(),
+            kind: ResourceKind::BrowserContext,
+            default: Some("default".into()),
         }
     }
 }
@@ -46,8 +61,11 @@ pub fn resource_keys(defs: &[ResourceDef], params: &Value) -> Vec<String> {
         .iter()
         .filter_map(|def| match def {
             ResourceDef::Static(name) => Some(name.clone()),
-            ResourceDef::Param { key, kind } => {
-                let value = params.get(key)?.as_str()?.trim();
+            ResourceDef::Param { key, kind, default } => {
+                let value = match params.get(key) {
+                    Some(value) => value.as_str()?.trim(),
+                    None => default.as_deref()?,
+                };
                 if value.is_empty() {
                     return None;
                 }
@@ -162,12 +180,25 @@ mod tests {
             ResourceDef::Param {
                 key: "title".into(),
                 kind: ResourceKind::Window,
+                default: None,
             },
+            ResourceDef::browser_context("context"),
         ];
         let keys = resource_keys(&defs, &json!({ "path": "C:/A.xlsx", "title": "Excel" }));
-        assert_eq!(keys, ["desktop.input", r"file:c:\a.xlsx", "window:excel"]);
-        // Missing params give no key.
-        assert_eq!(resource_keys(&defs, &json!({})), ["desktop.input"]);
+        assert_eq!(
+            keys,
+            [
+                "browser:default",
+                "desktop.input",
+                r"file:c:\a.xlsx",
+                "window:excel"
+            ]
+        );
+        // Missing params give no key unless they have a default.
+        assert_eq!(
+            resource_keys(&defs, &json!({ "context": "sales" })),
+            ["browser:sales", "desktop.input"]
+        );
     }
 
     #[test]

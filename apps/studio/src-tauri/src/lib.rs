@@ -33,7 +33,7 @@ pub fn run() {
         )
         .init();
 
-    let runtime = Runtime::new();
+    let (runtime, _browser) = shikigami_browser::default_runtime();
     let root = FileStore::default_root();
     let store = match FileStore::open(&root) {
         Ok(store) => store,

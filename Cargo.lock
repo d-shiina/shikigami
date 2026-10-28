@@ -3326,12 +3326,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "shikigami-browser"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "shikigami-core",
+ "shikigami-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "shikigami-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "serde_json",
+ "shikigami-browser",
  "shikigami-core",
  "shikigami-mcp",
  "shikigami-runtime",
@@ -3362,10 +3376,12 @@ name = "shikigami-mcp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "jsonschema",
  "rmcp",
  "schemars 1.2.3",
  "serde",
  "serde_json",
+ "shikigami-browser",
  "shikigami-core",
  "shikigami-runtime",
  "tempfile",
@@ -3398,6 +3414,7 @@ dependencies = [
  "notify",
  "serde",
  "serde_json",
+ "shikigami-browser",
  "shikigami-core",
  "shikigami-runtime",
  "tauri",

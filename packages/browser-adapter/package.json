@@ -1,0 +1,23 @@
+{
+  "name": "@shikigami/browser-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser automation adapter: Playwright driven by the Shikigami Runtime over JSON-RPC on stdio",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

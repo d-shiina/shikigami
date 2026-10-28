@@ -127,7 +127,7 @@ fn main() -> ExitCode {
 
 fn real_main() -> Result<ExitCode> {
     let cli = Cli::parse();
-    let runtime = Runtime::new();
+    let (runtime, browser) = shikigami_browser::default_runtime();
     let open_service = || -> Result<ScenarioService> {
         let root = cli
             .workspace
@@ -173,7 +173,10 @@ fn real_main() -> Result<ExitCode> {
             }
         }
         Command::Mcp { allow } => {
-            let mut options = shikigami_mcp::ServerOptions { allow: Vec::new() };
+            let mut options = shikigami_mcp::ServerOptions {
+                allow: Vec::new(),
+                browser: Some(browser.clone()),
+            };
             for name in allow {
                 let Some(class) = shikigami_mcp::ToolClass::parse(name) else {
                     bail!("unknown tool class: {name} (expected read, write or run)");

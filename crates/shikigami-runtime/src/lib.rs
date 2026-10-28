@@ -49,6 +49,7 @@ pub struct Runtime {
     registry: StepRegistry,
     handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
     resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
+    run_finished_hooks: Arc<Vec<RunFinishedHook>>,
     validator: Arc<Validator>,
     resources: Arc<ResourceLocks>,
 }
@@ -115,6 +116,7 @@ impl Runtime {
         let init = init_variables(&scenario, &options.inputs, &mut executor);
 
         let task_run_id = run_id.clone();
+        let hooks = self.run_finished_hooks.clone();
         let join = tokio::spawn(async move {
             let started_at = OffsetDateTime::now_utc();
             let clock = Instant::now();
@@ -146,6 +148,11 @@ impl Runtime {
                     (v.name.clone(), value)
                 })
                 .collect();
+
+            // Release per-run adapter state (browser contexts, ...).
+            for hook in hooks.iter() {
+                hook(task_run_id.clone()).await;
+            }
 
             let duration_ms = u64::try_from(clock.elapsed().as_millis()).unwrap_or(u64::MAX);
             emitter.update_snapshot(|s| {
@@ -187,9 +194,13 @@ impl Default for Runtime {
     }
 }
 
+/// Called once when a run ends (after its last step, before `RunFinished`).
+pub type RunFinishedHook = Arc<dyn Fn(RunId) -> BoxFuture<'static, ()> + Send + Sync>;
+
 pub struct RuntimeBuilder {
     registry: StepRegistry,
     handlers: HashMap<String, Arc<dyn ActionHandler>>,
+    run_finished_hooks: Vec<RunFinishedHook>,
 }
 
 impl RuntimeBuilder {
@@ -197,6 +208,7 @@ impl RuntimeBuilder {
         let mut builder = Self {
             registry: StepRegistry::with_builtins(),
             handlers: HashMap::new(),
+            run_finished_hooks: Vec::new(),
         };
         builder.handlers.insert(
             builtin_types::LOG_MESSAGE.into(),
@@ -216,6 +228,13 @@ impl RuntimeBuilder {
         self
     }
 
+    /// Registers cleanup to run when each run ends, e.g. closing the
+    /// browser contexts an adapter opened for it.
+    pub fn on_run_finished(mut self, hook: RunFinishedHook) -> Self {
+        self.run_finished_hooks.push(hook);
+        self
+    }
+
     pub fn build(self) -> Runtime {
         Runtime {
             validator: Arc::new(Validator::new(self.registry.clone())),
@@ -228,6 +247,7 @@ impl RuntimeBuilder {
                     .collect(),
             ),
             resources: Arc::default(),
+            run_finished_hooks: Arc::new(self.run_finished_hooks),
             registry: self.registry,
         }
     }
