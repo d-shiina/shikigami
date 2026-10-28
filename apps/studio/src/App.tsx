@@ -133,23 +133,47 @@ function loadView(): View {
   }
 }
 
-function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
-  const options: [View, string][] = [
-    ["flow", t.viewFlow],
-    ["story", t.viewStory],
-  ];
+function Segmented<K extends string>({ value, options, onChange }: { value: K; options: [K, string, string?][]; onChange: (key: K) => void }) {
   return (
-    <div className="absolute top-3 right-4 flex overflow-hidden rounded-full border border-slate-300 bg-sheet text-xs shadow-sm">
-      {options.map(([key, label]) => (
+    <div className="flex overflow-hidden rounded-full border border-slate-300 bg-sheet text-xs shadow-sm">
+      {options.map(([key, label, title]) => (
         <button
           key={key}
           type="button"
+          title={title}
           onClick={() => onChange(key)}
-          className={`px-3 py-1 ${view === key ? "bg-ink text-paper" : "text-slate-600 hover:bg-slate-100"}`}
+          className={`px-3 py-1 ${value === key ? "bg-ink text-paper" : "text-slate-600 hover:bg-slate-100"}`}
         >
           {label}
         </button>
       ))}
+    </div>
+  );
+}
+
+function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
+  const direction = useStudio((s) => s.flowDirection);
+  const setDirection = useStudio((s) => s.setFlowDirection);
+  return (
+    <div className="absolute top-3 right-4 flex gap-2">
+      {view === "flow" && (
+        <Segmented
+          value={direction}
+          onChange={setDirection}
+          options={[
+            ["vertical", "縦", "上から下へ流れる"],
+            ["horizontal", "横", "左から右へ流れる"],
+          ]}
+        />
+      )}
+      <Segmented
+        value={view}
+        onChange={onChange}
+        options={[
+          ["flow", t.viewFlow],
+          ["story", t.viewStory],
+        ]}
+      />
     </div>
   );
 }

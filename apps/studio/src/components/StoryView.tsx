@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import { useStudio } from "../context";
 import { actorLabel, describe, formatValue, relativeTime } from "../lib/changes";
 import { t } from "../lib/i18n";
+import { blockLabel } from "../lib/keywords";
 import { type Part, plain, sentence } from "../lib/sentence";
 import { revertBlocker, type StepRunState, touchedSteps } from "../store";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
@@ -135,7 +136,7 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
   const added = marks.some((m) => m.added);
   const selected = selection?.kind === "step" && selection.stepId === id;
   const lanes = [
-    ...(def?.blocks ?? []).map((b) => ({ name: b.name, label: b.label })),
+    ...(def?.blocks ?? []).map((b) => ({ name: b.name, label: blockLabel(step, b.name, b.label) })),
     ...Object.keys(step.blocks ?? {})
       .filter((name) => !def?.blocks?.some((b) => b.name === name))
       .map((name) => ({ name, label: name })),

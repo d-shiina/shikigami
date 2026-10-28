@@ -1,8 +1,10 @@
 import {
   Background,
   BaseEdge,
+  EdgeLabelRenderer,
   type EdgeProps,
   getBezierPath,
+  getSmoothStepPath,
   Controls,
   type Edge,
   Handle,
@@ -15,9 +17,10 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
+import { KEYWORD } from "../lib/keywords";
 import { CHIP_ROOM, type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
 import type { HistoryEntry } from "@shikigami/schema";
@@ -49,7 +52,6 @@ const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: string 
 };
 
 /** Which way the chart runs, for rows deciding whether to show chips. */
-const DirContext = createContext<Direction>("horizontal");
 
 const RUN_STYLE: Record<StepRunState, string> = {
   running: "ring-2 ring-accent-500 animate-pulse",
@@ -139,7 +141,32 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
   return <BaseEdge id={id} path={path} style={{ stroke: data.color, strokeWidth: 2.5 }} />;
 }
 
-const edgeTypes = { link: LinkEdge };
+/**
+ * A step-to-step edge. Its block label ("forEach：…", "catch：…") sits just
+ * above the step it leads to, not halfway, where sibling edges share a line.
+ */
+function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd }: EdgeProps) {
+  // Top to bottom, turn right below the source so the label has the run down to the step to itself.
+  const centerY = label && sourcePosition === Position.Bottom ? sourceY + 12 : undefined;
+  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY });
+  return (
+    <>
+      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+      {label && (
+        <EdgeLabelRenderer>
+          <div
+            style={{ transform: `translate(-50%, -100%) translate(${targetX}px, ${targetY - 10}px)` }}
+            className="pointer-events-none absolute max-w-[300px] truncate rounded-[3px] bg-paper px-1.5 text-[11px] leading-4 text-slate-600"
+          >
+            {label}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
+const edgeTypes = { link: LinkEdge, block: BlockEdge };
 
 type RunValues = { changes: VariableChange[]; starts: StepStart[] };
 const NO_RUN: RunValues = { changes: [], starts: [] };
@@ -241,7 +268,6 @@ function Chips({ side, color, children }: { side: "in" | "out"; color: string; c
 function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, string | undefined>; run: RunValues; stepId: string }) {
   const focused = useFocus();
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "#94a3b8";
-  const across = useContext(DirContext) === "horizontal";
   if (row.kind === "more") {
     return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[10px] text-slate-400">…ほか {row.count} 項目</div>;
   }
@@ -255,17 +281,15 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
           {row.variable}
         </span>
         <Socket side="out" id={outHandle(row.variable)} color={color} title={`${row.variable} に書き込む`} />
-        {across && (
-          <Chips side="out" color={color}>
-            <VarChip
-              side="out"
-              owner={stepId}
-              name={row.variable}
-              color={color}
-              values={run.changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
-            />
-          </Chips>
-        )}
+        <Chips side="out" color={color}>
+          <VarChip
+            side="out"
+            owner={stepId}
+            name={row.variable}
+            color={color}
+            values={run.changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
+          />
+        </Chips>
       </div>
     );
   }
@@ -274,7 +298,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
   return (
     <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${first} 12%, transparent)` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
       {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={`読む変数: ${row.refs.join(", ")}`} />}
-      {across && row.refs.length > 0 && (
+      {row.refs.length > 0 && (
         <Chips side="in" color={first}>
           {row.refs.slice(0, MAX_CHIPS).map((r) => (
             <VarChip key={r} side="in" owner={stepId} name={r} color={typeColor(r)} values={valuesSeenBy(run.changes, run.starts, r, stepId)} />
@@ -319,7 +343,7 @@ function StepNode({ data }: StepNodeProps) {
       }`}
     >
       {latest && (
-        <NodeToolbar isVisible position={data.dir === "horizontal" ? Position.Top : Position.Right} offset={12}>
+        <NodeToolbar isVisible position={Position.Top} offset={12}>
           <ReviewToolbar entry={latest} />
         </NodeToolbar>
       )}
@@ -337,15 +361,22 @@ function StepNode({ data }: StepNodeProps) {
           {DIFF_STYLE[data.diff].label}
         </span>
       )}
-      <DirContext.Provider value={data.dir}>
       <div
         style={{ height: 24, background: `color-mix(in srgb, ${color} 10%, transparent)` }}
         className="flex items-center gap-1.5 rounded-t-[3px] border-b border-slate-100 px-3"
       >
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-        <span className="truncate text-[12px] font-bold" style={{ color }}>
-          {data.def?.label ?? data.step.type}
-        </span>
+        {KEYWORD[data.step.type] && (
+          <span className="shrink-0 rounded-[3px] px-1 font-mono text-[11px] leading-4 font-bold text-white" style={{ background: color }}>
+            {KEYWORD[data.step.type]}
+          </span>
+        )}
+        {/* With a keyword the type is clear enough: make room for the name. */}
+        {!(KEYWORD[data.step.type] && data.step.name) && (
+          <span className="truncate text-[12px] font-bold" style={{ color }}>
+            {data.def?.label ?? data.step.type}
+          </span>
+        )}
         {data.step.name && <span className="truncate text-[12px] text-slate-500">{data.step.name}</span>}
         {data.byAi && (
           <span className="swirl ml-auto shrink-0 rounded-full px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
@@ -370,7 +401,6 @@ function StepNode({ data }: StepNodeProps) {
           ))}
         </div>
       )}
-      </DirContext.Provider>
     </div>
   );
 }
@@ -384,8 +414,8 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean; d
       }`}
     >
       <FlowHandles dir={data.dir} atHeader={false} />
-      {data.parentId ? `${data.label}：空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
-
+      {/* Top to bottom, the edge into the slot already carries the block's label. */}
+      {data.parentId ? `${data.dir === "vertical" ? "" : `${data.label}：`}空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
     </div>
   );
 }
@@ -502,7 +532,8 @@ export function FlowCanvas() {
 
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const wrapper = useRef<HTMLDivElement>(null);
-  const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs), [scenario, defs]);
+  const direction = useStudio((s) => s.flowDirection);
+  const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs, direction), [scenario, defs, direction]);
   const vars = useMemo(() => knownVariables(scenario?.variables, scenario?.steps ?? []), [scenario]);
 
   const issueCounts = useMemo(() => {
@@ -549,8 +580,8 @@ export function FlowCanvas() {
     };
   });
 
-  // Read chips stick out left of the first step, write chips right of the last.
-  const chips = layout.direction === "horizontal" ? CHIP_ROOM : 0;
+  // Read chips stick out left of a step, write chips right of it.
+  const chips = CHIP_ROOM;
   const bounds = { x: -chips, y: 0, width: layout.width + chips * 2, height: layout.height };
 
   const selectedId = selection?.kind === "step" ? selection.stepId : null;
@@ -580,12 +611,11 @@ export function FlowCanvas() {
     targetHandle: "flow",
     // Left to right, the frames carry the block names.
     label: layout.direction === "horizontal" ? undefined : e.label,
-    type: "smoothstep",
+    type: "block",
     animated: e.loop,
     style: { stroke: "var(--flow-edge)", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
     // A plain colour: the marker id is built from it, so no var().
     markerEnd: { type: MarkerType.ArrowClosed, color: theme === "dark" ? "#8193a8" : "#5b6b80" },
-    labelBgPadding: [4, 2],
   }));
   edges.push(...linkEdges);
 
