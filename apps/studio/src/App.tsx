@@ -1,6 +1,8 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AgentContext, createAgentStore } from "./agent";
+import { AgentButton, AgentPane } from "./components/AgentPane";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
@@ -20,7 +22,7 @@ import { VariablesPanel } from "./components/VariablesPanel";
 import { VersionsPanel } from "./components/VersionsPanel";
 import { WindowControls } from "./components/WindowControls";
 import { StudioContext, useStudio } from "./context";
-import { api, events } from "./lib/api";
+import { agent, api, events } from "./lib/api";
 import { t } from "./lib/i18n";
 import { createStudioStore, type StudioState } from "./store";
 
@@ -236,16 +238,11 @@ function Shell() {
     <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
       {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
       <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4 select-none">
-        <img data-tauri-drag-region src="/mark.png" alt="" className="h-6 w-6" draggable={false} />
-        <span data-tauri-drag-region className="text-[15px] font-black tracking-wider">
-          式神
-        </span>
-        <span data-tauri-drag-region className="-ml-1.5 text-[10px] font-medium tracking-[.2em] text-slate-400">
-          STUDIO
-        </span>
+        <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
         <ModeSwitch />
         <ScenarioHeader />
         <span className="h-5 w-px bg-slate-200" />
+        <AgentButton />
         <SecretsButton />
         <WindowControls />
         <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
@@ -295,6 +292,7 @@ function Shell() {
       <StatusBar />
       <CommandPalette />
       <SecretsDialog />
+      <AgentPane />
     </div>
   );
 }
@@ -334,6 +332,7 @@ function navigate(e: KeyboardEvent, state: StudioState) {
 
 export function App() {
   const store = useMemo(() => createStudioStore(api), []);
+  const agentStore = useMemo(() => createAgentStore(agent), []);
 
   useEffect(() => {
     void store.getState().init();
@@ -341,7 +340,9 @@ export function App() {
       events.onScenarioChanged((id) => void store.getState().onExternalChange(id)),
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
+      agent.onEvent((e) => agentStore.getState().onEvent(e)),
     ];
+    void agentStore.getState().init();
     // Requests come from another process (the MCP server): re-read on refocus too.
     const onFocus = () => void store.getState().loadSecretRequests();
     window.addEventListener("focus", onFocus);
@@ -368,6 +369,11 @@ export function App() {
         }
         return;
       }
+      if (mod && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        agentStore.getState().setOpen(!agentStore.getState().open);
+        return;
+      }
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (store.getState().scenario) store.getState().setPaletteOpen(!store.getState().paletteOpen);
@@ -392,13 +398,15 @@ export function App() {
       stopAttention();
       for (const p of unlisten) void p.then((off) => off());
     };
-  }, [store]);
+  }, [store, agentStore]);
 
   return (
     <StudioContext.Provider value={store}>
-      <ErrorBoundary>
-        <Shell />
-      </ErrorBoundary>
+      <AgentContext.Provider value={agentStore}>
+        <ErrorBoundary>
+          <Shell />
+        </ErrorBoundary>
+      </AgentContext.Provider>
     </StudioContext.Provider>
   );
 }

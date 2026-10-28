@@ -23,6 +23,7 @@ pub const RESERVED_NAMES: &[&str] = &[
     "variable",
     "log",
     "flow",
+    "scenario",
     "wait",
     "browser",
     "desktop",

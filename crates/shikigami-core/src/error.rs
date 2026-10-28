@@ -46,6 +46,13 @@ pub enum CoreError {
         name: String,
     },
 
+    #[error("scenario {scenario_id} is called by {} other scenario(s)", .callers.len())]
+    ScenarioInUse {
+        scenario_id: ScenarioId,
+        /// `(id, name)` of each scenario that calls it.
+        callers: Vec<(ScenarioId, String)>,
+    },
+
     #[error("observation not found: {0}")]
     ObservationNotFound(ObservationId),
 
@@ -80,6 +87,7 @@ impl CoreError {
             Self::RevisionConflict { .. } => "REVISION_CONFLICT",
             Self::VersionNotFound { .. } => "VERSION_NOT_FOUND",
             Self::ImportConflict { .. } => "IMPORT_CONFLICT",
+            Self::ScenarioInUse { .. } => "SCENARIO_IN_USE",
             Self::ObservationNotFound(_) => "OBSERVATION_NOT_FOUND",
             Self::InvalidEdit(_) => "INVALID_EDIT",
             Self::NothingTo(_) => "NOTHING_TO_UNDO_OR_REDO",
@@ -108,6 +116,17 @@ impl CoreError {
                 "scenario_id": scenario_id,
                 "name": name,
                 "hint": "\"update\" applies the imported content to the existing scenario as one undoable edit and adds its versions; \"copy\" imports it as a new scenario with a new ID",
+            })),
+            Self::ScenarioInUse {
+                scenario_id,
+                callers,
+            } => Some(serde_json::json!({
+                "scenario_id": scenario_id,
+                "callers": callers
+                    .iter()
+                    .map(|(id, name)| serde_json::json!({ "id": id, "name": name }))
+                    .collect::<Vec<_>>(),
+                "hint": "Remove or change the scenario.call steps in these scenarios first.",
             })),
             Self::ObservationNotFound(id) => Some(serde_json::json!({
                 "observation_id": id,

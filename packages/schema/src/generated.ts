@@ -78,7 +78,7 @@ export type Severity = "error" | "warning";
  * via the `definition` "StepCategory".
  */
 export type StepCategory =
-  | ("control" | "variable" | "log" | "flow" | "browser" | "windows" | "file" | "other")
+  | ("control" | "variable" | "log" | "flow" | "browser" | "windows" | "office" | "file" | "other")
   | "network"
   | "system";
 /**
@@ -108,6 +108,13 @@ export type DiffKind = "added" | "removed" | "changed" | "moved";
  * via the `definition` "ImportMode".
  */
 export type ImportMode = "created" | "updated" | "copied";
+/**
+ * What importing a bundle did with one of its sub-scenarios.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "SubscenarioImport".
+ */
+export type SubscenarioImport = "created" | "updated" | "kept";
 /**
  * What to do when an imported scenario's ID already exists.
  *
@@ -226,6 +233,7 @@ export interface ShikigamiApi {
   scenario_diff: ScenarioDiff;
   scenario_bundle: ScenarioBundle;
   import_outcome: ImportOutcome;
+  extract_outcome: ExtractOutcome;
   import_conflict: ImportConflict;
   workspace_info: WorkspaceInfo;
   change_note: ChangeNote;
@@ -852,6 +860,11 @@ export interface ScenarioBundle {
   exportedAt: string;
   scenario: Scenario;
   versions?: ScenarioVersion[];
+  /**
+   * Every scenario `scenario` calls (directly or through others), without
+   * versions, so the bundle runs on its own.
+   */
+  subscenarios?: Scenario[];
 }
 /**
  * Result of importing a bundle or scenario file.
@@ -865,10 +878,25 @@ export interface ImportOutcome {
    * Versions from the bundle that were added (already present ones are skipped).
    */
   versionsAdded: number;
+  /**
+   * The bundle's sub-scenarios and what happened to each.
+   */
+  subscenarios?: ImportedSubscenario[];
   scenario: Scenario;
   validation: ValidationReport2;
   canUndo: boolean;
   canRedo: boolean;
+}
+/**
+ * One sub-scenario of an imported bundle.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ImportedSubscenario".
+ */
+export interface ImportedSubscenario {
+  id: ScenarioId;
+  name: string;
+  mode: SubscenarioImport;
 }
 /**
  * Full validation of the new revision. Drafts may contain errors;
@@ -877,6 +905,38 @@ export interface ImportOutcome {
 export interface ValidationReport2 {
   valid: boolean;
   issues: ValidationIssue[];
+}
+/**
+ * Result of moving steps into a new sub-scenario.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ExtractOutcome".
+ */
+export interface ExtractOutcome {
+  subscenario: EditOutcome1;
+  caller: EditOutcome2;
+  /**
+   * Identifier of a step. Unique within a scenario and stable across edits.
+   */
+  callStepId: string;
+}
+/**
+ * Result of a committed change.
+ */
+export interface EditOutcome1 {
+  scenario: Scenario;
+  validation: ValidationReport;
+  canUndo: boolean;
+  canRedo: boolean;
+}
+/**
+ * Result of a committed change.
+ */
+export interface EditOutcome2 {
+  scenario: Scenario;
+  validation: ValidationReport;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 /**
  * Where a workspace keeps its data, for display and diagnostics.
@@ -1053,6 +1113,12 @@ export type RunEventEnvelope = {
    */
   seq: number;
   at: string;
+  /**
+   * The `scenario.call` steps (outermost first) the event happened
+   * inside; empty for the scenario that was started. Step IDs in the
+   * event belong to the innermost called scenario.
+   */
+  callPath?: StepId[];
 } & RunEventEnvelope1;
 export type RunEventEnvelope1 =
   | {
@@ -1181,6 +1247,26 @@ export interface RunReport {
   outputs: {
     [k: string]: unknown;
   };
+  /**
+   * The scenarios `scenario.call` steps could run, as they were when the
+   * run started.
+   */
+  subscenarios?: SubscenarioRef[];
+}
+/**
+ * A called scenario's content as used by a run.
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "SubscenarioRef".
+ */
+export interface SubscenarioRef {
+  scenarioId: ScenarioId;
+  scenarioName: string;
+  revision: number;
+  /**
+   * Named version its content matches, if any.
+   */
+  version?: number | null;
 }
 /**
  * Live state of a run, for `get_run_status` while it is executing.

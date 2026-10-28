@@ -1,9 +1,9 @@
 ---
 name: shikigami-scenarios
-description: Use when the user asks to create, change, debug or run an RPA scenario / automation in Shikigami（式神）, or mentions Shikigami Studio. Covers the shikigami MCP tools and how to edit scenarios safely alongside a human.
+description: Use when the user asks to create, change, debug or run an RPA scenario / automation in Shikigami, or mentions Shikigami Studio. Covers the shikigami MCP tools and how to edit scenarios safely alongside a human.
 ---
 
-# Shikigami（式神）のシナリオを作る・直す・動かす
+# Shikigamiのシナリオを作る・直す・動かす
 
 Shikigami はローカルで動く RPA です。あなた（AI）が作ったシナリオは、人間が Shikigami Studio で見て編集し、最後は **AI なし** で `shikigami run` により実行されます。したがって目的は「いま操作をこなすこと」ではなく、「AI がいなくても正しく動き続けるシナリオを残すこと」です。
 
@@ -48,6 +48,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
   - 表（配列）の加工は `map` / `filter` / `find` / `sortBy` / `groupBy` に `r => …` を渡す：`sum(map(filter(rows, r => r.status == '済'), r => num(r.amount)))`。レコードの追加・変更は `merge(row, { status: '済' })`、作るときは `{ name: r.氏名, amount: num(r.金額) }`。
   - 日付は文字列（`2026-10-28` / `2026-10-28T09:30:00`）で持つ：`today()`、`formatDate(today(), 'yyyyMMdd')`、`dateAdd(d, -1, 'month')`、`endOfMonth(d)`、`parseDate('令和8年10月28日', 'gge年M月d日')`。
 - 入出力は `variables` の `direction`（`input` / `output` / `inOut` / `local`。省略時は `local`）で宣言する。`secret: true` の変数はログで `***` に伏せられるが、既定値は書けない（パスワードは下のシークレットを使う）。
+- 長くなったフローや、何度も使う手順（ログイン、1 件の登録など）はサブシナリオにする。並んだステップは `extract_subscenario`（`stepIds`・`name`）でそのまま切り出せる（読み書きする変数は自動で入出力になる）。手で書くときは `scenario.call`：`params.scenario` に呼ぶシナリオの ID、`inputs` に「呼ばれる側の入力変数 → 値（テンプレート可）」、`outputs` に「呼ばれる側の出力変数 → 受け取る変数名」。どちらもキーは呼ばれる側の変数名。`saveAs` と `retry` は使わない。呼ばれる側の変数は見えないので、必要なものはすべて `inputs` で渡す。`get_scenario` の `subscenarios` に呼ぶ側から見た入力・出力の一覧が出る。
 - 要素ごとの処理は `control.forEach`。各回の結果は `collect`（式）で返すと `saveAs` に配列で入る。互いに独立した要素は `concurrency`（例 `4`）で同時に処理できるが、その場合は各回が変数のコピーで動くので、本体で外の変数に書かず（`FOREACH_SHARED_WRITE`）、`collect` + `saveAs` で受け取ってループ後に `sum(results)` などで集計する。
 - 時間のかかる処理の完了や状態の変化を待つときは `wait.until`（`condition` が真になるまで `intervalMs` ごとに確認。`check` ブロックで状態を読んで `saveAs` で変数に入れる。待つ上限は `timeoutMs`、超えると `WAIT_TIMEOUT`）。`flow.delay` の固定待ちや `retry` で代用しない。
 - 失敗し得るステップには `retry`（回数と間隔）や `timeoutMs`、`onError` を設定する。`onError: continue` のときエラー内容は変数 `lastError` に入る。
@@ -84,6 +85,14 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 4. アプリの起動は `desktop.launch`。続くステップがウィンドウの出現を待つ。
 5. パスワードは `desktop.setValue` の `value` に `{ "secret": "名前", "field": "password" }`。シークレットにアプリが `app:billing.exe` の形で登録されていないと入力しない（`SECRET_APP_NOT_SET`）ので、ユーザーに Studio で追加してもらう。
 6. `test_step` で 1 ステップずつ試し、返るウィンドウの一覧で結果を確かめてから書く。`inspect_ui` に SAP や Java の注記が出たら、見えている部品だけで書けるか確かめ、無理ならユーザーに伝える。
+
+## Excel のブックを扱うシナリオ
+
+1. セルの読み書きは `excel.*`（ファイルを直接読み書き、Excel 不要）。Excel の画面を `desktop.*` で操作しない。`path` はフルパス（`C:\work\受注.xlsx`）。
+2. 書く前に `test_step` で `excel.listSheets` か `excel.readRange` を実行し、返る `state`（全シートの使用範囲と先頭の数行）で見出しの位置とシート名を確かめる。
+3. 見出し行のある表は `excel.readRows`（見出しをキーにしたレコード、行番号 `_row` つき）→ `control.forEach`。同じ行に結果を書くときは `excel.writeCell` の `cell` を `"F{{ row._row }}"` にする。結果を貯めるときは `excel.appendRows`（キーは見出しと完全一致）。
+4. 日付は読むと `"2026-10-28"`、書くときは `{ "date": "2026-10-28" }`。数式は `{ "formula": "SUM(B2:B9)" }`。ただの文字列は文字のまま書かれる。
+5. 同じブックへのステップは自動で順番待ちになる。ロックや「開く・保存・閉じる」のステップは書かない（書き込みはステップごとに保存される）。`FILE_IN_USE` はユーザーが Excel でそのブックを開いているので、閉じてもらう。
 
 ## 取得データの扱い
 

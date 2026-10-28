@@ -340,7 +340,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 33);
+    assert_eq!(tools.len(), 34);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),

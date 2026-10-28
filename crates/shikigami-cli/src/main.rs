@@ -315,8 +315,8 @@ fn real_main() -> Result<ExitCode> {
         }
         Command::Validate { target } => {
             let svc = open_service()?;
-            let scenario = resolve(&svc, target)?;
-            let report = svc.validate(&scenario);
+            let (scenario, bundled) = resolve(&svc, target)?;
+            let report = svc.validate_bundled(&scenario, &bundled);
             println!("{}", serde_json::to_string_pretty(&report)?);
             if !report.valid {
                 return Ok(ExitCode::from(1));
@@ -392,8 +392,9 @@ fn real_main() -> Result<ExitCode> {
             vars,
         } => {
             let svc = open_service()?;
-            let scenario = resolve(&svc, target)?;
+            let (scenario, bundled) = resolve(&svc, target)?;
             let version = svc.matching_version(&scenario).ok().flatten();
+            let subscenarios = subscenarios(&svc, &scenario, bundled)?;
             let inputs = parse_inputs(inputs)?;
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -408,6 +409,7 @@ fn real_main() -> Result<ExitCode> {
                 RunOptions {
                     inputs,
                     version,
+                    subscenarios,
                     ..RunOptions::default()
                 },
                 *json,
@@ -726,27 +728,44 @@ fn print_outcome(out: &shikigami_core::EditOutcome) {
 }
 
 /// Reads a scenario JSON file or the scenario inside a bundle.
-fn load_file(path: &Path) -> Result<Scenario> {
+/// A scenario file or bundle, with the sub-scenarios a bundle carries.
+fn load_file(path: &Path) -> Result<(Scenario, Vec<Scenario>)> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let mut value: Value = serde_json::from_str(&text).context("parsing JSON")?;
+    let mut bundled = Vec::new();
     if shikigami_core::version::is_bundle(&value) {
+        if let Some(Value::Array(subs)) = value.get_mut("subscenarios").map(Value::take) {
+            for sub in subs {
+                bundled.push(shikigami_core::migrate::from_value(sub)?);
+            }
+        }
         value = value
             .get_mut("scenario")
             .map(Value::take)
             .unwrap_or_default();
     }
-    Ok(shikigami_core::migrate::from_value(value)?)
+    Ok((shikigami_core::migrate::from_value(value)?, bundled))
 }
 
 /// A target is a file path when it ends with `.json` or exists on disk.
-fn resolve(svc: &ScenarioService, target: &str) -> Result<Scenario> {
+fn resolve(svc: &ScenarioService, target: &str) -> Result<(Scenario, Vec<Scenario>)> {
     let path = Path::new(target);
     if target.ends_with(".json") || path.is_file() {
         load_file(path)
     } else {
-        Ok(svc.get(&ScenarioId::new(target))?)
+        Ok((svc.get(&ScenarioId::new(target))?, Vec::new()))
     }
+}
+
+/// What the run's calls may use: a bundle's own sub-scenarios first, then
+/// the workspace for any others (also those the bundled ones call).
+fn subscenarios(
+    svc: &ScenarioService,
+    scenario: &Scenario,
+    bundled: Vec<Scenario>,
+) -> Result<Vec<shikigami_core::Subscenario>> {
+    Ok(svc.subscenarios_bundled(scenario, &bundled)?)
 }
 
 fn parse_inputs(raw: &[String]) -> Result<Map<String, Value>> {

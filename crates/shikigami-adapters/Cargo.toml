@@ -10,6 +10,7 @@ license.workspace = true
 shikigami-runtime.workspace = true
 shikigami-browser.workspace = true
 shikigami-desktop.workspace = true
+shikigami-excel.workspace = true
 shikigami-files.workspace = true
 shikigami-system.workspace = true
 shikigami-plugins.workspace = true

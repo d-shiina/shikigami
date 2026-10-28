@@ -58,7 +58,7 @@ args = ["mcp"]
 | 区分 | ツール | 内容 |
 |---|---|---|
 | read | `list_scenarios` | シナリオ一覧 |
-|  | `get_scenario` | シナリオ本体（ステップ ID 付き）と Undo/Redo の可否。人が差し戻し中なら `feedback`（理由とステップへの指摘） |
+|  | `get_scenario` | シナリオ本体（ステップ ID 付き）と Undo/Redo の可否。人が差し戻し中なら `feedback`（理由とステップへの指摘）。`scenario.call` で呼ぶシナリオの入力・出力（`subscenarios`）と、このシナリオを呼んでいるシナリオ（`calledBy`） |
 |  | `validate_scenario` | 保存済み（`scenarioId`）または未保存の文書（`scenario`）を検証。全エラーを JSON Pointer 付きで返す |
 |  | `list_step_types` / `get_step_schema` | 使えるステップ型と、その params の JSON Schema・コピーして使える記述例（`examples`） |
 |  | `get_history` | 誰が（Studio / MCP クライアント名 / CLI）いつ何を変えたか。AI の説明（`summary`）と触ったステップ（`stepIds`）付き |
@@ -66,17 +66,18 @@ args = ["mcp"]
 |  | `get_run_status` / `get_run_logs` / `list_runs` | 実行中の状態・最終レポート・イベントログ（`afterSeq` で差分取得、`variable` でその変数の変化だけ） |
 |  | `list_versions` / `get_version` | 名前付きの版の一覧と、版のスナップショット |
 |  | `diff_versions` | 版どうし・版と現在の差分（ステップ ID 単位。既定は「最新の版 → 現在」） |
-|  | `export_scenario` | シナリオと版を 1 つのバンドルに（機密変数の初期値は除く） |
+|  | `export_scenario` | シナリオと版、呼び出すサブシナリオを 1 つのバンドルに（機密変数の初期値は除く） |
 |  | `list_secrets` | Studio で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
 | write | `create_scenario` | 新規作成（ステップ ID は省略可） |
 |  | `update_scenario` | 複数の EditOp を 1 リビジョンとして原子的に適用 |
 |  | `add_step` / `update_step` / `remove_step` / `move_step` | 個別の編集 |
 |  | （編集系の共通引数） | `summary`：変更の説明（レビューと履歴に出る）。`observations`：根拠にした画面の `observationId` |
 |  | `undo` / `redo` | Studio・CLI と共通の Undo スタック |
-|  | `delete_scenario` | ゴミ箱へ移動。`expectedRevision` 必須。`destructiveHint` 付き |
+|  | `delete_scenario` | ゴミ箱へ移動。`expectedRevision` 必須。`destructiveHint` 付き。他のシナリオから呼ばれていると `SCENARIO_IN_USE` |
 |  | `create_version` / `restore_version` | 版を保存／版の内容に戻す（Undo できる 1 回の編集） |
-|  | `import_scenario` | バンドルかシナリオ文書を取り込む。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ） |
-|  | `request_secret` | ログイン情報をユーザーに求める。Studio に「式神がログイン情報を求めています」と出て、名前とサイトが入った登録フォームが開く。値は Studio でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
+|  | `import_scenario` | バンドルかシナリオ文書を取り込む。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブシナリオもいっしょに取り込む |
+|  | `extract_subscenario` | 同じブロックに並んだステップを新しいシナリオに切り出し、`scenario.call` 1 つに置き換える。読み書きする変数は入力・出力として受け渡すので動きは変わらない（[設計](design/subscenarios.md)） |
+|  | `request_secret` | ログイン情報をユーザーに求める。Studio に「ログイン情報が必要です」と出て、名前とサイトが入った登録フォームが開く。値は Studio でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
 | run | `run_scenario` | Runtime で実行（AI は実行に関与しない）。`waitMs` で完了まで待てる。`secret: true` の入力変数には値を渡せない |
 |  | `stop_scenario` | 実行のキャンセル |
 | ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)）。証跡としてツリーとスクリーンショットを保存し `observationId` を返す |

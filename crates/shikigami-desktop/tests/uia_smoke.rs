@@ -72,7 +72,7 @@ async fn notepad_round_trip() {
     s.steps = vec![
         step(
             types::SET_VALUE,
-            json!({ "target": edit, "value": "式神 smoke test" }),
+            json!({ "target": edit, "value": "日本語 smoke test" }),
             None,
         ),
         step(types::GET_VALUE, json!({ "target": edit }), Some("text")),
@@ -85,7 +85,7 @@ async fn notepad_round_trip() {
         .unwrap();
     kill(pid);
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
-    assert_eq!(report.outputs["text"], json!("式神 smoke test"));
+    assert_eq!(report.outputs["text"], json!("日本語 smoke test"));
 }
 
 fn kill(pid: u64) {

@@ -1,4 +1,4 @@
-# Shikigami（式神）アーキテクチャ設計
+# Shikigamiアーキテクチャ設計
 
 > MCP ネイティブなデスクトップ RPA。AI と人間が **同じシナリオ** を作成・編集・実行・保守する。
 >
@@ -97,6 +97,7 @@ shikigami/
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
 │  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
 │  ├─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
+│  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き）
 │  ├─ shikigami-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
 │  └─ shikigami-plugins/  ノードのプラグイン（マニフェストで宣言、別プロセスで実行）
@@ -182,6 +183,7 @@ shikigami/
 | `control.fail` | `message`, `code` で失敗させる |
 | `variable.set` | `name` に `value`（テンプレート可）または `expression` を代入 |
 | `log.message` | 実行ログ出力 |
+| `scenario.call` | `scenario`（ID）, `inputs`, `outputs` で別のシナリオを 1 ステップとして呼ぶ（[設計](design/subscenarios.md)） |
 | `flow.delay` | 時間指定待機（完了待ちには `wait.until` を使う） |
 
 ## 5. Adapter Interface
@@ -406,7 +408,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 | 監査 | 全 MCP ツール呼び出し・承認・実行を `audit_log` に記録（シナリオ変更は P1 からジャーナル記録済み） | P2 |
 | 実行権限 | シナリオ単位で「MCP からの実行可否」「無人実行可否」を設定 | P2 |
 
-## 10.5 並行実行（式神の多重召喚）
+## 10.5 並行実行
 
 複数の処理を同時に動かせることを製品の特徴にする。段階は 3 つ。
 
@@ -509,6 +511,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 - Studio（Tauri 2 + React）：シナリオ一覧・作成・複製・削除、フローチャート表示（木から自動レイアウト）、ステップ追加・削除・上下移動、スキーマから生成するプロパティフォーム、変数編集、検証結果表示、Undo/Redo（Ctrl+Z / Ctrl+Y）、実行・停止・実行ログ・ステップ状態のハイライト、**外部（MCP / CLI）変更のリアルタイム反映**、競合時の自動再読込
 - MCP サーバー（Phase 2）：`shikigami mcp`（stdio）、シナリオ・ステップ・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
 - デスクトップアプリ操作（Phase 4）：`desktop.*` 11 種（UI Automation の専用 MTA スレッド、自動待ち、マウスなし操作と `desktop.input` を取る操作の区別、アプリ単位の排他、`app:` で登録したアプリにだけ入力するシークレット）と MCP の `inspect_ui`（[desktop.md](desktop.md)）
+- Excel（`excel.*` 8 種）：xlsx / xlsm を Excel なしで直接読み書き（表を行ごとに読む・行を追加・セル / 範囲の読み書き・シート一覧 / 追加）。ブックのパスで自動排他、一時ファイル経由の保存、Excel で開いているブックへの書き込みは `FILE_IN_USE`（[office.md](office.md)）
 - Claude Code プラグイン：`plugins/shikigami`（MCP 設定＋スキル `shikigami-scenarios`）とマーケットプレイス定義。`claude plugin validate` 合格
 
 ### 未実装（後続フェーズ）

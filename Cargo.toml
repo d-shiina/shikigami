@@ -12,6 +12,7 @@ members = [
     "crates/shikigami-plugins",
     "crates/shikigami-files",
     "crates/shikigami-system",
+    "crates/shikigami-excel",
     "apps/studio/src-tauri",
 ]
 
@@ -33,6 +34,7 @@ shikigami-desktop = { path = "crates/shikigami-desktop" }
 shikigami-plugins = { path = "crates/shikigami-plugins" }
 shikigami-files = { path = "crates/shikigami-files" }
 shikigami-system = { path = "crates/shikigami-system" }
+shikigami-excel = { path = "crates/shikigami-excel" }
 
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }

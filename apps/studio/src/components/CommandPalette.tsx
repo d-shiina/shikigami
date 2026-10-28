@@ -12,6 +12,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   flow: "フロー",
   browser: "ブラウザ",
   windows: "Windows",
+  office: "Office",
   file: "ファイル",
   text: "文字",
   number: "数値",
@@ -28,6 +29,7 @@ export const CATEGORY_COLOR: Record<string, string> = {
   flow: "var(--cat-flow)",
   browser: "var(--cat-browser)",
   windows: "var(--cat-windows)",
+  office: "var(--cat-office)",
   file: "var(--cat-file)",
   // Presets are "変数に代入" steps underneath, so they share its colour.
   text: "var(--cat-variable)",

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
 import { draftFor } from "./components/SecretsDialog";
-import { createStudioStore, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
+import { calledIds, createStudioStore, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
 
 const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({
   schemaVersion: 1,
@@ -234,6 +234,35 @@ describe("studio store", () => {
     expect(run.status).toBe("succeeded");
     expect(run.steps.s1).toBe("succeeded");
     expect(run.logs.map((l) => l.message)).toContain("hello");
+  });
+
+  it("shows steps inside a call apart from the caller's", () => {
+    const store = createStudioStore(fakeApi());
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    const events = [
+      { ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 },
+      { ...base, seq: 1, type: "stepStarted", stepId: "c1", stepType: "scenario.call", attempt: 1 },
+      { ...base, seq: 2, type: "stepStarted", stepId: "t1", stepType: "variable.set", attempt: 1, callPath: ["c1"] },
+      { ...base, seq: 3, type: "variableChanged", variable: "scratch", value: 2, stepId: "t1", callPath: ["c1"] },
+      { ...base, seq: 4, type: "stepFinished", stepId: "t1", stepType: "variable.set", outcome: "succeeded", durationMs: 1, callPath: ["c1"] },
+      { ...base, seq: 5, type: "stepStarted", stepId: "u1", stepType: "log.message", attempt: 1, callPath: ["c1", "t9"] },
+    ] as unknown as RunEventEnvelope[];
+    for (const e of events) store.getState().onRunEvent(e);
+    const run = store.getState().run!;
+    expect(run.steps).toEqual({ c1: "running" });
+    expect(run.inner.c1).toEqual({ t1: "succeeded" });
+    // The callee's variables are not the caller's.
+    expect(run.changes.map((c) => c.variable)).not.toContain("scratch");
+  });
+
+  it("finds the scenarios a scenario calls, nested ones included", () => {
+    const steps: Scenario["steps"] = [
+      { id: "c1", type: "scenario.call", params: { scenario: "scn_b" } },
+      { id: "i1", type: "control.if", params: { condition: "true" }, blocks: { then: [{ id: "c2", type: "scenario.call", params: { scenario: "scn_c" } }] } },
+      { id: "c3", type: "scenario.call", params: { scenario: "scn_b" } },
+      { id: "c4", type: "scenario.call", params: { scenario: "" } },
+    ];
+    expect([...calledIds(steps)].sort()).toEqual(["scn_b", "scn_c"]);
   });
 
   it("records variable changes the Runtime reports", () => {

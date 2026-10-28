@@ -2,7 +2,7 @@
 // only display strings live here so that an English dictionary can be added
 // without touching components.
 export const ja = {
-  appName: "式神 Studio",
+  appName: "Shikigami Studio",
   secrets: "シークレット",
   secretsIntro:
     "ログインに使う ID・パスワードを名前を付けて登録します。シナリオと AI には名前だけが渡り、値は登録したサイトの入力欄にだけ入力されます。",
@@ -33,8 +33,8 @@ export const ja = {
   secretRegister: "登録",
   secretFieldLabel: "項目",
   secretField: { username: "ユーザー名", password: "パスワード", totp: "ワンタイムコード" },
-  waitingForYou: "式神があなたの操作を待っています",
-  secretAsked: "式神がログイン情報を求めています",
+  waitingForYou: "操作を待っています",
+  secretAsked: "ログイン情報が必要です",
   secretAskMore: (name: string) => `シークレット「${name}」に足りないものがあります`,
   secretAskMissing: "足りないもの",
   secretAskFrom: "AI からのメッセージ",
@@ -54,6 +54,9 @@ export const ja = {
   secretAskAdded: (name: string, sites: string[]) =>
     `「入力してよいサイト」に ${sites.join("、")} を追加しました。「${name}」のパスワードをこのサイトに入力してよいか確かめてから保存してください`,
   secretAskHint: "登録フォームに名前とサイトを入れてあります。ユーザー名・パスワードを入力して保存してください",
+  inUse: (callers: string[]) =>
+    `${callers.map((c) => `「${c}」`).join("")}から呼ばれているため削除できません。先にそのシナリオの呼び出しを外してください`,
+  extracted: (name: string) => `新しいシナリオ「${name}」にまとめました`,
   close: "閉じる",
   cancel: "やめる",
   secretNoDefault: "機密の変数には既定値を書けません。パスワードは右上の「シークレット」に登録して、入力ステップで選びます",
