@@ -245,9 +245,10 @@ export class Adapter {
       if (!secret.sites.includes(origin)) {
         throw new AdapterError("SECRET_SITE_MISMATCH", `secret '${secret.name}' may not be typed on ${origin}`, {
           details: {
+            secret: secret.name,
             page: origin,
             sites: secret.sites,
-            hint: "This page is not one of the secret's registered sites. Check that the URL is right; if it is, ask the user to add it to the secret in Studio (シークレット).",
+            hint: "This page is not one of the secret's registered sites. Check that the URL is right; if it is, call request_secret with this name and the page's address so Studio asks the user to add it.",
           },
         });
       }
@@ -420,7 +421,7 @@ export class Adapter {
     if (await page.locator(PASSWORD_FIELDS).first().isVisible().catch(() => false)) {
       result.login = {
         site: originOf(page.url()),
-        hint: "This page asks for a login. Never ask the user for the password in chat: use a registered secret (list_secrets; browser.fill value { \"secret\": \"<name>\", \"field\": \"password\" }) or let the user log in by hand with browser.waitForHuman.",
+        hint: "This page asks for a login. Never ask the user for the password in chat: use a registered secret (list_secrets; browser.fill value { \"secret\": \"<name>\", \"field\": \"password\" }). If none fits, call request_secret with a name and this site so Studio asks the user to register one, or let the user log in by hand with browser.waitForHuman.",
       };
     }
     return result;

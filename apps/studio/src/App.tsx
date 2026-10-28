@@ -1,3 +1,4 @@
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppMenu } from "./components/AppMenu";
@@ -10,6 +11,7 @@ import { RunLog } from "./components/RunLog";
 import { ReviewInbox, ReviewPanel, useInbox } from "./components/ReviewDesk";
 import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
+import { SecretAskBanner } from "./components/SecretAskBanner";
 import { SecretsDialog } from "./components/SecretsDialog";
 import { Timeline, usePendingReview } from "./components/Timeline";
 import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
@@ -242,6 +244,7 @@ function Shell() {
       </header>
       <div className="col-span-3">
         <HumanBanner />
+        <SecretAskBanner />
         <Banner />
       </div>
       <div className="min-h-0">
@@ -288,7 +291,19 @@ export function App() {
     const unlisten = [
       events.onScenarioChanged((id) => void store.getState().onExternalChange(id)),
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
+      events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
     ];
+    // Requests come from another process (the MCP server): re-read on refocus too.
+    const onFocus = () => void store.getState().loadSecretRequests();
+    window.addEventListener("focus", onFocus);
+    // A new request flashes Studio in the taskbar: the user is likely in the AI's chat.
+    const stopAttention = store.subscribe((s, prev) => {
+      if (s.secretRequests.some((r) => !prev.secretRequests.some((p) => p.name === r.name))) {
+        void getCurrentWindow()
+          .requestUserAttention(UserAttentionType.Informational)
+          .catch(() => {});
+      }
+    });
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
@@ -322,6 +337,8 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("focus", onFocus);
+      stopAttention();
       for (const p of unlisten) void p.then((off) => off());
     };
   }, [store]);
