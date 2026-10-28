@@ -111,6 +111,36 @@ export const api = {
   forgetLogin: (session: string) => call<boolean>("forget_login", { session }),
 };
 
+export interface AppInfo {
+  version: string;
+  /** False in development builds. */
+  updatesEnabled: boolean;
+  /** The bundled CLI (MCP server), when Studio was installed. */
+  cliPath: string | null;
+}
+
+export interface UpdateInfo {
+  version: string;
+  currentVersion: string;
+  notes: string | null;
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
+}
+
+// Kept apart from `api` so the scenario store and its test doubles stay
+// unaware of app updates.
+export const updates = {
+  appInfo: () => call<AppInfo>("app_info"),
+  check: () => call<UpdateInfo | null>("check_update"),
+  /** Never resolves on success: the installer restarts Studio. */
+  install: () => call<void>("install_update"),
+  onProgress: (handler: (p: UpdateProgress) => void): Promise<UnlistenFn> =>
+    listen<UpdateProgress>("update-progress", (e) => handler(e.payload)),
+};
+
 export type Api = typeof api;
 
 export const events = {

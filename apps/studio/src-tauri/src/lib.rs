@@ -5,6 +5,7 @@
 //! the GUI does is exactly what MCP clients and the CLI can do.
 
 mod commands;
+mod updater;
 mod watcher;
 
 use std::collections::HashMap;
@@ -54,8 +55,11 @@ pub fn run() {
     };
 
     let result = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
+        .manage(updater::PendingUpdate::default())
         .setup(move |app| {
+            updater::on_startup(app.handle());
             watcher::spawn(app.handle().clone(), service.store().scenarios_dir());
             Ok(())
         })
@@ -83,6 +87,9 @@ pub fn run() {
             commands::run_scenario,
             commands::stop_run,
             commands::run_status,
+            updater::app_info,
+            updater::check_update,
+            updater::install_update,
             commands::list_secrets,
             commands::set_secret,
             commands::remove_secret,
