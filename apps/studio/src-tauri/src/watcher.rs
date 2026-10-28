@@ -79,3 +79,58 @@ fn watch(app: &AppHandle, dir: &Path) -> notify::Result<()> {
         }
     }
 }
+
+pub(crate) const SECRET_REQUESTS_CHANGED: &str = "secret-requests-changed";
+
+/// Tells the frontend when an AI client (the MCP server, another process)
+/// asks the user for a login, or a request is answered or dismissed. The
+/// event carries nothing: the frontend re-reads the requests.
+pub(crate) fn spawn_secret_requests(app: AppHandle, dir: PathBuf) {
+    let spawned = std::thread::Builder::new()
+        .name("secret-request-watcher".into())
+        .spawn(move || {
+            if let Err(e) = watch_secret_requests(&app, &dir) {
+                tracing::error!(error = %e, dir = %dir.display(), "secret request watcher stopped");
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::error!(error = %e, "failed to start secret request watcher");
+    }
+}
+
+fn watch_secret_requests(app: &AppHandle, dir: &Path) -> notify::Result<()> {
+    // The vault makes the folder on first use; watch it from the start.
+    std::fs::create_dir_all(dir)?;
+    let (tx, rx) = mpsc::channel();
+    let mut watcher = notify::recommended_watcher(tx)?;
+    watcher.watch(dir, RecursiveMode::NonRecursive)?;
+
+    let mut pending: Option<Instant> = None;
+    loop {
+        match rx.recv_timeout(DEBOUNCE) {
+            Ok(Ok(event)) => {
+                if matches!(event.kind, EventKind::Access(_)) {
+                    continue;
+                }
+                // The vault itself changes too: a registration answers a request.
+                let relevant = event.paths.iter().any(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n == "requests.json" || n == "vault.json")
+                });
+                if relevant {
+                    pending = Some(Instant::now());
+                }
+            }
+            Ok(Err(e)) => tracing::warn!(error = %e, "watch error"),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),
+        }
+        if pending.is_some_and(|at| at.elapsed() >= DEBOUNCE) {
+            pending = None;
+            if let Err(e) = app.emit(SECRET_REQUESTS_CHANGED, ()) {
+                tracing::warn!(error = %e, "failed to emit secret request change");
+            }
+        }
+    }
+}

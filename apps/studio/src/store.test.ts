@@ -2,7 +2,8 @@ import type { EditOp, EditOutcome, Evidence, HistoryEntry, ReviewTimeline, RunEv
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
-import { createStudioStore, locate, pendingReview, revertBlocker, touchedSteps } from "./store";
+import { draftFor } from "./components/SecretsDialog";
+import { createStudioStore, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
 
 const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({
   schemaVersion: 1,
@@ -29,6 +30,8 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
     undoState: vi.fn(async () => ({ canUndo: false, canRedo: false })),
     history: vi.fn(async () => []),
     listSecrets: vi.fn(async () => ({ secrets: [], keyLocation: "test", keyMissing: false })),
+    listSecretRequests: vi.fn(async () => []),
+    dismissSecretRequest: vi.fn(async () => true),
   };
   return { ...base, ...overrides } as Api;
 }
@@ -134,6 +137,71 @@ describe("studio store", () => {
     expect(setSecret).toHaveBeenCalledOnce();
     expect(JSON.stringify(store.getState())).not.toContain("hunter2");
     expect(store.getState().secrets.map((s) => s.name)).toEqual(["受注"]);
+  });
+
+  it("shows an AI's login request until the user registers or dismisses it", async () => {
+    const request = {
+      name: "Google",
+      sites: ["https://accounts.google.com"],
+      fields: ["username", "password"] as const,
+      reason: "Google にログインするため",
+      requestedAt: "",
+      missing: { registered: false, fields: ["username", "password"] as const, sites: ["https://accounts.google.com"] },
+    };
+    let pending: unknown[] = [request];
+    const listSecretRequests = vi.fn(async () => pending as never);
+    const dismissSecretRequest = vi.fn(async () => {
+      pending = [];
+      return true;
+    });
+    const store = createStudioStore(fakeApi({ listSecretRequests, dismissSecretRequest }));
+    await store.getState().init();
+    expect(store.getState().secretRequests.map((r) => r.name)).toEqual(["Google"]);
+
+    store.getState().openSecretForm({ name: "Google", sites: request.sites, fields: [...request.fields] });
+    expect(store.getState().secretsOpen).toBe(true);
+    await vi.waitFor(() => expect(store.getState().secretPrefill?.name).toBe("Google"));
+
+    await store.getState().dismissSecretRequest("Google");
+    expect(dismissSecretRequest).toHaveBeenCalledWith("Google");
+    expect(store.getState().secretRequests).toEqual([]);
+  });
+
+  it("offers to register the secret a run stopped on", () => {
+    const store = createStudioStore(fakeApi());
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({
+      ...base,
+      seq: 1,
+      type: "stepFinished",
+      stepId: "s1",
+      stepType: "browser.fill",
+      outcome: "failed",
+      durationMs: 1,
+      error: { code: "SECRET_NOT_FOUND", message: "no secret named 'Google'", details: { secret: "Google", hint: "…" } },
+    });
+    expect(store.getState().secretFix).toEqual({ name: "Google", code: "SECRET_NOT_FOUND", site: undefined });
+    store.getState().onRunEvent({ ...base, seq: 2, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    expect(store.getState().secretFix).toBeNull();
+
+    expect(
+      secretFixOf({ code: "SECRET_SITE_MISMATCH", details: { secret: "G", page: "https://evil.example" } }),
+    ).toEqual({ name: "G", code: "SECRET_SITE_MISMATCH", site: "https://evil.example" });
+    expect(secretFixOf({ code: "ELEMENT_NOT_FOUND", details: { secret: "G" } })).toBeNull();
+    expect(secretFixOf({ code: "SECRET_NOT_FOUND" })).toBeNull();
+  });
+
+  it("fills the secret form from a request, flagging sites added to a saved secret", () => {
+    const saved = { name: "Google", username: "me", sites: ["https://accounts.google.com"], fields: ["username", "password"] as never, updatedAt: "" };
+    const fresh = draftFor([], { name: "社内", sites: ["https://intra.example"] });
+    expect(fresh.isNew).toBe(true);
+    expect(fresh.draft).toMatchObject({ name: "社内", sites: "https://intra.example", password: "" });
+
+    const more = draftFor([saved], { name: "Google", sites: ["https://accounts.google.com", "https://mail.google.com"] });
+    expect(more.isNew).toBe(false);
+    expect(more.added).toEqual(["https://mail.google.com"]);
+    expect(more.draft.sites).toBe("https://accounts.google.com\nhttps://mail.google.com");
   });
 
   it("offers a reset when the secrets' key is not on this PC", async () => {

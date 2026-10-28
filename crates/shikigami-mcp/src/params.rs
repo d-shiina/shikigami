@@ -217,6 +217,30 @@ pub struct RunScenarioParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct RequestSecretParams {
+    /// Name to register the login under, e.g. `Google` or `受注システム`. Use an
+    /// existing name (list_secrets) to ask for a missing field or site.
+    pub name: String,
+    /// Addresses it will be typed into, e.g. the login page's URL
+    /// (`https://accounts.google.com/...`; kept as its origin). Desktop apps:
+    /// `app:<exe name>`.
+    #[serde(default)]
+    pub sites: Vec<String>,
+    /// Fields needed. Default: username and password. Add `totp` when the site
+    /// asks for an authenticator-app code.
+    #[serde(default)]
+    pub fields: Vec<shikigami_core::secret::SecretField>,
+    /// Why you need it, in one sentence for the user (Japanese is fine).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Wait up to this many milliseconds (max 300000) for the user to register
+    /// it. Omit or 0 to return at once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RunRef {
     /// Run ID, e.g. `run_...`.
     pub run_id: String,

@@ -62,6 +62,10 @@ pub fn run() {
             fit_to_screen(app);
             updater::on_startup(app.handle());
             watcher::spawn(app.handle().clone(), service.store().scenarios_dir());
+            watcher::spawn_secret_requests(
+                app.handle().clone(),
+                service.store().root().join("secrets"),
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -99,6 +103,8 @@ pub fn run() {
             commands::remove_secret,
             commands::reset_secrets,
             commands::forget_login,
+            commands::list_secret_requests,
+            commands::dismiss_secret_request,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {

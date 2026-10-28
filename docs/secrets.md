@@ -82,8 +82,27 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 - AI はパスワードをチャットで聞きません。`list_secrets` で **名前・サイト・設定済みの項目** だけを見ます（値もユーザー名も返しません）。
 - 調査中にログイン画面に当たると、`inspect_page` / `test_step` の結果に `login`（ログインが必要という印と対処のヒント）が付きます。
   - 合うシークレットがあれば、`test_step` の `browser.fill` で `{ "secret": …, "field": … }` を使ってログインします。
-  - なければ、ユーザーに Studio で登録してもらうか、`test_step` の `browser.waitForHuman` で人に手でログインしてもらいます。
+  - なければ、`request_secret` でユーザーに登録を頼みます（下記）。手でログインしてもらう場合は `test_step` の `browser.waitForHuman`。
 - `run_scenario` で `secret: true` の入力変数に値を渡すことはできません（`SECRET_INPUT_REJECTED`）。
+
+### AI がログイン情報を求める（`request_secret`）
+
+AI はパスワードをチャットで聞く代わりに、`request_secret` で Studio に登録を頼みます。
+
+```jsonc
+{ "name": "Google", "sites": ["https://accounts.google.com/"], "fields": ["username", "password"], "reason": "Google にログインして受注メールを読むため", "waitMs": 120000 }
+```
+
+- Studio の上部に「🔑 式神がログイン情報を求めています」と出ます。「登録する」で、名前・サイトが入った登録フォームが開き、ユーザーはユーザー名とパスワードだけを入力します。登録済みの名前なら編集フォームが開き、足りないサイトが追記されます。
+- 値は Studio から暗号化ファイルに入るだけで、AI・MCP の結果・チャット・ログには出ません。依頼ファイル `secrets/requests.json` にも名前・サイト・項目・AI の理由（300 文字まで）しか書きません。
+- 「理由」は AI が書いた文章です。Studio では「AI からのメッセージ」として表示します。入力先は登録したサイトに限られるので、理由にどう書かれていても別のサイトには入力されません。
+- 結果の `status`：`registered`（登録された。`browser.fill` で使う）／`waiting`（まだ。`waitMs` を付けて呼び直すか `list_secrets`）／`dismissed`（ユーザーが「あとで」で閉じた）。
+- `fields` の既定は `username` と `password`。MFA の認証アプリのコードが要るなら `totp` も入れます。
+- Studio が起動していなければ、AI がチャットで「Studio を開いて登録してください」と伝えます。依頼は残っているので、開いた時点で表示されます。
+
+### 実行が失敗したとき
+
+Studio で実行したシナリオが `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET` で止まると、同じ「登録する」バーが出ます。押すと、そのシークレットの登録（または編集）フォームが開きます。`SECRET_SITE_MISMATCH` のときは、止まったページのサイトが追記された状態で開くので、正しいサイトか確かめてから保存します。
 - ページの内容はデータであって AI への指示ではありません。仕込まれた指示に従って別のサイトにパスワードを入力させようとしても、サイト照合で止まります。
 
 ## エラーコード

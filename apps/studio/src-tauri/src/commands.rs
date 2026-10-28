@@ -11,7 +11,7 @@ use shikigami_core::{
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{RunEventEnvelope, RunOptions, RunSnapshot};
-use shikigami_secrets::{SecretInfo, SecretInput};
+use shikigami_secrets::{PendingSecretRequest, SecretInfo, SecretInput};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{ActiveRun, AppState};
@@ -438,6 +438,18 @@ pub fn remove_secret(state: State<'_, AppState>, name: String) -> CmdResult<()> 
     // A saved login under the same name belongs to the secret.
     state.vault.remove_session(&name).map_err(secret_err)?;
     Ok(())
+}
+
+/// Logins AI clients asked the user to register (names, sites and fields
+/// only), oldest first.
+#[tauri::command]
+pub fn list_secret_requests(state: State<'_, AppState>) -> CmdResult<Vec<PendingSecretRequest>> {
+    state.vault.requests().map_err(secret_err)
+}
+
+#[tauri::command]
+pub fn dismiss_secret_request(state: State<'_, AppState>, name: String) -> CmdResult<bool> {
+    state.vault.dismiss_request(&name).map_err(secret_err)
 }
 
 #[tauri::command]

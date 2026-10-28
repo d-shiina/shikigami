@@ -21,7 +21,14 @@ import type {
   WorkspaceInfo,
 } from "@shikigami/schema";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { type Api, ApiError, type SecretInfo, type SecretInput } from "./lib/api";
+import {
+  type Api,
+  ApiError,
+  type SecretField,
+  type SecretInfo,
+  type SecretInput,
+  type SecretRequest,
+} from "./lib/api";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
 import { summarize } from "./lib/review";
@@ -128,6 +135,12 @@ export type StudioState = {
   secretsOpen: boolean;
   /** A running step waits for the person at the PC (manual login, MFA). */
   human: { stepId: string; message: string } | null;
+  /** Logins AI clients asked the user to register (request_secret), oldest first. */
+  secretRequests: SecretRequest[];
+  /** The last run stopped on a missing or incomplete secret. */
+  secretFix: SecretFix | null;
+  /** What the secrets dialog opens its form with (from a request or a failed run). */
+  secretPrefill: SecretPrefill | null;
 
   init(): Promise<void>;
   refreshList(): Promise<void>;
@@ -147,7 +160,8 @@ export type StudioState = {
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
   setOutlineOpen(open: boolean): void;
-  addStep(type: string): Promise<void>;
+  /** Adds a step after the selection; `params` and `name` override the type's defaults (palette presets). */
+  addStep(type: string, params?: Record<string, unknown>, name?: string): Promise<void>;
   moveSelected(delta: -1 | 1): Promise<void>;
   removeSelected(): Promise<void>;
   updateStep(stepId: string, patch: StepPatch): Promise<void>;
@@ -189,7 +203,35 @@ export type StudioState = {
   removeSecret(name: string): Promise<void>;
   resetSecrets(): Promise<void>;
   setSecretsOpen(open: boolean): void;
+  loadSecretRequests(): Promise<void>;
+  dismissSecretRequest(name: string): Promise<void>;
+  /** Opens the secrets dialog on the form for `prefill.name`, with its sites added. */
+  openSecretForm(prefill: SecretPrefill): void;
+  clearSecretPrefill(): void;
+  dismissSecretFix(): void;
 };
+
+export type SecretPrefill = { name: string; sites: string[]; fields: SecretField[] };
+
+export type SecretFix = { name: string; code: string; site?: string };
+
+/** Step errors the user fixes by registering or editing a secret. */
+export const SECRET_FIX_CODES = [
+  "SECRET_NOT_FOUND",
+  "SECRET_FIELD_EMPTY",
+  "SECRET_SITE_NOT_SET",
+  "SECRET_SITE_MISMATCH",
+  "SECRET_APP_NOT_SET",
+];
+
+/** The secret a failed step asks the user to fix, from the error's details. */
+export function secretFixOf(error: { code: string; details?: unknown } | null | undefined): SecretFix | null {
+  if (!error || !SECRET_FIX_CODES.includes(error.code)) return null;
+  const details = (error.details ?? {}) as { secret?: unknown; page?: unknown };
+  if (typeof details.secret !== "string" || !details.secret) return null;
+  const site = typeof details.page === "string" && details.page ? details.page : undefined;
+  return { name: details.secret, code: error.code, site };
+}
 
 export const isExternal = (entry: HistoryEntry) => entry.actor.kind !== "studio";
 
@@ -434,6 +476,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       secretKeyMissing: false,
       secretsOpen: false,
       human: null,
+      secretRequests: [],
+      secretFix: null,
+      secretPrefill: null,
 
       async init() {
         try {
@@ -445,6 +490,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           set({ error: message(e) });
         }
         await get().loadSecrets();
+        await get().loadSecretRequests();
       },
 
       async loadSecrets() {
@@ -460,7 +506,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           await api.setSecret(input);
           await get().loadSecrets();
-          set({ notice: t.secretSaved(input.name), error: null });
+          await get().loadSecretRequests();
+          set((s) => ({
+            notice: t.secretSaved(input.name),
+            error: null,
+            secretFix: s.secretFix?.name === input.name ? null : s.secretFix,
+          }));
           return true;
         } catch (e) {
           set({ error: message(e) });
@@ -487,8 +538,41 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setSecretsOpen(open) {
-        set({ secretsOpen: open });
+        set(open ? { secretsOpen: true } : { secretsOpen: false, secretPrefill: null });
         if (open) void get().loadSecrets();
+      },
+
+      async loadSecretRequests() {
+        try {
+          set({ secretRequests: await api.listSecretRequests() });
+        } catch {
+          // Requests are a convenience: the dialog still works without them.
+        }
+      },
+
+      async dismissSecretRequest(name) {
+        try {
+          await api.dismissSecretRequest(name);
+        } catch (e) {
+          set({ error: message(e) });
+        }
+        await get().loadSecretRequests();
+      },
+
+      openSecretForm(prefill) {
+        set({ secretsOpen: true });
+        // The form edits the secret when it exists: list first, then fill.
+        void get()
+          .loadSecrets()
+          .then(() => set({ secretPrefill: prefill }));
+      },
+
+      clearSecretPrefill() {
+        set({ secretPrefill: null });
+      },
+
+      dismissSecretFix() {
+        set({ secretFix: null });
       },
 
       async refreshList() {
@@ -595,7 +679,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ outlineOpen: open });
       },
 
-      async addStep(type) {
+      async addStep(type, params, name) {
         const { scenario, selection } = get();
         if (!scenario) return;
         let position: { parentId?: string | null; block?: string | null; index?: number | null } = {};
@@ -605,7 +689,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const loc = locate(scenario.steps ?? [], selection.stepId);
           if (loc) position = { parentId: loc.parentId, block: loc.block, index: loc.index + 1 };
         }
-        const step: Step = { id: newStepId(), type, params: { ...(DEFAULT_PARAMS[type] ?? {}) } };
+        const step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
         const ok = await get().applyOps([{ op: "addStep", step, position }]);
         if (ok && step.id) set({ selection: { kind: "step", stepId: step.id } });
       },
@@ -697,6 +781,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       onRunEvent(env) {
         set((s) => {
           let human = s.human;
+          let secretFix = s.secretFix;
           const run: RunState =
             s.run && s.run.runId === env.runId
               ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs }
@@ -708,6 +793,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           if (change) run.changes = [...run.changes, change];
           switch (env.type) {
             case "runStarted":
+              secretFix = null;
               run.status = "running";
               push("info", `▶ ${env.scenarioName} (rev ${env.revision})`);
               break;
@@ -724,6 +810,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.steps[env.stepId] = env.outcome;
               if (env.error) {
                 push("error", `${env.error.code}: ${env.error.message}${env.willRetry ? "（リトライします）" : ""}`, env.stepId);
+                secretFix = secretFixOf(env.error) ?? secretFix;
               }
               break;
             case "log":
@@ -735,7 +822,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]} (${env.durationMs} ms)`);
               break;
           }
-          return { run, human };
+          return { run, human, secretFix };
         });
       },
 

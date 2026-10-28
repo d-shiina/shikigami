@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStudio } from "../context";
 import type { SecretInfo } from "../lib/api";
 import { t } from "../lib/i18n";
@@ -27,6 +27,23 @@ function draftOf(secret: SecretInfo): Draft {
   };
 }
 
+/**
+ * The form for a requested login: the existing secret with the requested
+ * sites added, or a new one. `added` lists sites a saved secret would newly
+ * be typed into, for the user to confirm.
+ */
+export function draftFor(
+  secrets: SecretInfo[],
+  prefill: { name: string; sites: string[] },
+): { draft: Draft; isNew: boolean; added: string[] } {
+  const existing = secrets.find((s) => s.name === prefill.name);
+  if (!existing) {
+    return { draft: { ...empty, name: prefill.name, sites: prefill.sites.join("\n") }, isNew: true, added: [] };
+  }
+  const added = prefill.sites.filter((site) => !existing.sites.includes(site));
+  return { draft: { ...draftOf(existing), sites: [...existing.sites, ...added].join("\n") }, isNew: false, added };
+}
+
 function Labeled({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1">
@@ -42,7 +59,21 @@ function Labeled({ label, hint, children }: { label: string; hint?: string; chil
  * back: editing shows empty password fields and keeps the stored value unless
  * something is typed.
  */
-function SecretForm({ initial, isNew, onDone }: { initial: Draft; isNew: boolean; onDone: () => void }) {
+function SecretForm({
+  initial,
+  isNew,
+  asked,
+  added = [],
+  onDone,
+}: {
+  initial: Draft;
+  isNew: boolean;
+  /** Opened from a request or a failed run: name and sites are filled in. */
+  asked?: boolean;
+  /** Sites the request adds to a saved secret. */
+  added?: string[];
+  onDone: () => void;
+}) {
   const saveSecret = useStudio((s) => s.saveSecret);
   const [draft, setDraft] = useState(initial);
   const edit = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
@@ -64,6 +95,12 @@ function SecretForm({ initial, isNew, onDone }: { initial: Draft; isNew: boolean
         if (saved) onDone();
       }}
     >
+      {asked && <p className="rounded bg-brand-50 px-2 py-1.5 text-xs text-slate-700">{t.secretAskHint}</p>}
+      {added.length > 0 && (
+        <p className="rounded border border-shu-600/40 bg-shu-600/5 px-2 py-1.5 text-xs text-slate-700">
+          {t.secretAskAdded(initial.name, added)}
+        </p>
+      )}
       <Labeled label={t.secretName}>
         <input
           className={inputClass}
@@ -75,7 +112,12 @@ function SecretForm({ initial, isNew, onDone }: { initial: Draft; isNew: boolean
         />
       </Labeled>
       <Labeled label={t.secretUsername}>
-        <input className={inputClass} value={draft.username} onChange={(e) => edit({ username: e.target.value })} />
+        <input
+          className={inputClass}
+          value={draft.username}
+          autoFocus={asked}
+          onChange={(e) => edit({ username: e.target.value })}
+        />
       </Labeled>
       <Labeled label={t.secretPassword} hint={isNew ? undefined : t.secretPasswordKeep}>
         <input
@@ -127,7 +169,16 @@ export function SecretsDialog() {
   const removeSecret = useStudio((s) => s.removeSecret);
   const keyMissing = useStudio((s) => s.secretKeyMissing);
   const resetSecrets = useStudio((s) => s.resetSecrets);
-  const [editing, setEditing] = useState<{ draft: Draft; isNew: boolean } | null>(null);
+  const prefill = useStudio((s) => s.secretPrefill);
+  const clearPrefill = useStudio((s) => s.clearSecretPrefill);
+  const [editing, setEditing] = useState<{ draft: Draft; isNew: boolean; asked?: boolean; added?: string[] } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!prefill) return;
+    setEditing({ ...draftFor(secrets, prefill), asked: true });
+    clearPrefill();
+  }, [prefill, secrets, clearPrefill]);
   if (!open) return null;
 
   return (
@@ -135,7 +186,7 @@ export function SecretsDialog() {
       <div
         role="dialog"
         aria-label={t.secrets}
-        className="max-h-[85vh] w-[520px] overflow-y-auto rounded-lg border border-slate-200 bg-sheet p-5 shadow-xl"
+        className="max-h-[85vh] w-[520px] overflow-y-auto rounded-[4px] border border-slate-200 bg-sheet p-5 shadow-dialog"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-2 flex items-center">
@@ -172,9 +223,11 @@ export function SecretsDialog() {
           </div>
         ) : editing ? (
           <SecretForm
-            key={editing.draft.name}
+            key={`${editing.draft.name}\n${editing.draft.sites}`}
             initial={editing.draft}
             isNew={editing.isNew}
+            asked={editing.asked}
+            added={editing.added}
             onDone={() => setEditing(null)}
           />
         ) : (

@@ -97,7 +97,9 @@ shikigami/
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
 │  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
 │  ├─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
-│  └─ shikigami-excel/    excel.*（xlsx を直接読み書き）
+│  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き）
+│  ├─ shikigami-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
+│  └─ shikigami-plugins/  ノードのプラグイン（マニフェストで宣言、別プロセスで実行）
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React（src/ がフロント、src-tauri/ が Rust）
 ├─ packages/

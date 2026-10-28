@@ -103,6 +103,7 @@ pub fn sidecar_config(node: PathBuf, script: Option<PathBuf>) -> SidecarConfig {
         name: "browser".into(),
         program: node,
         args,
+        cwd: None,
         unavailable,
         setup_hint: "Install Node.js 22.18+ and run `pnpm install` in the Shikigami folder, or set SHIKIGAMI_BROWSER_ADAPTER to packages/browser-adapter/src/main.ts.".into(),
     }
@@ -242,7 +243,8 @@ fn resolve_fill_secret(
             format!("secret '{}' has no site it may be typed into", secret.name),
         )
         .with_details(json!({
-            "hint": "Ask the user to add the site's address (e.g. https://example.com) to this secret in Studio (シークレット)."
+            "secret": secret.name,
+            "hint": "Call request_secret with this name and the site's address (e.g. https://example.com): Studio then asks the user to add it to this secret."
         })));
     }
     params.insert("value".into(), Value::String(secret.value));

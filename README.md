@@ -18,6 +18,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ**
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | システム構成、シナリオ形式、Adapter / MCP / IPC / DB / エラー / セキュリティ設計、設計判断、MVP 受け入れ基準 |
 | [docs/mcp.md](docs/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
+| [docs/design/plugins.md](docs/design/plugins.md) | ノードのプラグイン：社内システムなど向けのステップを、本体を作り直さずに足す（マニフェスト + 別プロセス） |
 | [docs/research.md](docs/research.md) | 採用ライブラリのバージョン・ライセンス・Windows 対応状況 |
 
 ## 構成
