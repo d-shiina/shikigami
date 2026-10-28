@@ -24,7 +24,7 @@ import { focus, useFocus, varFocus } from "../lib/focus";
 import { actorLabel, describe } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
-import { revertBlocker, type StepRunState, touchedSteps, type VariableChange } from "../store";
+import { findStep, revertBlocker, type StepRunState, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
@@ -137,6 +137,11 @@ const MAX_CHIPS = 2;
 function ValuePopover({ name, color, values, anchor }: { name: string; color: string; values: VariableChange[]; anchor: DOMRect }) {
   const last = values.at(-1);
   const below = anchor.top < window.innerHeight / 2;
+  const steps = useStudio((s) => s.scenario?.steps);
+  const stepName = (id: string) => {
+    const step = steps && findStep(steps, id);
+    return step ? (step.name ?? step.type) : undefined;
+  };
   return createPortal(
     <div
       // Above the chip, or below it when there is no room up top.
@@ -150,17 +155,21 @@ function ValuePopover({ name, color, values, anchor }: { name: string; color: st
       </div>
       {last ? (
         <>
-          <div className="mt-1.5 rounded-[3px] border border-slate-100 bg-paper px-2 py-1.5">
-            {last.iteration != null && <div className="mb-0.5 text-[10px] text-slate-400">{last.iteration + 1}件目のとき</div>}
+          <div className="mt-1.5 text-[10px] text-slate-400">実行が終わったときの値</div>
+          <div className="mt-0.5 rounded-[3px] border border-slate-100 bg-paper px-2 py-1.5">
             <ChangeView change={last} />
           </div>
           {values.length > 1 && (
             <div className="mt-1.5">
-              <div className="text-[10px] text-slate-400">それまでの値</div>
-              <ol className="mt-0.5 space-y-0.5 text-slate-500">
-                {values.slice(-6, -1).map((w) => (
-                  <li key={w.seq} className="truncate">
-                    {changeText(w)}
+              <div className="text-[10px] text-slate-400">この実行での移り変わり（古い順）</div>
+              <ol className="mt-0.5 space-y-0.5">
+                {values.slice(-6).map((w) => (
+                  <li key={w.seq} className={`flex gap-2 ${w === last ? "font-semibold text-ink" : "text-slate-500"}`}>
+                    <span className="w-24 shrink-0 truncate text-[10px] leading-[16px] text-slate-400">
+                      {w.stepId ? (stepName(w.stepId) ?? w.stepId) : "はじめの値"}
+                      {w.iteration != null && `・${w.iteration + 1}件目`}
+                    </span>
+                    <span className="truncate">{changeText(w)}</span>
                   </li>
                 ))}
               </ol>

@@ -7,7 +7,7 @@ import { FlowCanvas } from "./components/FlowCanvas";
 import { IssuesPanel } from "./components/IssuesPanel";
 import { PropertyPanel } from "./components/PropertyPanel";
 import { RunLog } from "./components/RunLog";
-import { ScenarioList } from "./components/ScenarioList";
+import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
 import { SecretsDialog } from "./components/SecretsDialog";
 import { Timeline, usePendingReview } from "./components/Timeline";
@@ -113,6 +113,7 @@ function SidePanel() {
 
 type View = "story" | "flow";
 const VIEW_KEY = "shikigami.studio.view";
+const LIST_KEY = "shikigami.studio.list";
 
 function loadView(): View {
   try {
@@ -150,11 +151,15 @@ function SecretsButton() {
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="flex items-center gap-1 rounded-full px-3 py-1 text-xs text-slate-600 hover:bg-slate-100"
+      className="flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
       title={t.secretsIntro}
     >
-      🔑 {t.secrets}
-      {count > 0 && <span className="rounded-full bg-slate-200 px-1 text-[10px]">{count}</span>}
+      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
+        <circle cx="5" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M8 8h6.5M12 8v2.5M14 8v2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+      {t.secrets}
+      {count > 0 && <span className="rounded-full bg-slate-200 px-1.5 text-[10px]">{count}</span>}
     </button>
   );
 }
@@ -171,15 +176,31 @@ function Shell() {
     }
   };
   const hasRun = useStudio((s) => s.run !== null);
+  const [listOpen, setListOpenState] = useState(() => {
+    try {
+      return globalThis.localStorage?.getItem(LIST_KEY) !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  const setListOpen = (open: boolean) => {
+    setListOpenState(open);
+    try {
+      globalThis.localStorage?.setItem(LIST_KEY, open ? "open" : "closed");
+    } catch {
+      // Only a remembered preference.
+    }
+  };
   return (
-    <div className="grid h-full grid-cols-[232px_1fr_360px] grid-rows-[auto_auto_1fr]">
-      <header className="relative col-span-3 flex items-center gap-3 bg-sheet px-4 py-2">
-        <img src="/mark.png" alt="" className="h-7 w-7" />
-        <span className="text-lg font-black tracking-wider">式神</span>
-        <span className="-ml-1 text-xs font-medium tracking-[.2em] text-slate-500">STUDIO</span>
+    <div className={`grid h-full grid-rows-[auto_auto_1fr] ${listOpen ? "grid-cols-[248px_1fr_360px]" : "grid-cols-[44px_1fr_360px]"}`}>
+      <header className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4">
+        <img src="/mark.png" alt="" className="h-6 w-6" />
+        <span className="text-[15px] font-black tracking-wider">式神</span>
+        <span className="-ml-1.5 text-[10px] font-medium tracking-[.2em] text-slate-400">STUDIO</span>
         <ScenarioHeader />
-        <AppMenu />
+        <span className="h-5 w-px bg-slate-200" />
         <SecretsButton />
+        <AppMenu />
         <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
       </header>
       <div className="col-span-3">
@@ -187,7 +208,7 @@ function Shell() {
         <Banner />
       </div>
       <div className="min-h-0">
-        <ScenarioList />
+        {listOpen ? <ScenarioList onCollapse={() => setListOpen(false)} /> : <ScenarioRail onExpand={() => setListOpen(true)} />}
       </div>
       <main className="flex min-h-0 flex-col">
         <div className="relative min-h-0 flex-1">
@@ -229,6 +250,17 @@ export function App() {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       const mod = e.ctrlKey || e.metaKey;
+      if (e.key === "F5") {
+        // Run, or stop with Shift, instead of reloading the window.
+        e.preventDefault();
+        const state = store.getState();
+        if (e.shiftKey) {
+          if (state.run?.status === "running") void state.stopRun();
+        } else if (state.scenario && state.run?.status !== "running" && !state.validation?.issues.some((i) => i.severity === "error")) {
+          void state.startRun();
+        }
+        return;
+      }
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (store.getState().scenario) store.getState().setPaletteOpen(!store.getState().paletteOpen);
