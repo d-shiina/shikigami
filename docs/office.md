@@ -65,8 +65,24 @@ AI が覚える書き方を増やさないため、同じ操作を 2 通りで�
 
 AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange` など）で確かめてから書きます。`test_step` の `state` に、そのブックの全シートの使用範囲と先頭の数行が付きます。
 
+## Excel のマクロ（`excel.runMacro`、実装済み）
+
+ファイル直接ではできない「ブックの VBA マクロを動かす」だけを Excel 本体（COM）で行います。Windows と デスクトップ版 Excel が必要です（ほかは `PLATFORM_UNSUPPORTED`、Excel がなければ `EXCEL_NOT_INSTALLED`）。
+
+```json
+{ "type": "excel.runMacro", "params": { "path": "C:\\work\\集計.xlsm", "macro": "Module1.集計", "args": ["{{ month }}", 2026] }, "saveAs": "result" }
+```
+
+- `macro`：`集計` か `Module1.集計`（標準モジュールの Public な Sub / Function）。Function の戻り値が出力（文字・数値・true/false・日付は ISO の文字、それ以外は null）
+- `args`：引数（文字・数値・true/false・null、最大 30 個）。`save`：実行後に保存するか（既定 true。false なら変更を捨てて閉じる）
+- ステップごとに**見えない別の Excel** を起動し、開く → 実行 → 保存 → 閉じる → 終了まで行います。ユーザーが開いている Excel のウィンドウには触りません。警告ダイアログは出さない設定（`DisplayAlerts = false`）で、外部リンクの更新もしません
+- 既定のタイムアウトは 5 分。MsgBox / InputBox を出すマクロは人を待って終わらないので、時間切れでその Excel を終了させ（保存しない）、`MACRO_TIMEOUT` を返します
+- 同じブックへのほかの `excel.*` とは自動で順番待ち。ユーザーがそのブックを Excel で開いていると `FILE_IN_USE`
+- インターネットから取得してブロックされたブック（ファイルのプロパティで「許可する」が未チェック）はマクロが動かず `MACRO_FAILED` になります
+- 任意のコードが動くので、ステップのリスクは `Dangerous` です
+
 ## 次の段階（予定）
 
-1. **`excel.runMacro`（COM）**：`path` のブックを Excel で開き、マクロ `macro` を `args` で実行して保存・終了する。Windows だけ（ほかは `PLATFORM_UNSUPPORTED`）。デスクトップ操作（`crates/shikigami-desktop/src/uia.rs`）と同じく専用スレッドで COM を呼び、`unsafe` はその 1 モジュールだけ。ブックのパスで排他し、ユーザーが開いている Excel には触らず専用のインスタンスを使う。マクロの警告・ダイアログで止まらないよう `DisplayAlerts = false`。同じ仕組みで「再計算して保存」「PDF に出力」を足す
+1. **Excel の再計算・PDF 出力**：`excel.runMacro` と同じ仕組みで足す
 2. **Word（`word.*`、ファイル直接）**：`.docx` の差し込み（`word.fillTemplate`：`{{ 名前 }}` の置き換え、表への行の追加）と本文の読み取り（`word.readText`）。PDF 出力は COM
 3. **メール（`mail.*`）**：アプリで分けず `mail.*` の 1 セットにし、送り方（Outlook の COM、のちに SMTP / Microsoft Graph）は設定で選ぶ。外にメッセージが出るので `mail.send` は `Dangerous`、まずは下書き作成（`mail.createDraft`）と受信メールの読み取り・添付保存（`mail.list` / `mail.saveAttachments`）から。宛先・本文の検証ヒントを厚くする
