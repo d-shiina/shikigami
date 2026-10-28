@@ -1,4 +1,5 @@
 import type { VarDirection, VariableDef, VarType } from "@shikigami/schema";
+import { focus, varFocus } from "../lib/focus";
 import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -83,7 +84,12 @@ function VariableRow({ variable }: { variable: VariableDef }) {
   const direction = variable.direction ?? "local";
 
   return (
-    <li className={`rounded-lg ${open ? "bg-slate-50 ring-1 ring-slate-200" : "hover:bg-slate-50"}`}>
+    <li
+      className={`rounded-lg ${open ? "bg-slate-50 ring-1 ring-slate-200" : "hover:bg-slate-50"}`}
+      // Lights up where the flow chart reads and writes this variable.
+      onMouseEnter={() => focus.set(varFocus(variable.name))}
+      onMouseLeave={() => focus.set(null)}
+    >
       <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-2 py-1.5 text-left">
         {direction !== "output" && <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white" style={{ background: color }} />}
         <span className="truncate font-mono text-[13px] font-semibold">{variable.name}</span>

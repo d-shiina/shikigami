@@ -15,7 +15,19 @@ function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { lab
   );
 }
 
-/** Scenario title, validation state and the run seal, in the top bar. */
+const PlayIcon = () => (
+  <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true">
+    <path d="M3 1.8v8.4a.6.6 0 0 0 .9.5l6.6-4.2a.6.6 0 0 0 0-1L3.9 1.3a.6.6 0 0 0-.9.5Z" fill="currentColor" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true">
+    <path d="m2.5 6.3 2.2 2.2 4.8-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/** Scenario title, validation state and the run control, in the top bar. */
 export function ScenarioHeader() {
   const scenario = useStudio((s) => s.scenario);
   const validation = useStudio((s) => s.validation);
@@ -29,37 +41,51 @@ export function ScenarioHeader() {
 
   return (
     <>
-      <span className="text-slate-300">/</span>
-      <div className="min-w-0 flex-1">
-        <span className="truncate text-base font-bold">{scenario.name}</span>
-        <span className="ml-2 text-xs text-slate-500">
+      <span className="h-5 w-px bg-slate-200" />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate text-[15px] font-bold">{scenario.name}</span>
+        <span className="shrink-0 rounded-[4px] bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
           {t.revision} {scenario.revision}
         </span>
       </div>
       <span
-        className={`flex items-center gap-1 text-xs ${errors ? "text-shu-600" : "text-moegi-500"}`}
+        className={`flex h-7 items-center gap-1 rounded-[6px] px-2 text-[12px] font-medium ${
+          errors ? "bg-shu-50 text-shu-600" : "text-moegi-500"
+        }`}
         title={t.issues}
       >
-        <span className={`h-1.5 w-1.5 rounded-full ${errors ? "bg-shu-500" : "bg-moegi-500"}`} />
+        {errors ? <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span> : <CheckIcon />}
         {errors ? `エラー ${errors} 件` : "検証OK"}
       </span>
       {running ? (
-        <button
-          type="button"
-          onClick={() => stopRun()}
-          className="rounded-full border-2 border-shu-500 px-4 py-1 text-sm font-bold text-shu-600 hover:bg-shu-50"
-        >
-          ■ {t.stop}
-        </button>
+        <div className="flex h-8 items-center overflow-hidden rounded-[6px] border border-slate-300 bg-sheet text-[13px]">
+          <span className="flex items-center gap-2 px-3 font-medium text-ink">
+            <span className="swirl h-2 w-2 animate-pulse rounded-full" />
+            実行中
+          </span>
+          <button
+            type="button"
+            onClick={() => stopRun()}
+            title={`${t.stop} (Shift+F5)`}
+            className="flex h-full items-center gap-1.5 border-l border-slate-300 px-3 font-semibold text-shu-600 hover:bg-shu-50"
+          >
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-shu-500" />
+            {t.stop}
+          </button>
+        </div>
       ) : (
         <button
           type="button"
           onClick={() => startRun()}
           disabled={errors > 0}
-          title={errors > 0 ? "検証エラーを直すと実行できます" : undefined}
-          className="warm rounded-full px-5 py-1 text-sm font-bold tracking-wider text-white shadow-[0_2px_8px_rgba(232,80,31,.35)] hover:brightness-105 disabled:bg-none disabled:bg-slate-300 disabled:shadow-none"
+          title={errors > 0 ? "検証エラーを直すと実行できます" : `${t.run} (F5)`}
+          className="group flex h-8 items-center gap-2 rounded-[6px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-white shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
         >
+          <span className="text-[#5fd08a] group-disabled:text-white">
+            <PlayIcon />
+          </span>
           {t.run}
+          <kbd className="rounded-[3px] bg-white/15 px-1 font-sans text-[10px] font-normal text-white/80">F5</kbd>
         </button>
       )}
     </>
