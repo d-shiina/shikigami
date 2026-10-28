@@ -128,6 +128,8 @@ async fn steps_forward_rendered_params_with_the_run_id() {
     assert_eq!(calls[0]["params"]["url"], "http://example.test/");
     assert_eq!(calls[1]["params"]["runId"], json!(report.run_id.as_str()));
     assert_eq!(calls[1]["params"]["target"], json!({ "text": "送信" }));
+    // The adapter stops each operation just before the step timeout (30 s).
+    assert_eq!(calls[1]["params"]["timeoutMs"], json!(29_500));
 }
 
 #[tokio::test]

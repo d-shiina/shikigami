@@ -60,13 +60,14 @@ pnpm demo:browser
 // 共通：exact（完全一致）, nth（複数一致したときの 0 始まりの番号）
 ```
 
-待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。
+待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。待つ上限はステップの `timeoutMs`（既定 30 秒）で、アダプター側の操作もその直前で止まるため、タイムアウトしたクリックが再試行の後で遅れて実行されることはありません。
 
 ### エラー
 
 | コード | 意味 | 再試行 |
 |---|---|---|
 | `ELEMENT_NOT_FOUND` | 要素が見つからない。`details.page` にそのときのページ（アクセシビリティツリー）と直し方のヒント | する |
+| `OPTION_NOT_FOUND` | `browser.select` の値が選択肢の表示名にも値にもない。`details.options` に選択肢 | しない |
 | `ELEMENT_AMBIGUOUS` | 複数の要素に一致。`exact` / `nth` で絞る | しない |
 | `BROWSER_NOT_OPEN` | 同じ `context` の `browser.open` がない | しない |
 | `NAVIGATION_FAILED` | ページを開けない | する |

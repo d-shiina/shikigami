@@ -112,6 +112,12 @@ export class Adapter {
     return this.options.timeoutMs ?? 20_000;
   }
 
+  /** The Runtime sends each step's limit (slightly under its timeoutMs). */
+  private limit(params: Params): number {
+    const ms = Number(params.timeoutMs);
+    return Number.isFinite(ms) && ms > 0 ? ms : this.timeout;
+  }
+
   private browser(headless: boolean): Promise<Browser> {
     let browser = this.browsers.get(headless);
     if (!browser) {
@@ -159,7 +165,7 @@ export class Adapter {
       this.sessions.set(key, session);
     }
     try {
-      await session.page.goto(url, { waitUntil: "load" });
+      await session.page.goto(url, { waitUntil: "load", timeout: this.limit(params) });
     } catch (error) {
       throw new AdapterError("NAVIGATION_FAILED", `could not open ${url}: ${(error as Error).message.split("\n")[0]}`, {
         retryable: true,
@@ -175,31 +181,40 @@ export class Adapter {
   }
 
   private async click({ ...params }: Params): Promise<null> {
-    await this.target(params).locator.click();
+    await this.target(params).locator.click({ timeout: this.limit(params) });
     return null;
   }
 
   private async fill(params: Params): Promise<null> {
-    await this.target(params).locator.fill(String(params.value ?? ""));
+    await this.target(params).locator.fill(String(params.value ?? ""), { timeout: this.limit(params) });
     return null;
   }
 
   private async select(params: Params): Promise<unknown> {
     const value = params.value;
-    const values = Array.isArray(value) ? value.map(String) : [String(value ?? "")];
-    // Match option labels first (what a person sees), then values.
+    const wanted = Array.isArray(value) ? value.map(String) : [String(value ?? "")];
     const { locator } = this.target(params);
-    try {
-      return await locator.selectOption(values.map((label) => ({ label })));
-    } catch {
-      return await locator.selectOption(values);
-    }
+    const timeout = this.limit(params);
+    // Match each value against the visible labels first (what a person
+    // sees), then option values, without waiting on a mode that cannot match.
+    await locator.waitFor({ timeout });
+    const options = await locator.locator("option").evaluateAll((els) =>
+      els.map((el) => ({ label: (el as HTMLOptionElement).label.trim(), value: (el as HTMLOptionElement).value })),
+    );
+    const choices = wanted.map((w) => {
+      if (options.some((o) => o.label === w)) return { label: w };
+      if (options.some((o) => o.value === w)) return { value: w };
+      throw new AdapterError("OPTION_NOT_FOUND", `no option labelled or valued ${JSON.stringify(w)}`, {
+        details: { options: options.map((o) => o.label), hint: "Use one of the option labels listed in `options`." },
+      });
+    });
+    return await locator.selectOption(choices, { timeout });
   }
 
   private async press(params: Params): Promise<null> {
     const key = String(params.key ?? "");
     if (params.target) {
-      await this.target(params).locator.press(key);
+      await this.target(params).locator.press(key, { timeout: this.limit(params) });
     } else {
       await this.session(params).page.keyboard.press(key);
     }
@@ -209,17 +224,17 @@ export class Adapter {
   private async getText(params: Params): Promise<unknown> {
     const { locator } = this.target(params);
     if (params.all === true) {
-      await locator.first().waitFor();
+      await locator.first().waitFor({ timeout: this.limit(params) });
       return (await locator.allInnerTexts()).map((t) => t.trim());
     }
-    return (await locator.innerText()).trim();
+    return (await locator.innerText({ timeout: this.limit(params) })).trim();
   }
 
   /** Reads an HTML table into objects keyed by its header cells. */
   private async getTable(params: Params): Promise<unknown> {
     const { page } = this.session(params);
     const table = params.target ? locate(page, params.target as Target) : page.getByRole("table").first();
-    await table.waitFor();
+    await table.waitFor({ timeout: this.limit(params) });
     return await table.evaluate((el) => {
       const text = (cell: Element) => (cell as HTMLElement).innerText.trim();
       const rows = Array.from(el.querySelectorAll("tr"));
@@ -240,7 +255,7 @@ export class Adapter {
 
   private async waitFor(params: Params): Promise<null> {
     const state = (params.state as "visible" | "hidden" | "attached" | "detached" | undefined) ?? "visible";
-    await this.target(params).locator.first().waitFor({ state });
+    await this.target(params).locator.first().waitFor({ state, timeout: this.limit(params) });
     return null;
   }
 
@@ -248,7 +263,7 @@ export class Adapter {
     const path = String(params.path ?? "");
     if (!path) throw new AdapterError("INVALID_PARAMS", "path is required");
     const { page } = this.session(params);
-    await page.screenshot({ path, fullPage: params.fullPage === true });
+    await page.screenshot({ path, fullPage: params.fullPage === true, timeout: this.limit(params) });
     return path;
   }
 

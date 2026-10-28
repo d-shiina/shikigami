@@ -25,6 +25,9 @@ use shikigami_runtime::{
 };
 use tokio_util::sync::CancellationToken;
 
+/// How much earlier than the step timeout the adapter stops an operation.
+const ADAPTER_TIMEOUT_MARGIN_MS: u64 = 500;
+
 /// Path of the adapter entry point inside the repository / install dir.
 pub const ADAPTER_SCRIPT: &str = "packages/browser-adapter/src/main.ts";
 
@@ -172,6 +175,13 @@ impl ActionHandler for BrowserStep {
                 _ => Map::new(),
             };
             params.insert("runId".into(), Value::String(input.run_id.to_string()));
+            // Playwright gives up just before the Runtime does, so a timed-out
+            // click can never land after the step was retried or skipped.
+            let limit = input
+                .timeout_ms
+                .saturating_sub(ADAPTER_TIMEOUT_MARGIN_MS)
+                .max(1);
+            params.insert("timeoutMs".into(), Value::from(limit));
             self.client
                 .call(self.method, Value::Object(params), &input.cancel)
                 .await
@@ -331,7 +341,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             step_type: WAIT_FOR,
             method: "waitFor",
             label: "要素を待つ",
-            description: "Waits until `target` reaches `state` (visible by default; hidden, attached, detached). The limit is the step's `timeoutMs` and at most 20 s per attempt; use retry for longer waits.",
+            description: "Waits until `target` reaches `state` (visible by default; hidden, attached, detached). The limit is the step's `timeoutMs` (default 30000).",
             params: json!({ "target": target, "state": { "enum": ["visible", "hidden", "attached", "detached"] } }),
             required: &["target"],
             has_output: false,
