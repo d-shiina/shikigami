@@ -14,6 +14,7 @@ use crate::expr::{self, Expr};
 use crate::ids::StepId;
 use crate::model::{SCHEMA_VERSION, Scenario, Step};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
+use crate::resource::{ResourceDef, ResourceKind, is_absolute_windows_path};
 
 /// Name of the implicit variable holding the last error when `onError: continue`.
 pub const LAST_ERROR_VAR: &str = "lastError";
@@ -36,6 +37,9 @@ pub struct ValidationIssue {
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_id: Option<StepId>,
+    /// How to fix it, written for AI clients (and shown to humans in Studio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
@@ -88,8 +92,14 @@ impl Validator {
             issues: Vec::new(),
             seen_ids: HashSet::new(),
             known_vars: known_variables(scenario, &self.registry),
+            declared_vars: scenario.variables.iter().map(|v| v.name.clone()).collect(),
         };
         cx.scenario(scenario);
+        for issue in &mut cx.issues {
+            if issue.hint.is_none() {
+                issue.hint = generic_hint(&issue.code).map(str::to_owned);
+            }
+        }
         let valid = !cx.issues.iter().any(|i| i.severity == Severity::Error);
         ValidationReport {
             valid,
@@ -140,6 +150,7 @@ struct Cx<'a> {
     issues: Vec<ValidationIssue>,
     seen_ids: HashSet<StepId>,
     known_vars: BTreeSet<String>,
+    declared_vars: BTreeSet<String>,
 }
 
 impl Cx<'_> {
@@ -157,7 +168,15 @@ impl Cx<'_> {
             message,
             path,
             step_id: step.filter(|id| !id.is_empty()).cloned(),
+            hint: None,
         });
+    }
+
+    /// Attaches a context-specific hint to the issue pushed last.
+    fn hint(&mut self, hint: impl Into<String>) {
+        if let Some(issue) = self.issues.last_mut() {
+            issue.hint = Some(hint.into());
+        }
     }
 
     fn error(&mut self, code: &str, message: String, path: String, step: Option<&StepId>) {
@@ -294,6 +313,18 @@ impl Cx<'_> {
                 format!("{path}/type"),
                 id,
             );
+            let names: Vec<&str> = self
+                .validator
+                .registry
+                .iter()
+                .map(|d| d.step_type.as_str())
+                .collect();
+            self.hint(match closest(&step.step_type, names.iter().copied()) {
+                Some(near) => {
+                    format!("Did you mean '{near}'? Call list_step_types for every available type.")
+                }
+                None => "Call list_step_types for every available type.".to_owned(),
+            });
             // Still descend so nested IDs are checked.
             for (name, children) in &step.blocks {
                 self.steps(children, &format!("{path}/blocks/{name}"), loop_depth);
@@ -302,6 +333,7 @@ impl Cx<'_> {
         };
 
         self.params(step, def, path);
+        self.file_paths(step, def, path);
 
         if let Some(save_as) = &step.save_as {
             if !is_identifier(save_as) {
@@ -332,7 +364,33 @@ impl Cx<'_> {
             );
         }
 
-        let child_depth = loop_depth + usize::from(def.is_loop());
+        if step.step_type == control::PARALLEL {
+            self.parallel_writes(step, path);
+        }
+        if step.step_type == control::FOR_EACH {
+            self.for_each(step, path);
+        }
+
+        if step.step_type == control::WAIT_UNTIL && step.retry.is_some() {
+            self.warn(
+                "REDUNDANT_RETRY",
+                "wait.until already repeats its check; `retry` is not used".into(),
+                format!("{path}/retry"),
+                Some(&step.id),
+            );
+            self.hint("Remove `retry` and set `timeoutMs` to the longest time to wait.");
+        }
+
+        // A branch of `control.parallel` (or the check of `wait.until`)
+        // cannot break out of an enclosing loop.
+        let child_depth = if matches!(
+            step.step_type.as_str(),
+            control::PARALLEL | control::WAIT_UNTIL
+        ) {
+            0
+        } else {
+            loop_depth + usize::from(def.is_loop())
+        };
         for (name, children) in &step.blocks {
             let block_path = format!("{path}/blocks/{name}");
             if !def.allows_block(name) {
@@ -342,8 +400,151 @@ impl Cx<'_> {
                     block_path.clone(),
                     id,
                 );
+                let allowed: Vec<&str> = def.blocks.iter().map(|b| b.name.as_str()).collect();
+                self.hint(if allowed.is_empty() {
+                    format!("'{}' has no child blocks; remove `blocks`.", def.step_type)
+                } else {
+                    format!(
+                        "Allowed blocks of '{}': {}.",
+                        def.step_type,
+                        allowed.join(", ")
+                    )
+                });
             }
             self.steps(children, &block_path, child_depth);
+        }
+    }
+
+    /// `collect` / `concurrency` rules of `control.forEach`. With
+    /// `concurrency`, each iteration works on its own copy of the variables,
+    /// so writes inside the body are lost and `collect` is the only way out.
+    fn for_each(&mut self, step: &Step, path: &str) {
+        if step.params.contains_key("collect") && step.save_as.is_none() {
+            self.warn(
+                "FOREACH_COLLECT_WITHOUT_SAVE_AS",
+                "`collect` is evaluated but its results are not saved".into(),
+                format!("{path}/params/collect"),
+                Some(&step.id),
+            );
+            self.hint(
+                "Add `saveAs` to receive the array of collected values (same order as `items`).",
+            );
+        }
+        if !step.params.contains_key("concurrency") {
+            return;
+        }
+        let body = step.block("body");
+        let body_path = format!("{path}/blocks/body");
+
+        let mut breaks = Vec::new();
+        find_own_breaks(body, &mut breaks);
+        for id in breaks {
+            self.error(
+                "FOREACH_BREAK_IN_CONCURRENT",
+                "control.break cannot stop a forEach that runs iterations at the same time".into(),
+                body_path.clone(),
+                Some(&id),
+            );
+            self.hint("Remove `concurrency` to run one item at a time, or filter `items` before the loop (control.continue skips one item).");
+        }
+
+        let bound: Vec<&str> = ["itemVar", "indexVar"]
+            .iter()
+            .filter_map(|k| step.params.get(*k).and_then(Value::as_str))
+            .collect();
+        let mut writes = BTreeSet::new();
+        for child in body {
+            collect_writes(child, &self.validator.registry, &mut writes);
+        }
+        for name in &writes {
+            if self.declared_vars.contains(name) && !bound.contains(&name.as_str()) {
+                self.error(
+                    "FOREACH_SHARED_WRITE",
+                    format!(
+                        "iterations run in parallel, so writing '{name}' inside the body is lost"
+                    ),
+                    body_path.clone(),
+                    Some(&step.id),
+                );
+                self.hint(format!(
+                    "Return each item's value with `collect` (e.g. \"collect\": \"[item.no, status]\") and `saveAs: \"results\"`, then use the array after the loop instead of writing '{name}'."
+                ));
+            }
+        }
+
+        let mut accumulators = BTreeSet::new();
+        find_accumulators(body, &mut accumulators);
+        for name in accumulators {
+            if self.declared_vars.contains(&name) {
+                continue; // already FOREACH_SHARED_WRITE
+            }
+            self.warn(
+                "FOREACH_ACCUMULATOR",
+                format!("'{name}' is updated from its own value, but each parallel iteration starts from the same copy"),
+                body_path.clone(),
+                Some(&step.id),
+            );
+            self.hint("Return each item's value with `collect` + `saveAs: \"amounts\"` and add them up after the loop with sum(amounts).");
+        }
+    }
+
+    /// File locks and later re-runs depend on where the scenario is started
+    /// from when a path is relative.
+    fn file_paths(&mut self, step: &Step, def: &StepTypeDef, path: &str) {
+        for resource in &def.resources {
+            let ResourceDef::Param {
+                key,
+                kind: ResourceKind::File,
+            } = resource
+            else {
+                continue;
+            };
+            let Some(Value::String(value)) = step.params.get(key) else {
+                continue;
+            };
+            if value.contains("{{") || is_absolute_windows_path(value) {
+                continue;
+            }
+            self.warn(
+                "RELATIVE_PATH",
+                format!("'{key}' is a relative path: {value}"),
+                format!("{path}/params/{key}"),
+                Some(&step.id),
+            );
+            self.hint(format!(
+                "Use an absolute path (e.g. C:\\work\\{value}) or build one from a variable: \"{{{{ baseDir }}}}\\{value}\"."
+            ));
+        }
+    }
+
+    /// Two branches writing the same variable would make the result depend
+    /// on timing (or fail at run time), so it is rejected up front.
+    fn parallel_writes(&mut self, step: &Step, path: &str) {
+        let mut owner: HashMap<String, usize> = HashMap::new();
+        for (index, branch) in step.block("branches").iter().enumerate() {
+            let mut names = BTreeSet::new();
+            collect_writes(branch, &self.validator.registry, &mut names);
+            for name in names {
+                match owner.get(&name) {
+                    Some(&other) if other != index => {
+                        self.error(
+                            "PARALLEL_VARIABLE_CONFLICT",
+                            format!(
+                                "parallel branches {other} and {index} both write variable '{name}'"
+                            ),
+                            format!("{path}/blocks/branches/{index}"),
+                            Some(&step.id),
+                        );
+                        self.hint(format!(
+                            "Give each branch its own variable (e.g. {name}A / {name}B) and combine them after the parallel step."
+                        ));
+                    }
+                    Some(_) => {}
+                    None => {
+                        owner.insert(name, index);
+                    }
+                }
+            }
         }
     }
 
@@ -356,6 +557,7 @@ impl Cx<'_> {
                     .iter_errors(&instance)
                     .map(|e| (e.instance_path().to_string(), e.to_string()))
                     .collect();
+                let hint = params_hint(def);
                 for (pointer, message) in errors {
                     self.error(
                         "INVALID_PARAMS",
@@ -363,6 +565,7 @@ impl Cx<'_> {
                         format!("{path}/params{pointer}"),
                         id,
                     );
+                    self.hint(hint.clone());
                 }
             }
             Some(Err(message)) => {
@@ -382,7 +585,16 @@ impl Cx<'_> {
                 if let Value::String(src) = value {
                     match Expr::parse(src) {
                         Ok(expr) => self.check_vars(expr.variables(), &param_path, id),
-                        Err(e) => self.error(e.code(), e.to_string(), param_path, id),
+                        Err(e) => {
+                            self.error(e.code(), e.to_string(), param_path, id);
+                            if src.contains("{{") {
+                                self.hint(format!(
+                                    "'{key}' is an expression param: write the bare expression without {{{{ }}}}, e.g. \"count > 3\"."
+                                ));
+                            } else {
+                                self.expr_hint(&e);
+                            }
+                        }
                     }
                 }
                 continue;
@@ -392,9 +604,24 @@ impl Cx<'_> {
             for result in results {
                 match result {
                     Ok(template) => self.check_vars(template.variables(), &param_path, id),
-                    Err(e) => self.error(e.code(), e.to_string(), param_path.clone(), id),
+                    Err(e) => {
+                        self.error(e.code(), e.to_string(), param_path.clone(), id);
+                        self.expr_hint(&e);
+                    }
                 }
             }
+        }
+    }
+
+    fn expr_hint(&mut self, error: &expr::ExprError) {
+        if let expr::ExprError::UnknownFunction(name) = error {
+            let near = closest(name, expr::FUNCTIONS.iter().copied());
+            self.hint(format!(
+                "{}Available functions: {}.",
+                near.map(|n| format!("Did you mean '{n}'? "))
+                    .unwrap_or_default(),
+                expr::FUNCTIONS.join(", ")
+            ));
         }
     }
 
@@ -407,9 +634,199 @@ impl Cx<'_> {
                     path.to_owned(),
                     id,
                 );
+                let near =
+                    closest(&name, self.known_vars.iter().map(String::as_str)).map(str::to_owned);
+                self.hint(match near {
+                    Some(near) => format!("Did you mean '{near}'? Otherwise declare '{name}' in `variables` or assign it first (variable.set or saveAs)."),
+                    None => format!("Declare '{name}' in `variables` (inputs need direction \"input\") or assign it first with variable.set or saveAs."),
+                });
             }
         }
     }
+}
+
+/// Variables a step (and its children) may assign.
+fn collect_writes(step: &Step, registry: &StepRegistry, out: &mut BTreeSet<String>) {
+    if let Some(save_as) = &step.save_as {
+        out.insert(save_as.clone());
+    }
+    if step.on_error == Some(crate::model::OnError::Continue) {
+        out.insert(LAST_ERROR_VAR.to_owned());
+    }
+    if let Some(def) = registry.get(&step.step_type) {
+        for key in &def.binds_variables {
+            if let Some(Value::String(name)) = step.params.get(key) {
+                out.insert(name.clone());
+            }
+        }
+    }
+    if step.step_type == control::FOR_EACH && step.params.contains_key("concurrency") {
+        return; // iterations work on copies; only `saveAs` leaves the loop
+    }
+    for children in step.blocks.values() {
+        for child in children {
+            collect_writes(child, registry, out);
+        }
+    }
+}
+
+/// `control.break` steps that would leave this loop (not a nested one).
+fn find_own_breaks(steps: &[Step], out: &mut Vec<StepId>) {
+    for step in steps {
+        if step.step_type == control::BREAK {
+            out.push(step.id.clone());
+        }
+        let nested_loop = matches!(
+            step.step_type.as_str(),
+            control::WHILE
+                | control::REPEAT
+                | control::FOR_EACH
+                | control::PARALLEL
+                | control::WAIT_UNTIL
+        );
+        if !nested_loop {
+            for children in step.blocks.values() {
+                find_own_breaks(children, out);
+            }
+        }
+    }
+}
+
+/// Variables set from an expression or template that reads them
+/// (`total = total + x`).
+fn find_accumulators(steps: &[Step], out: &mut BTreeSet<String>) {
+    for step in steps {
+        if step.step_type == crate::registry::builtin::VARIABLE_SET
+            && let Some(Value::String(name)) = step.params.get("name")
+        {
+            let reads = match (step.params.get("expression"), step.params.get("value")) {
+                (Some(Value::String(e)), _) => {
+                    Expr::parse(e).map(|e| e.variables()).unwrap_or_default()
+                }
+                (_, Some(Value::String(t))) => expr::Template::parse(t)
+                    .map(|t| t.variables())
+                    .unwrap_or_default(),
+                _ => BTreeSet::new(),
+            };
+            if reads.contains(name) {
+                out.insert(name.clone());
+            }
+        }
+        for children in step.blocks.values() {
+            find_accumulators(children, out);
+        }
+    }
+}
+
+/// Fix instructions for issues without a more specific hint.
+fn generic_hint(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "MISSING_STEP_ID" | "INVALID_STEP_ID" | "DUPLICATE_STEP_ID" => {
+            "Omit `id` when adding steps (Core assigns unique IDs); use existing IDs only to refer to steps from get_scenario."
+        }
+        "NOT_IN_LOOP" => {
+            "Put break/continue inside control.while, control.repeat or control.forEach. A control.parallel branch cannot leave an outer loop; end the branch or use control.fail."
+        }
+        "NO_OUTPUT" => "Remove `saveAs`: this step type returns no value.",
+        "INVALID_VARIABLE_NAME" => {
+            "Use letters, digits and '_' and start with a letter or '_' (e.g. invoiceTotal)."
+        }
+        "DUPLICATE_VARIABLE" => "Keep one declaration per variable name.",
+        "VARIABLE_TYPE_MISMATCH" => {
+            "Make `default` match `type`, or change `type` (any accepts every value)."
+        }
+        "INVALID_RETRY" => "Set retry.maxAttempts to 1 or more (1 means no retry).",
+        "EMPTY_NAME" => "Give the scenario a short descriptive name.",
+        "INVALID_SCENARIO_ID" => "Omit `id` when creating a scenario; Core assigns one.",
+        "UNSUPPORTED_SCHEMA_VERSION" => "Use schemaVersion 1.",
+        "EXPR_SYNTAX" => {
+            "Check quotes and brackets. Strings use '...', comparisons ==, !=, <, >, logic &&, ||, !. In template params wrap expressions in {{ }}."
+        }
+        "INVALID_STEP_DEFINITION" => {
+            "The step type itself is broken; report it instead of changing the scenario."
+        }
+        _ => return None,
+    })
+}
+
+/// Required and allowed params of a step type, from its schema.
+fn params_hint(def: &StepTypeDef) -> String {
+    let schema = &def.params_schema;
+    let names = |key: &str| -> Vec<String> {
+        match schema.get(key) {
+            Some(Value::Object(map)) => map.keys().cloned().collect(),
+            Some(Value::Array(items)) => items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect(),
+            _ => Vec::new(),
+        }
+    };
+    let allowed = names("properties");
+    let required = names("required");
+    let mut hint = String::new();
+    if def.step_type == crate::registry::builtin::VARIABLE_SET {
+        hint.push_str(
+            "Give exactly one of `value` (literal or template) or `expression` (bare expression). ",
+        );
+    }
+    if let Some(Value::Object(props)) = schema.get("properties")
+        && props.values().any(|p| {
+            p.pointer("/oneOf/1/pattern").and_then(Value::as_str)
+                == Some(crate::registry::SINGLE_TEMPLATE_PATTERN)
+        })
+    {
+        hint.push_str("Numeric params take an integer or exactly one {{ expr }} template, e.g. 3 or \"{{ retryCount }}\". ");
+    }
+    if !required.is_empty() {
+        hint.push_str(&format!("Required params: {}. ", required.join(", ")));
+    }
+    if !allowed.is_empty() {
+        hint.push_str(&format!("Allowed params: {}. ", allowed.join(", ")));
+    }
+    hint.push_str(&format!(
+        "Call get_step_schema(\"{}\") for the schema and a working example.",
+        def.step_type
+    ));
+    hint
+}
+
+/// The candidate closest to `name` by edit distance, if reasonably close.
+fn closest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+    let max = (name.chars().count() / 3).max(2);
+    candidates
+        .map(|c| (edit_distance(&name.to_lowercase(), &c.to_lowercase()), c))
+        .filter(|(d, _)| *d <= max)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c)
+}
+
+/// Edit distance counting a swap of two adjacent characters as one edit
+/// (optimal string alignment), so typos like `control.fi` → `control.if` rank first.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut d = vec![vec![0usize; b.len() + 1]; a.len() + 1];
+    for (i, row) in d.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for (j, cell) in d[0].iter_mut().enumerate() {
+        *cell = j;
+    }
+    for i in 1..=a.len() {
+        for j in 1..=b.len() {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            let mut best = (d[i - 1][j] + 1)
+                .min(d[i][j - 1] + 1)
+                .min(d[i - 1][j - 1] + cost);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                best = best.min(d[i - 2][j - 2] + 1);
+            }
+            d[i][j] = best;
+        }
+    }
+    d[a.len()][b.len()]
 }
 
 #[cfg(test)]
@@ -535,5 +952,167 @@ mod tests {
             c.contains("VARIABLE_TYPE_MISMATCH") && c.contains("DUPLICATE_VARIABLE"),
             "{c}"
         );
+    }
+
+    fn hint_of<'a>(report: &'a ValidationReport, code: &str) -> &'a str {
+        report
+            .issues
+            .iter()
+            .find(|i| i.code == code)
+            .and_then(|i| i.hint.as_deref())
+            .unwrap_or_else(|| panic!("no hint for {code}: {report:?}"))
+    }
+
+    #[test]
+    fn concurrent_for_each_rules() {
+        let body = vec![
+            Step::new("variable.set")
+                .with_id("s1")
+                .with_param("name", "total")
+                .with_param("expression", "total + item"),
+            Step::new("variable.set")
+                .with_id("s2")
+                .with_param("name", "count")
+                .with_param("expression", "count + 1"),
+            Step::new("control.break").with_id("b"),
+        ];
+        let mut s = Scenario::new("each");
+        s.variables.push(VariableDef::new("total", VarType::Number));
+        s.steps = vec![
+            Step::new("control.forEach")
+                .with_id("f")
+                .with_param("items", "[1, 2]")
+                .with_param("itemVar", "item")
+                .with_param("concurrency", 2)
+                .with_param("collect", "item")
+                .with_block("body", body.clone()),
+        ];
+        let report = validator().validate(&s);
+        let c = codes(&report).join(",");
+        for code in [
+            "FOREACH_SHARED_WRITE",
+            "FOREACH_BREAK_IN_CONCURRENT",
+            "FOREACH_ACCUMULATOR",
+            "FOREACH_COLLECT_WITHOUT_SAVE_AS",
+        ] {
+            assert!(c.contains(code), "{code} missing: {c}");
+            hint_of(&report, code);
+        }
+        // `total` is declared, so it is a shared write rather than an accumulator.
+        assert_eq!(c.matches("FOREACH_ACCUMULATOR").count(), 1, "{c}");
+
+        // Without `concurrency` the same loop is ordinary sequential code.
+        s.steps[0].params.remove("concurrency");
+        let c = codes(&validator().validate(&s)).join(",");
+        assert!(
+            !c.contains("FOREACH_SHARED_WRITE") && !c.contains("FOREACH_BREAK"),
+            "{c}"
+        );
+    }
+
+    #[test]
+    fn retry_on_wait_until_is_redundant() {
+        let mut wait = Step::new(control::WAIT_UNTIL)
+            .with_id("w")
+            .with_param("condition", "true");
+        wait.retry = Some(crate::model::RetryPolicy {
+            max_attempts: 3,
+            backoff_ms: 100,
+            backoff_multiplier: 1.0,
+        });
+        let mut s = Scenario::new("wait");
+        s.steps = vec![wait];
+        let report = validator().validate(&s);
+        assert_eq!(report.error_count(), 0, "{report:?}");
+        assert!(hint_of(&report, "REDUNDANT_RETRY").contains("timeoutMs"));
+    }
+
+    #[test]
+    fn relative_file_paths_are_warned() {
+        let mut registry = StepRegistry::with_builtins();
+        let mut def = registry.get("log.message").unwrap().clone();
+        def.step_type = "test.write".into();
+        def.resources = vec![ResourceDef::file("message")];
+        registry.register(def);
+        let write = |id: &str, path: &str| {
+            Step::new("test.write")
+                .with_id(id)
+                .with_param("message", path)
+        };
+        let mut s = Scenario::new("paths");
+        s.steps = vec![
+            write("a", "book.xlsx"),
+            write("b", r"C:\work\book.xlsx"),
+            write("c", "{{ dir }}\\book.xlsx"),
+        ];
+        s.variables.push(VariableDef::new("dir", VarType::String));
+        let report = Validator::new(registry).validate(&s);
+        assert_eq!(report.error_count(), 0, "{report:?}");
+        let warned: Vec<_> = report
+            .issues
+            .iter()
+            .filter(|i| i.code == "RELATIVE_PATH")
+            .map(|i| i.step_id.as_ref().map(ToString::to_string))
+            .collect();
+        assert_eq!(warned, [Some("a".to_owned())]);
+        assert!(hint_of(&report, "RELATIVE_PATH").contains("baseDir"));
+    }
+
+    #[test]
+    fn issues_carry_fix_hints() {
+        let mut s = Scenario::new("hints");
+        s.variables.push(VariableDef::new("total", VarType::Number));
+        s.steps = vec![
+            Step::new("control.fi").with_id("a"),
+            Step::new("log.message")
+                .with_id("b")
+                .with_param("message", "{{ totl }}"),
+            Step::new("log.message").with_id("c").with_param("msg", "x"),
+            Step::new("control.if")
+                .with_id("d")
+                .with_param("condition", "{{ total > 1 }}"),
+            Step::new("log.message")
+                .with_id("e")
+                .with_param("message", "{{ lne(total) }}"),
+        ];
+        let report = validator().validate(&s);
+        assert!(hint_of(&report, "UNKNOWN_STEP_TYPE").contains("'control.if'"));
+        assert!(hint_of(&report, "UNDEFINED_VARIABLE").contains("'total'"));
+        let params = hint_of(&report, "INVALID_PARAMS");
+        assert!(params.contains("Required params: message"), "{params}");
+        assert!(params.contains("get_step_schema"));
+        assert!(hint_of(&report, "EXPR_SYNTAX").contains("without {{ }}"));
+        assert!(hint_of(&report, "EXPR_UNKNOWN_FUNCTION").contains("'len'"));
+        // Every error gets some hint.
+        for issue in report.errors() {
+            assert!(issue.hint.is_some(), "{issue:?}");
+        }
+    }
+
+    #[test]
+    fn every_builtin_example_is_a_valid_step() {
+        let v = validator();
+        for def in v.registry().iter() {
+            assert!(!def.examples.is_empty(), "{} has no example", def.step_type);
+            for example in &def.examples {
+                let mut step: Step = serde_json::from_value(example.clone())
+                    .unwrap_or_else(|e| panic!("{}: {e}", def.step_type));
+                assert_eq!(step.step_type, def.step_type);
+                crate::ops::assign_missing_ids(&mut step);
+                // break/continue are only valid inside a loop.
+                let step = if matches!(def.step_type.as_str(), control::BREAK | control::CONTINUE) {
+                    Step::new(control::REPEAT)
+                        .with_id("loop")
+                        .with_param("count", 1)
+                        .with_block("body", vec![step])
+                } else {
+                    step
+                };
+                let mut s = Scenario::new("example");
+                s.steps = vec![step];
+                let report = v.validate(&s);
+                assert!(report.valid, "{}: {:?}", def.step_type, report.issues);
+            }
+        }
     }
 }

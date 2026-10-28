@@ -45,16 +45,30 @@ export type Layout = { nodes: LayoutNode[]; edges: LayoutEdge[]; width: number; 
 type Defs = ReadonlyMap<string, StepTypeDef>;
 
 const LOOP_TYPES = new Set(["control.while", "control.repeat", "control.forEach"]);
+/** Blocks whose children run at the same time: each child gets its own lane. */
+const FAN_OUT_BLOCKS: Record<string, string> = { "control.parallel": "branches" };
+
+type Lane = { name: string; label: string; steps: Step[]; start: number };
 
 /** Block lanes of a step: declared blocks in registry order, then unknown ones. */
-function lanes(step: Step, defs: Defs): { name: string; label: string; steps: Step[] }[] {
+function lanes(step: Step, defs: Defs): Lane[] {
   const def = defs.get(step.type);
   const declared = def?.blocks ?? [];
-  const result = declared.map((b) => ({ name: b.name, label: b.label, steps: step.blocks?.[b.name] ?? [] }));
+  const result: Lane[] = declared.map((b) => ({
+    name: b.name,
+    label: b.label,
+    steps: step.blocks?.[b.name] ?? [],
+    start: 0,
+  }));
   for (const [name, steps] of Object.entries(step.blocks ?? {})) {
-    if (!declared.some((b) => b.name === name)) result.push({ name, label: name, steps });
+    if (!declared.some((b) => b.name === name)) result.push({ name, label: name, steps, start: 0 });
   }
-  return result;
+  const fanOut = FAN_OUT_BLOCKS[step.type];
+  return result.flatMap((lane) =>
+    lane.name === fanOut && lane.steps.length > 0
+      ? lane.steps.map((child, i) => ({ ...lane, steps: [child], start: i }))
+      : [lane],
+  );
 }
 
 function measureList(steps: Step[], defs: Defs): { w: number; h: number } {
@@ -100,6 +114,7 @@ class Builder {
     parentId: string | null,
     block: string | null,
     slotLabel: string,
+    start = 0,
   ): { entry: string; exits: string[] } {
     if (steps.length === 0) {
       const id = `slot:${parentId ?? "root"}:${block ?? ""}`;
@@ -115,7 +130,7 @@ class Builder {
     let entry = "";
     let previous: string[] = [];
     steps.forEach((step, index) => {
-      const placed = this.step(step, x, cursor, width, parentId, block, index);
+      const placed = this.step(step, x, cursor, width, parentId, block, start + index);
       if (index === 0) entry = placed.entry;
       for (const p of previous) this.edge(p, placed.entry);
       previous = placed.exits;
@@ -151,7 +166,7 @@ class Builder {
     const isLoop = LOOP_TYPES.has(step.type);
     ls.forEach((lane, i) => {
       const size = sizes[i] ?? { w: NODE_W, h: SLOT_H };
-      const placed = this.list(lane.steps, laneX, y + NODE_H + GAP_Y, size.w, id, lane.name, lane.label);
+      const placed = this.list(lane.steps, laneX, y + NODE_H + GAP_Y, size.w, id, lane.name, lane.label, lane.start);
       this.edge(id, placed.entry, lane.label);
       if (isLoop) {
         for (const e of placed.exits) this.edge(e, id, undefined, true);

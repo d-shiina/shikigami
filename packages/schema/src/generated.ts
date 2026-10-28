@@ -426,6 +426,10 @@ export interface ValidationIssue {
    */
   path: string;
   stepId?: StepId | null;
+  /**
+   * How to fix it, written for AI clients (and shown to humans in Studio).
+   */
+  hint?: string | null;
 }
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -476,6 +480,11 @@ export interface StepTypeDef {
    */
   bindsVariables?: string[];
   risk: RiskLevel;
+  /**
+   * Complete, valid step objects showing typical use (IDs omitted). AI
+   * clients get them from `get_step_schema` and can copy them.
+   */
+  examples?: unknown[];
 }
 /**
  * Named child block of a control-flow step.

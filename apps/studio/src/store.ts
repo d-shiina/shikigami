@@ -195,6 +195,7 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "variable.set": { name: "value", value: "" },
   "log.message": { message: "" },
   "flow.delay": { ms: 1000 },
+  "wait.until": { condition: "true" },
 };
 
 export function newStepId(): string {

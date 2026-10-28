@@ -14,7 +14,12 @@ const def = (type: string, blocks: string[] = []): StepTypeDef => ({
 });
 
 const defs = new Map(
-  [def("log.message"), def("control.if", ["then", "else"]), def("control.repeat", ["body"])].map(
+  [
+    def("log.message"),
+    def("control.if", ["then", "else"]),
+    def("control.repeat", ["body"]),
+    def("control.parallel", ["branches"]),
+  ].map(
     (d) => [d.type, d] as const,
   ),
 );
@@ -60,5 +65,21 @@ describe("layoutScenario", () => {
     const layout = layoutScenario(steps, defs);
     expect(layout.edges.find((e) => e.source === "x" && e.target === "loop")?.loop).toBe(true);
     expect(layout.edges.some((e) => e.source === "loop" && e.target === "after")).toBe(true);
+  });
+
+  it("puts each parallel branch in its own lane and joins them", () => {
+    const steps: Step[] = [
+      { id: "par", type: "control.parallel", blocks: { branches: [log("a"), log("b"), log("c")] } },
+      log("after"),
+    ];
+    const layout = layoutScenario(steps, defs);
+    const byId = Object.fromEntries(layout.nodes.map((n) => [n.id, n]));
+    expect(byId.a!.position.y).toBe(byId.b!.position.y);
+    expect(byId.a!.position.x).toBeLessThan(byId.b!.position.x);
+    expect(byId.b!.position.x).toBeLessThan(byId.c!.position.x);
+    // indexes still address the shared "branches" block
+    expect(["a", "b", "c"].map((id) => (byId[id]!.data as { index: number }).index)).toEqual([0, 1, 2]);
+    const intoAfter = layout.edges.filter((e) => e.target === "after").map((e) => e.source);
+    expect(intoAfter.sort()).toEqual(["a", "b", "c"]);
   });
 });

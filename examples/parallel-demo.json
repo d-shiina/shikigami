@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "id": "scn_example_parallel",
+  "name": "並行実行のデモ",
+  "revision": 1,
+  "variables": [
+    {
+      "name": "a",
+      "type": "any",
+      "direction": "output"
+    },
+    {
+      "name": "b",
+      "type": "any",
+      "direction": "output"
+    }
+  ],
+  "steps": [
+    {
+      "id": "stp_01a180c4add372189e030d57953e0617",
+      "type": "log.message",
+      "name": "開始",
+      "params": {
+        "message": "3体の式神を同時に召喚"
+      }
+    },
+    {
+      "id": "stp_01a180c4add372189e030d587f00aab2",
+      "type": "control.parallel",
+      "name": "同時に処理",
+      "blocks": {
+        "branches": [
+          {
+            "id": "stp_01a180c4add372189e030d59e5b608dc",
+            "type": "control.group",
+            "name": "式神A：請求書",
+            "blocks": {
+              "body": [
+                {
+                  "id": "stp_01a180c4add372189e030d5a93ea9be3",
+                  "type": "flow.delay",
+                  "name": "処理中",
+                  "params": {
+                    "ms": 300
+                  }
+                },
+                {
+                  "id": "stp_01a180c4add372189e030d5b0e8c2ac5",
+                  "type": "variable.set",
+                  "name": "結果A",
+                  "params": {
+                    "name": "a",
+                    "expression": "1"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_01a180c4add372189e030d5c89bd2360",
+            "type": "control.group",
+            "name": "式神B：受注",
+            "blocks": {
+              "body": [
+                {
+                  "id": "stp_01a180c4add372189e030d5de99b62aa",
+                  "type": "flow.delay",
+                  "name": "処理中",
+                  "params": {
+                    "ms": 300
+                  }
+                },
+                {
+                  "id": "stp_01a180c4add372189e030d5ebbab565b",
+                  "type": "variable.set",
+                  "name": "結果B",
+                  "params": {
+                    "name": "b",
+                    "expression": "2"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_01a180c4add372189e030d5f8d92cc49",
+            "type": "log.message",
+            "name": "式神C：通知",
+            "params": {
+              "message": "通知を送信"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_01a180c4add372189e030d605d96fda3",
+      "type": "log.message",
+      "name": "完了",
+      "params": {
+        "message": "合計 {{ a + b }}"
+      }
+    }
+  ],
+  "metadata": {},
+  "description": "control.parallel で 3 つの処理を同時に実行するサンプル"
+}
