@@ -4185,6 +4185,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "umya-spreadsheet",
+ "windows 0.62.2",
 ]
 
 [[package]]

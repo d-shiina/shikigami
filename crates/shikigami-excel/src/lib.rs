@@ -26,7 +26,10 @@ use tokio_util::sync::CancellationToken;
 
 pub mod a1;
 pub mod book;
+#[cfg(windows)]
+mod com;
 pub mod date;
+pub mod macros;
 
 use a1::Range;
 
@@ -39,6 +42,7 @@ pub mod types {
     pub const APPEND_ROWS: &str = "excel.appendRows";
     pub const LIST_SHEETS: &str = "excel.listSheets";
     pub const ADD_SHEET: &str = "excel.addSheet";
+    pub const RUN_MACRO: &str = "excel.runMacro";
 }
 
 /// Workbook file steps; needs nothing installed.
@@ -118,6 +122,7 @@ enum Kind {
     AppendRows,
     ListSheets,
     AddSheet,
+    RunMacro,
 }
 
 struct ExcelStep {
@@ -129,6 +134,9 @@ impl ActionHandler for ExcelStep {
         let kind = self.kind;
         let params = input.params;
         let cancel = input.cancel;
+        // Excel is ended a little before the Runtime gives up on the step.
+        let timeout =
+            std::time::Duration::from_millis(input.timeout_ms.saturating_sub(1_000).max(1_000));
         Box::pin(async move {
             blocking(move || {
                 // The Runtime's lock on the workbook ends with this future,
@@ -136,6 +144,9 @@ impl ActionHandler for ExcelStep {
                 // background: this lock keeps it and the next attempt apart.
                 let lock = workbook_lock(&params);
                 let _held = lock.lock().unwrap_or_else(|e| e.into_inner());
+                if kind == Kind::RunMacro {
+                    return macros::run(macros::request(&params)?, timeout, &cancel);
+                }
                 run_step(kind, &params, &cancel)
             })
             .await
@@ -242,6 +253,10 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
                 book::append_rows(sheet, header_row, rows, date1904)
             })
         }
+        Kind::RunMacro => Err(StepError::permanent(
+            "INTERNAL",
+            "runMacro is run by the handler",
+        )),
         Kind::AddSheet => {
             let name = string(params, "sheet")?;
             let mut workbook = book::open_or_create(&path, Some(&name))?;
@@ -358,6 +373,8 @@ struct Def {
     required: &'static [&'static str],
     has_output: bool,
     writes: bool,
+    /// Runs code in Excel (macros): dangerous, slower default timeout.
+    excel_app: bool,
     examples: Vec<Value>,
 }
 
@@ -383,6 +400,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["path"],
             has_output: true,
             writes: false,
+            excel_app: false,
             examples: vec![
                 json!({ "type": READ_ROWS, "name": "受注一覧を読む", "params": { "path": PATH, "sheet": "受注" }, "saveAs": "orders" }),
                 json!({ "type": "control.forEach", "params": { "items": "orders", "itemVar": "order" }, "blocks": { "body": [
@@ -402,6 +420,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["path", "rows"],
             has_output: true,
             writes: true,
+            excel_app: false,
             examples: vec![
                 json!({ "type": APPEND_ROWS, "name": "結果を 1 行追加", "params": { "path": "C:\\work\\結果.xlsx", "rows": [ { "受注番号": "{{ order.受注番号 }}", "金額": "{{ order.金額 }}", "受注日": { "date": "{{ order.受注日 }}" } } ] } }),
                 json!({ "type": APPEND_ROWS, "params": { "path": "C:\\work\\結果.xlsx", "sheet": "集計", "rows": "{{ results }}" } }),
@@ -418,6 +437,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["path", "cell"],
             has_output: true,
             writes: false,
+            excel_app: false,
             examples: vec![
                 json!({ "type": READ_CELL, "name": "締め日を読む", "params": { "path": PATH, "sheet": "設定", "cell": "B2" }, "saveAs": "closingDate" }),
             ],
@@ -434,6 +454,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["path", "cell", "value"],
             has_output: false,
             writes: true,
+            excel_app: false,
             examples: vec![
                 json!({ "type": WRITE_CELL, "name": "処理日を書く", "params": { "path": PATH, "sheet": "受注", "cell": "G{{ order._row }}", "value": { "date": "{{ processedAt }}" } } }),
                 json!({ "type": WRITE_CELL, "params": { "path": PATH, "sheet": "集計", "cell": "B10", "value": { "formula": "SUM(B2:B9)" } } }),
@@ -450,6 +471,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["path"],
             has_output: true,
             writes: false,
+            excel_app: false,
             examples: vec![
                 json!({ "type": READ_RANGE, "params": { "path": PATH, "sheet": "単価表", "range": "A2:C50" }, "saveAs": "prices" }),
             ],
@@ -466,6 +488,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["path", "cell", "values"],
             has_output: true,
             writes: true,
+            excel_app: false,
             examples: vec![
                 json!({ "type": WRITE_RANGE, "name": "見出しを書く", "params": { "path": "C:\\work\\結果.xlsx", "cell": "A1", "values": [["受注番号", "金額", "状態"]] } }),
             ],
@@ -479,6 +502,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["path"],
             has_output: true,
             writes: false,
+            excel_app: false,
             examples: vec![
                 json!({ "type": LIST_SHEETS, "params": { "path": PATH }, "saveAs": "sheets" }),
             ],
@@ -492,8 +516,29 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             required: &["path", "sheet"],
             has_output: false,
             writes: true,
+            excel_app: false,
             examples: vec![
                 json!({ "type": ADD_SHEET, "params": { "path": "C:\\work\\結果.xlsx", "sheet": "{{ month }}月" } }),
+            ],
+        },
+        Def {
+            step_type: RUN_MACRO,
+            kind: Kind::RunMacro,
+            label: "マクロを実行",
+            description: "Runs the VBA macro `macro` (e.g. 集計 or Module1.集計; a Function's return value is the output) of the workbook `path` with `args`, in a separate, hidden Excel that never touches the user's open Excel windows, then saves the workbook (`save: false` to discard its changes) and closes it. Needs Windows with desktop Excel; macros must be enabled for the workbook on this PC. Use only for what other excel.* steps cannot do: read and write cells with them. A macro that shows a MsgBox waits forever and is ended at the step's timeoutMs (default 300000).",
+            params: json!({
+                "path": props(json!({}))["path"],
+                "macro": { "type": "string", "minLength": 1, "description": "マクロ名（例 集計、Module1.集計）" },
+                "args": { "type": "array", "maxItems": macros::MAX_ARGS, "items": { "type": ["string", "number", "boolean", "null"] }, "description": "マクロの引数（順番どおり）" },
+                "save": { "type": "boolean", "description": "実行後にブックを保存する（既定 true）" }
+            }),
+            required: &["path", "macro"],
+            has_output: true,
+            writes: true,
+            excel_app: true,
+            examples: vec![
+                json!({ "type": RUN_MACRO, "name": "集計マクロを実行", "params": { "path": "C:\\work\\集計.xlsm", "macro": "Module1.集計" } }),
+                json!({ "type": RUN_MACRO, "params": { "path": "C:\\work\\集計.xlsm", "macro": "月次レポート", "args": ["{{ month }}", 2026] }, "saveAs": "result" }),
             ],
         },
     ];
@@ -510,7 +555,9 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 has_output: d.has_output,
                 expression_params: vec![],
                 binds_variables: vec![],
-                risk: if d.writes {
+                risk: if d.excel_app {
+                    RiskLevel::Dangerous
+                } else if d.writes {
                     RiskLevel::Interactive
                 } else {
                     RiskLevel::Safe
@@ -518,7 +565,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 examples: d.examples,
                 resources: vec![ResourceDef::file("path")],
                 secret_params: vec![],
-                default_timeout_ms: None,
+                default_timeout_ms: d.excel_app.then_some(300_000),
             };
             (def, d.kind)
         })

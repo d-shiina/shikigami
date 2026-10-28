@@ -47,7 +47,7 @@ fn examples_validate_and_every_step_locks_its_workbook() {
     let runtime = runtime();
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 8);
+    assert_eq!(defs.len(), 9);
     for def in &defs {
         assert!(def.step_type.starts_with("excel."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
@@ -67,6 +67,7 @@ fn examples_validate_and_every_step_locks_its_workbook() {
                 "prices",
                 "sheets",
                 "results",
+                "result",
                 "month",
             ]
             .iter()
@@ -292,4 +293,30 @@ fn a_stopped_step_does_not_save() {
     .unwrap_err();
     assert_eq!(error.code, "CANCELLED");
     assert!(!std::path::Path::new(&path).exists());
+}
+
+#[cfg(not(windows))]
+#[tokio::test]
+async fn macros_need_windows_and_an_existing_workbook() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = workbook(&dir, "m.xlsm");
+    let missing = error_of(vec![step(
+        types::RUN_MACRO,
+        json!({ "path": path, "macro": "集計" }),
+    )])
+    .await;
+    assert_eq!(missing.code, "FILE_NOT_FOUND");
+    std::fs::write(&path, b"").unwrap();
+    let error = error_of(vec![step(
+        types::RUN_MACRO,
+        json!({ "path": path, "macro": "集計" }),
+    )])
+    .await;
+    assert_eq!(error.code, "PLATFORM_UNSUPPORTED");
+    let def = definitions()
+        .into_iter()
+        .find(|d| d.step_type == types::RUN_MACRO)
+        .unwrap();
+    assert_eq!(def.risk, RiskLevel::Dangerous);
+    assert_eq!(def.default_timeout_ms, Some(300_000));
 }
