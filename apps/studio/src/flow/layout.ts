@@ -8,8 +8,13 @@ export const NODE_W = 290;
 export const SLOT_H = 40;
 const GAP_X = 48;
 const GAP_Y = 36;
-/** Room between steps left to right, for edge labels and value tags. */
-const GAP_MAIN_H = 72;
+/**
+ * Left to right, room beside a step for its variable chips: the ones it
+ * reads sit off its left edge, the ones it writes off its right.
+ */
+export const CHIP_ROOM = 84;
+/** Room between steps left to right: one step's write chips, the next one's read chips. */
+const GAP_MAIN_H = CHIP_ROOM * 2;
 /** How far a block's steps start to the right of the step that owns them. */
 const LANE_INDENT = 48;
 /** Space inside a block's frame around its steps, and the frame's title strip. */
@@ -143,8 +148,8 @@ function measureList(steps: Step[], axes: Axes, defs: Defs): Size {
   return { main: main + axes.mainGap * (steps.length - 1), cross };
 }
 
-/** A lane's contents plus the frame drawn around them. */
-const frameBox = (m: Size): Size => ({ main: m.main + FRAME_PAD * 2, cross: m.cross + FRAME_PAD * 2 + FRAME_LABEL });
+/** A lane's contents plus the frame drawn around them, with room inside for the chips at either end. */
+const frameBox = (m: Size): Size => ({ main: m.main + (FRAME_PAD + CHIP_ROOM) * 2, cross: m.cross + FRAME_PAD * 2 + FRAME_LABEL });
 
 function measure(step: Step, axes: Axes, defs: Defs): Size {
   const ls = lanes(step, defs);
@@ -267,7 +272,7 @@ class Builder {
         this.depth++;
         const placed = this.list(
           lane.steps,
-          laneMain + FRAME_PAD,
+          laneMain + FRAME_PAD + CHIP_ROOM,
           laneCross + FRAME_PAD + FRAME_LABEL,
           size.cross,
           id,

@@ -1,9 +1,5 @@
 import {
   Background,
-  BaseEdge,
-  EdgeLabelRenderer,
-  type EdgeProps,
-  getBezierPath,
   Controls,
   type Edge,
   Handle,
@@ -14,14 +10,15 @@ import {
   Position,
   ReactFlow,
 } from "@xyflow/react";
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useStudio } from "../context";
-import { type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
+import { CHIP_ROOM, type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
 import type { HistoryEntry } from "@shikigami/schema";
-import { dataLinks, inHandle, outHandle } from "../lib/dataFlow";
-import { hubLinks } from "../lib/varHub";
-import { actorLabel, describe, formatValue } from "../lib/changes";
+import { inHandle, outHandle } from "../lib/dataFlow";
+import { focus, useFocus, varFocus } from "../lib/focus";
+import { actorLabel, describe } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
 import { valueText } from "../lib/runValues";
@@ -31,10 +28,13 @@ import { Sentence } from "./StoryView";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; dir: Direction }>
+  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; changes: VariableChange[]; dir: Direction }>
 >;
 
 const MIN_READABLE_ZOOM = 0.85;
+
+/** Which way the chart runs, for rows deciding whether to show chips. */
+const DirContext = createContext<Direction>("horizontal");
 
 const RUN_STYLE: Record<StepRunState, string> = {
   running: "ring-2 ring-accent-500 animate-pulse",
@@ -106,123 +106,134 @@ function FlowHandles({ dir, atHeader = true }: { dir: Direction; atHeader?: bool
   );
 }
 
-type DataEdgeData = {
-  variable: string;
-  color: string;
-  writes: VariableChange[];
-  from: string;
-  to: string;
-  selectedId: string | null;
-};
+const NO_CHANGES: VariableChange[] = [];
+/** Chips shown per input before the rest fold into "+n". */
+const MAX_CHIPS = 2;
 
-/**
- * The step under the pointer. Kept outside React state so hovering only
- * re-renders the links: re-rendering the whole canvas mid-click swallowed
- * the click that selects a step.
- */
-const hovered = (() => {
-  let id: string | null = null;
-  const listeners = new Set<() => void>();
-  return {
-    set(next: string | null) {
-      if (next === id) return;
-      id = next;
-      for (const l of listeners) l();
-    },
-    get: () => id,
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-})();
-
-/** A variable link. Hovering it shows the values that travelled along it in the last run. */
-function DataEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<DataEdgeData>>) {
-  const [hover, setHover] = useState(false);
-  const hoveredStep = useSyncExternalStore(hovered.subscribe, hovered.get);
-  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
-  if (!data) return null;
-  // Links of the step under the pointer (or else the selected one) light up.
-  const focus = hoveredStep ?? data.selectedId;
-  const lit = focus !== null && (data.from === focus || data.to === focus || focus === varFocus(data.variable));
-  // With nothing in focus no links are drawn: a scenario with many
-  // variables would otherwise be a web of lines.
-  if (!lit) return null;
-  const last = data.writes.at(-1);
-  return (
-    <>
-      <g onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-        <BaseEdge
-          id={id}
-          path={path}
-          interactionWidth={12}
-          style={{ stroke: data.color, strokeWidth: hover ? 3 : 2, opacity: 1 }}
-        />
-      </g>
-      {last && !hover && (
-        <EdgeLabelRenderer>
-          {/* The last value that travelled along this link, always visible after a run. */}
-          <div
-            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, borderColor: data.color }}
-            className="nodrag nopan pointer-events-none absolute max-w-[68px] truncate rounded-[3px] border bg-sheet px-1 font-mono text-[10px] leading-[16px] text-ink shadow-sm"
-          >
-            {valueText(last)}
-            {data.writes.length > 1 && <span className="ml-1 text-slate-400">×{data.writes.length}</span>}
-          </div>
-        </EdgeLabelRenderer>
+/** The values a chip's popover lists: the last few, newest last. */
+function ValuePopover({ name, color, values, anchor }: { name: string; color: string; values: VariableChange[]; anchor: DOMRect }) {
+  const last = values.at(-1);
+  return createPortal(
+    <div
+      style={{ left: anchor.left + anchor.width / 2, top: anchor.top - 6 }}
+      className="pointer-events-none fixed z-50 max-w-[280px] -translate-x-1/2 -translate-y-full rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lg"
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+        <span className="font-mono font-semibold">{name}</span>
+        {values.length > 1 && <span className="text-slate-400">{values.length}回変化</span>}
+      </div>
+      {last ? (
+        <ul className="mt-1 space-y-0.5 font-mono">
+          {values.slice(-5).map((w) => (
+            <li key={w.seq} className={`truncate ${w === last ? "font-semibold text-ink" : "text-slate-500"}`}>
+              {w.iteration != null && <span className="mr-1 text-slate-400">[{w.iteration}]</span>}
+              {valueText(w)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="mt-0.5 text-slate-400">実行すると、ここに値が出ます</div>
       )}
-      {hover && (
-        <EdgeLabelRenderer>
-          <div
-            style={{ transform: `translate(-50%, -110%) translate(${labelX}px, ${labelY}px)` }}
-            className="pointer-events-none absolute z-50 max-w-[280px] rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lg"
-          >
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: data.color }} />
-              <span className="font-mono font-semibold">{data.variable}</span>
-              {data.writes.length > 1 && <span className="text-slate-400">{data.writes.length}回変化</span>}
-            </div>
-            {last ? (
-              <ul className="mt-1 space-y-0.5 font-mono">
-                {data.writes.slice(-5).map((w) => (
-                  <li key={w.seq} className={`truncate ${w === last ? "font-semibold text-ink" : "text-slate-500"}`}>
-                    {w.iteration != null && <span className="mr-1 text-slate-400">[{w.iteration}]</span>}
-                    {valueText(w)}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="mt-0.5 text-slate-400">実行すると、ここに渡った値が出ます</div>
-            )}
-          </div>
-        </EdgeLabelRenderer>
-      )}
-    </>
+    </div>,
+    document.body,
   );
 }
 
-const edgeTypes = { data: DataEdge };
+/**
+ * A variable chip, like a Get / Set node in Unity's Visual Scripting: it sits
+ * right beside the socket it feeds, so no line ever crosses the chart.
+ * Hovering one lights every chip and row of the same variable.
+ */
+function VarChip({ name, color, values, side }: { name: string; color: string; values: VariableChange[]; side: "in" | "out" }) {
+  const focused = useFocus() === varFocus(name);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const last = values.at(-1);
+  return (
+    <span
+      className={`nodrag flex h-[20px] max-w-[72px] shrink-0 items-center gap-1 rounded-[3px] border bg-sheet px-1.5 font-mono text-[11px] leading-none shadow-sm ${
+        focused ? "ring-2 ring-offset-1" : ""
+      }`}
+      style={{ borderColor: color, color, ["--tw-ring-color" as string]: color }}
+      onMouseEnter={(e) => {
+        focus.set(varFocus(name));
+        setAnchor(e.currentTarget.getBoundingClientRect());
+      }}
+      onMouseLeave={() => {
+        focus.set(null);
+        setAnchor(null);
+      }}
+    >
+      {side === "out" && last ? (
+        <span className="truncate text-ink">{valueText(last)}</span>
+      ) : (
+        <span className="truncate font-semibold">{name}</span>
+      )}
+      {anchor && <ValuePopover name={name} color={color} values={values} anchor={anchor} />}
+    </span>
+  );
+}
 
-function NodeRow({ row, vars }: { row: Row; vars: Map<string, string | undefined> }) {
+/** The chips beside a row and the short stub joining them to its socket. */
+function Chips({ side, color, children }: { side: "in" | "out"; color: string; children: React.ReactNode }) {
+  return (
+    <div
+      style={side === "in" ? { right: "calc(100% + 6px)" } : { left: "calc(100% + 6px)" }}
+      className={`absolute top-1/2 flex -translate-y-1/2 items-center ${side === "in" ? "flex-row-reverse" : ""}`}
+    >
+      <span className="h-[2px] w-[10px] shrink-0" style={{ background: color }} />
+      <span className={`flex items-center gap-[3px] ${side === "in" ? "flex-row-reverse" : ""}`}>{children}</span>
+    </div>
+  );
+}
+
+function NodeRow({ row, vars, changes, stepId }: { row: Row; vars: Map<string, string | undefined>; changes: VariableChange[]; stepId: string }) {
+  const focused = useFocus();
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "#94a3b8";
+  const across = useContext(DirContext) === "horizontal";
   if (row.kind === "more") {
     return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[10px] text-slate-400">…ほか {row.count} 項目</div>;
   }
   if (row.kind === "output") {
+    const color = typeColor(row.variable);
+    const lit = focused === varFocus(row.variable);
     return (
-      <div style={{ height: ROW_H }} className="relative flex items-center justify-end gap-2 px-3 text-[12px]">
+      <div style={{ height: ROW_H, background: lit ? `${color}1f` : undefined }} className="relative flex items-center justify-end gap-2 px-3 text-[12px]">
         <span className="text-slate-500">{row.label}</span>
-        <span className="truncate font-mono font-semibold" style={{ color: typeColor(row.variable) }}>
+        <span className="truncate font-mono font-semibold" style={{ color }}>
           {row.variable}
         </span>
-        <Socket side="out" id={outHandle(row.variable)} color={typeColor(row.variable)} title={`${row.variable} に書き込む`} />
+        <Socket side="out" id={outHandle(row.variable)} color={color} title={`${row.variable} に書き込む`} />
+        {across && (
+          <Chips side="out" color={color}>
+            <VarChip
+              side="out"
+              name={row.variable}
+              color={color}
+              values={changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
+            />
+          </Chips>
+        )}
       </div>
     );
   }
+  const first = typeColor(row.refs[0] ?? "");
+  const lit = row.refs.some((r) => focused === varFocus(r));
   return (
-    <div style={{ height: ROW_H }} className="relative flex items-center gap-2 px-3 text-[12px]">
-      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={typeColor(row.refs[0] ?? "")} title={`読む変数: ${row.refs.join(", ")}`} />}
+    <div style={{ height: ROW_H, background: lit ? `${first}1f` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
+      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={`読む変数: ${row.refs.join(", ")}`} />}
+      {across && row.refs.length > 0 && (
+        <Chips side="in" color={first}>
+          {row.refs.slice(0, MAX_CHIPS).map((r) => (
+            <VarChip key={r} side="in" name={r} color={typeColor(r)} values={changes.filter((c) => c.variable === r)} />
+          ))}
+          {row.refs.length > MAX_CHIPS && (
+            <span className="text-[10px] text-slate-400" title={row.refs.slice(MAX_CHIPS).join(", ")}>
+              +{row.refs.length - MAX_CHIPS}
+            </span>
+          )}
+        </Chips>
+      )}
       <span className="w-16 shrink-0 truncate text-slate-500" title={row.key}>
         {row.label}
       </span>
@@ -255,6 +266,7 @@ function StepNode({ data }: StepNodeProps) {
         </NodeToolbar>
       )}
       <FlowHandles dir={data.dir} />
+      <DirContext.Provider value={data.dir}>
       <div
         style={{ height: 24, background: `${color}1a` }}
         className="flex items-center gap-1.5 rounded-t-[3px] border-b border-slate-100 px-3"
@@ -283,10 +295,11 @@ function StepNode({ data }: StepNodeProps) {
       {rows.length > 0 && (
         <div style={{ paddingBottom: NODE_PAD_B }} className="border-t border-dashed border-slate-200">
           {rows.map((row, i) => (
-            <NodeRow key={i} row={row} vars={data.vars} />
+            <NodeRow key={i} row={row} vars={data.vars} changes={data.changes} stepId={data.step.id ?? ""} />
           ))}
         </div>
       )}
+      </DirContext.Provider>
     </div>
   );
 }
@@ -302,61 +315,6 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean; d
       <FlowHandles dir={data.dir} atHeader={false} />
       {data.parentId ? `${data.label}：空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
 
-    </div>
-  );
-}
-
-type HubRow = { name: string; type: string; tag: string; value?: string };
-type HubNodeData = { kind: "hub"; rows: HubRow[] };
-
-const HUB_ID = "@variables";
-const HUB_W = 220;
-const HUB_ROW_H = 46;
-const HUB_HEAD_H = 30;
-const HUB_GAP = 120;
-const writeHandle = (v: string) => `w:${v}`;
-const readHandle = (v: string) => `r:${v}`;
-/** Hover focus for a whole variable (its row in the box), as opposed to a step id. */
-const varFocus = (v: string) => `var:${v}`;
-
-/**
- * The variable box, a list down the left of the chart. Steps that write a
- * variable and steps that read it link to its row, shown only for the step
- * or variable under the pointer (or selected), so many variables never
- * turn into a web of lines.
- */
-function HubNode({ data }: NodeProps<Node<HubNodeData>>) {
-  return (
-    <div style={{ width: HUB_W }} className="rounded-[6px] border border-slate-300 bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)]">
-      <div style={{ height: HUB_HEAD_H }} className="flex items-center gap-1.5 rounded-t-[5px] bg-ink px-3 text-[12px] font-bold text-paper">
-        <span className="swirl h-2.5 w-2.5 rounded-full" />
-        変数
-        <span className="ml-auto font-normal text-paper/60">{data.rows.length}</span>
-      </div>
-      {data.rows.map((r) => {
-        const color = TYPE_COLOR[r.type] ?? "#94a3b8";
-        const handle = { width: 10, height: 10, border: "2px solid white", boxShadow: "0 0 0 1px rgba(15,27,42,.25)", background: color };
-        return (
-          <div
-            key={r.name}
-            style={{ height: HUB_ROW_H }}
-            className="relative flex flex-col justify-center border-t border-slate-100 px-3 hover:bg-brand-50"
-            title={r.value}
-            onMouseEnter={() => hovered.set(varFocus(r.name))}
-            onMouseLeave={() => hovered.set(null)}
-          >
-            <div className="flex items-baseline gap-1.5">
-              <span className="truncate font-mono text-[13px] font-bold" style={{ color }}>
-                {r.name}
-              </span>
-              <span className="ml-auto shrink-0 text-[10px] text-slate-400">{r.tag}</span>
-            </div>
-            <div className="truncate font-mono text-[11px] text-slate-500">{r.value ?? "—"}</div>
-            <Handle id={writeHandle(r.name)} type="target" position={Position.Right} isConnectable={false} style={{ ...handle, top: "35%" }} title={`${r.name} に書き込む`} />
-            <Handle id={readHandle(r.name)} type="source" position={Position.Right} isConnectable={false} style={{ ...handle, top: "65%" }} title={`${r.name} を読む`} />
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -380,7 +338,7 @@ function FrameNode({ data }: NodeProps<Node<FrameNodeData>>) {
   );
 }
 
-const nodeTypes = { step: StepNode, slot: SlotNode, hub: HubNode, frame: FrameNode };
+const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode };
 
 export function FlowCanvas() {
   const scenario = useStudio((s) => s.scenario);
@@ -427,6 +385,7 @@ export function FlowCanvas() {
           byAi: reviews.has(id),
           reviews: reviews.get(id) ?? [],
           vars,
+          changes: run?.changes ?? NO_CHANGES,
         },
       };
     }
@@ -445,78 +404,9 @@ export function FlowCanvas() {
     };
   });
 
-  const declared = scenario?.variables ?? [];
-  const links = useMemo(
-    () => dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys())),
-    [scenario, defs, vars],
-  );
-  const hubItems = useMemo(() => hubLinks(scenario?.steps ?? [], links), [scenario, links]);
-
-  const lastValue = (name: string) => {
-    const last = run?.changes.filter((c) => c.variable === name).at(-1);
-    if (last) return valueText(last);
-    const def = declared.find((v) => v.name === name);
-    return def?.default === undefined ? undefined : formatValue(def.default);
-  };
-  // Inputs first, then outputs, internal variables and loop elements.
-  const GROUPS: [string, (d?: string) => boolean][] = [
-    ["入力", (d) => d === "input" || d === "inOut"],
-    ["出力", (d) => d === "output"],
-    ["内部", (d) => d === "local"],
-  ];
-  const hubRows: HubRow[] = [];
-  for (const [tag, match] of GROUPS) {
-    for (const v of declared) if (match(v.direction ?? "local")) hubRows.push({ name: v.name, type: v.type ?? "any", tag, value: lastValue(v.name) });
-  }
-  for (const [name, type] of vars) {
-    if (!declared.some((v) => v.name === name)) hubRows.push({ name, type: type ?? "any", tag: "要素", value: lastValue(name) });
-  }
-  if (hubRows.length > 0) {
-    nodes.push({
-      id: HUB_ID,
-      type: "hub",
-      draggable: false,
-      selectable: false,
-      position: { x: -HUB_W - HUB_GAP, y: 0 },
-      data: { kind: "hub", rows: hubRows },
-    });
-  }
-  const hubHeight = hubRows.length > 0 ? HUB_HEAD_H + hubRows.length * HUB_ROW_H : 0;
-  const bounds = {
-    x: hubRows.length > 0 ? -HUB_W - HUB_GAP : 0,
-    width: layout.width + (hubRows.length > 0 ? HUB_W + HUB_GAP : 0),
-    y: 0,
-    height: Math.max(layout.height, hubHeight),
-  };
-
-  // Links stay faint behind the chart; the hovered or selected step's own links light up.
-  const selectedId = selection?.kind === "step" ? selection.stepId : null;
-  const dataEdges: Edge[] = hubItems.map((l) => {
-    const color = TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8";
-    const all = run?.changes.filter((c) => c.variable === l.variable) ?? [];
-    const write = l.kind === "write";
-    return {
-      id: write ? `data:${l.step}:${l.variable}->hub` : `data:hub:${l.variable}->${l.step}:${l.handle}`,
-      source: write ? l.step : HUB_ID,
-      sourceHandle: write ? outHandle(l.variable) : readHandle(l.variable),
-      target: write ? HUB_ID : l.step,
-      targetHandle: write ? writeHandle(l.variable) : l.handle,
-      type: "data",
-      className: "data-link",
-      selectable: false,
-      focusable: false,
-      data: {
-        variable: l.variable,
-        color,
-        writes: write ? all.filter((c) => c.stepId === l.step) : all,
-        from: write ? l.step : HUB_ID,
-        to: write ? HUB_ID : l.step,
-        selectedId,
-      },
-      // Always beneath the steps, so a highlighted link never takes a click meant for a step.
-      zIndex: 0,
-    };
-  });
+  // Read chips stick out left of the first step, write chips right of the last.
+  const chips = layout.direction === "horizontal" ? CHIP_ROOM : 0;
+  const bounds = { x: -chips, y: 0, width: layout.width + chips * 2, height: layout.height };
 
   const edges: Edge[] = layout.edges.map((e) => ({
     ...e,
@@ -530,7 +420,6 @@ export function FlowCanvas() {
     markerEnd: { type: MarkerType.ArrowClosed, color: "#5b6b80" },
     labelBgPadding: [4, 2],
   }));
-  edges.push(...dataEdges);
 
   if (!scenario) {
     return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
@@ -546,7 +435,6 @@ export function FlowCanvas() {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
       nodesConnectable={false}
       ref={wrapper}
       onInit={(flow) => {
@@ -564,14 +452,12 @@ export function FlowCanvas() {
       }}
       minZoom={0.2}
       onNodeClick={(_, node) => {
-        const data = node.data as StepNodeData | SlotNodeData | HubNodeData | FrameNodeData;
-        if (data.kind === "hub" || data.kind === "frame") return;
+        const data = node.data as StepNodeData | SlotNodeData | FrameNodeData;
+        if (data.kind === "frame") return;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
       onPaneClick={() => select(null)}
-      onNodeMouseEnter={(_, node) => node.type === "step" && hovered.set(node.id)}
-      onNodeMouseLeave={() => hovered.set(null)}
     >
       <Background gap={24} size={1.2} color="#c3cedb" />
       <Controls showInteractive={false} />

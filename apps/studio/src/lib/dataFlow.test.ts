@@ -24,19 +24,3 @@ describe("dataLinks", () => {
     ]);
   });
 });
-
-import { hubLinks } from "./varHub";
-
-describe("variable box", () => {
-  it("links writers into the box and the box into readers", () => {
-    const steps: Step[] = [
-      { id: "set", type: "variable.set", params: { name: "total", expression: "1" } },
-      { id: "log", type: "log.message", params: { message: "{{ total }}" } },
-    ];
-    const links = dataLinks(steps, [{ name: "total", type: "number" }], new Map(), new Set(["total"]));
-    expect(hubLinks(steps, links)).toEqual([
-      { kind: "write", step: "set", variable: "total" },
-      { kind: "read", step: "log", variable: "total", handle: "in:message" },
-    ]);
-  });
-});
