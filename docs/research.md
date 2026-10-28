@@ -58,6 +58,8 @@
 
 ## 3. Windows 対応状況
 
+製品の対象 OS は Windows 10/11（x64）のみ（[architecture.md 判断9](architecture.md#判断9windows-特化os-の抽象化レイヤーは作らない)）。
+
 ### Tauri 2 の Windows 前提条件（公式 Prerequisites ページで確認）
 
 - **Microsoft C++ Build Tools**（ワークロード「Desktop development with C++」）。Visual Studio IDE 本体は不要。

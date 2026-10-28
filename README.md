@@ -6,7 +6,7 @@
 
 MCP-native desktop RPA where AI and humans build, edit, and run the same automation scenarios.
 
-AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したシナリオは AI なし・GUI なしで実行できます。
+AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したシナリオは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
 
 ![Shikigami Studio（Phase 1）](docs/assets/studio-phase1.png)
 
@@ -41,7 +41,7 @@ examples/                  サンプルシナリオ
 
 **Windows**：Visual Studio IDE は不要ですが、[Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) の「Desktop development with C++」ワークロード（Windows SDK を含む）と WebView2（Windows 10 1803 以降は標準搭載）が必要です。`rustup default stable-msvc` を設定してください。
 
-**Linux（Debian/Ubuntu）**：`libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
+**Linux（コアの開発・CI 用。製品の対象外）**：`libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
 ```sh
 pnpm install
@@ -61,7 +61,7 @@ pnpm studio:dev
 pnpm schema:generate
 ```
 
-ワークスペース（シナリオ・履歴・実行記録の保存先）は既定で `%APPDATA%\Shikigami\workspace`（Linux は `~/.local/share/Shikigami/workspace`）です。環境変数 `SHIKIGAMI_HOME` または CLI の `--workspace` で変更できます。
+ワークスペース（シナリオ・履歴・実行記録の保存先）は既定で `%APPDATA%\Shikigami\workspace` です。環境変数 `SHIKIGAMI_HOME` または CLI の `--workspace` で変更できます。
 
 ### CLI の例
 
