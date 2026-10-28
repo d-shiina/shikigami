@@ -20,6 +20,7 @@ import { StudioContext, useStudio } from "./context";
 import { api, events } from "./lib/api";
 import { t } from "./lib/i18n";
 import { createStudioStore, type StudioState } from "./store";
+import { setTheme, type ThemeChoice, useTheme } from "./lib/theme";
 
 type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
 
@@ -151,6 +152,34 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => 
   );
 }
 
+const THEME_NEXT: Record<ThemeChoice, ThemeChoice> = { system: "light", light: "dark", dark: "system" };
+const THEME_LABEL: Record<ThemeChoice, string> = { system: "PCの設定に合わせる", light: "ライト", dark: "ダーク" };
+
+/** Cycles PCの設定 → ライト → ダーク. */
+function ThemeButton() {
+  const { choice, mode } = useTheme();
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(THEME_NEXT[choice])}
+      title={`表示：${THEME_LABEL[choice]}（クリックで${THEME_LABEL[THEME_NEXT[choice]]}）`}
+      className="relative grid h-8 w-8 place-items-center rounded-[6px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+    >
+      {mode === "dark" ? (
+        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7Z" fill="currentColor" />
+        </svg>
+      ) : (
+        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="3.2" fill="currentColor" />
+          <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      )}
+      {choice === "system" && <span className="absolute right-1 bottom-1 text-[7px] leading-none font-bold">A</span>}
+    </button>
+  );
+}
+
 function SecretsButton() {
   const setOpen = useStudio((s) => s.setSecretsOpen);
   const count = useStudio((s) => s.secrets.length);
@@ -238,6 +267,7 @@ function Shell() {
         <ScenarioHeader />
         <span className="h-5 w-px bg-slate-200" />
         <SecretsButton />
+        <ThemeButton />
         <AppMenu />
         <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
       </header>

@@ -265,7 +265,7 @@ export function ReviewActions() {
         <button
           type="button"
           onClick={() => void approveAll()}
-          className="h-9 flex-[2] rounded-[6px] bg-ink px-4 text-[13px] font-semibold text-white hover:bg-brand-700"
+          className="h-9 flex-[2] rounded-[6px] bg-ink px-4 text-[13px] font-semibold text-paper hover:bg-brand-700"
         >
           ✓ 残して本番に使う
         </button>

@@ -89,13 +89,13 @@ export function ScenarioHeader() {
           onClick={() => startRun()}
           disabled={errors > 0}
           title={errors > 0 ? "検証エラーを直すと実行できます" : `${t.run} (F5)`}
-          className="group flex h-8 items-center gap-2 rounded-[6px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-white shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
+          className="group flex h-8 items-center gap-2 rounded-[6px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-paper shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
         >
-          <span className="text-[#5fd08a] group-disabled:text-white">
+          <span className="text-[#5fd08a] group-disabled:text-paper dark:text-moegi-100">
             <PlayIcon />
           </span>
           {t.run}
-          <kbd className="rounded-[3px] bg-white/15 px-1 font-sans text-[10px] font-normal text-white/80">F5</kbd>
+          <kbd className="rounded-[3px] bg-paper/15 px-1 font-sans text-[10px] font-normal text-paper/80">F5</kbd>
         </button>
       )}
     </>
@@ -125,7 +125,7 @@ export function CanvasDock() {
         className="flex items-center gap-2 rounded-full bg-ink py-1.5 pr-2 pl-3 text-sm font-medium text-paper hover:bg-slate-700"
       >
         ＋ <span className="@max-[560px]:hidden">{t.addStep}</span>
-        <kbd className="rounded bg-white/15 px-1 font-sans text-[10px] @max-[560px]:hidden">{t.shortcut}</kbd>
+        <kbd className="rounded bg-paper/15 px-1 font-sans text-[10px] @max-[560px]:hidden">{t.shortcut}</kbd>
       </button>
       <span className="mx-1 h-5 w-px bg-slate-200" />
       <DockButton label={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} disabled={!stepSelected}>

@@ -23,6 +23,7 @@ import { t } from "../lib/i18n";
 import type { HistoryEntry } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
+import { useTheme } from "../lib/theme";
 import { actorLabel, describe } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
@@ -248,7 +249,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
     const color = typeColor(row.variable);
     const lit = focused === varFocus(row.variable);
     return (
-      <div style={{ height: ROW_H, background: lit ? `${color}1f` : undefined }} className="relative flex items-center justify-end gap-2 px-3 text-[12px]">
+      <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${color} 12%, transparent)` : undefined }} className="relative flex items-center justify-end gap-2 px-3 text-[12px]">
         <span className="text-slate-500">{row.label}</span>
         <span className="truncate font-mono font-semibold" style={{ color }}>
           {row.variable}
@@ -271,7 +272,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
   const first = typeColor(row.refs[0] ?? "");
   const lit = row.refs.some((r) => focused === varFocus(r));
   return (
-    <div style={{ height: ROW_H, background: lit ? `${first}1f` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
+    <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${first} 12%, transparent)` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
       {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={`読む変数: ${row.refs.join(", ")}`} />}
       {across && row.refs.length > 0 && (
         <Chips side="in" color={first}>
@@ -338,7 +339,7 @@ function StepNode({ data }: StepNodeProps) {
       )}
       <DirContext.Provider value={data.dir}>
       <div
-        style={{ height: 24, background: `${color}1a` }}
+        style={{ height: 24, background: `color-mix(in srgb, ${color} 10%, transparent)` }}
         className="flex items-center gap-1.5 rounded-t-[3px] border-b border-slate-100 px-3"
       >
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
@@ -390,7 +391,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean; d
 }
 
 /** Shades for nested blocks, lightest outside. */
-const FRAME_TINT = ["#eaf1f8", "#e2ebf5", "#d9e5f2"];
+const FRAME_TINT = ["var(--frame-0)", "var(--frame-1)", "var(--frame-2)"];
 
 /** The box behind a step's block, labelled like the block ("条件が真", "要素ごとの処理"). */
 function FrameNode({ data }: NodeProps<Node<FrameNodeData>>) {
@@ -479,6 +480,7 @@ export function FlowCanvas() {
   const run = useStudio((s) => s.run);
   const select = useStudio((s) => s.select);
   const setFollowRun = useStudio((s) => s.setFollowRun);
+  const theme = useTheme().mode;
   const pending = usePendingReview();
   const reviewing = useStudio((s) => s.reviewing);
   const feedback = useStudio((s) => (s.scenario ? s.timelines[s.scenario.id]?.openFeedback : undefined));
@@ -580,8 +582,9 @@ export function FlowCanvas() {
     label: layout.direction === "horizontal" ? undefined : e.label,
     type: "smoothstep",
     animated: e.loop,
-    style: { stroke: "#5b6b80", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#5b6b80" },
+    style: { stroke: "var(--flow-edge)", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
+    // A plain colour: the marker id is built from it, so no var().
+    markerEnd: { type: MarkerType.ArrowClosed, color: theme === "dark" ? "#8193a8" : "#5b6b80" },
     labelBgPadding: [4, 2],
   }));
   edges.push(...linkEdges);
@@ -597,6 +600,7 @@ export function FlowCanvas() {
     <ReactFlow
       key={scenario.id}
       className="canvas-bg"
+      colorMode={theme}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -630,7 +634,7 @@ export function FlowCanvas() {
       onNodeMouseEnter={(_, node) => node.type === "step" && focus.set(node.id)}
       onNodeMouseLeave={() => focus.set(null)}
     >
-      <Background gap={24} size={1.2} color="#c3cedb" />
+      <Background gap={24} size={1.2} color="var(--color-slate-300)" />
       <Follow />
       {reviewing && <FocusOn id={layout.nodes.find((n) => diffs.has(n.id))?.id} />}
       <Controls showInteractive={false} />

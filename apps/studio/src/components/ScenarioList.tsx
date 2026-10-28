@@ -306,7 +306,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
           <button
             type="button"
             onClick={() => setMenu(!menu)}
-            className="flex h-6 items-center gap-1 rounded-[5px] bg-ink px-2 text-[11px] font-semibold text-white hover:bg-brand-700"
+            className="flex h-6 items-center gap-1 rounded-[5px] bg-ink px-2 text-[11px] font-semibold text-paper hover:bg-brand-700"
           >
             ＋ 追加
           </button>
@@ -358,7 +358,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
             placeholder={t.newScenarioPrompt}
             className="min-w-0 flex-1 rounded-[5px] border border-brand-500 bg-sheet px-2 py-1 text-[12px] focus:outline-none"
           />
-          <button type="submit" className="rounded-[5px] bg-ink px-2 text-[11px] text-white">
+          <button type="submit" className="rounded-[5px] bg-ink px-2 text-[11px] text-paper">
             作る
           </button>
         </form>
