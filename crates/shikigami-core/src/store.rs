@@ -12,6 +12,8 @@
 //! <local root>/                            per-PC part
 //!   history/<scenario-id>/journal.jsonl    append-only change journal (audit)
 //!   history/<scenario-id>/undo.json        undo/redo stacks
+//!   history/<scenario-id>/evidence.jsonl   review evidence (test runs, observations, reviews)
+//!   observations/<observation-id>/…        screens an AI looked at (tree, screenshot)
 //!   runs/<run-id>/…                        run records (see shikigami-runtime)
 //! ```
 //!
@@ -37,10 +39,11 @@ use serde_json::Value;
 use time::OffsetDateTime;
 
 use crate::error::{CoreError, CoreResult};
-use crate::ids::ScenarioId;
+use crate::ids::{ObservationId, ScenarioId, StepId};
 use crate::migrate;
 use crate::model::Scenario;
 use crate::ops::EditOp;
+use crate::review::{Evidence, Observation};
 use crate::version::ScenarioVersion;
 
 /// Who made a change. Recorded in history and the audit journal.
@@ -97,6 +100,12 @@ pub struct HistoryEntry {
     #[schemars(with = "String")]
     pub at: OffsetDateTime,
     pub label: String,
+    /// The author's own explanation of the change (an AI's `summary`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Steps the change added, changed, moved or removed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub step_ids: Vec<StepId>,
     /// Ops that were applied.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ops: Vec<EditOp>,
@@ -410,6 +419,117 @@ impl FileStore {
         }
         let skip = entries.len().saturating_sub(limit);
         Ok(entries.split_off(skip))
+    }
+
+    pub(crate) fn append_evidence(&self, id: &ScenarioId, evidence: &Evidence) -> CoreResult<()> {
+        self.checked(id)?;
+        let dir = self.history_dir(id);
+        fs::create_dir_all(&dir)?;
+        let mut line = serde_json::to_vec(evidence)?;
+        line.push(b'\n');
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("evidence.jsonl"))?
+            .write_all(&line)?;
+        Ok(())
+    }
+
+    /// Every evidence record of a scenario, oldest first.
+    pub fn read_evidence(&self, id: &ScenarioId) -> CoreResult<Vec<Evidence>> {
+        self.checked(id)?;
+        let file = match File::open(self.history_dir(id).join("evidence.jsonl")) {
+            Ok(f) => f,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e.into()),
+        };
+        let mut out = Vec::new();
+        for line in BufReader::new(file).lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<Evidence>(&line) {
+                Ok(e) => out.push(e),
+                Err(e) => tracing::warn!(error = %e, "skipping corrupt evidence line"),
+            }
+        }
+        Ok(out)
+    }
+
+    fn observations_dir(&self) -> PathBuf {
+        self.local.join("observations")
+    }
+
+    /// Folder of one observation's files.
+    pub fn observation_dir(&self, id: &ObservationId) -> CoreResult<PathBuf> {
+        if !id.is_well_formed() {
+            return Err(CoreError::ObservationNotFound(id.clone()));
+        }
+        Ok(self.observations_dir().join(id.as_str()))
+    }
+
+    /// Writes an observation and its files (`(file name, bytes)`).
+    pub(crate) fn save_observation(
+        &self,
+        observation: &Observation,
+        files: &[(String, Vec<u8>)],
+    ) -> CoreResult<()> {
+        let dir = self.observation_dir(&observation.id)?;
+        fs::create_dir_all(&dir)?;
+        for (name, bytes) in files {
+            write_atomic(&dir.join(name), bytes)?;
+        }
+        self.write_observation(observation)
+    }
+
+    pub(crate) fn write_observation(&self, observation: &Observation) -> CoreResult<()> {
+        let dir = self.observation_dir(&observation.id)?;
+        let mut json = serde_json::to_vec_pretty(observation)?;
+        json.push(b'\n');
+        write_atomic(&dir.join("observation.json"), &json)
+    }
+
+    pub fn load_observation(&self, id: &ObservationId) -> CoreResult<Observation> {
+        let path = self.observation_dir(id)?.join("observation.json");
+        match fs::read(&path) {
+            Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                Err(CoreError::ObservationNotFound(id.clone()))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Deletes observations no edit referred to that are older than
+    /// `max_age`. Returns how many were deleted.
+    pub(crate) fn prune_observations(&self, max_age: time::Duration) -> CoreResult<usize> {
+        let entries = match fs::read_dir(self.observations_dir()) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(0),
+            Err(e) => return Err(e.into()),
+        };
+        let cutoff = OffsetDateTime::now_utc() - max_age;
+        let mut removed = 0;
+        for entry in entries {
+            let path = entry?.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let id = ObservationId::new(name);
+            let stale = match self.load_observation(&id) {
+                Ok(o) => o.linked.is_empty() && o.at < cutoff,
+                // A folder without a readable observation.json: an
+                // interrupted write. Judge it by its age.
+                Err(_) => fs::metadata(&path)
+                    .and_then(|m| m.modified())
+                    .is_ok_and(|t| OffsetDateTime::from(t) < cutoff),
+            };
+            if stale && fs::remove_dir_all(&path).is_ok() {
+                removed += 1;
+            }
+        }
+        Ok(removed)
     }
 
     fn versions_dir(&self, id: &ScenarioId) -> PathBuf {

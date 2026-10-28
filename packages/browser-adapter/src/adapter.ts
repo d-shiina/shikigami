@@ -403,6 +403,20 @@ export class Adapter {
     const root = params.target ? locate(page, params.target as Target) : page.locator("body");
     const snapshot = await this.redact(session, await root.ariaSnapshot());
     const result: Record<string, unknown> = { url: page.url(), title: await page.title(), snapshot };
+    // Review evidence: the visible part of the page, secrets blacked out as in browser.screenshot.
+    // Best effort: a page that cannot be captured still gets its tree.
+    if (typeof params.screenshotPath === "string" && params.screenshotPath) {
+      await page
+        .screenshot({
+          path: params.screenshotPath,
+          type: "jpeg",
+          quality: 70,
+          mask: [page.locator(PASSWORD_FIELDS), ...session.secretFields],
+          maskColor: "#000",
+          timeout: 10_000,
+        })
+        .catch(() => {});
+    }
     if (await page.locator(PASSWORD_FIELDS).first().isVisible().catch(() => false)) {
       result.login = {
         site: originOf(page.url()),

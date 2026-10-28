@@ -16,6 +16,8 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
    - 追加・変更・削除・移動は `add_step` / `update_step` / `remove_step` / `move_step`。
    - 関連する複数の変更は `update_scenario` の `ops` にまとめると 1 リビジョン（人間の Undo 1 回分）になる。
    - 書き込み系には毎回 `expectedRevision`（直前に読んだ値）を付ける。
+   - 書き込み系には毎回 `summary`（何をなぜ変えたか。1〜2 文、日本語でよい）を付ける。人が Studio のレビューで読む。
+   - `inspect_page` / `inspect_ui` / `test_step` が返す `observationId` のうち、その変更の根拠にした画面を `observations` に渡す。人は AI が見た画面（ツリー・スクリーンショット）を手順の横で確認できる。
 4. **検証する**：`validate_scenario` でエラーが 0 になるまで直す。各 issue の `hint` に直し方（候補の名前、必須・使える params など）が書いてあるので、それに従う。下書きは不正でも保存されるが、エラーがあると実行できない（`VALIDATION_FAILED`）。
 5. **実行して確かめる**：`run_scenario`（`waitMs` を付けると完了まで待つ）→ 失敗したら `get_run_logs` で失敗ステップ ID とエラーコードを見て直す。
 6. **報告する**：何を変えたか（ステップ名・ID）、検証結果、実行結果をユーザーに伝える。
@@ -24,6 +26,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 
 - `REVISION_CONFLICT` は、人間（Studio）や別のクライアントが先に変更したという意味。**上書きしない。** `get_scenario` で読み直し、相手の変更を残したまま自分の変更をやり直す。
 - 変更履歴は `get_history` で見られる（誰が・いつ・何を）。人間の変更を勝手に元に戻さない。
+- `get_scenario` に `feedback` が付いていたら、人が Studio のレビューで差し戻したということ。`reason` と `steps`（ステップごとの指摘）に沿って直し、`summary` に「差し戻しに対応：…」と書く。全体は `get_review` で見られる（最後の承認以降の変更・テスト実行・根拠の画面・レビュー）。
 - `undo` / `redo` は Studio と共通の 1 本のスタック。最新の変更が人間のものなら、ユーザーに確認してから戻す。
 - `delete_scenario` はユーザーが明示的に削除を頼んだときだけ使う（ゴミ箱へ移動。`expectedRevision` 必須）。
 

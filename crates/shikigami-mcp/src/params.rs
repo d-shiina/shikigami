@@ -39,6 +39,16 @@ pub struct CreateScenarioParams {
     pub steps: Vec<Step>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// One or two sentences for the human who reviews your change in Studio:
+    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
+    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// observationId values from inspect_page / inspect_ui / test_step that
+    /// this change is based on. The screens are kept as evidence next to the
+    /// steps you touched so the reviewer can see what you saw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -51,6 +61,16 @@ pub struct UpdateScenarioParams {
     pub expected_revision: Option<u64>,
     /// Edit operations applied atomically as one revision (one undo step).
     pub ops: Vec<EditOp>,
+    /// One or two sentences for the human who reviews your change in Studio:
+    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
+    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// observationId values from inspect_page / inspect_ui / test_step that
+    /// this change is based on. The screens are kept as evidence next to the
+    /// steps you touched so the reviewer can see what you saw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -64,6 +84,16 @@ pub struct AddStepParams {
     /// Where to insert. Omit to append at the top level.
     #[serde(default)]
     pub position: Position,
+    /// One or two sentences for the human who reviews your change in Studio:
+    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
+    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// observationId values from inspect_page / inspect_ui / test_step that
+    /// this change is based on. The screens are kept as evidence next to the
+    /// steps you touched so the reviewer can see what you saw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -75,6 +105,16 @@ pub struct UpdateStepParams {
     pub step_id: String,
     /// Partial update. `params` is a JSON Merge Patch (null removes a key).
     pub patch: StepPatch,
+    /// One or two sentences for the human who reviews your change in Studio:
+    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
+    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// observationId values from inspect_page / inspect_ui / test_step that
+    /// this change is based on. The screens are kept as evidence next to the
+    /// steps you touched so the reviewer can see what you saw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -85,6 +125,16 @@ pub struct RemoveStepParams {
     pub expected_revision: Option<u64>,
     /// Step to remove (its children are removed too).
     pub step_id: String,
+    /// One or two sentences for the human who reviews your change in Studio:
+    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
+    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// observationId values from inspect_page / inspect_ui / test_step that
+    /// this change is based on. The screens are kept as evidence next to the
+    /// steps you touched so the reviewer can see what you saw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -96,6 +146,16 @@ pub struct MoveStepParams {
     pub step_id: String,
     /// New location. `index` is counted after removing the step.
     pub position: Position,
+    /// One or two sentences for the human who reviews your change in Studio:
+    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
+    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// observationId values from inspect_page / inspect_ui / test_step that
+    /// this change is based on. The screens are kept as evidence next to the
+    /// steps you touched so the reviewer can see what you saw.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -122,6 +182,16 @@ pub struct HistoryParams {
     /// Most recent entries to return (default 20).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GetReviewParams {
+    pub scenario_id: String,
+    /// List changes and evidence after this revision. Default: the last
+    /// revision a human approved (so you see everything still unreviewed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_revision: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -191,6 +261,10 @@ pub struct InspectPageParams {
     /// Limit the snapshot to one element, e.g. { "role": "table", "name": "受注" }.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<Value>,
+    /// Keep a screenshot with the observation for the human reviewer
+    /// (default true; password fields are blacked out). It is not returned to you.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screenshot: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

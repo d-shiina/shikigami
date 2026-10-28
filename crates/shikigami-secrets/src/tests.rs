@@ -41,6 +41,18 @@ fn values_are_encrypted_at_rest() {
 }
 
 #[test]
+fn mask_replaces_registered_passwords() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    assert_eq!(v.mask("no secrets yet"), "no secrets yet");
+    v.set(input("受注システム")).unwrap();
+    assert_eq!(
+        v.mask("textbox \"パスワード\" value=hunter2 / demo"),
+        "textbox \"パスワード\" value=*** / demo"
+    );
+}
+
+#[test]
 fn updates_keep_values_that_are_not_given() {
     let dir = tempfile::tempdir().unwrap();
     let v = vault(dir.path());

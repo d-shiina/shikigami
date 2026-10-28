@@ -8,10 +8,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, CoreResult};
-use crate::ids::ScenarioId;
+use crate::ids::{ObservationId, ScenarioId};
 use crate::model::{Scenario, ScenarioSummary, Step, VariableDef, now};
 use crate::ops::{self, EditOp};
 use crate::registry::StepRegistry;
+use crate::review::{
+    self, Evidence, EvidenceDetail, NewObservation, NewReview, Observation, ObservationContent,
+    ObservationLink, ReviewTimeline, ReviewVerdict, TestRun,
+};
 use crate::store::{Actor, ChangeKind, FileStore, HistoryEntry, UNDO_LIMIT, UndoState};
 use crate::validate::{ValidationReport, Validator};
 use crate::version::{
@@ -32,6 +36,19 @@ pub struct NewScenario {
     pub steps: Vec<Step>,
     #[serde(default)]
     pub tags: Vec<String>,
+}
+
+/// What the author of a change says about it (MCP edit tools).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeNote {
+    /// Why the change was made, in the author's words. Kept in the journal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Observations (screens looked at with inspect_* / test_step) the change
+    /// is based on. They are linked to the new revision and its steps.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<ObservationId>,
 }
 
 /// Result of a committed change.
@@ -152,12 +169,27 @@ impl ScenarioService {
     // -- lifecycle --------------------------------------------------------
 
     pub fn create(&self, input: NewScenario, actor: Actor) -> CoreResult<EditOutcome> {
+        self.create_noted(input, actor, ChangeNote::default())
+    }
+
+    /// [`Self::create`] with the author's summary and observations.
+    pub fn create_noted(
+        &self,
+        input: NewScenario,
+        actor: Actor,
+        note: ChangeNote,
+    ) -> CoreResult<EditOutcome> {
+        self.check_observations(&note.observations)?;
         let mut scenario = Scenario::new(input.name);
         scenario.description = input.description;
         scenario.variables = input.variables;
         scenario.steps = input.steps;
         scenario.metadata.tags = input.tags;
-        self.insert_new(scenario, actor, "create scenario")
+        let summary = review::clean_text(note.summary, review::MAX_SUMMARY_CHARS);
+        let outcome = self.insert_new(scenario, actor.clone(), "create scenario", summary)?;
+        let steps: Vec<_> = outcome.scenario.walk().map(|s| s.id.clone()).collect();
+        self.link_observations(&outcome.scenario, &steps, &actor, &note.observations);
+        Ok(outcome)
     }
 
     /// Imports a complete document (e.g. from a file). Keeps its ID unless it
@@ -170,7 +202,7 @@ impl ScenarioService {
         let now = now();
         scenario.metadata.created_at.get_or_insert(now);
         scenario.metadata.updated_at = Some(now);
-        self.insert_new(scenario, actor, "import scenario")
+        self.insert_new(scenario, actor, "import scenario", None)
     }
 
     pub fn duplicate(
@@ -186,7 +218,7 @@ impl ScenarioService {
         copy.steps = source.steps;
         copy.settings = source.settings;
         copy.metadata.tags = source.metadata.tags;
-        self.insert_new(copy, actor, "duplicate scenario")
+        self.insert_new(copy, actor, "duplicate scenario", None)
     }
 
     fn insert_new(
@@ -194,6 +226,7 @@ impl ScenarioService {
         mut scenario: Scenario,
         actor: Actor,
         label: &str,
+        summary: Option<String>,
     ) -> CoreResult<EditOutcome> {
         if !scenario.id.is_well_formed() {
             return Err(CoreError::InvalidScenarioId(scenario.id.to_string()));
@@ -219,6 +252,8 @@ impl ScenarioService {
             actor: actor.clone(),
             at: now(),
             label: label.to_owned(),
+            summary,
+            step_ids: Vec::new(),
             ops: Vec::new(),
             inverse: Vec::new(),
         };
@@ -258,6 +293,8 @@ impl ScenarioService {
             actor: actor.clone(),
             at: now(),
             label: "delete scenario".into(),
+            summary: None,
+            step_ids: Vec::new(),
             ops: Vec::new(),
             inverse: Vec::new(),
         };
@@ -286,6 +323,20 @@ impl ScenarioService {
         ops: Vec<EditOp>,
         actor: Actor,
     ) -> CoreResult<EditOutcome> {
+        self.edit_noted(id, expected_revision, ops, actor, ChangeNote::default())
+    }
+
+    /// [`Self::edit`] with the author's summary and the observations the
+    /// change is based on (linked to the new revision and touched steps).
+    pub fn edit_noted(
+        &self,
+        id: &ScenarioId,
+        expected_revision: Option<u64>,
+        ops: Vec<EditOp>,
+        actor: Actor,
+        note: ChangeNote,
+    ) -> CoreResult<EditOutcome> {
+        self.check_observations(&note.observations)?;
         if ops.is_empty() {
             return Err(CoreError::InvalidEdit("no operations given".into()));
         }
@@ -294,13 +345,17 @@ impl ScenarioService {
         } else {
             format!("{} edits", ops.len())
         };
-        self.commit(
+        let summary = review::clean_text(note.summary, review::MAX_SUMMARY_CHARS);
+        let mut step_ids = Vec::new();
+        let outcome = self.commit(
             id,
             expected_revision,
-            actor,
+            actor.clone(),
             ChangeKind::Edit,
+            summary,
             |_, current| {
                 let (next, inverse) = ops::apply_all(current, ops.clone())?;
+                step_ids = review::touched_steps(&inverse);
                 Ok(Commit {
                     next,
                     applied: ops,
@@ -308,7 +363,9 @@ impl ScenarioService {
                     label,
                 })
             },
-        )
+        )?;
+        self.link_observations(&outcome.scenario, &step_ids, &actor, &note.observations);
+        Ok(outcome)
     }
 
     pub fn undo(
@@ -322,6 +379,7 @@ impl ScenarioService {
             expected_revision,
             actor,
             ChangeKind::Undo,
+            None,
             |undo, current| {
                 let entry = undo.undo.pop().ok_or(CoreError::NothingTo("undo"))?;
                 let (next, redo_ops) = ops::apply_all(current, entry.inverse.clone())?;
@@ -346,6 +404,7 @@ impl ScenarioService {
             expected_revision,
             actor,
             ChangeKind::Redo,
+            None,
             |undo, current| {
                 let entry = undo.redo.pop().ok_or(CoreError::NothingTo("redo"))?;
                 let (next, undo_ops) = ops::apply_all(current, entry.inverse.clone())?;
@@ -492,6 +551,7 @@ impl ScenarioService {
             expected_revision.or(Some(current.revision)),
             actor,
             ChangeKind::Edit,
+            None,
             |_, current| {
                 let (next, inverse) = ops::apply_all(current, ops.clone())?;
                 Ok(Commit {
@@ -521,6 +581,229 @@ impl ScenarioService {
             .load_versions(id)?
             .last()
             .map_or(1, |v| v.number + 1))
+    }
+
+    // -- review evidence --------------------------------------------------
+
+    /// Stores what an AI saw on screen (inspect_* / test_step) so a later
+    /// edit can name it as its basis. Unused observations are deleted after
+    /// [`review::UNLINKED_OBSERVATION_DAYS`] days.
+    pub fn record_observation(
+        &self,
+        input: NewObservation,
+        actor: Actor,
+    ) -> CoreResult<Observation> {
+        if let Err(e) = self
+            .store
+            .prune_observations(time::Duration::days(review::UNLINKED_OBSERVATION_DAYS))
+        {
+            tracing::warn!(error = %e, "failed to prune old observations");
+        }
+        let mut observation = Observation {
+            id: ObservationId::generate(),
+            source: input.source,
+            at: now(),
+            actor,
+            title: review::clean_text(Some(input.title), 200).unwrap_or_default(),
+            request: input.request,
+            status: input.status,
+            output: input.output,
+            tree_file: None,
+            screenshot_file: None,
+            notes: Vec::new(),
+            linked: Vec::new(),
+        };
+        let mut files = Vec::new();
+        if let Some(mut tree) = input.tree {
+            if review::cut_bytes(&mut tree, review::MAX_TREE_BYTES) {
+                observation.notes.push(format!(
+                    "UI tree cut at {} KB",
+                    review::MAX_TREE_BYTES / 1024
+                ));
+            }
+            observation.tree_file = Some("tree.txt".into());
+            files.push(("tree.txt".to_owned(), tree.into_bytes()));
+        }
+        if let Some(bytes) = input.screenshot {
+            match review::image_extension(&bytes) {
+                _ if bytes.len() > review::MAX_SCREENSHOT_BYTES => observation.notes.push(format!(
+                    "screenshot left out: larger than {} MB",
+                    review::MAX_SCREENSHOT_BYTES / (1024 * 1024)
+                )),
+                Some(ext) => {
+                    let name = format!("screenshot.{ext}");
+                    observation.screenshot_file = Some(name.clone());
+                    files.push((name, bytes));
+                }
+                None => observation
+                    .notes
+                    .push("screenshot left out: not a PNG or JPEG image".into()),
+            }
+        }
+        self.store.save_observation(&observation, &files)?;
+        Ok(observation)
+    }
+
+    /// An observation with its tree text and screenshot (as a data URL).
+    pub fn get_observation(&self, id: &ObservationId) -> CoreResult<ObservationContent> {
+        let observation = self.store.load_observation(id)?;
+        let dir = self.store.observation_dir(id)?;
+        let tree = match &observation.tree_file {
+            Some(name) => {
+                Some(String::from_utf8_lossy(&std::fs::read(dir.join(name))?).into_owned())
+            }
+            None => None,
+        };
+        let screenshot_data_url = match &observation.screenshot_file {
+            Some(name) => {
+                let mime = if name.ends_with(".png") {
+                    "image/png"
+                } else {
+                    "image/jpeg"
+                };
+                let bytes = std::fs::read(dir.join(name))?;
+                Some(format!("data:{mime};base64,{}", review::base64(&bytes)))
+            }
+            None => None,
+        };
+        Ok(ObservationContent {
+            observation,
+            tree,
+            screenshot_data_url,
+        })
+    }
+
+    /// Records a run an AI started to check a revision.
+    pub fn record_test_run(
+        &self,
+        id: &ScenarioId,
+        revision: u64,
+        run: TestRun,
+        actor: Actor,
+    ) -> CoreResult<Evidence> {
+        let evidence = Evidence {
+            revision,
+            at: now(),
+            actor,
+            detail: run.into(),
+        };
+        self.store.append_evidence(id, &evidence)?;
+        Ok(evidence)
+    }
+
+    /// Records a human's verdict on the current revision. Sending a scenario
+    /// back (`rejected`) needs a reason or at least one step note; the AI
+    /// reads it with get_review / get_scenario.
+    pub fn submit_review(
+        &self,
+        id: &ScenarioId,
+        input: NewReview,
+        actor: Actor,
+    ) -> CoreResult<Evidence> {
+        let reason = review::clean_text(Some(input.reason), review::MAX_REVIEW_TEXT_CHARS)
+            .unwrap_or_default();
+        let mut steps = Vec::new();
+        for mut note in input.steps {
+            if let Some(text) = review::clean_text(Some(note.note), review::MAX_REVIEW_TEXT_CHARS) {
+                note.note = text;
+                steps.push(note);
+            }
+        }
+        if input.verdict == ReviewVerdict::Rejected && reason.is_empty() && steps.is_empty() {
+            return Err(CoreError::InvalidEdit(
+                "sending a scenario back needs a reason or a note on a step".into(),
+            ));
+        }
+        let _lock = self.store.lock()?;
+        let current = self.store.load(id)?;
+        check_revision(Some(input.revision), current.revision)?;
+        if let Some(note) = steps
+            .iter()
+            .find(|n| current.find_step(&n.step_id).is_none())
+        {
+            return Err(CoreError::StepNotFound(note.step_id.clone()));
+        }
+        let evidence = Evidence {
+            revision: current.revision,
+            at: now(),
+            actor,
+            detail: EvidenceDetail::Review {
+                verdict: input.verdict,
+                reason,
+                steps,
+            },
+        };
+        self.store.append_evidence(id, &evidence)?;
+        Ok(evidence)
+    }
+
+    /// Changes and evidence after `since` (default: the last approved
+    /// revision), for reviewing what an AI did.
+    pub fn review_timeline(
+        &self,
+        id: &ScenarioId,
+        since: Option<u64>,
+    ) -> CoreResult<ReviewTimeline> {
+        let scenario = self.get(id)?;
+        let journal = self.store.read_journal(id, usize::MAX)?;
+        let evidence = self.store.read_evidence(id)?;
+        Ok(review::timeline(
+            scenario.id,
+            scenario.revision,
+            since,
+            &journal,
+            evidence,
+        ))
+    }
+
+    /// The latest review when it sent the scenario back.
+    pub fn open_feedback(&self, id: &ScenarioId) -> CoreResult<Option<Evidence>> {
+        Ok(review::open_feedback(&self.store.read_evidence(id)?))
+    }
+
+    fn check_observations(&self, ids: &[ObservationId]) -> CoreResult<()> {
+        for id in ids {
+            self.store.load_observation(id)?;
+        }
+        Ok(())
+    }
+
+    /// Links observations to a committed revision. The edit already
+    /// happened, so failures are logged rather than returned.
+    fn link_observations(
+        &self,
+        scenario: &Scenario,
+        step_ids: &[crate::ids::StepId],
+        actor: &Actor,
+        observations: &[ObservationId],
+    ) {
+        for id in observations {
+            let result = self.store.load_observation(id).and_then(|mut o| {
+                o.linked.push(ObservationLink {
+                    scenario_id: scenario.id.clone(),
+                    revision: scenario.revision,
+                });
+                self.store.write_observation(&o)?;
+                self.store.append_evidence(
+                    &scenario.id,
+                    &Evidence {
+                        revision: scenario.revision,
+                        at: now(),
+                        actor: actor.clone(),
+                        detail: EvidenceDetail::Observation {
+                            observation_id: o.id.clone(),
+                            source: o.source,
+                            title: o.title.clone(),
+                            step_ids: step_ids.to_vec(),
+                            has_screenshot: o.screenshot_file.is_some(),
+                        },
+                    },
+                )
+            });
+            if let Err(e) = result {
+                tracing::warn!(observation = %id, error = %e, "failed to link observation");
+            }
+        }
     }
 
     // -- sharing ----------------------------------------------------------
@@ -602,7 +885,7 @@ impl ScenarioService {
         let now = now();
         scenario.metadata.created_at.get_or_insert(now);
         scenario.metadata.updated_at = Some(now);
-        self.insert_new(scenario, actor, "import scenario")
+        self.insert_new(scenario, actor, "import scenario", None)
     }
 
     /// Adds versions whose `uid` is not present yet, renumbered after the
@@ -651,6 +934,7 @@ impl ScenarioService {
         expected_revision: Option<u64>,
         actor: Actor,
         kind: ChangeKind,
+        summary: Option<String>,
         change: impl FnOnce(&mut UndoState, &Scenario) -> CoreResult<Commit>,
     ) -> CoreResult<EditOutcome> {
         let lock = self.store.lock()?;
@@ -690,6 +974,8 @@ impl ScenarioService {
             actor: actor.clone(),
             at: now(),
             label,
+            summary,
+            step_ids: review::touched_steps(&inverse),
             ops: applied,
             inverse,
         };
@@ -1034,6 +1320,77 @@ mod tests {
                 .code(),
             "INVALID_SCENARIO_ID"
         );
+    }
+
+    #[test]
+    fn observations_are_capped_and_unused_ones_expire() {
+        use crate::review::{MAX_TREE_BYTES, NewObservation, ObservationSource};
+        let (_dir, svc) = service();
+        let observe = |tree: String, screenshot: Vec<u8>| {
+            svc.record_observation(
+                NewObservation {
+                    source: ObservationSource::InspectUi,
+                    title: "請求 - 明細".into(),
+                    request: serde_json::json!({ "window": { "process": "billing.exe" } }),
+                    status: None,
+                    output: None,
+                    tree: Some(tree),
+                    screenshot: Some(screenshot),
+                },
+                mcp(),
+            )
+            .expect("observe")
+        };
+        let big = observe("あ".repeat(MAX_TREE_BYTES), b"not an image".to_vec());
+        assert_eq!(big.screenshot_file, None);
+        assert_eq!(big.notes.len(), 2, "{:?}", big.notes);
+        let content = svc.get_observation(&big.id).expect("content");
+        assert!(content.tree.expect("tree").len() <= MAX_TREE_BYTES);
+
+        let png = b"\x89PNG\r\n\x1a\nrest".to_vec();
+        let small = observe("- button \"保存\"".into(), png);
+        let content = svc.get_observation(&small.id).expect("content");
+        assert!(
+            content
+                .screenshot_data_url
+                .expect("screenshot")
+                .starts_with("data:image/png;base64,iVBORw0K")
+        );
+
+        // An old observation no edit used is deleted; a linked one stays.
+        let id = svc
+            .create_noted(
+                NewScenario {
+                    name: "s".into(),
+                    ..Default::default()
+                },
+                mcp(),
+                ChangeNote {
+                    summary: None,
+                    observations: vec![small.id.clone()],
+                },
+            )
+            .expect("create")
+            .scenario
+            .id;
+        for o in [&big, &small] {
+            let mut old = svc.store().load_observation(&o.id).expect("load");
+            old.at -= time::Duration::days(30);
+            svc.store().write_observation(&old).expect("age");
+        }
+        assert_eq!(
+            svc.store()
+                .prune_observations(time::Duration::days(3))
+                .expect("prune"),
+            1
+        );
+        assert_eq!(
+            svc.get_observation(&big.id).expect_err("gone").code(),
+            "OBSERVATION_NOT_FOUND"
+        );
+        let kept = svc.get_observation(&small.id).expect("kept").observation;
+        assert_eq!(kept.linked[0].scenario_id, id);
+        assert_eq!(kept.linked[0].revision, 1);
     }
 
     #[test]

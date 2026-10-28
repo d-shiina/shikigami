@@ -7,7 +7,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::ids::{ScenarioId, StepId};
+use crate::ids::{ObservationId, ScenarioId, StepId};
 use crate::validate::ValidationReport;
 
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -46,6 +46,9 @@ pub enum CoreError {
         name: String,
     },
 
+    #[error("observation not found: {0}")]
+    ObservationNotFound(ObservationId),
+
     #[error("invalid edit: {0}")]
     InvalidEdit(String),
 
@@ -77,6 +80,7 @@ impl CoreError {
             Self::RevisionConflict { .. } => "REVISION_CONFLICT",
             Self::VersionNotFound { .. } => "VERSION_NOT_FOUND",
             Self::ImportConflict { .. } => "IMPORT_CONFLICT",
+            Self::ObservationNotFound(_) => "OBSERVATION_NOT_FOUND",
             Self::InvalidEdit(_) => "INVALID_EDIT",
             Self::NothingTo(_) => "NOTHING_TO_UNDO_OR_REDO",
             Self::UnsupportedSchemaVersion { .. } => "UNSUPPORTED_SCHEMA_VERSION",
@@ -104,6 +108,10 @@ impl CoreError {
                 "scenario_id": scenario_id,
                 "name": name,
                 "hint": "\"update\" applies the imported content to the existing scenario as one undoable edit and adds its versions; \"copy\" imports it as a new scenario with a new ID",
+            })),
+            Self::ObservationNotFound(id) => Some(serde_json::json!({
+                "observation_id": id,
+                "hint": "Use the observationId returned by inspect_page, inspect_ui or test_step in this session; unused observations are deleted after a few days.",
             })),
             Self::ScenarioNotFound(id) | Self::ScenarioAlreadyExists(id) => {
                 Some(serde_json::json!({ "scenario_id": id }))
