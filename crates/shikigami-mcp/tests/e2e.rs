@@ -869,8 +869,53 @@ async fn publishing_and_the_policy_keep_people_in_charge() {
         .await;
     assert_eq!(e["code"], "APPROVAL_USED");
 
+    // An approval covers the called scenarios as they were: editing the
+    // callee afterwards makes it not match.
+    let call = json!({ "type": "scenario.call", "params": { "scenario": id } });
+    let (_, e) = h.call("test_step", json!({ "step": call })).await;
+    assert_eq!(e["code"], "APPROVAL_REQUIRED", "{e}");
+    let approval = e["details"]["approvalId"].as_str().unwrap().to_owned();
+    approvals
+        .decide(&ApprovalId::new(approval.as_str()), true, person())
+        .unwrap();
+    studio
+        .edit(
+            &ScenarioId::new(id.as_str()),
+            None,
+            vec![shikigami_core::EditOp::AddStep {
+                step: shikigami_core::Step::new("log.message").with_param("message", "後から"),
+                position: shikigami_core::Position::default(),
+            }],
+            Actor::new(ActorKind::Mcp),
+        )
+        .unwrap();
+    let (_, e) = h
+        .call("test_step", json!({ "step": call, "approvalId": approval }))
+        .await;
+    assert_eq!(e["code"], "APPROVAL_MISMATCH");
+
     // Deleting asks by default; a refusal is final.
     std::fs::remove_file(&policy_path).unwrap();
+    // A dangerous step inside a group counts, not just the group.
+    let (_, e) = h
+        .call(
+            "test_step",
+            json!({ "step": {
+                "type": "control.group",
+                "params": {},
+                "blocks": { "body": [ { "type": "file.delete", "params": { "path": "C:\\x.txt" } } ] }
+            } }),
+        )
+        .await;
+    assert_eq!(e["code"], "APPROVAL_REQUIRED");
+    assert_eq!(e["details"]["request"]["risk"], "dangerous");
+    let (_, e) = h
+        .call(
+            "test_step",
+            json!({ "step": { "type": "no.such", "params": {} } }),
+        )
+        .await;
+    assert_eq!(e["code"], "UNKNOWN_STEP_TYPE");
     let rev = got["scenario"]["revision"].as_u64().unwrap();
     let (_, e) = h
         .call(

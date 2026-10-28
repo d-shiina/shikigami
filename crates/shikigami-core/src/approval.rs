@@ -227,6 +227,7 @@ impl ApprovalStore {
             match parsed {
                 Ok(r) if r.expired(now) => {
                     let _ = fs::remove_file(&path);
+                    let _ = fs::remove_file(path.with_extension("used"));
                 }
                 Ok(r) => out.push(r),
                 Err(e) => {
@@ -303,17 +304,36 @@ impl ApprovalStore {
         match request.status {
             ApprovalStatus::Pending => Ok(Redeem::Pending(request)),
             ApprovalStatus::Denied => Ok(Redeem::Denied(request)),
-            ApprovalStatus::Used => Err(CoreError::Rejected {
-                code: "APPROVAL_USED",
-                message: format!("approval {id} was already used"),
-                hint: Some("One approval runs the action once. Repeat the call without approvalId to ask again.".into()),
-            }),
+            ApprovalStatus::Used => Err(used(id)),
             ApprovalStatus::Approved => {
+                // Claim it atomically: of two servers redeeming at once,
+                // only the one that creates the marker runs the action.
+                let marker = self.path(id)?.with_extension("used");
+                match fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&marker)
+                {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == ErrorKind::AlreadyExists => return Err(used(id)),
+                    Err(e) => return Err(e.into()),
+                }
                 request.status = ApprovalStatus::Used;
                 self.save(&request)?;
                 Ok(Redeem::Granted)
             }
         }
+    }
+}
+
+fn used(id: &ApprovalId) -> CoreError {
+    CoreError::Rejected {
+        code: "APPROVAL_USED",
+        message: format!("approval {id} was already used"),
+        hint: Some(
+            "One approval runs the action once. Repeat the call without approvalId to ask again."
+                .into(),
+        ),
     }
 }
 
@@ -389,6 +409,34 @@ mod tests {
                 .code(),
             "APPROVAL_USED"
         );
+    }
+
+    #[test]
+    fn two_servers_cannot_both_use_one_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let subject = json!({ "x": 1 });
+        let r = ApprovalStore::new(dir.path())
+            .request(input(subject.clone()))
+            .unwrap();
+        ApprovalStore::new(dir.path())
+            .decide(&r.id, true, Actor::new(ActorKind::Studio))
+            .unwrap();
+        // Both read `Approved` before either saved `Used`.
+        let a = ApprovalStore::new(dir.path());
+        let b = ApprovalStore::new(dir.path());
+        let mut granted = 0;
+        for store in [&a, &b] {
+            match store.redeem(&r.id, AiAction::TestStep, &subject) {
+                Ok(Redeem::Granted) => granted += 1,
+                Err(e) => assert_eq!(e.code(), "APPROVAL_USED"),
+                Ok(other) => panic!("unexpected {other:?}"),
+            }
+            // Undo the status write so the second store sees `Approved` too.
+            let mut stale = store.get(&r.id).unwrap();
+            stale.status = ApprovalStatus::Approved;
+            store.save(&stale).unwrap();
+        }
+        assert_eq!(granted, 1);
     }
 
     #[test]

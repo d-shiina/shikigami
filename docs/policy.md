@@ -66,7 +66,7 @@
 | `sites` | 空（どこでも） | `browser.open`・`http.request`（と、`targets` で宣言したプラグインのステップ）が開いてよいサイト。オリジン（`https://example.com`、ポート付きも可）か、サブドメインすべての `https://*.example.com`。http と https は別。`about:blank` はいつでも可、`file:` などは不可 |
 | `apps` | 空（どれでも） | `desktop.launch`・`process.run` が起動してよいプログラム。フォルダ付きならそのパスだけ、ファイル名だけならどのフォルダでも。大文字小文字・`/` と `\`・`.exe` の有無は区別しない |
 | `ai.runScenario` | safe/interactive は allow、dangerous は ask | AI の `run_scenario`。実行しうるステップ（呼び出し先を含む）のいちばん高い危険度で決まる |
-| `ai.testStep` | 同上 | AI の `test_step`。`scenario.call` は呼び出し先のいちばん高い危険度 |
+| `ai.testStep` | 同上 | AI の `test_step`。ブロックの中のステップと、`scenario.call` の呼び出し先を含めたいちばん高い危険度 |
 | `ai.deleteScenario` | ask | AI の `delete_scenario` |
 | `scenarios.<id>.aiRun` | なし | このシナリオ（と、これを呼ぶ実行・試行）だけ厳しくする。全体の規則より緩くはならない |
 | `scenarios.<id>.unattended` | true | false なら `shikigami run` で動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
@@ -87,7 +87,7 @@ Runtime が、テンプレートを展開した後の params をステップの�
 
 1. Studio の上部に「✋ AI が承認を求めています：ステップを 1 つ試す（file.delete・危険な操作）」が出ます。「内容」で実際に動く内容（ステップ・入力・リビジョン。シークレットの値は伏せ字）、AI の理由（`approvalReason`）を見て「許可する」か「断る」。CLI でも `shikigami approval list` / `approve <id>` / `deny <id>`。
 2. AI は同じ呼び出しに `approvalId` を付けて呼び直します（`approvalWaitMs` で答えを待てます。最初の呼び出しに付けてもよい）。
-3. 許可した内容とまったく同じ操作が **1 回だけ** 動きます。内容が違えば `APPROVAL_MISMATCH`、使用済みは `APPROVAL_USED`、断られたら `APPROVAL_DENIED`、`deny` の操作は `POLICY_DENIED`。
+3. 許可した内容とまったく同じ操作が **1 回だけ** 動きます。内容が違えば（呼び出し先のシナリオが後から変わった場合も）`APPROVAL_MISMATCH`、使用済みは `APPROVAL_USED`、断られたら `APPROVAL_DENIED`、`deny` の操作は `POLICY_DENIED`。
 
 依頼は 30 分、許可は 10 分で失効します。依頼は PC ごとの領域（`approvals/`、MCP の監査ログの隣）に置きます。AI クライアント・MCP サーバー・答える Studio は同じ PC で動く前提です。AI は自分の依頼に答えられません（`APPROVAL_NOT_ALLOWED`）。
 

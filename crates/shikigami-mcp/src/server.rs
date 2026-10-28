@@ -452,41 +452,52 @@ impl ShikigamiMcp {
         }
     }
 
-    /// The policy decision for test_step: the step's risk, or for a
-    /// `scenario.call` the riskiest step of what it calls.
+    /// The policy decision for test_step: the riskiest step it can run,
+    /// counting nested blocks and every scenario its calls reach (unknown
+    /// step types count as dangerous). Returns the called scenarios too, so
+    /// the test runs exactly the content the decision (and an approval) saw.
     fn test_step_gate(
         &self,
         policy: &Policy,
         step: &shikigami_core::Step,
-    ) -> Option<Gate<'static>> {
-        let def = self.inner.runtime.registry().get(&step.step_type)?;
-        let (risk, step_types, ids) = match shikigami_core::call::call_target(step) {
-            Some(target) => {
-                let callee = self.svc().get(&target).ok()?;
-                let subs = self.svc().subscenarios(&callee).ok()?;
-                let (risk, types) = self
-                    .svc()
-                    .risk_of(std::iter::once(&callee).chain(subs.iter().map(|s| &s.scenario)));
-                let mut ids: Vec<String> = vec![callee.id.to_string()];
-                ids.extend(subs.iter().map(|s| s.scenario.id.to_string()));
-                (risk, types, ids)
-            }
-            None => (def.risk, vec![step.step_type.clone()], Vec::new()),
-        };
-        let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
-        Some(Gate {
+    ) -> Result<(Gate<'static>, Vec<shikigami_core::Subscenario>), ErrorPayload> {
+        // A typo is an error to fix, not an action to approve.
+        if self.inner.runtime.registry().get(&step.step_type).is_none() {
+            return Err(err(
+                "UNKNOWN_STEP_TYPE",
+                format!(
+                    "unknown step type '{}' (see list_step_types)",
+                    step.step_type
+                ),
+            ));
+        }
+        let mut wrapper = shikigami_core::Scenario::new("test_step");
+        wrapper.steps = vec![step.clone()];
+        let subs = self.svc().subscenarios(&wrapper)?;
+        let (risk, step_types) = self
+            .svc()
+            .risk_of(std::iter::once(&wrapper).chain(subs.iter().map(|s| &s.scenario)));
+        let ids: Vec<&str> = subs.iter().map(|s| s.scenario.id.as_str()).collect();
+        let gate = Gate {
             action: AiAction::TestStep,
-            decision: policy.ai_test_step(risk, &id_refs),
+            decision: policy.ai_test_step(risk, &ids),
             risk,
-            step_types: if risk == RiskLevel::Safe {
-                Vec::new()
-            } else {
-                step_types
-            },
+            step_types,
             scenario: None,
-            subject: json!({ "step": step }),
-        })
+            subject: json!({ "step": step, "scenarios": snapshot_ids(&subs) }),
+        };
+        Ok((gate, subs))
     }
+}
+
+/// The called scenarios an approval covers: changing any of them after the
+/// request makes the approval not match.
+fn snapshot_ids(subs: &[shikigami_core::Subscenario]) -> Value {
+    Value::Array(
+        subs.iter()
+            .map(|s| json!({ "id": s.scenario.id, "revision": s.scenario.revision, "version": s.version }))
+            .collect(),
+    )
 }
 
 fn actor(peer: &Peer<RoleServer>) -> Actor {
@@ -1353,23 +1364,21 @@ impl ShikigamiMcp {
         peer: Peer<RoleServer>,
         Parameters(p): Parameters<TestStepParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let gate = match self.policy() {
-            Ok(policy) => self.test_step_gate(&policy, &p.step).map(Ok),
-            Err(e) => Some(Err(e)),
+        let gated = match self
+            .policy()
+            .and_then(|policy| self.test_step_gate(&policy, &p.step))
+        {
+            Ok((gate, subs)) => self.gate(&peer, gate, &p.approval).await.map(|()| subs),
+            Err(e) => Err(e),
         };
-        if let Some(gate) = gate {
-            let allowed = match gate {
-                Ok(gate) => self.gate(&peer, gate, &p.approval).await,
-                Err(e) => Err(e),
-            };
-            if let Err(e) = allowed {
-                return self.finish("test_step", &peer, None, Err(e));
-            }
-        }
+        let subscenarios = match gated {
+            Ok(subs) => subs,
+            Err(e) => return self.finish("test_step", &peer, None, Err(e)),
+        };
         let request = to_value(&p.step);
         let shot = ScreenshotFile::new(p.step.step_type.starts_with("browser."));
         let outcome = self
-            .test_step_inner(p.step, shot.path())
+            .test_step_inner(p.step, subscenarios, shot.path())
             .await
             .map(|mut result| {
                 let id = self.observe(
@@ -1539,6 +1548,7 @@ impl ShikigamiMcp {
     async fn test_step_inner(
         &self,
         mut step: shikigami_core::Step,
+        subscenarios: Vec<shikigami_core::Subscenario>,
         screenshot_path: Option<String>,
     ) -> Outcome {
         const OUTPUT: &str = "output";
@@ -1594,7 +1604,6 @@ impl ShikigamiMcp {
             .split_once('.')
             .map(|(prefix, _)| prefix.to_owned());
         scenario.steps = vec![step];
-        let subscenarios = self.svc().subscenarios(&scenario)?;
 
         let handle = self
             .inner
@@ -1846,8 +1855,10 @@ impl ShikigamiMcp {
                 subject: json!({
                     "scenarioId": scenario.id,
                     "revision": scenario.revision,
+                    "version": version,
                     "published": published,
                     "inputs": p.inputs,
+                    "scenarios": snapshot_ids(&subscenarios),
                 }),
             },
             &p.approval,

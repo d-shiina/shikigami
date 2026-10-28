@@ -252,7 +252,11 @@ impl ScenarioService {
         let mut level = RiskLevel::Safe;
         let mut types: Vec<String> = Vec::new();
         for scenario in scenarios {
-            for step in scenario.walk() {
+            // A call is as risky as what it calls, which is counted itself.
+            for step in scenario
+                .walk()
+                .filter(|s| s.step_type != crate::registry::scenario::CALL)
+            {
                 let risk = self
                     .registry()
                     .get(&step.step_type)
