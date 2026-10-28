@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { TYPE_COLOR } from "../lib/nodeRows";
+import { valueText } from "../lib/runValues";
+import { findStep, type VariableChange } from "../store";
 
 const TYPES = Object.keys(t.varType) as VarType[];
 const DIRECTIONS = Object.keys(t.direction) as VarDirection[];
@@ -26,7 +28,45 @@ const GROUPS: { title: string; directions: VarDirection[]; hint: string }[] = [
   { title: "内部", directions: ["local"], hint: "シナリオの中だけで使う値" },
 ];
 
+/** How a variable changed during the last run: when, by which step, to what. */
+function RunTrace({ changes }: { changes: VariableChange[] }) {
+  const scenario = useStudio((s) => s.scenario);
+  const select = useStudio((s) => s.select);
+  if (changes.length === 0) return <p className="text-[11px] text-slate-400">この実行では変わっていません</p>;
+  const start = Date.parse(changes[0]?.at ?? "");
+  return (
+    <ol className="relative space-y-1 border-l border-slate-200 pl-3">
+      {changes.map((c) => {
+        const step = c.stepId ? findStep(scenario?.steps ?? [], c.stepId) : null;
+        const ms = Date.parse(c.at) - start;
+        return (
+          <li key={c.seq} className="relative text-[11px]">
+            <span className="absolute top-1.5 -left-[16.5px] h-2 w-2 rounded-full border-2 border-white bg-brand-500" />
+            <div className="flex items-baseline gap-1.5 text-slate-500">
+              {c.stepId ? (
+                <button type="button" className="truncate text-brand-600 hover:underline" onClick={() => c.stepId && select({ kind: "step", stepId: c.stepId })}>
+                  {step?.name || step?.type || c.stepId}
+                </button>
+              ) : (
+                <span>はじめの値</span>
+              )}
+              {c.iteration != null && <span className="text-slate-400">#{c.iteration}</span>}
+              <span className="ml-auto shrink-0 font-mono text-[10px] text-slate-400">+{Number.isFinite(ms) ? ms : 0}ms</span>
+            </div>
+            <div className="truncate rounded bg-slate-100 px-1.5 font-mono text-ink" title={valueText(c)}>
+              {valueText(c)}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function VariableRow({ variable }: { variable: VariableDef }) {
+  const changes = useStudio((s) => s.run?.changes);
+  const traced = changes?.filter((c) => c.variable === variable.name) ?? [];
+  const last = traced.at(-1);
   const setVariable = useStudio((s) => s.setVariable);
   const removeVariable = useStudio((s) => s.removeVariable);
   const [open, setOpen] = useState(false);
@@ -51,9 +91,13 @@ function VariableRow({ variable }: { variable: VariableDef }) {
         <span className="ml-auto shrink-0 text-[10px] font-medium" style={{ color }}>
           {t.varType[type]}
         </span>
-        <span className="max-w-[90px] truncate rounded bg-slate-100 px-1.5 font-mono text-[10px] text-slate-500">
-          {defaultText || "—"}
-        </span>
+        {last ? (
+          <span className="max-w-[110px] truncate rounded bg-brand-50 px-1.5 font-mono text-[10px] text-brand-700" title={`実行後の値（${traced.length}回変化）`}>
+            {valueText(last)}
+          </span>
+        ) : (
+          <span className="max-w-[90px] truncate rounded bg-slate-100 px-1.5 font-mono text-[10px] text-slate-500">{defaultText || "—"}</span>
+        )}
         {direction === "output" && <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white" style={{ background: color }} />}
       </button>
       {open && (
@@ -93,6 +137,12 @@ function VariableRow({ variable }: { variable: VariableDef }) {
             <span className={rowLabel}>{t.secret}</span>
             <input type="checkbox" className="justify-self-start" checked={variable.secret ?? false} onChange={(e) => update({ secret: e.target.checked })} />
           </label>
+          {changes && (
+            <div className="pt-2">
+              <div className="pb-1 text-[11px] font-bold text-slate-600">実行中の変化（{traced.length}回）</div>
+              <RunTrace changes={traced} />
+            </div>
+          )}
           <div className="flex justify-end pt-1">
             <button type="button" className="text-[11px] text-slate-400 hover:text-shu-600" onClick={() => removeVariable(variable.name)}>
               {t.remove}

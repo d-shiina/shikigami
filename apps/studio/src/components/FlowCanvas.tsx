@@ -1,5 +1,9 @@
 import {
   Background,
+  BaseEdge,
+  EdgeLabelRenderer,
+  type EdgeProps,
+  getBezierPath,
   Controls,
   type Edge,
   Handle,
@@ -10,7 +14,7 @@ import {
   Position,
   ReactFlow,
 } from "@xyflow/react";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
@@ -19,7 +23,8 @@ import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/
 import { actorLabel, describe } from "../lib/changes";
 import { NODE_HEAD_H, NODE_PAD_B, nodeRows, knownVariables, ROW_H, type Row, TYPE_COLOR } from "../lib/nodeRows";
 import { plain, sentence } from "../lib/sentence";
-import { revertBlocker, type StepRunState, touchedSteps } from "../store";
+import { valueText, writesFrom } from "../lib/runValues";
+import { revertBlocker, type StepRunState, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
@@ -84,6 +89,57 @@ function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; co
 }
 
 const FLOW_HANDLE = "!border-0 !bg-slate-300";
+
+type DataEdgeData = { variable: string; color: string; writes: VariableChange[]; lit: boolean; dim: boolean };
+
+/** A variable link. Hovering it shows the values that travelled along it in the last run. */
+function DataEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<DataEdgeData>>) {
+  const [hover, setHover] = useState(false);
+  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+  if (!data) return null;
+  const strong = hover || data.lit;
+  const last = data.writes.at(-1);
+  return (
+    <>
+      <g onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+        <BaseEdge
+          id={id}
+          path={path}
+          interactionWidth={12}
+          style={{ stroke: data.color, strokeWidth: strong ? 2.5 : 1.5, opacity: strong ? 1 : data.dim ? 0.15 : 0.45 }}
+        />
+      </g>
+      {hover && (
+        <EdgeLabelRenderer>
+          <div
+            style={{ transform: `translate(-50%, -110%) translate(${labelX}px, ${labelY}px)` }}
+            className="pointer-events-none absolute z-50 max-w-[280px] rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lg"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: data.color }} />
+              <span className="font-mono font-semibold">{data.variable}</span>
+              {data.writes.length > 1 && <span className="text-slate-400">{data.writes.length}回変化</span>}
+            </div>
+            {last ? (
+              <ul className="mt-1 space-y-0.5 font-mono">
+                {data.writes.slice(-5).map((w) => (
+                  <li key={w.seq} className={`truncate ${w === last ? "font-semibold text-ink" : "text-slate-500"}`}>
+                    {w.iteration != null && <span className="mr-1 text-slate-400">[{w.iteration}]</span>}
+                    {valueText(w)}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-0.5 text-slate-400">実行すると、ここに渡った値が出ます</div>
+            )}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
+const edgeTypes = { data: DataEdge };
 
 function NodeRow({ row, vars }: { row: Row; vars: Map<string, string | undefined> }) {
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "#94a3b8";
@@ -319,18 +375,18 @@ export function FlowCanvas() {
   const dataEdges: Edge[] = links.map((l) => {
     const color = TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8";
     const lit = selectedId !== null && (l.from === selectedId || l.to === selectedId);
+    const writes = run ? writesFrom(run.changes, l.variable, l.from) : [];
     return {
       id: `data:${l.from}:${l.variable}->${l.to}:${l.toHandle}`,
       source: l.from,
       sourceHandle: outHandle(l.variable),
       target: l.to,
       targetHandle: l.toHandle,
-      type: "default",
+      type: "data",
       className: "data-link",
       selectable: false,
       focusable: false,
-      interactionWidth: 0,
-      style: { stroke: color, strokeWidth: lit ? 2.5 : 1.5, opacity: lit ? 1 : selectedId ? 0.15 : 0.45 },
+      data: { variable: l.variable, color, writes, lit, dim: selectedId !== null && !lit },
       zIndex: lit ? 1 : 0,
     };
   });
@@ -361,6 +417,7 @@ export function FlowCanvas() {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       nodesConnectable={false}
       ref={wrapper}
       onInit={(flow) => {

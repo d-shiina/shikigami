@@ -98,6 +98,24 @@ describe("studio store", () => {
     expect(run.logs.map((l) => l.message)).toContain("hello");
   });
 
+  it("records variable changes the Runtime reports", () => {
+    const store = createStudioStore(fakeApi());
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    const changes = [
+      { ...base, seq: 1, type: "variableChanged", variable: "total", value: 0 },
+      { ...base, seq: 2, type: "variableChanged", variable: "total", value: 12000, stepId: "s_add" },
+      { ...base, seq: 3, type: "variableChanged", variable: "password", value: "***", stepId: "s_get", secret: true },
+    ];
+    // Typed loosely: the schema package gains this event with the Runtime change.
+    for (const e of changes) store.getState().onRunEvent(e as unknown as RunEventEnvelope);
+    expect(store.getState().run!.changes.map((c) => [c.variable, c.value, c.stepId, c.secret])).toEqual([
+      ["total", 0, null, false],
+      ["total", 12000, "s_add", false],
+      ["password", "***", "s_get", true],
+    ]);
+  });
+
   it("locates nested steps for move operations", () => {
     const steps = [
       { id: "a", type: "log.message" },

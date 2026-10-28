@@ -96,7 +96,7 @@ textarea,
   background: transparent;
 }
 
-/* Variable links are a view: they never take clicks from the steps under them. */
+/* Variable links can't be selected, but still take hover for their value tip. */
 .react-flow__edge.data-link {
-  pointer-events: none;
+  pointer-events: visibleStroke;
 }
