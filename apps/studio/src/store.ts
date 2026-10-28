@@ -723,7 +723,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               .catch(() => [id, [] as HistoryEntry[]] as const),
           ),
         );
-        set({ histories: { ...get().histories, ...Object.fromEntries(pairs) } });
+        // A journal fetched since (after an outside edit) may be newer than
+        // this batch's answer; keep whichever reaches the later revision.
+        const latest = (h: HistoryEntry[] | undefined) => h?.at(-1)?.revision ?? -1;
+        const histories = { ...get().histories };
+        for (const [id, h] of pairs) if (latest(h) >= latest(histories[id])) histories[id] = h;
+        set({ histories });
       },
 
       setReviewing(on) {

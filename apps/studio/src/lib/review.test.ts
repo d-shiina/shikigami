@@ -34,6 +34,25 @@ describe("summarize", () => {
 
 import { groupRevertBlocker } from "../store";
 
+describe("summarize with generated ids", () => {
+  it("finds the ids Core gave steps added without one", () => {
+    const s = summarize([
+      entry(
+        2,
+        [
+          { op: "addStep", step: { type: "log.message" } },
+          { op: "addStep", step: { type: "log.message" } },
+        ],
+        [
+          { op: "removeStep", stepId: "stp_2" },
+          { op: "removeStep", stepId: "stp_1" },
+        ],
+      ),
+    ]);
+    expect([...s.steps.keys()]).toEqual(["stp_1", "stp_2"]);
+  });
+});
+
 describe("groupRevertBlocker", () => {
   it("allows reverting a group unless someone else changed the same step later", () => {
     const a = entry(2, [{ op: "updateStep", stepId: "a", patch: { name: "x" } }], [{ op: "updateStep", stepId: "a", patch: { name: "" } }]);

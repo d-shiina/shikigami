@@ -21,10 +21,12 @@ export function summarize(entries: HistoryEntry[]): ReviewSummary {
   const vars = new Set<string>();
   let scenario = false;
   for (const entry of entries) {
+    const generated = generatedIds(entry);
     for (const op of entry.ops ?? []) {
-      if (op.op === "addStep" && op.step.id) {
-        steps.set(op.step.id, "added");
-        removed.delete(op.step.id);
+      const added = op.op === "addStep" ? (op.step.id ?? generated.shift()) : undefined;
+      if (added) {
+        steps.set(added, "added");
+        removed.delete(added);
       } else if (op.op === "updateStep" || op.op === "moveStep") {
         if (!steps.has(op.stepId)) steps.set(op.stepId, "changed");
       } else if (op.op === "removeStep") {
@@ -38,6 +40,18 @@ export function summarize(entries: HistoryEntry[]): ReviewSummary {
     }
   }
   return { steps, removed: [...removed.values()], variables: vars.size, scenario };
+}
+
+/**
+ * Ids Core generated for steps an entry added without one. The journal keeps
+ * the ops as sent, so only the inverse `removeStep`s carry them; the inverse
+ * runs newest first, hence the reversal.
+ */
+function generatedIds(entry: HistoryEntry): string[] {
+  const given = new Set((entry.ops ?? []).flatMap((op) => (op.op === "addStep" && op.step.id ? [op.step.id] : [])));
+  return (entry.inverse ?? [])
+    .flatMap((op) => (op.op === "removeStep" && !given.has(op.stepId) ? [op.stepId] : []))
+    .reverse();
 }
 
 /** "3手順追加・1変更" — what the group did, in a few words. */
