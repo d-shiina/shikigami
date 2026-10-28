@@ -11,7 +11,7 @@ use crate::call::{self, Subscenario};
 use crate::error::{CoreError, CoreResult};
 use crate::ids::{ObservationId, ScenarioId, StepId};
 use crate::model::{Scenario, ScenarioSummary, Step, VariableDef, now};
-use crate::ops::{self, EditOp};
+use crate::ops::{self, EditOp, ScenarioPatch};
 use crate::registry::StepRegistry;
 use crate::review::{
     self, Evidence, EvidenceDetail, NewObservation, NewReview, Observation, ObservationContent,
@@ -1153,12 +1153,25 @@ impl ScenarioService {
 
         let Commit {
             mut next,
-            applied,
-            inverse,
+            mut applied,
+            mut inverse,
             label,
         } = change(&mut undo, &current)?;
         self.reject_structural_errors(&next)?;
+        let before_sync = next.requires.clone();
         crate::requires::sync(&mut next, self.registry());
+        if next.requires != before_sync {
+            // Core's own change to `requires` is part of the edit, so undo and
+            // redo restore the exact ranges (a hand-set one included).
+            let patch = |requires| EditOp::UpdateScenario {
+                patch: ScenarioPatch {
+                    requires: Some(requires),
+                    ..ScenarioPatch::default()
+                },
+            };
+            applied.push(patch(next.requires.clone()));
+            inverse.insert(0, patch(before_sync));
+        }
         next.id = current.id.clone();
         next.revision = current.revision + 1;
         ops::touch(&mut next.metadata);
@@ -1270,7 +1283,7 @@ fn check_revision(expected: Option<u64>, actual: u64) -> CoreResult<()> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::ops::{Position, ScenarioPatch, StepPatch};
+    use crate::ops::{Position, StepPatch};
     use crate::store::ActorKind;
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1345,8 +1358,11 @@ mod tests {
             .edit(&id, None, vec![EditOp::RemoveStep { step_id: step }], mcp())
             .expect("remove");
         assert!(removed.scenario.requires.is_empty());
+        // Undo brings back the hand-set range, not the installed default.
         let undone = svc.undo(&id, None, mcp()).expect("undo");
-        assert_eq!(undone.scenario.requires["plugin:hello"], "^0.3.1");
+        assert_eq!(undone.scenario.requires["plugin:hello"], ">=0.3, <2");
+        let redone = svc.redo(&id, None, mcp()).expect("redo");
+        assert!(redone.scenario.requires.is_empty());
     }
 
     #[test]
