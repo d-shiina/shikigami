@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
 use shikigami_core::expr::{self, Expr};
-use shikigami_core::registry::{builtin, control};
+use shikigami_core::registry::{builtin, control, is_control_type};
 use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_core::validate::LAST_ERROR_VAR;
 use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, Step, StepId};
@@ -26,6 +26,7 @@ use crate::event::{
 use crate::handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
+const DEFAULT_WAIT_INTERVAL_MS: u64 = 500;
 const DEFAULT_MAX_ITERATIONS: u64 = 1000;
 const MASK: &str = "***";
 
@@ -356,7 +357,7 @@ impl Executor {
             s.steps_executed += 1;
         });
 
-        let is_control = step.step_type.starts_with("control.");
+        let is_control = is_control_type(&step.step_type);
         let started = Instant::now();
         if is_control {
             self.emitter.emit(RunEvent::StepStarted {
@@ -399,7 +400,11 @@ impl Executor {
                     will_retry: false,
                 });
             }
-            return result;
+            // A wait that times out may be skipped with onError: continue;
+            // other control steps only pass on their children's errors.
+            if step.step_type != control::WAIT_UNTIL {
+                return result;
+            }
         }
 
         match result {
@@ -542,6 +547,7 @@ impl Executor {
             }
             control::GROUP => self.block(step.block("body")).await,
             control::PARALLEL => self.parallel(step).await,
+            control::WAIT_UNTIL => self.wait_until(step).await,
             control::BREAK => Ok(Flow::Break),
             control::CONTINUE => Ok(Flow::Continue),
             control::FAIL => {
@@ -677,6 +683,53 @@ impl Executor {
             self.set_var(&name, value);
         }
         Ok(Flow::Next)
+    }
+
+    /// Polls `condition` (after running `check`) until it holds or the
+    /// step's timeout passes. The last check happens at the deadline.
+    async fn wait_until(&mut self, step: &Step) -> StepResult {
+        let condition = Expr::parse(param_str(step, "condition")?).map_err(expr_error)?;
+        let interval_ms = if step.params.contains_key("intervalMs") {
+            let ms = self.eval_number(step, "intervalMs")?;
+            if !(50.0..=60_000.0).contains(&ms) {
+                return Err(RunError::new(
+                    "INVALID_PARAMS",
+                    "intervalMs must be between 50 and 60000",
+                )
+                .into());
+            }
+            ms as u64
+        } else {
+            DEFAULT_WAIT_INTERVAL_MS
+        };
+        let timeout_ms = step.timeout_ms.unwrap_or(self.default_timeout_ms);
+        let started = Instant::now();
+        let mut polls = 0u64;
+        loop {
+            self.check_cancel()?;
+            self.block(step.block("check")).await?;
+            polls += 1;
+            if expr::truthy(&condition.eval(&self.vars).map_err(expr_error)?) {
+                return Ok(Flow::Next);
+            }
+            let elapsed_ms = duration_ms(started);
+            if elapsed_ms >= timeout_ms {
+                return Err(RunError {
+                    details: Some(serde_json::json!({ "elapsedMs": elapsed_ms, "polls": polls })),
+                    ..RunError::new(
+                        "WAIT_TIMEOUT",
+                        format!("condition was still false after {elapsed_ms} ms ({polls} checks)"),
+                    )
+                }
+                .into());
+            }
+            let pause = interval_ms.min(timeout_ms - elapsed_ms);
+            tokio::select! {
+                biased;
+                () = self.cancel.cancelled() => return Err(Interrupt::Cancelled),
+                () = tokio::time::sleep(Duration::from_millis(pause)) => {}
+            }
+        }
     }
 
     async fn action(&mut self, step: &Step) -> StepResult {

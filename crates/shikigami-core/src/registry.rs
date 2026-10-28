@@ -26,6 +26,13 @@ pub mod control {
     pub const FAIL: &str = "control.fail";
     pub const PARALLEL: &str = "control.parallel";
     pub const GROUP: &str = "control.group";
+    /// Polls a condition; run by the interpreter like the `control.*` steps.
+    pub const WAIT_UNTIL: &str = "wait.until";
+}
+
+/// Whether the Runtime interprets the step itself (no adapter handler).
+pub fn is_control_type(step_type: &str) -> bool {
+    step_type.starts_with("control.") || step_type == control::WAIT_UNTIL
 }
 
 /// Built-in action step types that need no external adapter.
@@ -409,10 +416,30 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             resources: vec![],
         },
         StepTypeDef {
+            step_type: control::WAIT_UNTIL.into(),
+            category: StepCategory::Flow,
+            label: "条件を待つ".into(),
+            description: "Waits until `condition` is truthy, checking every `intervalMs` (default 500). The optional `check` block runs before each check, e.g. a step that reads a file or screen state into a variable with `saveAs`. The step's `timeoutMs` (default 30000) limits the whole wait; when it passes the step fails with WAIT_TIMEOUT. Use this, not flow.delay or retry, to wait for slow work to finish.".into(),
+            params_schema: object_schema(
+                json!({
+                    "condition": expression,
+                    "intervalMs": number_or_template(50, 60_000),
+                }),
+                &["condition"],
+            ),
+            blocks: vec![block("check", "確認のたびに実行")],
+            has_output: false,
+            expression_params: vec!["condition".into()],
+            binds_variables: vec![],
+            risk: RiskLevel::Safe,
+            examples: vec![],
+            resources: vec![],
+        },
+        StepTypeDef {
             step_type: builtin::FLOW_DELAY.into(),
             category: StepCategory::Flow,
             label: "待機（時間指定）".into(),
-            description: "Waits for `ms` milliseconds. Prefer state-based waits (e.g. wait_for_element) for UI synchronisation.".into(),
+            description: "Waits for a fixed `ms` milliseconds. To wait for something to finish or appear, use wait.until instead.".into(),
             params_schema: object_schema(
                 json!({ "ms": number_or_template(0, 3_600_000) }),
                 &["ms"],
@@ -509,6 +536,15 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
         builtin::LOG_MESSAGE => vec![json!({
             "type": "log.message",
             "params": { "level": "info", "message": "合計 {{ total }} 円" }
+        })],
+        control::WAIT_UNTIL => vec![json!({
+            "type": "wait.until",
+            "name": "転記が終わるまで待つ",
+            "params": { "condition": "status == 'done'", "intervalMs": 2000 },
+            "timeoutMs": 600000,
+            "blocks": { "check": [
+                { "type": "log.message", "name": "状態を読む（実際は読み取りステップに saveAs: status）", "params": { "message": "確認中: {{ status }}" } }
+            ] }
         })],
         builtin::FLOW_DELAY => vec![json!({ "type": "flow.delay", "params": { "ms": 1000 } })],
         _ => Vec::new(),

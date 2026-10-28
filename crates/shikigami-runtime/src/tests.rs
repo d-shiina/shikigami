@@ -719,3 +719,43 @@ async fn numeric_params_take_an_integer_or_a_template() {
     assert!(details.contains("INVALID_PARAMS"));
     assert!(details.contains("{{ retryCount }}"), "{details}");
 }
+
+fn wait_until(condition: &str, check: Vec<Step>) -> Step {
+    Step::new("wait.until")
+        .with_param("condition", condition)
+        .with_param("intervalMs", 50)
+        .with_block("check", check)
+}
+
+#[tokio::test]
+async fn wait_until_runs_the_check_until_the_condition_holds() {
+    let mut s = scenario(vec![wait_until("n >= 3", vec![set("n", "n + 1")])]);
+    s.variables = vec![var(
+        "n",
+        VarType::Number,
+        VarDirection::Output,
+        Some(json!(0)),
+    )];
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["n"], json!(3));
+}
+
+#[tokio::test]
+async fn wait_until_fails_with_wait_timeout_and_can_be_skipped() {
+    let mut wait = wait_until("false", vec![]);
+    wait.timeout_ms = Some(200);
+    let (report, _) = run(&Runtime::new(), scenario(vec![wait.clone()]), json!({})).await;
+    let error = report.error.expect("timeout");
+    assert_eq!(error.code, "WAIT_TIMEOUT");
+    let details = error.details.unwrap();
+    assert!(details["elapsedMs"].as_u64().unwrap() >= 200);
+    assert!(details["polls"].as_u64().unwrap() >= 3);
+
+    wait.on_error = Some(OnError::Continue);
+    let mut s = scenario(vec![wait, set("code", "lastError.code")]);
+    s.variables = vec![var("code", VarType::String, VarDirection::Output, None)];
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(report.outputs["code"], json!("WAIT_TIMEOUT"));
+}

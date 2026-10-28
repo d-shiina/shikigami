@@ -35,6 +35,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 - 書き分けの規則は1つだけ：ステップ型の `expressionParams`（`list_step_types` に載っている。`control.if` の `condition` など）には `{{ }}` なしの式を書く。それ以外の文字列 params はすべてテンプレートで、`"合計 {{ total }} 円"` のように書く。文字列全体が1つの `{{ 式 }}` なら値の型（数値・配列など）がそのまま渡る。回数・待ち時間などの数値 params は `3` か `"{{ retryCount }}"`。
 - 式で使える関数は安全なものに限られる（`len`, `contains`, `startsWith`, `endsWith`, `lower`, `upper`, `trim`, `str`, `num`, `isEmpty`, `coalesce`, `join`, `split`）。任意コードは実行できない。
 - 入出力は `variables` の `direction`（`input` / `output` / `inOut` / `local`。省略時は `local`）で宣言する。パスワード等は `secret: true` にするとログで `***` に伏せられる。
+- 時間のかかる処理の完了や状態の変化を待つときは `wait.until`（`condition` が真になるまで `intervalMs` ごとに確認。`check` ブロックで状態を読んで `saveAs` で変数に入れる。待つ上限は `timeoutMs`、超えると `WAIT_TIMEOUT`）。`flow.delay` の固定待ちや `retry` で代用しない。
 - 失敗し得るステップには `retry`（回数と間隔）や `timeoutMs`、`onError` を設定する。`onError: continue` のときエラー内容は変数 `lastError` に入る。
 - `name` には人間が Studio で読んで分かる日本語の説明を付ける（例：「請求書の合計を計算」）。
 

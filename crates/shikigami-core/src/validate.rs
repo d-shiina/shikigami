@@ -366,8 +366,22 @@ impl Cx<'_> {
             self.parallel_writes(step, path);
         }
 
-        // A branch of `control.parallel` cannot break out of an enclosing loop.
-        let child_depth = if step.step_type == control::PARALLEL {
+        if step.step_type == control::WAIT_UNTIL && step.retry.is_some() {
+            self.warn(
+                "REDUNDANT_RETRY",
+                "wait.until already repeats its check; `retry` is not used".into(),
+                format!("{path}/retry"),
+                Some(&step.id),
+            );
+            self.hint("Remove `retry` and set `timeoutMs` to the longest time to wait.");
+        }
+
+        // A branch of `control.parallel` (or the check of `wait.until`)
+        // cannot break out of an enclosing loop.
+        let child_depth = if matches!(
+            step.step_type.as_str(),
+            control::PARALLEL | control::WAIT_UNTIL
+        ) {
             0
         } else {
             loop_depth + usize::from(def.is_loop())
@@ -818,6 +832,23 @@ mod tests {
             .find(|i| i.code == code)
             .and_then(|i| i.hint.as_deref())
             .unwrap_or_else(|| panic!("no hint for {code}: {report:?}"))
+    }
+
+    #[test]
+    fn retry_on_wait_until_is_redundant() {
+        let mut wait = Step::new(control::WAIT_UNTIL)
+            .with_id("w")
+            .with_param("condition", "true");
+        wait.retry = Some(crate::model::RetryPolicy {
+            max_attempts: 3,
+            backoff_ms: 100,
+            backoff_multiplier: 1.0,
+        });
+        let mut s = Scenario::new("wait");
+        s.steps = vec![wait];
+        let report = validator().validate(&s);
+        assert_eq!(report.error_count(), 0, "{report:?}");
+        assert!(hint_of(&report, "REDUNDANT_RETRY").contains("timeoutMs"));
     }
 
     #[test]
