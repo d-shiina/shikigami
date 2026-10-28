@@ -1,7 +1,8 @@
 // The display language: Japanese or English, or follow the OS. Components read
 // strings from `t`, a live binding that switches with the language; Studio
-// re-mounts its shell on a switch so everything on screen is redrawn.
-import { useSyncExternalStore } from "react";
+// re-mounts its shell on a switch so everything on screen is redrawn
+// (unsent input kept with useKeptState).
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { en } from "./locales/en";
 import { type Dict, ja } from "./locales/ja";
 
@@ -83,4 +84,28 @@ export function stepLabel(type: string, label?: string): string {
 export function blockName(type: string, block: string, label: string): string {
   if (locale === "ja") return label;
   return (t.blockNames as Record<string, string>)[`${type}:${block}`] ?? (t.blockNames as Record<string, string>)[block] ?? label;
+}
+
+const kept = new Map<string, unknown>();
+
+/**
+ * useState for unsent input (a message to the AI, a send-back reason) that
+ * survives the shell re-mount on a language switch. On any other unmount the
+ * value is dropped as usual.
+ */
+export function useKeptState<T>(key: string, initial: T): [T, Dispatch<SetStateAction<T>>] {
+  // The new shell renders before the old one's effects are cleaned up, so the
+  // value is recorded as it changes rather than on unmount.
+  const [value, setValue] = useState<T>(() => (kept.has(key) ? (kept.get(key) as T) : initial));
+  const mountedIn = useRef(locale);
+  useEffect(() => {
+    kept.set(key, value);
+  }, [key, value]);
+  useEffect(
+    () => () => {
+      if (locale === mountedIn.current) kept.delete(key);
+    },
+    [key],
+  );
+  return [value, setValue];
 }

@@ -2,7 +2,7 @@
 // Opening one shows the scenario's flow chart with what changed marked on
 // it, the changes in words, and one place to keep or send them back.
 import type { HistoryEntry } from "@shikigami/schema";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useStudio } from "../context";
 import { actorLabel, describe, relativeTime } from "../lib/changes";
 import { headline, summarize } from "../lib/review";
@@ -10,7 +10,7 @@ import { sentence, plain } from "../lib/sentence";
 import { approvedUpTo, groupRevertBlocker, pendingIn } from "../store";
 import { Explanations, FeedbackBox, Observations, type Observed, type Review, SendBackForm, Section, TestRuns, type TestRun } from "./Evidence";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
-import { t } from "../lib/i18n";
+import { t, useKeptState } from "../lib/i18n";
 
 export type InboxItem = {
   scenarioId: string;
@@ -230,7 +230,7 @@ export function ReviewActions() {
   const history = useStudio((s) => s.history);
   const approveAll = useStudio((s) => s.approveAll);
   const revertAll = useStudio((s) => s.revertAll);
-  const [sending, setSending] = useState(false);
+  const [sending, setSending] = useKeptState("review.sending", false);
   if (pending.length === 0) return null;
   const blocker = groupRevertBlocker(pending, history);
   if (sending) {

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type ChatItem, useAgent } from "../agent";
 import { agent } from "../lib/api";
 import { useStudio } from "../context";
-import { t } from "../lib/i18n";
+import { t, useKeptState } from "../lib/i18n";
 
 const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[name] ?? name;
 
@@ -40,7 +40,7 @@ export function AgentPane() {
   const reset = useAgent((s) => s.reset);
   const scenario = useStudio((s) => s.scenario);
   const selection = useStudio((s) => s.selection);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useKeptState("agent.draft", "");
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Newer WebView2 returns a promise here; an effect must not.

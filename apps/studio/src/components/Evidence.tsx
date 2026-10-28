@@ -10,7 +10,7 @@ import { api } from "../lib/api";
 import { relativeTime } from "../lib/changes";
 import { plain, sentence } from "../lib/sentence";
 import { findStep } from "../store";
-import { t } from "../lib/i18n";
+import { t, useKeptState } from "../lib/i18n";
 
 export type TestRun = Extract<Evidence, { kind: "testRun" }>;
 export type Observed = Extract<Evidence, { kind: "observation" }>;
@@ -291,10 +291,10 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
   const agentReady = useAgent((s) => s.info?.available === true && s.turnId === null && !s.sending);
   const agentName = useAgent((s) => s.info?.name ?? "AI");
   const askAgent = useAgent((s) => s.send);
-  const [fixNow, setFixNow] = useState(true);
+  const [fixNow, setFixNow] = useKeptState("sendBack.fixNow", true);
   const label = useStepLabel();
-  const [reason, setReason] = useState("");
-  const [notes, setNotes] = useState<StepNote[]>([]);
+  const [reason, setReason] = useKeptState("sendBack.reason", "");
+  const [notes, setNotes] = useKeptState<StepNote[]>("sendBack.notes", []);
   const [busy, setBusy] = useState(false);
   const selected = selection?.kind === "step" ? selection.stepId : null;
   const canNote = selected !== null && !notes.some((n) => n.stepId === selected);
