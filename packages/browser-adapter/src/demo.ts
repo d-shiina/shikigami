@@ -5,6 +5,9 @@
 //
 // The browser window is visible and slowed down so you can follow along
 // (set SHIKIGAMI_BROWSER_SLOWMO=0 to run at full speed).
+//
+// The CLI is built into target/demo so a shikigami.exe already running from
+// target/debug (e.g. the MCP server) does not block the build on Windows.
 
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -17,7 +20,7 @@ console.log(`デモサイト: ${url}`);
 
 const child = spawn(
   "cargo",
-  ["run", "-q", "-p", "shikigami-cli", "--", "run", "examples/browser-demo.json", "--input", `siteUrl=${url}`],
+  ["run", "-q", "--target-dir", "target/demo", "-p", "shikigami-cli", "--", "run", "examples/browser-demo.json", "--input", `siteUrl=${url}`],
   {
     cwd: repo,
     stdio: "inherit",

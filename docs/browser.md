@@ -29,7 +29,7 @@ pnpm demo:browser
 2. 未処理の注文ごとに「出荷する」を押し、処理完了の表示を待つ（`control.forEach` + `control.if`）
 3. 出荷した注文番号・合計金額・在庫切れの商品を出力する
 
-サイトだけ起動するときは `pnpm demo:site`。Studio からも同じシナリオを読み込んで実行できます。
+CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\shikigami.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Studio からも同じシナリオを読み込んで実行できます。
 
 ## ステップ
 

@@ -39,6 +39,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @shikigami/studio build
+      - name: Demo site serves pages (Windows paths)
+        if: runner.os == 'Windows'
+        run: pnpm --filter @shikigami/browser-adapter exec vitest run test/demo-site.test.ts
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
