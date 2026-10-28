@@ -31,7 +31,7 @@ function Button({
   return (
     <button
       type="button"
-      className={`flex h-8 shrink-0 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-semibold disabled:cursor-not-allowed ${tones[tone]}`}
+      className={`flex h-8 shrink-0 items-center gap-1.5 rounded-[4px] px-2.5 text-[13px] font-semibold disabled:cursor-not-allowed ${tones[tone]}`}
       {...rest}
     >
       {children}
@@ -76,7 +76,7 @@ function Screenshot({ src, title }: { src: string; title: string }) {
       {open &&
         createPortal(
           <div className="fixed inset-0 z-50 grid place-items-center bg-ink/50 p-6" onClick={() => setOpen(false)}>
-            <figure lang="ja" className="max-h-full overflow-auto rounded-[8px] bg-sheet p-2 shadow-xl">
+            <figure lang="ja" className="max-h-full overflow-auto rounded-[4px] bg-sheet p-2 shadow-dialog">
               <figcaption className="px-1 pb-2 text-[13px] font-bold">{title}</figcaption>
               <img src={src} alt={title} className="max-w-[min(1200px,90vw)]" />
             </figure>
@@ -239,7 +239,7 @@ export function RunPausePanel() {
       )}
 
       {unreviewed > 0 && (
-        <div className="mt-2 flex items-center gap-2 rounded-[6px] bg-brand-50 px-3 py-1.5 text-[13px] text-brand-700">
+        <div className="mt-2 flex items-center gap-2 rounded-[4px] bg-brand-50 px-3 py-1.5 text-[13px] text-brand-700">
           <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
           {t.pause.fixArrived(unreviewed)}
           {!reviewing && (

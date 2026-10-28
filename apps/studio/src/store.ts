@@ -43,6 +43,9 @@ export type Selection =
   | { kind: "slot"; parentId: string | null; block: string | null }
   | null;
 
+/** Side panel tabs: the step in hand first, then the scenario, then its past. */
+export type SideTab = "review" | "properties" | "variables" | "issues" | "timeline" | "versions";
+
 export type StepRunState = "running" | "succeeded" | "failed" | "skipped" | "paused";
 
 /** Where an interactive run waits for the person (the Runtime's `paused` event). */
@@ -198,6 +201,8 @@ export type StudioState = {
   breakpoints: Record<string, string[]>;
   outlineOpen: boolean;
   paletteOpen: boolean;
+  /** The side panel's open tab. */
+  sideTab: SideTab;
   /** Named versions of the open scenario, newest first. */
   versions: VersionSummary[];
   /** The scenarios the open one calls, directly or deeper, by id, for call nodes and their inputs. */
@@ -242,6 +247,7 @@ export type StudioState = {
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
   setOutlineOpen(open: boolean): void;
+  setSideTab(tab: SideTab): void;
   /** Adds a step after the selection; `params` and `name` override the type's defaults (palette presets). */
   addStep(type: string, params?: Record<string, unknown>, name?: string): Promise<void>;
   moveSelected(delta: -1 | 1): Promise<void>;
@@ -612,6 +618,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
+      sideTab: "timeline",
       versions: [],
       called: {},
       unfolded: {},
@@ -844,6 +851,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       setOutlineOpen(open) {
         saveFlag(OUTLINE_KEY, open);
         set({ outlineOpen: open });
+      },
+
+      setSideTab(tab) {
+        set({ sideTab: tab });
       },
 
       async addStep(type, params, name) {

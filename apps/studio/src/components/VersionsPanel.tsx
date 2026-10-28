@@ -93,7 +93,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
   return (
     <li className="group relative flex gap-3 pb-4 pl-1">
       <span className="absolute top-7 bottom-0 left-[16px] w-px bg-slate-200 group-last:hidden" />
-      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-[3px] bg-ink px-1 font-serif text-[10px] font-bold text-paper">
+      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-[3px] bg-ink px-1 text-[10px] font-bold text-paper">
         v{version.number}
       </span>
       <div className="min-w-0 flex-1">
@@ -186,7 +186,7 @@ export function VersionsPanel() {
         <p className="text-[11px] leading-relaxed text-slate-500">{t.versionsHint}</p>
       </form>
       <section>
-        <h3 className="mb-3 font-serif text-sm font-semibold">{t.versions}</h3>
+        <h3 className="mb-3 text-sm font-semibold">{t.versions}</h3>
         {versions.length === 0 ? (
           <p className="text-sm text-slate-400">{t.versionsEmpty}</p>
         ) : (
@@ -198,7 +198,7 @@ export function VersionsPanel() {
         )}
       </section>
       <section>
-        <h3 className="mb-2 font-serif text-sm font-semibold">{t.share}</h3>
+        <h3 className="mb-2 text-sm font-semibold">{t.share}</h3>
         <button
           type="button"
           onClick={() => void exportScenario()}

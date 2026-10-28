@@ -190,7 +190,7 @@ export function SecretsDialog() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-2 flex items-center">
-          <h2 className="font-serif text-lg font-bold">{t.secrets}</h2>
+          <h2 className="text-lg font-bold">{t.secrets}</h2>
           <button
             type="button"
             className="ml-auto text-xs text-slate-500 hover:underline"

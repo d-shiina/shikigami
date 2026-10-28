@@ -10,7 +10,7 @@ import { IssuesPanel } from "./components/IssuesPanel";
 import { PropertyPanel } from "./components/PropertyPanel";
 import { RunLog } from "./components/RunLog";
 import { RunPausePanel } from "./components/RunPausePanel";
-import { OutlinePanel, OutlineToggle } from "./components/Outline";
+import { OutlinePanel } from "./components/Outline";
 import { ReviewInbox, ReviewPanel, useInbox } from "./components/ReviewDesk";
 import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
@@ -18,16 +18,14 @@ import { SecretAskDialog } from "./components/SecretAskDialog";
 import { SecretsDialog } from "./components/SecretsDialog";
 import { StatusBar } from "./components/StatusBar";
 import { Timeline, usePendingReview } from "./components/Timeline";
-import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
+import { CanvasDock, ScenarioBar, type View } from "./components/Toolbar";
 import { VariablesPanel } from "./components/VariablesPanel";
 import { VersionsPanel } from "./components/VersionsPanel";
 import { WindowControls } from "./components/WindowControls";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
 import { t, useLocale } from "./lib/i18n";
-import { createStudioStore, isActive, type StudioState } from "./store";
-
-type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
+import { createStudioStore, isActive, type SideTab, type StudioState } from "./store";
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -67,7 +65,8 @@ function Banner() {
 
 function SidePanel() {
   const reviewing = useStudio((s) => s.reviewing);
-  const [tab, setTab] = useState<Tab>(reviewing ? "review" : "timeline");
+  const tab = useStudio((s) => s.sideTab);
+  const setTab = useStudio((s) => s.setSideTab);
   // The review desk opens on its own tab, and leaving it falls back to the record.
   useEffect(() => setTab(reviewing ? "review" : "timeline"), [reviewing]);
   const issueCount = useStudio((s) => s.validation?.issues.length ?? 0);
@@ -82,24 +81,25 @@ function SidePanel() {
     if (pendingCount > lastPending.current && !reviewing) setTab("timeline");
     lastPending.current = pendingCount;
   }, [pendingCount]);
-  const tabs: [Tab, string, number][] = [
-    ...(reviewing ? [["review", t.reviewTab, pendingCount] as [Tab, string, number]] : []),
-    ["timeline", t.timeline, reviewing ? 0 : pendingCount],
-    ["versions", t.versions, 0],
+  // From the step in hand, to the scenario as it is, to its past.
+  const tabs: [SideTab, string, number][] = [
+    ...(reviewing ? [["review", t.reviewTab, pendingCount] as [SideTab, string, number]] : []),
     ["properties", t.inspect, 0],
     ["variables", t.variables, 0],
     ["issues", t.issues, issueCount],
+    ["timeline", t.timeline, reviewing ? 0 : pendingCount],
+    ["versions", t.versions, 0],
   ];
   return (
     // A sheet laid over the edge of the desk.
     <aside className="relative z-[1] flex h-full flex-col border-l border-slate-200 bg-sheet shadow-sheet">
-      <nav className="flex border-b border-slate-200 px-2">
+      <nav className="flex h-10 shrink-0 border-b border-slate-200 px-2">
         {tabs.map(([key, label, count]) => (
           <button
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`relative flex flex-1 items-center justify-center gap-1 py-2.5 text-xs font-medium ${
+            className={`relative flex flex-1 items-center justify-center gap-1 text-xs font-medium ${
               tab === key ? "text-ink" : "text-slate-500 hover:text-ink"
             }`}
           >
@@ -111,7 +111,7 @@ function SidePanel() {
                 {count}
               </span>
             )}
-            {tab === key && <span className="absolute inset-x-3 bottom-[-1px] h-[2px] rounded-full bg-ink" />}
+            {tab === key && <span className="absolute inset-x-3 bottom-[-1px] h-[2px] bg-ink" />}
           </button>
         ))}
       </nav>
@@ -127,7 +127,6 @@ function SidePanel() {
   );
 }
 
-type View = "story" | "flow";
 const VIEW_KEY = "shikigami.studio.view";
 const LIST_KEY = "shikigami.studio.list";
 
@@ -139,43 +138,23 @@ function loadView(): View {
   }
 }
 
-function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
-  const options: [View, string][] = [
-    ["flow", t.viewFlow],
-    ["story", t.viewStory],
-  ];
-  return (
-    <div className="absolute top-3 right-4 flex overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-xs shadow-raised">
-      {options.map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange(key)}
-          className={`px-3 py-1 ${view === key ? "bg-ink text-paper" : "text-slate-600 hover:bg-slate-100"}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
+/** The badge counts what waits on the person (logins an AI asked for), not what is stored. */
 function SecretsButton() {
   const setOpen = useStudio((s) => s.setSecretsOpen);
-  const count = useStudio((s) => s.secrets.length);
+  const asks = useStudio((s) => s.secretRequests.length);
   return (
     <button
       type="button"
       onClick={() => setOpen(true)}
       className="flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
-      title={t.secretsIntro}
+      title={asks > 0 ? t.bar.secretAskTitle : t.secretsIntro}
     >
       <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
         <circle cx="5" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path d="M8 8h6.5M12 8v2.5M14 8v2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
       {t.secrets}
-      {count > 0 && <span className="rounded-[3px] bg-slate-200 px-1.5 text-[10px]">{count}</span>}
+      {asks > 0 && <span className="rounded-[3px] bg-accent-500 px-1.5 text-[10px] leading-4 font-bold text-white">{asks}</span>}
     </button>
   );
 }
@@ -201,7 +180,7 @@ function ModeSwitch() {
       <button type="button" className={tab(!reviewing)} onClick={() => setReviewing(false)}>
         {t.scenarios}
       </button>
-      <button type="button" className={tab(reviewing)} onClick={enterReview}>
+      <button type="button" className={tab(reviewing)} onClick={enterReview} title={t.bar.reviewTitle}>
         {t.awaitingReview}
         {inbox.length > 0 && <span className="rounded-[3px] bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
       </button>
@@ -238,15 +217,18 @@ function Shell() {
     }
   };
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
-      {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
-      <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 border-b border-slate-200 bg-sheet px-4 select-none">
+    <div className={`grid h-full grid-rows-[auto_auto_minmax(0,1fr)_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
+      {/*
+        The window's title bar, for what spans the whole workspace: which desk
+        (scenarios or review), and the tools that are not about one scenario.
+        Drag anywhere that is not a control, double-click to maximize.
+      */}
+      <header data-tauri-drag-region className="relative col-span-3 flex h-10 items-center gap-3 border-b border-slate-200 bg-sheet px-3 select-none">
         <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
         <ModeSwitch />
-        <ScenarioHeader />
-        <span className="h-5 w-px bg-slate-200" />
-        <AgentButton />
+        <span data-tauri-drag-region className="flex-1 self-stretch" />
         <SecretsButton />
+        <AgentButton />
         <WindowControls />
       </header>
       <div className="col-span-3">
@@ -263,21 +245,16 @@ function Shell() {
         )}
       </div>
       <main className="flex min-h-0 min-w-0 flex-col">
+        <ScenarioBar view={view} onView={setView} />
         <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
             <StoryView />
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
-              {hasScenario && (
-                <>
-                  <OutlineToggle />
-                  <OutlinePanel />
-                </>
-              )}
+              {hasScenario && <OutlinePanel />}
             </ReactFlowProvider>
           )}
-          {hasScenario && <ViewToggle view={view} onChange={setView} />}
           {/* Clear of the zoom controls in the bottom-left corner. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
             <CanvasDock />

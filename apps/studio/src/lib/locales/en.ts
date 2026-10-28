@@ -316,7 +316,6 @@ export const en: Dict = {
     aiEdited: (who: string, when: string) => `${who} edited ${when}`,
     reviewTitle: "AI changes waiting for review",
     secretAskTitle: "The AI is asking for login details",
-    secretAsk: "Login requests",
     goToRunning: "Go to the running step",
     run: {
       pending: "Pending",
@@ -594,6 +593,8 @@ export const en: Dict = {
     direction: { input: "Takes", output: "Returns", inOut: "Takes and returns", local: "Uses" },
   },
   toolbar: {
+    issuesTitle: "Open the check results",
+    stepTools: "Selected step",
     errors: (n: number) => `${n} errors`,
     valid: "Valid",
     pauseTitle: "Pause before the next step",

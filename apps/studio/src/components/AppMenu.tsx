@@ -84,7 +84,7 @@ export function AppMenu() {
       {open && (
         <div className="absolute right-0 bottom-full z-30 mb-2 w-96 rounded-[4px] border border-slate-200 bg-sheet p-4 text-sm shadow-lifted">
           <div className="flex items-baseline justify-between">
-            <span className="font-serif font-semibold">{t.appName}</span>
+            <span className="font-semibold">{t.appName}</span>
             <span className="text-xs text-slate-500">v{info.version}</span>
           </div>
 

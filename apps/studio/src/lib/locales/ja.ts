@@ -315,7 +315,6 @@ export const ja = {
     aiEdited: (who: string, when: string) => `${who}・${when}に編集`,
     reviewTitle: "AIの変更が確認を待っています",
     secretAskTitle: "AIがログイン情報の登録を頼んでいます",
-    secretAsk: "ログインの登録依頼",
     goToRunning: "実行中の手順へ移動",
     run: {
       pending: "実行待ち",
@@ -593,6 +592,8 @@ export const ja = {
     direction: { input: "受け取る", output: "返す", inOut: "受け取って返す", local: "使う" },
   },
   toolbar: {
+    issuesTitle: "検証結果を開く",
+    stepTools: "選んだ手順",
     errors: (n: number) => `エラー ${n} 件`,
     valid: "検証OK",
     pauseTitle: "次の手順の前で一時停止する",

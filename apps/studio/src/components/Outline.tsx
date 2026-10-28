@@ -16,26 +16,6 @@ const RUN_DOT: Record<string, string> = {
   skipped: "bg-slate-300",
 };
 
-export function OutlineToggle() {
-  const open = useStudio((s) => s.outlineOpen);
-  const setOpen = useStudio((s) => s.setOutlineOpen);
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(!open)}
-      title={t.outline.title}
-      className={`absolute top-3 left-4 z-10 flex h-[26px] items-center gap-1.5 rounded-[3px] border px-3 text-xs shadow-raised ${
-        open ? "border-ink bg-ink text-paper" : "border-slate-300 bg-sheet text-slate-600 hover:bg-slate-100"
-      }`}
-    >
-      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-        <path d="M1 2.5h10M3 6h8M3 9.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      </svg>
-      {t.outline.toggle}
-    </button>
-  );
-}
-
 export function OutlinePanel() {
   const open = useStudio((s) => s.outlineOpen);
   const scenario = useStudio((s) => s.scenario);
@@ -62,7 +42,7 @@ export function OutlinePanel() {
   if (!open || !scenario) return null;
 
   return (
-    <nav className="absolute top-12 left-4 z-10 flex max-h-[calc(100%-8rem)] w-[264px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
+    <nav className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
       <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
         <span className="font-bold text-ink">{t.outline.steps}</span>
         <span>{items.length}</span>

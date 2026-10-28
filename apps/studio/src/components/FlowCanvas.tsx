@@ -148,6 +148,28 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   );
 }
 
+const STEP_TOOL = "grid h-6 w-6 place-items-center rounded-[3px] text-[13px] text-slate-600 hover:bg-slate-100 hover:text-ink";
+
+/** Move and delete, on the selected step itself: the pointer is already there. */
+function StepTools() {
+  const moveSelected = useStudio((s) => s.moveSelected);
+  const removeSelected = useStudio((s) => s.removeSelected);
+  return (
+    <div role="toolbar" aria-label={t.toolbar.stepTools} className="flex items-center gap-0.5 rounded-[3px] border border-slate-200 bg-sheet p-0.5 shadow-raised">
+      <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL}>
+        ↑
+      </button>
+      <button type="button" title={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} className={STEP_TOOL}>
+        ↓
+      </button>
+      <span className="mx-0.5 h-4 w-px bg-slate-200" />
+      <button type="button" title={`${t.delete} (Delete)`} onClick={() => removeSelected()} className={`${STEP_TOOL} hover:bg-shu-50! hover:text-shu-600!`}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
 /** A variable socket on the node's edge, coloured by the variable's type. Links attach here. */
 function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; color: string; title: string }) {
   return (
@@ -495,9 +517,13 @@ function StepNode({ data }: StepNodeProps) {
         data.runState ? RUN_STYLE[data.runState] : ""
       }`}
     >
-      {latest && (
-        <NodeToolbar isVisible position={Position.Top} offset={12}>
-          <ReviewToolbar entry={latest} />
+      {(latest || (data.selected && !data.readOnly)) && (
+        // At the top-right corner, clear of the flow line entering at the top centre.
+        <NodeToolbar isVisible position={Position.Top} align="end" offset={8}>
+          <div className="flex items-center gap-1.5">
+            {latest && <ReviewToolbar entry={latest} />}
+            {data.selected && !data.readOnly && <StepTools />}
+          </div>
         </NodeToolbar>
       )}
       <FlowHandles />
@@ -945,8 +971,7 @@ export function FlowCanvas() {
       <Background gap={24} size={1.2} color="var(--color-slate-300)" />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
       {inside && (
-        // Below the outline and view buttons.
-        <Panel position="top-center" style={{ marginTop: 52 }}>
+        <Panel position="top-center">
           <DiveBar root={root} chain={chain} />
         </Panel>
       )}

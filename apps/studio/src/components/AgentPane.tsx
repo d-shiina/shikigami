@@ -20,7 +20,7 @@ export function AgentButton() {
       type="button"
       onClick={() => setOpen(!open)}
       title={`${name}（Ctrl+J）`}
-      className={`flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] font-semibold ${open ? "bg-ink text-sheet" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
+      className={`flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-semibold ${open ? "bg-ink text-sheet" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
     >
       {busy && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />}
       {name}
@@ -54,14 +54,14 @@ export function AgentPane() {
     if (await send(draft, ref, context)) setDraft("");
   };
   return (
-    <aside className="fixed top-12 right-0 bottom-7 z-30 flex w-[380px] flex-col border-l border-slate-200 bg-sheet shadow-xl">
+    <aside className="fixed top-10 right-0 bottom-7 z-30 flex w-[380px] flex-col border-l border-slate-200 bg-sheet shadow-lifted">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5">
         <div className="min-w-0 flex-1 text-[13px] font-bold">{info?.name ?? "AI"}</div>
         <button
           type="button"
           onClick={reset}
           disabled={turnId !== null || sending || items.length === 0}
-          className="grid h-6 w-6 place-items-center rounded-[5px] text-[15px] text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
+          className="grid h-6 w-6 place-items-center rounded-[4px] text-[15px] text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
           title={t.agent.newChat}
           aria-label={t.agent.newChat}
         >
@@ -70,7 +70,7 @@ export function AgentPane() {
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="grid h-6 w-6 place-items-center rounded-[5px] text-slate-400 hover:bg-slate-100 hover:text-ink"
+          className="grid h-6 w-6 place-items-center rounded-[4px] text-slate-400 hover:bg-slate-100 hover:text-ink"
           aria-label={t.close}
         >
           ✕
@@ -78,7 +78,7 @@ export function AgentPane() {
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {info && !info.available && (
-          <div className="rounded-[6px] border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
+          <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
         )}
         {items.length === 0 && info?.available && (
           <div className="grid h-full place-items-center">
@@ -110,7 +110,7 @@ export function AgentPane() {
           rows={3}
           disabled={!info?.available}
           placeholder={scenario ? t.agent.placeholderEdit : t.agent.placeholderNew}
-          className="w-full resize-none rounded-[6px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
+          className="w-full resize-none rounded-[4px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
           <span className="text-[10.5px] text-slate-400">{t.agent.sendHint}</span>
@@ -118,7 +118,7 @@ export function AgentPane() {
             <button
               type="button"
               onClick={() => void stop()}
-              className="ml-auto h-8 shrink-0 rounded-[6px] border border-slate-300 px-3 text-[12px] text-slate-600 hover:bg-slate-100"
+              className="ml-auto h-8 shrink-0 rounded-[4px] border border-slate-300 px-3 text-[12px] text-slate-600 hover:bg-slate-100"
             >
               {t.stop}
             </button>
@@ -127,7 +127,7 @@ export function AgentPane() {
               type="button"
               disabled={!info?.available || sending || draft.trim() === ""}
               onClick={() => void submit()}
-              className="ml-auto h-8 shrink-0 rounded-[6px] bg-ink px-4 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400"
+              className="ml-auto h-8 shrink-0 rounded-[4px] bg-ink px-4 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400"
             >
               {t.agent.send}
             </button>
@@ -143,7 +143,7 @@ function Item({ item }: { item: ChatItem }) {
     return (
       <div className="ml-8">
         {item.context && <div className="mb-0.5 truncate text-right text-[10px] text-slate-400">{item.context}</div>}
-        <div className="rounded-[8px] rounded-tr-[2px] bg-ink px-3 py-2 text-[13px] whitespace-pre-wrap text-sheet">{item.text}</div>
+        <div className="rounded-[4px] rounded-tr-[2px] bg-ink px-3 py-2 text-[13px] whitespace-pre-wrap text-sheet">{item.text}</div>
       </div>
     );
   }
@@ -160,7 +160,7 @@ function Item({ item }: { item: ChatItem }) {
       )}
       {/* An expired login is explained by the sign-in box below instead. */}
       {item.status === "failed" && !item.needsLogin && (
-        <div className="rounded-[6px] border border-shu-100 bg-shu-50 px-2.5 py-1.5 text-[12px] whitespace-pre-wrap text-shu-600">
+        <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-2.5 py-1.5 text-[12px] whitespace-pre-wrap text-shu-600">
           {item.message ?? t.agent.failed}
         </div>
       )}
@@ -199,9 +199,9 @@ function LoginBox({ name }: { name: string }) {
   const cancel = useAgent((s) => s.cancelLogin);
   const [code, setCode] = useState("");
   if (!needed && login.phase === "idle") return null;
-  const box = "space-y-2 rounded-[6px] border border-brand-100 bg-brand-50 px-3 py-2.5 text-[12px] text-ink";
+  const box = "space-y-2 rounded-[4px] border border-brand-100 bg-brand-50 px-3 py-2.5 text-[12px] text-ink";
   const primary =
-    "h-8 rounded-[6px] bg-ink px-3 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400";
+    "h-8 rounded-[4px] bg-ink px-3 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400";
   if (login.phase === "waiting") {
     return (
       <div className={box}>
@@ -224,7 +224,7 @@ function LoginBox({ name }: { name: string }) {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder={t.agent.pasteCode}
-            className="min-w-0 flex-1 rounded-[6px] border border-slate-300 bg-sheet px-2 text-[12px] outline-none focus:border-brand-500"
+            className="min-w-0 flex-1 rounded-[4px] border border-slate-300 bg-sheet px-2 text-[12px] outline-none focus:border-brand-500"
           />
           <button type="submit" disabled={!code.trim() || login.sendingCode} className={primary}>
             {t.agent.send}

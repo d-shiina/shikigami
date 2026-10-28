@@ -28,6 +28,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/adapters.md](docs/adapters.md) | Where each step type comes from, and node plugins |
 | [docs/release.md](docs/release.md) | Installer, updates and release signing |
 | [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add steps for in-house systems without rebuilding Shikigami (manifest + separate process) |
+| [docs/design/ui-principles.md](docs/design/ui-principles.md) (Japanese) | Studio's layout rules: where each button goes and how it looks, and why |
 | [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the scenario format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |
 | [docs/research.md](docs/research.md) (Japanese) | Versions, licenses and Windows support of the libraries used |
 

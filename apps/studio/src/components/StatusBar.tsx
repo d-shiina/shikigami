@@ -1,5 +1,7 @@
-// The bar along the bottom: where the data lives, what the AI and the runner
-// are doing, what waits on the person, and the theme and version at the end.
+// The bar along the bottom reports and never asks: where the data lives, what
+// the AI and the runner are doing, where the selection is, then this PC's
+// preferences (language, theme) and the version. What waits on the person has
+// its badge on the control that answers it (確認待ち, シークレット), not here.
 import type { HistoryEntry, Step } from "@shikigami/schema";
 import { type ReactNode, useMemo, useState } from "react";
 import { useStudio } from "../context";
@@ -8,7 +10,6 @@ import { outline } from "../lib/outline";
 import { type Locale, setLocale, t, useLocale } from "../lib/i18n";
 import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
 import { AppMenu } from "./AppMenu";
-import { useInbox } from "./ReviewDesk";
 
 const ITEM = "flex h-full shrink-0 items-center gap-1.5 px-2 whitespace-nowrap";
 const BUTTON = `${ITEM} hover:bg-slate-100 hover:text-ink`;
@@ -93,29 +94,6 @@ function AiActivity() {
       <span className="bg-brand-500 h-2 w-2 rounded-full" />
       {t.bar.aiEdited(actorLabel(latest), relativeTime(latest.at))}
     </span>
-  );
-}
-
-function Waiting() {
-  const inbox = useInbox().filter((i) => !i.waiting);
-  const asks = useStudio((s) => s.secretRequests.length);
-  const setReviewing = useStudio((s) => s.setReviewing);
-  const setSecretsOpen = useStudio((s) => s.setSecretsOpen);
-  return (
-    <>
-      {inbox.length > 0 && (
-        <button type="button" className={BUTTON} onClick={() => setReviewing(true)} title={t.bar.reviewTitle}>
-          <span className="rounded-[3px] bg-shu-500 px-1.5 text-[10px] leading-4 font-bold text-white">{inbox.length}</span>
-          {t.awaitingReview}
-        </button>
-      )}
-      {asks > 0 && (
-        <button type="button" className={BUTTON} onClick={() => setSecretsOpen(true)} title={t.bar.secretAskTitle}>
-          <span className="rounded-[3px] bg-accent-500 px-1.5 text-[10px] leading-4 font-bold text-white">{asks}</span>
-          {t.bar.secretAsk}
-        </button>
-      )}
-    </>
   );
 }
 
@@ -247,7 +225,6 @@ export function StatusBar() {
     <footer className="col-span-3 flex h-7 min-w-0 items-center border-t border-slate-200 bg-sheet px-2 text-[11px] text-slate-500">
       <Workspace />
       <AiActivity />
-      <Waiting />
       <span className="flex-1" />
       <RunStatus />
       <Position />
