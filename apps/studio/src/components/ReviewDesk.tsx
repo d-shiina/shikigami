@@ -69,7 +69,7 @@ export function ReviewInbox() {
                 onClick={() => void open(item.scenarioId)}
                 className={`relative w-full rounded-[4px] px-2.5 py-2 text-left ${active ? "bg-sheet shadow-sheet ring-1 ring-brand-100" : "hover:bg-sheet/70"}`}
               >
-                {active && <span className="swirl absolute top-2 bottom-2 left-0 w-[3px] rounded-full" />}
+                {active && <span className="absolute top-2 bottom-2 left-0 w-[3px] rounded-[1px] bg-brand-500" />}
                 <div className="flex items-center gap-1.5">
                   {newest && <ActorMark entry={newest} size={18} />}
                   <span className="truncate text-[13px] font-bold">{item.name}</span>

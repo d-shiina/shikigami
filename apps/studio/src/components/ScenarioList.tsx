@@ -77,7 +77,7 @@ function Monogram({ name, active }: { name: string; active: boolean }) {
   return (
     <span
       className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] text-[11px] font-bold ${
-        active ? "swirl text-white" : "bg-brand-50 text-brand-700"
+        active ? "bg-ink text-paper" : "bg-brand-50 text-brand-700"
       }`}
     >
       {[...name.trim()][0] ?? "?"}
@@ -118,7 +118,7 @@ function ScenarioItem({ summary, active, query }: { summary: ScenarioSummary; ac
           active ? "bg-brand-50 text-ink" : "text-slate-700 hover:bg-slate-100"
         }`}
       >
-        {active && <span className="swirl absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full" />}
+        {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-[1px] bg-brand-500" />}
         <Monogram name={summary.name} active={active} />
         <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "font-bold" : ""}`}>
           <Marked text={summary.name} query={query} />
