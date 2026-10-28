@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import { useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
-import { layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
+import { type Direction, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { t } from "../lib/i18n";
 import type { HistoryEntry, VariableDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
@@ -30,7 +30,7 @@ import { Sentence } from "./StoryView";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined> }>
+  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; dir: Direction }>
 >;
 
 const MIN_READABLE_ZOOM = 0.8;
@@ -90,6 +90,21 @@ function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; co
 
 const FLOW_HANDLE = "!border-0 !bg-slate-300";
 
+/**
+ * Where step-to-step flow enters and leaves a node. Left to right, it uses
+ * the header's height on the side edges, clear of the variable sockets below.
+ */
+function FlowHandles({ dir, atHeader = true }: { dir: Direction; atHeader?: boolean }) {
+  const across = dir === "horizontal";
+  const style = across && atHeader ? { top: 12 } : undefined;
+  return (
+    <>
+      <Handle id="flow" type="target" position={across ? Position.Left : Position.Top} style={style} className={FLOW_HANDLE} />
+      <Handle id="flow" type="source" position={across ? Position.Right : Position.Bottom} style={style} className={FLOW_HANDLE} />
+    </>
+  );
+}
+
 type DataEdgeData = { variable: string; color: string; writes: VariableChange[]; lit: boolean; dim: boolean };
 
 /** A variable link. Hovering it shows the values that travelled along it in the last run. */
@@ -114,7 +129,7 @@ function DataEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
           {/* The last value that travelled along this link, always visible after a run. */}
           <div
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, borderColor: data.color }}
-            className="nodrag nopan pointer-events-none absolute max-w-[150px] truncate rounded-[3px] border bg-sheet px-1 font-mono text-[10px] leading-[16px] text-ink shadow-sm"
+            className="nodrag nopan pointer-events-none absolute max-w-[68px] truncate rounded-[3px] border bg-sheet px-1 font-mono text-[10px] leading-[16px] text-ink shadow-sm"
           >
             {valueText(last)}
             {data.writes.length > 1 && <span className="ml-1 text-slate-400">×{data.writes.length}</span>}
@@ -199,11 +214,11 @@ function StepNode({ data }: StepNodeProps) {
       }`}
     >
       {latest && (
-        <NodeToolbar isVisible position={Position.Right} offset={12}>
+        <NodeToolbar isVisible position={data.dir === "horizontal" ? Position.Top : Position.Right} offset={12}>
           <ReviewToolbar entry={latest} />
         </NodeToolbar>
       )}
-      <Handle id="flow" type="target" position={Position.Top} className={FLOW_HANDLE} />
+      <FlowHandles dir={data.dir} />
       <div
         style={{ height: 24, background: `${color}1a` }}
         className="flex items-center gap-1.5 rounded-t-[3px] border-b border-slate-100 px-3"
@@ -236,12 +251,11 @@ function StepNode({ data }: StepNodeProps) {
           ))}
         </div>
       )}
-      <Handle id="flow" type="source" position={Position.Bottom} className={FLOW_HANDLE} />
     </div>
   );
 }
 
-function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
+function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean; dir: Direction }>>) {
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
@@ -249,9 +263,9 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
         data.selected ? "border-brand-500 bg-brand-50 text-brand-600" : "border-slate-300 text-slate-400"
       }`}
     >
-      <Handle id="flow" type="target" position={Position.Top} className={FLOW_HANDLE} />
+      <FlowHandles dir={data.dir} atHeader={false} />
       {data.parentId ? `${data.label}：空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
-      <Handle id="flow" type="source" position={Position.Bottom} className={FLOW_HANDLE} />
+
     </div>
   );
 }
@@ -330,6 +344,7 @@ export function FlowCanvas() {
         draggable: false,
         data: {
           ...n.data,
+          dir: layout.direction,
           runState: run?.steps[id],
           issueCount: issueCounts.get(id) ?? 0,
           selected: selection?.kind === "step" && selection.stepId === id,
@@ -345,6 +360,7 @@ export function FlowCanvas() {
       draggable: false,
       data: {
         ...slot,
+        dir: layout.direction,
         selected: selection?.kind === "slot" && selection.parentId === slot.parentId && selection.block === slot.block,
       },
     };
@@ -373,7 +389,7 @@ export function FlowCanvas() {
       draggable: false,
       selectable: false,
       // Below the last step, so review buttons beside nodes never cover it.
-      position: { x: layout.width + IO_GAP, y: layout.height + 16 },
+      position: layout.direction === "horizontal" ? { x: layout.width + IO_GAP, y: 0 } : { x: layout.width + IO_GAP, y: layout.height + 16 },
       data: { kind: "io", side: "output", variables: returned },
     });
   }
@@ -434,14 +450,16 @@ export function FlowCanvas() {
       ref={wrapper}
       onInit={(flow) => {
         // Fit the chart, but never shrink it below reading size: a long
-        // scenario starts at its top and scrolls instead.
+        // scenario starts at its beginning (left, or top) and scrolls instead.
         const box = wrapper.current;
         if (!box) return;
         const pad = 64;
-        const fit = Math.min((box.clientWidth - pad) / bounds.width, (box.clientHeight - pad) / layout.height, 1);
-        const zoom = Math.max(fit, MIN_READABLE_ZOOM);
-        const top = zoom > fit ? pad / 2 : (box.clientHeight - layout.height * zoom) / 2;
-        void flow.setViewport({ x: (box.clientWidth - bounds.width * zoom) / 2 - bounds.x * zoom, y: top, zoom });
+        const fitW = (box.clientWidth - pad) / bounds.width;
+        const fitH = (box.clientHeight - pad) / layout.height;
+        const zoom = Math.max(Math.min(fitW, fitH, 1), MIN_READABLE_ZOOM);
+        const x = zoom > fitW ? pad / 2 : (box.clientWidth - bounds.width * zoom) / 2;
+        const y = zoom > fitH || layout.direction === "horizontal" ? pad / 2 + 24 : (box.clientHeight - layout.height * zoom) / 2;
+        void flow.setViewport({ x: x - bounds.x * zoom, y, zoom });
       }}
       minZoom={0.2}
       onNodeClick={(_, node) => {

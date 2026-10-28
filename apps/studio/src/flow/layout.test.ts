@@ -34,7 +34,7 @@ describe("layoutScenario", () => {
   });
 
   it("chains sequential steps top to bottom", () => {
-    const layout = layoutScenario([log("a"), log("b"), log("c")], defs);
+    const layout = layoutScenario([log("a"), log("b"), log("c")], defs, "vertical");
     const ys = layout.nodes.map((n) => n.position.y);
     expect(ys).toEqual([...ys].sort((p, q) => p - q));
     expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual(["a>b", "b>c"]);
@@ -45,7 +45,7 @@ describe("layoutScenario", () => {
       { id: "if", type: "control.if", blocks: { then: [log("t1"), log("t2")] } },
       log("after"),
     ];
-    const layout = layoutScenario(steps, defs);
+    const layout = layoutScenario(steps, defs, "vertical");
     const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
     const elseSlot = layout.nodes.find((n) => n.type === "slot");
     expect(elseSlot?.id).toBe("slot:if:else");
@@ -62,7 +62,7 @@ describe("layoutScenario", () => {
       { id: "loop", type: "control.repeat", blocks: { body: [log("x")] } },
       log("after"),
     ];
-    const layout = layoutScenario(steps, defs);
+    const layout = layoutScenario(steps, defs, "vertical");
     expect(layout.edges.find((e) => e.source === "x" && e.target === "loop")?.loop).toBe(true);
     expect(layout.edges.some((e) => e.source === "loop" && e.target === "after")).toBe(true);
   });
@@ -72,7 +72,7 @@ describe("layoutScenario", () => {
       { id: "par", type: "control.parallel", blocks: { branches: [log("a"), log("b"), log("c")] } },
       log("after"),
     ];
-    const layout = layoutScenario(steps, defs);
+    const layout = layoutScenario(steps, defs, "vertical");
     const byId = Object.fromEntries(layout.nodes.map((n) => [n.id, n]));
     expect(byId.a!.position.y).toBe(byId.b!.position.y);
     expect(byId.a!.position.x).toBeLessThan(byId.b!.position.x);
@@ -81,5 +81,24 @@ describe("layoutScenario", () => {
     expect(["a", "b", "c"].map((id) => (byId[id]!.data as { index: number }).index)).toEqual([0, 1, 2]);
     const intoAfter = layout.edges.filter((e) => e.target === "after").map((e) => e.source);
     expect(intoAfter.sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("runs left to right by default, with blocks hanging below their step", () => {
+    const steps: Step[] = [
+      log("a"),
+      { id: "if", type: "control.if", blocks: { then: [log("t")], else: [log("e")] } },
+      log("after"),
+    ];
+    const layout = layoutScenario(steps, defs);
+    const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
+    expect(layout.direction).toBe("horizontal");
+    expect(pos.a!.x).toBeLessThan(pos.if!.x);
+    expect(pos.if!.x).toBeLessThan(pos.t!.x);
+    expect(pos.t!.y).toBeGreaterThan(pos.if!.y);
+    expect(pos.t!.y).toBe(pos.e!.y);
+    expect(pos.t!.x).toBeLessThan(pos.e!.x);
+    expect(pos.e!.x).toBeLessThan(pos.after!.x);
+    // the main line stays on one row
+    expect(pos.a!.y).toBe(pos.after!.y);
   });
 });
