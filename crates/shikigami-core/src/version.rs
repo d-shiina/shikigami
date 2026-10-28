@@ -98,6 +98,10 @@ pub struct ScenarioBundle {
     pub scenario: Scenario,
     #[serde(default)]
     pub versions: Vec<ScenarioVersion>,
+    /// Every scenario `scenario` calls (directly or through others), without
+    /// versions, so the bundle runs on its own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subscenarios: Vec<Scenario>,
 }
 
 /// What to do when an imported scenario's ID already exists.
@@ -109,6 +113,18 @@ pub enum ImportConflict {
     Update,
     /// Import as a new scenario with a new ID.
     Copy,
+}
+
+/// What importing a bundle did with one of its sub-scenarios.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SubscenarioImport {
+    /// It was not in the workspace and was added with the same ID.
+    Created,
+    /// It existed and was updated (`onConflict: "update"`).
+    Updated,
+    /// It existed and was left as it is.
+    Kept,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

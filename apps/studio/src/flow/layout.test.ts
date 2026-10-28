@@ -27,6 +27,15 @@ const defs = new Map(
 const log = (id: string): Step => ({ id, type: "log.message" });
 
 describe("layoutScenario", () => {
+  it("makes room below an unfolded call", () => {
+    const steps = [log("a"), log("b")];
+    const folded = layoutScenario(steps, defs);
+    const open = layoutScenario(steps, defs, new Map([["a", 120]]));
+    const y = (l: typeof open, id: string) => l.nodes.find((n) => n.id === id)!.position.y;
+    expect(y(open, "b") - y(folded, "b")).toBe(120);
+    expect(open.height - folded.height).toBe(120);
+  });
+
   it("renders an empty scenario as a single slot", () => {
     const layout = layoutScenario([], defs);
     expect(layout.nodes).toHaveLength(1);

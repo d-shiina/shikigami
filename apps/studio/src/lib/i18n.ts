@@ -54,6 +54,9 @@ export const ja = {
   secretAskAdded: (name: string, sites: string[]) =>
     `「入力してよいサイト」に ${sites.join("、")} を追加しました。「${name}」のパスワードをこのサイトに入力してよいか確かめてから保存してください`,
   secretAskHint: "登録フォームに名前とサイトを入れてあります。ユーザー名・パスワードを入力して保存してください",
+  inUse: (callers: string[]) =>
+    `${callers.map((c) => `「${c}」`).join("")}から呼ばれているため削除できません。先にそのシナリオの呼び出しを外してください`,
+  extracted: (name: string) => `新しいシナリオ「${name}」にまとめました`,
   close: "閉じる",
   cancel: "やめる",
   secretNoDefault: "機密の変数には既定値を書けません。パスワードは右上の「シークレット」に登録して、入力ステップで選びます",
