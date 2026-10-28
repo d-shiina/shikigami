@@ -976,6 +976,7 @@ impl Executor {
         child.default_retry = callee.settings.default_retry;
         child.default_on_error = callee.settings.on_error.unwrap_or(OnError::Fail);
         crate::init_variables(&callee, &inputs, &mut child)?;
+        let initial = child.vars.clone();
 
         let result = match step.timeout_ms {
             None => child.block(&callee.steps).await,
@@ -992,6 +993,21 @@ impl Executor {
             }
         };
         cancel.cancel();
+        // Outputs come back even when the call fails, but only those it
+        // assigned: like steps run in place, whatever they wrote before the
+        // failure stays visible to the caller's catch / onError: continue.
+        let failed = result.is_err();
+        let outputs = step.params.get("outputs").and_then(Value::as_object);
+        for (name, target) in outputs.into_iter().flatten() {
+            let Some(target) = target.as_str() else {
+                continue;
+            };
+            let value = child.vars.get(name).cloned().unwrap_or(Value::Null);
+            if failed && initial.get(name) == Some(&value) {
+                continue;
+            }
+            self.set_var(target, value, Some(&step.id));
+        }
         match result {
             Ok(_) => {}
             Err(Interrupt::Cancelled) => return Err(Interrupt::Cancelled),
@@ -1017,14 +1033,6 @@ impl Executor {
             }
             // The call itself failed (timeout): no step inside to point at.
             Err(interrupt) => return Err(interrupt),
-        }
-        let outputs = step.params.get("outputs").and_then(Value::as_object);
-        for (name, target) in outputs.into_iter().flatten() {
-            let Some(target) = target.as_str() else {
-                continue;
-            };
-            let value = child.vars.get(name).cloned().unwrap_or(Value::Null);
-            self.set_var(target, value, Some(&step.id));
         }
         Ok(Flow::Next)
     }

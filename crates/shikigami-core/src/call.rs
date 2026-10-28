@@ -525,9 +525,10 @@ pub fn extract(
         .collect();
     let has_value = |v: &str| declared.contains(v) || writes_before.contains(v);
 
+    // Loop variables and `errorVar` are only local when nothing outside
+    // sees them: variables are flat, so a loop leaves its last item behind.
     let outputs: BTreeSet<String> = writes_in
         .iter()
-        .filter(|v| !binders.contains(*v))
         .filter(|v| {
             declared.contains(v.as_str())
                 || returned.contains(v.as_str())
@@ -871,6 +872,27 @@ mod tests {
         // `item` and `double` stay inside.
         assert!(plan.subscenario.variable("item").is_none());
         assert!(plan.subscenario.variable("double").is_none());
+    }
+
+    #[test]
+    fn a_loop_variable_read_after_the_loop_comes_back_out() {
+        let registry = StepRegistry::with_builtins();
+        let caller = scenario(
+            "main",
+            vec![var("items", VarType::Array, VarDirection::Input)],
+            vec![
+                Step::new(control::FOR_EACH)
+                    .with_param("items", "items")
+                    .with_param("itemVar", "item")
+                    .with_block("body", vec![set("seen", "item")]),
+                Step::new("log.message").with_param("message", "last: {{ item }}"),
+            ],
+        );
+        let plan = extract(&caller, &[caller.steps[0].id.clone()], "x", &registry).unwrap();
+        assert_eq!(plan.call.params["outputs"]["item"], json!("item"));
+        assert!(plan.call.params.get("inputs").unwrap()["item"].is_null());
+        let report = Validator::new(StepRegistry::with_builtins()).validate(&plan.subscenario);
+        assert!(report.valid, "{report:?}");
     }
 
     #[test]

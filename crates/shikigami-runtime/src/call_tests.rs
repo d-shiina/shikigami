@@ -360,3 +360,40 @@ async fn secrets_found_inside_a_call_stay_masked_outside() {
     let text = serde_json::to_string(&events).expect("json");
     assert!(!text.contains("hunter2-long"), "{text}");
 }
+
+#[tokio::test]
+async fn a_failed_call_still_hands_back_what_it_assigned() {
+    let mut half = Scenario::new("途中で失敗");
+    half.id = "scn_half".into();
+    half.variables = vec![
+        var("x", VarType::Number, VarDirection::Output),
+        var("y", VarType::String, VarDirection::Output),
+    ];
+    half.steps = vec![
+        set("x", "1"),
+        Step::new("control.fail")
+            .with_param("message", "だめ")
+            .with_param("code", "NOPE"),
+    ];
+    let half = with_ids(half, "h");
+    let main = caller(
+        vec![
+            set("y", "'keep'"),
+            Step::new("control.try")
+                .with_block(
+                    "try",
+                    vec![call("scn_half", json!({}), json!({ "x": "x", "y": "y" }))],
+                )
+                .with_block("catch", vec![set("seen", "x")]),
+        ],
+        vec![
+            var("seen", VarType::Number, VarDirection::Output),
+            var("y", VarType::String, VarDirection::Output),
+        ],
+    );
+    let (report, _) = run_with(&Runtime::new(), main, vec![half]).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs.get("seen"), Some(&json!(1)));
+    // `y` was never assigned inside, so the caller's value stays.
+    assert_eq!(report.outputs.get("y"), Some(&json!("keep")));
+}

@@ -190,8 +190,18 @@ impl ScenarioService {
     /// once, missing ones left out), with the version each one matches.
     /// Pass them to the Runtime with the run.
     pub fn subscenarios(&self, scenario: &Scenario) -> CoreResult<Vec<Subscenario>> {
+        self.subscenarios_bundled(scenario, &[])
+    }
+
+    /// Like [`Self::subscenarios`] for a bundle: its own sub-scenarios win
+    /// over the workspace's, the same lookup [`Self::validate_bundled`] uses.
+    pub fn subscenarios_bundled(
+        &self,
+        scenario: &Scenario,
+        bundled: &[Scenario],
+    ) -> CoreResult<Vec<Subscenario>> {
         Ok(self
-            .called_scenarios(scenario)
+            .called_scenarios(scenario, bundled)
             .into_iter()
             .map(|s| {
                 let version = self.matching_version(&s).ok().flatten();
@@ -203,14 +213,18 @@ impl ScenarioService {
             .collect())
     }
 
-    fn called_scenarios(&self, scenario: &Scenario) -> Vec<Scenario> {
+    fn called_scenarios(&self, scenario: &Scenario, bundled: &[Scenario]) -> Vec<Scenario> {
         let mut found: Vec<Scenario> = Vec::new();
         let mut queue: Vec<ScenarioId> = call::called_ids(scenario).into_iter().collect();
         while let Some(id) = queue.pop() {
             if id == scenario.id || found.iter().any(|s| s.id == id) {
                 continue;
             }
-            if let Ok(next) = self.store.load(&id) {
+            let next = match bundled.iter().find(|s| s.id == id) {
+                Some(s) => Some(s.clone()),
+                None => self.store.load(&id).ok(),
+            };
+            if let Some(next) = next {
                 queue.extend(call::called_ids(&next));
                 found.push(next);
             }
@@ -972,7 +986,7 @@ impl ScenarioService {
         } else {
             Vec::new()
         };
-        let mut subscenarios = self.called_scenarios(&scenario);
+        let mut subscenarios = self.called_scenarios(&scenario, &[]);
         subscenarios.iter_mut().for_each(version::strip_secrets);
         Ok(ScenarioBundle {
             format: BUNDLE_FORMAT.into(),

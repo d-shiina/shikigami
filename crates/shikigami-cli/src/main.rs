@@ -759,25 +759,13 @@ fn resolve(svc: &ScenarioService, target: &str) -> Result<(Scenario, Vec<Scenari
 }
 
 /// What the run's calls may use: a bundle's own sub-scenarios first, then
-/// the workspace for any others.
+/// the workspace for any others (also those the bundled ones call).
 fn subscenarios(
     svc: &ScenarioService,
     scenario: &Scenario,
     bundled: Vec<Scenario>,
 ) -> Result<Vec<shikigami_core::Subscenario>> {
-    let mut all: Vec<shikigami_core::Subscenario> = bundled
-        .into_iter()
-        .map(|scenario| shikigami_core::Subscenario {
-            scenario,
-            version: None,
-        })
-        .collect();
-    for sub in svc.subscenarios(scenario)? {
-        if !all.iter().any(|s| s.scenario.id == sub.scenario.id) {
-            all.push(sub);
-        }
-    }
-    Ok(all)
+    Ok(svc.subscenarios_bundled(scenario, &bundled)?)
 }
 
 fn parse_inputs(raw: &[String]) -> Result<Map<String, Value>> {

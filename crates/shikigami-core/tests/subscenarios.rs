@@ -187,3 +187,33 @@ fn extracting_steps_creates_a_scenario_and_one_undoable_edit() {
         .unwrap_err();
     assert_eq!(err.code(), "REVISION_CONFLICT");
 }
+
+#[test]
+fn a_bundles_own_subscenarios_lead_to_the_workspace_ones_they_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let svc = service_at(dir.path());
+    let tax = tax(&svc);
+    // `wrap` is only in the bundle; it calls `tax` from the workspace.
+    let mut wrap = shikigami_core::Scenario::new("包む");
+    wrap.id = "scn_wrap".into();
+    wrap.steps = vec![call(&tax.id).with_id("w1")];
+    wrap.variables = vec![var("total", VarType::Number, VarDirection::Output)];
+    let mut main = shikigami_core::Scenario::new("本体");
+    main.steps = vec![
+        Step::new("scenario.call")
+            .with_id("m1")
+            .with_param("scenario", "scn_wrap"),
+    ];
+    assert!(
+        svc.validate_bundled(&main, std::slice::from_ref(&wrap))
+            .valid
+    );
+    let ids: Vec<String> = svc
+        .subscenarios_bundled(&main, &[wrap])
+        .unwrap()
+        .into_iter()
+        .map(|s| s.scenario.id.as_str().to_owned())
+        .collect();
+    assert!(ids.contains(&"scn_wrap".to_owned()), "{ids:?}");
+    assert!(ids.contains(&tax.id.as_str().to_owned()), "{ids:?}");
+}
