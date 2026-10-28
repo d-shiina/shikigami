@@ -1,6 +1,6 @@
 //! Stable identifiers for scenarios, steps and runs.
 //!
-//! IDs are prefixed UUIDv7 strings (`scn_…`, `stp_…`, `run_…`). The prefix makes
+//! IDs are prefixed UUIDv7 strings (`scn_…`, `stp_…`, `run_…`, `obs_…`). The prefix makes
 //! them self-describing for AI clients and logs; UUIDv7 keeps them sortable by
 //! creation time. Parsing is lenient (any non-empty string without whitespace or
 //! path separators is accepted) so hand-written or imported scenarios still load.
@@ -78,6 +78,11 @@ define_id!(
     /// Identifier of a single scenario execution.
     RunId,
     "run"
+);
+define_id!(
+    /// Identifier of a screen an AI looked at (review evidence).
+    ObservationId,
+    "obs"
 );
 
 fn is_well_formed(value: &str) -> bool {

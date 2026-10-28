@@ -4,10 +4,10 @@
 use serde::Serialize;
 use serde_json::{Map, Value};
 use shikigami_core::{
-    Actor, ActorKind, EditOp, EditOutcome, ErrorPayload, FileStore, HistoryEntry, ImportConflict,
-    ImportOutcome, NewScenario, NewVersion, RunId, Scenario, ScenarioDiff, ScenarioId,
-    ScenarioSummary, StepTypeDef, UserConfig, ValidationReport, VersionSummary, WorkspaceInfo,
-    WorkspaceManifest,
+    Actor, ActorKind, EditOp, EditOutcome, ErrorPayload, Evidence, FileStore, HistoryEntry,
+    ImportConflict, ImportOutcome, NewReview, NewScenario, NewVersion, ObservationContent,
+    ObservationId, ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId, ScenarioSummary,
+    StepTypeDef, UserConfig, ValidationReport, VersionSummary, WorkspaceInfo, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{RunEventEnvelope, RunOptions, RunSnapshot};
@@ -241,6 +241,37 @@ pub fn scenario_history(
     limit: Option<usize>,
 ) -> CmdResult<Vec<HistoryEntry>> {
     Ok(state.service.history(&id, limit.unwrap_or(100))?)
+}
+
+/// Changes since the last approval (or `since`) with their summaries, the
+/// AI's test runs, the screens it based changes on, and the reviews.
+#[tauri::command]
+pub fn review_timeline(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    since: Option<u64>,
+) -> CmdResult<ReviewTimeline> {
+    Ok(state.service.review_timeline(&id, since)?)
+}
+
+/// Approves the current revision or sends it back with a reason the AI
+/// reads over MCP (get_scenario `feedback`, get_review).
+#[tauri::command]
+pub fn submit_review(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    input: NewReview,
+) -> CmdResult<Evidence> {
+    Ok(state.service.submit_review(&id, input, studio())?)
+}
+
+/// One observation with its UI tree and screenshot (data URL).
+#[tauri::command]
+pub fn get_observation(
+    state: State<'_, AppState>,
+    id: ObservationId,
+) -> CmdResult<ObservationContent> {
+    Ok(state.service.get_observation(&id)?)
 }
 
 /// Starts a run of the stored scenario. Events are emitted as `run-event`

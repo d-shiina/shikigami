@@ -1,6 +1,8 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -141,6 +143,11 @@ describe("browser adapter", () => {
     await adapter.call("fill", { ...r, target: { label: "パスワード" }, value: "typed-by-hand" });
     const again = (await adapter.call("snapshot", r)) as { snapshot: string };
     expect(again.snapshot).not.toContain("typed-by-hand");
+
+    // Review evidence: a JPEG of the page next to the tree.
+    const shot = join(mkdtempSync(join(tmpdir(), "shikigami-")), "shot.jpg");
+    await adapter.call("snapshot", { ...r, screenshotPath: shot });
+    expect([...readFileSync(shot).subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
     await adapter.call("closeRun", r);
   });
 

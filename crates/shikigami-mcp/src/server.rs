@@ -9,8 +9,8 @@ use rmcp::{ErrorData, Peer, RoleServer, ServerHandler, tool, tool_handler, tool_
 use serde::Serialize;
 use serde_json::{Value, json};
 use shikigami_core::{
-    Actor, ActorKind, EditOp, ErrorPayload, NewScenario, NewVersion, RunId, ScenarioId,
-    ScenarioService, StepId,
+    Actor, ActorKind, ChangeNote, EditOp, ErrorPayload, NewObservation, NewScenario, NewVersion,
+    ObservationId, ObservationSource, RunId, ScenarioId, ScenarioService, StepId, TestRun,
 };
 use shikigami_runtime::record::{self, RunRecorder};
 use shikigami_runtime::{
@@ -62,6 +62,7 @@ pub const TOOLS: &[(&str, ToolClass)] = &[
     ("list_step_types", ToolClass::Read),
     ("get_step_schema", ToolClass::Read),
     ("get_history", ToolClass::Read),
+    ("get_review", ToolClass::Read),
     ("get_run_status", ToolClass::Read),
     ("get_run_logs", ToolClass::Read),
     ("list_runs", ToolClass::Read),
@@ -125,6 +126,8 @@ Shikigami Studio, and scenarios run later without you.\n\
 - Prefer small edits (add_step, update_step) or one update_scenario with several ops; each call is one undo step for the human.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the scenario: re-read it and redo your change, never overwrite blindly.\n\
 - After editing, call validate_scenario and fix every error, then run_scenario (waitMs) and inspect get_run_logs; its variableChanged events show each value a variable took and the step that set it.\n\
+- A human reviews your changes in Studio. On every edit pass `summary` (what you changed and why, one or two sentences, Japanese is fine) and `observations`: the observationId values that inspect_page, inspect_ui and test_step returned for the screens the change is based on. Your run_scenario results are recorded against the revision they ran.\n\
+- When get_scenario returns `feedback`, the human sent the scenario back: read its reason and step notes (get_review shows the whole review), fix exactly that, and say in `summary` how you addressed it.\n\
 - Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
 - Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.\n\
 - Versions: when the user says a scenario works or is ready, offer create_version with a short name. diff_versions shows what changed since the latest version; restore_version is one undoable edit. Never restore without the user asking.\n\
@@ -252,11 +255,59 @@ impl ShikigamiMcp {
         id: &str,
         rev: Option<u64>,
         ops: Vec<EditOp>,
+        note: ChangeNote,
     ) -> Outcome {
         let out = self
             .svc()
-            .edit(&ScenarioId::new(id), rev, ops, actor(peer))?;
+            .edit_noted(&ScenarioId::new(id), rev, ops, actor(peer), note)?;
         Ok(to_value(&out))
+    }
+
+    /// Stores what the AI just saw as review evidence and returns its ID.
+    /// Text is masked against the registered secrets first. Failing to store
+    /// evidence never fails the tool call.
+    fn observe(
+        &self,
+        peer: &Peer<RoleServer>,
+        source: ObservationSource,
+        request: Value,
+        result: &Value,
+        screenshot: Option<Vec<u8>>,
+    ) -> Option<ObservationId> {
+        let vault = &self.inner.vault;
+        let state = if source == ObservationSource::TestStep {
+            result.get("state").unwrap_or(&Value::Null)
+        } else {
+            result
+        };
+        let tree = state
+            .get("snapshot")
+            .and_then(Value::as_str)
+            .map(|t| vault.mask(t));
+        let title = observation_title(source, &request, state);
+        let input = NewObservation {
+            source,
+            title: vault.mask(&title),
+            request,
+            status: result
+                .get("status")
+                .filter(|_| source == ObservationSource::TestStep)
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            output: result
+                .get("output")
+                .filter(|_| source == ObservationSource::TestStep)
+                .map(|v| mask_value(vault, v)),
+            tree,
+            screenshot,
+        };
+        match self.svc().record_observation(input, actor(peer)) {
+            Ok(o) => Some(o.id),
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to record observation");
+                None
+            }
+        }
     }
 }
 
@@ -318,7 +369,11 @@ impl ShikigamiMcp {
             let id = ScenarioId::new(p.scenario_id.as_str());
             let scenario = self.svc().get(&id)?;
             let (can_undo, can_redo) = self.svc().undo_state(&id)?;
-            Ok(json!({ "scenario": scenario, "canUndo": can_undo, "canRedo": can_redo }))
+            let mut out = json!({ "scenario": scenario, "canUndo": can_undo, "canRedo": can_redo });
+            if let Some(feedback) = self.svc().open_feedback(&id)? {
+                out["feedback"] = to_value(&feedback);
+            }
+            Ok(out)
         })();
         self.finish("get_scenario", &peer, Some(&p.scenario_id), outcome)
     }
@@ -422,6 +477,8 @@ impl ShikigamiMcp {
                             "actor": e.actor,
                             "at": e.at,
                             "label": e.label,
+                            "summary": e.summary,
+                            "stepIds": e.step_ids,
                         })
                     })
                     .collect();
@@ -429,6 +486,23 @@ impl ShikigamiMcp {
             })
             .map_err(Into::into);
         self.finish("get_history", &peer, Some(&p.scenario_id), outcome)
+    }
+
+    /// What a human reviewing this scenario sees: the changes since the last approval (with each
+    /// change's summary and touched steps), your test runs, the screens you based changes on, and
+    /// the reviews. `openFeedback` is a review that sent the scenario back and still needs fixing.
+    #[tool(annotations(read_only_hint = true, open_world_hint = false))]
+    async fn get_review(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(p): Parameters<GetReviewParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let outcome = self
+            .svc()
+            .review_timeline(&ScenarioId::new(p.scenario_id.as_str()), p.since_revision)
+            .map(|t| to_value(&t))
+            .map_err(Into::into);
+        self.finish("get_review", &peer, Some(&p.scenario_id), outcome)
     }
 
     /// Status of a run: live progress while running, the final report (status, outputs, error) once finished.
@@ -600,9 +674,10 @@ impl ShikigamiMcp {
             steps: p.steps,
             tags: p.tags,
         };
+        let note = change_note(p.summary, p.observations);
         let outcome = self
             .svc()
-            .create(input, actor(&peer))
+            .create_noted(input, actor(&peer), note)
             .map(|o| to_value(&o))
             .map_err(Into::into);
         let id = outcome
@@ -626,7 +701,8 @@ impl ShikigamiMcp {
         peer: Peer<RoleServer>,
         Parameters(p): Parameters<UpdateScenarioParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, p.ops);
+        let note = change_note(p.summary, p.observations);
+        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, p.ops, note);
         self.finish("update_scenario", &peer, Some(&p.scenario_id), outcome)
     }
 
@@ -645,7 +721,8 @@ impl ShikigamiMcp {
             step: p.step,
             position: p.position,
         }];
-        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops);
+        let note = change_note(p.summary, p.observations);
+        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops, note);
         self.finish("add_step", &peer, Some(&p.scenario_id), outcome)
     }
 
@@ -664,7 +741,8 @@ impl ShikigamiMcp {
             step_id: StepId::new(p.step_id),
             patch: p.patch,
         }];
-        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops);
+        let note = change_note(p.summary, p.observations);
+        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops, note);
         self.finish("update_step", &peer, Some(&p.scenario_id), outcome)
     }
 
@@ -682,7 +760,8 @@ impl ShikigamiMcp {
         let ops = vec![EditOp::RemoveStep {
             step_id: StepId::new(p.step_id),
         }];
-        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops);
+        let note = change_note(p.summary, p.observations);
+        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops, note);
         self.finish("remove_step", &peer, Some(&p.scenario_id), outcome)
     }
 
@@ -701,7 +780,8 @@ impl ShikigamiMcp {
             step_id: StepId::new(p.step_id),
             position: p.position,
         }];
-        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops);
+        let note = change_note(p.summary, p.observations);
+        let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops, note);
         self.finish("move_step", &peer, Some(&p.scenario_id), outcome)
     }
 
@@ -871,7 +951,7 @@ impl ShikigamiMcp {
         peer: Peer<RoleServer>,
         Parameters(p): Parameters<RunScenarioParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let outcome = self.start_run(&p).await;
+        let outcome = self.start_run(&p, actor(&peer)).await;
         self.finish("run_scenario", &peer, Some(&p.scenario_id), outcome)
     }
 
@@ -896,10 +976,27 @@ impl ShikigamiMcp {
         if let Some(target) = p.target {
             params.insert("target".into(), target);
         }
+        let request = Value::Object(params.clone());
+        let shot = ScreenshotFile::new(p.screenshot.unwrap_or(true));
+        if let Some(path) = shot.path() {
+            params.insert("screenshotPath".into(), Value::String(path));
+        }
         let outcome = self
             .inspect("browser", Value::Object(params))
             .await
-            .map(truncate_snapshot);
+            .map(|mut page| {
+                let id = self.observe(
+                    &peer,
+                    ObservationSource::InspectPage,
+                    request,
+                    &page,
+                    shot.take(),
+                );
+                if let Some(id) = id {
+                    page["observationId"] = json!(id);
+                }
+                truncate_snapshot(page)
+            });
         self.finish("inspect_page", &peer, None, outcome)
     }
 
@@ -922,17 +1019,28 @@ impl ShikigamiMcp {
         if let Some(max_nodes) = p.max_nodes {
             params.insert("maxNodes".into(), max_nodes.into());
         }
+        let request = Value::Object(params.clone());
         let outcome = self
             .inspect("desktop", Value::Object(params))
             .await
-            .map(truncate_snapshot);
+            .map(|mut ui| {
+                // The window list is not a screen worth keeping.
+                if ui.get("snapshot").is_some()
+                    && let Some(id) =
+                        self.observe(&peer, ObservationSource::InspectUi, request, &ui, None)
+                {
+                    ui["observationId"] = json!(id);
+                }
+                truncate_snapshot(ui)
+            });
         self.finish("inspect_ui", &peer, None, outcome)
     }
 
     /// Run one step now, outside any scenario, and return its output (and, for application steps such
     /// as browser.*, what the application shows afterwards). Steps share this MCP session's state, so
     /// you can walk through a site (open, log in, open a menu) before writing the scenario. Use literal
-    /// values (no {{ }}). The scenario is not changed and nothing is recorded.
+    /// values (no {{ }}). The scenario is not changed; what you saw is kept as an observation
+    /// (observationId) to name in the edit it leads to.
     #[tool(annotations(
         read_only_hint = false,
         destructive_hint = false,
@@ -943,7 +1051,24 @@ impl ShikigamiMcp {
         peer: Peer<RoleServer>,
         Parameters(p): Parameters<TestStepParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let outcome = self.test_step_inner(p.step).await;
+        let request = to_value(&p.step);
+        let shot = ScreenshotFile::new(p.step.step_type.starts_with("browser."));
+        let outcome = self
+            .test_step_inner(p.step, shot.path())
+            .await
+            .map(|mut result| {
+                let id = self.observe(
+                    &peer,
+                    ObservationSource::TestStep,
+                    request,
+                    &result,
+                    shot.take(),
+                );
+                if let Some(id) = id {
+                    result["observationId"] = json!(id);
+                }
+                result
+            });
         self.finish("test_step", &peer, None, outcome)
     }
 
@@ -994,6 +1119,84 @@ fn truncate_snapshot(mut page: Value) -> Value {
     page
 }
 
+fn change_note(summary: Option<String>, observations: Vec<String>) -> ChangeNote {
+    ChangeNote {
+        summary,
+        observations: observations.into_iter().map(ObservationId::new).collect(),
+    }
+}
+
+/// A line for lists of observations: the window or page, or the tested step.
+fn observation_title(source: ObservationSource, request: &Value, state: &Value) -> String {
+    let text = |v: Option<&Value>| v.and_then(Value::as_str).unwrap_or_default().to_owned();
+    match source {
+        ObservationSource::InspectUi => text(state.pointer("/window/title")),
+        ObservationSource::InspectPage => {
+            let title = text(state.get("title"));
+            let url = text(state.get("url"));
+            if title.is_empty() {
+                url
+            } else {
+                format!("{title} ({url})")
+            }
+        }
+        ObservationSource::TestStep => {
+            let name = text(request.get("name"));
+            let kind = text(request.get("type"));
+            if name.is_empty() {
+                kind
+            } else {
+                format!("{kind}: {name}")
+            }
+        }
+    }
+}
+
+/// Masks registered secrets in every string of a JSON value.
+fn mask_value(vault: &shikigami_secrets::Vault, value: &Value) -> Value {
+    match value {
+        Value::String(s) => Value::String(vault.mask(s)),
+        Value::Array(items) => Value::Array(items.iter().map(|v| mask_value(vault, v)).collect()),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), mask_value(vault, v)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// A temporary file the browser adapter writes a screenshot to.
+struct ScreenshotFile(Option<std::path::PathBuf>);
+
+impl ScreenshotFile {
+    fn new(wanted: bool) -> Self {
+        Self(wanted.then(|| {
+            std::env::temp_dir().join(format!("shikigami-{}.jpg", ObservationId::generate()))
+        }))
+    }
+
+    fn path(&self) -> Option<String> {
+        self.0.as_ref().map(|p| p.display().to_string())
+    }
+
+    /// The screenshot's bytes, when the adapter wrote one.
+    fn take(&self) -> Option<Vec<u8>> {
+        let path = self.0.as_ref()?;
+        let bytes = std::fs::read(path).ok();
+        let _ = std::fs::remove_file(path);
+        bytes
+    }
+}
+
+impl Drop for ScreenshotFile {
+    fn drop(&mut self) {
+        if let Some(path) = &self.0 {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 impl ShikigamiMcp {
     async fn inspect(&self, adapter: &str, params: Value) -> Outcome {
         let adapter = self
@@ -1017,7 +1220,11 @@ impl ShikigamiMcp {
             })
     }
 
-    async fn test_step_inner(&self, mut step: shikigami_core::Step) -> Outcome {
+    async fn test_step_inner(
+        &self,
+        mut step: shikigami_core::Step,
+        screenshot_path: Option<String>,
+    ) -> Outcome {
         const OUTPUT: &str = "output";
         let registry = self.inner.runtime.registry();
         let def = registry.get(&step.step_type).ok_or_else(|| {
@@ -1092,6 +1299,9 @@ impl ShikigamiMcp {
             // desktop.launch, or when it closed).
             if let Some(window) = window {
                 params.insert("window".into(), window);
+            }
+            if let Some(path) = screenshot_path {
+                params.insert("screenshotPath".into(), Value::String(path));
             }
             if (adapter != "desktop" || params.contains_key("window"))
                 && let Ok(state) = self.inspect(&adapter, Value::Object(params)).await
@@ -1200,7 +1410,7 @@ impl ShikigamiMcp {
         Ok((id, handle, recorder))
     }
 
-    async fn start_run(&self, p: &RunScenarioParams) -> Outcome {
+    async fn start_run(&self, p: &RunScenarioParams, actor: Actor) -> Outcome {
         let scenario = self
             .svc()
             .get_runnable(&ScenarioId::new(p.scenario_id.as_str()))?;
@@ -1221,11 +1431,13 @@ impl ShikigamiMcp {
                 })),
             });
         }
+        let scenario_id = scenario.id.clone();
         let (id, handle, mut recorder) = self.launch(scenario, p)?;
         let (tx, mut rx) = watch::channel(None);
 
         let inner = self.inner.clone();
         let task_id = id.clone();
+        let run_actor = actor.clone();
         tokio::spawn(async move {
             let result = handle
                 .wait_with(|event| {
@@ -1238,6 +1450,27 @@ impl ShikigamiMcp {
                 Ok(report) => {
                     if let Err(e) = recorder.finish(&report) {
                         tracing::warn!(error = %e, "failed to write run report");
+                    }
+                    // Review evidence: what the AI's test run of this revision showed.
+                    let run = TestRun {
+                        run_id: report.run_id.clone(),
+                        status: to_value(&report.status)
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_owned(),
+                        error_code: report.error.as_ref().map(|e| e.code.clone()),
+                        error_message: report.error.as_ref().map(|e| e.message.clone()),
+                        step_id: report.error.as_ref().and_then(|e| e.step_id.clone()),
+                        version: report.version,
+                        started_at: report.started_at,
+                        finished_at: report.finished_at,
+                    };
+                    if let Err(e) =
+                        inner
+                            .service
+                            .record_test_run(&scenario_id, report.revision, run, run_actor)
+                    {
+                        tracing::warn!(error = %e, "failed to record test run");
                     }
                     let _ = tx.send(Some(report));
                 }

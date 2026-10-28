@@ -10,7 +10,9 @@ use rmcp::model::{
 use rmcp::service::RunningService;
 use rmcp::{RoleClient, ServiceExt};
 use serde_json::{Value, json};
-use shikigami_core::{ActorKind, FileStore, ScenarioId, ScenarioService};
+use shikigami_core::{
+    Actor, ActorKind, FileStore, NewReview, ReviewVerdict, ScenarioId, ScenarioService, StepNote,
+};
 use shikigami_mcp::{ServerOptions, ShikigamiMcp, ToolClass};
 use shikigami_runtime::Runtime;
 
@@ -337,7 +339,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 31);
+    assert_eq!(tools.len(), 32);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -532,5 +534,166 @@ async fn secrets_are_named_but_never_revealed() {
         .await;
     assert!(is_error);
     assert_eq!(result["code"], "SECRET_INPUT_REJECTED");
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn changes_carry_summaries_evidence_and_review_feedback() {
+    let h = start(ServerOptions::default()).await;
+    let created = h
+        .ok(
+            "create_scenario",
+            json!({ "name": "レビュー", "summary": "  空のシナリオを作成  " }),
+        )
+        .await;
+    let id = created["scenario"]["id"].as_str().unwrap().to_owned();
+
+    // What the AI tried before writing the step is kept as an observation.
+    let tried = h
+        .ok(
+            "test_step",
+            json!({ "step": { "type": "log.message", "name": "試し", "params": { "message": "hi" } } }),
+        )
+        .await;
+    let obs = tried["observationId"].as_str().unwrap().to_owned();
+    assert!(obs.starts_with("obs_"));
+
+    // An unknown observation fails the edit before anything changes.
+    let (is_error, e) = h
+        .call(
+            "add_step",
+            json!({ "scenarioId": id, "step": { "type": "log.message", "params": { "message": "x" } }, "observations": ["obs_missing"] }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(e["code"], "OBSERVATION_NOT_FOUND");
+
+    let added = h
+        .ok(
+            "add_step",
+            json!({
+                "scenarioId": id,
+                "expectedRevision": 1,
+                "step": { "type": "log.message", "params": { "message": "hi" } },
+                "summary": "あいさつを記録する手順を追加",
+                "observations": [obs],
+            }),
+        )
+        .await;
+    let step_id = added["scenario"]["steps"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let run = h
+        .ok("run_scenario", json!({ "scenarioId": id, "waitMs": 10000 }))
+        .await;
+    assert_eq!(run["report"]["status"], "succeeded");
+
+    let history = h.ok("get_history", json!({ "scenarioId": id })).await;
+    assert_eq!(history["entries"][0]["summary"], "空のシナリオを作成");
+    assert_eq!(
+        history["entries"][1]["summary"],
+        "あいさつを記録する手順を追加"
+    );
+    assert_eq!(history["entries"][1]["stepIds"], json!([step_id]));
+
+    // The human sends revision 2 back from Studio (another process).
+    let studio = h.other_process();
+    let sid = ScenarioId::new(id.as_str());
+    let stale = studio.submit_review(
+        &sid,
+        NewReview {
+            revision: 1,
+            verdict: ReviewVerdict::Rejected,
+            reason: "古い".into(),
+            steps: vec![],
+        },
+        Actor::new(ActorKind::Studio),
+    );
+    assert_eq!(stale.unwrap_err().code(), "REVISION_CONFLICT");
+    let no_reason = studio.submit_review(
+        &sid,
+        NewReview {
+            revision: 2,
+            verdict: ReviewVerdict::Rejected,
+            reason: " ".into(),
+            steps: vec![],
+        },
+        Actor::new(ActorKind::Studio),
+    );
+    assert_eq!(no_reason.unwrap_err().code(), "INVALID_EDIT");
+    studio
+        .submit_review(
+            &sid,
+            NewReview {
+                revision: 2,
+                verdict: ReviewVerdict::Rejected,
+                reason: "メッセージは日本語にしてください".into(),
+                steps: vec![StepNote {
+                    step_id: step_id.as_str().into(),
+                    note: "「こんにちは」に".into(),
+                }],
+            },
+            Actor::new(ActorKind::Studio),
+        )
+        .unwrap();
+
+    let got = h.ok("get_scenario", json!({ "scenarioId": id })).await;
+    assert_eq!(got["feedback"]["verdict"], "rejected");
+    assert_eq!(
+        got["feedback"]["reason"],
+        "メッセージは日本語にしてください"
+    );
+    assert_eq!(got["feedback"]["steps"][0]["stepId"], step_id);
+
+    let review = h.ok("get_review", json!({ "scenarioId": id })).await;
+    assert_eq!(review["revision"], 2);
+    assert_eq!(review["sinceRevision"], 0);
+    assert_eq!(review["changes"].as_array().map(Vec::len), Some(2));
+    let kinds: Vec<&str> = review["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["observation", "testRun", "review"]);
+    assert_eq!(review["evidence"][0]["observationId"], obs);
+    assert_eq!(review["evidence"][0]["stepIds"], json!([step_id]));
+    assert_eq!(review["evidence"][1]["revision"], 2);
+    assert_eq!(review["evidence"][1]["status"], "succeeded");
+    assert_eq!(review["evidence"][1]["actor"]["name"], "test-client");
+    assert_eq!(review["openFeedback"]["verdict"], "rejected");
+
+    // Studio reads the observation with its contents.
+    let content = studio
+        .get_observation(&shikigami_core::ObservationId::new(obs.as_str()))
+        .unwrap();
+    assert_eq!(content.observation.status.as_deref(), Some("succeeded"));
+    assert_eq!(content.observation.linked.len(), 1);
+
+    // The AI fixes it; approval closes the feedback and starts a new round.
+    h.ok(
+        "update_step",
+        json!({ "scenarioId": id, "stepId": step_id, "patch": { "params": { "message": "こんにちは" } }, "summary": "差し戻しに対応：日本語に変更" }),
+    )
+    .await;
+    studio
+        .submit_review(
+            &sid,
+            NewReview {
+                revision: 3,
+                verdict: ReviewVerdict::Approved,
+                reason: String::new(),
+                steps: vec![],
+            },
+            Actor::new(ActorKind::Studio),
+        )
+        .unwrap();
+    let got = h.ok("get_scenario", json!({ "scenarioId": id })).await;
+    assert!(got.get("feedback").is_none());
+    let review = h.ok("get_review", json!({ "scenarioId": id })).await;
+    assert_eq!(review["sinceRevision"], 3);
+    assert_eq!(review["changes"].as_array().map(Vec::len), Some(0));
+    assert_eq!(review["lastApproval"]["verdict"], "approved");
     h.client.cancel().await.unwrap();
 }

@@ -13,7 +13,8 @@ use crate::model::Scenario;
 use crate::model::ScenarioSummary;
 use crate::ops::EditOp;
 use crate::registry::StepTypeDef;
-use crate::service::{ChangeEvent, EditOutcome, ImportOutcome, NewScenario};
+use crate::review::{Evidence, NewReview, ObservationContent, ReviewTimeline};
+use crate::service::{ChangeEvent, ChangeNote, EditOutcome, ImportOutcome, NewScenario};
 use crate::store::{HistoryEntry, WorkspaceInfo};
 use crate::validate::ValidationReport;
 use crate::version::{
@@ -65,6 +66,11 @@ struct Api {
     import_outcome: ImportOutcome,
     import_conflict: ImportConflict,
     workspace_info: WorkspaceInfo,
+    change_note: ChangeNote,
+    review_timeline: ReviewTimeline,
+    evidence: Evidence,
+    new_review: NewReview,
+    observation_content: ObservationContent,
 }
 
 fn api_schema() -> Value {
