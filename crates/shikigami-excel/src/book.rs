@@ -6,6 +6,7 @@
 //! next to the workbook and renames it over the original.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Map, Value, json};
 use shikigami_runtime::StepError;
@@ -119,7 +120,12 @@ pub fn save(book: &Workbook, path: &str) -> Result<(), StepError> {
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("workbook.xlsx");
-    let temp = path.with_file_name(format!(".{name}.shikigami-{}.tmp", std::process::id()));
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let temp = path.with_file_name(format!(
+        ".{name}.shikigami-{}-{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
     umya_spreadsheet::writer::xlsx::write(book, &temp).map_err(|e| {
         let _ = std::fs::remove_file(&temp);
         match e {

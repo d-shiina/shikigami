@@ -13,12 +13,16 @@
 // move the allocation.
 #![allow(clippy::result_large_err)]
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
+
 use serde_json::{Value, json};
 use shikigami_core::registry::{RiskLevel, SINGLE_TEMPLATE_PATTERN, StepCategory, StepTypeDef};
-use shikigami_core::resource::ResourceDef;
+use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_runtime::{
     ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
 };
+use tokio_util::sync::CancellationToken;
 
 pub mod a1;
 pub mod book;
@@ -124,8 +128,49 @@ impl ActionHandler for ExcelStep {
     fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
         let kind = self.kind;
         let params = input.params;
-        Box::pin(async move { blocking(move || run(kind, &params)).await })
+        let cancel = input.cancel;
+        Box::pin(async move {
+            blocking(move || {
+                // The Runtime's lock on the workbook ends with this future,
+                // but a timed-out attempt's file work goes on in the
+                // background: this lock keeps it and the next attempt apart.
+                let lock = workbook_lock(&params);
+                let _held = lock.lock().unwrap_or_else(|e| e.into_inner());
+                run_step(kind, &params, &cancel)
+            })
+            .await
+        })
     }
+}
+
+/// One lock per workbook file (by its resource key), held while a step
+/// works on the file.
+fn workbook_lock(params: &Value) -> Arc<Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+    let key = resource_keys(&[ResourceDef::file("path")], params)
+        .pop()
+        .unwrap_or_default();
+    let mut locks = LOCKS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    locks.entry(key).or_default().clone()
+}
+
+/// Saves unless the step was stopped or timed out meanwhile, so an attempt
+/// that has already failed never changes the file afterwards.
+fn save(
+    workbook: &umya_spreadsheet::Workbook,
+    path: &str,
+    cancel: &CancellationToken,
+) -> Result<(), StepError> {
+    if cancel.is_cancelled() {
+        return Err(StepError::new(
+            "CANCELLED",
+            "the step was stopped before the workbook was saved",
+        ));
+    }
+    book::save(workbook, path)
 }
 
 /// Runs file work off the async threads.
@@ -137,7 +182,7 @@ async fn blocking(
         .map_err(|e| StepError::permanent("INTERNAL", e.to_string()))?
 }
 
-fn run(kind: Kind, params: &Value) -> Result<Value, StepError> {
+fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Value, StepError> {
     let path = string(params, "path")?;
     let sheet_name = optional_string(params, "sheet")?;
     let sheet_name = sheet_name.as_deref();
@@ -172,7 +217,7 @@ fn run(kind: Kind, params: &Value) -> Result<Value, StepError> {
         Kind::WriteCell => {
             let cell = book::cell_address(&string(params, "cell")?)?;
             let value = params.get("value").cloned().unwrap_or(Value::Null);
-            change(&path, sheet_name, |sheet, date1904| {
+            change(&path, sheet_name, cancel, |sheet, date1904| {
                 book::write(sheet, cell, &value, date1904).map(|()| Value::Null)
             })
         }
@@ -181,7 +226,7 @@ fn run(kind: Kind, params: &Value) -> Result<Value, StepError> {
             let Some(Value::Array(values)) = params.get("values") else {
                 return Err(StepError::invalid_params("'values' must be a list of rows"));
             };
-            change(&path, sheet_name, |sheet, date1904| {
+            change(&path, sheet_name, cancel, |sheet, date1904| {
                 let range = book::write_range(sheet, start, values, date1904)?;
                 Ok(json!({ "range": range.name() }))
             })
@@ -193,7 +238,7 @@ fn run(kind: Kind, params: &Value) -> Result<Value, StepError> {
                     "'rows' must be a list of records",
                 ));
             };
-            change(&path, sheet_name, |sheet, date1904| {
+            change(&path, sheet_name, cancel, |sheet, date1904| {
                 book::append_rows(sheet, header_row, rows, date1904)
             })
         }
@@ -202,7 +247,7 @@ fn run(kind: Kind, params: &Value) -> Result<Value, StepError> {
             let mut workbook = book::open_or_create(&path, Some(&name))?;
             let created = !std::path::Path::new(&path).exists();
             if book::add_sheet(&mut workbook, &name)? || created {
-                book::save(&workbook, &path)?;
+                save(&workbook, &path, cancel)?;
             }
             Ok(Value::Null)
         }
@@ -213,12 +258,13 @@ fn run(kind: Kind, params: &Value) -> Result<Value, StepError> {
 fn change(
     path: &str,
     sheet: Option<&str>,
+    cancel: &CancellationToken,
     edit: impl FnOnce(&mut umya_spreadsheet::Worksheet, bool) -> Result<Value, StepError>,
 ) -> Result<Value, StepError> {
     let mut workbook = book::open_or_create(path, sheet)?;
     let date1904 = workbook.date1904();
     let output = edit(book::sheet_mut(&mut workbook, sheet)?, date1904)?;
-    book::save(&workbook, path)?;
+    save(&workbook, path, cancel)?;
     Ok(output)
 }
 

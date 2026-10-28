@@ -277,3 +277,19 @@ async fn appended_rows_go_below_formulas_not_yet_calculated() {
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs["out"], json!({ "firstRow": 4, "count": 1 }));
 }
+
+#[test]
+fn a_stopped_step_does_not_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = workbook(&dir, "d.xlsx");
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    let error = run_step(
+        Kind::WriteCell,
+        &json!({ "path": path, "cell": "A1", "value": 1 }),
+        &cancel,
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "CANCELLED");
+    assert!(!std::path::Path::new(&path).exists());
+}
