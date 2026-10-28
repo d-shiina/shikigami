@@ -108,6 +108,12 @@ impl Backend for UiaBackend {
     fn call(&self, op: Op) -> BoxFuture<'static, Result<Value, StepError>> {
         let (tx, rx) = oneshot::channel();
         let submitted = self.submit(Box::new(move |uia| {
+            // The step gave up (timed out, was cancelled or retried) while
+            // this request waited in the queue: acting now could click or
+            // type after the run moved on, so drop it.
+            if tx.is_closed() {
+                return;
+            }
             let result = match uia {
                 Ok(uia) => uia.run(op),
                 Err(e) => Err(e.clone()),
@@ -663,8 +669,10 @@ impl Uia {
 
     // -- the real mouse and keyboard ---------------------------------------------
 
-    /// Restores and activates the window, then focuses the element.
-    fn bring_to_front(&self, found: &Found) -> Result<(), StepError> {
+    /// Restores and activates the window, then focuses the element. For
+    /// keyboard input the element must really have the focus, or the keys
+    /// (perhaps a password) would land in another field.
+    fn bring_to_front(&self, found: &Found, keyboard: bool) -> Result<(), StepError> {
         let window = hwnd(found.window.handle);
         // SAFETY: Win32 / UIA calls on the UIA thread.
         unsafe {
@@ -692,10 +700,46 @@ impl Uia {
                 })));
             }
             if found.is_element {
-                let _ = found.el.SetFocus();
+                let focused = found.el.SetFocus();
+                if keyboard && (focused.is_err() || !self.has_focus(&found.el)) {
+                    return Err(StepError::permanent(
+                        "FOCUS_FAILED",
+                        format!("the {} could not be given the keyboard focus", found.node.role),
+                    )
+                    .with_details(json!({
+                        "hint": "Target the input field itself (inspect_ui), or use desktop.setValue / desktop.mouseClick on it first."
+                    })));
+                }
             }
         }
         Ok(())
+    }
+
+    /// Whether `el` or something inside it has the keyboard focus.
+    fn has_focus(&self, el: &IUIAutomationElement) -> bool {
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            let (Ok(mut current), Ok(walker)) = (
+                self.automation.GetFocusedElement(),
+                self.automation.ControlViewWalker(),
+            ) else {
+                return false;
+            };
+            for _ in 0..16 {
+                if self
+                    .automation
+                    .CompareElements(el, &current)
+                    .is_ok_and(|same| same.as_bool())
+                {
+                    return true;
+                }
+                match walker.GetParentElement(&current) {
+                    Ok(parent) => current = parent,
+                    Err(_) => return false,
+                }
+            }
+            false
+        }
     }
 
     fn mouse_click(
@@ -705,7 +749,7 @@ impl Uia {
         double: bool,
     ) -> Result<Value, StepError> {
         let found = self.resolve_enabled(target)?;
-        self.bring_to_front(&found)?;
+        self.bring_to_front(&found, false)?;
         // SAFETY: Win32 / UIA calls on the UIA thread.
         unsafe {
             let at = match target.point {
@@ -741,7 +785,7 @@ impl Uia {
     fn type_text(&self, target: &Target, text: &Text) -> Result<Value, StepError> {
         let found = self.resolve_enabled(target)?;
         check_app(text, &found.window)?;
-        self.bring_to_front(&found)?;
+        self.bring_to_front(&found, true)?;
         let mut inputs = Vec::new();
         for unit in text.value.encode_utf16() {
             match unit {
@@ -772,7 +816,7 @@ impl Uia {
 
     fn press(&self, target: &Target, chord: &Chord) -> Result<Value, StepError> {
         let found = self.resolve_enabled(target)?;
-        self.bring_to_front(&found)?;
+        self.bring_to_front(&found, true)?;
         let mut inputs = Vec::new();
         for m in &chord.modifiers {
             inputs.push(key_event(*m, false));

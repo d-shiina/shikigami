@@ -79,6 +79,7 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 - 接続 2 秒・処理 10 秒の UI Automation のタイムアウトを設定し、応答しないアプリで止まり続けないようにします（`APP_NOT_RESPONDING`）。クリックなどの操作中のタイムアウトは「操作が済んだかもしれない」ので、二重に押さないよう再試行しません
 - 昔ながらの Win32 のボタンはクリックを投げるだけにして、押した先でダイアログが開いても待たされないようにしています
 - 管理者として動いているアプリは、通常の権限の Shikigami から操作できません（Windows の制限）。`ELEVATION_REQUIRED` で知らせます
+- 実行キューで待っている間にステップが時間切れ・停止になった要求は、実行せずに捨てます（停止後や再試行で二重にクリック・入力しないため）
 - マウス・キーボードを使う前にウィンドウを前面に出します。Windows が許さなかったとき（画面ロック中など）は `FOREGROUND_DENIED` / `INPUT_BLOCKED` で止めます
 - 座標は高 DPI でもずれないよう、スレッドを Per-Monitor DPI 対応にしています
 
@@ -92,6 +93,7 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 | `NOT_CLICKABLE` / `NOT_SUPPORTED` | マウスなしでは操作できない部品。`desktop.mouseClick` / `desktop.type` を使う |
 | `OPTION_NOT_FOUND` | 選択肢がない（選択肢の一覧つき） |
 | `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | シークレットにこのアプリ（`app:xxx.exe`）が登録されていない |
+| `FOCUS_FAILED` | キーボード入力の前に部品へフォーカスを移せなかった（別の欄に打ち込まないよう止める）。入力欄そのものを対象にする |
 | `ELEVATION_REQUIRED` | 管理者として動いているアプリ |
 | `PLATFORM_UNSUPPORTED` | Windows 以外で実行した |
 
