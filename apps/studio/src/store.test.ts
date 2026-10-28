@@ -1,4 +1,4 @@
-import type { EditOp, EditOutcome, HistoryEntry, RunEventEnvelope, Scenario } from "@shikigami/schema";
+import type { EditOp, EditOutcome, Evidence, HistoryEntry, ReviewTimeline, RunEventEnvelope, Scenario } from "@shikigami/schema";
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
@@ -190,6 +190,39 @@ describe("studio store", () => {
       expect(pendingReview(store.getState()).map((e) => e.revision)).toEqual([2]);
       expect(touchedSteps(aiEdit)).toEqual(["stp_a"]);
       store.getState().approve(2);
+      expect(pendingReview(store.getState())).toEqual([]);
+    });
+
+    it("treats edits up to Core's last approval as reviewed", async () => {
+      const timeline = {
+        scenarioId: "scn_a",
+        revision: 2,
+        sinceRevision: 2,
+        lastApproval: { revision: 2, at: aiEdit.at, actor: { kind: "studio" }, kind: "review", verdict: "approved" },
+        changes: [],
+        evidence: [],
+      } as ReviewTimeline;
+      const store = createStudioStore(
+        fakeApi({ history: vi.fn(async () => [aiEdit]), reviewTimeline: vi.fn(async () => timeline) }),
+      );
+      await store.getState().open("scn_a");
+      expect(pendingReview(store.getState())).toEqual([]);
+    });
+
+    it("records approval and sending back in Core for the current revision", async () => {
+      const submitReview = vi.fn(async () => ({}) as Evidence);
+      const store = createStudioStore(fakeApi({ history: vi.fn(async () => [aiEdit]), submitReview }));
+      await store.getState().open("scn_a");
+      expect(await store.getState().sendBack("  表の名前が違う ", [{ stepId: "stp_a", note: " 受注一覧 " }, { stepId: "stp_b", note: " " }])).toBe(true);
+      expect(submitReview).toHaveBeenLastCalledWith("scn_a", {
+        revision: 1,
+        verdict: "rejected",
+        reason: "表の名前が違う",
+        steps: [{ stepId: "stp_a", note: "受注一覧" }],
+      });
+      expect(pendingReview(store.getState()).map((e) => e.revision)).toEqual([2]);
+      await store.getState().approveAll();
+      expect(submitReview).toHaveBeenLastCalledWith("scn_a", { revision: 1, verdict: "approved" });
       expect(pendingReview(store.getState())).toEqual([]);
     });
 

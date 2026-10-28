@@ -6,11 +6,13 @@ import type {
   HistoryEntry,
   ImportConflict,
   LogLevel,
+  ReviewTimeline,
   RunEventEnvelope,
   RunStatus,
   Scenario,
   ScenarioSummary,
   Step,
+  StepNote,
   StepPatch,
   StepTypeDef,
   ValidationReport,
@@ -101,6 +103,8 @@ export type StudioState = {
   reviewed: Record<string, number[]>;
   /** Every scenario's journal, oldest first, for the review inbox. */
   histories: Record<string, HistoryEntry[]>;
+  /** Per scenario: changes and evidence since the last approval (Core's reviews). */
+  timelines: Record<string, ReviewTimeline>;
   /** The review desk is open instead of the scenario list. */
   reviewing: boolean;
   paletteOpen: boolean;
@@ -142,7 +146,13 @@ export type StudioState = {
   dismiss(): void;
   loadHistory(): Promise<void>;
   approve(revision: number): void;
-  approveAll(): void;
+  /** Marks every unreviewed external change of the open scenario as looked at (this PC only). */
+  markAllReviewed(): void;
+  /** Keeps the open scenario's current revision: recorded in Core as approved. */
+  approveAll(): Promise<void>;
+  /** Sends the current revision back to the AI with a reason it reads over MCP. */
+  sendBack(reason: string, steps: StepNote[]): Promise<boolean>;
+  loadTimeline(id: string): Promise<void>;
   /** Reverts one journal entry by sending its inverse ops to Core as a new edit. */
   revert(entry: HistoryEntry): Promise<void>;
   /** Reverts every unreviewed external change of the open scenario in one edit. */
@@ -204,14 +214,24 @@ export function revertBlocker(entry: HistoryEntry, history: HistoryEntry[]): str
 }
 
 /** External edits the user has not reviewed yet, newest first. */
-export function pendingReview(state: Pick<StudioState, "history" | "reviewed" | "scenario">): HistoryEntry[] {
-  return pendingIn(state.history, state.reviewed[state.scenario?.id ?? ""]);
+export function pendingReview(
+  state: Pick<StudioState, "history" | "reviewed" | "scenario"> & Partial<Pick<StudioState, "timelines">>,
+): HistoryEntry[] {
+  const id = state.scenario?.id ?? "";
+  return pendingIn(state.history, state.reviewed[id], approvedUpTo(state.timelines?.[id]));
+}
+
+/** The last revision someone approved (on any PC sharing this workspace's history), or 0. */
+export function approvedUpTo(timeline: ReviewTimeline | undefined): number {
+  return timeline?.lastApproval?.revision ?? 0;
 }
 
 /** Unreviewed external edits in one scenario's journal, newest first. */
-export function pendingIn(history: HistoryEntry[], reviewed: number[] | undefined): HistoryEntry[] {
+export function pendingIn(history: HistoryEntry[], reviewed: number[] | undefined, approved = 0): HistoryEntry[] {
   const seen = new Set(reviewed ?? []);
-  return history.filter((e) => isExternal(e) && isRevertible(e) && !seen.has(e.revision)).reverse();
+  return history
+    .filter((e) => isExternal(e) && isRevertible(e) && e.revision > approved && !seen.has(e.revision))
+    .reverse();
 }
 
 /**
@@ -367,6 +387,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       history: [],
       reviewed: loadReviewed(),
       histories: {},
+      timelines: {},
       reviewing: false,
       paletteOpen: false,
       versions: [],
@@ -556,6 +577,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           .history(scenarioId)
           .then((h) => set({ histories: { ...get().histories, [scenarioId]: h } }))
           .catch(() => {});
+        void get().loadTimeline(scenarioId);
         const current = get().scenario;
         if (current?.id !== scenarioId) return;
         try {
@@ -658,7 +680,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const id = get().scenario?.id;
         if (!id) return;
         try {
-          const history = await api.history(id);
+          const [history] = await Promise.all([api.history(id), get().loadTimeline(id)]);
           set({ histories: { ...get().histories, [id]: history } });
           // Ignore a late answer for a scenario that is no longer open.
           if (get().scenario?.id === id) set({ history });
@@ -675,13 +697,57 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ reviewed });
       },
 
-      approveAll() {
+      markAllReviewed() {
         const id = get().scenario?.id;
         if (!id) return;
         const revisions = pendingReview(get()).map((e) => e.revision);
         const reviewed = { ...get().reviewed, [id]: [...(get().reviewed[id] ?? []), ...revisions] };
         saveReviewed(reviewed);
         set({ reviewed });
+      },
+
+      async approveAll() {
+        const scenario = get().scenario;
+        if (!scenario) return;
+        get().markAllReviewed();
+        try {
+          await api.submitReview(scenario.id, { revision: scenario.revision ?? 0, verdict: "approved" });
+          set({ notice: t.approved });
+        } catch (e) {
+          // Marked here anyway; Core refuses only when the scenario moved on (REVISION_CONFLICT).
+          set({ error: message(e) });
+        }
+        await get().loadTimeline(scenario.id);
+      },
+
+      async sendBack(reason, steps) {
+        const scenario = get().scenario;
+        if (!scenario) return false;
+        try {
+          await api.submitReview(scenario.id, {
+            revision: scenario.revision ?? 0,
+            verdict: "rejected",
+            reason: reason.trim(),
+            steps: steps.filter((n) => n.note.trim()).map((n) => ({ ...n, note: n.note.trim() })),
+          });
+          set({ notice: t.sentBack });
+          await get().loadTimeline(scenario.id);
+          return true;
+        } catch (e) {
+          set({ error: message(e) });
+          return false;
+        }
+      },
+
+      async loadTimeline(id) {
+        try {
+          const timeline = await api.reviewTimeline(id);
+          // Polled while reviewing: keep the old object when nothing changed.
+          if (JSON.stringify(timeline) === JSON.stringify(get().timelines[id])) return;
+          set({ timelines: { ...get().timelines, [id]: timeline } });
+        } catch {
+          // Evidence is secondary; reviewing works from the journal alone.
+        }
       },
 
       async revert(entry) {
@@ -708,7 +774,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         // Newest first, so each inverse meets the state its own edit left.
         const ok = await get().applyOps(group.flatMap((e) => e.inverse ?? []));
         if (ok) {
-          get().approveAll();
+          get().markAllReviewed();
           set({ notice: t.reverted });
         }
       },
@@ -723,6 +789,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               .catch(() => [id, [] as HistoryEntry[]] as const),
           ),
         );
+        for (const id of ids) void get().loadTimeline(id);
         // A journal fetched since (after an outside edit) may be newer than
         // this batch's answer; keep whichever reaches the later revision.
         const latest = (h: HistoryEntry[] | undefined) => h?.at(-1)?.revision ?? -1;

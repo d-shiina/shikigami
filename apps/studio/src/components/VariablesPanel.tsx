@@ -170,8 +170,12 @@ function VariableRow({ variable }: { variable: VariableDef }) {
   );
 }
 
+// One shared empty list: a selector that returns a new [] on every call
+// never settles and React stops with "Maximum update depth exceeded".
+const NO_VARIABLES: VariableDef[] = [];
+
 export function VariablesPanel() {
-  const variables = useStudio((s) => s.scenario?.variables ?? []);
+  const variables = useStudio((s) => s.scenario?.variables ?? NO_VARIABLES);
   const setVariable = useStudio((s) => s.setVariable);
   const [name, setName] = useState("");
 

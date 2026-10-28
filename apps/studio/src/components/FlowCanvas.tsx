@@ -34,7 +34,7 @@ import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; dir: Direction }>
+  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; dir: Direction }>
 >;
 
 const MIN_READABLE_ZOOM = 0.85;
@@ -54,7 +54,7 @@ const RUN_STYLE: Record<StepRunState, string> = {
   skipped: "opacity-60",
 };
 
-/** 残す / 差し戻す for an unreviewed AI edit, floating beside its node. */
+/** 残す / 取り消す for an unreviewed AI edit, floating beside its node. */
 function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   const history = useStudio((s) => s.history);
   const approve = useStudio((s) => s.approve);
@@ -320,6 +320,14 @@ function StepNode({ data }: StepNodeProps) {
         </NodeToolbar>
       )}
       <FlowHandles dir={data.dir} />
+      {data.note && (
+        <span
+          title={data.note}
+          className="absolute bottom-full left-1 z-10 mb-1 max-w-[95%] truncate rounded-[4px] border border-shu-500 bg-shu-50 px-2 text-[10px] leading-[18px] font-bold text-shu-600"
+        >
+          指摘：{data.note}
+        </span>
+      )}
       {data.diff && (
         <span className={`absolute -top-2.5 right-2 z-10 rounded-full px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
           {DIFF_STYLE[data.diff].label}
@@ -423,6 +431,12 @@ export function FlowCanvas() {
   const select = useStudio((s) => s.select);
   const pending = usePendingReview();
   const reviewing = useStudio((s) => s.reviewing);
+  const feedback = useStudio((s) => (s.scenario ? s.timelines[s.scenario.id]?.openFeedback : undefined));
+  // What the person last asked the AI to fix, pinned to the steps it names.
+  const notes = useMemo(
+    () => new Map(feedback?.kind === "review" ? (feedback.steps ?? []).map((n) => [n.stepId, n.note] as const) : []),
+    [feedback],
+  );
   // On the review desk every unreviewed step is marked by what happened to it.
   const diffs = useMemo(() => summarize([...pending].reverse()).steps, [pending]);
   // Oldest first, so the toolbar offers the newest unreviewed change.
@@ -463,6 +477,7 @@ export function FlowCanvas() {
           byAi: !reviewing && reviews.has(id),
           reviews: reviewing ? [] : (reviews.get(id) ?? []),
           diff: reviewing ? diffs.get(id) : undefined,
+          note: reviewing ? notes.get(id) : undefined,
           vars,
           run: run ? { changes: run.changes, starts: run.starts } : NO_RUN,
         },
