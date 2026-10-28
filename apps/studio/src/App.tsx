@@ -125,7 +125,18 @@ function ScenariosPlace() {
   const agentOpen = useAgent((s) => s.open);
   return (
     <Editor
-      list={list === "open" && !agentOpen ? <ScenarioList onCollapse={() => setList("closed")} /> : <ScenarioRail onExpand={() => setList("open")} />}
+      // Fixed widths: a long scenario name must not widen the list into the chart.
+      list={
+        list === "open" && !agentOpen ? (
+          <div className="h-full w-[248px]">
+            <ScenarioList onCollapse={() => setList("closed")} />
+          </div>
+        ) : (
+          <div className="h-full w-[44px]">
+            <ScenarioRail onExpand={() => setList("open")} />
+          </div>
+        )
+      }
       right={<Inspector />}
     />
   );
