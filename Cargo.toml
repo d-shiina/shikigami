@@ -43,6 +43,8 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 uuid = { version = "1.29.0", features = ["v7", "serde"] }
 time = { version = "0.3.55", features = ["serde", "formatting", "parsing", "macros"] }
 notify = "8.2.1"
+regex = "1.13.1"
+jiff = "0.2.38"
 clap = { version = "4.6.7", features = ["derive"] }
 tempfile = "3.27.0"
 dirs = "7.0.0"

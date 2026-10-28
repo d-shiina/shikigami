@@ -683,12 +683,12 @@ impl Cx<'_> {
 
     fn expr_hint(&mut self, error: &expr::ExprError) {
         if let expr::ExprError::UnknownFunction(name) = error {
-            let near = closest(name, expr::FUNCTIONS.iter().copied());
+            let near = closest(name, expr::function_names());
             self.hint(format!(
                 "{}Available functions: {}.",
                 near.map(|n| format!("Did you mean '{n}'? "))
                     .unwrap_or_default(),
-                expr::FUNCTIONS.join(", ")
+                expr::function_names().collect::<Vec<_>>().join(", ")
             ));
         }
     }
