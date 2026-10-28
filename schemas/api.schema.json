@@ -1,0 +1,1095 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ShikigamiApi",
+  "description": "Bundle of the IPC/API payload types used by Studio and MCP tools.",
+  "type": "object",
+  "properties": {
+    "scenario": {
+      "$ref": "#/$defs/Scenario"
+    },
+    "scenario_summary": {
+      "$ref": "#/$defs/ScenarioSummary"
+    },
+    "new_scenario": {
+      "$ref": "#/$defs/NewScenario"
+    },
+    "edit_op": {
+      "$ref": "#/$defs/EditOp"
+    },
+    "edit_outcome": {
+      "$ref": "#/$defs/EditOutcome"
+    },
+    "validation_report": {
+      "$ref": "#/$defs/ValidationReport"
+    },
+    "step_type_def": {
+      "$ref": "#/$defs/StepTypeDef"
+    },
+    "history_entry": {
+      "$ref": "#/$defs/HistoryEntry"
+    },
+    "change_event": {
+      "$ref": "#/$defs/ChangeEvent"
+    },
+    "error_payload": {
+      "$ref": "#/$defs/ErrorPayload"
+    }
+  },
+  "required": [
+    "scenario",
+    "scenario_summary",
+    "new_scenario",
+    "edit_op",
+    "edit_outcome",
+    "validation_report",
+    "step_type_def",
+    "history_entry",
+    "change_event",
+    "error_payload"
+  ],
+  "$defs": {
+    "Scenario": {
+      "title": "Scenario",
+      "description": "A scenario: the unit that AI clients, Studio and the Runtime share.",
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "description": "Optional JSON Schema reference for editors. Ignored by Shikigami.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schemaVersion": {
+          "description": "Version of the scenario file format.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "revision": {
+          "description": "Monotonic revision, incremented by every committed edit. Used for\noptimistic concurrency between Studio, MCP clients and the CLI.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "variables": {
+          "description": "Declared variables (inputs, outputs and locals).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VariableDef"
+          }
+        },
+        "steps": {
+          "description": "Top-level steps, executed in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "default": []
+        },
+        "settings": {
+          "description": "Scenario-wide defaults for error handling, timeouts and retries.",
+          "$ref": "#/$defs/ScenarioSettings"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata",
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "id",
+        "name"
+      ]
+    },
+    "ScenarioId": {
+      "description": "Identifier of a scenario. Also used as its file name in the store.",
+      "type": "string"
+    },
+    "VariableDef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Identifier used in expressions: `[A-Za-z_][A-Za-z0-9_]*`.",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/VarType",
+          "default": "any"
+        },
+        "direction": {
+          "$ref": "#/$defs/VarDirection",
+          "default": "local"
+        },
+        "default": true,
+        "description": {
+          "type": "string"
+        },
+        "secret": {
+          "description": "Secret values are masked in logs, events and run records.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "VarType": {
+      "type": "string",
+      "enum": [
+        "string",
+        "number",
+        "boolean",
+        "object",
+        "array",
+        "any"
+      ]
+    },
+    "VarDirection": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "local"
+          ]
+        },
+        {
+          "description": "Supplied by the caller when the run starts.",
+          "type": "string",
+          "const": "input"
+        },
+        {
+          "description": "Returned to the caller when the run finishes.",
+          "type": "string",
+          "const": "output"
+        },
+        {
+          "description": "Both supplied and returned.",
+          "type": "string",
+          "const": "inOut"
+        }
+      ]
+    },
+    "Step": {
+      "description": "A single step. Control-flow and action steps share this shape.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Stable unique ID. Omit when adding a step; Core assigns one.",
+          "$ref": "#/$defs/StepId"
+        },
+        "type": {
+          "description": "Step type, e.g. `control.if`, `variable.set`, `browser.click`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display label (Japanese is fine). Purely informational.",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "params": {
+          "description": "Type-specific parameters, validated against the step type's schema.\nString values may contain `{{ expression }}` templates.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "blocks": {
+          "description": "Child step lists of control-flow steps, keyed by block name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Step"
+            }
+          }
+        },
+        "disabled": {
+          "description": "Disabled steps are skipped by the Runtime but kept in the scenario.",
+          "type": "boolean"
+        },
+        "timeoutMs": {
+          "description": "Per-attempt timeout. Falls back to `settings.defaultTimeoutMs`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "retry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onError": {
+          "description": "What to do when the step still fails after retries.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "saveAs": {
+          "description": "Variable that receives the step's output value.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "meta": {
+          "description": "Free-form metadata (Studio layout hints, AI provenance such as the UI\nelement a selector was derived from). Never interpreted by the Runtime.",
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    "StepId": {
+      "description": "Identifier of a step. Unique within a scenario and stable across edits.",
+      "type": "string"
+    },
+    "RetryPolicy": {
+      "type": "object",
+      "properties": {
+        "maxAttempts": {
+          "description": "Total attempts including the first one (1 = no retry).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "backoffMs": {
+          "description": "Delay before the second attempt.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 1000
+        },
+        "backoffMultiplier": {
+          "description": "Multiplier applied to the delay after each failed attempt.",
+          "type": "number",
+          "format": "double",
+          "default": 2.0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "maxAttempts"
+      ]
+    },
+    "OnError": {
+      "oneOf": [
+        {
+          "description": "Stop the run (or hand control to the enclosing `control.try`).",
+          "type": "string",
+          "const": "fail"
+        },
+        {
+          "description": "Record the error in `lastError` and continue with the next step.",
+          "type": "string",
+          "const": "continue"
+        }
+      ]
+    },
+    "ScenarioSettings": {
+      "type": "object",
+      "properties": {
+        "defaultTimeoutMs": {
+          "description": "Default per-step timeout in milliseconds (30 s when omitted).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "defaultRetry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onError": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Metadata": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updatedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "ScenarioSummary": {
+      "description": "Listing entry returned by `list_scenarios`.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stepCount": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "updatedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "revision",
+        "stepCount",
+        "tags"
+      ]
+    },
+    "NewScenario": {
+      "description": "Input for creating a scenario.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "default": ""
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VariableDef"
+          },
+          "default": []
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "default": []
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "EditOp": {
+      "oneOf": [
+        {
+          "description": "Inserts a step (and its children). Missing IDs are generated.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "addStep"
+            },
+            "step": {
+              "$ref": "#/$defs/Step"
+            },
+            "position": {
+              "$ref": "#/$defs/Position",
+              "default": {}
+            }
+          },
+          "required": [
+            "op",
+            "step"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "updateStep"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "patch": {
+              "$ref": "#/$defs/StepPatch"
+            }
+          },
+          "required": [
+            "op",
+            "stepId",
+            "patch"
+          ]
+        },
+        {
+          "description": "Removes a step and all of its children.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "removeStep"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            }
+          },
+          "required": [
+            "op",
+            "stepId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "moveStep"
+            },
+            "stepId": {
+              "$ref": "#/$defs/StepId"
+            },
+            "position": {
+              "$ref": "#/$defs/Position"
+            }
+          },
+          "required": [
+            "op",
+            "stepId",
+            "position"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "updateScenario"
+            },
+            "patch": {
+              "$ref": "#/$defs/ScenarioPatch"
+            }
+          },
+          "required": [
+            "op",
+            "patch"
+          ]
+        },
+        {
+          "description": "Adds or replaces (by name) a variable declaration.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setVariable"
+            },
+            "variable": {
+              "$ref": "#/$defs/VariableDef"
+            },
+            "index": {
+              "description": "Position in the variable list when adding; ignored when replacing.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "op",
+            "variable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "removeVariable"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ]
+        },
+        {
+          "description": "Replaces the whole step tree (bulk edits by AI, imports).",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "replaceSteps"
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Step"
+              }
+            }
+          },
+          "required": [
+            "op",
+            "steps"
+          ]
+        }
+      ]
+    },
+    "Position": {
+      "description": "Where a step lives (or should be inserted).",
+      "type": "object",
+      "properties": {
+        "parentId": {
+          "description": "Parent control-flow step; omit for the top level.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "block": {
+          "description": "Block of the parent (`then`, `else`, `body`, `try`, `catch`, `finally`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "description": "Index in the target list (after removing the moved step). Omit to append.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        }
+      }
+    },
+    "StepPatch": {
+      "description": "Partial update of a step. Absent fields are left unchanged; for optional\nfields, an explicit `null` clears the value.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "params": {
+          "description": "JSON Merge Patch (RFC 7386) applied to `params`: keys set to `null` are removed.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "replaceParams": {
+          "description": "Replaces `params` entirely. Mutually exclusive with `params`.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "disabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "timeoutMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "retry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onError": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "saveAs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "meta": {
+          "description": "Replaces `meta` entirely.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScenarioPatch": {
+      "description": "Partial update of scenario-level fields.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScenarioSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tags": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "EditOutcome": {
+      "description": "Result of a committed change.",
+      "type": "object",
+      "properties": {
+        "scenario": {
+          "$ref": "#/$defs/Scenario"
+        },
+        "validation": {
+          "description": "Full validation of the new revision. Drafts may contain errors;\nthey must be fixed before the scenario can run.",
+          "$ref": "#/$defs/ValidationReport"
+        },
+        "canUndo": {
+          "type": "boolean"
+        },
+        "canRedo": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "scenario",
+        "validation",
+        "canUndo",
+        "canRedo"
+      ]
+    },
+    "ValidationReport": {
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "boolean"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationIssue"
+          }
+        }
+      },
+      "required": [
+        "valid",
+        "issues"
+      ]
+    },
+    "ValidationIssue": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "code": {
+          "description": "Stable machine-readable code, e.g. `UNKNOWN_STEP_TYPE`.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "JSON Pointer into the scenario document.",
+          "type": "string"
+        },
+        "stepId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "severity",
+        "code",
+        "message",
+        "path"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "error",
+        "warning"
+      ]
+    },
+    "StepTypeDef": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "Stable identifier, `namespace.action`.",
+          "type": "string"
+        },
+        "category": {
+          "$ref": "#/$defs/StepCategory"
+        },
+        "label": {
+          "description": "Japanese display name.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description written for both humans and AI clients.",
+          "type": "string"
+        },
+        "paramsSchema": {
+          "description": "JSON Schema (draft 2020-12) for `params`."
+        },
+        "blocks": {
+          "description": "Child blocks allowed on this step (empty for action steps).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BlockDef"
+          }
+        },
+        "hasOutput": {
+          "description": "Whether the step produces a value that `saveAs` can capture.",
+          "type": "boolean",
+          "default": false
+        },
+        "expressionParams": {
+          "description": "Params whose string value is an expression (not a template).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bindsVariables": {
+          "description": "Params that declare a variable name (introduced into scope).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "risk": {
+          "$ref": "#/$defs/RiskLevel"
+        }
+      },
+      "required": [
+        "type",
+        "category",
+        "label",
+        "description",
+        "paramsSchema",
+        "risk"
+      ]
+    },
+    "StepCategory": {
+      "type": "string",
+      "enum": [
+        "control",
+        "variable",
+        "log",
+        "flow",
+        "browser",
+        "windows",
+        "file",
+        "other"
+      ]
+    },
+    "BlockDef": {
+      "description": "Named child block of a control-flow step.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label"
+      ]
+    },
+    "RiskLevel": {
+      "description": "Risk level used by the permission layer (MCP approval, allow-lists).",
+      "oneOf": [
+        {
+          "description": "No side effects outside the run (variables, logs, control flow).",
+          "type": "string",
+          "const": "safe"
+        },
+        {
+          "description": "Interacts with applications or pages (clicks, typing, navigation).",
+          "type": "string",
+          "const": "interactive"
+        },
+        {
+          "description": "May destroy data or reach outside the machine (file delete, downloads, process kill).",
+          "type": "string",
+          "const": "dangerous"
+        }
+      ]
+    },
+    "HistoryEntry": {
+      "description": "One committed change.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ChangeKind"
+        },
+        "revision": {
+          "description": "Revision of the scenario after this change.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "at": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "ops": {
+          "description": "Ops that were applied.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EditOp"
+          }
+        },
+        "inverse": {
+          "description": "Ops that revert this change.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EditOp"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "revision",
+        "actor",
+        "at",
+        "label"
+      ]
+    },
+    "ChangeKind": {
+      "type": "string",
+      "enum": [
+        "create",
+        "edit",
+        "undo",
+        "redo",
+        "delete"
+      ]
+    },
+    "Actor": {
+      "description": "Who made a change. Recorded in history and the audit journal.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ActorKind"
+        },
+        "name": {
+          "description": "Client name, e.g. the MCP client's reported name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "ActorKind": {
+      "type": "string",
+      "enum": [
+        "studio",
+        "mcp",
+        "cli",
+        "system"
+      ]
+    },
+    "ChangeEvent": {
+      "description": "Notification sent to in-process listeners after every committed change.",
+      "type": "object",
+      "properties": {
+        "scenarioId": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "kind": {
+          "$ref": "#/$defs/ChangeKind"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        }
+      },
+      "required": [
+        "scenarioId",
+        "kind",
+        "revision",
+        "actor"
+      ]
+    },
+    "ErrorPayload": {
+      "description": "Serializable error shape returned over IPC / MCP.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": true
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  },
+  "$id": "https://shikigami.dev/schemas/api.schema.json"
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "../schemas/scenario.schema.json",
+  "schemaVersion": 1,
+  "id": "scn_example_invoice_summary",
+  "name": "請求書の集計（サンプル）",
+  "description": "入力された請求書リストを集計し、高額な請求書を警告する。Phase 1 の組み込みステップのみで動作する。",
+  "revision": 1,
+  "variables": [
+    { "name": "invoices", "type": "array", "direction": "input", "default": [ { "no": "INV-001", "amount": 12000 }, { "no": "INV-002", "amount": 150000 }, { "no": "INV-003", "amount": 8000 } ], "description": "請求書の一覧" },
+    { "name": "threshold", "type": "number", "direction": "input", "default": 100000 },
+    { "name": "total", "type": "number", "direction": "output", "default": 0 },
+    { "name": "flagged", "type": "array", "direction": "output", "default": [] }
+  ],
+  "steps": [
+    { "id": "stp_log_start", "type": "log.message", "name": "開始ログ", "params": { "message": "{{ len(invoices) }} 件の請求書を処理します" } },
+    {
+      "id": "stp_loop", "type": "control.forEach", "name": "請求書ごとに処理",
+      "params": { "items": "invoices", "itemVar": "invoice", "indexVar": "i" },
+      "blocks": {
+        "body": [
+          { "id": "stp_add", "type": "variable.set", "name": "合計に加算", "params": { "name": "total", "expression": "total + invoice.amount" } },
+          {
+            "id": "stp_check", "type": "control.if", "name": "高額チェック",
+            "params": { "condition": "invoice.amount >= threshold" },
+            "blocks": {
+              "then": [
+                { "id": "stp_flag", "type": "variable.set", "params": { "name": "flagged", "expression": "flagged + [invoice.no]" } },
+                { "id": "stp_warn", "type": "log.message", "params": { "message": "高額な請求書: {{ invoice.no }} ({{ invoice.amount }} 円)", "level": "warn" } }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    { "id": "stp_log_end", "type": "log.message", "name": "完了ログ", "params": { "message": "合計 {{ total }} 円 / 要確認 {{ len(flagged) }} 件" } }
+  ],
+  "metadata": { "tags": ["sample"] }
+}

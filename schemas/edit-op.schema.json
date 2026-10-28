@@ -1,0 +1,551 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EditOp",
+  "oneOf": [
+    {
+      "description": "Inserts a step (and its children). Missing IDs are generated.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "addStep"
+        },
+        "step": {
+          "$ref": "#/$defs/Step"
+        },
+        "position": {
+          "$ref": "#/$defs/Position",
+          "default": {}
+        }
+      },
+      "required": [
+        "op",
+        "step"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "updateStep"
+        },
+        "stepId": {
+          "$ref": "#/$defs/StepId"
+        },
+        "patch": {
+          "$ref": "#/$defs/StepPatch"
+        }
+      },
+      "required": [
+        "op",
+        "stepId",
+        "patch"
+      ]
+    },
+    {
+      "description": "Removes a step and all of its children.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "removeStep"
+        },
+        "stepId": {
+          "$ref": "#/$defs/StepId"
+        }
+      },
+      "required": [
+        "op",
+        "stepId"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "moveStep"
+        },
+        "stepId": {
+          "$ref": "#/$defs/StepId"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "required": [
+        "op",
+        "stepId",
+        "position"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "updateScenario"
+        },
+        "patch": {
+          "$ref": "#/$defs/ScenarioPatch"
+        }
+      },
+      "required": [
+        "op",
+        "patch"
+      ]
+    },
+    {
+      "description": "Adds or replaces (by name) a variable declaration.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "setVariable"
+        },
+        "variable": {
+          "$ref": "#/$defs/VariableDef"
+        },
+        "index": {
+          "description": "Position in the variable list when adding; ignored when replacing.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "variable"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "removeVariable"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "op",
+        "name"
+      ]
+    },
+    {
+      "description": "Replaces the whole step tree (bulk edits by AI, imports).",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "replaceSteps"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Step"
+          }
+        }
+      },
+      "required": [
+        "op",
+        "steps"
+      ]
+    }
+  ],
+  "$defs": {
+    "Step": {
+      "description": "A single step. Control-flow and action steps share this shape.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Stable unique ID. Omit when adding a step; Core assigns one.",
+          "$ref": "#/$defs/StepId"
+        },
+        "type": {
+          "description": "Step type, e.g. `control.if`, `variable.set`, `browser.click`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display label (Japanese is fine). Purely informational.",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "params": {
+          "description": "Type-specific parameters, validated against the step type's schema.\nString values may contain `{{ expression }}` templates.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "blocks": {
+          "description": "Child step lists of control-flow steps, keyed by block name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Step"
+            }
+          }
+        },
+        "disabled": {
+          "description": "Disabled steps are skipped by the Runtime but kept in the scenario.",
+          "type": "boolean"
+        },
+        "timeoutMs": {
+          "description": "Per-attempt timeout. Falls back to `settings.defaultTimeoutMs`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "retry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onError": {
+          "description": "What to do when the step still fails after retries.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "saveAs": {
+          "description": "Variable that receives the step's output value.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "meta": {
+          "description": "Free-form metadata (Studio layout hints, AI provenance such as the UI\nelement a selector was derived from). Never interpreted by the Runtime.",
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    "StepId": {
+      "description": "Identifier of a step. Unique within a scenario and stable across edits.",
+      "type": "string"
+    },
+    "RetryPolicy": {
+      "type": "object",
+      "properties": {
+        "maxAttempts": {
+          "description": "Total attempts including the first one (1 = no retry).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "backoffMs": {
+          "description": "Delay before the second attempt.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 1000
+        },
+        "backoffMultiplier": {
+          "description": "Multiplier applied to the delay after each failed attempt.",
+          "type": "number",
+          "format": "double",
+          "default": 2.0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "maxAttempts"
+      ]
+    },
+    "OnError": {
+      "oneOf": [
+        {
+          "description": "Stop the run (or hand control to the enclosing `control.try`).",
+          "type": "string",
+          "const": "fail"
+        },
+        {
+          "description": "Record the error in `lastError` and continue with the next step.",
+          "type": "string",
+          "const": "continue"
+        }
+      ]
+    },
+    "Position": {
+      "description": "Where a step lives (or should be inserted).",
+      "type": "object",
+      "properties": {
+        "parentId": {
+          "description": "Parent control-flow step; omit for the top level.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "block": {
+          "description": "Block of the parent (`then`, `else`, `body`, `try`, `catch`, `finally`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "description": "Index in the target list (after removing the moved step). Omit to append.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        }
+      }
+    },
+    "StepPatch": {
+      "description": "Partial update of a step. Absent fields are left unchanged; for optional\nfields, an explicit `null` clears the value.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "params": {
+          "description": "JSON Merge Patch (RFC 7386) applied to `params`: keys set to `null` are removed.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "replaceParams": {
+          "description": "Replaces `params` entirely. Mutually exclusive with `params`.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "disabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "timeoutMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "retry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onError": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "saveAs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "meta": {
+          "description": "Replaces `meta` entirely.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScenarioPatch": {
+      "description": "Partial update of scenario-level fields.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScenarioSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tags": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScenarioSettings": {
+      "type": "object",
+      "properties": {
+        "defaultTimeoutMs": {
+          "description": "Default per-step timeout in milliseconds (30 s when omitted).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "defaultRetry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onError": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "VariableDef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Identifier used in expressions: `[A-Za-z_][A-Za-z0-9_]*`.",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/VarType",
+          "default": "any"
+        },
+        "direction": {
+          "$ref": "#/$defs/VarDirection",
+          "default": "local"
+        },
+        "default": true,
+        "description": {
+          "type": "string"
+        },
+        "secret": {
+          "description": "Secret values are masked in logs, events and run records.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "VarType": {
+      "type": "string",
+      "enum": [
+        "string",
+        "number",
+        "boolean",
+        "object",
+        "array",
+        "any"
+      ]
+    },
+    "VarDirection": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "local"
+          ]
+        },
+        {
+          "description": "Supplied by the caller when the run starts.",
+          "type": "string",
+          "const": "input"
+        },
+        {
+          "description": "Returned to the caller when the run finishes.",
+          "type": "string",
+          "const": "output"
+        },
+        {
+          "description": "Both supplied and returned.",
+          "type": "string",
+          "const": "inOut"
+        }
+      ]
+    }
+  },
+  "$id": "https://shikigami.dev/schemas/edit-op.schema.json"
+}
