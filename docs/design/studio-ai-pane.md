@@ -42,7 +42,7 @@ claude -p --output-format stream-json --verbose
 
 ## 差し戻し → そのまま AI が直す
 
-確認待ちの「差し戻す…」に「<AI 名> にすぐ直してもらう」（既定オン、AI が使えるときだけ表示）を追加。
+確認待ちの「差し戻す…」に「<AI 名> がすぐ直す」（既定オン、AI が使えるときだけ表示）を追加。
 
 1. これまでどおり `submit_review(rejected)` で理由と手順への指摘を Core に記録する。
 2. 続けて AI ペインに「「<理由>」で差し戻しました。get_scenario の feedback を読んで、指摘どおりに直してください。」を送る。理由そのものは Core 経由で AI が読む（ペインのメッセージは起こすだけ）ので、チャットから直す場合と同じ情報になる。
@@ -71,8 +71,8 @@ MCP は Claude Code 以外（GitHub Copilot、Gemini CLI、Codex など）でも
 ## 今回やったこと（最初の一歩）
 
 - Tauri コマンド `agent_info` / `agent_send` / `agent_stop`、イベント `agent-event`（`apps/studio/src-tauri/src/agent.rs`）。
-- ヘッダーの「AIと話す」ボタンと右側の AI ペイン（`AgentPane.tsx`、会話は `agent.ts`）。開いているシナリオと選んだ手順を文脈として付ける。
-- 差し戻しフォームの「すぐ直してもらう」。
+- ヘッダーの AI 名ボタン（例「Claude Code」、Ctrl+J）と右側の AI ペイン（`AgentPane.tsx`、会話は `agent.ts`）。開いているシナリオと選んだ手順を文脈として付ける。
+- 差し戻しフォームの「<AI 名> がすぐ直す」。
 
 ## まだやらないこと
 
@@ -81,3 +81,7 @@ MCP は Claude Code 以外（GitHub Copilot、Gemini CLI、Codex など）でも
 - AI の作業中の「確認待ち」への自動切り替えやフロー図上での強調（既存の監視で編集は反映される）。
 - 承認ダイアログ（AI に実行やブラウザ操作を許すかを毎回聞く）。今は shikigami の全ツールを許可しており、どの編集も確認待ちを通る前提。
 - Agent SDK への置き換え。`claude -p` で足りなくなったら検討する。
+
+## 文言
+
+「AIと話す」「〜してもらう」のような説明調のラベルは使わない。ボタンやペインの見出しは使っている AI の名前（「Claude Code」）だけにし、ツールの表示も「手順を追加」「試し実行」のように短い名詞にする。

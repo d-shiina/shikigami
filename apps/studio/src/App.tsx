@@ -311,6 +311,11 @@ export function App() {
         }
         return;
       }
+      if (mod && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        agentStore.getState().setOpen(!agentStore.getState().open);
+        return;
+      }
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (store.getState().scenario) store.getState().setPaletteOpen(!store.getState().paletteOpen);

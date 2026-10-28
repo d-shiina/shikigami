@@ -312,7 +312,7 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
       void askAgent(
         `${quoted}で差し戻しました。get_scenario の feedback を読んで、指摘どおりに直してください。`,
         { id: scenario.id, name: scenario.name },
-        `「${scenario.name}」を差し戻し`,
+        `${scenario.name} ・ 差し戻し`,
       );
     }
   };
@@ -361,7 +361,7 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
       {agentReady && (
         <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
           <input type="checkbox" checked={fixNow} onChange={(e) => setFixNow(e.target.checked)} />
-          {agentName} にすぐ直してもらう
+          {agentName} がすぐ直す
         </label>
       )}
       <div className="flex gap-2 pt-1">

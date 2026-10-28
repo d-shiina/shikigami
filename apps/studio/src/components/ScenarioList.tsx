@@ -333,7 +333,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
                 {t.importScenario}
               </button>
               <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] leading-relaxed text-slate-400">
-                右上の「AIと話す」や Claude Code などのAIに「〜するシナリオを作って」と頼んでも増えます
+                Claude Code などのAIに「〜するシナリオを作って」と頼んでも増えます
               </div>
             </div>
           )}
