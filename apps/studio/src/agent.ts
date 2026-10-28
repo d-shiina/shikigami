@@ -5,7 +5,7 @@
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { AgentApi, AgentEvent, AgentInfo, AgentRequest } from "./lib/api";
+import type { AgentApi, AgentEvent, AgentInfo, AgentRequest, LoginEvent } from "./lib/api";
 
 export type AgentPart =
   | { kind: "text"; text: string }
@@ -13,7 +13,14 @@ export type AgentPart =
   | { kind: "toolFailed"; message: string };
 
 export type ChatItem =
-  | { role: "person"; id: string; text: string; context: string | null }
+  | {
+      role: "person";
+      id: string;
+      text: string;
+      context: string | null;
+      /** Kept so the message can be sent again, e.g. after signing in. */
+      scenario: AgentRequest["scenario"] | null;
+    }
   | {
       role: "ai";
       id: string;
@@ -21,7 +28,15 @@ export type ChatItem =
       parts: AgentPart[];
       status: "running" | "done" | "failed";
       message: string | null;
+      /** Failed because the agent is signed out or its login expired. */
+      needsLogin: boolean;
     };
+
+/** Signing the agent in from the pane. */
+export type LoginState =
+  | { phase: "idle" }
+  | { phase: "waiting"; url: string | null; sendingCode: boolean }
+  | { phase: "failed"; message: string };
 
 export type AgentState = {
   info: AgentInfo | null;
@@ -33,11 +48,19 @@ export type AgentState = {
   turnId: string | null;
   /** A message is on its way and its turn id not known yet. */
   sending: boolean;
+  login: LoginState;
   init(): Promise<void>;
   setOpen(open: boolean): void;
   /** `context` is a short label shown above the message, e.g. the scenario. */
   send(message: string, scenario?: AgentRequest["scenario"], context?: string | null): Promise<boolean>;
   stop(): Promise<void>;
+  /** Sends the last message again. */
+  retry(): Promise<boolean>;
+  /** Starts the agent's own sign-in; the last message is sent again once it is done. */
+  startLogin(): Promise<void>;
+  submitLoginCode(code: string): Promise<boolean>;
+  cancelLogin(): Promise<void>;
+  onLoginEvent(event: LoginEvent): void;
   /** Starts a new conversation. */
   reset(): void;
   onEvent(event: AgentEvent): void;
@@ -82,6 +105,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       sessionId: loadSession(),
       turnId: null,
       sending: false,
+      login: { phase: "idle" },
 
       async init() {
         try {
@@ -98,14 +122,17 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       async send(message, scenario, context = null) {
         const text = message.trim();
         if (!text || get().turnId || get().sending) return false;
-        const person: ChatItem = { role: "person", id: nextId(), text, context };
+        const person: ChatItem = { role: "person", id: nextId(), text, context, scenario: scenario ?? null };
         set({ items: [...get().items, person], open: true, sending: true });
         try {
           const turnId = await api.send({ message: text, sessionId: get().info?.remembers ? get().sessionId : null, scenario });
           set({
             turnId,
             sending: false,
-            items: [...get().items, { role: "ai", id: nextId(), turnId, parts: [], status: "running", message: null }],
+            items: [
+              ...get().items,
+              { role: "ai", id: nextId(), turnId, parts: [], status: "running", message: null, needsLogin: false },
+            ],
           });
           for (const e of early.get(turnId) ?? []) get().onEvent(e);
           early.delete(turnId);
@@ -115,7 +142,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
             sending: false,
             items: [
               ...get().items,
-              { role: "ai", id: nextId(), turnId: "", parts: [], status: "failed", message: errorText(e) },
+              { role: "ai", id: nextId(), turnId: "", parts: [], status: "failed", message: errorText(e), needsLogin: false },
             ],
           });
           return false;
@@ -125,6 +152,59 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       async stop() {
         const turnId = get().turnId;
         if (turnId) await api.stop(turnId).catch(() => undefined);
+      },
+
+      async retry() {
+        const last = [...get().items].reverse().find((i) => i.role === "person");
+        if (!last || last.role !== "person") return false;
+        return get().send(last.text, last.scenario, last.context);
+      },
+
+      async startLogin() {
+        set({ login: { phase: "waiting", url: null, sendingCode: false } });
+        try {
+          await api.login();
+        } catch (e) {
+          set({ login: { phase: "failed", message: errorText(e) } });
+        }
+      },
+
+      async submitLoginCode(code) {
+        const login = get().login;
+        if (login.phase !== "waiting" || !code.trim()) return false;
+        set({ login: { ...login, sendingCode: true } });
+        try {
+          await api.loginCode(code);
+          return true;
+        } catch (e) {
+          set({ login: { phase: "failed", message: errorText(e) } });
+          return false;
+        } finally {
+          const now = get().login;
+          if (now.phase === "waiting") set({ login: { ...now, sendingCode: false } });
+        }
+      },
+
+      async cancelLogin() {
+        set({ login: { phase: "idle" } });
+        await api.cancelLogin().catch(() => undefined);
+      },
+
+      onLoginEvent(event) {
+        const login = get().login;
+        if (login.phase !== "waiting") return;
+        if (event.kind === "url") {
+          set({ login: { ...login, url: event.url } });
+          return;
+        }
+        if (!event.ok) {
+          set({ login: { phase: "failed", message: event.message ?? "ログインできませんでした" } });
+          return;
+        }
+        set({ login: { phase: "idle" } });
+        // Signed in: carry on with what the expired login interrupted.
+        const last = get().items.at(-1);
+        if (last?.role === "ai" && last.needsLogin) void get().retry();
       },
 
       reset() {
@@ -159,7 +239,14 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
             }));
             return;
           case "done":
-            updateTurn(event.turnId, (i) => ({ ...i, status: event.ok ? "done" : "failed", message: event.message }));
+            updateTurn(event.turnId, (i) => ({
+              ...i,
+              // Claude Code also says the error as the reply; show it once.
+              parts: event.ok ? i.parts : i.parts.filter((p) => !(p.kind === "text" && p.text.trim() === event.message?.trim())),
+              status: event.ok ? "done" : "failed",
+              message: event.message,
+              needsLogin: !event.ok && event.needsLogin,
+            }));
             if (get().turnId === event.turnId) set({ turnId: null });
             return;
         }
