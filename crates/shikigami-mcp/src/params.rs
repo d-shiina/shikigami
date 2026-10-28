@@ -4,7 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use shikigami_core::{EditOp, Position, Scenario, Step, StepPatch, VariableDef};
+use shikigami_core::{EditOp, ImportConflict, Position, Scenario, Step, StepPatch, VariableDef};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -200,4 +200,70 @@ pub struct TestStepParams {
     /// { "type": "browser.click", "params": { "target": { "role": "button", "name": "ログイン" } } }.
     /// `id` may be omitted.
     pub step: Step,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateVersionParams {
+    pub scenario_id: String,
+    /// Short name, e.g. "v1" or "本番リリース".
+    pub name: String,
+    /// What changed or why this version matters.
+    #[serde(default)]
+    pub note: String,
+    /// When given, fails with REVISION_CONFLICT unless the stored revision
+    /// matches, so the version is exactly what you last read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_revision: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionRef {
+    pub scenario_id: String,
+    /// Version number from list_versions.
+    pub number: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreVersionParams {
+    pub scenario_id: String,
+    /// Version number from list_versions.
+    pub number: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_revision: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffVersionsParams {
+    pub scenario_id: String,
+    /// Older side: a version number. Omit for the latest version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<u32>,
+    /// Newer side: a version number. Omit for the current content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportScenarioParams {
+    pub scenario_id: String,
+    /// Include named versions (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_versions: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportScenarioParams {
+    /// The `bundle` returned by export_scenario, or a bare scenario document.
+    pub bundle: Value,
+    /// Only needed when the scenario ID already exists (IMPORT_CONFLICT):
+    /// "update" applies the content to the existing scenario as one undoable
+    /// edit and adds missing versions; "copy" imports it under a new ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_conflict: Option<ImportConflict>,
 }

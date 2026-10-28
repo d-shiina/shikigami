@@ -13,12 +13,13 @@ import { SecretsDialog } from "./components/SecretsDialog";
 import { Timeline, usePendingReview } from "./components/Timeline";
 import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
 import { VariablesPanel } from "./components/VariablesPanel";
+import { VersionsPanel } from "./components/VersionsPanel";
 import { StudioContext, useStudio } from "./context";
 import { api, events } from "./lib/api";
 import { t } from "./lib/i18n";
 import { createStudioStore } from "./store";
 
-type Tab = "timeline" | "properties" | "variables" | "issues";
+type Tab = "timeline" | "versions" | "properties" | "variables" | "issues";
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -70,6 +71,7 @@ function SidePanel() {
   }, [pendingCount]);
   const tabs: [Tab, string, number][] = [
     ["timeline", t.timeline, pendingCount],
+    ["versions", t.versions, 0],
     ["properties", t.inspect, 0],
     ["variables", t.variables, 0],
     ["issues", t.issues, issueCount],
@@ -100,6 +102,7 @@ function SidePanel() {
       </nav>
       <div className="flex-1 overflow-y-auto">
         {tab === "timeline" && <Timeline />}
+        {tab === "versions" && <VersionsPanel />}
         {tab === "properties" && <PropertyPanel />}
         {tab === "variables" && <VariablesPanel />}
         {tab === "issues" && <IssuesPanel />}

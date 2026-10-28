@@ -181,6 +181,9 @@ pub struct RunReport {
     pub scenario_id: ScenarioId,
     pub scenario_name: String,
     pub revision: u64,
+    /// Named version whose content was run, when it matches one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
     pub status: RunStatus,
     #[serde(with = "time::serde::rfc3339")]
     #[schemars(with = "String")]

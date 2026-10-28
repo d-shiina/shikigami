@@ -14,6 +14,10 @@ use crate::ops::{self, EditOp};
 use crate::registry::StepRegistry;
 use crate::store::{Actor, ChangeKind, FileStore, HistoryEntry, UNDO_LIMIT, UndoState};
 use crate::validate::{ValidationReport, Validator};
+use crate::version::{
+    self, BUNDLE_FORMAT, BUNDLE_FORMAT_VERSION, ImportConflict, ImportMode, NewVersion,
+    ScenarioBundle, ScenarioDiff, ScenarioVersion, VersionSummary,
+};
 
 /// Input for creating a scenario.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -50,6 +54,17 @@ pub struct ChangeEvent {
     pub kind: ChangeKind,
     pub revision: u64,
     pub actor: Actor,
+}
+
+/// Result of importing a bundle or scenario file.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportOutcome {
+    pub mode: ImportMode,
+    /// Versions from the bundle that were added (already present ones are skipped).
+    pub versions_added: usize,
+    #[serde(flatten)]
+    pub outcome: EditOutcome,
 }
 
 type Listener = Arc<dyn Fn(&ChangeEvent) + Send + Sync>;
@@ -357,6 +372,267 @@ impl ScenarioService {
         Ok((!state.undo.is_empty(), !state.redo.is_empty()))
     }
 
+    // -- versions ---------------------------------------------------------
+
+    /// Saves the current content as a new named version.
+    pub fn create_version(
+        &self,
+        id: &ScenarioId,
+        input: NewVersion,
+        expected_revision: Option<u64>,
+        actor: Actor,
+    ) -> CoreResult<VersionSummary> {
+        let name = input.name.trim();
+        if name.is_empty() {
+            return Err(CoreError::InvalidEdit(
+                "version name must not be empty".into(),
+            ));
+        }
+        let _lock = self.store.lock()?;
+        let current = self.store.load(id)?;
+        check_revision(expected_revision, current.revision)?;
+        let number = self.next_version_number(id)?;
+        let mut scenario = current;
+        scenario.schema_ref = None;
+        let version = ScenarioVersion {
+            number,
+            uid: uuid::Uuid::now_v7().simple().to_string(),
+            name: name.to_owned(),
+            note: input.note.trim().to_owned(),
+            created_at: now(),
+            created_by: actor,
+            revision: scenario.revision,
+            scenario,
+        };
+        self.store.save_version(&version)?;
+        Ok(version.summary())
+    }
+
+    /// Versions of a scenario, newest first.
+    pub fn list_versions(&self, id: &ScenarioId) -> CoreResult<Vec<VersionSummary>> {
+        let mut versions: Vec<_> = self
+            .store
+            .load_versions(id)?
+            .iter()
+            .map(ScenarioVersion::summary)
+            .collect();
+        versions.reverse();
+        Ok(versions)
+    }
+
+    pub fn get_version(&self, id: &ScenarioId, number: u32) -> CoreResult<ScenarioVersion> {
+        self.store.load_version(id, number)
+    }
+
+    /// Number of the newest version, if any.
+    pub fn latest_version(&self, id: &ScenarioId) -> CoreResult<Option<u32>> {
+        Ok(self.store.load_versions(id)?.last().map(|v| v.number))
+    }
+
+    /// Newest version whose content equals `scenario` (e.g. to label a run).
+    pub fn matching_version(&self, scenario: &Scenario) -> CoreResult<Option<u32>> {
+        Ok(self
+            .store
+            .load_versions(&scenario.id)?
+            .iter()
+            .rev()
+            .find(|v| version::same_content(&v.scenario, scenario))
+            .map(|v| v.number))
+    }
+
+    /// Differences from version `from` to version `to`; `None` means the
+    /// current content.
+    pub fn diff_versions(
+        &self,
+        id: &ScenarioId,
+        from: Option<u32>,
+        to: Option<u32>,
+    ) -> CoreResult<ScenarioDiff> {
+        let current = self.get(id)?;
+        let load = |n: Option<u32>| n.map(|n| self.get_version(id, n)).transpose();
+        let (from_v, to_v) = (load(from)?, load(to)?);
+        let from_s = from_v.as_ref().map_or(&current, |v| &v.scenario);
+        let to_s = to_v.as_ref().map_or(&current, |v| &v.scenario);
+        Ok(version::diff(
+            (from_s, version::side(from_v.as_ref(), &current)),
+            (to_s, version::side(to_v.as_ref(), &current)),
+        ))
+    }
+
+    /// Makes the current content equal to a version, as one undoable edit.
+    /// Does nothing (and returns the current state) when it already matches.
+    pub fn restore_version(
+        &self,
+        id: &ScenarioId,
+        number: u32,
+        expected_revision: Option<u64>,
+        actor: Actor,
+    ) -> CoreResult<EditOutcome> {
+        let target = self.get_version(id, number)?;
+        let label = format!("restore version {number} ({})", target.name);
+        self.match_content(id, &target.scenario, expected_revision, actor, label)
+    }
+
+    fn match_content(
+        &self,
+        id: &ScenarioId,
+        target: &Scenario,
+        expected_revision: Option<u64>,
+        actor: Actor,
+        label: String,
+    ) -> CoreResult<EditOutcome> {
+        let current = self.get(id)?;
+        check_revision(expected_revision, current.revision)?;
+        let ops = version::ops_to_match(&current, target);
+        if ops.is_empty() {
+            return self.current_outcome(current);
+        }
+        self.commit(
+            id,
+            expected_revision.or(Some(current.revision)),
+            actor,
+            ChangeKind::Edit,
+            |_, current| {
+                let (next, inverse) = ops::apply_all(current, ops.clone())?;
+                Ok(Commit {
+                    next,
+                    applied: ops,
+                    inverse,
+                    label,
+                })
+            },
+        )
+    }
+
+    fn current_outcome(&self, scenario: Scenario) -> CoreResult<EditOutcome> {
+        let (can_undo, can_redo) = self.undo_state(&scenario.id)?;
+        let validation = self.validate(&scenario);
+        Ok(EditOutcome {
+            scenario,
+            validation,
+            can_undo,
+            can_redo,
+        })
+    }
+
+    fn next_version_number(&self, id: &ScenarioId) -> CoreResult<u32> {
+        Ok(self
+            .store
+            .load_versions(id)?
+            .last()
+            .map_or(1, |v| v.number + 1))
+    }
+
+    // -- sharing ----------------------------------------------------------
+
+    /// Packs a scenario (and optionally its versions) into a bundle for
+    /// another workspace. Secret variable defaults are removed.
+    pub fn export(&self, id: &ScenarioId, include_versions: bool) -> CoreResult<ScenarioBundle> {
+        let mut scenario = self.get(id)?;
+        version::strip_secrets(&mut scenario);
+        let versions = if include_versions {
+            let mut versions = self.store.load_versions(id)?;
+            for v in &mut versions {
+                version::strip_secrets(&mut v.scenario);
+            }
+            versions
+        } else {
+            Vec::new()
+        };
+        Ok(ScenarioBundle {
+            format: BUNDLE_FORMAT.into(),
+            format_version: BUNDLE_FORMAT_VERSION,
+            exported_at: now(),
+            scenario,
+            versions,
+        })
+    }
+
+    /// Imports a bundle or a bare scenario document.
+    ///
+    /// A new ID is created as is. When the ID already exists, `on_conflict`
+    /// decides; without it the import fails with `IMPORT_CONFLICT` so the
+    /// caller can ask the user.
+    pub fn import_bundle(
+        &self,
+        value: serde_json::Value,
+        on_conflict: Option<ImportConflict>,
+        actor: Actor,
+    ) -> CoreResult<ImportOutcome> {
+        let bundle = parse_bundle(value)?;
+        let mut scenario = bundle.scenario;
+        let exists = scenario.id.is_well_formed() && self.store.exists(&scenario.id);
+        let (mode, outcome) = match (exists, on_conflict) {
+            (true, None) => {
+                let existing = self.get(&scenario.id)?;
+                return Err(CoreError::ImportConflict {
+                    scenario_id: existing.id,
+                    name: existing.name,
+                });
+            }
+            (true, Some(ImportConflict::Update)) => {
+                let id = scenario.id.clone();
+                let label = "import update".to_owned();
+                (
+                    ImportMode::Updated,
+                    self.match_content(&id, &scenario, None, actor, label)?,
+                )
+            }
+            (true, Some(ImportConflict::Copy)) => {
+                scenario.id = ScenarioId::generate();
+                (ImportMode::Copied, self.insert_imported(scenario, actor)?)
+            }
+            (false, _) => {
+                if !scenario.id.is_well_formed() {
+                    scenario.id = ScenarioId::generate();
+                }
+                (ImportMode::Created, self.insert_imported(scenario, actor)?)
+            }
+        };
+        let versions_added = self.add_versions(&outcome.scenario.id, bundle.versions)?;
+        Ok(ImportOutcome {
+            mode,
+            versions_added,
+            outcome,
+        })
+    }
+
+    fn insert_imported(&self, mut scenario: Scenario, actor: Actor) -> CoreResult<EditOutcome> {
+        scenario.revision = 0;
+        let now = now();
+        scenario.metadata.created_at.get_or_insert(now);
+        scenario.metadata.updated_at = Some(now);
+        self.insert_new(scenario, actor, "import scenario")
+    }
+
+    /// Adds versions whose `uid` is not present yet, renumbered after the
+    /// existing ones in their original order.
+    fn add_versions(
+        &self,
+        id: &ScenarioId,
+        mut incoming: Vec<ScenarioVersion>,
+    ) -> CoreResult<usize> {
+        if incoming.is_empty() {
+            return Ok(0);
+        }
+        let _lock = self.store.lock()?;
+        let existing = self.store.load_versions(id)?;
+        let mut next = existing.last().map_or(1, |v| v.number + 1);
+        incoming.sort_by_key(|v| v.number);
+        let mut added = 0;
+        for mut v in incoming {
+            if existing.iter().any(|e| e.uid == v.uid) {
+                continue;
+            }
+            v.number = next;
+            v.scenario.id = id.clone();
+            self.store.save_version(&v)?;
+            next += 1;
+            added += 1;
+        }
+        Ok(added)
+    }
+
     fn reject_structural_errors(&self, scenario: &Scenario) -> CoreResult<()> {
         let issues = self.validator.structural_errors(scenario);
         if issues.is_empty() {
@@ -457,6 +733,31 @@ struct Commit {
     applied: Vec<EditOp>,
     inverse: Vec<EditOp>,
     label: String,
+}
+
+fn parse_bundle(value: serde_json::Value) -> CoreResult<ScenarioBundle> {
+    if !version::is_bundle(&value) {
+        return Ok(ScenarioBundle {
+            format: BUNDLE_FORMAT.into(),
+            format_version: BUNDLE_FORMAT_VERSION,
+            exported_at: now(),
+            scenario: crate::migrate::from_value(value)?,
+            versions: Vec::new(),
+        });
+    }
+    let found = value
+        .get("formatVersion")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(1);
+    if found > u64::from(BUNDLE_FORMAT_VERSION) {
+        return Err(CoreError::InvalidEdit(format!(
+            "bundle format version {found} is newer than this build supports ({BUNDLE_FORMAT_VERSION})"
+        )));
+    }
+    let mut bundle: ScenarioBundle = serde_json::from_value(value)?;
+    // Run the scenario documents through the same migrations as files.
+    bundle.scenario = crate::migrate::from_value(serde_json::to_value(&bundle.scenario)?)?;
+    Ok(bundle)
 }
 
 fn check_revision(expected: Option<u64>, actual: u64) -> CoreResult<()> {

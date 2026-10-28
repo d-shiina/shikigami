@@ -32,6 +32,20 @@ pub enum CoreError {
     #[error("revision conflict: expected {expected}, actual {actual}")]
     RevisionConflict { expected: u64, actual: u64 },
 
+    #[error("version {number} of scenario {scenario_id} not found")]
+    VersionNotFound {
+        scenario_id: ScenarioId,
+        number: u32,
+    },
+
+    #[error(
+        "scenario {scenario_id} ({name}) already exists in this workspace; choose \"update\" or \"copy\" (onConflict)"
+    )]
+    ImportConflict {
+        scenario_id: ScenarioId,
+        name: String,
+    },
+
     #[error("invalid edit: {0}")]
     InvalidEdit(String),
 
@@ -61,6 +75,8 @@ impl CoreError {
             Self::StepNotFound(_) => "STEP_NOT_FOUND",
             Self::DuplicateStepId(_) => "DUPLICATE_STEP_ID",
             Self::RevisionConflict { .. } => "REVISION_CONFLICT",
+            Self::VersionNotFound { .. } => "VERSION_NOT_FOUND",
+            Self::ImportConflict { .. } => "IMPORT_CONFLICT",
             Self::InvalidEdit(_) => "INVALID_EDIT",
             Self::NothingTo(_) => "NOTHING_TO_UNDO_OR_REDO",
             Self::UnsupportedSchemaVersion { .. } => "UNSUPPORTED_SCHEMA_VERSION",
@@ -80,6 +96,15 @@ impl CoreError {
             Self::StepNotFound(id) | Self::DuplicateStepId(id) => {
                 Some(serde_json::json!({ "step_id": id }))
             }
+            Self::VersionNotFound {
+                scenario_id,
+                number,
+            } => Some(serde_json::json!({ "scenario_id": scenario_id, "number": number })),
+            Self::ImportConflict { scenario_id, name } => Some(serde_json::json!({
+                "scenario_id": scenario_id,
+                "name": name,
+                "hint": "\"update\" applies the imported content to the existing scenario as one undoable edit and adds its versions; \"copy\" imports it as a new scenario with a new ID",
+            })),
             Self::ScenarioNotFound(id) | Self::ScenarioAlreadyExists(id) => {
                 Some(serde_json::json!({ "scenario_id": id }))
             }

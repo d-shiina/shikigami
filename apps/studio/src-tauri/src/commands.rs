@@ -4,8 +4,10 @@
 use serde::Serialize;
 use serde_json::{Map, Value};
 use shikigami_core::{
-    Actor, ActorKind, EditOp, EditOutcome, ErrorPayload, HistoryEntry, NewScenario, RunId,
-    Scenario, ScenarioId, ScenarioSummary, StepTypeDef, ValidationReport,
+    Actor, ActorKind, EditOp, EditOutcome, ErrorPayload, FileStore, HistoryEntry, ImportConflict,
+    ImportOutcome, NewScenario, NewVersion, RunId, Scenario, ScenarioDiff, ScenarioId,
+    ScenarioSummary, StepTypeDef, UserConfig, ValidationReport, VersionSummary, WorkspaceInfo,
+    WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{RunEventEnvelope, RunOptions, RunSnapshot};
@@ -30,17 +32,119 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
     }
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceInfo {
-    root: String,
+#[tauri::command]
+pub fn workspace_info(state: State<'_, AppState>) -> WorkspaceInfo {
+    state.service.store().info()
+}
+
+/// Makes `path` the default workspace (shared by the CLI and the MCP server)
+/// and restarts Studio on it. `shared` marks a new folder for several people.
+#[tauri::command]
+pub fn set_workspace(app: AppHandle, path: String, shared: bool) -> CmdResult<()> {
+    if std::env::var_os("SHIKIGAMI_HOME").is_some() {
+        return Err(err(
+            "WORKSPACE_OVERRIDDEN",
+            "SHIKIGAMI_HOME が設定されているため、保存先はその値に固定されています",
+        ));
+    }
+    let dir = std::path::absolute(path.trim())
+        .map_err(|e| err("INVALID_PATH", format!("フォルダを指定できません: {e}")))?;
+    if shared {
+        FileStore::init(&dir, &WorkspaceManifest { shared: true })?;
+    }
+    FileStore::open(&dir)?;
+    let mut config = UserConfig::load();
+    config.workspace = Some(dir);
+    config.save()?;
+    app.restart()
 }
 
 #[tauri::command]
-pub fn workspace_info(state: State<'_, AppState>) -> WorkspaceInfo {
-    WorkspaceInfo {
-        root: state.service.store().root().display().to_string(),
+pub fn list_versions(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<Vec<VersionSummary>> {
+    Ok(state.service.list_versions(&id)?)
+}
+
+#[tauri::command]
+pub fn create_version(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    expected_revision: Option<u64>,
+    input: NewVersion,
+) -> CmdResult<VersionSummary> {
+    Ok(state
+        .service
+        .create_version(&id, input, expected_revision, studio())?)
+}
+
+/// `from` / `to` are version numbers; omitted means the current content.
+#[tauri::command]
+pub fn diff_versions(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    from: Option<u32>,
+    to: Option<u32>,
+) -> CmdResult<ScenarioDiff> {
+    Ok(state.service.diff_versions(&id, from, to)?)
+}
+
+#[tauri::command]
+pub fn restore_version(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    number: u32,
+    expected_revision: Option<u64>,
+) -> CmdResult<EditOutcome> {
+    Ok(state
+        .service
+        .restore_version(&id, number, expected_revision, studio())?)
+}
+
+/// Writes a bundle into the Downloads folder and returns its path.
+#[tauri::command]
+pub fn export_scenario(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<String> {
+    let bundle = state.service.export(&id, true)?;
+    let dir = dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .ok_or_else(|| err("STORAGE_ERROR", "保存先フォルダが見つかりません"))?;
+    let stem: String = bundle
+        .scenario
+        .name
+        .chars()
+        .map(|c| {
+            if r#"\/:*?"<>|"#.contains(c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let stem = if stem.trim().is_empty() {
+        "scenario".to_owned()
+    } else {
+        stem
+    };
+    let mut path = dir.join(format!("{stem}.shikigami.json"));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{stem} ({n}).shikigami.json"));
+        n += 1;
     }
+    let json =
+        serde_json::to_vec_pretty(&bundle).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    std::fs::write(&path, json).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    Ok(path.display().to_string())
+}
+
+/// Imports the text of a bundle or scenario file chosen in the UI.
+#[tauri::command]
+pub fn import_scenario(
+    state: State<'_, AppState>,
+    contents: String,
+    on_conflict: Option<ImportConflict>,
+) -> CmdResult<ImportOutcome> {
+    let value: Value = serde_json::from_str(&contents)
+        .map_err(|e| err("PARSE_ERROR", format!("JSON として読めません: {e}")))?;
+    Ok(state.service.import_bundle(value, on_conflict, studio())?)
 }
 
 #[tauri::command]
@@ -149,6 +253,7 @@ pub async fn run_scenario(
     inputs: Option<Map<String, Value>>,
 ) -> CmdResult<RunId> {
     let scenario = state.service.get_runnable(&id)?;
+    let version = state.service.matching_version(&scenario).ok().flatten();
     let handle = state
         .runtime
         .start(
@@ -156,6 +261,7 @@ pub async fn run_scenario(
             RunOptions {
                 inputs: inputs.unwrap_or_default(),
                 run_id: None,
+                version,
                 ..RunOptions::default()
             },
         )
@@ -165,7 +271,7 @@ pub async fn run_scenario(
             details: e.details,
         })?;
     let run_id = handle.run_id.clone();
-    let mut recorder = RunRecorder::create(state.service.store().root(), &run_id)
+    let mut recorder = RunRecorder::create(state.service.store().local_root(), &run_id)
         .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
 
     if let Ok(mut runs) = state.runs.lock() {
