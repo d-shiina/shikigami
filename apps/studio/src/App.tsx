@@ -1,5 +1,7 @@
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AgentContext, createAgentStore } from "./agent";
+import { AgentButton, AgentPane } from "./components/AgentPane";
 import { AppMenu } from "./components/AppMenu";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -16,7 +18,7 @@ import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
 import { VariablesPanel } from "./components/VariablesPanel";
 import { VersionsPanel } from "./components/VersionsPanel";
 import { StudioContext, useStudio } from "./context";
-import { api, events } from "./lib/api";
+import { agent, api, events } from "./lib/api";
 import { t } from "./lib/i18n";
 import { createStudioStore } from "./store";
 
@@ -236,6 +238,7 @@ function Shell() {
         <ModeSwitch />
         <ScenarioHeader />
         <span className="h-5 w-px bg-slate-200" />
+        <AgentButton />
         <SecretsButton />
         <AppMenu />
         <span className="swirl-line absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
@@ -276,19 +279,23 @@ function Shell() {
       <div className="min-h-0">{hasScenario && <SidePanel />}</div>
       <CommandPalette />
       <SecretsDialog />
+      <AgentPane />
     </div>
   );
 }
 
 export function App() {
   const store = useMemo(() => createStudioStore(api), []);
+  const agentStore = useMemo(() => createAgentStore(agent), []);
 
   useEffect(() => {
     void store.getState().init();
     const unlisten = [
       events.onScenarioChanged((id) => void store.getState().onExternalChange(id)),
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
+      agent.onEvent((e) => agentStore.getState().onEvent(e)),
     ];
+    void agentStore.getState().init();
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
@@ -324,13 +331,15 @@ export function App() {
       window.removeEventListener("keydown", onKey);
       for (const p of unlisten) void p.then((off) => off());
     };
-  }, [store]);
+  }, [store, agentStore]);
 
   return (
     <StudioContext.Provider value={store}>
-      <ErrorBoundary>
-        <Shell />
-      </ErrorBoundary>
+      <AgentContext.Provider value={agentStore}>
+        <ErrorBoundary>
+          <Shell />
+        </ErrorBoundary>
+      </AgentContext.Provider>
     </StudioContext.Provider>
   );
 }

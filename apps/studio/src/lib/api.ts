@@ -150,6 +150,43 @@ export const updates = {
 
 export type Api = typeof api;
 
+/** The person's own coding agent, run in the background with Shikigami's MCP server. */
+export type AgentInfo = {
+  available: boolean;
+  name: string;
+  command: string | null;
+  /** Why it cannot be used, in words for the person. */
+  problem: string | null;
+  /** Whether later messages continue the same conversation. */
+  remembers: boolean;
+};
+
+export type AgentRequest = {
+  message: string;
+  sessionId?: string | null;
+  scenario?: { id: string; name: string; stepId?: string | null } | null;
+};
+
+export type AgentEvent = { turnId: string } & (
+  | { kind: "session"; sessionId: string }
+  | { kind: "text"; text: string }
+  | { kind: "tool"; name: string; detail: string | null }
+  | { kind: "toolFailed"; message: string }
+  | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null }
+);
+
+// Kept apart from `api` like `updates`: the scenario store never talks to the AI.
+export const agent = {
+  info: () => call<AgentInfo>("agent_info"),
+  /** Returns the turn id; progress arrives through `onEvent`. */
+  send: (input: AgentRequest) => call<string>("agent_send", { input }),
+  stop: (turnId: string) => call<void>("agent_stop", { turnId }),
+  onEvent: (handler: (e: AgentEvent) => void): Promise<UnlistenFn> =>
+    listen<AgentEvent>("agent-event", (e) => handler(e.payload)),
+};
+
+export type AgentApi = Omit<typeof agent, "onEvent">;
+
 export const events = {
   onScenarioChanged: (handler: (scenarioId: string) => void): Promise<UnlistenFn> =>
     listen<{ scenarioId: string }>("scenario-changed", (e) => handler(e.payload.scenarioId)),
