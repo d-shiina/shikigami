@@ -155,6 +155,7 @@ pub async fn run_scenario(
             RunOptions {
                 inputs: inputs.unwrap_or_default(),
                 run_id: None,
+                ..RunOptions::default()
             },
         )
         .map_err(|e| ErrorPayload {

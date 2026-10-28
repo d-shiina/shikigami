@@ -6,22 +6,27 @@
 //! one context take turns, different contexts run in parallel.
 //!
 //! ```no_run
-//! # use std::sync::Arc;
-//! use shikigami_browser::{BrowserClient, BrowserConfig};
-//! let client = Arc::new(BrowserClient::new(BrowserConfig::discover()));
-//! let runtime = shikigami_browser::install(shikigami_runtime::Runtime::builder(), client).build();
+//! use shikigami_browser::BrowserAdapter;
+//! let runtime = shikigami_runtime::Runtime::builder()
+//!     .adapter(&BrowserAdapter::discover())
+//!     .build();
 //! ```
 
-mod client;
-
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 use shikigami_core::registry::{RiskLevel, StepCategory, StepTypeDef};
 use shikigami_core::resource::ResourceDef;
-use shikigami_runtime::{ActionHandler, ActionInput, BoxFuture, RuntimeBuilder, StepError};
+use shikigami_runtime::sidecar::{SidecarClient, SidecarConfig};
+use shikigami_runtime::{
+    ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
+};
+use tokio_util::sync::CancellationToken;
 
-pub use client::{ADAPTER_SCRIPT, BrowserClient, BrowserConfig};
+/// Path of the adapter entry point inside the repository / install dir.
+pub const ADAPTER_SCRIPT: &str = "packages/browser-adapter/src/main.ts";
 
 pub mod types {
     pub const OPEN: &str = "browser.open";
@@ -36,34 +41,126 @@ pub mod types {
     pub const CLOSE: &str = "browser.close";
 }
 
-/// Registers every browser step type and closes a run's browser contexts
-/// when it ends.
-pub fn install(mut builder: RuntimeBuilder, client: Arc<BrowserClient>) -> RuntimeBuilder {
-    for (def, method) in step_defs() {
-        builder = builder.register(
-            def,
-            BrowserStep {
-                client: client.clone(),
-                method,
-            },
-        );
-    }
-    builder.on_run_finished(Arc::new(move |run_id| {
-        let client = client.clone();
-        Box::pin(async move { client.close_run(run_id.as_str()).await })
-    }))
+/// Browser steps backed by the Node.js + Playwright sidecar.
+#[derive(Debug, Clone)]
+pub struct BrowserAdapter {
+    client: Arc<SidecarClient>,
 }
 
-/// The Runtime used by the CLI, MCP server and Studio: built-in steps plus
-/// browser steps backed by an adapter found with [`BrowserConfig::discover`].
-pub fn default_runtime() -> (shikigami_runtime::Runtime, Arc<BrowserClient>) {
-    let client = Arc::new(BrowserClient::new(BrowserConfig::discover()));
-    let runtime = install(shikigami_runtime::Runtime::builder(), client.clone()).build();
-    (runtime, client)
+impl BrowserAdapter {
+    pub fn new(config: SidecarConfig) -> Self {
+        Self {
+            client: Arc::new(SidecarClient::new(config)),
+        }
+    }
+
+    /// Uses `SHIKIGAMI_NODE` / `SHIKIGAMI_BROWSER_ADAPTER` when set,
+    /// otherwise `node` on PATH and the adapter found next to the executable
+    /// (or the current directory) or in one of their parents.
+    pub fn discover() -> Self {
+        let node =
+            std::env::var_os("SHIKIGAMI_NODE").map_or_else(|| PathBuf::from("node"), PathBuf::from);
+        let script = std::env::var_os("SHIKIGAMI_BROWSER_ADAPTER")
+            .map(PathBuf::from)
+            .or_else(|| {
+                let exe_dir = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(Path::to_path_buf));
+                let cwd = std::env::current_dir().ok();
+                [exe_dir, cwd]
+                    .into_iter()
+                    .flatten()
+                    .find_map(|start| find_upwards(&start))
+            });
+        Self::new(sidecar_config(node, script))
+    }
+}
+
+/// How to start the adapter script with Node.js (22.18+ runs TypeScript).
+pub fn sidecar_config(node: PathBuf, script: Option<PathBuf>) -> SidecarConfig {
+    let mut args: Vec<OsString> = vec![
+        "--experimental-strip-types".into(),
+        "--disable-warning=ExperimentalWarning".into(),
+    ];
+    let unavailable = match script {
+        Some(script) => {
+            args.push(script.into_os_string());
+            None
+        }
+        None => Some(format!("{ADAPTER_SCRIPT} not found")),
+    };
+    SidecarConfig {
+        name: "browser".into(),
+        program: node,
+        args,
+        unavailable,
+        setup_hint: "Install Node.js 22.18+ and run `pnpm install` in the Shikigami folder, or set SHIKIGAMI_BROWSER_ADAPTER to packages/browser-adapter/src/main.ts.".into(),
+    }
+}
+
+fn find_upwards(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .map(|dir| dir.join(ADAPTER_SCRIPT))
+        .find(|candidate| candidate.is_file())
+}
+
+impl Adapter for BrowserAdapter {
+    fn name(&self) -> &'static str {
+        "browser"
+    }
+
+    /// Registers every browser step type and closes a run's browser
+    /// contexts when it ends.
+    fn install(&self, mut builder: RuntimeBuilder) -> RuntimeBuilder {
+        for (def, method) in step_defs() {
+            builder = builder.register(
+                def,
+                BrowserStep {
+                    client: self.client.clone(),
+                    method,
+                },
+            );
+        }
+        let client = self.client.clone();
+        builder.on_run_finished(Arc::new(move |run_id| {
+            let client = client.clone();
+            Box::pin(async move {
+                if client.is_running().await {
+                    let _ = client
+                        .call(
+                            "closeRun",
+                            json!({ "runId": run_id.as_str() }),
+                            &CancellationToken::new(),
+                        )
+                        .await;
+                }
+            })
+        }))
+    }
+
+    /// The page's accessibility tree (`url` opens a page first; `context`,
+    /// `target` narrow it down).
+    fn inspect<'a>(
+        &'a self,
+        session: &'a str,
+        params: Value,
+    ) -> BoxFuture<'a, Result<Value, StepError>> {
+        Box::pin(async move {
+            let mut params = match params {
+                Value::Object(map) => map,
+                _ => Map::new(),
+            };
+            params.insert("runId".into(), Value::String(session.to_owned()));
+            self.client
+                .call("snapshot", Value::Object(params), &CancellationToken::new())
+                .await
+        })
+    }
 }
 
 struct BrowserStep {
-    client: Arc<BrowserClient>,
+    client: Arc<SidecarClient>,
     method: &'static str,
 }
 

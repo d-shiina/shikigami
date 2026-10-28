@@ -1,66 +1,47 @@
-//! The adapter child process and its JSON-RPC connection.
+//! Out-of-process adapters ("sidecars") spoken to over JSON-RPC 2.0.
 //!
-//! One Node.js process (packages/browser-adapter) serves every run. It is
-//! started on first use; when it dies, in-flight steps fail with
-//! `ADAPTER_CRASHED` (retryable) and the next call starts a new one.
+//! An adapter written in another language (Node.js + Playwright for the
+//! browser, later .NET / Python for Office or other apps) runs as a child
+//! process and exchanges newline-delimited JSON-RPC messages on stdin /
+//! stdout. One process serves every run; it is started on first use, and
+//! when it dies, in-flight calls fail with `ADAPTER_CRASHED` (retryable) and
+//! the next call starts a new one.
+//!
+//! Protocol: requests `{"jsonrpc":"2.0","id":1,"method":"…","params":{…}}`;
+//! errors carry `data: { code, retryable, details }`, which become the
+//! step's error code, retry decision and details. stderr goes to tracing.
 
-// StepError is the Runtime's handler error type; boxing it here would only
-// move the allocation.
+// StepError is the handler error type; boxing it here would only move the
+// allocation.
 #![allow(clippy::result_large_err)]
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::ffi::OsString;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
-use shikigami_runtime::StepError;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
-/// Path of the adapter entry point inside the repository / install dir.
-pub const ADAPTER_SCRIPT: &str = "packages/browser-adapter/src/main.ts";
+use crate::handler::StepError;
 
-/// How to start the adapter.
+/// How to start a sidecar.
 #[derive(Debug, Clone)]
-pub struct BrowserConfig {
-    /// Node.js executable (22.18 or later).
-    pub node: PathBuf,
-    /// The adapter's `main.ts`; `None` when it could not be found.
-    pub script: Option<PathBuf>,
-}
-
-impl BrowserConfig {
-    /// `SHIKIGAMI_NODE` / `SHIKIGAMI_BROWSER_ADAPTER` when set, otherwise
-    /// `node` on PATH and the adapter found next to the executable (or the
-    /// current directory) or in one of their parents.
-    pub fn discover() -> Self {
-        let node =
-            std::env::var_os("SHIKIGAMI_NODE").map_or_else(|| PathBuf::from("node"), PathBuf::from);
-        let script = std::env::var_os("SHIKIGAMI_BROWSER_ADAPTER")
-            .map(PathBuf::from)
-            .or_else(|| {
-                let exe_dir = std::env::current_exe()
-                    .ok()
-                    .and_then(|p| p.parent().map(Path::to_path_buf));
-                let cwd = std::env::current_dir().ok();
-                [exe_dir, cwd]
-                    .into_iter()
-                    .flatten()
-                    .find_map(|start| find_upwards(&start))
-            });
-        Self { node, script }
-    }
-}
-
-fn find_upwards(start: &Path) -> Option<PathBuf> {
-    start
-        .ancestors()
-        .map(|dir| dir.join(ADAPTER_SCRIPT))
-        .find(|candidate| candidate.is_file())
+pub struct SidecarConfig {
+    /// Short name used in messages and logs, e.g. "browser".
+    pub name: String,
+    pub program: PathBuf,
+    pub args: Vec<OsString>,
+    /// Why the sidecar cannot be started (e.g. its script was not found);
+    /// calls then fail with `ADAPTER_UNAVAILABLE` without trying.
+    pub unavailable: Option<String>,
+    /// How to fix `ADAPTER_UNAVAILABLE` (shown to people and AI clients).
+    pub setup_hint: String,
 }
 
 type Reply = Result<Value, StepError>;
@@ -70,13 +51,13 @@ struct Connection {
     stdin: tokio::sync::Mutex<ChildStdin>,
     pending: Pending,
     alive: Arc<AtomicBool>,
-    // Killed (with its browsers) when the client is dropped.
+    // Killed (with anything it started) when the client is dropped.
     _child: Child,
 }
 
-/// Shared handle to the adapter process. Cheap to clone via `Arc`.
-pub struct BrowserClient {
-    config: BrowserConfig,
+/// Shared handle to a sidecar process. Share it via `Arc`.
+pub struct SidecarClient {
+    config: SidecarConfig,
     connection: tokio::sync::Mutex<Option<Arc<Connection>>>,
     next_id: AtomicU64,
 }
@@ -85,21 +66,30 @@ fn crashed(message: impl Into<String>) -> StepError {
     StepError::new("ADAPTER_CRASHED", message)
 }
 
-impl std::fmt::Debug for BrowserClient {
+impl std::fmt::Debug for SidecarClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BrowserClient")
+        f.debug_struct("SidecarClient")
             .field("config", &self.config)
             .finish_non_exhaustive()
     }
 }
 
-impl BrowserClient {
-    pub fn new(config: BrowserConfig) -> Self {
+impl SidecarClient {
+    pub fn new(config: SidecarConfig) -> Self {
         Self {
             config,
             connection: tokio::sync::Mutex::new(None),
             next_id: AtomicU64::new(1),
         }
+    }
+
+    /// Whether the process is currently running.
+    pub async fn is_running(&self) -> bool {
+        self.connection
+            .lock()
+            .await
+            .as_ref()
+            .is_some_and(|c| c.alive.load(Ordering::SeqCst))
     }
 
     /// Calls one adapter method. Cancelling `cancel` stops waiting (the
@@ -121,34 +111,18 @@ impl BrowserClient {
         if let Err(e) = written {
             lock(&connection.pending).remove(&id);
             connection.alive.store(false, Ordering::SeqCst);
-            return Err(crashed(format!("could not reach the browser adapter: {e}")));
+            return Err(crashed(format!(
+                "could not reach the {} adapter: {e}",
+                self.config.name
+            )));
         }
 
         tokio::select! {
-            reply = rx => reply.unwrap_or_else(|_| Err(crashed("the browser adapter stopped during the step"))),
+            reply = rx => reply.unwrap_or_else(|_| Err(crashed(format!("the {} adapter stopped during the step", self.config.name)))),
             () = cancel.cancelled() => {
                 lock(&connection.pending).remove(&id);
                 Err(StepError::permanent("CANCELLED", "cancelled"))
             }
-        }
-    }
-
-    /// Closes the browser contexts of a finished run (if the adapter runs).
-    pub async fn close_run(&self, run_id: &str) {
-        let running = self
-            .connection
-            .lock()
-            .await
-            .as_ref()
-            .is_some_and(|c| c.alive.load(Ordering::SeqCst));
-        if running {
-            let _ = self
-                .call(
-                    "closeRun",
-                    json!({ "runId": run_id }),
-                    &CancellationToken::new(),
-                )
-                .await;
         }
     }
 
@@ -165,21 +139,17 @@ impl BrowserClient {
     }
 
     fn spawn(&self) -> Result<Connection, StepError> {
+        let name = &self.config.name;
         let unavailable = |message: String| {
-            StepError::permanent("ADAPTER_UNAVAILABLE", message).with_details(json!({
-                "hint": "Install Node.js 22.18+ and run `pnpm install` in the Shikigami folder, or set SHIKIGAMI_BROWSER_ADAPTER to packages/browser-adapter/src/main.ts."
-            }))
+            StepError::permanent("ADAPTER_UNAVAILABLE", message)
+                .with_details(json!({ "hint": self.config.setup_hint }))
         };
-        let Some(script) = &self.config.script else {
-            return Err(unavailable(format!(
-                "browser adapter not found ({ADAPTER_SCRIPT})"
-            )));
-        };
-        let mut command = Command::new(&self.config.node);
+        if let Some(reason) = &self.config.unavailable {
+            return Err(unavailable(format!("{name} adapter unavailable: {reason}")));
+        }
+        let mut command = Command::new(&self.config.program);
         command
-            .arg("--experimental-strip-types")
-            .arg("--disable-warning=ExperimentalWarning")
-            .arg(script)
+            .args(&self.config.args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -192,25 +162,25 @@ impl BrowserClient {
         }
         let mut child = command.spawn().map_err(|e| {
             unavailable(format!(
-                "could not start {} for the browser adapter: {e}",
-                self.config.node.display()
+                "could not start {} for the {name} adapter: {e}",
+                self.config.program.display()
             ))
         })?;
         let (Some(stdin), Some(stdout), Some(stderr)) =
             (child.stdin.take(), child.stdout.take(), child.stderr.take())
         else {
-            return Err(crashed("browser adapter pipes unavailable"));
+            return Err(crashed(format!("{name} adapter pipes unavailable")));
         };
 
         let pending: Pending = Arc::default();
         let alive = Arc::new(AtomicBool::new(true));
         {
-            let (pending, alive) = (pending.clone(), alive.clone());
+            let (pending, alive, name) = (pending.clone(), alive.clone(), name.clone());
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
                     let Ok(message) = serde_json::from_str::<Value>(&line) else {
-                        tracing::warn!(%line, "unexpected output from the browser adapter");
+                        tracing::warn!(%line, adapter = %name, "unexpected output from adapter");
                         continue;
                     };
                     let Some(id) = message.get("id").and_then(Value::as_u64) else {
@@ -223,13 +193,14 @@ impl BrowserClient {
                 // EOF: the process ended. Dropping the senders fails waiters.
                 alive.store(false, Ordering::SeqCst);
                 lock(&pending).clear();
-                tracing::warn!("browser adapter exited");
+                tracing::warn!(adapter = %name, "adapter exited");
             });
         }
+        let log_name = name.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                tracing::debug!(target: "shikigami_browser::adapter", "{line}");
+                tracing::debug!(target: "shikigami::adapter", adapter = %log_name, "{line}");
             }
         });
 
@@ -252,11 +223,11 @@ fn reply_of(message: Value) -> Reply {
         let code = data
             .and_then(|d| d.get("code"))
             .and_then(Value::as_str)
-            .unwrap_or("BROWSER_ERROR");
+            .unwrap_or("ADAPTER_ERROR");
         let text = error
             .get("message")
             .and_then(Value::as_str)
-            .unwrap_or("browser adapter error");
+            .unwrap_or("adapter error");
         let mut err = StepError::new(code, text);
         err.retryable = data
             .and_then(|d| d.get("retryable"))

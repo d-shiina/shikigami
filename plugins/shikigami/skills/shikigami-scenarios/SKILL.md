@@ -42,7 +42,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 
 ## Web ページを操作するシナリオ
 
-1. `inspect_page`（`url` を付ける）でページのアクセシビリティツリーを見る。ログインが必要な画面は `test_browser_step` で `browser.fill` / `browser.click` を 1 つずつ試して進み、その都度返るページを見る。
+1. `inspect_page`（`url` を付ける）でページのアクセシビリティツリーを見る。ログインが必要な画面は `test_step`（`{ "step": { "type": "browser.click", "params": {…} } }`）で `browser.fill` / `browser.click` を 1 つずつ試して進み、その都度返るページを見る。
 2. 要素は意味で指定する：`- button "ログイン"` → `{ "role": "button", "name": "ログイン" }`、入力欄は `{ "label": "ユーザー名" }`。CSS は最後の手段。複数一致（`ELEMENT_AMBIGUOUS`）なら `exact` や `nth` で絞る。
 3. シナリオは `browser.open` から始める。待機は自動なので `flow.delay` は入れない。画面の切り替わりは `browser.waitFor`（見出しや完了メッセージ）で待つ。
 4. 表は `browser.getTable` で配列にして `control.forEach` で回す（セルは文字列なので金額は `num()`）。

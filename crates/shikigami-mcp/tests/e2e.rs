@@ -345,3 +345,34 @@ async fn a_run_that_cannot_be_recorded_is_not_started() {
     assert_eq!(value["code"], "IO_ERROR");
     h.client.cancel().await.unwrap();
 }
+
+#[tokio::test]
+async fn test_step_runs_one_step_without_touching_scenarios() {
+    let h = start(ServerOptions::default()).await;
+    let out = h.ok(
+        "test_step",
+        json!({ "step": { "type": "variable.set", "params": { "name": "x", "expression": "1 + 2" } } }),
+    )
+    .await;
+    assert_eq!(out["status"], "succeeded");
+    let out = h
+        .ok(
+            "test_step",
+            json!({ "step": { "type": "control.fail", "params": { "message": "だめ" } } }),
+        )
+        .await;
+    assert_eq!(out["status"], "failed");
+    assert_eq!(out["error"]["message"], "だめ");
+    let (is_error, e) = h
+        .call("test_step", json!({ "step": { "type": "nope.step" } }))
+        .await;
+    assert!(is_error);
+    assert_eq!(e["code"], "UNKNOWN_STEP_TYPE");
+    // Without a browser adapter, inspect_page says so.
+    let (is_error, e) = h.call("inspect_page", json!({ "url": "http://x/" })).await;
+    assert!(is_error);
+    assert_eq!(e["code"], "ADAPTER_UNAVAILABLE");
+    let scenarios = h.ok("list_scenarios", json!({})).await;
+    assert_eq!(scenarios["scenarios"].as_array().map(Vec::len), Some(0));
+    h.client.cancel().await.unwrap();
+}

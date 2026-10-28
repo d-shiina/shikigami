@@ -79,7 +79,7 @@ pnpm demo:browser
 MCP サーバーに 2 つのツールがあります（権限区分は `run`）。
 
 - `inspect_page`：ページを開いて（または開いているページの）アクセシビリティツリーを返す。`- button "ログイン"` と出ていれば `{ "role": "button", "name": "ログイン" }` がそのまま `target` になる
-- `test_browser_step`：browser ステップを 1 つその場で実行して、結果と実行後のページを返す。ログインしてから次の画面を調べる、といった下調べに使う。シナリオは変更しない
+- `test_step`：ステップを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのステップでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。シナリオは変更しない
 
 AI はこれでサイトを確かめながらステップを組み、`validate_scenario` → `run_scenario` で AI なしの実行を確認します。
 
@@ -90,5 +90,6 @@ Runtime ──(JSON-RPC over stdio)──▶ node packages/browser-adapter/src/m
   browser.* ステップ                   実行 × context ごとに BrowserContext
 ```
 
+- ブラウザ対応は「アダプター」の 1 つです。ほかのアプリを足す方法は [adapters.md](adapters.md)。
 - アダプターは最初のブラウザステップで起動し、全実行で共有します。異常終了すると実行中のステップは `ADAPTER_CRASHED` で失敗し、次の要求で起動し直します。
 - アダプターの stderr は Rust の tracing（`shikigami_browser::adapter`）に流れます。
