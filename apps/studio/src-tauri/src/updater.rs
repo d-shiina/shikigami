@@ -158,9 +158,15 @@ pub async fn install_update(app: AppHandle, pending: State<'_, PendingUpdate>) -
     {
         tracing::warn!(error = %e, "cannot move the CLI aside; the installer may ask to retry");
     }
-    update
-        .install(bytes)
-        .map_err(|e| err("UPDATE_INSTALL_FAILED", e.to_string()))?;
+    if let Err(e) = update.install(bytes) {
+        // The installer never started, so MCP clients still need the CLI.
+        if let Some(dir) = install_dir()
+            && let Err(e) = restore_parked_cli(&dir, &update.current_version)
+        {
+            tracing::warn!(error = %e, "cannot restore the parked CLI");
+        }
+        return Err(err("UPDATE_INSTALL_FAILED", e.to_string()));
+    }
     app.restart()
 }
 
