@@ -40,6 +40,9 @@ enum Command {
         /// Print events as JSON lines instead of human-readable text.
         #[arg(long)]
         json: bool,
+        /// Also print every variable change (value and the step that set it).
+        #[arg(long)]
+        vars: bool,
     },
     /// Validate a scenario (by ID or JSON file).
     Validate { target: String },
@@ -195,6 +198,7 @@ fn real_main() -> Result<ExitCode> {
             target,
             inputs,
             json,
+            vars,
         } => {
             let svc = open_service()?;
             let scenario = resolve(&svc, target)?;
@@ -202,7 +206,14 @@ fn real_main() -> Result<ExitCode> {
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            let status = rt.block_on(run(&runtime, svc.store().root(), scenario, inputs, *json))?;
+            let status = rt.block_on(run(
+                &runtime,
+                svc.store().root(),
+                scenario,
+                inputs,
+                *json,
+                *vars,
+            ))?;
             return Ok(match status {
                 RunStatus::Succeeded => ExitCode::SUCCESS,
                 RunStatus::Cancelled => ExitCode::from(130),
@@ -342,6 +353,7 @@ async fn run(
     scenario: Scenario,
     inputs: Map<String, Value>,
     json: bool,
+    vars: bool,
 ) -> Result<RunStatus> {
     let handle = runtime
         .start(
@@ -397,6 +409,21 @@ async fn run(
                         LogLevel::Error => "error",
                     };
                     println!("  [{tag}] {message}");
+                }
+                RunEvent::VariableChanged {
+                    variable,
+                    value,
+                    step_id,
+                    iteration,
+                    truncated,
+                    ..
+                } if vars => {
+                    let by = step_id
+                        .as_ref()
+                        .map_or_else(|| "start".to_owned(), ToString::to_string);
+                    let at = iteration.map(|i| format!(" #{i}")).unwrap_or_default();
+                    let cut = if *truncated { " (truncated)" } else { "" };
+                    println!("  · {variable} = {value}{cut}  ← {by}{at}");
                 }
                 RunEvent::StepFinished {
                     step_id,

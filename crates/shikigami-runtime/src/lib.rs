@@ -112,6 +112,7 @@ impl Runtime {
                     .filter(|v| v.secret)
                     .map(|v| v.name.clone())
                     .collect(),
+                iteration: None,
                 emitter: emitter.clone(),
                 cancel: cancel.clone(),
                 default_timeout_ms: exec::DEFAULT_TIMEOUT_MS,
@@ -120,7 +121,7 @@ impl Runtime {
                 resources: self.resources.clone(),
             },
         );
-        let init = init_variables(&scenario, &options.inputs, &mut executor);
+        let inputs = options.inputs;
 
         let task_run_id = run_id.clone();
         let hooks = if options.keep_adapter_state {
@@ -138,6 +139,9 @@ impl Runtime {
                 revision: scenario.revision,
             });
 
+            // After `runStarted`, so the inputs' `variableChanged` events
+            // come first in the run.
+            let init = init_variables(&scenario, &inputs, &mut executor);
             let result = match init {
                 Ok(()) => executor.block(&scenario.steps).await,
                 Err(e) => Err(exec::Interrupt::Failed(e)),
@@ -314,7 +318,7 @@ fn init_variables(
                 None => Value::Null,
             },
         };
-        executor.set_var(&var.name, value);
+        executor.set_var(&var.name, value, None);
     }
     Ok(())
 }

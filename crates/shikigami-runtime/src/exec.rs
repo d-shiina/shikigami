@@ -29,6 +29,9 @@ pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS: u64 = 500;
 const DEFAULT_MAX_ITERATIONS: u64 = 1000;
 const MASK: &str = "***";
+/// Longest value (in characters, as JSON text for arrays and objects)
+/// recorded in full by `variableChanged`.
+const VALUE_PREVIEW_CHARS: usize = 1000;
 
 // ---------------------------------------------------------------------------
 // Event emission with secret masking
@@ -160,6 +163,29 @@ impl Emitter {
         let _ = self.inner.tx.send(envelope);
     }
 
+    pub(crate) fn variable_changed(
+        &self,
+        name: &str,
+        value: &Value,
+        step_id: Option<&StepId>,
+        iteration: Option<usize>,
+        secret: bool,
+    ) {
+        let (value, truncated) = if secret {
+            (Value::String(MASK.into()), false)
+        } else {
+            preview(self.mask_value(value))
+        };
+        self.emit(RunEvent::VariableChanged {
+            variable: name.to_owned(),
+            value,
+            step_id: step_id.cloned(),
+            iteration,
+            secret,
+            truncated,
+        });
+    }
+
     pub(crate) fn log(&self, level: LogLevel, message: String, step_id: Option<StepId>) {
         self.emit(RunEvent::Log {
             level,
@@ -172,6 +198,33 @@ impl Emitter {
         if let Ok(mut snapshot) = self.inner.snapshot.lock() {
             f(&mut snapshot);
         }
+    }
+}
+
+/// Cuts a value recorded in `variableChanged` down to a preview when it is
+/// large, so loops over big tables do not bloat the run record. Returns the
+/// value and whether it was cut.
+fn preview(value: Value) -> (Value, bool) {
+    fn cut(text: &str) -> String {
+        let end = text
+            .char_indices()
+            .nth(VALUE_PREVIEW_CHARS)
+            .map_or(text.len(), |(i, _)| i);
+        format!("{}…", &text[..end])
+    }
+    match value {
+        Value::String(s) if s.chars().count() > VALUE_PREVIEW_CHARS => {
+            (Value::String(cut(&s)), true)
+        }
+        value @ (Value::Array(_) | Value::Object(_)) => {
+            let text = value.to_string();
+            if text.chars().count() > VALUE_PREVIEW_CHARS {
+                (Value::String(cut(&text)), true)
+            } else {
+                (value, false)
+            }
+        }
+        other => (other, false),
     }
 }
 
@@ -233,6 +286,9 @@ pub(crate) struct Executor {
     pub resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
     pub vars: Map<String, Value>,
     pub secret_vars: Vec<String>,
+    /// Item index when running inside an iteration of a concurrent
+    /// `forEach` (the innermost one), reported with variable changes.
+    pub iteration: Option<usize>,
     pub emitter: Emitter,
     pub cancel: CancellationToken,
     pub default_timeout_ms: u64,
@@ -277,6 +333,7 @@ impl Executor {
             resource_defs: self.resource_defs.clone(),
             vars: self.vars.clone(),
             secret_vars: self.secret_vars.clone(),
+            iteration: self.iteration,
             emitter: self.emitter.clone(),
             cancel,
             default_timeout_ms: self.default_timeout_ms,
@@ -310,10 +367,15 @@ impl Executor {
             .ok_or_else(|| RunError::new("EXPR_TYPE", format!("'{key}' must evaluate to a number")))
     }
 
-    pub(crate) fn set_var(&mut self, name: &str, value: Value) {
-        if self.secret_vars.iter().any(|s| s == name) {
+    /// Assigns a variable and reports it as `variableChanged`. `step_id` is
+    /// the step that assigned it (`None` for inputs and defaults).
+    pub(crate) fn set_var(&mut self, name: &str, value: Value, step_id: Option<&StepId>) {
+        let secret = self.secret_vars.iter().any(|s| s == name);
+        if secret {
             self.emitter.add_secret(&value);
         }
+        self.emitter
+            .variable_changed(name, &value, step_id, self.iteration, secret);
         self.vars.insert(name.to_owned(), value);
     }
 
@@ -417,7 +479,7 @@ impl Executor {
                     Some(step.id.clone()),
                 );
                 let value = error.to_value();
-                self.set_var(LAST_ERROR_VAR, value);
+                self.set_var(LAST_ERROR_VAR, value, Some(&step.id));
                 Ok(Flow::Next)
             }
             other => other,
@@ -478,7 +540,7 @@ impl Executor {
                 for i in 0..(count as u64) {
                     self.check_cancel()?;
                     if let Some(name) = &index_var {
-                        self.set_var(name, Value::from(i));
+                        self.set_var(name, Value::from(i), Some(&step.id));
                     }
                     if let Flow::Break = self.block(step.block("body")).await? {
                         break;
@@ -504,7 +566,7 @@ impl Executor {
                         Some(step.id.clone()),
                     );
                     let value = error.to_value();
-                    self.set_var(&error_var, value);
+                    self.set_var(&error_var, value, Some(&step.id));
                     result = self.block(step.block("catch")).await;
                 }
                 // `finally` runs after success or failure, but not after cancellation.
@@ -650,8 +712,9 @@ impl Executor {
                 changed.insert(name, (index, value));
             }
         }
+        // Each branch already reported its changes when it made them.
         for (name, (_, value)) in changed {
-            self.set_var(&name, value);
+            self.vars.insert(name, value);
         }
         Ok(Flow::Next)
     }
@@ -699,17 +762,17 @@ impl Executor {
             results
         };
         if let Some(name) = &step.save_as {
-            self.set_var(name, Value::Array(results));
+            self.set_var(name, Value::Array(results), Some(&step.id));
         }
         Ok(Flow::Next)
     }
 
     fn bind_item(&mut self, step: &Step, index: usize, item: Value) {
         if let Some(name) = step.params.get("itemVar").and_then(Value::as_str) {
-            self.set_var(name, item);
+            self.set_var(name, item, Some(&step.id));
         }
         if let Some(name) = step.params.get("indexVar").and_then(Value::as_str) {
-            self.set_var(name, Value::from(index));
+            self.set_var(name, Value::from(index), Some(&step.id));
         }
     }
 
@@ -739,6 +802,7 @@ impl Executor {
                     break;
                 };
                 let mut executor = self.fork(group.child_token());
+                executor.iteration = Some(index);
                 executor.bind_item(step, index, item);
                 let (body, collect, group) = (body.clone(), collect.clone(), group.clone());
                 set.spawn(async move {
@@ -918,7 +982,7 @@ impl Executor {
                         will_retry: false,
                     });
                     if let Some(name) = &step.save_as {
-                        self.set_var(name, value);
+                        self.set_var(name, value, Some(&step.id));
                     }
                     return Ok(Flow::Next);
                 }
@@ -972,9 +1036,9 @@ impl Executor {
         })();
         match result {
             Ok((name, value)) => {
-                self.set_var(&name, value.clone());
+                self.set_var(&name, value.clone(), Some(&step.id));
                 if let Some(save_as) = &step.save_as {
-                    self.set_var(save_as, value);
+                    self.set_var(save_as, value, Some(&step.id));
                 }
                 self.emitter.emit(RunEvent::StepFinished {
                     step_id: step.id.clone(),

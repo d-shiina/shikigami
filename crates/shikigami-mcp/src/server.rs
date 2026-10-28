@@ -12,7 +12,9 @@ use shikigami_core::{
     Actor, ActorKind, EditOp, ErrorPayload, NewScenario, RunId, ScenarioId, ScenarioService, StepId,
 };
 use shikigami_runtime::record::{self, RunRecorder};
-use shikigami_runtime::{Adapter, RunHandle, RunOptions, RunSnapshot, RunStatus, Runtime};
+use shikigami_runtime::{
+    Adapter, RunEvent, RunHandle, RunOptions, RunSnapshot, RunStatus, Runtime,
+};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
@@ -111,7 +113,7 @@ Shikigami Studio, and scenarios run later without you.\n\
 - Call list_step_types / get_step_schema before writing steps; params are validated against the schema.\n\
 - Prefer small edits (add_step, update_step) or one update_scenario with several ops; each call is one undo step for the human.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the scenario: re-read it and redo your change, never overwrite blindly.\n\
-- After editing, call validate_scenario and fix every error, then run_scenario (waitMs) and inspect get_run_logs.\n\
+- After editing, call validate_scenario and fix every error, then run_scenario (waitMs) and inspect get_run_logs; its variableChanged events show each value a variable took and the step that set it.\n\
 - Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
 - Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.\n\
 - For web pages: inspect_page shows the page as an accessibility tree; target elements by role + name (or label for inputs) exactly as listed there, not by CSS. test_step runs one step now (e.g. a login click) and returns its output and the resulting page, so you can walk the site before writing the scenario.";
@@ -418,7 +420,7 @@ impl ShikigamiMcp {
         self.finish("get_run_status", &peer, None, outcome)
     }
 
-    /// Events of a run (step started/finished, logs, errors) in order. Use afterSeq to poll for new events.
+    /// Events of a run (step started/finished, variable changes, logs, errors) in order. Use afterSeq to poll for new events, variable to trace one variable's values.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn get_run_logs(
         &self,
@@ -439,6 +441,11 @@ impl ShikigamiMcp {
             let selected: Vec<_> = events
                 .into_iter()
                 .filter(|e| p.after_seq.is_none_or(|after| e.seq > after))
+                .filter(|e| {
+                    p.variable.as_ref().is_none_or(|name| {
+                        matches!(&e.event, RunEvent::VariableChanged { variable, .. } if variable == name)
+                    })
+                })
                 .take(limit)
                 .collect();
             let last_seq = selected.last().map(|e| e.seq).or(p.after_seq);

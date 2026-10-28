@@ -611,6 +611,26 @@ export type RunEventEnvelope1 =
       willRetry?: boolean;
     }
   | {
+      type: "variableChanged";
+      variable: string;
+      value: unknown;
+      /**
+       * The step that assigned it; absent for inputs and defaults.
+       */
+      stepId?: StepId | null;
+      /**
+       * Item index (from 0) of the concurrent `forEach` iteration that
+       * made the change, so interleaved iterations can be told apart.
+       */
+      iteration?: number | null;
+      secret?: boolean;
+      /**
+       * `value` is a preview: a long string cut short, or the start of
+       * a large array / object's JSON text.
+       */
+      truncated?: boolean;
+    }
+  | {
       type: "log";
       level: LogLevel;
       message: string;

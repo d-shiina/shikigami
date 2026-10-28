@@ -257,7 +257,7 @@ Runtime::builder()
 | 実行 | `run_scenario` | `id, inputs` → `runId` | run |
 |  | `stop_scenario` | `runId` → ok | run |
 |  | `get_run_status` | `runId` → `RunSnapshot \| RunReport` | read |
-|  | `get_run_logs` | `runId, since?` → `RunEventEnvelope[]` | read |
+|  | `get_run_logs` | `runId, afterSeq?, variable?` → `RunEventEnvelope[]` | read |
 |  | `debug_scenario` | `id, breakpoints[]` → `runId`（ステップ実行） | run |
 |  | `test_step` | `Step`（単体）, 変数 → 実行結果（シナリオは変更しない） | ui.act |
 
@@ -318,6 +318,19 @@ Runtime::builder()
   trash/                      削除済みシナリオ
   shikigami.db                SQLite（Phase 2〜）
 ```
+
+`events.jsonl` には変数の代入も `variableChanged` として残るので、実行後に「どの変数に何が渡され、いつ・どのステップで変わったか」を追える（MCP は `get_run_logs(runId, variable)`、CLI は `shikigami run --vars`）。
+
+```json
+{ "seq": 7, "at": "…", "runId": "run_…", "type": "variableChanged",
+  "variable": "amount", "value": 13200, "stepId": "stp_…", "iteration": 0 }
+```
+
+- `stepId`：代入したステップ（`variable.set`、`saveAs`、`forEach` / `repeat` の item・index 変数、`errorVar` / `lastError`）。入力値・既定値は `runStarted` 直後に `stepId` なしで出る。
+- `iteration`：並列 `forEach`（`concurrency` 指定）の中の変更だけに付く要素番号（0 始まり）。同時に進む反復を見分けるため。
+- `secret: true` の変数は値が `"***"`。他の変数に紛れ込んだ機密値もマスクする。
+- 1000 文字を超える値はプレビューに切り詰め `truncated: true`（文字列は先頭、配列・オブジェクトは JSON テキストの先頭）。
+- `parallel` の各ブランチの変更はブランチ内で起きた時点で出し、合流時には再度出さない。順序は `seq` の通り。
 
 SQLite スキーマ（Phase 2 で導入予定）：
 
