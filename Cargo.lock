@@ -3751,8 +3751,10 @@ dependencies = [
 name = "shikigami-adapters"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "shikigami-browser",
  "shikigami-desktop",
+ "shikigami-plugins",
  "shikigami-runtime",
 ]
 
@@ -3781,6 +3783,7 @@ dependencies = [
  "shikigami-adapters",
  "shikigami-core",
  "shikigami-mcp",
+ "shikigami-plugins",
  "shikigami-runtime",
  "shikigami-secrets",
  "tempfile",
@@ -3834,6 +3837,22 @@ dependencies = [
  "shikigami-secrets",
  "tempfile",
  "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "shikigami-plugins"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "jsonschema",
+ "serde",
+ "serde_json",
+ "shikigami-core",
+ "shikigami-runtime",
+ "tempfile",
  "tokio",
  "tokio-util",
  "tracing",

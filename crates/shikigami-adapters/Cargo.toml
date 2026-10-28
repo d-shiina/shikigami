@@ -10,6 +10,8 @@ license.workspace = true
 shikigami-runtime.workspace = true
 shikigami-browser.workspace = true
 shikigami-desktop.workspace = true
+shikigami-plugins.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

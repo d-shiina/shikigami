@@ -160,6 +160,8 @@ fn sites_are_normalized_to_origins() {
         "app:billing.exe"
     );
     assert!(normalize_site("app:").is_err());
+    assert_eq!(normalize_site("plugin:Kintone").unwrap(), "plugin:kintone");
+    assert!(normalize_site("plugin:").is_err());
     assert!(normalize_site(r"app:C:\x\a.exe").is_err());
     assert!(normalize_site("example.com").is_err());
     assert!(normalize_site("file:///c:/x").is_err());
