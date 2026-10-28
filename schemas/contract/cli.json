@@ -1,0 +1,635 @@
+{
+  "name": "shikigami",
+  "args": [
+    {
+      "id": "workspace",
+      "required": false,
+      "takesValue": true,
+      "repeatable": false,
+      "global": true,
+      "long": "workspace"
+    }
+  ],
+  "subcommands": [
+    {
+      "name": "scenario",
+      "subcommands": [
+        {
+          "name": "list"
+        },
+        {
+          "name": "show",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "create",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "import",
+          "args": [
+            {
+              "id": "file",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "on_conflict",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "on-conflict",
+              "values": [
+                "update",
+                "copy"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "export",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "output",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "output",
+              "short": "o"
+            },
+            {
+              "id": "no_versions",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "no-versions",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "delete",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "edit",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "ops",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "expected_revision",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "expected-revision"
+            }
+          ]
+        },
+        {
+          "name": "undo",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "redo",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "history",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "limit",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "limit"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "version",
+      "subcommands": [
+        {
+          "name": "create",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "note",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "note"
+            }
+          ]
+        },
+        {
+          "name": "list",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "show",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "number",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "diff",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "from",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "to",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "json",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "json",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "restore",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "number",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "workspace",
+      "subcommands": [
+        {
+          "name": "info"
+        },
+        {
+          "name": "init",
+          "args": [
+            {
+              "id": "dir",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "shared",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "shared",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "use",
+          "args": [
+            {
+              "id": "dir",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "run",
+      "args": [
+        {
+          "id": "target",
+          "required": true,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "positional": true
+        },
+        {
+          "id": "inputs",
+          "required": false,
+          "takesValue": true,
+          "repeatable": true,
+          "global": false,
+          "long": "input",
+          "short": "i"
+        },
+        {
+          "id": "json",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "json",
+          "values": [
+            "true",
+            "false"
+          ]
+        },
+        {
+          "id": "vars",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "vars",
+          "values": [
+            "true",
+            "false"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "validate",
+      "args": [
+        {
+          "id": "target",
+          "required": true,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "positional": true
+        }
+      ]
+    },
+    {
+      "name": "step-types",
+      "args": [
+        {
+          "id": "json",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "json",
+          "values": [
+            "true",
+            "false"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "plugin",
+      "subcommands": [
+        {
+          "name": "list"
+        },
+        {
+          "name": "check",
+          "args": [
+            {
+              "id": "dir",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "schema",
+      "subcommands": [
+        {
+          "name": "export",
+          "args": [
+            {
+              "id": "dir",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "dir"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "secret",
+      "subcommands": [
+        {
+          "name": "list",
+          "args": [
+            {
+              "id": "json",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "json",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "set",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "username",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "username"
+            },
+            {
+              "id": "password_stdin",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "password-stdin",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "password",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "password",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "totp",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "totp"
+            },
+            {
+              "id": "sites",
+              "required": false,
+              "takesValue": true,
+              "repeatable": true,
+              "global": false,
+              "long": "site"
+            },
+            {
+              "id": "description",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "description"
+            }
+          ]
+        },
+        {
+          "name": "remove",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "logout",
+          "args": [
+            {
+              "id": "session",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "reset",
+          "args": [
+            {
+              "id": "yes",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "yes",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mcp",
+      "args": [
+        {
+          "id": "allow",
+          "required": false,
+          "takesValue": true,
+          "repeatable": true,
+          "global": false,
+          "long": "allow"
+        }
+      ]
+    }
+  ]
+}

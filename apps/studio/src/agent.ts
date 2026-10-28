@@ -99,6 +99,33 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       set({ items: get().items.map((i) => (i.role === "ai" && i.turnId === turnId ? change(i) : i)) });
     // Events can outrun the reply that names their turn.
     const early = new Map<string, AgentEvent[]>();
+    // Sends the message already shown as the last person item and adds the reply.
+    const dispatch = async (text: string, scenario: AgentRequest["scenario"] | null): Promise<boolean> => {
+      set({ open: true, sending: true });
+      try {
+        const turnId = await api.send({ message: text, sessionId: get().info?.remembers ? get().sessionId : null, scenario });
+        set({
+          turnId,
+          sending: false,
+          items: [
+            ...get().items,
+            { role: "ai", id: nextId(), turnId, parts: [], status: "running", message: null, needsLogin: false },
+          ],
+        });
+        for (const e of early.get(turnId) ?? []) get().onEvent(e);
+        early.delete(turnId);
+        return true;
+      } catch (e) {
+        set({
+          sending: false,
+          items: [
+            ...get().items,
+            { role: "ai", id: nextId(), turnId: "", parts: [], status: "failed", message: errorText(e), needsLogin: false },
+          ],
+        });
+        return false;
+      }
+    };
     return {
       info: null,
       open: false,
@@ -124,30 +151,8 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         const text = message.trim();
         if (!text || get().turnId || get().sending) return false;
         const person: ChatItem = { role: "person", id: nextId(), text, context, scenario: scenario ?? null };
-        set({ items: [...get().items, person], open: true, sending: true });
-        try {
-          const turnId = await api.send({ message: text, sessionId: get().info?.remembers ? get().sessionId : null, scenario });
-          set({
-            turnId,
-            sending: false,
-            items: [
-              ...get().items,
-              { role: "ai", id: nextId(), turnId, parts: [], status: "running", message: null, needsLogin: false },
-            ],
-          });
-          for (const e of early.get(turnId) ?? []) get().onEvent(e);
-          early.delete(turnId);
-          return true;
-        } catch (e) {
-          set({
-            sending: false,
-            items: [
-              ...get().items,
-              { role: "ai", id: nextId(), turnId: "", parts: [], status: "failed", message: errorText(e), needsLogin: false },
-            ],
-          });
-          return false;
-        }
+        set({ items: [...get().items, person] });
+        return dispatch(text, scenario ?? null);
       },
 
       async stop() {
@@ -156,9 +161,15 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       },
 
       async retry() {
-        const last = [...get().items].reverse().find((i) => i.role === "person");
+        if (get().turnId || get().sending) return false;
+        const items = get().items;
+        let index = items.length - 1;
+        while (index >= 0 && items[index]?.role !== "person") index--;
+        const last = items[index];
         if (!last || last.role !== "person") return false;
-        return get().send(last.text, last.scenario, last.context);
+        // The same message again: replace the failed reply instead of repeating the message.
+        set({ items: items.slice(0, index + 1) });
+        return dispatch(last.text, last.scenario);
       },
 
       async startLogin() {

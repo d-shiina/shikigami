@@ -6,10 +6,12 @@
 //! installer. Development builds never check.
 //!
 //! The installer also carries the `shikigami` CLI (the MCP server), which an
-//! MCP client such as Claude Code may be running from the install folder.
-//! Windows refuses to overwrite a running executable but allows renaming it,
-//! so the CLI is moved aside just before the installer starts. The running
-//! server keeps the old file; the next launch picks up the new one.
+//! MCP client such as Claude Code may be running from the install folder,
+//! and Node.js (`node\node.exe`), which runs the browser adapter for Studio
+//! and for that server. Windows refuses to overwrite a running executable
+//! but allows renaming it, so both are moved aside just before the
+//! installer starts. A running process keeps the old file; the next launch
+//! picks up the new one.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -23,6 +25,10 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 pub(crate) const UPDATE_EVENT: &str = "update-progress";
 
 const CLI_EXE: &str = "shikigami.exe";
+
+/// Executables that may be running while the installer replaces them,
+/// relative to the install folder.
+const PARKED_EXES: [&str; 2] = [CLI_EXE, "node/node.exe"];
 
 type CmdResult<T> = Result<T, ErrorPayload>;
 
@@ -84,17 +90,16 @@ fn updates_enabled<R: Runtime>(app: &AppHandle<R>) -> bool {
         .is_some_and(|k| !k.trim().is_empty())
 }
 
-/// Startup housekeeping for installed builds: undo a parked CLI whose
-/// installer never ran, and delete copies left by finished updates.
-pub(crate) fn on_startup<R: Runtime>(app: &AppHandle<R>) {
+/// Startup housekeeping for installed builds: undo parked executables whose
+/// installer never ran, and delete copies left by finished updates. Runs
+/// before the adapters are built, since they look for `node\node.exe`.
+pub(crate) fn on_startup() {
     if cfg!(debug_assertions) {
         return;
     }
     if let Some(dir) = install_dir() {
-        let version = app.package_info().version.to_string();
-        if let Err(e) = restore_parked_cli(&dir, &version) {
-            tracing::warn!(error = %e, "cannot restore the parked CLI");
-        }
+        // Studio's version is the workspace version, as in `package_info`.
+        restore_parked_exes(&dir, env!("CARGO_PKG_VERSION"));
     }
 }
 
@@ -153,17 +158,19 @@ pub async fn install_update(app: AppHandle, pending: State<'_, PendingUpdate>) -
         )
         .await
         .map_err(|e| err("UPDATE_DOWNLOAD_FAILED", e.to_string()))?;
-    if let Some(dir) = install_dir()
-        && let Err(e) = park_cli(&dir, &update.current_version)
-    {
-        tracing::warn!(error = %e, "cannot move the CLI aside; the installer may ask to retry");
+    if let Some(dir) = install_dir() {
+        for exe in PARKED_EXES {
+            let exe = dir.join(exe);
+            if let Err(e) = park(&exe, &update.current_version) {
+                tracing::warn!(exe = %exe.display(), error = %e, "cannot move aside; the installer may ask to retry");
+            }
+        }
     }
     if let Err(e) = update.install(bytes) {
-        // The installer never started, so MCP clients still need the CLI.
-        if let Some(dir) = install_dir()
-            && let Err(e) = restore_parked_cli(&dir, &update.current_version)
-        {
-            tracing::warn!(error = %e, "cannot restore the parked CLI");
+        // The installer never started, so MCP clients and runs still need
+        // these files.
+        if let Some(dir) = install_dir() {
+            restore_parked_exes(&dir, &update.current_version);
         }
         return Err(err("UPDATE_INSTALL_FAILED", e.to_string()));
     }
@@ -177,37 +184,53 @@ fn lock(pending: &PendingUpdate) -> std::sync::MutexGuard<'_, Option<Update>> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-fn parked_name(version: &str) -> String {
-    format!("shikigami-{version}.exe.old")
+/// `shikigami.exe` -> `shikigami-<version>.exe.old` in the same folder.
+fn parked_path(exe: &Path, version: &str) -> PathBuf {
+    exe.with_file_name(format!("{}-{version}.exe.old", exe_stem(exe)))
 }
 
-/// Renames the CLI so the installer can write a fresh copy even while it is
+fn exe_stem(exe: &Path) -> &str {
+    exe.file_stem().and_then(|s| s.to_str()).unwrap_or_default()
+}
+
+/// Renames `exe` so the installer can write a fresh copy even while it is
 /// running. The name carries the version being replaced, so a copy still
 /// held open by an earlier update never blocks this one.
-fn park_cli(dir: &Path, current_version: &str) -> io::Result<()> {
-    let exe = dir.join(CLI_EXE);
+fn park(exe: &Path, current_version: &str) -> io::Result<()> {
     if !exe.is_file() {
         return Ok(());
     }
-    let parked = dir.join(parked_name(current_version));
+    let parked = parked_path(exe, current_version);
     if parked.exists() {
         std::fs::remove_file(&parked)?;
     }
     std::fs::rename(exe, parked)
 }
 
-fn restore_parked_cli(dir: &Path, current_version: &str) -> io::Result<()> {
-    let exe = dir.join(CLI_EXE);
-    let own = dir.join(parked_name(current_version));
+fn restore_parked_exes(dir: &Path, current_version: &str) {
+    for exe in PARKED_EXES {
+        let exe = dir.join(exe);
+        if let Err(e) = restore(&exe, current_version) {
+            tracing::warn!(exe = %exe.display(), error = %e, "cannot restore the parked copy");
+        }
+    }
+}
+
+fn restore(exe: &Path, current_version: &str) -> io::Result<()> {
+    let own = parked_path(exe, current_version);
     if !exe.exists() && own.is_file() {
         // The installer was cancelled or failed: this version is still the
-        // installed one, so its CLI goes back.
-        std::fs::rename(&own, &exe)?;
+        // installed one, so its file goes back.
+        std::fs::rename(&own, exe)?;
     }
+    let Some(dir) = exe.parent().filter(|d| d.is_dir()) else {
+        return Ok(());
+    };
+    let prefix = format!("{}-", exe_stem(exe));
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name.starts_with("shikigami-") && name.ends_with(".exe.old") {
+        if name.starts_with(&prefix) && name.ends_with(".exe.old") {
             // Still running under an MCP client: leave it for next time.
             let _ = std::fs::remove_file(&path);
         }
@@ -235,7 +258,7 @@ mod tests {
     fn park_moves_the_cli_aside() -> io::Result<()> {
         let dir = tempdir();
         write(&dir.path().join(CLI_EXE), "v1");
-        park_cli(dir.path(), "0.1.0")?;
+        park(&dir.path().join(CLI_EXE), "0.1.0")?;
         assert!(!dir.path().join(CLI_EXE).exists());
         assert_eq!(read(&dir.path().join("shikigami-0.1.0.exe.old")), "v1");
         Ok(())
@@ -244,7 +267,7 @@ mod tests {
     #[test]
     fn park_without_cli_is_a_no_op() -> io::Result<()> {
         let dir = tempdir();
-        park_cli(dir.path(), "0.1.0")?;
+        park(&dir.path().join(CLI_EXE), "0.1.0")?;
         assert_eq!(std::fs::read_dir(dir.path())?.count(), 0);
         Ok(())
     }
@@ -254,7 +277,7 @@ mod tests {
         let dir = tempdir();
         write(&dir.path().join(CLI_EXE), "v2");
         write(&dir.path().join("shikigami-0.1.0.exe.old"), "v1");
-        restore_parked_cli(dir.path(), "0.2.0")?;
+        restore_parked_exes(dir.path(), "0.2.0");
         assert_eq!(read(&dir.path().join(CLI_EXE)), "v2");
         assert!(!dir.path().join("shikigami-0.1.0.exe.old").exists());
         Ok(())
@@ -264,9 +287,23 @@ mod tests {
     fn startup_after_a_cancelled_update_restores_the_cli() -> io::Result<()> {
         let dir = tempdir();
         write(&dir.path().join("shikigami-0.1.0.exe.old"), "v1");
-        restore_parked_cli(dir.path(), "0.1.0")?;
+        restore_parked_exes(dir.path(), "0.1.0");
         assert_eq!(read(&dir.path().join(CLI_EXE)), "v1");
         assert!(!dir.path().join("shikigami-0.1.0.exe.old").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn parks_and_restores_the_shipped_node() -> io::Result<()> {
+        let dir = tempdir();
+        let node = dir.path().join("node/node.exe");
+        std::fs::create_dir_all(node.parent().unwrap())?;
+        write(&node, "v1");
+        park(&node, "0.1.0")?;
+        assert_eq!(read(&dir.path().join("node/node-0.1.0.exe.old")), "v1");
+        restore_parked_exes(dir.path(), "0.1.0");
+        assert_eq!(read(&node), "v1");
+        assert!(!dir.path().join("node/node-0.1.0.exe.old").exists());
         Ok(())
     }
 }

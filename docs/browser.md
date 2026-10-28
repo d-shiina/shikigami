@@ -6,8 +6,8 @@ Shikigami scenarios drive web pages. The Rust Runtime starts the Node.js + Playw
 
 ## Requirements
 
-- Node.js 22.18 or later (runs the TypeScript directly)
-- `pnpm install` in the repository (installs `playwright-core`)
+- **Nothing extra when installed with the installer.** Node.js and the adapter are bundled ([release.md](release.md#bundling-nodejs-and-the-browser-adapter))
+- When running from source: Node.js 22.18 or later (runs the TypeScript directly) and `pnpm install` in the repository (installs `playwright-core`)
 - A browser: on Windows **the installed Microsoft Edge is used**, so nothing else is downloaded. For Chrome set `SHIKIGAMI_BROWSER_CHANNEL=chrome`; for any other executable, `SHIKIGAMI_BROWSER_PATH`
 
 | Environment variable | Meaning |
@@ -17,7 +17,7 @@ Shikigami scenarios drive web pages. The Rust Runtime starts the Node.js + Playw
 | `SHIKIGAMI_BROWSER_HEADLESS` | `1` to always run without a window (unattended runs, CI) |
 | `SHIKIGAMI_BROWSER_SLOWMO` | Delay per action (ms), to show the moves in a demo |
 | `SHIKIGAMI_BROWSER_ADAPTER` | Location of the adapter's `main.ts` (normally found automatically) |
-| `SHIKIGAMI_NODE` | The Node.js executable (default: `node` on PATH) |
+| `SHIKIGAMI_NODE` | The Node.js executable (default: the bundled `node\node.exe`, otherwise `node` on PATH) |
 
 ## Demo
 

@@ -263,6 +263,8 @@ pub async fn agent_send(
             agent_info().problem.unwrap_or_default(),
         ));
     };
+    #[cfg(debug_assertions)]
+    refresh_dev_cli().await?;
     let Some(cli) = cli_path() else {
         return Err(err(
             "AGENT_NOT_FOUND",
@@ -775,6 +777,44 @@ fn cli_path() -> Option<PathBuf> {
         .and_then(|p| p.parent().map(|d| d.join(exe("shikigami"))))
         .filter(|p| p.is_file())
         .or_else(|| find_on_path(&[&exe("shikigami")]))
+}
+
+/// In development `tauri dev` rebuilds only Studio, so after a pull the
+/// CLI in target/debug lags behind and its MCP server rejects what this
+/// Studio's AI writes (unknown functions or steps). Bring it up to date
+/// once per Studio process, before the first turn; when nothing changed
+/// the build takes about a second.
+#[cfg(debug_assertions)]
+async fn refresh_dev_cli() -> CmdResult<()> {
+    static FRESH: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
+    FRESH
+        .get_or_try_init(|| async {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+            let mut command = Command::new("cargo");
+            command
+                .args(["build", "--quiet", "--package", "shikigami-cli"])
+                .current_dir(root)
+                .stdin(Stdio::null())
+                .kill_on_drop(true);
+            #[cfg(windows)]
+            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+            match command.output().await {
+                Ok(out) if out.status.success() => Ok(()),
+                // Windows cannot replace a running exe: another Claude Code
+                // with this MCP server registered keeps it in use.
+                Ok(out) => Err(err(
+                    "AGENT_FAILED",
+                    format!(
+                        "shikigami コマンド（MCP サーバー）を最新のソースでビルドできませんでした。shikigami.exe を使っている Claude Code などを閉じてから、もう一度送ってください。\n{}",
+                        tail(String::from_utf8_lossy(&out.stderr).trim(), 1500)
+                    ),
+                )),
+                // No cargo: not a source checkout, use the CLI as it is.
+                Err(_) => Ok(()),
+            }
+        })
+        .await
+        .map(|_| ())
 }
 
 fn find_claude() -> Option<PathBuf> {

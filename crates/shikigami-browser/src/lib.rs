@@ -33,8 +33,11 @@ use tokio_util::sync::CancellationToken;
 /// How much earlier than the step timeout the adapter stops an operation.
 const ADAPTER_TIMEOUT_MARGIN_MS: u64 = 500;
 
-/// Path of the adapter entry point inside the repository / install dir.
+/// Path of the adapter entry point inside the repository.
 pub const ADAPTER_SCRIPT: &str = "packages/browser-adapter/src/main.ts";
+
+/// Where the installer puts the adapter, relative to the executable.
+pub const BUNDLED_ADAPTER_SCRIPT: &str = "browser-adapter/src/main.ts";
 
 pub mod types {
     pub const OPEN: &str = "browser.open";
@@ -65,17 +68,22 @@ impl BrowserAdapter {
     }
 
     /// Uses `SHIKIGAMI_NODE` / `SHIKIGAMI_BROWSER_ADAPTER` when set,
-    /// otherwise `node` on PATH and the adapter found next to the executable
-    /// (or the current directory) or in one of their parents.
+    /// otherwise what the installer ships next to the executable
+    /// (`node\node.exe`, `browser-adapter\src\main.ts`), otherwise `node`
+    /// on PATH and the repository's adapter found from the executable (or
+    /// the current directory) or one of their parents.
     pub fn discover() -> Self {
-        let node =
-            std::env::var_os("SHIKIGAMI_NODE").map_or_else(|| PathBuf::from("node"), PathBuf::from);
+        let node = shikigami_runtime::node::node_program();
+        let exe_dir = shikigami_runtime::node::exe_dir();
         let script = std::env::var_os("SHIKIGAMI_BROWSER_ADAPTER")
             .map(PathBuf::from)
             .or_else(|| {
-                let exe_dir = std::env::current_exe()
-                    .ok()
-                    .and_then(|p| p.parent().map(Path::to_path_buf));
+                exe_dir
+                    .as_deref()
+                    .map(|dir| dir.join(BUNDLED_ADAPTER_SCRIPT))
+                    .filter(|script| script.is_file())
+            })
+            .or_else(|| {
                 let cwd = std::env::current_dir().ok();
                 [exe_dir, cwd]
                     .into_iter()
@@ -105,7 +113,7 @@ pub fn sidecar_config(node: PathBuf, script: Option<PathBuf>) -> SidecarConfig {
         args,
         cwd: None,
         unavailable,
-        setup_hint: "Install Node.js 22.18+ and run `pnpm install` in the Shikigami folder, or set SHIKIGAMI_BROWSER_ADAPTER to packages/browser-adapter/src/main.ts.".into(),
+        setup_hint: "The installer ships Node.js and the adapter; reinstall Shikigami if its node or browser-adapter folder is missing. From a source checkout, install Node.js 22.18+ and run `pnpm install`, or set SHIKIGAMI_NODE / SHIKIGAMI_BROWSER_ADAPTER.".into(),
     }
 }
 
@@ -564,6 +572,8 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 resources,
                 secret_params: d.secret_params.iter().map(|p| (*p).to_owned()).collect(),
                 default_timeout_ms: d.default_timeout_ms,
+                deprecated: None,
+                plugin: None,
             };
             (def, d.method)
         })

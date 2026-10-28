@@ -99,9 +99,13 @@ shikigami/
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
 │  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
 │  ├─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
-│  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き）
+│  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き、マクロは COM）
+│  ├─ shikigami-word/     word.*（docx の差し込み・読み取り）
+│  ├─ shikigami-mail/     mail.*（Outlook：下書き・一覧・添付保存）
+│  ├─ shikigami-com/      Office の COM 呼び出し（Excel マクロ・Outlook で共用）
 │  ├─ shikigami-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
+│  ├─ shikigami-pdf/      pdf.readText（PDF の文字を読む）
 │  └─ shikigami-plugins/  ノードのプラグイン（マニフェストで宣言、別プロセスで実行）
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React（src/ がフロント、src-tauri/ が Rust）
@@ -137,10 +141,11 @@ shikigami/
 
 ```jsonc
 {
-  "schemaVersion": 1,             // ファイル形式のバージョン
+  "schemaVersion": 2,             // ファイル形式のバージョン
   "id": "scn_…",                  // 安定ID（ファイル名にもなる）
   "name": "請求書の集計",
   "description": "…",
+  "requires": { "plugin:kintone": "^0.3.1" },  // 使うプラグインと版（Core が自動で管理。なければ省略）
   "revision": 12,                 // 変更ごとに+1。競合検出に使用
   "variables": [
     { "name": "invoices", "type": "array", "direction": "input", "default": [] },
@@ -167,7 +172,7 @@ shikigami/
 - **`params` は型ごとの JSON Schema で検証**（`StepRegistry` が保持）。新しいステップ型はスキーマ本体を変えずに追加できる。
 - **式言語**（§11 判断5）：条件は式（`count > 3 && status == 'OK'`）、文字列パラメーターは `{{ 式 }}` テンプレート。任意コード実行はできない。
 - **ステップ共通オプション**：`disabled`, `timeoutMs`, `retry`, `onError`（`fail`/`continue`）, `saveAs`（出力を変数へ）, `meta`（Studio 表示や AI の根拠情報。Runtime は解釈しない）。
-- **後方互換**：読み込み時に `schemaVersion` を見て段階的にマイグレーション（`migrate.rs`）。未来のバージョンは黙って切り捨てず `UNSUPPORTED_SCHEMA_VERSION` で拒否。`metadata` の未知キーは保持する。
+- **後方互換**：読み込み時に `schemaVersion` を見て段階的にマイグレーション（`migrate.rs`）。未来のバージョンは黙って切り捨てず `UNSUPPORTED_SCHEMA_VERSION` で拒否。`metadata` の未知キーは保持する。版を上げる条件、プラグインの `requires`、非推奨の扱い、MCP・CLI の互換は [compatibility.md](compatibility.md)。
 - **YAML** は将来のインポート/エクスポート形式として扱い、正規形式にはしない。
 
 ### 組み込みステップ型（Phase 1）
@@ -477,7 +482,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 - **採用理由**：公式 Playwright（Node.js）が最も成熟し、要件でも優先指定。プロセス分離で Node 側のクラッシュが Runtime を巻き込まない。
 - **代替案**：Rust から CDP を直接操作（chromiumoxide 等）。単一バイナリになるが、Playwright のオートウェイトやロケーターの品質を再実装することになる。
-- **トレードオフ**：Node.js とブラウザの同梱で配布サイズが増える（Phase 3 で同梱方式を決定）。
+- **トレードオフ**：Node.js の同梱で配布サイズが増える。インストーラーに `node.exe` とアダプターを入れ、ブラウザは Windows の Edge を使う（[release.md](release.md#nodejs-とブラウザアダプターの同梱)）。
 
 ### 判断9：Windows 特化（OS の抽象化レイヤーは作らない）
 

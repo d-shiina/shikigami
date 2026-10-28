@@ -671,6 +671,7 @@ impl SecretProvider for Vault {
             )
             .with_hint("Call request_secret with this name and the missing field: Studio then asks the user to fill it in. Never ask for it in chat.")
             .with_secret(&reference.secret)
+            .with_field(reference.field)
         };
         let value = match reference.field {
             SecretField::Username => values.username,

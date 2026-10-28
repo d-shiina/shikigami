@@ -6,8 +6,8 @@ Shikigami のシナリオから Web ページを操作します。Rust の Runti
 
 ## 必要なもの
 
-- Node.js 22.18 以降（TypeScript をそのまま実行します）
-- リポジトリで `pnpm install`（`playwright-core` が入ります）
+- **インストーラーで入れた場合は追加のものは不要です。** Node.js とアダプターが同梱されています（[release.md](release.md#nodejs-とブラウザアダプターの同梱)）
+- ソースから動かす場合：Node.js 22.18 以降（TypeScript をそのまま実行します）と、リポジトリでの `pnpm install`（`playwright-core` が入ります）
 - ブラウザ：Windows では **Microsoft Edge をそのまま使う** ので追加のダウンロードは不要です。Chrome を使うときは `SHIKIGAMI_BROWSER_CHANNEL=chrome`、任意の実行ファイルは `SHIKIGAMI_BROWSER_PATH`
 
 | 環境変数 | 意味 |
@@ -17,7 +17,7 @@ Shikigami のシナリオから Web ページを操作します。Rust の Runti
 | `SHIKIGAMI_BROWSER_HEADLESS` | `1` で常に画面なし（無人実行・CI 向け） |
 | `SHIKIGAMI_BROWSER_SLOWMO` | 操作ごとの待ち（ミリ秒）。デモで動きを見せるとき |
 | `SHIKIGAMI_BROWSER_ADAPTER` | アダプター `main.ts` の場所（通常は自動で見つける） |
-| `SHIKIGAMI_NODE` | Node.js の実行ファイル（既定は PATH 上の `node`） |
+| `SHIKIGAMI_NODE` | Node.js の実行ファイル（既定は同梱の `node\node.exe`、なければ PATH 上の `node`） |
 
 ## デモ
 

@@ -2,7 +2,7 @@
 
 [English](../adapters.md) | 日本語
 
-Shikigami が操作できるアプリは「アダプター」単位で増やします。いまはブラウザ（`browser.*`、[browser.md](browser.md)）、Windows のデスクトップアプリ（`desktop.*`、[desktop.md](desktop.md)）、ファイル・フォルダー（`file.*`、[files.md](files.md)）、Excel のブック（`excel.*`、[office.md](office.md)）、Web API・プログラム・クリップボード・ダイアログ（`http.*` / `process.*` / `clipboard.*` / `dialog.*`、[system.md](system.md)）があります。
+Shikigami が操作できるアプリは「アダプター」単位で増やします。いまはブラウザ（`browser.*`、[browser.md](browser.md)）、Windows のデスクトップアプリ（`desktop.*`、[desktop.md](desktop.md)）、ファイル・フォルダー（`file.*`、[files.md](files.md)）、Excel のブック・Word の文書・メール（`excel.*` / `word.*` / `mail.*`、[office.md](office.md)）、Web API・プログラム・クリップボード・ダイアログ（`http.*` / `process.*` / `clipboard.*` / `dialog.*`、[system.md](system.md)）、PDF の文字の読み取り（`pdf.*`、[pdf.md](pdf.md)）があります。
 
 本体を作り直さずに足したいとき（社内システムや個別の SaaS など）は、組込のアダプターではなく**プラグイン**にします。フォルダにマニフェスト（`shikigami-plugin.json`）とプログラムを置くだけで、言語は自由です。仕組みは [design/plugins.md](../design/plugins.md)、例は `examples/plugins/hello`。
 

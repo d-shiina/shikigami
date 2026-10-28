@@ -99,9 +99,13 @@ shikigami/
 │  ├─ shikigami-mcp/          MCP server (rmcp, started with `shikigami mcp`)
 │  ├─ shikigami-adapter-browser/  [Phase 3] client of the Node sidecar
 │  ├─ shikigami-desktop/  [Phase 4] desktop.* (UI Automation)
-│  ├─ shikigami-excel/    excel.* (reads and writes xlsx directly)
+│  ├─ shikigami-excel/    excel.* (reads and writes xlsx directly; macros through COM)
+│  ├─ shikigami-word/     word.* (fills and reads docx)
+│  ├─ shikigami-mail/     mail.* (Outlook: drafts, listing, saving attachments)
+│  ├─ shikigami-com/      Office COM calls (shared by Excel macros and Outlook)
 │  ├─ shikigami-files/    file.* (text, CSV, copy/move/delete, zip)
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
+│  ├─ shikigami-pdf/      pdf.readText (reads the text of PDFs)
 │  └─ shikigami-plugins/  node plugins (declared in a manifest, run in a separate process)
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React (src/ is the frontend, src-tauri/ the Rust side)
@@ -137,10 +141,11 @@ The canonical format is JSON (`schemas/scenario.schema.json`). Example: [example
 
 ```jsonc
 {
-  "schemaVersion": 1,             // file format version
+  "schemaVersion": 2,             // file format version
   "id": "scn_…",                  // stable ID (also the file name)
   "name": "Invoice summary",
   "description": "…",
+  "requires": { "plugin:kintone": "^0.3.1" },  // plugins used and their versions (managed by Core; omitted when none)
   "revision": 12,                 // +1 on every change; used to detect conflicts
   "variables": [
     { "name": "invoices", "type": "array", "direction": "input", "default": [] },
@@ -167,7 +172,7 @@ The canonical format is JSON (`schemas/scenario.schema.json`). Example: [example
 - **`params` are validated with a JSON Schema per type** (held by `StepRegistry`). New step types can be added without changing the scenario schema itself.
 - **Expression language** (§11 decision 5): conditions are expressions (`count > 3 && status == 'OK'`), string params are `{{ expression }}` templates. No arbitrary code can run.
 - **Common step options**: `disabled`, `timeoutMs`, `retry`, `onError` (`fail`/`continue`), `saveAs` (output into a variable), `meta` (for Studio display and the AI's evidence; the Runtime ignores it).
-- **Backward compatibility**: on load, `schemaVersion` drives step-by-step migration (`migrate.rs`). Future versions are rejected with `UNSUPPORTED_SCHEMA_VERSION` rather than silently truncated. Unknown keys in `metadata` are kept.
+- **Backward compatibility**: on load, `schemaVersion` drives step-by-step migration (`migrate.rs`). Future versions are rejected with `UNSUPPORTED_SCHEMA_VERSION` rather than silently truncated. Unknown keys in `metadata` are kept. When the version goes up, plugin `requires`, deprecation, and MCP / CLI compatibility: [compatibility.md](compatibility.md).
 - **YAML** is a possible future import/export format, not the canonical one.
 
 ### Built-in step types (Phase 1)
@@ -477,7 +482,7 @@ Running several things at once is meant to be a feature of the product. There ar
 
 - **Reason**: the official Playwright (Node.js) is the most mature and was preferred in the requirements. Process isolation keeps a Node crash from taking down the Runtime.
 - **Alternative**: drive CDP directly from Rust (chromiumoxide etc.). A single binary, but it would mean re-implementing the quality of Playwright's auto-waiting and locators.
-- **Trade-off**: bundling Node.js and a browser grows the distribution (bundling decided in Phase 3).
+- **Trade-off**: bundling Node.js grows the distribution. The installer carries `node.exe` and the adapter; the browser is Windows' Edge ([release.md](release.md#bundling-nodejs-and-the-browser-adapter)).
 
 ### Decision 9: Windows only (no OS abstraction layer)
 

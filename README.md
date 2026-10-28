@@ -23,11 +23,12 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/architecture.md](docs/architecture.md) | System layout, scenario format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
 | [docs/expressions.md](docs/expressions.md) | Functions available in scenario expressions |
-| [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md) | Built-in steps: browser, Windows apps, Excel, files, HTTP / programs / clipboard / dialogs |
+| [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md) | Built-in steps: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF |
 | [docs/secrets.md](docs/secrets.md) | Logins: secrets the AI refers to by name only |
 | [docs/adapters.md](docs/adapters.md) | Where each step type comes from, and node plugins |
 | [docs/release.md](docs/release.md) | Installer, updates and release signing |
 | [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add steps for in-house systems without rebuilding Shikigami (manifest + separate process) |
+| [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the scenario format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |
 | [docs/research.md](docs/research.md) (Japanese) | Versions, licenses and Windows support of the libraries used |
 
 The design notes under `docs/design/` and `docs/research.md` are in Japanese. Japanese versions of the guides above are in [docs/ja/](docs/ja/).
@@ -120,3 +121,7 @@ claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shiki
 With this registration and the plugin both in place, the plugin's own `shikigami` server (which starts `shikigami` from PATH) fails to connect, but its skill still works.
 
 See [docs/mcp.md](docs/mcp.md) for Codex / Cursor settings and the tool list. AI edits show up in Studio immediately and can be undone from Studio.
+
+## License
+
+[Apache License 2.0](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for contributing, [SECURITY.md](SECURITY.md) for reporting vulnerabilities, [docs/compatibility.md](docs/compatibility.md) for the file format, MCP and CLI compatibility policy, and [CHANGELOG.md](CHANGELOG.md) for changes.

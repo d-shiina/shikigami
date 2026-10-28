@@ -18,7 +18,7 @@ The release installer puts `shikigami.exe` (CLI and MCP server) in the same fold
 claude mcp add --scope user shikigami -- "<install folder>\shikigami.exe" mcp
 ```
 
-Updating works even while Claude Code runs the MCP server. Windows cannot overwrite a running exe but can rename it, so right before starting the installer Studio renames `shikigami.exe` to `shikigami-<old version>.exe.old`. The running server keeps going on the old file, and the next start uses the new version (in Claude Code, reconnect from `/mcp`). Leftover `.old` files are removed the next time Studio starts. If the installation is cancelled, the file is put back.
+Updating works even while Claude Code runs the MCP server. Windows cannot overwrite a running exe but can rename it, so right before starting the installer Studio renames `shikigami.exe` to `shikigami-<old version>.exe.old` (and the bundled `node\node.exe` to `node-<old version>.exe.old`). The running server keeps going on the old file, and the next start uses the new version (in Claude Code, reconnect from `/mcp`). Leftover `.old` files are removed the next time Studio starts. If the installation is cancelled, the file is put back.
 
 When developing from the repository with `target\debug\shikigami.exe` registered, `cargo build -p shikigami-cli` keeps updating it as before.
 
@@ -41,6 +41,7 @@ If the GitHub CLI (`gh`) is signed in, this happens automatically. Without `gh`,
 
 ## Releasing
 
+1. Turn "Unreleased" in [CHANGELOG.md](../CHANGELOG.md) into a heading with the version and date (breaking changes and deprecations: [compatibility.md](compatibility.md) §9)
 1. Raise `version` under `[workspace.package]` in the root `Cargo.toml` (this one place sets the version of Studio, the CLI and the MCP server). Run `cargo check` to update `Cargo.lock`, and commit
 2. Push a tag with the same version
 
@@ -62,7 +63,22 @@ pnpm studio:release
 
 The public key is read from `~\.tauri\shikigami.key.pub`.
 
-`pnpm studio:build` is a trial build that neither bundles the CLI nor signs.
+`pnpm studio:build` is a trial build that neither bundles the CLI and Node.js nor signs.
+
+## Bundling Node.js and the browser adapter
+
+So that browser automation and Node plugins work on PCs without Node.js (including company PCs where it cannot be installed), the installer puts the following in Studio's folder.
+
+| Folder | Contents |
+|---|---|
+| `node\` | `node.exe` and the Node.js license (no npm etc.) |
+| `browser-adapter\` | The browser adapter (`src\*.ts`) and `playwright-core` |
+
+- `pnpm studio:bundle-node` (`apps/studio/scripts/bundle-node.mjs`) downloads the official Windows zip from nodejs.org, checks it against the SHA-256 written in the script, and places it in `apps/studio/src-tauri/bundled/`. Downloads are cached in `target/node-dist/`. On Windows it also checks that the adapter starts with the placed Node.js
+- The Node.js version is pinned to an LTS (currently 24.22.1). To raise it, change the script's `NODE_VERSION` and `NODE_SHA256` (the `win-x64.zip` / `win-arm64.zip` lines of that version's `SHASUMS256.txt`) together
+- No browser is bundled. Playwright uses the Edge that comes with Windows
+- Node.js is looked up in the order `SHIKIGAMI_NODE` → `node\node.exe` next to the executable → `node` on PATH. Development builds have no `node\` next to them, so they use Node.js on PATH as before
+- The installer grows by a few tens of MB (`node.exe` is about 90 MB, about a third of that compressed)
 
 ## Notes
 

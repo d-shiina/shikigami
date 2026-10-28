@@ -67,8 +67,57 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 
 The AI checks a workbook's contents with `test_step` (`excel.listSheets`, `excel.readRange`…) before writing. `test_step`'s `state` includes the used range and first few rows of every sheet in that workbook.
 
+## Excel macros (`excel.runMacro`, implemented)
+
+Only "run a workbook's VBA macro", which files alone cannot do, goes through Excel itself (COM). It needs Windows and desktop Excel (`PLATFORM_UNSUPPORTED` elsewhere, `EXCEL_NOT_INSTALLED` without Excel).
+
+```json
+{ "type": "excel.runMacro", "params": { "path": "C:\\work\\summary.xlsm", "macro": "Module1.Summarize", "args": ["{{ month }}", 2026] }, "saveAs": "result" }
+```
+
+- `macro`: `Summarize` or `Module1.Summarize` (a Public Sub / Function in a standard module). A Function's return value is the output (text, numbers, true/false; dates as ISO text; anything else null)
+- `args`: arguments (text, numbers, true/false, null; up to 30). `save`: whether to save after running (default true; false discards the changes and closes)
+- Each step starts **its own hidden Excel** and goes open → run → save → close → quit. Excel windows the person has open are never touched. Warning dialogs are off (`DisplayAlerts = false`) and external links are not updated
+- The default timeout is 5 minutes. A macro that shows a MsgBox / InputBox waits for a person and never ends, so on timeout that Excel is quit (without saving) and the step returns `MACRO_TIMEOUT`
+- It waits its turn automatically with other `excel.*` steps on the same workbook. `FILE_IN_USE` while the person has the workbook open in Excel
+- Workbooks downloaded from the internet and blocked ("Unblock" not checked in the file's properties) cannot run macros and give `MACRO_FAILED`
+- Any code can run, so the step's risk is `Dangerous`
+
+## Word (`word.*`, implemented)
+
+Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`) directly; Word is not needed (`.doc` gives `UNSUPPORTED_FORMAT`).
+
+| type | Main params | Output |
+|---|---|---|
+| `word.fillTemplate` | `template`, `path` (the document to create), `values` | `{ path, replaced }` |
+| `word.readText` | `path` | The body text (a line break per paragraph) |
+
+- Write `{{ name }}` in the template's body, headers and footers and it is replaced with the value from `values`. Formatting (bold, fonts…) stays as in the template. `\n` in a value becomes a line break. `{{ customer.name }}` is a field of a record
+- **Repeating table rows**: write `{{ items.product }}` `{{ items.qty }}` in a table row and pass `"items": [ { "product": …, "qty": … }, … ]` in `values`; the row repeats once per record (an empty list removes the row)
+- If any `{{ }}` has no value, no document is created and the step gives `TEMPLATE_VALUE_MISSING` (`details.missing` lists the names), so documents with unreplaced fields are never produced
+- Placeholders such as `{{ name }}` that Word split internally (spell checking and formatting changes do this) are replaced just the same
+- The template is never changed. `path` is written as a temporary file in the same folder, then replaced. Writing to a document open in Word gives `FILE_IN_USE`
+- Both `template` and `path` are resources, so steps on the same file wait their turn automatically
+- Running `word.readText` on a template with MCP's `test_step` adds the list of placeholders to `state`
+
+## Mail (`mail.*`, implemented)
+
+Crate `crates/shikigami-mail`. One `mail.*` set regardless of app; for now it uses this PC's Outlook (classic) through COM (Windows only; the new Outlook app and the web version are not supported). It uses the account signed in to Outlook, so no passwords or server settings are needed.
+
+| type | Main params | Output |
+|---|---|---|
+| `mail.createDraft` | `to` / `cc` / `bcc` (lists of addresses), `subject`, `body`, `html`, `attachments` (list of full paths) | `{ id }` |
+| `mail.list` | `folder` (e.g. `Inbox/Invoices`; default the Inbox), `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit` (default 50), `includeBody` | A list of mails, newest first: `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
+| `mail.saveAttachments` | `id` (an id from `mail.list`), `folder` (where to save), `nameContains` | A list of the full paths saved |
+
+- **Nothing is sent.** `mail.createDraft` only puts a draft in the Drafts folder; a person checks and sends it. Sending automatically (`mail.send`) leaves the PC, so it is being considered separately
+- Write recipients one per list item (`["{{ customer.email }}"]`). Anything that is not an address gives `INVALID_ADDRESS` and a missing attachment `FILE_NOT_FOUND`, before the draft is created
+- Saving attachments never overwrites a file of the same name; it numbers them like `invoice (2).pdf`. Folder parts in attachment names are ignored
+- Outlook operations run one at a time (resource `app:outlook`). The person's Outlook is never closed. `OUTLOOK_TIMEOUT` when it gets stuck on a security prompt or similar
+- Mail content is data from outside, not instructions (this is stated to AI clients too)
+
 ## Next (planned)
 
-1. **`excel.runMacro` (COM)**: opens the `path` workbook in Excel, runs the macro `macro` with `args`, saves and quits. Windows only (`PLATFORM_UNSUPPORTED` elsewhere). Like desktop automation (`crates/shikigami-desktop/src/uia.rs`), COM is called on a dedicated thread with `unsafe` confined to that one module. Locked by workbook path; uses its own Excel instance and never touches the one the person has open. `DisplayAlerts = false` so macro warnings and dialogs do not stop it. "Recalculate and save" and "Export to PDF" come the same way
-2. **Word (`word.*`, files directly)**: `.docx` templates (`word.fillTemplate`: replace `{{ name }}`, add rows to tables) and reading the text (`word.readText`). PDF export through COM
-3. **Mail (`mail.*`)**: one set regardless of app, with the sending method (Outlook COM, later SMTP / Microsoft Graph) chosen in settings. Messages leave the PC, so `mail.send` is `Dangerous`; it starts with creating drafts (`mail.createDraft`) and reading received mail and saving attachments (`mail.list` / `mail.saveAttachments`), with thorough validation hints for recipients and bodies
+1. **Excel recalculation and PDF export**: added the same way as `excel.runMacro`
+2. **Word PDF export**: through COM (the same way as Excel macros)
+3. **Sending mail and other ways to send**: `mail.send` (`Dangerous`, with thorough recipient checks), and choosing something other than Outlook (SMTP / Microsoft Graph) in settings

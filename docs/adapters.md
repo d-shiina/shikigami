@@ -2,7 +2,7 @@
 
 English | [日本語](ja/adapters.md)
 
-The apps Shikigami can drive grow by "adapter". Today there are browsers (`browser.*`, [browser.md](browser.md)), Windows desktop apps (`desktop.*`, [desktop.md](desktop.md)), files and folders (`file.*`, [files.md](files.md)), Excel workbooks (`excel.*`, [office.md](office.md)), and web APIs, programs, the clipboard and dialogs (`http.*` / `process.*` / `clipboard.*` / `dialog.*`, [system.md](system.md)).
+The apps Shikigami can drive grow by "adapter". Today there are browsers (`browser.*`, [browser.md](browser.md)), Windows desktop apps (`desktop.*`, [desktop.md](desktop.md)), files and folders (`file.*`, [files.md](files.md)), Excel workbooks, Word documents and mail (`excel.*` / `word.*` / `mail.*`, [office.md](office.md)), web APIs, programs, the clipboard and dialogs (`http.*` / `process.*` / `clipboard.*` / `dialog.*`, [system.md](system.md)), and reading the text of PDFs (`pdf.*`, [pdf.md](pdf.md)).
 
 To add steps without rebuilding Shikigami (in-house systems, a particular SaaS…), write a **plugin** instead of a built-in adapter: a folder with a manifest (`shikigami-plugin.json`) and a program, in any language. How it works: [design/plugins.md](design/plugins.md) (Japanese); example: `examples/plugins/hello`.
 

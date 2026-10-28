@@ -6,7 +6,7 @@ export type * from "./generated";
 import type { ErrorPayload } from "./generated";
 
 /** Current scenario file format version (`shikigami_core::SCHEMA_VERSION`). */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** Stable error codes shared by Core, Runtime, MCP tools and Studio. */
 export type CoreErrorCode =

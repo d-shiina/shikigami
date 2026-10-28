@@ -79,13 +79,18 @@ pub fn open_or_create(path: &str, sheet: Option<&str>) -> Result<Workbook, StepE
     Ok(book)
 }
 
+/// Whether Excel has the workbook open (its owner file exists).
+pub fn open_in_excel(path: &Path) -> bool {
+    owner_file(path).is_some_and(|owner| owner.exists())
+}
+
 /// `C:\work\~$orders.xlsx`: the owner file Excel keeps while the workbook is open.
 fn owner_file(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_str()?;
     Some(path.with_file_name(format!("~${name}")))
 }
 
-fn in_use(path: &Path) -> StepError {
+pub fn in_use(path: &Path) -> StepError {
     StepError::new(
         "FILE_IN_USE",
         format!("{} is open in another program (probably Excel)", path.display()),

@@ -19,6 +19,7 @@ tempfile.workspace = true
 dirs.workspace = true
 regex.workspace = true
 jiff.workspace = true
+semver.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
