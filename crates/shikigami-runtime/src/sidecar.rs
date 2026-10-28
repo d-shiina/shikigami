@@ -37,6 +37,8 @@ pub struct SidecarConfig {
     pub name: String,
     pub program: PathBuf,
     pub args: Vec<OsString>,
+    /// Working directory of the process (default: inherited).
+    pub cwd: Option<PathBuf>,
     /// Why the sidecar cannot be started (e.g. its script was not found);
     /// calls then fail with `ADAPTER_UNAVAILABLE` without trying.
     pub unavailable: Option<String>,
@@ -154,6 +156,9 @@ impl SidecarClient {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        if let Some(cwd) = &self.config.cwd {
+            command.current_dir(cwd);
+        }
         #[cfg(windows)]
         {
             // No console window when started from Studio.

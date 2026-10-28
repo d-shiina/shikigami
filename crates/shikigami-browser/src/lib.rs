@@ -103,6 +103,7 @@ pub fn sidecar_config(node: PathBuf, script: Option<PathBuf>) -> SidecarConfig {
         name: "browser".into(),
         program: node,
         args,
+        cwd: None,
         unavailable,
         setup_hint: "Install Node.js 22.18+ and run `pnpm install` in the Shikigami folder, or set SHIKIGAMI_BROWSER_ADAPTER to packages/browser-adapter/src/main.ts.".into(),
     }

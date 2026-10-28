@@ -96,7 +96,8 @@ shikigami/
 │  ├─ shikigami-cli/          CLI（`shikigami` バイナリ）
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
 │  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
-│  └─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
+│  ├─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
+│  └─ shikigami-plugins/  ノードのプラグイン（マニフェストで宣言、別プロセスで実行）
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React（src/ がフロント、src-tauri/ が Rust）
 ├─ packages/

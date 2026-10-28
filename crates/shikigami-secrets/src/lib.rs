@@ -513,19 +513,21 @@ impl SecretProvider for Vault {
 
 /// `https://example.com/login` → `https://example.com` (what browsers call
 /// the page's origin). Desktop apps are written `app:<exe name>`
-/// (`app:Billing.exe` → `app:billing.exe`).
+/// (`app:Billing.exe` → `app:billing.exe`), node plugins `plugin:<name>`.
 pub fn normalize_site(text: &str) -> Result<String, SecretError> {
     let invalid = || {
         SecretError::new("INVALID_SITE", format!("'{text}' is not a web address"))
-            .with_hint("Write the site's address, e.g. https://example.com, or app:billing.exe for a desktop app")
+            .with_hint("Write the site's address, e.g. https://example.com, app:billing.exe for a desktop app, or plugin:<name> for a plugin")
     };
     let text = text.trim();
-    if let Some(app) = text.strip_prefix("app:") {
-        let app = app.trim().to_lowercase();
-        if app.is_empty() || app.contains(['\\', '/', ':']) {
-            return Err(invalid());
+    for prefix in ["app:", "plugin:"] {
+        if let Some(name) = text.strip_prefix(prefix) {
+            let name = name.trim().to_lowercase();
+            if name.is_empty() || name.contains(['\\', '/', ':']) {
+                return Err(invalid());
+            }
+            return Ok(format!("{prefix}{name}"));
         }
-        return Ok(format!("app:{app}"));
     }
     let (scheme, rest) = text.split_once("://").ok_or_else(invalid)?;
     let scheme = scheme.to_ascii_lowercase();

@@ -2,6 +2,8 @@
 
 Shikigami が操作できるアプリは「アダプター」単位で増やします。いまはブラウザ（`browser.*`、[browser.md](browser.md)）と Windows のデスクトップアプリ（`desktop.*`、[desktop.md](desktop.md)）があり、Excel なども同じ形で足します。
 
+本体を作り直さずに足したいとき（社内システムや個別の SaaS など）は、組込のアダプターではなく**プラグイン**にします。フォルダにマニフェスト（`shikigami-plugin.json`）とプログラムを置くだけで、言語は自由です。仕組みは [design/plugins.md](design/plugins.md)、例は `examples/plugins/hello`。
+
 アダプターは「操作の対象」ごとに作り、アプリの作りの違い（Win32 / WPF / SAP GUI / Java など）では分けません。デスクトップアプリは `desktop.*` の 1 セットで書き、どの技術でアプリの中を見るかはアダプターの中で対象のウィンドウから決めます（`crates/shikigami-desktop/src/engine.rs`）。AI が覚える書き方を増やさないためです。
 
 ## アダプターが用意するもの

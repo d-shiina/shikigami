@@ -17,7 +17,7 @@ use crate::handler::{BoxFuture, StepError};
 
 pub trait Adapter: Send + Sync + 'static {
     /// Prefix of this adapter's step types, e.g. `"browser"` for `browser.click`.
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 
     /// Registers the step types and handlers (and run-finished hooks).
     fn install(&self, builder: RuntimeBuilder) -> RuntimeBuilder;
@@ -30,7 +30,7 @@ pub trait Adapter: Send + Sync + 'static {
         _session: &'a str,
         _params: Value,
     ) -> BoxFuture<'a, Result<Value, StepError>> {
-        let name = self.name();
+        let name = self.name().to_owned();
         Box::pin(async move {
             Err(StepError::permanent(
                 "NOT_SUPPORTED",
