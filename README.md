@@ -42,12 +42,22 @@ examples/                  サンプルシナリオ
 | Node.js | 22 LTS |
 | pnpm | 10（`corepack enable` で自動） |
 
-**Windows**：Visual Studio IDE は不要ですが、[Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) の「Desktop development with C++」ワークロード（Windows SDK を含む）と WebView2（Windows 10 1803 以降は標準搭載）が必要です。`rustup default stable-msvc` を設定してください。
+**Windows**：Visual Studio IDE は不要ですが、[Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) の「Desktop development with C++」ワークロード（Windows SDK を含む）と WebView2（Windows 10 1803 以降は標準搭載）が必要です。Build Tools は 2022 でも 2026 でも動きます。インストールには管理者権限が要ります（会社 PC では管理者に依頼してください）。winget なら次のとおりです。
+
+```powershell
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+Rust を rustup で入れた場合は `rustup default stable-msvc` を設定してください。スタンドアロンのインストーラー（MSVC 版）でも、1.90 以上なら clippy・rustfmt 込みでそのまま使えます。
 
 **Linux（コアの開発・CI 用。製品の対象外）**：`libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
 ```sh
 pnpm install
+
+# Studio のフロントエンドをビルド（Tauri のビルドスクリプトが dist を要求するため、
+# clone 直後は cargo test / cargo build の前に一度必要）
+pnpm --filter @shikigami/studio build
 
 # テスト
 cargo test --workspace
@@ -87,4 +97,12 @@ Claude Code ならプラグインを入れるだけです（`shikigami` コマ�
 /plugin install shikigami --marketplace d-shiina/shikigami
 ```
 
-MCP サーバーだけを登録する場合は `claude mcp add shikigami -- shikigami mcp`。Codex / Cursor の設定例とツール一覧は [docs/mcp.md](docs/mcp.md) を参照してください。AI の変更は Studio に即座に反映され、Studio から元に戻せます。
+MCP サーバーだけを登録する場合は `claude mcp add shikigami -- shikigami mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p shikigami-cli` で更新されます）。
+
+```powershell
+claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shikigami.exe mcp
+```
+
+この登録とプラグインを併用すると、プラグイン側の `shikigami` サーバー（PATH 上の `shikigami` を起動）は接続に失敗しますが、スキルは使えます。
+
+Codex / Cursor の設定例とツール一覧は [docs/mcp.md](docs/mcp.md) を参照してください。AI の変更は Studio に即座に反映され、Studio から元に戻せます。
