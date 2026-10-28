@@ -1,0 +1,22 @@
+[package]
+name = "shikigami-pdf"
+description = "PDF steps for Shikigami (pdf.*): reading the text of a PDF"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+shikigami-core.workspace = true
+shikigami-runtime.workspace = true
+shikigami-files.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+pdf-extract = "0.12.1"
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true
