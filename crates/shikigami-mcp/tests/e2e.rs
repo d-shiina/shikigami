@@ -325,3 +325,22 @@ async fn every_tool_has_an_object_input_schema_and_description() {
     }
     h.client.cancel().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_run_that_cannot_be_recorded_is_not_started() {
+    let h = start(ServerOptions::default()).await;
+    let created = h
+        .ok(
+            "create_scenario",
+            json!({ "name": "記録不可", "steps": [ { "type": "log.message", "params": { "message": "x" } } ] }),
+        )
+        .await;
+    let id = created["scenario"]["id"].as_str().unwrap().to_owned();
+    // A file where the runs directory should be makes recording fail.
+    std::fs::write(h.root.join("runs"), b"not a directory").unwrap();
+
+    let (is_error, value) = h.call("run_scenario", json!({ "scenarioId": id })).await;
+    assert!(is_error);
+    assert_eq!(value["code"], "IO_ERROR");
+    h.client.cancel().await.unwrap();
+}
