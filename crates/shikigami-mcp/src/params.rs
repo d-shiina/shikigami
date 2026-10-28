@@ -162,6 +162,10 @@ pub struct RunLogsParams {
     /// Maximum events to return (default 200).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
+    /// Only the `variableChanged` events of this variable: what it was set
+    /// to, by which step, in order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variable: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

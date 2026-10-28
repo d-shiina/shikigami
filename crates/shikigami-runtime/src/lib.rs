@@ -124,6 +124,7 @@ impl Runtime {
                     .filter(|v| v.secret)
                     .map(|v| v.name.clone())
                     .collect(),
+                iteration: None,
                 emitter: emitter.clone(),
                 cancel: cancel.clone(),
                 default_timeout_ms: exec::DEFAULT_TIMEOUT_MS,
@@ -132,7 +133,7 @@ impl Runtime {
                 resources: self.resources.clone(),
             },
         );
-        let init = init_variables(&scenario, &options.inputs, &mut executor);
+        let inputs = options.inputs;
 
         let task_run_id = run_id.clone();
         let secrets = self.secrets.clone();
@@ -151,6 +152,9 @@ impl Runtime {
                 revision: scenario.revision,
             });
 
+            // After `runStarted`, so the inputs' `variableChanged` events
+            // come first in the run.
+            let init = init_variables(&scenario, &inputs, &mut executor);
             let result = match init {
                 Ok(()) => executor.block(&scenario.steps).await,
                 Err(e) => Err(exec::Interrupt::Failed(e)),
@@ -324,6 +328,7 @@ fn init_variables(
             ));
         }
     }
+    let mut values = Vec::with_capacity(scenario.variables.len());
     for var in &scenario.variables {
         let value = match inputs.get(&var.name) {
             Some(value) if var.direction.is_input() => {
@@ -346,7 +351,17 @@ fn init_variables(
                 None => Value::Null,
             },
         };
-        executor.set_var(&var.name, value);
+        values.push((var, value));
+    }
+    // Know every secret before the first value is reported, so a secret
+    // copied into an earlier-declared input is masked too.
+    for (var, value) in &values {
+        if var.secret {
+            executor.emitter.add_secret(value);
+        }
+    }
+    for (var, value) in values {
+        executor.set_var(&var.name, value, None);
     }
     Ok(())
 }

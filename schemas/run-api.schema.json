@@ -138,6 +138,52 @@
           ]
         },
         {
+          "description": "A variable was assigned: by `variable.set`, a step's `saveAs`, a\nloop's item/index variable, `errorVar` / `lastError`, or (without\n`stepId`) its input or default value when the run starts. Changes a\nparallel branch makes are reported when the branch makes them, not\nagain when they are merged back.\n\n`value` is the new value: `\"***\"` for secret variables, other\nsecrets masked inside it, and cut to a preview when large (see\n`truncated`).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "variableChanged"
+            },
+            "variable": {
+              "type": "string"
+            },
+            "value": true,
+            "stepId": {
+              "description": "The step that assigned it; absent for inputs and defaults.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StepId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "iteration": {
+              "description": "Item index (from 0) of the concurrent `forEach` iteration that\nmade the change, so interleaved iterations can be told apart.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0
+            },
+            "secret": {
+              "type": "boolean"
+            },
+            "truncated": {
+              "description": "`value` is a preview: a long string cut short, or the start of\na large array / object's JSON text.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "variable",
+            "value"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "type": {
