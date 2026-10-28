@@ -1241,3 +1241,330 @@ async fn step_types_can_set_their_own_default_timeout() {
     let (report, _) = run(&typing_runtime(), s, json!({})).await;
     assert_eq!(report.error.unwrap().code, "STEP_TIMEOUT");
 }
+
+// -- interactive runs ---------------------------------------------------------
+
+fn debug_options(breakpoints: &[&str]) -> RunOptions {
+    RunOptions {
+        debug: Some(DebugOptions {
+            pause_on_error: true,
+            breakpoints: breakpoints.iter().map(|&id| id.into()).collect(),
+            pause_at_start: false,
+        }),
+        ..RunOptions::default()
+    }
+}
+
+fn fail(message: &str) -> Step {
+    Step::new("control.fail").with_param("message", message)
+}
+
+/// What a test does at a pause.
+enum Answer {
+    Send(DebugCommand),
+    /// Swap in this scenario, then send the command.
+    Swap(Box<Scenario>, DebugCommand),
+}
+
+/// Runs `s` interactively, answering each pause with `answer(n, event)`
+/// (`n` counts pauses from 0). Returns the report, every event and the
+/// pauses as (step, reason).
+async fn debug_run(
+    runtime: &Runtime,
+    s: Scenario,
+    options: RunOptions,
+    mut answer: impl FnMut(usize, &RunEvent) -> Answer,
+) -> (RunReport, Vec<RunEventEnvelope>, Vec<(String, PauseReason)>) {
+    let mut handle = runtime.start(s, options).expect("start");
+    let control = handle.debug_control().expect("debug control");
+    let mut events = Vec::new();
+    let mut pauses = Vec::new();
+    while let Some(event) = tokio::time::timeout(Duration::from_secs(5), handle.next_event())
+        .await
+        .expect("the run stalled")
+    {
+        if let RunEvent::Paused {
+            step_id, reason, ..
+        } = &event.event
+        {
+            assert!(control.is_paused());
+            pauses.push((step_id.to_string(), *reason));
+            assert!(pauses.len() < 10, "paused over and over: {pauses:?}");
+            match answer(pauses.len() - 1, &event.event) {
+                Answer::Send(command) => control.send(command).expect("command"),
+                Answer::Swap(scenario, command) => {
+                    control.update_scenario(*scenario).expect("swap");
+                    control.send(command).expect("command");
+                }
+            }
+        }
+        events.push(event);
+    }
+    let report = handle.wait().await.expect("wait");
+    (report, events, pauses)
+}
+
+#[tokio::test]
+async fn an_unhandled_error_pauses_and_a_fixed_step_resumes_with_the_variables() {
+    let s = scenario(vec![set("n", "41"), fail("boom"), set("n", "n + 1")]);
+    let mut fixed = s.clone();
+    fixed.revision += 1;
+    fixed.steps[1] = log("fixed {{ n }}");
+    fixed.steps[1].id = "s2".into();
+    let mut paused_with = None;
+    let (report, events, pauses) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, event| {
+        paused_with = Some(event.clone());
+        Answer::Swap(Box::new(fixed.clone()), DebugCommand::Retry)
+    })
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(pauses, vec![("s2".to_owned(), PauseReason::Error)]);
+    let Some(RunEvent::Paused {
+        error, variables, ..
+    }) = paused_with
+    else {
+        panic!("no pause");
+    };
+    assert_eq!(error.expect("error").code, "SCENARIO_FAILED");
+    assert_eq!(variables.get("n"), Some(&json!(41)));
+    assert!(logs(&events).contains(&"fixed 41".to_owned()));
+    assert!(events.iter().any(|e| matches!(
+        e.event,
+        RunEvent::Resumed {
+            action: ResumeAction::Retry,
+            revision: Some(_)
+        }
+    )));
+}
+
+#[tokio::test]
+async fn retry_runs_steps_inserted_before_the_failed_one() {
+    // The AI adds the missing step in front of the one that failed.
+    let s = scenario(vec![
+        set("ready", "false"),
+        Step::new("control.if")
+            .with_param("condition", "!ready")
+            .with_block("then", vec![fail("not ready")]),
+    ]);
+    let mut fixed = s.clone();
+    fixed.revision += 1;
+    let mut insert = log("inserted");
+    insert.id = "new".into();
+    let then = fixed.steps[1].blocks.get_mut("then").expect("then");
+    then.insert(0, insert);
+    then[1] = log("fixed");
+    then[1].id = "s3".into();
+    let (report, events, pauses) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {
+        Answer::Swap(Box::new(fixed.clone()), DebugCommand::Continue)
+    })
+    .await;
+    assert_eq!(pauses, vec![("s3".to_owned(), PauseReason::Error)]);
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    // The `if` already chose its branch; the new step in it runs first.
+    assert_eq!(logs(&events), ["inserted", "fixed"]);
+}
+
+#[tokio::test]
+async fn skip_leaves_the_failed_step_undone() {
+    let s = scenario(vec![fail("boom"), log("after")]);
+    let (report, events, _) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {
+        Answer::Send(DebugCommand::Skip)
+    })
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert!(logs(&events).contains(&"after".to_owned()));
+}
+
+#[tokio::test]
+async fn abort_fails_the_run_without_pausing_again_further_out() {
+    let s = scenario(vec![
+        Step::new("control.group").with_block("body", vec![fail("boom")]),
+        log("after"),
+    ]);
+    let (report, events, pauses) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {
+        Answer::Send(DebugCommand::Abort)
+    })
+    .await;
+    assert_eq!(pauses.len(), 1);
+    assert_eq!(report.status, RunStatus::Failed);
+    assert_eq!(report.error.expect("error").message, "boom");
+    assert!(!logs(&events).contains(&"after".to_owned()));
+}
+
+#[tokio::test]
+async fn handled_errors_do_not_pause() {
+    let mut on_error = fail("ignored");
+    on_error.step_type = "wait.until".into();
+    let s = scenario(vec![
+        Step::new("control.try")
+            .with_block("try", vec![fail("caught")])
+            .with_block("catch", vec![log("in catch")]),
+        log("after"),
+    ]);
+    let (report, _, pauses) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {
+        Answer::Send(DebugCommand::Abort)
+    })
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert!(pauses.is_empty());
+
+    // A try without catch only has a finally: the error is not handled.
+    let s = scenario(vec![
+        Step::new("control.try")
+            .with_block("try", vec![fail("not caught")])
+            .with_block("finally", vec![log("finally")]),
+    ]);
+    let (report, _, pauses) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {
+        Answer::Send(DebugCommand::Abort)
+    })
+    .await;
+    assert_eq!(pauses.len(), 1);
+    assert_eq!(report.status, RunStatus::Failed);
+}
+
+#[tokio::test]
+async fn unattended_runs_still_fail_without_pausing() {
+    let s = scenario(vec![fail("boom")]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e.event, RunEvent::Paused { .. }))
+    );
+}
+
+#[tokio::test]
+async fn breakpoints_and_step_commands_walk_the_tree() {
+    // s1 group { s2, s3 }, s4
+    let s = scenario(vec![
+        Step::new("control.group").with_block("body", vec![log("a"), log("b")]),
+        log("c"),
+    ]);
+    let commands = [
+        DebugCommand::StepInto, // at s1 (breakpoint) -> s2
+        DebugCommand::StepOver, // at s2 -> s3
+        DebugCommand::StepOut,  // at s3 -> s4
+        DebugCommand::Continue, // at s4 -> end
+    ];
+    let (report, _, pauses) = debug_run(&Runtime::new(), s, debug_options(&["s1"]), |n, _| {
+        Answer::Send(commands[n].clone())
+    })
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let ids: Vec<&str> = pauses.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, ["s1", "s2", "s3", "s4"]);
+    assert_eq!(pauses[0].1, PauseReason::Breakpoint);
+    assert_eq!(pauses[1].1, PauseReason::Step);
+
+    // Step over a block runs all of it.
+    let s = scenario(vec![
+        Step::new("control.group").with_block("body", vec![log("a"), log("b")]),
+        log("c"),
+    ]);
+    let (_, _, pauses) = debug_run(&Runtime::new(), s, debug_options(&["s1"]), |n, _| {
+        Answer::Send(if n == 0 {
+            DebugCommand::StepOver
+        } else {
+            DebugCommand::Continue
+        })
+    })
+    .await;
+    let ids: Vec<&str> = pauses.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, ["s1", "s4"]);
+}
+
+#[tokio::test]
+async fn a_breakpoint_in_a_loop_pauses_every_iteration() {
+    let s = scenario(vec![
+        Step::new("control.repeat")
+            .with_param("count", 3)
+            .with_block("body", vec![log("x")]),
+    ]);
+    let (report, _, pauses) = debug_run(&Runtime::new(), s, debug_options(&["s2"]), |_, _| {
+        Answer::Send(DebugCommand::Continue)
+    })
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(pauses.len(), 3);
+}
+
+#[tokio::test]
+async fn swaps_that_lose_the_paused_position_are_refused() {
+    let s = scenario(vec![
+        Step::new("control.group").with_block("body", vec![log("a"), fail("boom")]),
+    ]);
+    let revision = s.revision;
+    let mut moved = s.clone();
+    moved.revision += 1;
+    // The block the run is in no longer has the step it already finished.
+    moved.steps[0]
+        .blocks
+        .get_mut("body")
+        .expect("body")
+        .remove(0);
+    let mut handle = Runtime::new().start(s, debug_options(&[])).expect("start");
+    let control = handle.debug_control().expect("control");
+    while let Some(event) = handle.next_event().await {
+        if matches!(event.event, RunEvent::Paused { .. }) {
+            let err = control.update_scenario(moved.clone()).expect_err("refused");
+            assert_eq!(err.code, "RESUME_INCOMPATIBLE");
+            assert_eq!(control.revision(), revision);
+            control.send(DebugCommand::Abort).expect("abort");
+        }
+    }
+    assert_eq!(handle.wait().await.expect("wait").status, RunStatus::Failed);
+}
+
+#[tokio::test]
+async fn resuming_commands_need_a_pause_and_cancel_ends_a_paused_run() {
+    let s = scenario(vec![log("a")]);
+    let mut options = debug_options(&[]);
+    if let Some(debug) = options.debug.as_mut() {
+        debug.pause_at_start = true;
+    }
+    let mut handle = Runtime::new().start(s, options).expect("start");
+    let control = handle.debug_control().expect("control");
+    while let Some(event) = handle.next_event().await {
+        if let RunEvent::Paused { reason, .. } = event.event {
+            assert_eq!(reason, PauseReason::Step);
+            assert_eq!(
+                control.send(DebugCommand::Retry).expect_err("retry").code,
+                "NOTHING_TO_RETRY"
+            );
+            handle.cancel();
+        }
+    }
+    assert_eq!(
+        handle.wait().await.expect("wait").status,
+        RunStatus::Cancelled
+    );
+    assert_eq!(
+        control
+            .send(DebugCommand::Continue)
+            .expect_err("not paused")
+            .code,
+        "RUN_NOT_PAUSED"
+    );
+}
+
+#[tokio::test]
+async fn errors_in_parallel_branches_pause_at_the_parallel_step() {
+    let flaky = flaky_runtime();
+    let s = scenario(vec![Step::new("control.parallel").with_block(
+        "branches",
+        vec![log("a"), Step::new("test.flaky").with_param("succeedOn", 2)],
+    )]);
+    let mut fixed = s.clone();
+    fixed.revision += 1;
+    fixed.steps[0].blocks.get_mut("branches").expect("branches")[1]
+        .params
+        .insert("succeedOn".into(), json!(1));
+    // The retry runs the whole parallel step again, as fixed.
+    let (report, _, pauses) = debug_run(&flaky, s, debug_options(&[]), |_, _| {
+        Answer::Swap(Box::new(fixed.clone()), DebugCommand::Retry)
+    })
+    .await;
+    assert_eq!(pauses, vec![("s1".to_owned(), PauseReason::Error)]);
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+}

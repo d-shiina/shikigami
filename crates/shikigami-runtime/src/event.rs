@@ -7,11 +7,15 @@ use serde_json::{Map, Value};
 use shikigami_core::{RunId, ScenarioId, StepId};
 use time::OffsetDateTime;
 
+use crate::debug::{PauseReason, ResumeAction};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum RunStatus {
     Pending,
     Running,
+    /// An interactive run waits for a person (see `paused`).
+    Paused,
     Succeeded,
     Failed,
     Cancelled,
@@ -147,6 +151,29 @@ pub enum RunEvent {
     /// A step waits for a person (e.g. to log in or approve MFA on the
     /// screen). Studio shows `message` until the step finishes.
     HumanActionRequired { step_id: StepId, message: String },
+    /// An interactive run stopped before `stepId` (breakpoint, step
+    /// command, pause request) or after it failed (`reason: "error"`, with
+    /// `error`). Nothing runs until it is resumed.
+    ///
+    /// `variables` holds every variable's value at that point, masked and
+    /// cut like `variableChanged` values. `revision` is the scenario
+    /// revision the run is executing.
+    Paused {
+        step_id: StepId,
+        step_type: String,
+        reason: PauseReason,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<RunError>,
+        variables: Map<String, Value>,
+        revision: u64,
+    },
+    /// The run goes on after `paused`. `revision` is set when a newer
+    /// revision of the scenario was swapped in while it was paused.
+    Resumed {
+        action: ResumeAction,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        revision: Option<u64>,
+    },
     RunFinished {
         status: RunStatus,
         #[serde(default, skip_serializing_if = "Option::is_none")]

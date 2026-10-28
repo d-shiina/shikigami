@@ -1106,6 +1106,22 @@ export type RunEventEnvelope1 =
       message: string;
     }
   | {
+      type: "paused";
+      stepId: StepId;
+      stepType: string;
+      reason: PauseReason;
+      error?: RunError | null;
+      variables: {
+        [k: string]: unknown;
+      };
+      revision: number;
+    }
+  | {
+      type: "resumed";
+      action: ResumeAction;
+      revision?: number | null;
+    }
+  | {
       type: "runFinished";
       status: RunStatus;
       error?: RunError | null;
@@ -1122,15 +1138,66 @@ export type StepOutcome = "succeeded" | "failed" | "skipped";
  */
 export type LogLevel = "debug" | "info" | "warn" | "error";
 /**
+ * Why a run paused.
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "PauseReason".
+ */
+export type PauseReason = "breakpoint" | "step" | "requested" | "error";
+/**
+ * What a resumed run does next (reported as `resumed`).
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "ResumeAction".
+ */
+export type ResumeAction =
+  "continue" | "stepOver" | "stepInto" | "stepOut" | "retry" | "skip" | "abort";
+/**
  * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
  * via the `definition` "RunStatus".
  */
-export type RunStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
+export type RunStatus = ("pending" | "running" | "succeeded" | "failed" | "cancelled") | "paused";
+/**
+ * What a person does with a run (see [`DebugControl::send`]).
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "DebugCommand".
+ */
+export type DebugCommand =
+  | {
+      action: "continue";
+    }
+  | {
+      action: "stepOver";
+    }
+  | {
+      action: "stepInto";
+    }
+  | {
+      action: "stepOut";
+    }
+  | {
+      action: "retry";
+    }
+  | {
+      action: "skip";
+    }
+  | {
+      action: "abort";
+    }
+  | {
+      action: "pause";
+    }
+  | {
+      action: "setBreakpoints";
+      stepIds: StepId[];
+    };
 
 export interface ShikigamiRunApi {
   run_event_envelope: RunEventEnvelope;
   run_report: RunReport;
   run_snapshot: RunSnapshot;
+  debug_command: DebugCommand;
 }
 /**
  * Structured failure information, kept for AI-assisted diagnosis.

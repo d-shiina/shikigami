@@ -10,6 +10,7 @@
 
 pub mod adapter;
 pub mod builtin;
+pub mod debug;
 pub mod event;
 mod exec;
 pub mod handler;
@@ -30,6 +31,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 pub use adapter::Adapter;
+pub use debug::{DebugCommand, DebugControl, DebugOptions, PauseReason, ResumeAction};
 pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunReport, RunSnapshot, RunStatus, StepOutcome,
 };
@@ -52,6 +54,9 @@ pub struct RunOptions {
     /// Named version whose content is being run, recorded in the report
     /// (see `ScenarioService::matching_version`).
     pub version: Option<u32>,
+    /// Make this an interactive run that can pause (Studio). Unattended
+    /// runs leave it unset and fail as usual. See [`debug`].
+    pub debug: Option<DebugOptions>,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -111,6 +116,13 @@ impl Runtime {
         }));
         let emitter = Emitter::new(run_id.clone(), tx, snapshot.clone());
         let cancel = CancellationToken::new();
+        let debugger = options.debug.map(|debug| {
+            Arc::new(debug::Debugger::new(
+                debug,
+                scenario.clone(),
+                self.validator.clone(),
+            ))
+        });
 
         let mut executor = Executor::new_from(
             &scenario,
@@ -134,6 +146,8 @@ impl Runtime {
                 default_retry: None,
                 default_on_error: OnError::Fail,
                 resources: self.resources.clone(),
+                debug: debugger.clone(),
+                handled_depth: 0,
             },
         );
         let inputs = options.inputs;
@@ -160,7 +174,7 @@ impl Runtime {
             // come first in the run.
             let init = init_variables(&scenario, &inputs, &mut executor);
             let result = match init {
-                Ok(()) => executor.block(&scenario.steps).await,
+                Ok(()) => executor.top_block(&scenario.steps).await,
                 Err(e) => Err(exec::Interrupt::Failed(e)),
             };
             let (status, error) = exec::final_status(&result);
@@ -220,6 +234,10 @@ impl Runtime {
             run_id,
             cancel,
             events: rx,
+            debug: debugger.map(|inner| DebugControl {
+                inner,
+                snapshot: snapshot.clone(),
+            }),
             snapshot,
             join,
         })
@@ -376,6 +394,7 @@ pub struct RunHandle {
     pub run_id: RunId,
     cancel: CancellationToken,
     events: mpsc::UnboundedReceiver<RunEventEnvelope>,
+    debug: Option<DebugControl>,
     snapshot: Arc<Mutex<RunSnapshot>>,
     join: JoinHandle<RunReport>,
 }
@@ -390,6 +409,12 @@ impl RunHandle {
     /// A token that cancels this run when triggered (for stop buttons, MCP `stop_scenario`).
     pub fn cancel_token(&self) -> CancellationToken {
         self.cancel.clone()
+    }
+
+    /// Pause / step / resume controls; `None` unless started with
+    /// [`RunOptions::debug`].
+    pub fn debug_control(&self) -> Option<DebugControl> {
+        self.debug.clone()
     }
 
     pub fn snapshot(&self) -> Option<RunSnapshot> {
@@ -438,6 +463,7 @@ pub fn run_api_schema() -> Value {
         run_event_envelope: RunEventEnvelope,
         run_report: RunReport,
         run_snapshot: RunSnapshot,
+        debug_command: DebugCommand,
     }
     let mut value = serde_json::to_value(schemars::schema_for!(RunApi)).unwrap_or(Value::Null);
     if let Some(obj) = value.as_object_mut() {
