@@ -7,8 +7,10 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
-use serde_json::Value;
+use serde_json::{Value, json};
+use shikigami_core::secret::{ResolvedSecret, SecretError, SecretProvider, SecretRef};
 use shikigami_core::{RunId, StepId};
 use tokio_util::sync::CancellationToken;
 
@@ -84,6 +86,18 @@ pub struct ActionInput {
     /// on (dropping the future cannot stop work in another process).
     pub timeout_ms: u64,
     pub(crate) emitter: Emitter,
+    pub(crate) secrets: Option<Arc<dyn SecretProvider>>,
+}
+
+impl From<SecretError> for StepError {
+    fn from(e: SecretError) -> Self {
+        let details = e.details();
+        let error = StepError::permanent(e.code, e.message);
+        match details {
+            Some(details) => error.with_details(details),
+            None => error,
+        }
+    }
 }
 
 impl ActionInput {
@@ -91,6 +105,38 @@ impl ActionInput {
     pub fn log(&self, level: LogLevel, message: impl Into<String>) {
         self.emitter
             .log(level, message.into(), Some(self.step_id.clone()));
+    }
+
+    /// Tells the person at the PC that the step waits for them (shown in
+    /// Studio while the step runs).
+    pub fn request_human(&self, message: impl Into<String>) {
+        self.emitter
+            .human_action_required(message.into(), self.step_id.clone());
+    }
+
+    /// Looks up `value` when it is a secret reference
+    /// (`{ "secret": "受注システム", "field": "password" }`); `None` for any
+    /// other value. Sensitive values are masked in this run's logs, errors
+    /// and outputs from now on.
+    pub fn resolve_secret(&self, value: &Value) -> Result<Option<ResolvedSecret>, StepError> {
+        let Some(reference) = SecretRef::from_value(value) else {
+            return Ok(None);
+        };
+        let reference = reference.map_err(StepError::invalid_params)?;
+        let resolved = self.secret_provider()?.resolve(&reference)?;
+        if resolved.field.is_sensitive() {
+            self.emitter
+                .add_secret(&Value::String(resolved.value.clone()));
+        }
+        Ok(Some(resolved))
+    }
+
+    /// The Runtime's secret store (also holds saved browser logins).
+    pub fn secret_provider(&self) -> Result<&Arc<dyn SecretProvider>, StepError> {
+        self.secrets.as_ref().ok_or_else(|| {
+            StepError::permanent("SECRETS_UNAVAILABLE", "this runtime has no secret store")
+                .with_details(json!({ "hint": "Run the scenario from Studio, the CLI or the MCP server of a workspace." }))
+        })
     }
 
     /// Deserialises params into a typed struct.

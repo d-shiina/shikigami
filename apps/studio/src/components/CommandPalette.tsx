@@ -22,8 +22,8 @@ export const CATEGORY_COLOR: Record<string, string> = {
   flow: "#f5872a",
   browser: "#0a6fa8",
   windows: "#e0301e",
-  file: "#7a6e5c",
-  other: "#a29580",
+  file: "#64748b",
+  other: "#94a3b8",
 };
 
 function matches(def: StepTypeDef, query: string): boolean {

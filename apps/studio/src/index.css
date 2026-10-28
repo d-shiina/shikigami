@@ -2,43 +2,34 @@
 @import "@xyflow/react/dist/style.css";
 
 /*
- * Washi & sumi theme. The neutral scale is re-tinted from cool slate to warm
- * paper/ink so every existing utility follows the theme, and the accents are
- * taken from the logo's swirl (藍 indigo, 水 cyan, 萌黄 green, 朱 vermilion).
+ * Theme taken from the logo: crisp white surfaces, the wordmark's deep navy
+ * for text, and the swirl's colours (藍 navy, blue, 水 cyan, 萌黄 green,
+ * orange, 朱 red) as accents and gradients. Neutrals use Tailwind's cool
+ * slate so they sit next to the navy.
  */
 @theme {
-  --font-sans: "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
-  --font-serif: "Noto Serif JP", "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", serif;
+  --font-sans: "Noto Sans JP Variable", "Yu Gothic UI", "Meiryo", sans-serif;
+  /* Latin from a code font; kana and kanji from the same Japanese font as the UI. */
+  --font-mono: "Cascadia Mono", Consolas, "Noto Sans JP Variable", "BIZ UDGothic", monospace;
 
-  --color-slate-50: #f8f4ec;
-  --color-slate-100: #f0e9dc;
-  --color-slate-200: #e3d9c7;
-  --color-slate-300: #cdbfa8;
-  --color-slate-400: #a29580;
-  --color-slate-500: #7a6e5c;
-  --color-slate-600: #5d5446;
-  --color-slate-700: #433c32;
-  --color-slate-800: #2b2620;
-  --color-slate-900: #1b1814;
+  --color-paper: #f4f7fb;
+  --color-sheet: #ffffff;
+  --color-ink: #0f1b2a;
 
-  --color-paper: #f6f1e6;
-  --color-sheet: #fcfaf5;
-  --color-ink: #1d1a16;
-
-  --color-brand-50: #e9f2f8;
-  --color-brand-100: #cfe2ef;
+  --color-brand-50: #e8f3fb;
+  --color-brand-100: #cde4f4;
   --color-brand-500: #0a6fa8;
-  --color-brand-600: #0d5a8a;
+  --color-brand-600: #0b5c8c;
   --color-brand-700: #0f3a66;
 
-  --color-mizu-100: #d4f3f4;
+  --color-mizu-100: #d3f4f6;
   --color-mizu-500: #12a7b4;
-  --color-moegi-100: #dcefdf;
-  --color-moegi-500: #3f9a5a;
-  --color-shu-50: #fdf0e8;
-  --color-shu-100: #fbdcc8;
-  --color-shu-500: #e0501e;
-  --color-shu-600: #c23d12;
+  --color-moegi-100: #def1e2;
+  --color-moegi-500: #2f8a4c;
+  --color-shu-50: #fff1eb;
+  --color-shu-100: #ffdccc;
+  --color-shu-500: #e8501f;
+  --color-shu-600: #c73d12;
   --color-accent-500: #f5872a;
 }
 
@@ -50,19 +41,42 @@ body,
 }
 
 body {
-  @apply bg-paper text-ink antialiased;
+  @apply bg-paper font-sans text-ink antialiased;
 }
 
-/* The swirl's four colours, used for AI avatars and the review marker. */
+/* Form controls and React Flow otherwise pick their own fonts. */
+button,
+input,
+select,
+textarea,
+.react-flow {
+  font-family: inherit;
+}
+
+/* The swirl's colours, used for AI avatars and the review marker. */
 .swirl {
   background: conic-gradient(from 200deg, #0f3a66, #0a6fa8, #12c2cc, #3f9a5a, #f5872a, #e0301e, #0f3a66);
 }
 
-/* Faint fibres so the canvas reads as paper rather than a grid. */
-.washi {
+/* The same colours as a straight band: header rule, primary actions. */
+.swirl-line {
+  background: linear-gradient(90deg, #0f3a66, #0a6fa8 20%, #12c2cc 40%, #3f9a5a 60%, #f5872a 80%, #e0301e);
+}
+
+.warm {
+  background: linear-gradient(135deg, #f5a03a, #f0702a 55%, #e0301e);
+}
+
+/* Gradient outline for cards an AI changed and nobody reviewed yet. */
+.ai-border {
+  border: 2px solid transparent !important;
+  background:
+    linear-gradient(var(--color-sheet), var(--color-sheet)) padding-box,
+    conic-gradient(from 200deg, #0f3a66, #0a6fa8, #12c2cc, #3f9a5a, #f5872a, #e0301e, #0f3a66) border-box;
+}
+
+.canvas-bg {
   background-color: var(--color-paper);
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .38 0 0 0 0 .28 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .react-flow__edge-text {
@@ -74,10 +88,15 @@ body {
 }
 
 .react-flow__edge-path {
-  stroke: var(--color-slate-400);
+  stroke: #9fb0c4;
   stroke-width: 1.5;
 }
 
 .react-flow__attribution {
   background: transparent;
+}
+
+/* Variable links can't be selected, but still take hover for their value tip. */
+.react-flow__edge.data-link {
+  pointer-events: visibleStroke;
 }

@@ -310,7 +310,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 22);
+    assert_eq!(tools.len(), 23);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -374,5 +374,68 @@ async fn test_step_runs_one_step_without_touching_scenarios() {
     assert_eq!(e["code"], "ADAPTER_UNAVAILABLE");
     let scenarios = h.ok("list_scenarios", json!({})).await;
     assert_eq!(scenarios["scenarios"].as_array().map(Vec::len), Some(0));
+    h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn secrets_are_named_but_never_revealed() {
+    let h = start(ServerOptions::default()).await;
+    // The user registers a login in Studio (same workspace, other process).
+    shikigami_secrets::Vault::open(&h.root)
+        .set(shikigami_secrets::SecretInput {
+            name: "受注システム".into(),
+            username: Some("tanaka".into()),
+            password: Some("hunter2".into()),
+            sites: Some(vec!["https://orders.example.com/login".into()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+    let listed = h.ok("list_secrets", json!({})).await;
+    assert_eq!(listed["secrets"][0]["name"], "受注システム");
+    assert_eq!(
+        listed["secrets"][0]["sites"],
+        json!(["https://orders.example.com"])
+    );
+    assert_eq!(
+        listed["secrets"][0]["fields"],
+        json!(["username", "password"])
+    );
+    let text = listed.to_string();
+    assert!(!text.contains("hunter2") && !text.contains("tanaka"));
+
+    // Secrets may only be typed into input fields, never logged.
+    let (is_error, result) = h
+        .call(
+            "test_step",
+            json!({ "step": { "type": "log.message", "params": { "message": { "secret": "受注システム", "field": "password" } } } }),
+        )
+        .await;
+    assert!(is_error || result["status"] != "succeeded", "{result}");
+    assert!(
+        result.to_string().contains("SECRET_NOT_ALLOWED"),
+        "{result}"
+    );
+    assert!(!result.to_string().contains("hunter2"));
+
+    // Secret inputs cannot be passed through the AI client.
+    let created = h
+        .ok(
+            "create_scenario",
+            json!({
+                "name": "ログイン",
+                "variables": [{ "name": "pw", "type": "string", "direction": "input", "secret": true }]
+            }),
+        )
+        .await;
+    let id = created["scenario"]["id"].as_str().unwrap().to_owned();
+    let (is_error, result) = h
+        .call(
+            "run_scenario",
+            json!({ "scenarioId": id, "inputs": { "pw": "hunter2" } }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(result["code"], "SECRET_INPUT_REJECTED");
     h.client.cancel().await.unwrap();
 }
