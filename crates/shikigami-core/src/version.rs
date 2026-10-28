@@ -86,6 +86,64 @@ pub struct NewVersion {
     pub note: String,
 }
 
+/// One line of `versions/<scenario-id>/publish.jsonl`: which version runs
+/// unattended from now on (`None`: none, the scenario was withdrawn). The
+/// last line is in force; earlier lines are the record of who published
+/// what, kept in the shared part of the workspace.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishRecord {
+    pub version: Option<u32>,
+    /// The version's `uid`, so a record never points at another snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schemars(with = "String")]
+    pub at: OffsetDateTime,
+    pub by: Actor,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+}
+
+/// The published version of a scenario (what `shikigami run <id>` and
+/// other unattended runs execute).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishedState {
+    pub version: u32,
+    pub name: String,
+    /// Revision the version was taken from.
+    pub revision: u64,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schemars(with = "String")]
+    pub published_at: OffsetDateTime,
+    pub published_by: Actor,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+    /// Whether the current (working) content equals the published version.
+    /// `false` means there are changes that do not run unattended yet.
+    pub matches_current: bool,
+}
+
+/// Input for publishing.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishInput {
+    /// Version to publish. Omitted: the current content, saved as a new
+    /// version first unless one already matches it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
+    /// Name of the version created for the current content (default `v<n>`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub note: String,
+    /// With `version` omitted: fail with REVISION_CONFLICT unless the
+    /// current revision is this one (what the person reviewed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_revision: Option<u64>,
+}
+
 /// File format for moving a scenario (and its versions) between workspaces.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]

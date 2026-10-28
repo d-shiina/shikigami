@@ -320,6 +320,64 @@
               "positional": true
             }
           ]
+        },
+        {
+          "name": "publish",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "number",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "name",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "name"
+            },
+            {
+              "id": "note",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "note"
+            }
+          ]
+        },
+        {
+          "name": "unpublish",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "note",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "note"
+            }
+          ]
         }
       ]
     },
@@ -379,6 +437,18 @@
           "repeatable": false,
           "global": false,
           "positional": true
+        },
+        {
+          "id": "draft",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "draft",
+          "values": [
+            "true",
+            "false"
+          ]
         },
         {
           "id": "inputs",
@@ -613,6 +683,68 @@
                 "true",
                 "false"
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "policy",
+      "subcommands": [
+        {
+          "name": "show"
+        },
+        {
+          "name": "check"
+        },
+        {
+          "name": "init"
+        }
+      ]
+    },
+    {
+      "name": "approval",
+      "subcommands": [
+        {
+          "name": "list",
+          "args": [
+            {
+              "id": "json",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "json",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "approve",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "deny",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
             }
           ]
         }

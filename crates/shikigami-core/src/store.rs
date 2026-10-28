@@ -44,7 +44,7 @@ use crate::migrate;
 use crate::model::Scenario;
 use crate::ops::EditOp;
 use crate::review::{Evidence, Observation};
-use crate::version::ScenarioVersion;
+use crate::version::{PublishRecord, ScenarioVersion};
 
 /// Who made a change. Recorded in history and the audit journal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -597,6 +597,44 @@ impl FileStore {
         Ok(())
     }
 
+    /// Every publish record of a scenario, oldest first (unreadable lines
+    /// are skipped and logged).
+    pub fn read_publish_log(&self, id: &ScenarioId) -> CoreResult<Vec<PublishRecord>> {
+        self.checked(id)?;
+        let file = match File::open(self.versions_dir(id).join(PUBLISH_LOG)) {
+            Ok(f) => f,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e.into()),
+        };
+        let mut out = Vec::new();
+        for line in BufReader::new(file).lines() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str(&line) {
+                Ok(record) => out.push(record),
+                Err(e) => tracing::warn!(error = %e, "skipping unreadable publish record"),
+            }
+        }
+        Ok(out)
+    }
+
+    pub(crate) fn append_publish(&self, id: &ScenarioId, record: &PublishRecord) -> CoreResult<()> {
+        self.checked(id)?;
+        let dir = self.versions_dir(id);
+        fs::create_dir_all(&dir)?;
+        let mut line = serde_json::to_vec(record)?;
+        line.push(b'\n');
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join(PUBLISH_LOG))?;
+        file.write_all(&line)?;
+        file.sync_all()?;
+        Ok(())
+    }
+
     pub(crate) fn load_undo(&self, id: &ScenarioId) -> CoreResult<UndoState> {
         let path = self.history_dir(id).join("undo.json");
         match fs::read(&path) {
@@ -625,6 +663,8 @@ impl FileStore {
 }
 
 const MANIFEST_FILE: &str = "workspace.json";
+/// Next to the version files (`.jsonl`, so version listing skips it).
+const PUBLISH_LOG: &str = "publish.jsonl";
 
 fn read_manifest(root: &Path) -> CoreResult<WorkspaceManifest> {
     match fs::read(root.join(MANIFEST_FILE)) {

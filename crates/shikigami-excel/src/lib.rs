@@ -501,6 +501,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
     defs.into_iter()
         .map(|d| {
             let def = StepTypeDef {
+                targets: Vec::new(),
                 step_type: d.step_type.into(),
                 category: StepCategory::Office,
                 label: d.label.into(),

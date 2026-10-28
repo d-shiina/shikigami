@@ -75,6 +75,21 @@
     },
     "observation_content": {
       "$ref": "#/$defs/ObservationContent"
+    },
+    "published_state": {
+      "$ref": "#/$defs/PublishedState"
+    },
+    "publish_input": {
+      "$ref": "#/$defs/PublishInput"
+    },
+    "publish_record": {
+      "$ref": "#/$defs/PublishRecord"
+    },
+    "policy": {
+      "$ref": "#/$defs/Policy"
+    },
+    "approval_request": {
+      "$ref": "#/$defs/ApprovalRequest"
     }
   },
   "required": [
@@ -101,7 +116,12 @@
     "review_timeline",
     "evidence",
     "new_review",
-    "observation_content"
+    "observation_content",
+    "published_state",
+    "publish_input",
+    "publish_record",
+    "policy",
+    "approval_request"
   ],
   "$defs": {
     "Scenario": {
@@ -990,6 +1010,13 @@
           "type": "array",
           "items": true
         },
+        "targets": {
+          "description": "Params that name a site or a program, checked against the\nworkspace policy (`policy.json` `sites` / `apps`) before each run of\nthe step.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TargetDef"
+          }
+        },
         "secretParams": {
           "description": "Params that may take a registered secret,\n`{ \"secret\": \"<name>\", \"field\": \"password\" }`, instead of text.\nSecrets are rejected everywhere else.",
           "type": "array",
@@ -1099,6 +1126,37 @@
           "description": "May destroy data or reach outside the machine (file delete, downloads, process kill).",
           "type": "string",
           "const": "dangerous"
+        }
+      ]
+    },
+    "TargetDef": {
+      "description": "A step param that names something outside the run, checked against the\npolicy before the step executes.",
+      "type": "object",
+      "properties": {
+        "param": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/TargetKind"
+        }
+      },
+      "required": [
+        "param",
+        "kind"
+      ]
+    },
+    "TargetKind": {
+      "description": "What kind of target a step param names.",
+      "oneOf": [
+        {
+          "description": "A URL, checked against `sites`.",
+          "type": "string",
+          "const": "site"
+        },
+        {
+          "description": "A program (path or file name), checked against `apps`.",
+          "type": "string",
+          "const": "app"
         }
       ]
     },
@@ -2236,6 +2294,365 @@
       "required": [
         "scenarioId",
         "revision"
+      ]
+    },
+    "PublishedState": {
+      "description": "The published version of a scenario (what `shikigami run <id>` and\nother unattended runs execute).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "revision": {
+          "description": "Revision the version was taken from.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "publishedAt": {
+          "type": "string"
+        },
+        "publishedBy": {
+          "$ref": "#/$defs/Actor"
+        },
+        "note": {
+          "type": "string"
+        },
+        "matchesCurrent": {
+          "description": "Whether the current (working) content equals the published version.\n`false` means there are changes that do not run unattended yet.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "version",
+        "name",
+        "revision",
+        "publishedAt",
+        "publishedBy",
+        "matchesCurrent"
+      ]
+    },
+    "PublishInput": {
+      "description": "Input for publishing.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "Version to publish. Omitted: the current content, saved as a new\nversion first unless one already matches it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "description": "Name of the version created for the current content (default `v<n>`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "default": ""
+        },
+        "expectedRevision": {
+          "description": "With `version` omitted: fail with REVISION_CONFLICT unless the\ncurrent revision is this one (what the person reviewed).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      }
+    },
+    "PublishRecord": {
+      "description": "One line of `versions/<scenario-id>/publish.jsonl`: which version runs\nunattended from now on (`None`: none, the scenario was withdrawn). The\nlast line is in force; earlier lines are the record of who published\nwhat, kept in the shared part of the workspace.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "uid": {
+          "description": "The version's `uid`, so a record never points at another snapshot.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "at": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/$defs/Actor"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "by"
+      ]
+    },
+    "Policy": {
+      "description": "`policy.json`.",
+      "type": "object",
+      "properties": {
+        "formatVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0,
+          "default": 1
+        },
+        "sites": {
+          "description": "Sites `browser.open`, `http.request` (and plugin steps that declare a\nsite param) may reach: origins such as `https://order.example.co.jp`,\nor `https://*.example.co.jp` for every subdomain. Empty: any site.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "apps": {
+          "description": "Programs `desktop.launch` and `process.run` may start: a full path\n(`C:\\Program Files\\Billing\\billing.exe`) or a file name that matches\nin any folder (`notepad.exe`). Empty: any program.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ai": {
+          "$ref": "#/$defs/AiPolicy",
+          "default": {
+            "runScenario": {
+              "safe": "allow",
+              "interactive": "allow",
+              "dangerous": "ask"
+            },
+            "testStep": {
+              "safe": "allow",
+              "interactive": "allow",
+              "dangerous": "ask"
+            },
+            "deleteScenario": "ask"
+          }
+        },
+        "scenarios": {
+          "description": "Per-scenario settings, keyed by scenario ID.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ScenarioPolicy"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AiPolicy": {
+      "description": "What an AI client (MCP) may do. Studio and the CLI are people and are not\nasked.",
+      "type": "object",
+      "properties": {
+        "runScenario": {
+          "description": "`run_scenario`, by the riskiest step the run may execute (including\nthe scenarios it calls).",
+          "$ref": "#/$defs/ByRisk",
+          "default": {
+            "safe": "allow",
+            "interactive": "allow",
+            "dangerous": "ask"
+          }
+        },
+        "testStep": {
+          "description": "`test_step`, by the step's risk (a `scenario.call` counts as the\nriskiest step of the scenarios it calls).",
+          "$ref": "#/$defs/ByRisk",
+          "default": {
+            "safe": "allow",
+            "interactive": "allow",
+            "dangerous": "ask"
+          }
+        },
+        "deleteScenario": {
+          "description": "`delete_scenario` (moves to the trash).",
+          "$ref": "#/$defs/Decision",
+          "default": "ask"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ByRisk": {
+      "description": "A decision for each step risk level.",
+      "type": "object",
+      "properties": {
+        "safe": {
+          "$ref": "#/$defs/Decision",
+          "default": "allow"
+        },
+        "interactive": {
+          "$ref": "#/$defs/Decision",
+          "default": "allow"
+        },
+        "dangerous": {
+          "$ref": "#/$defs/Decision",
+          "default": "ask"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Decision": {
+      "description": "What happens when an AI asks for an action.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "allow",
+            "deny"
+          ]
+        },
+        {
+          "description": "A person approves (or refuses) the exact request in Studio first.",
+          "type": "string",
+          "const": "ask"
+        }
+      ]
+    },
+    "ScenarioPolicy": {
+      "description": "Settings for one scenario.",
+      "type": "object",
+      "properties": {
+        "aiRun": {
+          "description": "Whether an AI may run or test this scenario. Overrides `ai.runScenario`\n(and `ai.testStep` for calls of it) when it is stricter.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unattended": {
+          "description": "`false`: `shikigami run` (scheduled, unattended) refuses it; it only\nruns from Studio. Default `true`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApprovalRequest": {
+      "description": "One request, `approvals/<id>.json`.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ApprovalId"
+        },
+        "action": {
+          "$ref": "#/$defs/AiAction"
+        },
+        "status": {
+          "$ref": "#/$defs/ApprovalStatus"
+        },
+        "requestedAt": {
+          "type": "string"
+        },
+        "requestedBy": {
+          "$ref": "#/$defs/Actor"
+        },
+        "scenarioId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScenarioId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scenarioName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "risk": {
+          "$ref": "#/$defs/RiskLevel"
+        },
+        "stepTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subject": true,
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decidedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decidedBy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "action",
+        "status",
+        "requestedAt",
+        "requestedBy",
+        "risk",
+        "subject"
+      ]
+    },
+    "ApprovalId": {
+      "description": "Identifier of a request for a person's approval of an AI action.",
+      "type": "string"
+    },
+    "AiAction": {
+      "description": "AI actions the policy can hold for approval.",
+      "type": "string",
+      "enum": [
+        "runScenario",
+        "testStep",
+        "deleteScenario"
+      ]
+    },
+    "ApprovalStatus": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "denied"
+          ]
+        },
+        {
+          "description": "Approved and already used by the action.",
+          "type": "string",
+          "const": "used"
+        }
       ]
     }
   },

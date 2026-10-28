@@ -16,6 +16,8 @@ import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
 import { SecretAskBanner } from "./components/SecretAskBanner";
 import { SecretsDialog } from "./components/SecretsDialog";
+import { ApprovalBanner } from "./components/ApprovalBanner";
+import { PolicyDialog } from "./components/PolicyDialog";
 import { StatusBar } from "./components/StatusBar";
 import { Timeline, usePendingReview } from "./components/Timeline";
 import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
@@ -178,6 +180,24 @@ function SecretsButton() {
   );
 }
 
+function PolicyButton() {
+  const setOpen = useStudio((s) => s.setPolicyOpen);
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
+      title={t.policyIntro}
+    >
+      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
+        <path d="M8 1.5 13.5 3.5v4c0 3.2-2.3 5.8-5.5 7-3.2-1.2-5.5-3.8-5.5-7v-4z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="m5.5 8 1.8 1.8L10.8 6.3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {t.policy}
+    </button>
+  );
+}
+
 /** Scenarios, or the AI edits waiting for review. */
 function ModeSwitch() {
   const reviewing = useStudio((s) => s.reviewing);
@@ -245,10 +265,12 @@ function Shell() {
         <span className="h-5 w-px bg-slate-200" />
         <AgentButton />
         <SecretsButton />
+        <PolicyButton />
         <WindowControls />
       </header>
       <div className="col-span-3">
         <HumanBanner />
+        <ApprovalBanner />
         <SecretAskBanner />
         <Banner />
       </div>
@@ -293,6 +315,7 @@ function Shell() {
       <StatusBar />
       <CommandPalette />
       <SecretsDialog />
+      <PolicyDialog />
       <AgentPane />
     </div>
   );
@@ -368,16 +391,24 @@ export function App() {
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
       events.onRunEvidence((e) => store.getState().onRunEvidence(e)),
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
+      events.onApprovalsChanged(() => void store.getState().loadApprovals()),
       agent.onEvent((e) => agentStore.getState().onEvent(e)),
       agent.onLogin((e) => agentStore.getState().onLoginEvent(e)),
     ];
     void agentStore.getState().init();
     // Requests come from another process (the MCP server): re-read on refocus too.
-    const onFocus = () => void store.getState().loadSecretRequests();
+    void store.getState().loadApprovals();
+    const onFocus = () => {
+      void store.getState().loadSecretRequests();
+      void store.getState().loadApprovals();
+    };
     window.addEventListener("focus", onFocus);
     // A new request flashes Studio in the taskbar: the user is likely in the AI's chat.
     const stopAttention = store.subscribe((s, prev) => {
-      if (s.secretRequests.some((r) => !prev.secretRequests.some((p) => p.name === r.name))) {
+      const asked =
+        s.secretRequests.some((r) => !prev.secretRequests.some((p) => p.name === r.name)) ||
+        s.approvals.some((r) => !prev.approvals.some((p) => p.id === r.id));
+      if (asked) {
         void getCurrentWindow()
           .requestUserAttention(UserAttentionType.Informational)
           .catch(() => {});

@@ -14,8 +14,9 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use serde_json::{Map, Value};
 use shikigami_core::{
-    Actor, ActorKind, DiffKind, FileStore, ImportConflict, NewScenario, NewVersion, Scenario,
-    ScenarioDiff, ScenarioId, ScenarioService, UserConfig, WorkspaceManifest,
+    Actor, ActorKind, ApprovalId, ApprovalStore, DiffKind, FileStore, ImportConflict, NewScenario,
+    NewVersion, Policy, PublishInput, Scenario, ScenarioDiff, ScenarioId, ScenarioService,
+    UserConfig, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{LogLevel, RunEvent, RunOptions, RunStatus, Runtime, StepOutcome};
@@ -42,10 +43,14 @@ enum Command {
     /// Workspace location and sharing.
     #[command(subcommand)]
     Workspace(WorkspaceCmd),
-    /// Run a scenario (by ID or JSON file) without GUI or AI.
+    /// Run a scenario (by ID or JSON file) without GUI or AI. A scenario in
+    /// the workspace runs its published version (see `version publish`).
     Run {
         /// Scenario ID in the workspace, or a path to a scenario JSON file.
         target: String,
+        /// Run the working content instead of the published version.
+        #[arg(long)]
+        draft: bool,
         /// Input variable as name=value; value is parsed as JSON, else used as a string.
         #[arg(long = "input", short = 'i', value_name = "NAME=VALUE")]
         inputs: Vec<String>,
@@ -73,6 +78,13 @@ enum Command {
     /// encrypted in the workspace; the key is kept by Windows Credential Manager.
     #[command(subcommand)]
     Secret(SecretCmd),
+    /// The workspace policy (policy.json): allowed sites and programs, and
+    /// what an AI may do without a person's approval.
+    #[command(subcommand)]
+    Policy(PolicyCmd),
+    /// Requests from AI clients waiting for a person's approval.
+    #[command(subcommand)]
+    Approval(ApprovalCmd),
     /// Serve MCP over stdio for AI clients (Claude Code, Codex, Cursor, ...).
     Mcp {
         /// Tool classes to expose, comma separated: read, write, run.
@@ -169,6 +181,47 @@ enum VersionCmd {
         id: String,
         number: u32,
     },
+    /// Make a version the one `shikigami run <id>` (unattended) executes.
+    /// Without NUMBER the current content is published, saved as a new
+    /// version first unless one matches it.
+    Publish {
+        id: String,
+        number: Option<u32>,
+        /// Name of the version created for the current content.
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long, default_value = "")]
+        note: String,
+    },
+    /// Stop unattended runs until a version is published again.
+    Unpublish {
+        id: String,
+        #[arg(long, default_value = "")]
+        note: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PolicyCmd {
+    /// Print the policy in force (the defaults when there is no policy.json).
+    Show,
+    /// Check policy.json; exits with 1 when it is broken.
+    Check,
+    /// Write policy.json with the defaults, to edit (keeps an existing file).
+    Init,
+}
+
+#[derive(Subcommand)]
+enum ApprovalCmd {
+    /// Requests waiting for an answer.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Approve one request (the AI may then run that exact action once).
+    Approve { id: String },
+    /// Refuse one request.
+    Deny { id: String },
 }
 
 #[derive(Subcommand)]
@@ -288,7 +341,35 @@ fn real_main() -> Result<ExitCode> {
         }
         Command::Version(cmd) => {
             let svc = open_service()?;
-            version_cmd(&svc, cmd)?;
+            version_cmd(&svc, cmd).map_err(core_err)?;
+        }
+        Command::Policy(cmd) => {
+            let path = Policy::path(&workspace());
+            match cmd {
+                PolicyCmd::Show => {
+                    let policy = Policy::load(&path).map_err(core_err)?;
+                    println!("{}", serde_json::to_string_pretty(&policy)?);
+                }
+                PolicyCmd::Check => match Policy::load(&path) {
+                    Ok(_) => println!("ok: {}", path.display()),
+                    Err(e) => {
+                        eprintln!("{}", core_err(e));
+                        return Ok(ExitCode::from(1));
+                    }
+                },
+                PolicyCmd::Init => {
+                    if path.exists() {
+                        bail!("{} already exists", path.display());
+                    }
+                    let text = serde_json::to_string_pretty(&Policy::default())? + "\n";
+                    std::fs::write(&path, text)?;
+                    println!("wrote {}", path.display());
+                }
+            }
+        }
+        Command::Approval(cmd) => {
+            let svc = open_service()?;
+            approval_cmd(&ApprovalStore::new(svc.store().local_root()), cmd).map_err(core_err)?;
         }
         Command::Workspace(WorkspaceCmd::Info) => {
             let svc = open_service()?;
@@ -393,21 +474,21 @@ fn real_main() -> Result<ExitCode> {
         }
         Command::Run {
             target,
+            draft,
             inputs,
             json,
             vars,
         } => {
             let svc = open_service()?;
-            let (scenario, bundled) = resolve(&svc, target)?;
-            let version = svc.matching_version(&scenario).ok().flatten();
-            let subscenarios = subscenarios(&svc, &scenario, bundled)?;
+            let (scenario, version, subscenarios) = runnable(&svc, target, *draft)?;
             let inputs = parse_inputs(inputs)?;
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
             let runtime = runtime
                 .clone()
-                .with_secrets(Arc::new(Vault::open(svc.store().root())));
+                .with_secrets(Arc::new(Vault::open(svc.store().root())))
+                .with_policy(Policy::path(svc.store().root()));
             let status = rt.block_on(run(
                 &runtime,
                 svc.store().local_root(),
@@ -620,7 +701,7 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
     Ok(())
 }
 
-fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> Result<()> {
+fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> shikigami_core::CoreResult<()> {
     match cmd {
         VersionCmd::Create { id, name, note } => {
             let v = svc.create_version(
@@ -635,13 +716,20 @@ fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> Result<()> {
             println!("v{} {} (rev {})", v.number, v.name, v.revision);
         }
         VersionCmd::List { id } => {
-            for v in svc.list_versions(&ScenarioId::new(id.as_str()))? {
+            let id = ScenarioId::new(id.as_str());
+            let published = svc.published(&id)?.map(|p| p.version);
+            for v in svc.list_versions(&id)? {
+                let mark = if published == Some(v.number) {
+                    "\tpublished"
+                } else {
+                    ""
+                };
                 let at = v
                     .created_at
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap_or_default();
                 println!(
-                    "v{}\trev {}\t{}\t{:?} {}\t{}\t{}",
+                    "v{}\trev {}\t{}\t{:?} {}\t{}\t{}{mark}",
                     v.number,
                     v.revision,
                     at,
@@ -677,8 +765,117 @@ fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> Result<()> {
                 actor(),
             )?);
         }
+        VersionCmd::Publish {
+            id,
+            number,
+            name,
+            note,
+        } => {
+            let p = svc.publish(
+                &ScenarioId::new(id.as_str()),
+                PublishInput {
+                    version: *number,
+                    name: name.clone(),
+                    note: note.clone(),
+                    expected_revision: None,
+                },
+                actor(),
+            )?;
+            println!("published v{} {} (rev {})", p.version, p.name, p.revision);
+            if !p.matches_current {
+                println!("note: the working content has changes that are not published");
+            }
+        }
+        VersionCmd::Unpublish { id, note } => {
+            svc.unpublish(&ScenarioId::new(id.as_str()), note.clone(), actor())?;
+            println!(
+                "unpublished {id}: `shikigami run {id}` now refuses until a version is published"
+            );
+        }
     }
     Ok(())
+}
+
+fn approval_cmd(store: &ApprovalStore, cmd: &ApprovalCmd) -> shikigami_core::CoreResult<()> {
+    match cmd {
+        ApprovalCmd::List { json } => {
+            let pending = store.pending()?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&pending)?);
+                return Ok(());
+            }
+            for r in pending {
+                println!(
+                    "{}\t{}\t{:?}\t{}\t{}",
+                    r.id,
+                    r.action.as_str(),
+                    r.risk,
+                    r.scenario_name.as_deref().unwrap_or("-"),
+                    r.step_types.join(",")
+                );
+                println!("  {}", r.subject);
+                if let Some(reason) = &r.reason {
+                    println!("  reason (from the AI): {reason}");
+                }
+            }
+        }
+        ApprovalCmd::Approve { id } => {
+            let r = store.decide(&ApprovalId::new(id.as_str()), true, actor())?;
+            println!("approved {} ({})", r.id, r.action.as_str());
+        }
+        ApprovalCmd::Deny { id } => {
+            let r = store.decide(&ApprovalId::new(id.as_str()), false, actor())?;
+            println!("denied {} ({})", r.id, r.action.as_str());
+        }
+    }
+    Ok(())
+}
+
+/// A core error with its stable code and hint, for the terminal.
+fn core_err(e: shikigami_core::CoreError) -> anyhow::Error {
+    let hint = e
+        .details()
+        .and_then(|d| d.get("hint").and_then(Value::as_str).map(str::to_owned));
+    match hint {
+        Some(hint) => anyhow::anyhow!("{e} ({})\nhint: {hint}", e.code()),
+        None => anyhow::anyhow!("{e} ({})", e.code()),
+    }
+}
+
+/// What `shikigami run` executes, with the version recorded in the report.
+/// A file runs as written. A workspace scenario runs its published version
+/// (and the published versions of what it calls) unless `draft`; the
+/// policy can keep a scenario from running unattended at all.
+fn runnable(
+    svc: &ScenarioService,
+    target: &str,
+    draft: bool,
+) -> Result<(Scenario, Option<u32>, Vec<shikigami_core::Subscenario>)> {
+    if is_file(target) {
+        let (scenario, bundled) = load_file(Path::new(target))?;
+        let version = svc.matching_version(&scenario).ok().flatten();
+        let subscenarios = subscenarios(svc, &scenario, bundled)?;
+        return Ok((scenario, version, subscenarios));
+    }
+    let id = ScenarioId::new(target);
+    let policy = Policy::load(&Policy::path(svc.store().root())).map_err(core_err)?;
+    if !policy.allows_unattended(id.as_str()) {
+        return Err(core_err(shikigami_core::CoreError::Rejected {
+            code: "UNATTENDED_NOT_ALLOWED",
+            message: format!("the workspace policy keeps {id} from running unattended"),
+            hint: Some(
+                "Run it from Studio, or change \"unattended\" for it in policy.json.".into(),
+            ),
+        }));
+    }
+    if draft {
+        let scenario = svc.get(&id).map_err(core_err)?;
+        let version = svc.matching_version(&scenario).ok().flatten();
+        let subscenarios = subscenarios(svc, &scenario, Vec::new())?;
+        return Ok((scenario, version, subscenarios));
+    }
+    let run = svc.published_run(&id).map_err(core_err)?;
+    Ok((run.scenario, Some(run.version), run.subscenarios))
 }
 
 fn print_diff(diff: &ScenarioDiff) {
@@ -755,10 +952,13 @@ fn load_file(path: &Path) -> Result<(Scenario, Vec<Scenario>)> {
 }
 
 /// A target is a file path when it ends with `.json` or exists on disk.
+fn is_file(target: &str) -> bool {
+    target.ends_with(".json") || Path::new(target).is_file()
+}
+
 fn resolve(svc: &ScenarioService, target: &str) -> Result<(Scenario, Vec<Scenario>)> {
-    let path = Path::new(target);
-    if target.ends_with(".json") || path.is_file() {
-        load_file(path)
+    if is_file(target) {
+        load_file(Path::new(target))
     } else {
         Ok((svc.get(&ScenarioId::new(target))?, Vec::new()))
     }

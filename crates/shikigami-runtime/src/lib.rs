@@ -19,10 +19,12 @@ pub mod record;
 pub mod sidecar;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use serde_json::{Map, Value};
+use shikigami_core::policy::{Policy, TargetDef};
 use shikigami_core::registry::builtin as builtin_types;
 use shikigami_core::secret::SecretProvider;
 use shikigami_core::{
@@ -78,6 +80,10 @@ pub struct Runtime {
     resources: Arc<ResourceLocks>,
     default_timeouts: Arc<HashMap<String, u64>>,
     secrets: Option<Arc<dyn SecretProvider>>,
+    /// Params naming sites and programs, per step type.
+    target_defs: Arc<HashMap<String, Vec<TargetDef>>>,
+    /// `policy.json` of the workspace, read when each run starts.
+    policy_path: Option<Arc<PathBuf>>,
 }
 
 impl Runtime {
@@ -94,6 +100,14 @@ impl Runtime {
     /// params) and saved browser logins: the workspace vault.
     pub fn with_secrets(mut self, secrets: Arc<dyn SecretProvider>) -> Self {
         self.secrets = Some(secrets);
+        self
+    }
+
+    /// The workspace policy file (`policy.json`) whose `sites` and `apps`
+    /// every run is held to. It is read when each run starts, so changes
+    /// apply to the next run; a broken file stops runs (`POLICY_INVALID`).
+    pub fn with_policy(mut self, path: PathBuf) -> Self {
+        self.policy_path = Some(Arc::new(path));
         self
     }
 
@@ -119,6 +133,14 @@ impl Runtime {
                 ..RunError::new("VALIDATION_FAILED", "the scenario has validation errors")
             });
         }
+
+        let policy = match &self.policy_path {
+            Some(path) => Policy::load(path).map_err(|e| RunError {
+                details: e.details(),
+                ..RunError::new(e.code(), e.to_string())
+            })?,
+            None => Policy::default(),
+        };
 
         let run_id = options.run_id.unwrap_or_else(RunId::generate);
         let (tx, rx) = mpsc::unbounded_channel();
@@ -164,6 +186,8 @@ impl Runtime {
                 debug: debugger.clone(),
                 handled_depth: 0,
                 library: Arc::new(library),
+                target_defs: self.target_defs.clone(),
+                policy: Arc::new(policy),
             },
         );
         let inputs = options.inputs;
@@ -349,6 +373,14 @@ impl RuntimeBuilder {
                     .collect(),
             ),
             secrets: None,
+            target_defs: Arc::new(
+                self.registry
+                    .iter()
+                    .filter(|def| !def.targets.is_empty())
+                    .map(|def| (def.step_type.clone(), def.targets.clone()))
+                    .collect(),
+            ),
+            policy_path: None,
             run_finished_hooks: Arc::new(self.run_finished_hooks),
             registry: self.registry,
         }

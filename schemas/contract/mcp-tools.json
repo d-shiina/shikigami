@@ -480,7 +480,6 @@
           "scenarioId",
           "expectedRevision"
         ],
-        "type": "object",
         "properties": {
           "scenarioId": {
             "type": "string"
@@ -489,8 +488,29 @@
             "type": "integer",
             "format": "uint64",
             "minimum": 0
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "approvalWaitMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "approvalReason": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
-        }
+        },
+        "type": "object"
       },
       "class": "write"
     },
@@ -627,6 +647,18 @@
             "minimum": 0
           }
         }
+      },
+      "class": "read"
+    },
+    {
+      "name": "get_policy",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
       },
       "class": "read"
     },
@@ -1240,7 +1272,6 @@
         "required": [
           "scenarioId"
         ],
-        "type": "object",
         "properties": {
           "scenarioId": {
             "type": "string"
@@ -1257,8 +1288,35 @@
             ],
             "format": "uint64",
             "minimum": 0
+          },
+          "published": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "approvalWaitMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "approvalReason": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
-        }
+        },
+        "type": "object"
       },
       "class": "run"
     },
@@ -1409,15 +1467,35 @@
             ]
           }
         },
+        "required": [
+          "step"
+        ],
         "type": "object",
         "properties": {
           "step": {
             "$ref": "#/$defs/Step"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "approvalWaitMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "approvalReason": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
-        },
-        "required": [
-          "step"
-        ]
+        }
       },
       "class": "run"
     },

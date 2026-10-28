@@ -73,9 +73,59 @@ function DiffView({ diff, defs }: { diff: ScenarioDiff; defs: Map<string, StepTy
   );
 }
 
+/** Which version unattended runs execute, and publishing the current content. */
+function PublishedCard() {
+  const published = useStudio((s) => s.published);
+  const publish = useStudio((s) => s.publish);
+  const unpublish = useStudio((s) => s.unpublish);
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <section className="space-y-1.5 rounded-[4px] border border-slate-200 bg-paper p-3">
+      <div className="flex items-center gap-2">
+        {published ? (
+          <span className="rounded-[3px] bg-moegi-100 px-1.5 text-[11px] font-bold text-moegi-500">{t.published}</span>
+        ) : null}
+        <span className="truncate text-sm font-semibold">
+          {published ? t.publishedLabel(published.version, published.name) : t.notPublished}
+        </span>
+        {published && <span className="ml-auto shrink-0 text-xs text-slate-400">{relativeTime(published.publishedAt)}</span>}
+      </div>
+      {published && !published.matchesCurrent && <p className="text-xs text-shu-600">{t.publishedBehind}</p>}
+      <p className="text-[11px] leading-relaxed text-slate-500">{t.publishedHint}</p>
+      <div className="flex items-center gap-3">
+        {!published?.matchesCurrent && (
+          <button
+            type="button"
+            onClick={() => void publish()}
+            className="rounded-[4px] bg-ink px-3 py-1 text-xs font-medium text-sheet hover:bg-brand-700"
+          >
+            {t.publishCurrent}
+          </button>
+        )}
+        {published && (
+          <button
+            type="button"
+            className={confirm ? "text-xs font-semibold text-shu-600" : "text-xs text-slate-500 hover:text-shu-600"}
+            onClick={() => {
+              if (!confirm) return setConfirm(true);
+              setConfirm(false);
+              void unpublish();
+            }}
+            onBlur={() => setConfirm(false)}
+          >
+            {confirm ? t.unpublishConfirm : t.unpublish}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<string, StepTypeDef> }) {
   const scenario = useStudio((s) => s.scenario);
   const restoreVersion = useStudio((s) => s.restoreVersion);
+  const published = useStudio((s) => s.published?.version === version.number);
+  const publish = useStudio((s) => s.publish);
   const [diff, setDiff] = useState<ScenarioDiff | null>(null);
   const [confirm, setConfirm] = useState(false);
   const revision = scenario?.revision ?? 0;
@@ -104,6 +154,9 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-1.5">
           <span className="truncate text-sm font-semibold">{version.name}</span>
+          {published && (
+            <span className="shrink-0 rounded-[3px] bg-moegi-100 px-1 text-[10px] font-bold text-moegi-500">{t.published}</span>
+          )}
           <span className="ml-auto shrink-0 text-xs text-slate-400">{relativeTime(version.createdAt)}</span>
         </div>
         <div className="text-xs text-slate-500">
@@ -127,6 +180,11 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
           >
             ↶ {confirm ? `${t.confirmRestore}（もう一度押す）` : t.restore}
           </button>
+          {!published && (
+            <button type="button" className="text-slate-500 hover:text-moegi-500" onClick={() => void publish(version.number)}>
+              {t.publishThis}
+            </button>
+          )}
         </div>
         {diff && (
           <div className="mt-2">
@@ -167,6 +225,7 @@ export function VersionsPanel() {
 
   return (
     <div className="space-y-5 p-4">
+      <PublishedCard />
       <form onSubmit={submit} className="space-y-1.5">
         <input
           value={name}

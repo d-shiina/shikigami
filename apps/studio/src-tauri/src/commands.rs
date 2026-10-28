@@ -4,11 +4,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use shikigami_core::{
-    Actor, ActorKind, ChangeNote, EditOp, EditOutcome, ErrorPayload, Evidence, ExtractOutcome,
-    FileStore, HistoryEntry, ImportConflict, ImportOutcome, NewReview, NewScenario, NewVersion,
-    ObservationContent, ObservationId, ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId,
-    ScenarioSummary, StepId, StepTypeDef, UserConfig, ValidationReport, VersionSummary,
-    WorkspaceInfo, WorkspaceManifest,
+    Actor, ActorKind, ApprovalId, ApprovalRequest, ChangeNote, EditOp, EditOutcome, ErrorPayload,
+    Evidence, ExtractOutcome, FileStore, HistoryEntry, ImportConflict, ImportOutcome, NewReview,
+    NewScenario, NewVersion, ObservationContent, ObservationId, Policy, PublishInput,
+    PublishedState, ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId, ScenarioSummary,
+    StepId, StepTypeDef, UserConfig, ValidationReport, VersionSummary, WorkspaceInfo,
+    WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunSnapshot};
@@ -75,6 +76,76 @@ pub fn create_version(
     Ok(state
         .service
         .create_version(&id, input, expected_revision, studio())?)
+}
+
+/// The version unattended runs execute (`shikigami run <id>`), if any.
+#[tauri::command]
+pub fn published_state(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+) -> CmdResult<Option<PublishedState>> {
+    Ok(state.service.published(&id)?)
+}
+
+#[tauri::command]
+pub fn publish_scenario(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    input: PublishInput,
+) -> CmdResult<PublishedState> {
+    Ok(state.service.publish(&id, input, studio())?)
+}
+
+/// The review desk's 「承認して公開」: approves `revision` and publishes it.
+#[tauri::command]
+pub fn approve_and_publish(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    revision: u64,
+    reason: Option<String>,
+    input: Option<PublishInput>,
+) -> CmdResult<PublishedState> {
+    Ok(state.service.approve_and_publish(
+        &id,
+        revision,
+        reason.unwrap_or_default(),
+        input.unwrap_or_default(),
+        studio(),
+    )?)
+}
+
+#[tauri::command]
+pub fn unpublish_scenario(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<()> {
+    Ok(state.service.unpublish(&id, String::new(), studio())?)
+}
+
+/// The workspace policy (`policy.json`), or the defaults.
+#[tauri::command]
+pub fn get_policy(state: State<'_, AppState>) -> CmdResult<Policy> {
+    Ok(Policy::load(&Policy::path(state.service.store().root()))?)
+}
+
+/// Saves `policy.json`. Only Studio and the CLI write it, never an AI client.
+#[tauri::command]
+pub fn save_policy(state: State<'_, AppState>, policy: Policy) -> CmdResult<Policy> {
+    let path = Policy::path(state.service.store().root());
+    policy.save(&path)?;
+    Ok(Policy::load(&path)?)
+}
+
+/// Requests from AI clients waiting for the person (oldest first).
+#[tauri::command]
+pub fn list_approvals(state: State<'_, AppState>) -> CmdResult<Vec<ApprovalRequest>> {
+    Ok(state.approvals.pending()?)
+}
+
+#[tauri::command]
+pub fn decide_approval(
+    state: State<'_, AppState>,
+    id: ApprovalId,
+    approve: bool,
+) -> CmdResult<ApprovalRequest> {
+    Ok(state.approvals.decide(&id, approve, studio())?)
 }
 
 /// `from` / `to` are version numbers; omitted means the current content.

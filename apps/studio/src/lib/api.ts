@@ -2,6 +2,7 @@
 // which in turn is a thin wrapper over ScenarioService / Runtime. The
 // frontend never edits scenario documents itself; it only sends EditOps.
 import type {
+  ApprovalRequest,
   DebugCommand,
   EditOp,
   EditOutcome,
@@ -15,6 +16,9 @@ import type {
   NewScenario,
   NewVersion,
   ObservationContent,
+  Policy,
+  PublishInput,
+  PublishedState,
   ReviewTimeline,
   RunEventEnvelope,
   RunSnapshot,
@@ -108,6 +112,18 @@ export const api = {
     call<ScenarioDiff>("diff_versions", { id, from, to }),
   restoreVersion: (id: string, number: number, expectedRevision: number) =>
     call<EditOutcome>("restore_version", { id, number, expectedRevision }),
+  /** The version unattended runs (`shikigami run <id>`) execute; null when none is published. */
+  publishedState: (id: string) => call<PublishedState | null>("published_state", { id }),
+  publishScenario: (id: string, input: PublishInput) => call<PublishedState>("publish_scenario", { id, input }),
+  /** The review desk's 「残して本番に使う」: approves `revision` and publishes it in one step. */
+  approveAndPublish: (id: string, revision: number, reason?: string) =>
+    call<PublishedState>("approve_and_publish", { id, revision, reason }),
+  unpublishScenario: (id: string) => call<void>("unpublish_scenario", { id }),
+  getPolicy: () => call<Policy>("get_policy"),
+  savePolicy: (policy: Policy) => call<Policy>("save_policy", { policy }),
+  /** Requests from AI clients waiting for the person's approval. */
+  listApprovals: () => call<ApprovalRequest[]>("list_approvals"),
+  decideApproval: (id: string, approve: boolean) => call<ApprovalRequest>("decide_approval", { id, approve }),
   /** Writes a bundle to the Downloads folder; returns its path. */
   exportScenario: (id: string) => call<string>("export_scenario", { id }),
   importScenario: (contents: string, onConflict?: ImportConflict) =>
@@ -241,4 +257,6 @@ export const events = {
   /** An AI asked for a login, or a request was answered or dismissed (any process). */
   onSecretRequestsChanged: (handler: () => void): Promise<UnlistenFn> =>
     listen("secret-requests-changed", () => handler()),
+  /** An AI client asked for approval, or a request was answered, used or expired. */
+  onApprovalsChanged: (handler: () => void): Promise<UnlistenFn> => listen("approvals-changed", () => handler()),
 };

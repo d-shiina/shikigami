@@ -49,7 +49,7 @@ export function ReviewInbox() {
     <aside className="flex h-full flex-col border-r border-slate-200 bg-paper">
       <div className="px-3 pt-3 pb-1">
         <div className="text-[12px] font-bold">AIからの変更</div>
-        <div className="text-[11px] leading-relaxed text-slate-400">見て「残す」と、そのまま本番の実行に使われます</div>
+        <div className="text-[11px] leading-relaxed text-slate-400">見て「承認して公開」すると、その版が本番の実行に使われます</div>
       </div>
       <ul className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
         {inbox.filter((i) => !i.waiting).length === 0 && (
@@ -227,7 +227,8 @@ function Legend({ color, label }: { color: string; label: string }) {
 export function ReviewActions() {
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
-  const approveAll = useStudio((s) => s.approveAll);
+  const approveAndPublish = useStudio((s) => s.approveAndPublish);
+  const published = useStudio((s) => s.published);
   const revertAll = useStudio((s) => s.revertAll);
   const [sending, setSending] = useState(false);
   if (pending.length === 0) return null;
@@ -264,11 +265,15 @@ export function ReviewActions() {
         </button>
         <button
           type="button"
-          onClick={() => void approveAll()}
+          onClick={() => void approveAndPublish()}
+          title="この内容を承認して公開します。無人実行（shikigami run・スケジュール）はこの版を動かします"
           className="h-9 flex-[2] rounded-[4px] bg-ink px-4 text-[13px] font-semibold text-paper hover:bg-brand-700"
         >
-          ✓ 残して本番に使う
+          ✓ 承認して公開
         </button>
+      </div>
+      <div className="text-[11px] text-slate-400">
+        {published ? `本番で動いているのは v${published.version}「${published.name}」です` : "まだ公開していません。公開するまで無人実行では動きません"}
       </div>
     </div>
   );

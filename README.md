@@ -18,6 +18,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ**
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | システム構成、シナリオ形式、Adapter / MCP / IPC / DB / エラー / セキュリティ設計、設計判断、MVP 受け入れ基準 |
 | [docs/mcp.md](docs/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
+| [docs/policy.md](docs/policy.md) | 無人実行は承認・公開した版だけ、許可するサイト・アプリ、AI の操作の承認（`policy.json`） |
 | [docs/design/plugins.md](docs/design/plugins.md) | ノードのプラグイン：社内システムなど向けのステップを、本体を作り直さずに足す（マニフェスト + 別プロセス） |
 | [docs/compatibility.md](docs/compatibility.md) | 互換性の方針：シナリオ形式（`schemaVersion`・移行・`requires`）、MCP・CLI で何を壊さないか |
 | [docs/research.md](docs/research.md) | 採用ライブラリのバージョン・ライセンス・Windows 対応状況 |
@@ -86,7 +87,9 @@ shikigami scenario list
 echo '[{"op":"addStep","step":{"type":"log.message","params":{"message":"hello"}}}]' \
   | shikigami scenario edit scn_example_invoice_summary -
 shikigami scenario undo scn_example_invoice_summary
-shikigami run scn_example_invoice_summary --json
+shikigami run scn_example_invoice_summary --draft --json   # 作業中の内容を試す
+shikigami version publish scn_example_invoice_summary       # 人が確認して公開
+shikigami run scn_example_invoice_summary --json           # 無人実行は公開版だけを動かす
 ```
 
 Studio を開いたまま CLI でシナリオを編集すると、変更が Studio に即座に反映されます。

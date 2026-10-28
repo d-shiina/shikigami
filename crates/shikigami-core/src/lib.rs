@@ -4,6 +4,7 @@
 //! versioned and stored. Studio, the MCP server, the CLI and the Runtime all
 //! depend on this crate and never re-implement its logic.
 
+pub mod approval;
 pub mod call;
 pub mod error;
 pub mod expr;
@@ -11,6 +12,7 @@ pub mod ids;
 pub mod migrate;
 pub mod model;
 pub mod ops;
+pub mod policy;
 pub mod registry;
 pub mod requires;
 pub mod resource;
@@ -22,14 +24,16 @@ pub mod store;
 pub mod validate;
 pub mod version;
 
+pub use approval::{AiAction, ApprovalRequest, ApprovalStatus, ApprovalStore, NewApproval, Redeem};
 pub use call::Subscenario;
 pub use error::{CoreError, CoreResult, ErrorPayload};
-pub use ids::{ObservationId, RunId, ScenarioId, StepId};
+pub use ids::{ApprovalId, ObservationId, RunId, ScenarioId, StepId};
 pub use model::{
     Metadata, OnError, RetryPolicy, SCHEMA_VERSION, Scenario, ScenarioSettings, ScenarioSummary,
     Step, VarDirection, VarType, VariableDef,
 };
 pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
+pub use policy::{Decision, Policy, TargetDef, TargetKind};
 pub use registry::{Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef};
 pub use review::{
     ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,
@@ -37,7 +41,7 @@ pub use review::{
 };
 pub use service::{
     ChangeEvent, ChangeNote, EditOutcome, ExtractOutcome, ImportOutcome, ImportedSubscenario,
-    NewScenario, ScenarioService,
+    NewScenario, PublishedRun, ScenarioService,
 };
 pub use store::{
     Actor, ActorKind, ChangeKind, FileStore, HistoryEntry, UserConfig, WorkspaceInfo,
@@ -45,6 +49,6 @@ pub use store::{
 };
 pub use validate::{Severity, ValidationIssue, ValidationReport, Validator};
 pub use version::{
-    DiffKind, ImportConflict, ImportMode, NewVersion, ScenarioBundle, ScenarioDiff,
-    ScenarioVersion, SubscenarioImport, VersionSummary,
+    DiffKind, ImportConflict, ImportMode, NewVersion, PublishInput, PublishRecord, PublishedState,
+    ScenarioBundle, ScenarioDiff, ScenarioVersion, SubscenarioImport, VersionSummary,
 };

@@ -147,5 +147,8 @@ fn read_text_def() -> StepTypeDef {
         resources: vec![ResourceDef::file("path")],
         secret_params: vec!["password".into()],
         default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
+        targets: Vec::new(),
     }
 }

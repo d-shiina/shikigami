@@ -78,6 +78,7 @@ hello/
 | `steps[].risk` | - | `safe` / `interactive`（既定）/ `dangerous`。MCP の許可レベルに使う |
 | `steps[].secretParams` | - | 登録済みシークレットを受け取れる param（§5） |
 | `steps[].resources` | - | 排他する資源（§4） |
+| `steps[].targets` | - | サイト・プログラムを指す param（`[{ "kind": "site" \| "app", "param": "url" }]`）。ワークスペースの `policy.json` の `sites` / `apps` で検査する（[policy.md](../policy.md)） |
 | `steps[].defaultTimeoutMs` | - | `timeoutMs` 省略時の時間制限 |
 | `steps[].deprecated` | - | 使うのをやめてほしいステップ：`{ "note": "理由", "replacement": "hello.greet2" }`。動き続けるが、検証で `DEPRECATED_STEP_TYPE` の警告が出る |
 
@@ -108,7 +109,7 @@ hello/
 - **params の検証**：マニフェストの JSON Schema で検証し、エラーには直し方のヒントを付ける
 - **タイムアウト・リトライ・キャンセル・`onError`**：Runtime が処理する。プラグインには `timeoutMs`（ステップの制限より 0.5 秒短い値）を渡すので、それまでに処理を止める
 - **シークレット**：`secretParams` に挙げた param だけが `{ "secret": "<名前>", "field": "password" }` を受け取れる（それ以外は検証エラー）。本体が値を取り出し、シークレットの「使ってよい先」に `plugin:<name>`（例 `plugin:hello`）が登録されているときだけ、文字列にしてプラグインに渡す。登録がなければ `SECRET_PLUGIN_NOT_ALLOWED`。渡した値はログ・エラー・結果、プラグインの標準エラー出力から自動で伏せ字になる
-- **許可レベル**：`risk` を MCP の承認に使う
+- **許可レベル**：`risk` を MCP の承認（`policy.json` の `ai.runScenario` / `ai.testStep`）に使う。`targets` の param は `sites` / `apps` で検査する
 
 プラグイン自身はシナリオの変数を読み書きできない。データは params で入り、戻り値（`saveAs`）で出る。
 

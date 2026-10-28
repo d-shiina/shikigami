@@ -59,6 +59,15 @@ pub enum CoreError {
     #[error("invalid edit: {0}")]
     InvalidEdit(String),
 
+    /// Refused by a rule (publishing, the workspace policy, approvals),
+    /// with its own stable code and a hint for the client.
+    #[error("{message}")]
+    Rejected {
+        code: &'static str,
+        message: String,
+        hint: Option<String>,
+    },
+
     #[error("nothing to {0}")]
     NothingTo(&'static str),
 
@@ -90,6 +99,7 @@ impl CoreError {
             Self::ScenarioInUse { .. } => "SCENARIO_IN_USE",
             Self::ObservationNotFound(_) => "OBSERVATION_NOT_FOUND",
             Self::InvalidEdit(_) => "INVALID_EDIT",
+            Self::Rejected { code, .. } => code,
             Self::NothingTo(_) => "NOTHING_TO_UNDO_OR_REDO",
             Self::UnsupportedSchemaVersion { .. } => "UNSUPPORTED_SCHEMA_VERSION",
             Self::ValidationFailed(_) => "VALIDATION_FAILED",
@@ -137,6 +147,9 @@ impl CoreError {
                 "observation_id": id,
                 "hint": "Use the observationId returned by inspect_page, inspect_ui or test_step in this session; unused observations are deleted after a few days.",
             })),
+            Self::Rejected {
+                hint: Some(hint), ..
+            } => Some(serde_json::json!({ "hint": hint })),
             Self::ScenarioNotFound(id) | Self::ScenarioAlreadyExists(id) => {
                 Some(serde_json::json!({ "scenario_id": id }))
             }
