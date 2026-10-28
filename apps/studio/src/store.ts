@@ -99,6 +99,10 @@ export type StudioState = {
   history: HistoryEntry[];
   /** Revisions of non-Studio changes the user has looked at, per scenario. */
   reviewed: Record<string, number[]>;
+  /** Every scenario's journal, oldest first, for the review inbox. */
+  histories: Record<string, HistoryEntry[]>;
+  /** The review desk is open instead of the scenario list. */
+  reviewing: boolean;
   paletteOpen: boolean;
   /** Named versions of the open scenario, newest first. */
   versions: VersionSummary[];
@@ -141,6 +145,10 @@ export type StudioState = {
   approveAll(): void;
   /** Reverts one journal entry by sending its inverse ops to Core as a new edit. */
   revert(entry: HistoryEntry): Promise<void>;
+  /** Reverts every unreviewed external change of the open scenario in one edit. */
+  revertAll(): Promise<void>;
+  loadInbox(): Promise<void>;
+  setReviewing(on: boolean): void;
   setPaletteOpen(open: boolean): void;
   loadVersions(): Promise<void>;
   createVersion(name: string, note: string): Promise<boolean>;
@@ -197,8 +205,31 @@ export function revertBlocker(entry: HistoryEntry, history: HistoryEntry[]): str
 
 /** External edits the user has not reviewed yet, newest first. */
 export function pendingReview(state: Pick<StudioState, "history" | "reviewed" | "scenario">): HistoryEntry[] {
-  const seen = new Set(state.reviewed[state.scenario?.id ?? ""] ?? []);
-  return state.history.filter((e) => isExternal(e) && isRevertible(e) && !seen.has(e.revision)).reverse();
+  return pendingIn(state.history, state.reviewed[state.scenario?.id ?? ""]);
+}
+
+/** Unreviewed external edits in one scenario's journal, newest first. */
+export function pendingIn(history: HistoryEntry[], reviewed: number[] | undefined): HistoryEntry[] {
+  const seen = new Set(reviewed ?? []);
+  return history.filter((e) => isExternal(e) && isRevertible(e) && !seen.has(e.revision)).reverse();
+}
+
+/**
+ * Why a group of entries cannot be reverted together, or null: an entry
+ * outside the group changed the same thing afterwards.
+ */
+export function groupRevertBlocker(group: HistoryEntry[], history: HistoryEntry[]): string | null {
+  if (group.some((e) => !isRevertible(e))) return t.revertUnsupported;
+  const inGroup = new Set(group.map((e) => e.revision));
+  const oldest = Math.min(...group.map((e) => e.revision));
+  const mine = new Set(group.flatMap((e) => [...targets(e)]));
+  for (const later of history) {
+    if (later.revision <= oldest || inGroup.has(later.revision)) continue;
+    for (const key of targets(later)) {
+      if (key === "*" || mine.has("*") || mine.has(key)) return t.revertBlocked;
+    }
+  }
+  return null;
 }
 
 /** Step IDs an entry's ops point at (for highlighting on the canvas). */
@@ -335,6 +366,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       run: null,
       history: [],
       reviewed: loadReviewed(),
+      histories: {},
+      reviewing: false,
       paletteOpen: false,
       versions: [],
       workspace: null,
@@ -349,6 +382,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const [stepTypes, summaries] = await Promise.all([api.listStepTypes(), api.listScenarios()]);
           set({ stepTypes, summaries });
+          void get().loadInbox();
           set({ workspace: await api.workspaceInfo() });
         } catch (e) {
           set({ error: message(e) });
@@ -518,6 +552,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async onExternalChange(scenarioId) {
         await get().refreshList();
+        void api
+          .history(scenarioId)
+          .then((h) => set({ histories: { ...get().histories, [scenarioId]: h } }))
+          .catch(() => {});
         const current = get().scenario;
         if (current?.id !== scenarioId) return;
         try {
@@ -621,6 +659,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (!id) return;
         try {
           const history = await api.history(id);
+          set({ histories: { ...get().histories, [id]: history } });
           // Ignore a late answer for a scenario that is no longer open.
           if (get().scenario?.id === id) set({ history });
         } catch {
@@ -656,6 +695,39 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           get().approve(entry.revision);
           set({ notice: t.reverted });
         }
+      },
+
+      async revertAll() {
+        const group = pendingReview(get());
+        if (group.length === 0) return;
+        const blocker = groupRevertBlocker(group, get().history);
+        if (blocker) {
+          set({ error: blocker });
+          return;
+        }
+        // Newest first, so each inverse meets the state its own edit left.
+        const ok = await get().applyOps(group.flatMap((e) => e.inverse ?? []));
+        if (ok) {
+          get().approveAll();
+          set({ notice: t.reverted });
+        }
+      },
+
+      async loadInbox() {
+        const ids = get().summaries.map((s) => s.id);
+        const pairs = await Promise.all(
+          ids.map((id) =>
+            api
+              .history(id)
+              .then((h) => [id, h] as const)
+              .catch(() => [id, [] as HistoryEntry[]] as const),
+          ),
+        );
+        set({ histories: { ...get().histories, ...Object.fromEntries(pairs) } });
+      },
+
+      setReviewing(on) {
+        set({ reviewing: on });
       },
 
       setPaletteOpen(open) {

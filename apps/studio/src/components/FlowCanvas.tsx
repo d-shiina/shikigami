@@ -12,8 +12,9 @@ import {
   NodeToolbar,
   Position,
   ReactFlow,
+  useReactFlow,
 } from "@xyflow/react";
-import { createContext, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { CHIP_ROOM, type Direction, type FrameNodeData, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
@@ -29,13 +30,19 @@ import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
 import { valuesSeenBy } from "../lib/runValues";
+import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; dir: Direction }>
+  Node<StepNodeData & { runState?: StepRunState; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; dir: Direction }>
 >;
 
 const MIN_READABLE_ZOOM = 0.85;
+
+const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: string }> = {
+  added: { border: "border-moegi-500", tag: "bg-moegi-500", label: "AIが追加" },
+  changed: { border: "border-accent-500", tag: "bg-accent-500", label: "AIが変更" },
+};
 
 /** Which way the chart runs, for rows deciding whether to show chips. */
 const DirContext = createContext<Direction>("horizontal");
@@ -296,7 +303,13 @@ function StepNode({ data }: StepNodeProps) {
     <div
       style={{ width: NODE_W }}
       className={`relative rounded-[4px] border bg-sheet shadow-[0_1px_2px_rgba(15,27,42,.06),0_4px_12px_rgba(15,27,42,.05)] ${
-        data.byAi ? "ai-border" : data.selected ? "border-brand-500 ring-4 ring-brand-100" : "border-slate-200"
+        data.diff
+          ? `border-2 ${DIFF_STYLE[data.diff].border} ${data.selected ? "ring-4 ring-brand-100" : ""}`
+          : data.byAi
+            ? "ai-border"
+            : data.selected
+              ? "border-brand-500 ring-4 ring-brand-100"
+              : "border-slate-200"
       } ${data.selected && data.byAi ? "ring-4 ring-brand-100" : ""} ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
         data.runState ? RUN_STYLE[data.runState] : ""
       }`}
@@ -307,6 +320,11 @@ function StepNode({ data }: StepNodeProps) {
         </NodeToolbar>
       )}
       <FlowHandles dir={data.dir} />
+      {data.diff && (
+        <span className={`absolute -top-2.5 right-2 z-10 rounded-full px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
+          {DIFF_STYLE[data.diff].label}
+        </span>
+      )}
       <DirContext.Provider value={data.dir}>
       <div
         style={{ height: 24, background: `${color}1a` }}
@@ -379,6 +397,21 @@ function FrameNode({ data }: NodeProps<Node<FrameNodeData>>) {
   );
 }
 
+/**
+ * On the review desk, brings a step into view: the first one the AI changed,
+ * then whichever change the reviewer picks.
+ */
+function FocusOn({ id }: { id: string | undefined }) {
+  const flow = useReactFlow();
+  useEffect(() => {
+    if (!id) return;
+    // After the canvas has measured its nodes and placed its starting view.
+    const timer = setTimeout(() => void flow.fitView({ nodes: [{ id }], padding: 1.2, maxZoom: 1, minZoom: MIN_READABLE_ZOOM, duration: 300 }), 200);
+    return () => clearTimeout(timer);
+  }, [flow, id]);
+  return null;
+}
+
 const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode };
 
 export function FlowCanvas() {
@@ -389,6 +422,9 @@ export function FlowCanvas() {
   const run = useStudio((s) => s.run);
   const select = useStudio((s) => s.select);
   const pending = usePendingReview();
+  const reviewing = useStudio((s) => s.reviewing);
+  // On the review desk every unreviewed step is marked by what happened to it.
+  const diffs = useMemo(() => summarize([...pending].reverse()).steps, [pending]);
   // Oldest first, so the toolbar offers the newest unreviewed change.
   const reviews = useMemo(() => {
     const map = new Map<string, HistoryEntry[]>();
@@ -411,6 +447,7 @@ export function FlowCanvas() {
     return counts;
   }, [validation]);
 
+  const selectedStep = selection?.kind === "step" ? selection.stepId : undefined;
   const nodes: Node[] = layout.nodes.map((n) => {
     if (n.data.kind === "step") {
       const id = n.data.step.id ?? n.id;
@@ -423,8 +460,9 @@ export function FlowCanvas() {
           runState: run?.steps[id],
           issueCount: issueCounts.get(id) ?? 0,
           selected: selection?.kind === "step" && selection.stepId === id,
-          byAi: reviews.has(id),
-          reviews: reviews.get(id) ?? [],
+          byAi: !reviewing && reviews.has(id),
+          reviews: reviewing ? [] : (reviews.get(id) ?? []),
+          diff: reviewing ? diffs.get(id) : undefined,
           vars,
           run: run ? { changes: run.changes, starts: run.starts } : NO_RUN,
         },
@@ -513,6 +551,7 @@ export function FlowCanvas() {
         const x = zoom > fitW ? pad / 2 : (box.clientWidth - bounds.width * zoom) / 2;
         const y = zoom > fitH || layout.direction === "horizontal" ? pad / 2 : (box.clientHeight - bounds.height * zoom) / 2;
         void flow.setViewport({ x: x - bounds.x * zoom, y: y - bounds.y * zoom, zoom });
+
       }}
       minZoom={0.2}
       onNodeClick={(_, node) => {
@@ -526,6 +565,7 @@ export function FlowCanvas() {
       onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="#c3cedb" />
+      {reviewing && <FocusOn id={selectedStep ?? layout.nodes.find((n) => diffs.has(n.id))?.id} />}
       <Controls showInteractive={false} />
     </ReactFlow>
   );

@@ -54,7 +54,7 @@ const VERB_STYLE: Record<ChangeLine["verb"], string> = {
   replace: "bg-shu-50 text-shu-600",
 };
 
-function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: boolean }) {
+export function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: boolean }) {
   const select = useStudio((s) => s.select);
   return (
     <ul className="space-y-1.5">

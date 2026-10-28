@@ -7,6 +7,7 @@ import { FlowCanvas } from "./components/FlowCanvas";
 import { IssuesPanel } from "./components/IssuesPanel";
 import { PropertyPanel } from "./components/PropertyPanel";
 import { RunLog } from "./components/RunLog";
+import { ReviewInbox, ReviewPanel, useInbox } from "./components/ReviewDesk";
 import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { StoryView } from "./components/StoryView";
 import { SecretsDialog } from "./components/SecretsDialog";
@@ -19,7 +20,7 @@ import { api, events } from "./lib/api";
 import { t } from "./lib/i18n";
 import { createStudioStore } from "./store";
 
-type Tab = "timeline" | "versions" | "properties" | "variables" | "issues";
+type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -56,21 +57,25 @@ function Banner() {
 }
 
 function SidePanel() {
-  const [tab, setTab] = useState<Tab>("timeline");
+  const reviewing = useStudio((s) => s.reviewing);
+  const [tab, setTab] = useState<Tab>(reviewing ? "review" : "timeline");
+  // The review desk opens on its own tab, and leaving it falls back to the record.
+  useEffect(() => setTab(reviewing ? "review" : "timeline"), [reviewing]);
   const issueCount = useStudio((s) => s.validation?.issues.length ?? 0);
   const selection = useStudio((s) => s.selection);
   const pendingCount = usePendingReview().length;
   useEffect(() => {
-    if (selection?.kind === "step") setTab("properties");
-  }, [selection]);
+    if (selection?.kind === "step" && !reviewing) setTab("properties");
+  }, [selection, reviewing]);
   // New AI edits pull the review to the front.
   const lastPending = useRef(pendingCount);
   useEffect(() => {
-    if (pendingCount > lastPending.current) setTab("timeline");
+    if (pendingCount > lastPending.current && !reviewing) setTab("timeline");
     lastPending.current = pendingCount;
   }, [pendingCount]);
   const tabs: [Tab, string, number][] = [
-    ["timeline", t.timeline, pendingCount],
+    ...(reviewing ? [["review", "確認", pendingCount] as [Tab, string, number]] : []),
+    ["timeline", t.timeline, reviewing ? 0 : pendingCount],
     ["versions", t.versions, 0],
     ["properties", t.inspect, 0],
     ["variables", t.variables, 0],
@@ -91,7 +96,7 @@ function SidePanel() {
             {label}
             {count > 0 && (
               <span
-                className={`rounded-full px-1.5 text-[10px] ${key === "timeline" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
+                className={`rounded-full px-1.5 text-[10px] ${key === "timeline" || key === "review" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
               >
                 {count}
               </span>
@@ -100,7 +105,8 @@ function SidePanel() {
           </button>
         ))}
       </nav>
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {tab === "review" && <ReviewPanel />}
         {tab === "timeline" && <Timeline />}
         {tab === "versions" && <VersionsPanel />}
         {tab === "properties" && <PropertyPanel />}
@@ -164,6 +170,34 @@ function SecretsButton() {
   );
 }
 
+/** Scenarios, or the AI edits waiting for review. */
+function ModeSwitch() {
+  const reviewing = useStudio((s) => s.reviewing);
+  const setReviewing = useStudio((s) => s.setReviewing);
+  const open = useStudio((s) => s.open);
+  const currentId = useStudio((s) => s.scenario?.id);
+  const inbox = useInbox();
+  const enterReview = () => {
+    setReviewing(true);
+    // Land on something to review rather than a scenario with nothing new.
+    const first = inbox[0];
+    if (first && !inbox.some((i) => i.scenarioId === currentId)) void open(first.scenarioId);
+  };
+  const tab = (on: boolean) =>
+    `flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[12px] font-semibold ${on ? "bg-sheet text-ink shadow-sm" : "text-slate-500 hover:text-ink"}`;
+  return (
+    <div className="flex items-center gap-0.5 rounded-[7px] bg-slate-100 p-0.5">
+      <button type="button" className={tab(!reviewing)} onClick={() => setReviewing(false)}>
+        シナリオ
+      </button>
+      <button type="button" className={tab(reviewing)} onClick={enterReview}>
+        確認待ち
+        {inbox.length > 0 && <span className="rounded-full bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
+      </button>
+    </div>
+  );
+}
+
 function Shell() {
   const hasScenario = useStudio((s) => s.scenario !== null);
   const [view, setViewState] = useState<View>(loadView);
@@ -176,6 +210,7 @@ function Shell() {
     }
   };
   const hasRun = useStudio((s) => s.run !== null);
+  const reviewing = useStudio((s) => s.reviewing);
   const [listOpen, setListOpenState] = useState(() => {
     try {
       return globalThis.localStorage?.getItem(LIST_KEY) !== "closed";
@@ -192,11 +227,12 @@ function Shell() {
     }
   };
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr] ${listOpen ? "grid-cols-[248px_1fr_360px]" : "grid-cols-[44px_1fr_360px]"}`}>
+    <div className={`grid h-full grid-rows-[auto_auto_1fr] ${listOpen || reviewing ? "grid-cols-[248px_1fr_360px]" : "grid-cols-[44px_1fr_360px]"}`}>
       <header className="relative col-span-3 flex h-12 items-center gap-3 bg-sheet px-4">
         <img src="/mark.png" alt="" className="h-6 w-6" />
         <span className="text-[15px] font-black tracking-wider">式神</span>
         <span className="-ml-1.5 text-[10px] font-medium tracking-[.2em] text-slate-400">STUDIO</span>
+        <ModeSwitch />
         <ScenarioHeader />
         <span className="h-5 w-px bg-slate-200" />
         <SecretsButton />
@@ -208,7 +244,13 @@ function Shell() {
         <Banner />
       </div>
       <div className="min-h-0">
-        {listOpen ? <ScenarioList onCollapse={() => setListOpen(false)} /> : <ScenarioRail onExpand={() => setListOpen(true)} />}
+        {reviewing ? (
+          <ReviewInbox />
+        ) : listOpen ? (
+          <ScenarioList onCollapse={() => setListOpen(false)} />
+        ) : (
+          <ScenarioRail onExpand={() => setListOpen(true)} />
+        )}
       </div>
       <main className="flex min-h-0 flex-col">
         <div className="relative min-h-0 flex-1">
