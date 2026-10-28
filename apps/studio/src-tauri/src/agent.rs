@@ -387,7 +387,12 @@ pub async fn agent_send(
                     tail
                 }
             });
-            emit(AgentEvent::done(ok, message, None));
+            let mut done = AgentEvent::done(ok, message, None);
+            // Only Claude Code can be signed in from the pane; other agents keep their message.
+            if let AgentEvent::Done { needs_login, .. } = &mut done {
+                *needs_login &= kind == AgentKind::ClaudeCode;
+            }
+            emit(done);
         }
         lock(&app.state::<AgentTurns>().running).remove(&id);
     });
@@ -418,7 +423,10 @@ pub enum LoginEvent {
 /// when the browser cannot hand it back by itself.
 #[derive(Default)]
 pub(crate) struct AgentLogin {
-    stdin: tokio::sync::Mutex<Option<tokio::process::ChildStdin>>,
+    /// Tagged with the sign-in it belongs to, so a cancelled one finishing
+    /// late does not close a newer one's input.
+    stdin: tokio::sync::Mutex<Option<(u64, tokio::process::ChildStdin)>>,
+    generation: AtomicU64,
     cancel: Mutex<Option<CancellationToken>>,
 }
 
@@ -459,7 +467,8 @@ pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdRes
     let mut child = command
         .spawn()
         .map_err(|e| err("AGENT_FAILED", format!("ログインを始められません: {e}")))?;
-    *login.stdin.lock().await = child.stdin.take();
+    let generation = login.generation.fetch_add(1, Ordering::Relaxed) + 1;
+    *login.stdin.lock().await = child.stdin.take().map(|stdin| (generation, stdin));
     let cancel = CancellationToken::new();
     *lock(&login.cancel) = Some(cancel.clone());
 
@@ -498,7 +507,13 @@ pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdRes
         }
         let status = child.wait().await;
         let stderr = stderr_task.await.unwrap_or_default();
-        *app.state::<AgentLogin>().stdin.lock().await = None;
+        {
+            let login = app.state::<AgentLogin>();
+            let mut stdin = login.stdin.lock().await;
+            if stdin.as_ref().is_some_and(|(g, _)| *g == generation) {
+                *stdin = None;
+            }
+        }
         if stopped {
             return;
         }
@@ -526,7 +541,7 @@ pub async fn agent_login_code(login: State<'_, AgentLogin>, code: String) -> Cmd
         return Err(err("INVALID_INPUT", "コードが空です"));
     }
     let mut stdin = login.stdin.lock().await;
-    let Some(stdin) = stdin.as_mut() else {
+    let Some((_, stdin)) = stdin.as_mut() else {
         return Err(err("AGENT_LOGIN_NOT_RUNNING", "ログインが始まっていません"));
     };
     stdin
