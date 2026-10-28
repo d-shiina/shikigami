@@ -68,6 +68,21 @@ enum ScenarioCmd {
     Delete {
         id: String,
     },
+    /// Apply edit operations (a JSON array of EditOp) to a scenario.
+    Edit {
+        id: String,
+        /// File containing the JSON array, or `-` for stdin.
+        ops: PathBuf,
+        /// Fail with REVISION_CONFLICT unless the stored revision matches.
+        #[arg(long)]
+        expected_revision: Option<u64>,
+    },
+    Undo {
+        id: String,
+    },
+    Redo {
+        id: String,
+    },
     History {
         id: String,
         #[arg(long, default_value_t = 20)]
@@ -143,7 +158,9 @@ fn real_main() -> Result<ExitCode> {
         }
         Command::Schema(SchemaCmd::Export { dir }) => {
             std::fs::create_dir_all(dir)?;
-            for (name, schema) in shikigami_core::schema::all() {
+            let mut schemas = shikigami_core::schema::all();
+            schemas.push(("run-api.schema.json", shikigami_runtime::run_api_schema()));
+            for (name, schema) in schemas {
                 let path = dir.join(name);
                 std::fs::write(&path, serde_json::to_string_pretty(&schema)? + "\n")?;
                 println!("wrote {}", path.display());
@@ -212,6 +229,33 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
             svc.delete(&ScenarioId::new(id.as_str()), None, actor())?;
             println!("moved {id} to trash");
         }
+        ScenarioCmd::Edit {
+            id,
+            ops,
+            expected_revision,
+        } => {
+            let text = if ops.as_os_str() == "-" {
+                std::io::read_to_string(std::io::stdin())?
+            } else {
+                std::fs::read_to_string(ops)
+                    .with_context(|| format!("reading {}", ops.display()))?
+            };
+            let ops: Vec<shikigami_core::EditOp> =
+                serde_json::from_str(&text).context("parsing edit operations")?;
+            let out = svc.edit(
+                &ScenarioId::new(id.as_str()),
+                *expected_revision,
+                ops,
+                actor(),
+            )?;
+            print_outcome(&out);
+        }
+        ScenarioCmd::Undo { id } => {
+            print_outcome(&svc.undo(&ScenarioId::new(id.as_str()), None, actor())?)
+        }
+        ScenarioCmd::Redo { id } => {
+            print_outcome(&svc.redo(&ScenarioId::new(id.as_str()), None, actor())?)
+        }
         ScenarioCmd::History { id, limit } => {
             for entry in svc.history(&ScenarioId::new(id.as_str()), *limit)? {
                 let who = entry.actor.name.as_deref().unwrap_or("");
@@ -223,6 +267,20 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn print_outcome(out: &shikigami_core::EditOutcome) {
+    println!(
+        "rev {} ({} issue(s))",
+        out.scenario.revision,
+        out.validation.issues.len()
+    );
+    for issue in &out.validation.issues {
+        eprintln!(
+            "{:?} {} {}: {}",
+            issue.severity, issue.code, issue.path, issue.message
+        );
+    }
 }
 
 fn load_file(path: &Path) -> Result<Scenario> {

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main window: core events only. All scenario access goes through Shikigami commands.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

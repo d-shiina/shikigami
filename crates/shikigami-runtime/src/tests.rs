@@ -428,3 +428,15 @@ async fn run_records_round_trip() {
     let events = record::read_events(dir.path(), &run_id).expect("events");
     assert_eq!(logs(&events), ["hello"]);
 }
+
+#[test]
+fn committed_run_schema_is_up_to_date() {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/run-api.schema.json");
+    let expected = serde_json::to_string_pretty(&run_api_schema()).expect("json") + "\n";
+    let actual = std::fs::read_to_string(path).unwrap_or_default();
+    assert!(
+        actual == expected,
+        "schemas/run-api.schema.json is outdated; run `pnpm schema:generate`"
+    );
+}

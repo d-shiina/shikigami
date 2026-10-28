@@ -4,7 +4,7 @@ members = [
     "crates/shikigami-core",
     "crates/shikigami-runtime",
     "crates/shikigami-cli",
-#    "apps/studio/src-tauri",
+    "apps/studio/src-tauri",
 ]
 
 [workspace.package]

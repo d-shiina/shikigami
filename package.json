@@ -1,0 +1,12 @@
+{
+  "name": "shikigami",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "scripts": {
+    "schema:generate": "cargo run -q -p shikigami-cli -- schema export && pnpm --filter @shikigami/schema generate",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "studio:dev": "pnpm --filter @shikigami/studio tauri dev",
+    "studio:build": "pnpm --filter @shikigami/studio tauri build"
+  }
+}

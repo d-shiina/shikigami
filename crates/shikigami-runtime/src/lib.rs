@@ -326,3 +326,24 @@ impl RunHandle {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
+
+/// JSON Schema of the run API types (events, reports, snapshots), exported
+/// next to the core schemas for TypeScript generation.
+pub fn run_api_schema() -> Value {
+    #[derive(schemars::JsonSchema)]
+    #[allow(dead_code)]
+    #[schemars(rename = "ShikigamiRunApi")]
+    struct RunApi {
+        run_event_envelope: RunEventEnvelope,
+        run_report: RunReport,
+        run_snapshot: RunSnapshot,
+    }
+    let mut value = serde_json::to_value(schemars::schema_for!(RunApi)).unwrap_or(Value::Null);
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "$id".into(),
+            Value::String("https://shikigami.dev/schemas/run-api.schema.json".into()),
+        );
+    }
+    value
+}

@@ -1,0 +1,74 @@
+// Typed bridge to the Rust backend. Every call maps 1:1 to a Tauri command,
+// which in turn is a thin wrapper over ScenarioService / Runtime. The
+// frontend never edits scenario documents itself; it only sends EditOps.
+import type {
+  EditOp,
+  EditOutcome,
+  ErrorPayload,
+  HistoryEntry,
+  NewScenario,
+  RunEventEnvelope,
+  RunSnapshot,
+  Scenario,
+  ScenarioSummary,
+  StepTypeDef,
+  ValidationReport,
+} from "@shikigami/schema";
+import { isErrorPayload } from "@shikigami/schema";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+export class ApiError extends Error {
+  readonly code: string;
+  readonly details: unknown;
+
+  constructor(payload: ErrorPayload) {
+    super(payload.message);
+    this.name = "ApiError";
+    this.code = payload.code;
+    this.details = payload.details;
+  }
+}
+
+async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (e) {
+    if (isErrorPayload(e)) throw new ApiError(e);
+    throw new ApiError({ code: "IPC_ERROR", message: String(e) });
+  }
+}
+
+export const api = {
+  workspaceInfo: () => call<{ root: string }>("workspace_info"),
+  listScenarios: () => call<ScenarioSummary[]>("list_scenarios"),
+  getScenario: (id: string) => call<Scenario>("get_scenario", { id }),
+  createScenario: (input: NewScenario) => call<EditOutcome>("create_scenario", { input }),
+  duplicateScenario: (id: string, name?: string) =>
+    call<EditOutcome>("duplicate_scenario", { id, name }),
+  deleteScenario: (id: string, expectedRevision?: number) =>
+    call<void>("delete_scenario", { id, expectedRevision }),
+  edit: (id: string, expectedRevision: number, ops: EditOp[]) =>
+    call<EditOutcome>("edit_scenario", { id, expectedRevision, ops }),
+  undo: (id: string, expectedRevision: number) =>
+    call<EditOutcome>("undo", { id, expectedRevision }),
+  redo: (id: string, expectedRevision: number) =>
+    call<EditOutcome>("redo", { id, expectedRevision }),
+  undoState: (id: string) => call<{ canUndo: boolean; canRedo: boolean }>("undo_state", { id }),
+  validate: (id: string) => call<ValidationReport>("validate_scenario", { id }),
+  listStepTypes: () => call<StepTypeDef[]>("list_step_types"),
+  history: (id: string, limit = 100) => call<HistoryEntry[]>("scenario_history", { id, limit }),
+  run: (id: string, inputs?: Record<string, unknown>) =>
+    call<string>("run_scenario", { id, inputs }),
+  stopRun: (runId: string) => call<void>("stop_run", { runId }),
+  runStatus: (runId: string) => call<RunSnapshot | null>("run_status", { runId }),
+};
+
+export type Api = typeof api;
+
+export const events = {
+  onScenarioChanged: (handler: (scenarioId: string) => void): Promise<UnlistenFn> =>
+    listen<{ scenarioId: string }>("scenario-changed", (e) => handler(e.payload.scenarioId)),
+  onRunEvent: (handler: (event: RunEventEnvelope) => void): Promise<UnlistenFn> =>
+    listen<RunEventEnvelope>("run-event", (e) => handler(e.payload)),
+};
