@@ -86,7 +86,7 @@ function AiActivity() {
   if (!latest) return null;
   return (
     <span className={ITEM} title="AI（MCP）が最後に編集した時刻">
-      <span className="swirl h-2 w-2 rounded-full" />
+      <span className="bg-brand-500 h-2 w-2 rounded-full" />
       {actorLabel(latest)}・{relativeTime(latest.at)}に編集
     </span>
   );
@@ -131,7 +131,7 @@ function RunStatus() {
   const current = run.status === "running" ? run.starts.at(-1)?.stepId : undefined;
   const name = current ? findName(steps ?? [], current) : undefined;
   const color =
-    run.status === "running" ? "swirl animate-pulse" : run.status === "succeeded" ? "bg-moegi-500" : run.status === "failed" ? "bg-shu-500" : "bg-slate-400";
+    run.status === "running" ? "bg-accent-500 animate-pulse" : run.status === "succeeded" ? "bg-moegi-500" : run.status === "failed" ? "bg-shu-500" : "bg-slate-400";
   return (
     <button type="button" className={BUTTON} onClick={() => current && goTo(current)} title={current ? "実行中の手順へ移動" : undefined}>
       <span className={`h-2 w-2 rounded-full ${color}`} />

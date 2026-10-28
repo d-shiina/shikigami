@@ -9,7 +9,7 @@ import { CATEGORY_COLOR } from "./CommandPalette";
 import { usePendingReview } from "./Timeline";
 
 const RUN_DOT: Record<string, string> = {
-  running: "swirl animate-pulse",
+  running: "bg-accent-500 animate-pulse",
   succeeded: "bg-moegi-500",
   failed: "bg-shu-500",
   skipped: "bg-slate-300",

@@ -62,7 +62,7 @@ export function ScenarioHeader() {
       {running ? (
         <div className="flex h-8 items-center overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-[13px]">
           <span className="flex items-center gap-2 px-3 font-medium text-ink">
-            <span className="swirl h-2 w-2 animate-pulse rounded-full" />
+            <span className="bg-accent-500 h-2 w-2 animate-pulse rounded-full" />
             実行中
           </span>
           <button

@@ -380,7 +380,7 @@ function StepNode({ data }: StepNodeProps) {
         )}
         {data.step.name && <span className="truncate text-[12px] text-slate-500">{data.step.name}</span>}
         {data.byAi && (
-          <span className="swirl ml-auto shrink-0 rounded-[3px] px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
+          <span className="ml-auto bg-brand-500 shrink-0 rounded-[3px] px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
             AI
           </span>
         )}

@@ -167,12 +167,12 @@ textarea,
   background: linear-gradient(135deg, #f5a03a, #f0702a 55%, #e0301e);
 }
 
-/* Gradient outline for cards an AI changed and nobody reviewed yet. */
+/*
+ * Cards an AI changed and nobody reviewed yet: a solid blue edge. The swirl's
+ * full gradient muddies at this size, so AI marks use its blue alone.
+ */
 .ai-border {
-  border: 2px solid transparent !important;
-  background:
-    linear-gradient(var(--color-sheet), var(--color-sheet)) padding-box,
-    conic-gradient(from 200deg, #0f3a66, #0a6fa8, #12c2cc, #3f9a5a, #f5872a, #e0301e, #0f3a66) border-box;
+  border: 2px solid var(--color-brand-500) !important;
 }
 
 .canvas-bg {

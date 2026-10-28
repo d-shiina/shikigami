@@ -36,7 +36,7 @@ export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: nu
       style={{ width: size, height: size }}
       className={`grid shrink-0 place-items-center rounded-full text-[10px] font-bold ${
         entry.actor.kind === "mcp"
-          ? "swirl text-white"
+          ? "bg-brand-500 text-white"
           : external
             ? "bg-slate-300 text-slate-700"
             : "bg-ink text-paper"
@@ -184,7 +184,7 @@ export function Timeline() {
       {pending.length > 0 && (
         <section>
           <div className="mb-1 flex items-center gap-2">
-            <span className="swirl h-2.5 w-2.5 rounded-full" />
+            <span className="bg-brand-500 h-2.5 w-2.5 rounded-full" />
             <h3 className="text-sm font-semibold">
               {t.review}
               <span className="ml-1 text-shu-600">{pending.length}</span>

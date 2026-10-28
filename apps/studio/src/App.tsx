@@ -32,7 +32,7 @@ function HumanBanner() {
   if (!human) return null;
   return (
     <div className="flex items-center gap-2 border-b border-shu-100 bg-shu-50 px-4 py-2 text-sm font-medium text-shu-600">
-      <span className="swirl h-2 w-2 rounded-full" />
+      <span className="bg-shu-500 h-2 w-2 rounded-full" />
       <span>
         {t.waitingForYou}：{human.message}
       </span>
@@ -51,7 +51,7 @@ function Banner() {
         error ? "border-shu-100 bg-shu-50 text-shu-600" : "border-slate-200 bg-sheet text-slate-700"
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-shu-500" : "swirl"}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-shu-500" : "bg-brand-500"}`} />
       <span>{error ?? notice}</span>
       <button type="button" className="ml-auto text-xs text-slate-500 hover:underline" onClick={dismiss}>
         閉じる
