@@ -288,7 +288,8 @@ impl ShikigamiMcp {
         let input = NewObservation {
             source,
             title: vault.mask(&title),
-            request,
+            // A tested step may carry a password typed as literal text.
+            request: mask_value(vault, &request),
             status: result
                 .get("status")
                 .filter(|_| source == ObservationSource::TestStep)
