@@ -2,7 +2,7 @@
 // Opening one shows the scenario's flow chart with what changed marked on
 // it, the changes in words, and one place to keep or send them back.
 import type { HistoryEntry } from "@shikigami/schema";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { actorLabel, describe, relativeTime } from "../lib/changes";
 import { headline, summarize } from "../lib/review";
@@ -89,6 +89,8 @@ export function ReviewInbox() {
   );
 }
 
+const EVIDENCE_POLL_MS = 5000;
+
 /** What the unreviewed edits of the open scenario did, and one place to keep or send them back. */
 export function ReviewPanel() {
   const pending = usePendingReview();
@@ -97,6 +99,22 @@ export function ReviewPanel() {
   const open = useStudio((s) => s.open);
   const inbox = useInbox();
   const timeline = useStudio((s) => (s.scenario ? s.timelines[s.scenario.id] : undefined));
+  const loadTimeline = useStudio((s) => s.loadTimeline);
+  const scenarioId = scenario?.id;
+  // An MCP test run only appends evidence; it does not touch the scenario
+  // file the watcher sees. Re-read while this panel is open and on refocus.
+  useEffect(() => {
+    if (!scenarioId) return;
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadTimeline(scenarioId);
+    };
+    const timer = window.setInterval(refresh, EVIDENCE_POLL_MS);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [scenarioId, loadTimeline]);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const oldestFirst = useMemo(() => [...pending].reverse(), [pending]);
   const summary = useMemo(() => summarize(oldestFirst), [oldestFirst]);

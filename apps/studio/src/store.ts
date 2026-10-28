@@ -742,6 +742,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async loadTimeline(id) {
         try {
           const timeline = await api.reviewTimeline(id);
+          // Polled while reviewing: keep the old object when nothing changed.
+          if (JSON.stringify(timeline) === JSON.stringify(get().timelines[id])) return;
           set({ timelines: { ...get().timelines, [id]: timeline } });
         } catch {
           // Evidence is secondary; reviewing works from the journal alone.
