@@ -159,7 +159,37 @@ pub enum AgentEvent {
         ok: bool,
         message: Option<String>,
         cost_usd: Option<f64>,
+        /// The agent is signed out or its login expired: `agent_login` fixes it.
+        needs_login: bool,
     },
+}
+
+impl AgentEvent {
+    fn done(ok: bool, message: Option<String>, cost_usd: Option<f64>) -> Self {
+        let needs_login = !ok && message.as_deref().is_some_and(is_login_error);
+        Self::Done {
+            ok,
+            message,
+            cost_usd,
+            needs_login,
+        }
+    }
+}
+
+/// Claude Code's wording when it cannot use the account, e.g. "Failed to
+/// authenticate: OAuth session expired" or "Not logged in · Please run /login".
+fn is_login_error(message: &str) -> bool {
+    let m = message.to_lowercase();
+    [
+        "oauth",
+        "not logged in",
+        "failed to authenticate",
+        "/login",
+        "invalid api key",
+        "authentication_error",
+    ]
+    .iter()
+    .any(|k| m.contains(k))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -346,11 +376,7 @@ pub async fn agent_send(
         let status = child.wait().await;
         let stderr = stderr_task.await.unwrap_or_default();
         if stopped {
-            emit(AgentEvent::Done {
-                ok: false,
-                message: Some("止めました".to_owned()),
-                cost_usd: None,
-            });
+            emit(AgentEvent::done(false, Some("止めました".to_owned()), None));
         } else if !finished {
             let ok = status.as_ref().is_ok_and(std::process::ExitStatus::success);
             let message = (!ok).then(|| {
@@ -361,15 +387,238 @@ pub async fn agent_send(
                     tail
                 }
             });
-            emit(AgentEvent::Done {
-                ok,
-                message,
-                cost_usd: None,
-            });
+            let mut done = AgentEvent::done(ok, message, None);
+            // Only Claude Code can be signed in from the pane; other agents keep their message.
+            if let AgentEvent::Done { needs_login, .. } = &mut done {
+                *needs_login &= kind == AgentKind::ClaudeCode;
+            }
+            emit(done);
         }
         lock(&app.state::<AgentTurns>().running).remove(&id);
     });
     Ok(turn_id)
+}
+
+pub(crate) const LOGIN_EVENT: &str = "agent-login";
+
+/// Progress of `claude auth login` run in the background for the pane.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum LoginEvent {
+    /// The sign-in page; Claude Code opens it in the browser itself.
+    Url {
+        url: String,
+    },
+    Done {
+        ok: bool,
+        message: Option<String>,
+    },
+}
+
+/// The sign-in in progress: its stdin takes the code the sign-in page shows
+/// when the browser cannot hand it back by itself.
+#[derive(Default)]
+pub(crate) struct AgentLogin {
+    /// Tagged with the sign-in it belongs to, so a cancelled one finishing
+    /// late does not close a newer one's input.
+    stdin: tokio::sync::Mutex<Option<(u64, tokio::process::ChildStdin)>>,
+    generation: AtomicU64,
+    cancel: Mutex<Option<CancellationToken>>,
+}
+
+/// Signs Claude Code in from the pane: runs `claude auth login` hidden, hands
+/// the sign-in URL to the pane and reports when the account is usable.
+/// Studio never sees the account's tokens; Claude Code stores them as usual.
+#[tauri::command]
+pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdResult<()> {
+    let config = AgentConfig::load();
+    if config.kind != AgentKind::ClaudeCode {
+        return Err(err(
+            "AGENT_LOGIN_UNSUPPORTED",
+            format!(
+                "{} へのログインは、その AI の画面から行ってください",
+                config.name()
+            ),
+        ));
+    }
+    let Some(program) = config.executable() else {
+        return Err(err(
+            "AGENT_NOT_FOUND",
+            agent_info().problem.unwrap_or_default(),
+        ));
+    };
+    if let Some(previous) = lock(&login.cancel).take() {
+        previous.cancel();
+    }
+    let mut command = Command::new(&program);
+    command
+        .args(["auth", "login"])
+        .env_remove("CLAUDECODE")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let mut child = command
+        .spawn()
+        .map_err(|e| err("AGENT_FAILED", format!("ログインを始められません: {e}")))?;
+    let generation = login.generation.fetch_add(1, Ordering::Relaxed) + 1;
+    *login.stdin.lock().await = child.stdin.take().map(|stdin| (generation, stdin));
+    let cancel = CancellationToken::new();
+    *lock(&login.cancel) = Some(cancel.clone());
+
+    tauri::async_runtime::spawn(async move {
+        let emit = |event: LoginEvent| {
+            let _ = app.emit(LOGIN_EVENT, event);
+        };
+        let mut stderr = child.stderr.take();
+        let stderr_task = tauri::async_runtime::spawn(async move {
+            let mut buf = Vec::new();
+            if let Some(s) = stderr.as_mut() {
+                let _ = s.read_to_end(&mut buf).await;
+            }
+            String::from_utf8_lossy(&buf).into_owned()
+        });
+        let mut stopped = false;
+        if let Some(stdout) = child.stdout.take() {
+            let mut lines = BufReader::new(stdout).lines();
+            loop {
+                tokio::select! {
+                    () = cancel.cancelled() => {
+                        let _ = child.start_kill();
+                        stopped = true;
+                        break;
+                    }
+                    line = lines.next_line() => match line {
+                        Ok(Some(line)) => {
+                            if let Some(url) = login_url(&line) {
+                                emit(LoginEvent::Url { url });
+                            }
+                        }
+                        Ok(None) | Err(_) => break,
+                    }
+                }
+            }
+        }
+        let status = child.wait().await;
+        let stderr = stderr_task.await.unwrap_or_default();
+        {
+            let login = app.state::<AgentLogin>();
+            let mut stdin = login.stdin.lock().await;
+            if stdin.as_ref().is_some_and(|(g, _)| *g == generation) {
+                *stdin = None;
+            }
+        }
+        if stopped {
+            return;
+        }
+        let ok = status.as_ref().is_ok_and(std::process::ExitStatus::success)
+            && logged_in(&program).await;
+        let message = (!ok).then(|| {
+            let tail = tail(stderr.trim(), STDERR_TAIL);
+            if tail.is_empty() {
+                "ログインできませんでした".to_owned()
+            } else {
+                tail
+            }
+        });
+        emit(LoginEvent::Done { ok, message });
+    });
+    Ok(())
+}
+
+/// The code the sign-in page shows, for when the browser could not return
+/// to Claude Code by itself.
+#[tauri::command]
+pub async fn agent_login_code(login: State<'_, AgentLogin>, code: String) -> CmdResult<()> {
+    let code = code.trim();
+    if code.is_empty() {
+        return Err(err("INVALID_INPUT", "コードが空です"));
+    }
+    let mut stdin = login.stdin.lock().await;
+    let Some((_, stdin)) = stdin.as_mut() else {
+        return Err(err("AGENT_LOGIN_NOT_RUNNING", "ログインが始まっていません"));
+    };
+    stdin
+        .write_all(format!("{code}\n").as_bytes())
+        .await
+        .map_err(|e| err("AGENT_FAILED", e.to_string()))?;
+    stdin
+        .flush()
+        .await
+        .map_err(|e| err("AGENT_FAILED", e.to_string()))
+}
+
+#[tauri::command]
+pub fn agent_login_cancel(login: State<'_, AgentLogin>) {
+    if let Some(cancel) = lock(&login.cancel).take() {
+        cancel.cancel();
+    }
+}
+
+/// Opens the sign-in page in the default browser (only Anthropic's own pages).
+#[tauri::command]
+pub fn agent_open_url(url: String) -> CmdResult<()> {
+    if !is_sign_in_url(&url) {
+        return Err(err("INVALID_INPUT", "開けない URL です"));
+    }
+    let mut command = if cfg!(windows) {
+        let mut c = std::process::Command::new("explorer");
+        c.arg(&url);
+        c
+    } else {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(&url);
+        c
+    };
+    command
+        .spawn()
+        .map(drop)
+        .map_err(|e| err("AGENT_FAILED", format!("ブラウザを開けません: {e}")))
+}
+
+fn is_sign_in_url(url: &str) -> bool {
+    [
+        "https://claude.com/",
+        "https://claude.ai/",
+        "https://console.anthropic.com/",
+        "https://platform.claude.com/",
+    ]
+    .iter()
+    .any(|p| url.starts_with(p))
+        && !url.contains(char::is_whitespace)
+}
+
+fn login_url(line: &str) -> Option<String> {
+    let start = line.find("https://")?;
+    let url: String = line[start..]
+        .chars()
+        .take_while(|c| !c.is_whitespace())
+        .collect();
+    is_sign_in_url(&url).then_some(url)
+}
+
+/// `claude auth status --json` → `loggedIn`.
+async fn logged_in(program: &Path) -> bool {
+    let mut command = Command::new(program);
+    command
+        .args(["auth", "status", "--json"])
+        .env_remove("CLAUDECODE")
+        .stdin(Stdio::null());
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let Ok(out) = command.output().await else {
+        return false;
+    };
+    serde_json::from_slice::<Value>(&out.stdout)
+        .ok()
+        .and_then(|v| v.get("loggedIn").and_then(Value::as_bool))
+        .unwrap_or(false)
 }
 
 #[tauri::command]
@@ -457,11 +706,11 @@ pub(crate) fn parse_claude_line(line: &str) -> Vec<AgentEvent> {
             .collect(),
         Some("result") => {
             let ok = !v.get("is_error").and_then(Value::as_bool).unwrap_or(false);
-            vec![AgentEvent::Done {
+            vec![AgentEvent::done(
                 ok,
-                message: if ok { None } else { str_of(&v, "result") },
-                cost_usd: v.get("total_cost_usd").and_then(Value::as_f64),
-            }]
+                if ok { None } else { str_of(&v, "result") },
+                v.get("total_cost_usd").and_then(Value::as_f64),
+            )]
         }
         _ => Vec::new(),
     }
@@ -608,18 +857,15 @@ mod tests {
             parse_claude_line(
                 r#"{"stop_reason":"end_turn","is_error":false,"result":"done","type":"result","total_cost_usd":0.01}"#
             ),
-            vec![AgentEvent::Done {
-                ok: true,
-                message: None,
-                cost_usd: Some(0.01)
-            }]
+            vec![AgentEvent::done(true, None, Some(0.01))]
         );
         assert_eq!(
             parse_claude_line(r#"{"type":"result","is_error":true,"result":"Not logged in"}"#),
             vec![AgentEvent::Done {
                 ok: false,
                 message: Some("Not logged in".into()),
-                cost_usd: None
+                cost_usd: None,
+                needs_login: true,
             }]
         );
     }
@@ -635,16 +881,41 @@ mod tests {
     fn events_serialize_camel_cased() {
         let e = Envelope {
             turn_id: "t".into(),
-            event: AgentEvent::Done {
-                ok: true,
-                message: None,
-                cost_usd: Some(0.5),
-            },
+            event: AgentEvent::done(true, None, Some(0.5)),
         };
         assert_eq!(
             serde_json::to_value(e).unwrap(),
-            json!({ "turnId": "t", "kind": "done", "ok": true, "message": null, "costUsd": 0.5 })
+            json!({ "turnId": "t", "kind": "done", "ok": true, "message": null, "costUsd": 0.5, "needsLogin": false })
         );
+    }
+
+    #[test]
+    fn finds_the_sign_in_url_only_on_anthropic_pages() {
+        assert_eq!(
+            login_url(
+                "If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&state=x"
+            ),
+            Some("https://claude.com/cai/oauth/authorize?code=true&state=x".into())
+        );
+        assert_eq!(login_url("Opening browser to sign in…"), None);
+        assert_eq!(login_url("visit https://evil.example/claude.com/"), None);
+        assert!(!is_sign_in_url("https://claude.com/ x"));
+    }
+
+    #[test]
+    fn tells_an_expired_login_from_other_failures() {
+        assert!(is_login_error(
+            "Failed to authenticate: OAuth session expired and could not be refreshed"
+        ));
+        assert!(is_login_error("Invalid API key · Please run /login"));
+        assert!(!is_login_error("STEP_NOT_FOUND"));
+        assert!(!is_login_error("止めました"));
+        let AgentEvent::Done { needs_login, .. } =
+            AgentEvent::done(true, Some("oauth".into()), None)
+        else {
+            unreachable!()
+        };
+        assert!(!needs_login);
     }
 
     #[test]

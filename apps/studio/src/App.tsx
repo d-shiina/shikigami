@@ -369,6 +369,7 @@ export function App() {
       events.onRunEvidence((e) => store.getState().onRunEvidence(e)),
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
       agent.onEvent((e) => agentStore.getState().onEvent(e)),
+      agent.onLogin((e) => agentStore.getState().onLoginEvent(e)),
     ];
     void agentStore.getState().init();
     // Requests come from another process (the MCP server): re-read on refocus too.

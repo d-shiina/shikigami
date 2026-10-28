@@ -9,6 +9,10 @@ function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
     info: vi.fn(async () => ready),
     send: vi.fn(async () => "turn_1"),
     stop: vi.fn(async () => undefined),
+    login: vi.fn(async () => undefined),
+    loginCode: vi.fn(async () => undefined),
+    cancelLogin: vi.fn(async () => undefined),
+    openUrl: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -31,7 +35,7 @@ describe("agent store", () => {
     s.onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess" });
     s.onEvent({ turnId: "turn_1", kind: "tool", name: "update_step", detail: "待ちを10秒に" });
     s.onEvent({ turnId: "turn_1", kind: "text", text: "延ばしました" });
-    s.onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: 0.01 });
+    s.onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: 0.01, needsLogin: false });
 
     const ai = store.getState().items[1];
     expect(ai).toMatchObject({
@@ -97,10 +101,42 @@ describe("agent store", () => {
     await store.getState().init();
     await store.getState().send("一つ目");
     store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess" });
-    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: "止めました", costUsd: null });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: "止めました", costUsd: null, needsLogin: false });
     expect(store.getState().items[1]).toMatchObject({ status: "failed", message: "止めました" });
     store.getState().reset();
     expect(store.getState().items).toEqual([]);
     expect(store.getState().sessionId).toBeNull();
+  });
+
+  it("shows an error once and signs in from the pane, then sends the message again", async () => {
+    let turn = 0;
+    const api = fakeAgent({ send: vi.fn(async () => `turn_${++turn}`) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    await store.getState().send("ニュースをまとめて", { id: "scn_a", name: "A" }, "A");
+    const expired = "Failed to authenticate: OAuth session expired and could not be refreshed";
+    store.getState().onEvent({ turnId: "turn_1", kind: "text", text: expired });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: expired, costUsd: null, needsLogin: true });
+    expect(store.getState().items[1]).toMatchObject({ status: "failed", needsLogin: true, parts: [] });
+
+    await store.getState().startLogin();
+    expect(api.login).toHaveBeenCalledOnce();
+    store.getState().onLoginEvent({ kind: "url", url: "https://claude.com/cai/oauth/authorize?x" });
+    expect(store.getState().login).toMatchObject({ phase: "waiting", url: "https://claude.com/cai/oauth/authorize?x" });
+    expect(await store.getState().submitLoginCode(" abc#123 ")).toBe(true);
+    expect(api.loginCode).toHaveBeenCalledWith(" abc#123 ");
+
+    store.getState().onLoginEvent({ kind: "done", ok: true, message: null });
+    await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
+    expect(api.send).toHaveBeenLastCalledWith({ message: "ニュースをまとめて", sessionId: null, scenario: { id: "scn_a", name: "A" } });
+    expect(store.getState().login).toEqual({ phase: "idle" });
+  });
+
+  it("keeps the sign-in box with the reason when signing in fails", async () => {
+    const store = createAgentStore(fakeAgent());
+    await store.getState().init();
+    await store.getState().startLogin();
+    store.getState().onLoginEvent({ kind: "done", ok: false, message: "timed out" });
+    expect(store.getState().login).toEqual({ phase: "failed", message: "timed out" });
   });
 });

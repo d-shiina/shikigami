@@ -69,6 +69,7 @@ pub fn run() {
         .manage(state)
         .manage(updater::PendingUpdate::default())
         .manage(agent::AgentTurns::default())
+        .manage(agent::AgentLogin::default())
         .setup(move |app| {
             fit_to_screen(app);
             updater::on_startup(app.handle());
@@ -121,6 +122,10 @@ pub fn run() {
             agent::agent_info,
             agent::agent_send,
             agent::agent_stop,
+            agent::agent_login,
+            agent::agent_login_code,
+            agent::agent_login_cancel,
+            agent::agent_open_url,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = result {
