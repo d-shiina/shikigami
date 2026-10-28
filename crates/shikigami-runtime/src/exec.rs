@@ -486,36 +486,7 @@ impl Executor {
                 }
                 Ok(Flow::Next)
             }
-            control::FOR_EACH => {
-                let items = match self.eval(param_str(step, "items")?)? {
-                    Value::Array(items) => items,
-                    Value::Null => Vec::new(),
-                    other => {
-                        return Err(RunError::new(
-                            "EXPR_TYPE",
-                            format!("items must be an array, got {other}"),
-                        )
-                        .into());
-                    }
-                };
-                let item_var = param_str(step, "itemVar")?.to_owned();
-                let index_var = step
-                    .params
-                    .get("indexVar")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-                for (i, item) in items.into_iter().enumerate() {
-                    self.check_cancel()?;
-                    self.set_var(&item_var, item);
-                    if let Some(name) = &index_var {
-                        self.set_var(name, Value::from(i));
-                    }
-                    if let Flow::Break = self.block(step.block("body")).await? {
-                        break;
-                    }
-                }
-                Ok(Flow::Next)
-            }
+            control::FOR_EACH => self.for_each(step).await,
             control::TRY => {
                 let error_var = step
                     .params
@@ -683,6 +654,141 @@ impl Executor {
             self.set_var(&name, value);
         }
         Ok(Flow::Next)
+    }
+
+    async fn for_each(&mut self, step: &Step) -> StepResult {
+        let items = match self.eval(param_str(step, "items")?)? {
+            Value::Array(items) => items,
+            Value::Null => Vec::new(),
+            other => {
+                return Err(RunError::new(
+                    "EXPR_TYPE",
+                    format!("items must be an array, got {other}"),
+                )
+                .into());
+            }
+        };
+        let collect = match step.params.get("collect").and_then(Value::as_str) {
+            Some(source) => Some(Expr::parse(source).map_err(expr_error)?),
+            None => None,
+        };
+        let results = if step.params.contains_key("concurrency") {
+            let concurrency = self.eval_number(step, "concurrency")?;
+            if !(1.0..=64.0).contains(&concurrency) || concurrency.fract() != 0.0 {
+                return Err(RunError::new(
+                    "INVALID_PARAMS",
+                    "concurrency must be an integer between 1 and 64",
+                )
+                .into());
+            }
+            self.for_each_isolated(step, items, collect, concurrency as usize)
+                .await?
+        } else {
+            let mut results = Vec::with_capacity(items.len());
+            for (index, item) in items.into_iter().enumerate() {
+                self.check_cancel()?;
+                self.bind_item(step, index, item);
+                let flow = self.block(step.block("body")).await?;
+                if let Some(collect) = &collect {
+                    results.push(collect.eval(&self.vars).map_err(expr_error)?);
+                }
+                if let Flow::Break = flow {
+                    break;
+                }
+            }
+            results
+        };
+        if let Some(name) = &step.save_as {
+            self.set_var(name, Value::Array(results));
+        }
+        Ok(Flow::Next)
+    }
+
+    fn bind_item(&mut self, step: &Step, index: usize, item: Value) {
+        if let Some(name) = step.params.get("itemVar").and_then(Value::as_str) {
+            self.set_var(name, item);
+        }
+        if let Some(name) = step.params.get("indexVar").and_then(Value::as_str) {
+            self.set_var(name, Value::from(index));
+        }
+    }
+
+    /// Runs iterations on copies of the variables, at most `limit` at a
+    /// time, and returns the collected values in item order. Nothing else
+    /// leaves an iteration. The first failure cancels the rest.
+    async fn for_each_isolated(
+        &mut self,
+        step: &Step,
+        items: Vec<Value>,
+        collect: Option<Expr>,
+        limit: usize,
+    ) -> Result<Vec<Value>, Interrupt> {
+        let group = self.cancel.child_token();
+        let collect = Arc::new(collect);
+        let body: Arc<Vec<Step>> = Arc::new(step.block("body").to_vec());
+        let mut results = vec![Value::Null; items.len()];
+        let mut first_error: Option<Interrupt> = None;
+        let mut set = JoinSet::new();
+        let mut items = items.into_iter().enumerate();
+
+        loop {
+            // Start iterations lazily so a large list never holds more than
+            // `limit` copies of the variables.
+            while set.len() < limit && first_error.is_none() && !group.is_cancelled() {
+                let Some((index, item)) = items.next() else {
+                    break;
+                };
+                let mut executor = self.fork(group.child_token());
+                executor.bind_item(step, index, item);
+                let (body, collect, group) = (body.clone(), collect.clone(), group.clone());
+                set.spawn(async move {
+                    let mut result =
+                        executor
+                            .block(&body)
+                            .await
+                            .and_then(|_| match collect.as_ref() {
+                                Some(c) => c.eval(&executor.vars).map_err(|e| expr_error(e).into()),
+                                None => Ok(Value::Null),
+                            });
+                    if let Err(Interrupt::Failed(error)) = &mut result {
+                        let mut details = match error.details.take() {
+                            Some(Value::Object(map)) => map,
+                            Some(other) => Map::from_iter([("cause".to_owned(), other)]),
+                            None => Map::new(),
+                        };
+                        details.insert("index".into(), Value::from(index));
+                        error.details = Some(Value::Object(details));
+                        group.cancel();
+                    }
+                    (index, result)
+                });
+            }
+            let Some(joined) = set.join_next().await else {
+                break;
+            };
+            match joined {
+                Ok((index, Ok(value))) => results[index] = value,
+                Ok((_, Err(Interrupt::Cancelled))) if first_error.is_some() => {}
+                Ok((_, Err(interrupt))) => {
+                    group.cancel();
+                    first_error.get_or_insert(interrupt);
+                }
+                Err(e) => {
+                    group.cancel();
+                    first_error.get_or_insert(Interrupt::Failed(RunError::new(
+                        "INTERNAL",
+                        format!("forEach iteration panicked: {e}"),
+                    )));
+                }
+            }
+        }
+        if self.cancel.is_cancelled() {
+            return Err(Interrupt::Cancelled);
+        }
+        match first_error {
+            Some(interrupt) => Err(interrupt),
+            None => Ok(results),
+        }
     }
 
     /// Polls `condition` (after running `check`) until it holds or the

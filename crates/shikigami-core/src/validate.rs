@@ -92,6 +92,7 @@ impl Validator {
             issues: Vec::new(),
             seen_ids: HashSet::new(),
             known_vars: known_variables(scenario, &self.registry),
+            declared_vars: scenario.variables.iter().map(|v| v.name.clone()).collect(),
         };
         cx.scenario(scenario);
         for issue in &mut cx.issues {
@@ -149,6 +150,7 @@ struct Cx<'a> {
     issues: Vec<ValidationIssue>,
     seen_ids: HashSet<StepId>,
     known_vars: BTreeSet<String>,
+    declared_vars: BTreeSet<String>,
 }
 
 impl Cx<'_> {
@@ -365,6 +367,9 @@ impl Cx<'_> {
         if step.step_type == control::PARALLEL {
             self.parallel_writes(step, path);
         }
+        if step.step_type == control::FOR_EACH {
+            self.for_each(step, path);
+        }
 
         if step.step_type == control::WAIT_UNTIL && step.retry.is_some() {
             self.warn(
@@ -407,6 +412,79 @@ impl Cx<'_> {
                 });
             }
             self.steps(children, &block_path, child_depth);
+        }
+    }
+
+    /// `collect` / `concurrency` rules of `control.forEach`. With
+    /// `concurrency`, each iteration works on its own copy of the variables,
+    /// so writes inside the body are lost and `collect` is the only way out.
+    fn for_each(&mut self, step: &Step, path: &str) {
+        if step.params.contains_key("collect") && step.save_as.is_none() {
+            self.warn(
+                "FOREACH_COLLECT_WITHOUT_SAVE_AS",
+                "`collect` is evaluated but its results are not saved".into(),
+                format!("{path}/params/collect"),
+                Some(&step.id),
+            );
+            self.hint(
+                "Add `saveAs` to receive the array of collected values (same order as `items`).",
+            );
+        }
+        if !step.params.contains_key("concurrency") {
+            return;
+        }
+        let body = step.block("body");
+        let body_path = format!("{path}/blocks/body");
+
+        let mut breaks = Vec::new();
+        find_own_breaks(body, &mut breaks);
+        for id in breaks {
+            self.error(
+                "FOREACH_BREAK_IN_CONCURRENT",
+                "control.break cannot stop a forEach that runs iterations at the same time".into(),
+                body_path.clone(),
+                Some(&id),
+            );
+            self.hint("Remove `concurrency` to run one item at a time, or filter `items` before the loop (control.continue skips one item).");
+        }
+
+        let bound: Vec<&str> = ["itemVar", "indexVar"]
+            .iter()
+            .filter_map(|k| step.params.get(*k).and_then(Value::as_str))
+            .collect();
+        let mut writes = BTreeSet::new();
+        for child in body {
+            collect_writes(child, &self.validator.registry, &mut writes);
+        }
+        for name in &writes {
+            if self.declared_vars.contains(name) && !bound.contains(&name.as_str()) {
+                self.error(
+                    "FOREACH_SHARED_WRITE",
+                    format!(
+                        "iterations run in parallel, so writing '{name}' inside the body is lost"
+                    ),
+                    body_path.clone(),
+                    Some(&step.id),
+                );
+                self.hint(format!(
+                    "Return each item's value with `collect` (e.g. \"collect\": \"[item.no, status]\") and `saveAs: \"results\"`, then use the array after the loop instead of writing '{name}'."
+                ));
+            }
+        }
+
+        let mut accumulators = BTreeSet::new();
+        find_accumulators(body, &mut accumulators);
+        for name in accumulators {
+            if self.declared_vars.contains(&name) {
+                continue; // already FOREACH_SHARED_WRITE
+            }
+            self.warn(
+                "FOREACH_ACCUMULATOR",
+                format!("'{name}' is updated from its own value, but each parallel iteration starts from the same copy"),
+                body_path.clone(),
+                Some(&step.id),
+            );
+            self.hint("Return each item's value with `collect` + `saveAs: \"amounts\"` and add them up after the loop with sum(amounts).");
         }
     }
 
@@ -582,9 +660,60 @@ fn collect_writes(step: &Step, registry: &StepRegistry, out: &mut BTreeSet<Strin
             }
         }
     }
+    if step.step_type == control::FOR_EACH && step.params.contains_key("concurrency") {
+        return; // iterations work on copies; only `saveAs` leaves the loop
+    }
     for children in step.blocks.values() {
         for child in children {
             collect_writes(child, registry, out);
+        }
+    }
+}
+
+/// `control.break` steps that would leave this loop (not a nested one).
+fn find_own_breaks(steps: &[Step], out: &mut Vec<StepId>) {
+    for step in steps {
+        if step.step_type == control::BREAK {
+            out.push(step.id.clone());
+        }
+        let nested_loop = matches!(
+            step.step_type.as_str(),
+            control::WHILE
+                | control::REPEAT
+                | control::FOR_EACH
+                | control::PARALLEL
+                | control::WAIT_UNTIL
+        );
+        if !nested_loop {
+            for children in step.blocks.values() {
+                find_own_breaks(children, out);
+            }
+        }
+    }
+}
+
+/// Variables set from an expression or template that reads them
+/// (`total = total + x`).
+fn find_accumulators(steps: &[Step], out: &mut BTreeSet<String>) {
+    for step in steps {
+        if step.step_type == crate::registry::builtin::VARIABLE_SET
+            && let Some(Value::String(name)) = step.params.get("name")
+        {
+            let reads = match (step.params.get("expression"), step.params.get("value")) {
+                (Some(Value::String(e)), _) => {
+                    Expr::parse(e).map(|e| e.variables()).unwrap_or_default()
+                }
+                (_, Some(Value::String(t))) => expr::Template::parse(t)
+                    .map(|t| t.variables())
+                    .unwrap_or_default(),
+                _ => BTreeSet::new(),
+            };
+            if reads.contains(name) {
+                out.insert(name.clone());
+            }
+        }
+        for children in step.blocks.values() {
+            find_accumulators(children, out);
         }
     }
 }
@@ -832,6 +961,53 @@ mod tests {
             .find(|i| i.code == code)
             .and_then(|i| i.hint.as_deref())
             .unwrap_or_else(|| panic!("no hint for {code}: {report:?}"))
+    }
+
+    #[test]
+    fn concurrent_for_each_rules() {
+        let body = vec![
+            Step::new("variable.set")
+                .with_id("s1")
+                .with_param("name", "total")
+                .with_param("expression", "total + item"),
+            Step::new("variable.set")
+                .with_id("s2")
+                .with_param("name", "count")
+                .with_param("expression", "count + 1"),
+            Step::new("control.break").with_id("b"),
+        ];
+        let mut s = Scenario::new("each");
+        s.variables.push(VariableDef::new("total", VarType::Number));
+        s.steps = vec![
+            Step::new("control.forEach")
+                .with_id("f")
+                .with_param("items", "[1, 2]")
+                .with_param("itemVar", "item")
+                .with_param("concurrency", 2)
+                .with_param("collect", "item")
+                .with_block("body", body.clone()),
+        ];
+        let report = validator().validate(&s);
+        let c = codes(&report).join(",");
+        for code in [
+            "FOREACH_SHARED_WRITE",
+            "FOREACH_BREAK_IN_CONCURRENT",
+            "FOREACH_ACCUMULATOR",
+            "FOREACH_COLLECT_WITHOUT_SAVE_AS",
+        ] {
+            assert!(c.contains(code), "{code} missing: {c}");
+            hint_of(&report, code);
+        }
+        // `total` is declared, so it is a shared write rather than an accumulator.
+        assert_eq!(c.matches("FOREACH_ACCUMULATOR").count(), 1, "{c}");
+
+        // Without `concurrency` the same loop is ordinary sequential code.
+        s.steps[0].params.remove("concurrency");
+        let c = codes(&validator().validate(&s)).join(",");
+        assert!(
+            !c.contains("FOREACH_SHARED_WRITE") && !c.contains("FOREACH_BREAK"),
+            "{c}"
+        );
     }
 
     #[test]

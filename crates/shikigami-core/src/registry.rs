@@ -265,14 +265,20 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             step_type: control::FOR_EACH.into(),
             category: StepCategory::Control,
             label: "繰り返し（リスト）".into(),
-            description: "Runs `body` once per element of the array produced by the `items` expression, binding it to `itemVar`.".into(),
+            description: "Runs `body` once per element of the array produced by the `items` expression, binding it to `itemVar` (and the 0-based index to `indexVar`). `collect` (optional expression) is evaluated at the end of each iteration; `saveAs` receives the array of those values in item order. `concurrency` (optional, 1-64) runs up to that many iterations at the same time: each iteration then works on its own copy of the variables, writes inside `body` are discarded, `collect` + `saveAs` is the only way to return results, `control.break` is not allowed, and the first failure stops the loop (error details include `index`).".into(),
             params_schema: object_schema(
-                json!({ "items": expression, "itemVar": ident, "indexVar": ident }),
+                json!({
+                    "items": expression,
+                    "itemVar": ident,
+                    "indexVar": ident,
+                    "collect": expression,
+                    "concurrency": number_or_template(1, 64),
+                }),
                 &["items", "itemVar"],
             ),
             blocks: vec![block("body", "要素ごとの処理")],
-            has_output: false,
-            expression_params: vec!["items".into()],
+            has_output: true,
+            expression_params: vec!["items".into(), "collect".into()],
             binds_variables: vec!["itemVar".into(), "indexVar".into()],
             risk: RiskLevel::Safe,
             examples: vec![],
@@ -488,14 +494,25 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
             "params": { "count": 3, "indexVar": "i" },
             "blocks": { "body": [ { "type": "log.message", "params": { "message": "{{ i + 1 }} 回目" } } ] }
         })],
-        control::FOR_EACH => vec![json!({
-            "type": "control.forEach",
-            "name": "請求書ごとに処理",
-            "params": { "items": "invoices", "itemVar": "invoice", "indexVar": "i" },
-            "blocks": { "body": [
-                { "type": "variable.set", "params": { "name": "total", "expression": "total + invoice.amount" } }
-            ] }
-        })],
+        control::FOR_EACH => vec![
+            json!({
+                "type": "control.forEach",
+                "name": "請求書ごとに処理",
+                "params": { "items": "invoices", "itemVar": "invoice", "indexVar": "i" },
+                "blocks": { "body": [
+                    { "type": "variable.set", "params": { "name": "total", "expression": "total + invoice.amount" } }
+                ] }
+            }),
+            json!({
+                "type": "control.forEach",
+                "name": "請求書を4件ずつ同時に処理",
+                "params": { "items": "invoices", "itemVar": "invoice", "concurrency": 4, "collect": "taxed" },
+                "saveAs": "taxedAmounts",
+                "blocks": { "body": [
+                    { "type": "variable.set", "params": { "name": "taxed", "expression": "round(invoice.amount * 1.1)" } }
+                ] }
+            }),
+        ],
         control::TRY => vec![json!({
             "type": "control.try",
             "name": "失敗しても続ける",

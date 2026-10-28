@@ -32,6 +32,8 @@ pub const FUNCTIONS: &[&str] = &[
     "coalesce",
     "join",
     "split",
+    "sum",
+    "round",
 ];
 
 const MAX_DEPTH: usize = 64;
@@ -838,6 +840,47 @@ fn call(name: &str, args: &[Value]) -> Result<Value, ExprError> {
             .find(|v| !v.is_null())
             .cloned()
             .unwrap_or(Value::Null)),
+        "round" => {
+            // round(x) or round(x, digits); halves round away from zero.
+            if args.is_empty() || args.len() > 2 {
+                return Err(ExprError::Type(format!(
+                    "round() takes 1 or 2 arguments, got {}",
+                    args.len()
+                )));
+            }
+            let x = args[0]
+                .as_f64()
+                .ok_or_else(|| ExprError::Type(format!("round() of {}", type_name(&args[0]))))?;
+            let digits = match args.get(1) {
+                None => 0,
+                Some(d) => d
+                    .as_i64()
+                    .filter(|d| (0..=10).contains(d))
+                    .ok_or_else(|| ExprError::Type("round() digits must be 0-10".into()))?,
+            };
+            let scale = 10f64.powi(digits as i32);
+            Ok(number((x * scale).round() / scale))
+        }
+        "sum" => {
+            arity(name, args, 1)?;
+            let Value::Array(items) = &args[0] else {
+                return Err(ExprError::Type("sum() expects an array".into()));
+            };
+            let mut total = 0.0;
+            for item in items {
+                total += match item {
+                    Value::Number(n) => n.as_f64().unwrap_or(0.0),
+                    Value::Null => 0.0,
+                    other => {
+                        return Err(ExprError::Type(format!(
+                            "sum() of an array containing {}",
+                            type_name(other)
+                        )));
+                    }
+                };
+            }
+            Ok(number(total))
+        }
         "join" => {
             arity(name, args, 2)?;
             let Value::Array(items) = &args[0] else {
@@ -884,6 +927,19 @@ mod tests {
             Ok(v) => v,
             Err(e) => panic!("{src}: {e}"),
         }
+    }
+
+    #[test]
+    fn sum_adds_up_numbers() {
+        let scope = Map::new();
+        let eval = |src: &str| Expr::parse(src).unwrap().eval(&scope);
+        assert_eq!(eval("sum([1, 2.5, null])").unwrap(), json!(3.5));
+        assert_eq!(eval("sum([100, 200])").unwrap(), json!(300));
+        assert_eq!(eval("sum([])").unwrap(), json!(0));
+        assert!(eval("sum(['a'])").is_err());
+        assert_eq!(eval("round(12000 * 1.1)").unwrap(), json!(13200));
+        assert_eq!(eval("round(2.345, 2)").unwrap(), json!(2.35));
+        assert_eq!(eval("round(-2.5)").unwrap(), json!(-3));
     }
 
     #[test]

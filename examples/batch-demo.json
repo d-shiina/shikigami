@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "id": "scn_example_batch",
+  "name": "一括転記のデモ（並列 forEach と条件待ち）",
+  "revision": 1,
+  "variables": [
+    {
+      "name": "invoices",
+      "type": "array",
+      "direction": "input",
+      "default": [
+        {
+          "no": "INV-001",
+          "amount": 12000
+        },
+        {
+          "no": "INV-002",
+          "amount": 150000
+        },
+        {
+          "no": "INV-003",
+          "amount": 8000
+        },
+        {
+          "no": "INV-004",
+          "amount": 43000
+        },
+        {
+          "no": "INV-005",
+          "amount": 99000
+        },
+        {
+          "no": "INV-006",
+          "amount": 5000
+        }
+      ]
+    },
+    {
+      "name": "taxed",
+      "type": "array",
+      "direction": "output"
+    },
+    {
+      "name": "total",
+      "type": "number",
+      "direction": "output"
+    },
+    {
+      "name": "checks",
+      "type": "number",
+      "direction": "local",
+      "default": 0
+    }
+  ],
+  "steps": [
+    {
+      "id": "stp_1a97d99dd6d290c7ecd2e557d1b61b82",
+      "type": "log.message",
+      "name": "開始",
+      "params": {
+        "message": "{{ len(invoices) }} 件を 3 体の式神で転記します"
+      }
+    },
+    {
+      "id": "stp_14818993d177fa5f1b0287befd8d004d",
+      "type": "control.forEach",
+      "name": "請求書を 3 件ずつ同時に転記",
+      "params": {
+        "items": "invoices",
+        "itemVar": "invoice",
+        "concurrency": 3,
+        "collect": "amount"
+      },
+      "saveAs": "taxed",
+      "blocks": {
+        "body": [
+          {
+            "id": "stp_22c930422f338d057eb1673f21ef2c6a",
+            "type": "flow.delay",
+            "name": "転記（実際は Excel 操作などの時間のかかる処理）",
+            "params": {
+              "ms": 300
+            }
+          },
+          {
+            "id": "stp_78e96388b43201913eefed257ec45190",
+            "type": "variable.set",
+            "name": "税込金額",
+            "params": {
+              "name": "amount",
+              "expression": "round(invoice.amount * 1.1)"
+            }
+          },
+          {
+            "id": "stp_bfd6a81eaf561426f6ce00ac0b34b623",
+            "type": "log.message",
+            "name": "転記完了",
+            "params": {
+              "message": "{{ invoice.no }} を転記"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_3e76359608fb84bc91b9150a2f27b11b",
+      "type": "variable.set",
+      "name": "合計を集計",
+      "params": {
+        "name": "total",
+        "expression": "sum(taxed)"
+      }
+    },
+    {
+      "id": "stp_efc17ef714d42adca2f2ec5468905a1d",
+      "type": "wait.until",
+      "name": "集計表の更新を待つ",
+      "params": {
+        "condition": "checks >= 3",
+        "intervalMs": 200
+      },
+      "timeoutMs": 10000,
+      "blocks": {
+        "check": [
+          {
+            "id": "stp_d8f2fb8b131d1b3412efedeb2b90fa8d",
+            "type": "variable.set",
+            "name": "状態を読む（実際はファイルや画面を読むステップ）",
+            "params": {
+              "name": "checks",
+              "expression": "checks + 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_fcd00d46114ec72bb857a7f20499484b",
+      "type": "log.message",
+      "name": "終了",
+      "params": {
+        "message": "合計 {{ total }} 円"
+      }
+    }
+  ]
+}

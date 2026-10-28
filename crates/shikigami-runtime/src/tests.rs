@@ -759,3 +759,97 @@ async fn wait_until_fails_with_wait_timeout_and_can_be_skipped() {
     assert_eq!(report.status, RunStatus::Succeeded);
     assert_eq!(report.outputs["code"], json!("WAIT_TIMEOUT"));
 }
+
+fn for_each(items: &str, body: Vec<Step>) -> Step {
+    Step::new("control.forEach")
+        .with_param("items", items)
+        .with_param("itemVar", "item")
+        .with_block("body", body)
+}
+
+#[tokio::test]
+async fn for_each_collects_one_value_per_item() {
+    let mut step = for_each(
+        "[1, 2, 3, 4]",
+        vec![
+            Step::new("control.if")
+                .with_param("condition", "item == 3")
+                .with_block(
+                    "then",
+                    vec![set("doubled", "0"), Step::new("control.continue")],
+                ),
+            set("doubled", "item * 2"),
+        ],
+    )
+    .with_param("collect", "doubled");
+    step.save_as = Some("out".into());
+    let mut s = scenario(vec![step]);
+    s.variables = outputs(&["out"]);
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"], json!([2, 4, 0, 8]));
+}
+
+#[tokio::test]
+async fn concurrent_for_each_runs_items_at_once_and_keeps_order() {
+    let mut step = for_each(
+        "[5, 4, 3, 2, 1, 0, 9, 8]",
+        vec![delay(100), set("doubled", "item * 2")],
+    )
+    .with_param("collect", "doubled")
+    .with_param("concurrency", "{{ workers }}");
+    step.save_as = Some("out".into());
+    let mut s = scenario(vec![step]);
+    s.variables = outputs(&["out"]);
+    s.variables.push(var(
+        "workers",
+        VarType::Number,
+        VarDirection::Input,
+        Some(json!(4)),
+    ));
+    let started = std::time::Instant::now();
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"], json!([10, 8, 6, 4, 2, 0, 18, 16]));
+    // 8 items x 100 ms with 4 at a time: about 200 ms, not 800 ms.
+    assert!(started.elapsed() < Duration::from_millis(600));
+}
+
+#[tokio::test]
+async fn concurrent_for_each_stops_at_the_first_failure() {
+    let s = scenario(vec![
+        for_each(
+            "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]",
+            vec![
+                Step::new("control.if")
+                    .with_param("condition", "item == 2")
+                    .with_block(
+                        "then",
+                        vec![Step::new("control.fail").with_param("message", "bad {{ item }}")],
+                    ),
+                delay(50),
+                log("done {{ item }}"),
+            ],
+        )
+        .with_param("concurrency", 2),
+    ]);
+    let (report, events) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let error = report.error.unwrap();
+    assert_eq!(error.message, "bad 2");
+    assert_eq!(error.details.unwrap()["index"], json!(2));
+    // Items after the failure never start.
+    assert!(!logs(&events).iter().any(|l| l == "done 9"));
+}
+
+#[tokio::test]
+async fn runs_the_batch_example() {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/batch-demo.json");
+    let text = std::fs::read_to_string(path).expect("example");
+    let s = shikigami_core::migrate::parse_scenario(&text).expect("parse");
+    let (report, _) = run(&Runtime::new(), s, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["total"], json!(348700));
+    assert_eq!(report.outputs["taxed"][1], json!(165000));
+}
