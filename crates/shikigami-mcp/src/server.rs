@@ -16,6 +16,8 @@ use shikigami_runtime::{RunHandle, RunOptions, RunSnapshot, Runtime};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
+use shikigami_browser::BrowserClient;
+
 use crate::audit::{AuditLog, AuditRecord, now};
 use crate::params::*;
 
@@ -72,6 +74,8 @@ pub const TOOLS: &[(&str, ToolClass)] = &[
     ("delete_scenario", ToolClass::Write),
     ("run_scenario", ToolClass::Run),
     ("stop_scenario", ToolClass::Run),
+    ("inspect_page", ToolClass::Run),
+    ("test_browser_step", ToolClass::Run),
 ];
 
 fn class_of(tool: &str) -> ToolClass {
@@ -86,12 +90,16 @@ fn class_of(tool: &str) -> ToolClass {
 pub struct ServerOptions {
     /// Tool classes this server exposes.
     pub allow: Vec<ToolClass>,
+    /// Browser adapter for inspect_page / test_browser_step (the same one
+    /// the Runtime's browser steps use).
+    pub browser: Option<Arc<BrowserClient>>,
 }
 
 impl Default for ServerOptions {
     fn default() -> Self {
         Self {
             allow: vec![ToolClass::Read, ToolClass::Write, ToolClass::Run],
+            browser: None,
         }
     }
 }
@@ -107,7 +115,8 @@ Shikigami Studio, and scenarios run later without you.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the scenario: re-read it and redo your change, never overwrite blindly.\n\
 - After editing, call validate_scenario and fix every error, then run_scenario (waitMs) and inspect get_run_logs.\n\
 - Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
-- Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.";
+- Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.\n\
+- For web pages: inspect_page shows the page as an accessibility tree; target elements by role + name (or label for inputs) exactly as listed there, not by CSS. test_browser_step tries one browser step (e.g. log in) and returns the resulting page, so you can walk the site before writing the scenario.";
 
 struct ActiveRun {
     cancel: CancellationToken,
@@ -119,6 +128,7 @@ struct Inner {
     runtime: Runtime,
     runs: Mutex<HashMap<RunId, ActiveRun>>,
     audit: AuditLog,
+    browser: Option<Arc<BrowserClient>>,
 }
 
 /// Outcome of one tool call before it is turned into an MCP result.
@@ -145,6 +155,7 @@ impl ShikigamiMcp {
                 runtime,
                 runs: Mutex::new(HashMap::new()),
                 audit,
+                browser: options.browser,
             }),
             tool_router,
         }
@@ -660,6 +671,82 @@ impl ShikigamiMcp {
         self.finish("run_scenario", &peer, Some(&p.scenario_id), outcome)
     }
 
+    // -- browser --------------------------------------------------------------
+
+    /// Open a web page (or look at the one already open) and return its accessibility tree: roles,
+    /// names and labels to use as step targets, e.g. `- button "ログイン"` becomes
+    /// { "role": "button", "name": "ログイン" }. The browser state belongs to this MCP session.
+    #[tool(annotations(read_only_hint = true, open_world_hint = true))]
+    async fn inspect_page(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(p): Parameters<InspectPageParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let mut params = serde_json::Map::new();
+        if let Some(url) = p.url {
+            params.insert("url".into(), Value::String(url));
+        }
+        if let Some(context) = p.context {
+            params.insert("context".into(), Value::String(context));
+        }
+        if let Some(target) = p.target {
+            params.insert("target".into(), target);
+        }
+        let outcome = self
+            .browser_call("snapshot", params)
+            .await
+            .map(truncate_snapshot);
+        self.finish("inspect_page", &peer, None, outcome)
+    }
+
+    /// Run one browser step now (outside any scenario) in this MCP session's browser and return its
+    /// output and the page afterwards. Use it to try targets and walk through a site (log in, open a
+    /// menu) before adding the steps to a scenario. The scenario is not changed.
+    #[tool(annotations(
+        read_only_hint = false,
+        destructive_hint = false,
+        open_world_hint = true
+    ))]
+    async fn test_browser_step(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(p): Parameters<TestBrowserStepParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let outcome = async {
+            let (def, method) = shikigami_browser::step_defs()
+                .into_iter()
+                .find(|(def, _)| def.step_type == p.step_type)
+                .ok_or_else(|| {
+                    err(
+                        "UNKNOWN_STEP_TYPE",
+                        format!("'{}' is not a browser step type", p.step_type),
+                    )
+                })?;
+            let schema = jsonschema::validator_for(&def.params_schema)
+                .map_err(|e| err("INTERNAL", e.to_string()))?;
+            let params = Value::Object(p.params.clone());
+            if let Some(e) = schema.iter_errors(&params).next() {
+                return Err(err("INVALID_PARAMS", format!("{e} (see get_step_schema)")));
+            }
+            let output = self.browser_call(method, p.params.clone()).await?;
+            let mut page_params = serde_json::Map::new();
+            if let Some(context) = p.params.get("context") {
+                page_params.insert("context".into(), context.clone());
+            }
+            let page = if method == "close" {
+                Value::Null
+            } else {
+                self.browser_call("snapshot", page_params)
+                    .await
+                    .map(truncate_snapshot)
+                    .unwrap_or(Value::Null)
+            };
+            Ok(json!({ "output": output, "page": page }))
+        }
+        .await;
+        self.finish("test_browser_step", &peer, None, outcome)
+    }
+
     /// Request cancellation of a running scenario.
     #[tool(annotations(
         read_only_hint = false,
@@ -691,7 +778,47 @@ impl ShikigamiMcp {
     }
 }
 
+/// Browser state opened from MCP tools lives under this pseudo run.
+const MCP_BROWSER_RUN: &str = "mcp";
+const SNAPSHOT_LIMIT: usize = 20_000;
+
+fn truncate_snapshot(mut page: Value) -> Value {
+    if let Some(Value::String(text)) = page.get_mut("snapshot")
+        && text.len() > SNAPSHOT_LIMIT
+    {
+        let mut end = SNAPSHOT_LIMIT;
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        text.truncate(end);
+        text.push_str("\n… (truncated: pass `target` to inspect one part of the page)");
+    }
+    page
+}
+
 impl ShikigamiMcp {
+    async fn browser_call(
+        &self,
+        method: &str,
+        mut params: serde_json::Map<String, Value>,
+    ) -> Outcome {
+        let Some(browser) = &self.inner.browser else {
+            return Err(err(
+                "ADAPTER_UNAVAILABLE",
+                "browser steps are not available in this server",
+            ));
+        };
+        params.insert("runId".into(), Value::String(MCP_BROWSER_RUN.into()));
+        browser
+            .call(method, Value::Object(params), &CancellationToken::new())
+            .await
+            .map_err(|e| ErrorPayload {
+                code: e.code,
+                message: e.message,
+                details: e.details,
+            })
+    }
+
     fn run_status(&self, id: &RunId) -> Outcome {
         if let Ok(runs) = self.inner.runs.lock()
             && let Some(run) = runs.get(id)

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>式神商事 受注管理システム - ログイン</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><strong>式神商事 受注管理システム</strong><span>デモ用</span></header>
+  <main>
+    <h1>ログイン</h1>
+    <p>デモ用のアカウント：ユーザー名 <code>demo</code> ／ パスワード <code>shikigami</code></p>
+    <form id="login">
+      <label for="user">ユーザー名</label>
+      <input id="user" name="user" autocomplete="username">
+      <label for="password">パスワード</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+      <div><button type="submit">ログイン</button></div>
+      <p id="error" class="error" role="alert"></p>
+    </form>
+  </main>
+  <script src="app.js"></script>
+  <script>
+    document.getElementById("login").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const user = document.getElementById("user").value;
+      const password = document.getElementById("password").value;
+      if (user === "demo" && password === "shikigami") {
+        sessionStorage.setItem("user", user);
+        // Simulate a slow back end so waiting is visible.
+        setTimeout(() => (location.href = "orders.html"), 400);
+      } else {
+        document.getElementById("error").textContent = "ユーザー名またはパスワードが違います";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 1,
+  "id": "scn_example_browser",
+  "name": "受注システムで未処理の注文を出荷する（ブラウザのデモ）",
+  "description": "式神商事のデモサイト（pnpm demo:site）にログインし、未処理の注文を出荷済みにする。在庫係の式神が同時に在庫一覧を確認し、在庫切れを知らせる。",
+  "revision": 1,
+  "variables": [
+    {
+      "name": "siteUrl",
+      "type": "string",
+      "direction": "input",
+      "default": "http://127.0.0.1:8787/",
+      "description": "デモサイトの URL"
+    },
+    {
+      "name": "user",
+      "type": "string",
+      "direction": "input",
+      "default": "demo"
+    },
+    {
+      "name": "password",
+      "type": "string",
+      "direction": "input",
+      "default": "shikigami",
+      "secret": true
+    },
+    {
+      "name": "shipped",
+      "type": "array",
+      "direction": "output",
+      "default": [],
+      "description": "出荷した注文番号"
+    },
+    {
+      "name": "shippedTotal",
+      "type": "number",
+      "direction": "output",
+      "default": 0,
+      "description": "出荷した金額の合計（円）"
+    },
+    {
+      "name": "outOfStock",
+      "type": "array",
+      "direction": "output",
+      "default": [],
+      "description": "在庫切れの商品"
+    }
+  ],
+  "steps": [
+    {
+      "id": "stp_bcce292923aa2708028f40fb6f57e7ce",
+      "type": "log.message",
+      "name": "開始",
+      "params": {
+        "message": "2 体の式神を召喚して受注処理を始めます"
+      }
+    },
+    {
+      "id": "stp_d647f9e09756c54db47226015376c896",
+      "type": "control.parallel",
+      "name": "受注係と在庫係が同時に作業",
+      "params": {},
+      "blocks": {
+        "branches": [
+          {
+            "id": "stp_2d856d07ca5c7a2ddadab76d521bc0cd",
+            "type": "control.group",
+            "name": "受注係：ログインして受注一覧を読む",
+            "blocks": {
+              "body": [
+                {
+                  "id": "stp_fcd12aa70801354864eb9799a0966509",
+                  "type": "browser.open",
+                  "name": "受注システムを開く",
+                  "params": {
+                    "url": "{{ siteUrl }}",
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_fdc18fd7b837216ec8dcef773a108218",
+                  "type": "browser.fill",
+                  "name": "ユーザー名を入力",
+                  "params": {
+                    "target": {
+                      "label": "ユーザー名"
+                    },
+                    "value": "{{ user }}",
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_e1954cb6bd6b8f63a18df7c2ca30793b",
+                  "type": "browser.fill",
+                  "name": "パスワードを入力",
+                  "params": {
+                    "target": {
+                      "label": "パスワード"
+                    },
+                    "value": "{{ password }}",
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_e5cc0b6dc9882e7bd4f995d04badedf2",
+                  "type": "browser.click",
+                  "name": "ログイン",
+                  "params": {
+                    "target": {
+                      "role": "button",
+                      "name": "ログイン"
+                    },
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_be78bf37c9ab389cde934cbb597464e6",
+                  "type": "browser.waitFor",
+                  "name": "受注一覧の表示を待つ",
+                  "params": {
+                    "target": {
+                      "role": "heading",
+                      "name": "受注一覧"
+                    },
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_aa2ef3752541e99bbd15f91f1effe14d",
+                  "type": "browser.getTable",
+                  "name": "受注一覧を読む",
+                  "params": {
+                    "target": {
+                      "role": "table",
+                      "name": "受注"
+                    },
+                    "context": "orders"
+                  },
+                  "saveAs": "orders"
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_be97a063f965b3f00fb2f922f42d251f",
+            "type": "control.group",
+            "name": "在庫係：在庫一覧を読む",
+            "blocks": {
+              "body": [
+                {
+                  "id": "stp_07f409901539e8b1a41b59105a326d64",
+                  "type": "browser.open",
+                  "name": "在庫一覧を開く",
+                  "params": {
+                    "url": "{{ siteUrl }}stock.html",
+                    "context": "stock"
+                  }
+                },
+                {
+                  "id": "stp_1beb86cea9f95d369ba63e292d5d41aa",
+                  "type": "browser.getTable",
+                  "name": "在庫一覧を読む（表示まで自動で待つ）",
+                  "params": {
+                    "target": {
+                      "role": "table",
+                      "name": "在庫"
+                    },
+                    "context": "stock"
+                  },
+                  "saveAs": "stock"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_97e395b7abcf135e919ce306672a76f3",
+      "type": "log.message",
+      "name": "読み取り結果",
+      "params": {
+        "message": "受注 {{ len(orders) }} 件、在庫 {{ len(stock) }} 品目を読み取りました"
+      }
+    },
+    {
+      "id": "stp_0c3ae6264cbac7a9384644653ff39f5f",
+      "type": "control.forEach",
+      "name": "未処理の注文を 1 件ずつ出荷",
+      "params": {
+        "items": "orders",
+        "itemVar": "order"
+      },
+      "blocks": {
+        "body": [
+          {
+            "id": "stp_4f83dc3832291cc6e26970dffe5b4d4e",
+            "type": "control.if",
+            "name": "未処理か",
+            "params": {
+              "condition": "order['状態'] == '未処理'"
+            },
+            "blocks": {
+              "then": [
+                {
+                  "id": "stp_bacbdee1f739318e546e5c7113596084",
+                  "type": "browser.click",
+                  "name": "出荷ボタンを押す",
+                  "params": {
+                    "target": {
+                      "role": "button",
+                      "name": "{{ order['注文番号'] }} を出荷"
+                    },
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_e80538956b2ed15aa03e028ea435830d",
+                  "type": "browser.waitFor",
+                  "name": "出荷完了の表示を待つ",
+                  "params": {
+                    "target": {
+                      "text": "{{ order['注文番号'] }} を出荷しました"
+                    },
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_6a36a61dd075563385c58c8be945a493",
+                  "type": "variable.set",
+                  "name": "出荷した注文を記録",
+                  "params": {
+                    "name": "shipped",
+                    "expression": "shipped + [order['注文番号']]"
+                  }
+                },
+                {
+                  "id": "stp_9f2c7c139610c921639c018231ff674b",
+                  "type": "variable.set",
+                  "name": "金額を合計",
+                  "params": {
+                    "name": "shippedTotal",
+                    "expression": "shippedTotal + num(order['金額（円）'])"
+                  }
+                },
+                {
+                  "id": "stp_5ebdfe9cadafb64dbe867a63cc15c5ba",
+                  "type": "log.message",
+                  "name": "出荷を報告",
+                  "params": {
+                    "message": "{{ order['注文番号'] }}（{{ order['顧客'] }}・{{ order['商品'] }}）を出荷しました"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_1b4b2813efeed6e7d5be24603285e895",
+      "type": "control.forEach",
+      "name": "在庫切れを確認",
+      "params": {
+        "items": "stock",
+        "itemVar": "item"
+      },
+      "blocks": {
+        "body": [
+          {
+            "id": "stp_b55105b7e9e7f84da822193bfc9fe7d6",
+            "type": "control.if",
+            "name": "在庫が 0 か",
+            "params": {
+              "condition": "num(item['在庫数']) == 0"
+            },
+            "blocks": {
+              "then": [
+                {
+                  "id": "stp_1b027dd7097d303ccc76660970db90ed",
+                  "type": "variable.set",
+                  "name": "在庫切れを記録",
+                  "params": {
+                    "name": "outOfStock",
+                    "expression": "outOfStock + [item['商品名']]"
+                  }
+                },
+                {
+                  "id": "stp_f9a74ccb77d87c46ea09fe59d3e60089",
+                  "type": "log.message",
+                  "name": "在庫切れを知らせる",
+                  "params": {
+                    "level": "warn",
+                    "message": "在庫切れ：{{ item['商品名'] }}（{{ item['商品コード'] }}）"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_cd34f5556762b4b902d649dc8cca9918",
+      "type": "browser.waitFor",
+      "name": "出荷後の一覧で未処理が消えたことを確認",
+      "params": {
+        "target": {
+          "role": "cell",
+          "name": "未処理",
+          "exact": true
+        },
+        "state": "hidden",
+        "context": "orders"
+      }
+    },
+    {
+      "id": "stp_1aec6e2affa1b16246240e3a892a5c78",
+      "type": "log.message",
+      "name": "完了報告",
+      "params": {
+        "message": "出荷 {{ len(shipped) }} 件（{{ join(shipped, '、') }}）、合計 {{ shippedTotal }} 円。在庫切れ {{ len(outOfStock) }} 品目"
+      }
+    }
+  ]
+}

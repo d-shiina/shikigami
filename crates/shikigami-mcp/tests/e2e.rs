@@ -282,6 +282,7 @@ async fn long_runs_can_be_polled_and_stopped() {
 async fn read_only_server_exposes_only_read_tools() {
     let h = start(ServerOptions {
         allow: vec![ToolClass::Read],
+        ..ServerOptions::default()
     })
     .await;
     let tools = h.client.list_all_tools().await.unwrap();
@@ -309,7 +310,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 20);
+    assert_eq!(tools.len(), 22);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),

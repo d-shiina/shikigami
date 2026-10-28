@@ -174,3 +174,28 @@ pub struct ListRunsParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InspectPageParams {
+    /// Page to open first. Omit to inspect the page already open in `context`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Browser context to use (default "default"). Contexts here belong to the MCP session, not to runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    /// Limit the snapshot to one element, e.g. { "role": "table", "name": "受注" }.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TestBrowserStepParams {
+    /// A browser step type, e.g. "browser.click" (see list_step_types).
+    #[serde(rename = "type")]
+    pub step_type: String,
+    /// The step's params exactly as they would appear in the scenario, with literal values (no {{ }}).
+    #[serde(default)]
+    pub params: Map<String, Value>,
+}

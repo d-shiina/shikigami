@@ -495,6 +495,7 @@ impl Cx<'_> {
             let ResourceDef::Param {
                 key,
                 kind: ResourceKind::File,
+                ..
             } = resource
             else {
                 continue;

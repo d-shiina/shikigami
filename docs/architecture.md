@@ -230,6 +230,7 @@ Runtime::builder()
 - Node.js + Playwright を **子プロセス** として起動し、stdin/stdout の改行区切り JSON-RPC 2.0 で通信（§7.3）。
 - 待機は Playwright のオートウェイト / `locator.waitFor` / `page.waitForLoadState` を使い、固定 sleep を使わない。
 - 子プロセスの異常終了は Rust 側で検知し、実行中ステップを `ADAPTER_CRASHED` で失敗させ、次回要求時に再起動する。
+- **実装済み**（[browser.md](browser.md)）：クレート `shikigami-browser`（子プロセス管理・`browser.*` ステップ 10 種）、`packages/browser-adapter`（Node 22.18+ で TypeScript を直接実行）。ブラウザは Windows 既定で Edge を使い、同梱しない。ページは「実行 × `context` 名」ごとの BrowserContext に分け、実行終了時に閉じる。
 
 ## 6. MCP Tool Interface（Phase 2）
 
@@ -291,7 +292,7 @@ Runtime::builder()
 ### 7.3 Runtime ⇔ Browser Adapter（Phase 3）
 
 - 改行区切り JSON-RPC 2.0 over stdio。要求：`{"jsonrpc":"2.0","id":1,"method":"click","params":{...}}`。
-- メソッド：`launch`, `navigate`, `snapshot`（アクセシビリティツリー）, `click`, `fill`, `select`, `waitFor`, `download`, `upload`, `screenshot`, `close`。
+- メソッド（実装済み）：`open`, `click`, `fill`, `select`, `press`, `getText`, `getTable`, `waitFor`, `screenshot`, `snapshot`（アクセシビリティツリー）, `close`, `closeRun`, `ping`, `shutdown`。`download` / `upload` は未実装。
 - ハートビート（`ping`）と子プロセス終了監視で異常終了を検知。stderr は tracing に転送。
 - プロトコルの型も `@shikigami/schema` に生成し、Rust/TS で共有する。
 
@@ -492,7 +493,7 @@ CREATE TABLE credentials_index (          -- 値は OS の資格情報ストア�
 
 ### 未実装（後続フェーズ）
 
-- ブラウザ操作（Phase 3）、Windows 操作（Phase 4）、プロセス間の資源排他（§10.5）
+- Windows 操作（Phase 4）、プロセス間の資源排他（§10.5）、ブラウザのダウンロード・アップロード
 - Studio のドラッグ＆ドロップ編集、ブレークポイント・ステップ実行、UI 要素インスペクター、差分表示（Phase 5）
 - SQLite、クライアント別のツール権限設定・削除時の人間承認、許可リスト、資格情報ストア連携、MCP の Streamable HTTP
 

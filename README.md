@@ -12,7 +12,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ**
 
 ## 現在の状態
 
-**Phase 1（基盤）と Phase 2（MCP サーバー）を実装済み。** Scenario Core / Runtime / CLI / Studio（Tauri 2 + React）/ MCP サーバーが動作します。ブラウザ操作（Phase 3）、Windows 操作（Phase 4）は未実装です。詳細は [アーキテクチャ設計 §13](docs/architecture.md#13-実装状況と制約)。
+**Phase 1（基盤）と Phase 2（MCP サーバー）を実装済み。** Scenario Core / Runtime / CLI / Studio（Tauri 2 + React）/ MCP サーバーが動作します。ブラウザ操作（Phase 3）も動作します（[docs/browser.md](docs/browser.md)、`pnpm demo:browser` でデモ）。Windows 操作（Phase 4）は未実装です。詳細は [アーキテクチャ設計 §13](docs/architecture.md#13-実装状況と制約)。
 
 | ドキュメント | 内容 |
 |---|---|
