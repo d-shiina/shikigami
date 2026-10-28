@@ -24,7 +24,7 @@ import { useStudio } from "../context";
 import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
 import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
-import { t } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
 import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
@@ -83,9 +83,9 @@ const MIN_READABLE_ZOOM = 0.85;
 /** Width of the outline panel plus its gap, from the canvas's left edge. */
 const OUTLINE_W = 284;
 
-const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: string }> = {
-  added: { border: "border-moegi-500", tag: "bg-moegi-500", label: "AIが追加" },
-  changed: { border: "border-accent-500", tag: "bg-accent-500", label: "AIが変更" },
+const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: () => string }> = {
+  added: { border: "border-moegi-500", tag: "bg-moegi-500", label: () => t.flow.aiAdded },
+  changed: { border: "border-accent-500", tag: "bg-accent-500", label: () => t.flow.aiChanged },
 };
 
 /** Which way the chart runs, for rows deciding whether to show chips. */
@@ -104,7 +104,7 @@ function BreakpointDot({ stepId, on }: { stepId: string; on: boolean }) {
   return (
     <button
       type="button"
-      title={on ? "ブレークポイントを外す (F9)" : "ここで一時停止する（ブレークポイント, F9）"}
+      title={on ? t.flow.breakpointOff : t.flow.breakpointOn}
       onClick={(e) => {
         e.stopPropagation();
         toggle(stepId);
@@ -129,7 +129,7 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   return (
     <div title={scope.title} className="flex items-center gap-1.5 rounded-[3px] border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-raised">
       <ActorMark entry={entry} size={18} />
-      <span className="text-slate-600">{actorLabel(entry)}の変更</span>
+      <span className="text-slate-600">{t.flow.changeBy(actorLabel(entry))}</span>
       <button type="button" onClick={() => approve(entry.revision)} className="rounded-[3px] bg-ink px-2 py-0.5 text-paper hover:bg-slate-700">
         {t.approve}
         {scope.suffix}
@@ -244,23 +244,23 @@ function ValuePopover({ name, color, values, side, anchor }: { name: string; col
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
         <span className="font-mono font-semibold">{name}</span>
         <span className="text-slate-400">
-          {side === "in" ? "このステップが受け取った値" : "このステップが書き込んだ値"}
-          {many && `（${values.length}回実行）`}
+          {side === "in" ? t.flow.valuesIn : t.flow.valuesOut}
+          {many && t.flow.runs(values.length)}
         </span>
       </div>
       {values.length === 0 ? (
-        <div className="mt-0.5 text-slate-400">実行すると、ここに値が出ます</div>
+        <div className="mt-0.5 text-slate-400">{t.flow.valuesEmpty}</div>
       ) : (
         <ol className="mt-1.5 space-y-1">
           {values.slice(0, MAX_RUNS).map((w, i) => (
             <li key={`${w.seq}-${i}`} className="flex items-start gap-2">
-              {many && <span className="w-9 shrink-0 pt-1 text-[10px] text-slate-400">{i + 1}回目</span>}
+              {many && <span className="w-9 shrink-0 pt-1 text-[10px] text-slate-400">{t.flow.nth(i + 1)}</span>}
               <div className="min-w-0 flex-1 rounded-[3px] border border-slate-100 bg-paper px-2 py-1">
                 <ChangeView change={w} />
               </div>
             </li>
           ))}
-          {values.length > MAX_RUNS && <li className="text-[10px] text-slate-400">…ほか {values.length - MAX_RUNS} 回</li>}
+          {values.length > MAX_RUNS && <li className="text-[10px] text-slate-400">{t.flow.moreRuns(values.length - MAX_RUNS)}</li>}
         </ol>
       )}
     </div>,
@@ -323,7 +323,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
   const focused = useFocus();
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "#94a3b8";
   if (row.kind === "more") {
-    return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[10px] text-slate-400">…ほか {row.count} 項目</div>;
+    return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[10px] text-slate-400">{t.flow.moreRows(row.count)}</div>;
   }
   if (row.kind === "output") {
     const color = typeColor(row.variable);
@@ -335,7 +335,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
           <VarIcon size={11} />
           <span className="truncate">{row.variable}</span>
         </span>
-        <Socket side="out" id={outHandle(row.variable)} color={color} title={`${row.variable} に書き込む`} />
+        <Socket side="out" id={outHandle(row.variable)} color={color} title={t.flow.writes(row.variable)} />
         <Chips side="out" color={color}>
           <VarChip
             side="out"
@@ -352,7 +352,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
   const lit = row.refs.some((r) => focused === varFocus(r));
   return (
     <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${first} 12%, transparent)` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
-      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={`読む変数: ${row.refs.join(", ")}`} />}
+      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={t.flow.reads(row.refs.join(", "))} />}
       {row.refs.length > 0 && (
         <Chips side="in" color={first}>
           {row.refs.slice(0, MAX_CHIPS).map((r) => (
@@ -400,11 +400,11 @@ function CallBar({ call }: { call: CallView }) {
       className="flex items-center gap-1.5 border-t border-slate-100 px-3 text-[11px]"
     >
       {call.target === "" ? (
-        <span className="text-slate-400">右のパネルで呼ぶシナリオを選びます</span>
+        <span className="text-slate-400">{t.flow.chooseCallee}</span>
       ) : missing ? (
-        <span className="truncate font-semibold text-shu-600">呼ぶシナリオが見つかりません</span>
+        <span className="truncate font-semibold text-shu-600">{t.flow.calleeMissing}</span>
       ) : (
-        <span className="truncate text-slate-500">{count} ステップ</span>
+        <span className="truncate text-slate-500">{t.flow.stepCount(count)}</span>
       )}
       {call.callee && (
         <span className="ml-auto flex shrink-0 items-center gap-1">
@@ -418,18 +418,18 @@ function CallBar({ call }: { call: CallView }) {
             }}
             data-call-toggle
           >
-            {call.unfolded ? "たたむ ▴" : "中を見る ▾"}
+            {call.unfolded ? `${t.flow.fold} ▴` : `${t.flow.unfold} ▾`}
           </button>
           <button
             type="button"
             className={`${button} bg-ink text-paper hover:bg-slate-700`}
-            title={`「${call.callee.name}」を開く`}
+            title={t.flow.openCallee(call.callee.name)}
             onClick={(e) => {
               e.stopPropagation();
               void open(call.target);
             }}
           >
-            開く ↗
+            {t.flow.open} ↗
           </button>
         </span>
       )}
@@ -465,7 +465,7 @@ function InnerSteps({ call, defs }: { call: CallView; defs: Map<string, StepType
       })}
       {call.hidden > 0 && (
         <div style={{ height: INNER_LINE_H }} className="flex items-center text-[11px] text-slate-400">
-          …ほか {call.hidden} ステップ（「開く」で全体を見る）
+          {t.flow.moreSteps(call.hidden)}
         </div>
       )}
     </div>
@@ -508,7 +508,7 @@ function StepNode({ data }: StepNodeProps) {
             data.runState === "failed" ? "bg-shu-500" : "bg-mizu-500"
           }`}
         >
-          {data.runState === "failed" ? "✕ ここで止まっています" : "❚❚ ここで一時停止中"}
+          {data.runState === "failed" ? `✕ ${t.flow.stoppedHere}` : `❚❚ ${t.flow.pausedHere}`}
         </span>
       )}
       {data.note && (
@@ -516,12 +516,14 @@ function StepNode({ data }: StepNodeProps) {
           title={data.note}
           className="absolute bottom-full left-1 z-10 mb-1 max-w-[95%] truncate rounded-[4px] border border-shu-500 bg-shu-50 px-2 text-[10px] leading-[18px] font-bold text-shu-600"
         >
-          指摘：{data.note}
+          {t.flow.note}
+          {t.colon}
+          {data.note}
         </span>
       )}
       {data.diff && (
         <span className={`absolute -top-2.5 right-2 z-10 rounded-[3px] px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
-          {DIFF_STYLE[data.diff].label}
+          {DIFF_STYLE[data.diff].label()}
         </span>
       )}
       <div
@@ -537,7 +539,7 @@ function StepNode({ data }: StepNodeProps) {
         {/* With a keyword the type is clear enough: make room for the name. */}
         {!(KEYWORD[data.step.type] && data.step.name) && (
           <span className="truncate text-[12px] font-bold" style={{ color }}>
-            {data.def?.label ?? data.step.type}
+            {stepLabel(data.step.type, data.def?.label)}
           </span>
         )}
         {data.step.name && <span className="truncate text-[12px] text-slate-500">{data.step.name}</span>}
@@ -580,7 +582,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
     >
       <FlowHandles />
       {/* The edge into the slot already carries the block's label. */}
-      {data.parentId ? `空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
+      {data.parentId ? t.flow.emptySlot(t.shortcut) : t.emptyScenario}
     </div>
   );
 }
@@ -716,7 +718,7 @@ function DiveBar({ root, chain }: { root: Scenario; chain: DiveLevel[] }) {
         title={t.diveOpen}
         className="ml-1 shrink-0 rounded-[3px] bg-ink px-2 leading-[22px] text-[11px] font-medium text-paper hover:bg-slate-700"
       >
-        開く ↗
+        {t.diveOpenLabel} ↗
       </button>
     </div>
   );

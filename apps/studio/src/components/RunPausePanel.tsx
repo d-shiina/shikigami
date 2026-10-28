@@ -12,6 +12,7 @@ import { plain, sentence } from "../lib/sentence";
 import { findStep, isActive } from "../store";
 import { usePendingReview } from "./Timeline";
 import { shortText } from "./ValueView";
+import { stepLabel as typeName, t } from "../lib/i18n";
 
 const MAX_VARS = 14;
 
@@ -41,7 +42,7 @@ function Button({
 
 function Variables({ values }: { values: Record<string, unknown> }) {
   const entries = Object.entries(values);
-  if (entries.length === 0) return <span className="text-[12px] text-slate-400">変数はありません</span>;
+  if (entries.length === 0) return <span className="text-[12px] text-slate-400">{t.pause.noVariables}</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {entries.slice(0, MAX_VARS).map(([name, value]) => (
@@ -55,7 +56,7 @@ function Variables({ values }: { values: Record<string, unknown> }) {
           <span className="truncate text-ink">{shortText(value)}</span>
         </span>
       ))}
-      {entries.length > MAX_VARS && <span className="text-[12px] text-slate-400">ほか {entries.length - MAX_VARS} 個</span>}
+      {entries.length > MAX_VARS && <span className="text-[12px] text-slate-400">{t.pause.moreVariables(entries.length - MAX_VARS)}</span>}
     </div>
   );
 }
@@ -67,7 +68,7 @@ function Screenshot({ src, title }: { src: string; title: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="止まったときの画面（クリックで拡大）"
+        title={t.pause.screenshotTitle}
         className="shrink-0 overflow-hidden rounded-[4px] border border-slate-300 hover:border-brand-500"
       >
         <img src={src} alt={title} className="h-[92px] w-auto max-w-[180px] object-cover object-top" />
@@ -112,8 +113,8 @@ export function RunPausePanel() {
   const stepId = pause?.stepId ?? failure?.stepId ?? null;
   const step = stepId ? findStep(scenario.steps ?? [], stepId) : null;
   const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
-  const stepLabel = step ? step.name || plain(sentence(step, def)) : stepId ? "（いまは無い手順）" : null;
-  const kind = def?.label ?? step?.type;
+  const stepLabel = step ? step.name || plain(sentence(step, def)) : stepId ? t.evidence.goneStep : null;
+  const kind = step ? typeName(step.type, def?.label) : undefined;
   const error = pause?.error ?? failure;
   const onError = pause ? pause.reason === "error" : true;
   // An AI's fix waits in the review queue: look at it before running it.
@@ -127,13 +128,13 @@ export function RunPausePanel() {
       const text = fixRequest({ scenario, runId: run.runId, pause, evidence: run.evidence, defs: stepTypes });
       if (agentAvailable) {
         // Straight to the AI pane; its edits come back through the review queue.
-        const sent = await askAgent(text, { id: scenario.id, name: scenario.name, stepId: pause.stepId }, `${scenario.name} ・ 実行エラーの修正`);
-        setTold(sent ? `${agentName} に修正を頼みました。直した内容を確認して承認すると、ここから再開できます。` : `${agentName} に送れませんでした。AI のパネルを確認してください。`);
+        const sent = await askAgent(text, { id: scenario.id, name: scenario.name, stepId: pause.stepId }, `${scenario.name} ・ ${t.pause.fixContext}`);
+        setTold(sent ? t.pause.asked(agentName) : t.pause.notSent(agentName));
       } else {
         setTold(await clipboardAi.ask(text));
       }
     } catch (e) {
-      setTold(`依頼できませんでした: ${e instanceof Error ? e.message : String(e)}`);
+      setTold(t.pause.askFailed(e instanceof Error ? e.message : String(e)));
     } finally {
       setAsking(false);
     }
@@ -141,7 +142,7 @@ export function RunPausePanel() {
 
   const evidence = run.evidence?.observation;
   const looking = pause && onError && !run.evidence && /^(browser|desktop)\./.test(pause.stepType);
-  const resumeBlocked = unreviewed > 0 ? "AIの修正を確認してから再開できます" : undefined;
+  const resumeBlocked = unreviewed > 0 ? t.runMsg.reviewBeforeResume : undefined;
 
   return (
     <section
@@ -153,18 +154,18 @@ export function RunPausePanel() {
         <span
           className={`flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-white ${onError ? "bg-shu-500" : "bg-mizu-500"}`}
         >
-          {pause ? (onError ? "エラーで一時停止中" : pause.reason === "breakpoint" ? "ブレークポイント" : "一時停止中") : "失敗しました"}
+          {pause ? (onError ? t.pause.onError : pause.reason === "breakpoint" ? t.pause.breakpoint : t.status.paused) : t.agent.failed}
         </span>
         {stepLabel && (
           <button
             type="button"
             onClick={() => stepId && goTo(stepId)}
             className="min-w-0 truncate text-[14px] font-bold hover:text-brand-600 hover:underline"
-            title="この手順を表示"
+            title={t.pause.showStep}
           >
             {kind && <span className="mr-1.5 text-[12px] font-semibold text-slate-500">{kind}</span>}
             {stepLabel}
-            {pause && !onError && <span className="ml-1.5 text-[12px] font-normal text-slate-500">の前</span>}
+            {pause && !onError && <span className="ml-1.5 text-[12px] font-normal text-slate-500">{t.pause.before}</span>}
           </button>
         )}
         <span className="flex-1" />
@@ -176,56 +177,56 @@ export function RunPausePanel() {
               disabled={asking || (agentAvailable && agentBusy)}
               title={
                 agentAvailable && agentBusy
-                  ? `${agentName} がほかの依頼に取り組んでいます`
+                  ? t.pause.agentBusy(agentName)
                   : agentAvailable
-                    ? `エラーと止まった画面・変数を添えて ${agentName} に修正を頼みます`
-                    : "エラーと止まった画面・変数を添えた依頼文をコピーします（AI のパネルが使えないため）"
+                    ? t.pause.askTitle(agentName)
+                    : t.pause.copyTitle
               }
             >
-              ✦ {agentAvailable ? `${agentName}に直してもらう` : "AIに直してもらう"}
+              ✦ {t.pause.askFix(agentAvailable ? agentName : "AI")}
             </Button>
             <Button
               tone="primary"
               onClick={() => void debug({ action: "retry" })}
               disabled={unreviewed > 0}
-              title={resumeBlocked ?? "このステップをもう一度実行して続けます（変数はそのまま）"}
+              title={resumeBlocked ?? t.pause.retryTitle}
               keys="F5"
             >
-              {changed ? "直した内容で再開" : "もう一度"}
+              {changed ? t.pause.resumeFixed : t.pause.retry}
             </Button>
-            <Button onClick={() => void debug({ action: "skip" })} disabled={unreviewed > 0} title={resumeBlocked ?? "このステップを飛ばして次へ進みます"}>
-              飛ばして次へ
+            <Button onClick={() => void debug({ action: "skip" })} disabled={unreviewed > 0} title={resumeBlocked ?? t.pause.skipTitle}>
+              {t.pause.skipNext}
             </Button>
-            <Button tone="danger" onClick={() => void debug({ action: "abort" })} title="失敗として実行を終えます">
-              終える
+            <Button tone="danger" onClick={() => void debug({ action: "abort" })} title={t.pause.abortTitle}>
+              {t.pause.abort}
             </Button>
           </>
         )}
         {pause && !onError && (
           <>
             <Button tone="primary" onClick={() => void debug({ action: "continue" })} disabled={unreviewed > 0} title={resumeBlocked} keys="F5">
-              ▶ 続行
+              ▶ {t.runMsg.resume.continue}
             </Button>
-            <Button onClick={() => void debug({ action: "stepOver" })} disabled={unreviewed > 0} title={resumeBlocked ?? "この手順を（中も含めて）実行して次で止まる"} keys="F10">
-              次へ
+            <Button onClick={() => void debug({ action: "stepOver" })} disabled={unreviewed > 0} title={resumeBlocked ?? t.pause.stepOverTitle} keys="F10">
+              {t.pause.stepOver}
             </Button>
-            <Button onClick={() => void debug({ action: "stepInto" })} disabled={unreviewed > 0} title={resumeBlocked ?? "ブロックの中の最初の手順で止まる"} keys="F11">
-              中へ
+            <Button onClick={() => void debug({ action: "stepInto" })} disabled={unreviewed > 0} title={resumeBlocked ?? t.pause.stepIntoTitle} keys="F11">
+              {t.pause.stepInto}
             </Button>
-            <Button onClick={() => void debug({ action: "stepOut" })} disabled={unreviewed > 0} title={resumeBlocked ?? "今いるブロックを最後まで実行して止まる"} keys="⇧F11">
-              外へ
+            <Button onClick={() => void debug({ action: "stepOut" })} disabled={unreviewed > 0} title={resumeBlocked ?? t.pause.stepOutTitle} keys="⇧F11">
+              {t.pause.stepOut}
             </Button>
-            <Button onClick={() => void debug({ action: "skip" })} disabled={unreviewed > 0} title={resumeBlocked ?? "この手順を実行せずに次へ"}>
-              飛ばす
+            <Button onClick={() => void debug({ action: "skip" })} disabled={unreviewed > 0} title={resumeBlocked ?? t.pause.skipStepTitle}>
+              {t.pause.skip}
             </Button>
           </>
         )}
         {failure && (
           <>
             <Button tone="primary" onClick={() => void startRun()} keys="F5">
-              もう一度実行
+              {t.pause.runAgain}
             </Button>
-            <Button onClick={dismissFailure}>閉じる</Button>
+            <Button onClick={dismissFailure}>{t.close}</Button>
           </>
         )}
       </div>
@@ -240,10 +241,10 @@ export function RunPausePanel() {
       {unreviewed > 0 && (
         <div className="mt-2 flex items-center gap-2 rounded-[6px] bg-brand-50 px-3 py-1.5 text-[13px] text-brand-700">
           <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
-          AIの修正が届きました（未確認 {unreviewed} 件）。確認して承認すると、止まったところから再開できます。
+          {t.pause.fixArrived(unreviewed)}
           {!reviewing && (
             <button type="button" className="ml-auto shrink-0 font-semibold underline" onClick={() => setReviewing(true)}>
-              確認する
+              {t.pause.review}
             </button>
           )}
         </div>
@@ -253,7 +254,7 @@ export function RunPausePanel() {
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
           {told}
           <button type="button" className="ml-auto shrink-0 text-slate-400 hover:underline" onClick={() => setTold(null)}>
-            閉じる
+            {t.close}
           </button>
         </div>
       )}
@@ -262,10 +263,18 @@ export function RunPausePanel() {
         <div className="mt-2 flex gap-3">
           {evidence?.screenshotDataUrl && <Screenshot src={evidence.screenshotDataUrl} title={evidence.title} />}
           <div className="min-w-0 flex-1 space-y-1">
-            {looking && <div className="text-[12px] text-slate-500">止まったときの画面を取得しています…</div>}
-            {run.evidence?.problem && <div className="text-[12px] text-slate-500">画面を取得できませんでした：{run.evidence.problem}</div>}
-            {evidence && !evidence.screenshotDataUrl && <div className="text-[12px] text-slate-500">止まったときの画面：{evidence.title}</div>}
-            <div className="text-[11px] font-semibold text-slate-500">この時点の変数</div>
+            {looking && <div className="text-[12px] text-slate-500">{t.pause.capturing}</div>}
+            {run.evidence?.problem && <div className="text-[12px] text-slate-500">
+                {t.pause.captureFailed}
+                {t.colon}
+                {run.evidence.problem}
+              </div>}
+            {evidence && !evidence.screenshotDataUrl && <div className="text-[12px] text-slate-500">
+                {t.evidence.pausedScreen}
+                {t.colon}
+                {evidence.title}
+              </div>}
+            <div className="text-[11px] font-semibold text-slate-500">{t.pause.variablesNow}</div>
             <Variables values={pause.variables} />
           </div>
         </div>

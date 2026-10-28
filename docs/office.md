@@ -1,121 +1,123 @@
-# Office 操作（Excel・Word・Outlook）
+# Office automation (Excel, Word, Outlook)
 
-Office の操作は「ファイルを直接読み書きする」を基本にし、Office アプリ本体（COM）はファイルだけではできないことにだけ使います。
+English | [日本語](ja/office.md)
 
-## 方式
+Office work is based on reading and writing the files directly; the Office apps themselves (COM) are used only for what files alone cannot do.
 
-| | ファイル直接（既定） | Office アプリ（COM） |
+## Approach
+
+| | Files directly (default) | Office app (COM) |
 |---|---|---|
-| Office のインストール | 不要 | 必要 |
-| 速さ・並列 | 速い。別のブックは同時に動く | 遅い。アプリ 1 つを順番に使う |
-| 無人実行 | 安定（ダイアログが出ない） | ダイアログ・ライセンス画面で止まることがある |
-| できること | セル・範囲・表・シートの読み書き | マクロ、数式の再計算、印刷、PDF 出力など |
-| テスト | Linux の CI でも回る | Windows で Office がある環境だけ |
+| Office installed | Not needed | Needed |
+| Speed / parallelism | Fast. Different workbooks run at the same time | Slow. One app used in turn |
+| Unattended runs | Stable (no dialogs) | Can stop on dialogs or license screens |
+| What it can do | Read and write cells, ranges, tables, sheets | Macros, recalculation, printing, PDF export… |
+| Tests | Run in Linux CI too | Only on Windows with Office |
 
-AI が覚える書き方を増やさないため、同じ操作を 2 通りで書けるようにはしません。セルの読み書きは常に `excel.*`（ファイル直接）で、COM のステップは「マクロを実行する」のようにファイル直接ではできない操作だけに用意します。Excel の画面を `desktop.*` で操作するのは最後の手段です。
+To keep the number of ways the AI has to learn small, the same action is never available both ways. Reading and writing cells is always `excel.*` (files directly); COM steps exist only for what files cannot do, such as "run a macro". Driving the Excel window with `desktop.*` is the last resort.
 
-## Excel（`excel.*`、実装済み）
+## Excel (`excel.*`, implemented)
 
-クレート `crates/shikigami-excel`。`.xlsx` / `.xlsm` を直接読み書きします（`.xls` は `UNSUPPORTED_FORMAT`、Excel で `.xlsx` に保存し直してもらう）。
+Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.xls` gives `UNSUPPORTED_FORMAT`; save it as `.xlsx` in Excel).
 
-| type | 主な params | 出力 |
+| type | Main params | Output |
 |---|---|---|
-| `excel.readRows` | `path`, `sheet`, `headerRow`（既定 1） | 見出しをキーにしたレコードの配列。各レコードに行番号 `_row` |
-| `excel.appendRows` | `path`, `sheet`, `rows`（レコードの配列）, `headerRow` | `{ firstRow, count }` |
-| `excel.readCell` | `path`, `sheet`, `cell`（例 `B3`） | セルの値 |
+| `excel.readRows` | `path`, `sheet`, `headerRow` (default 1) | list of records keyed by the header cells, each with its row number `_row` |
+| `excel.appendRows` | `path`, `sheet`, `rows` (list of records), `headerRow` | `{ firstRow, count }` |
+| `excel.readCell` | `path`, `sheet`, `cell` (e.g. `B3`) | the cell's value |
 | `excel.writeCell` | `path`, `sheet`, `cell`, `value` | – |
-| `excel.readRange` | `path`, `sheet`, `range`（例 `A1:D20`、省略で使用範囲全体） | 行の配列（各行はセル値の配列） |
-| `excel.writeRange` | `path`, `sheet`, `cell`（左上）, `values`（行の配列） | `{ range }` |
-| `excel.listSheets` | `path` | シート名の配列 |
-| `excel.addSheet` | `path`, `sheet` | –（同名があれば何もしない） |
+| `excel.readRange` | `path`, `sheet`, `range` (e.g. `A1:D20`; the whole used range when omitted) | list of rows (each a list of cell values) |
+| `excel.writeRange` | `path`, `sheet`, `cell` (top-left), `values` (list of rows) | `{ range }` |
+| `excel.listSheets` | `path` | list of sheet names |
+| `excel.addSheet` | `path`, `sheet` | – (does nothing if it exists) |
 
-- `sheet` を省略すると先頭のシート。名前違いは `SHEET_NOT_FOUND`（`details.sheets` にシート名の一覧）
-- 書き込むステップは、ファイルがなければブックを作ります（フォルダーは作らない）。シートは作らないので、新しいシートは `excel.addSheet` で足します
-- **よくある形**：`excel.readRows` → `control.forEach` → 行ごとに処理 → `excel.writeCell`（`cell: "F{{ row._row }}"`）で同じ行に結果を書く。結果を別のブックに貯めるときは `excel.appendRows`（空のシートなら見出し行もレコードのキーから書く）
-- `excel.appendRows` のキーは見出しと完全一致。合わないキーは `UNKNOWN_COLUMN`（`details.columns` に見出しの一覧）。勝手に列は増やしません
+- Without `sheet`, the first sheet. A wrong name gives `SHEET_NOT_FOUND` (`details.sheets` lists the sheets)
+- Writing steps create the workbook when the file does not exist (but not the folder). They do not create sheets; add new sheets with `excel.addSheet`
+- **A common shape**: `excel.readRows` → `control.forEach` → work on each row → `excel.writeCell` (`cell: "F{{ row._row }}"`) to write the result on the same row. To collect results in another workbook use `excel.appendRows` (on an empty sheet it also writes the header row from the record keys)
+- `excel.appendRows` keys must match the headers exactly. Others give `UNKNOWN_COLUMN` (`details.columns` lists the headers). Columns are never added on their own
 
-### 値の決まり
+### Values
 
-| セル | 読んだ値 | 書くときの書き方 |
+| Cell | Value read | How to write it |
 |---|---|---|
-| 文字 | `"A-1"` | `"A-1"`（`"=1+1"` や `"007"` も文字のまま。数値や数式に化けない） |
-| 数値 | `1200` / `980.5` | `1200` |
-| 真偽 | `true` / `false` | `true` |
-| 日付 | `"2026-10-28"`（時刻つきは `"2026-10-28T09:30:00"`、時刻だけは `"09:30:00"`） | `{ "date": "2026-10-28" }` |
-| 数式 | Excel が最後に計算した結果 | `{ "formula": "SUM(B2:B9)" }` |
-| エラー | `"#DIV/0!"` などの文字 | – |
-| 空 | `null` | `null`（書式は残して値を消す） |
+| Text | `"A-1"` | `"A-1"` (`"=1+1"` and `"007"` stay text; they never turn into numbers or formulas) |
+| Number | `1200` / `980.5` | `1200` |
+| Boolean | `true` / `false` | `true` |
+| Date | `"2026-10-28"` (`"2026-10-28T09:30:00"` with a time, `"09:30:00"` for a time only) | `{ "date": "2026-10-28" }` |
+| Formula | The result Excel last calculated | `{ "formula": "SUM(B2:B9)" }` |
+| Error | Text such as `"#DIV/0!"` | – |
+| Empty | `null` | `null` (clears the value, keeps the formatting) |
 
-- 日付はセルの表示形式（`yyyy/mm/dd`、`ggge年m月d日` など）で判断します。書くときは、セルが日付の表示形式でなければ `yyyy/mm/dd` を付けます
-- 書いた数式の結果は、次に Excel で開いたときに計算されます（Shikigami は計算しない）。その場で結果が要るときは COM の再計算ステップ（予定）を使います
+- Dates are recognized by the cell's number format (`yyyy/mm/dd`, `ggge年m月d日`…). When writing a date to a cell without a date format, `yyyy/mm/dd` is applied
+- Results of formulas you write are calculated the next time the workbook is opened in Excel (Shikigami does not calculate). If you need the result right away, use the COM recalculation step (planned)
 
-### 排他と保存
+### Locking and saving
 
-- どのステップも `path` を資源にするので、同じブックへのステップは自動で 1 つずつ、別のブックは並行に動きます（`file:` キー、[ai-authoring.md](design/ai-authoring.md) B）。シナリオにロックは書きません
-- 書き込みはステップごとに保存まで終えます。保存は同じフォルダーの一時ファイルに書いてから置き換えるので、失敗しても元のファイルは壊れません。「ブックを開く / 保存する / 閉じる」のステップはありません（離れたステップを名前でつなぐ書き方を作らないため）
-- Excel でそのブックを開いているとき（`~$ブック名` があるとき）は書き込まずに `FILE_IN_USE`（再試行可）。読み込みはできます
+- Every step uses `path` as a resource, so steps on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Scenarios never declare locks
+- Each writing step saves before it finishes. It writes to a temporary file in the same folder and then replaces the original, so a failure never corrupts it. There are no "open / save / close workbook" steps (so no way of linking distant steps by name is needed)
+- While the workbook is open in Excel (a `~$name` file exists), writes fail with `FILE_IN_USE` (retryable). Reading still works
 
-### 制約
+### Limits
 
-- ステップごとにブック全体を読み書きするので、大きなブックでは 1 ステップに時間がかかります。行ごとに `excel.writeCell` するより、結果を貯めて最後に `excel.appendRows` / `excel.writeRange` 1 回で書くほうが速い
-- 書式・結合セル・条件付き書式・マクロ（`.xlsm`）は保ったまま保存するよう作っていますが、ピボットテーブルやグラフなど一部の要素はライブラリ（umya-spreadsheet）の対応範囲に依存します。大事なブックはコピーで確かめてから使ってください
-- パスワード付きのブックは開けません（`WORKBOOK_UNREADABLE`）
+- Each step reads and writes the whole workbook, so a step on a large workbook takes time. Collecting the results and writing them once at the end with `excel.appendRows` / `excel.writeRange` is faster than `excel.writeCell` per row
+- Formatting, merged cells, conditional formatting and macros (`.xlsm`) are meant to be kept on save, but some parts such as pivot tables and charts depend on what the library (umya-spreadsheet) supports. Try important workbooks on a copy first
+- Password-protected workbooks cannot be opened (`WORKBOOK_UNREADABLE`)
 
 ### MCP
 
-AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange` など）で確かめてから書きます。`test_step` の `state` に、そのブックの全シートの使用範囲と先頭の数行が付きます。
+The AI checks a workbook's contents with `test_step` (`excel.listSheets`, `excel.readRange`…) before writing. `test_step`'s `state` includes the used range and first few rows of every sheet in that workbook.
 
-## Excel のマクロ（`excel.runMacro`、実装済み）
+## Excel macros (`excel.runMacro`, implemented)
 
-ファイル直接ではできない「ブックの VBA マクロを動かす」だけを Excel 本体（COM）で行います。Windows と デスクトップ版 Excel が必要です（ほかは `PLATFORM_UNSUPPORTED`、Excel がなければ `EXCEL_NOT_INSTALLED`）。
+Only "run a workbook's VBA macro", which files alone cannot do, goes through Excel itself (COM). It needs Windows and desktop Excel (`PLATFORM_UNSUPPORTED` elsewhere, `EXCEL_NOT_INSTALLED` without Excel).
 
 ```json
-{ "type": "excel.runMacro", "params": { "path": "C:\\work\\集計.xlsm", "macro": "Module1.集計", "args": ["{{ month }}", 2026] }, "saveAs": "result" }
+{ "type": "excel.runMacro", "params": { "path": "C:\\work\\summary.xlsm", "macro": "Module1.Summarize", "args": ["{{ month }}", 2026] }, "saveAs": "result" }
 ```
 
-- `macro`：`集計` か `Module1.集計`（標準モジュールの Public な Sub / Function）。Function の戻り値が出力（文字・数値・true/false・日付は ISO の文字、それ以外は null）
-- `args`：引数（文字・数値・true/false・null、最大 30 個）。`save`：実行後に保存するか（既定 true。false なら変更を捨てて閉じる）
-- ステップごとに**見えない別の Excel** を起動し、開く → 実行 → 保存 → 閉じる → 終了まで行います。ユーザーが開いている Excel のウィンドウには触りません。警告ダイアログは出さない設定（`DisplayAlerts = false`）で、外部リンクの更新もしません
-- 既定のタイムアウトは 5 分。MsgBox / InputBox を出すマクロは人を待って終わらないので、時間切れでその Excel を終了させ（保存しない）、`MACRO_TIMEOUT` を返します
-- 同じブックへのほかの `excel.*` とは自動で順番待ち。ユーザーがそのブックを Excel で開いていると `FILE_IN_USE`
-- インターネットから取得してブロックされたブック（ファイルのプロパティで「許可する」が未チェック）はマクロが動かず `MACRO_FAILED` になります
-- 任意のコードが動くので、ステップのリスクは `Dangerous` です
+- `macro`: `Summarize` or `Module1.Summarize` (a Public Sub / Function in a standard module). A Function's return value is the output (text, numbers, true/false; dates as ISO text; anything else null)
+- `args`: arguments (text, numbers, true/false, null; up to 30). `save`: whether to save after running (default true; false discards the changes and closes)
+- Each step starts **its own hidden Excel** and goes open → run → save → close → quit. Excel windows the person has open are never touched. Warning dialogs are off (`DisplayAlerts = false`) and external links are not updated
+- The default timeout is 5 minutes. A macro that shows a MsgBox / InputBox waits for a person and never ends, so on timeout that Excel is quit (without saving) and the step returns `MACRO_TIMEOUT`
+- It waits its turn automatically with other `excel.*` steps on the same workbook. `FILE_IN_USE` while the person has the workbook open in Excel
+- Workbooks downloaded from the internet and blocked ("Unblock" not checked in the file's properties) cannot run macros and give `MACRO_FAILED`
+- Any code can run, so the step's risk is `Dangerous`
 
-## Word（`word.*`、実装済み）
+## Word (`word.*`, implemented)
 
-クレート `crates/shikigami-word`。`.docx`（`.docm` / `.dotx` も可）を直接読み書きし、Word は不要です（`.doc` は `UNSUPPORTED_FORMAT`）。
+Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`) directly; Word is not needed (`.doc` gives `UNSUPPORTED_FORMAT`).
 
-| type | 主な params | 出力 |
+| type | Main params | Output |
 |---|---|---|
-| `word.fillTemplate` | `template`（テンプレート）, `path`（作る文書）, `values` | `{ path, replaced }` |
-| `word.readText` | `path` | 本文の文字（段落ごとに改行） |
+| `word.fillTemplate` | `template`, `path` (the document to create), `values` | `{ path, replaced }` |
+| `word.readText` | `path` | The body text (a line break per paragraph) |
 
-- テンプレートの本文・ヘッダー・フッターに `{{ 名前 }}` を書いておくと、`values` の値で置き換えます。書式（太字・フォントなど）はテンプレートのまま。値の `\n` は改行になります。`{{ 顧客.氏名 }}` はレコードの項目
-- **表の行の繰り返し**：表の行に `{{ 明細.品名 }}` `{{ 明細.数量 }}` と書き、`values` に `"明細": [ { "品名": …, "数量": … }, … ]` を渡すと、その行がレコードの数だけ並びます（空の配列なら行ごと消える）
-- 値のない `{{ }}` が 1 つでもあると文書を作らずに `TEMPLATE_VALUE_MISSING`（`details.missing` に名前の一覧）。置き換え漏れのある書類を作らないためです
-- Word の編集で `{{ 氏名 }}` が内部で分割されていても（スペルチェックや書式の変更で起きる）同じように置き換えます
-- テンプレートは変更しません。`path` は同じフォルダーに一時ファイルを書いてから置き換え。Word で開いている文書への書き込みは `FILE_IN_USE`
-- `template` と `path` の両方を資源にするので、同じファイルへのステップは自動で順番待ち
-- MCP の `test_step` で `word.readText` をテンプレートに実行すると、`state` にプレースホルダーの一覧が付きます
+- Write `{{ name }}` in the template's body, headers and footers and it is replaced with the value from `values`. Formatting (bold, fonts…) stays as in the template. `\n` in a value becomes a line break. `{{ customer.name }}` is a field of a record
+- **Repeating table rows**: write `{{ items.product }}` `{{ items.qty }}` in a table row and pass `"items": [ { "product": …, "qty": … }, … ]` in `values`; the row repeats once per record (an empty list removes the row)
+- If any `{{ }}` has no value, no document is created and the step gives `TEMPLATE_VALUE_MISSING` (`details.missing` lists the names), so documents with unreplaced fields are never produced
+- Placeholders such as `{{ name }}` that Word split internally (spell checking and formatting changes do this) are replaced just the same
+- The template is never changed. `path` is written as a temporary file in the same folder, then replaced. Writing to a document open in Word gives `FILE_IN_USE`
+- Both `template` and `path` are resources, so steps on the same file wait their turn automatically
+- Running `word.readText` on a template with MCP's `test_step` adds the list of placeholders to `state`
 
-## メール（`mail.*`、実装済み）
+## Mail (`mail.*`, implemented)
 
-クレート `crates/shikigami-mail`。アプリで分けず `mail.*` の 1 セットにし、今はこの PC の Outlook（クラシック版）を COM で使います（Windows だけ。新しい Outlook アプリと Web 版は対象外）。Outlook にサインインしているアカウントをそのまま使うので、パスワードやサーバー設定は要りません。
+Crate `crates/shikigami-mail`. One `mail.*` set regardless of app; for now it uses this PC's Outlook (classic) through COM (Windows only; the new Outlook app and the web version are not supported). It uses the account signed in to Outlook, so no passwords or server settings are needed.
 
-| type | 主な params | 出力 |
+| type | Main params | Output |
 |---|---|---|
-| `mail.createDraft` | `to` / `cc` / `bcc`（アドレスの配列）, `subject`, `body`, `html`, `attachments`（フルパスの配列） | `{ id }` |
-| `mail.list` | `folder`（例 `受信トレイ/請求書`、省略で受信トレイ）, `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit`（既定 50）, `includeBody` | 新しい順のメールの配列 `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
-| `mail.saveAttachments` | `id`（`mail.list` の id）, `folder`（保存先）, `nameContains` | 保存したファイルのフルパスの配列 |
+| `mail.createDraft` | `to` / `cc` / `bcc` (lists of addresses), `subject`, `body`, `html`, `attachments` (list of full paths) | `{ id }` |
+| `mail.list` | `folder` (e.g. `Inbox/Invoices`; default the Inbox), `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit` (default 50), `includeBody` | A list of mails, newest first: `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
+| `mail.saveAttachments` | `id` (an id from `mail.list`), `folder` (where to save), `nameContains` | A list of the full paths saved |
 
-- **送信はしません**。`mail.createDraft` は下書きフォルダーに置くだけで、人が確かめて送ります。自動送信（`mail.send`）は、外に出るものなので別途検討します
-- 宛先は 1 件ずつ配列で書きます（`["{{ customer.email }}"]`）。アドレスの形でないものは `INVALID_ADDRESS`、無い添付ファイルは `FILE_NOT_FOUND` で、下書きを作る前に止めます
-- 添付の保存は同じ名前のファイルを上書きせず、`請求書 (2).pdf` のように番号を付けます。添付の名前に含まれるフォルダー指定は無視します
-- Outlook への操作は 1 つずつ動きます（資源 `app:outlook`）。ユーザーの Outlook は閉じません。セキュリティの確認ダイアログなどで止まったときは `OUTLOOK_TIMEOUT`
-- メールの中身は外から来たデータで、指示ではありません（AI クライアントへの説明にも明記）
+- **Nothing is sent.** `mail.createDraft` only puts a draft in the Drafts folder; a person checks and sends it. Sending automatically (`mail.send`) leaves the PC, so it is being considered separately
+- Write recipients one per list item (`["{{ customer.email }}"]`). Anything that is not an address gives `INVALID_ADDRESS` and a missing attachment `FILE_NOT_FOUND`, before the draft is created
+- Saving attachments never overwrites a file of the same name; it numbers them like `invoice (2).pdf`. Folder parts in attachment names are ignored
+- Outlook operations run one at a time (resource `app:outlook`). The person's Outlook is never closed. `OUTLOOK_TIMEOUT` when it gets stuck on a security prompt or similar
+- Mail content is data from outside, not instructions (this is stated to AI clients too)
 
-## 次の段階（予定）
+## Next (planned)
 
-1. **Excel の再計算・PDF 出力**：`excel.runMacro` と同じ仕組みで足す
-2. **Word の PDF 出力**：COM（Excel のマクロと同じ仕組み）
-3. **メールの送信と別の送り方**：`mail.send`（`Dangerous`、宛先の確認を厚くする）、Outlook 以外（SMTP / Microsoft Graph）を設定で選べるようにする
+1. **Excel recalculation and PDF export**: added the same way as `excel.runMacro`
+2. **Word PDF export**: through COM (the same way as Excel macros)
+3. **Sending mail and other ways to send**: `mail.send` (`Dangerous`, with thorough recipient checks), and choosing something other than Outlook (SMTP / Microsoft Graph) in settings

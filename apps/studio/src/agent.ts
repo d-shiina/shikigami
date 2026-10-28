@@ -6,6 +6,7 @@ import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { AgentApi, AgentEvent, AgentInfo, AgentRequest, LoginEvent } from "./lib/api";
+import { t } from "./lib/i18n";
 
 export type AgentPart =
   | { kind: "text"; text: string }
@@ -209,7 +210,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
           return;
         }
         if (!event.ok) {
-          set({ login: { phase: "failed", message: event.message ?? "ログインできませんでした" } });
+          set({ login: { phase: "failed", message: event.message ?? t.agent.loginFailed } });
           return;
         }
         set({ login: { phase: "idle" } });

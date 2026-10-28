@@ -4,35 +4,14 @@
 import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
 import { formatValue } from "./changes";
 import { readable, targetText } from "./sentence";
+import { t } from "./i18n";
 
 export const NODE_HEAD_H = 58;
 export const ROW_H = 26;
 export const NODE_PAD_B = 8;
 export const MAX_PARAM_ROWS = 5;
 
-const PARAM_LABEL: Record<string, string> = {
-  message: "メッセージ",
-  level: "レベル",
-  name: "変数",
-  value: "値",
-  expression: "式",
-  condition: "条件",
-  items: "リスト",
-  itemVar: "要素",
-  indexVar: "番号",
-  count: "回数",
-  ms: "待ち(ms)",
-  url: "URL",
-  target: "対象",
-  key: "キー",
-  path: "保存先",
-  state: "状態",
-  headless: "画面なし",
-  all: "すべて",
-  fullPage: "ページ全体",
-};
-
-export const paramLabel = (key: string) => PARAM_LABEL[key] ?? key;
+export const paramLabel = (key: string) => (t.paramLabels as Record<string, string>)[key] ?? key;
 
 export type Row =
   | { kind: "param"; key: string; label: string; value: string; refs: string[] }
@@ -81,17 +60,17 @@ export function callMap(step: Step, key: "inputs" | "outputs"): Record<string, u
 export function outputs(step: Step): { label: string; variable: string }[] {
   const p = step.params ?? {};
   const out: { label: string; variable: string }[] = [];
-  if (step.type === "variable.set" && typeof p.name === "string") out.push({ label: "書き込む", variable: p.name });
+  if (step.type === "variable.set" && typeof p.name === "string") out.push({ label: t.outputLabels.writes, variable: p.name });
   if (step.type === CALL) {
     for (const [name, target] of Object.entries(callMap(step, "outputs"))) {
       if (typeof target === "string" && target) out.push({ label: name, variable: target });
     }
   }
   if (step.type === "control.forEach") {
-    out.push({ label: "要素", variable: typeof p.itemVar === "string" ? p.itemVar : "item" });
-    if (typeof p.indexVar === "string") out.push({ label: "番号", variable: p.indexVar });
+    out.push({ label: t.outputLabels.item, variable: typeof p.itemVar === "string" ? p.itemVar : "item" });
+    if (typeof p.indexVar === "string") out.push({ label: t.outputLabels.index, variable: p.indexVar });
   }
-  if (step.saveAs) out.push({ label: "結果", variable: step.saveAs });
+  if (step.saveAs) out.push({ label: t.outputLabels.result, variable: step.saveAs });
   return out;
 }
 

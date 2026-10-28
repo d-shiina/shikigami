@@ -1,24 +1,26 @@
-# MCP サーバー
+# MCP server
 
-`shikigami mcp` は AI クライアント（Claude Code / Codex / Cursor など）に Shikigami のシナリオ編集・検証・実行を MCP ツールとして提供します。Studio と同じ Scenario Core を使うため、AI の変更は Studio に即座に反映され、Studio から Undo できます。GUI がなくても単独で動きます。
+English | [日本語](ja/mcp.md)
 
-![MCP からの編集が Studio に反映された様子](assets/studio-mcp-edit.png)
+`shikigami mcp` gives AI clients (Claude Code, Codex, Cursor and others) Shikigami's scenario editing, validation and execution as MCP tools. It uses the same Scenario Core as Studio, so AI edits show up in Studio immediately and can be undone there. It also runs on its own, without a GUI.
 
-## 接続方法
+![An MCP edit showing up in Studio](assets/studio-mcp-edit.png)
 
-トランスポートは **stdio** です。AI クライアントが `shikigami mcp` を子プロセスとして起動します。ネットワークのポートは開きません。`shikigami` コマンドに PATH が通っている必要があります（インストーラーで導入される想定。開発中は `cargo build -p shikigami-cli` の `target/debug/shikigami`）。
+## Connecting
+
+The transport is **stdio**: the AI client starts `shikigami mcp` as a child process. No network port is opened. The `shikigami` command must be on PATH (the installer puts it there; during development it is `target/debug/shikigami` from `cargo build -p shikigami-cli`).
 
 ### Claude Code
 
-プラグイン（MCP 設定と、シナリオ作成の作法を教えるスキルを同梱）を入れるのがおすすめです。
+The plugin is recommended: it bundles the MCP settings and a skill that teaches how to write scenarios.
 
 ```text
 /plugin install shikigami --marketplace d-shiina/shikigami
 ```
 
-（Claude Code 2.1.275 より前は `/plugin marketplace add d-shiina/shikigami` のあと `/plugin install shikigami@shikigami`。）
+(Before Claude Code 2.1.275: `/plugin marketplace add d-shiina/shikigami`, then `/plugin install shikigami@shikigami`.)
 
-MCP サーバーだけを登録する場合：
+To register only the MCP server:
 
 ```sh
 claude mcp add shikigami -- shikigami mcp
@@ -26,7 +28,7 @@ claude mcp add shikigami -- shikigami mcp
 
 ### Codex
 
-`~/.codex/config.toml`：
+`~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.shikigami]
@@ -36,7 +38,7 @@ args = ["mcp"]
 
 ### Cursor
 
-`.cursor/mcp.json`（プロジェクト）または `~/.cursor/mcp.json`：
+`.cursor/mcp.json` (project) or `~/.cursor/mcp.json`:
 
 ```json
 {
@@ -46,66 +48,66 @@ args = ["mcp"]
 }
 ```
 
-### オプション
+### Options
 
-| オプション | 既定 | 説明 |
+| Option | Default | Description |
 |---|---|---|
-| `--workspace <DIR>` | `%APPDATA%\Shikigami\workspace`（`SHIKIGAMI_HOME` で変更可） | 対象ワークスペース。Studio と同じ場所を指定すると相互に反映される |
-| `--allow read,write,run` | 3 つすべて | 公開するツールの権限区分。例：閲覧だけ許すなら `--allow read` |
+| `--workspace <DIR>` | `%APPDATA%\Shikigami\workspace` (change with `SHIKIGAMI_HOME`) | The workspace. Point it at the same place as Studio and changes show up in both |
+| `--allow read,write,run` | All three | Which tool classes to expose. For read-only access: `--allow read` |
 
-## ツール
+## Tools
 
-| 区分 | ツール | 内容 |
+| Class | Tool | What it does |
 |---|---|---|
-| read | `list_scenarios` | シナリオ一覧 |
-|  | `get_scenario` | シナリオ本体（ステップ ID 付き）と Undo/Redo の可否。人が差し戻し中なら `feedback`（理由とステップへの指摘）。`scenario.call` で呼ぶシナリオの入力・出力（`subscenarios`）と、このシナリオを呼んでいるシナリオ（`calledBy`） |
-|  | `validate_scenario` | 保存済み（`scenarioId`）または未保存の文書（`scenario`）を検証。全エラーを JSON Pointer 付きで返す |
-|  | `list_step_types` / `get_step_schema` | 使えるステップ型と、その params の JSON Schema・コピーして使える記述例（`examples`） |
-|  | `get_history` | 誰が（Studio / MCP クライアント名 / CLI）いつ何を変えたか。AI の説明（`summary`）と触ったステップ（`stepIds`）付き |
-|  | `get_review` | レビュー台と同じ内容：最後の承認以降の変更・AI のテスト実行・根拠にした画面・レビュー（差し戻し理由）。[設計](design/review-evidence.md) |
-|  | `get_run_status` / `get_run_logs` / `list_runs` | 実行中の状態・最終レポート・イベントログ（`afterSeq` で差分取得、`variable` でその変数の変化だけ） |
-|  | `list_versions` / `get_version` | 名前付きの版の一覧と、版のスナップショット |
-|  | `diff_versions` | 版どうし・版と現在の差分（ステップ ID 単位。既定は「最新の版 → 現在」） |
-|  | `export_scenario` | シナリオと版、呼び出すサブシナリオを 1 つのバンドルに（機密変数の初期値は除く） |
-|  | `list_secrets` | Studio で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
-| write | `create_scenario` | 新規作成（ステップ ID は省略可） |
-|  | `update_scenario` | 複数の EditOp を 1 リビジョンとして原子的に適用 |
-|  | `add_step` / `update_step` / `remove_step` / `move_step` | 個別の編集 |
-|  | （編集系の共通引数） | `summary`：変更の説明（レビューと履歴に出る）。`observations`：根拠にした画面の `observationId` |
-|  | `undo` / `redo` | Studio・CLI と共通の Undo スタック |
-|  | `delete_scenario` | ゴミ箱へ移動。`expectedRevision` 必須。`destructiveHint` 付き。他のシナリオから呼ばれていると `SCENARIO_IN_USE` |
-|  | `create_version` / `restore_version` | 版を保存／版の内容に戻す（Undo できる 1 回の編集） |
-|  | `import_scenario` | バンドルかシナリオ文書を取り込む。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブシナリオもいっしょに取り込む |
-|  | `extract_subscenario` | 同じブロックに並んだステップを新しいシナリオに切り出し、`scenario.call` 1 つに置き換える。読み書きする変数は入力・出力として受け渡すので動きは変わらない（[設計](design/subscenarios.md)） |
-|  | `request_secret` | ログイン情報をユーザーに求める。Studio に「ログイン情報が必要です」と出て、名前とサイトが入った登録フォームが開く。値は Studio でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
-| run | `run_scenario` | Runtime で実行（AI は実行に関与しない）。`waitMs` で完了まで待てる。`secret: true` の入力変数には値を渡せない |
-|  | `stop_scenario` | 実行のキャンセル |
-| ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)）。証跡としてツリーとスクリーンショットを保存し `observationId` を返す |
-| デスクトップ | `inspect_ui` | 開いているウィンドウの一覧、または 1 つのウィンドウの部品の一覧（`target` の選び方は [desktop.md](desktop.md)）。ウィンドウを見たときは部品ツリーを証跡に保存し `observationId` を返す |
-| 試行 | `test_step` | ステップを 1 つその場で実行して出力を返す（browser ステップなら実行後のページ、desktop ステップなら操作したウィンドウも）。シナリオは変更しない。試した結果を証跡に保存し `observationId` を返す |
+| read | `list_scenarios` | List scenarios |
+|  | `get_scenario` | The scenario (with step IDs) and whether Undo/Redo is possible. While a person has sent it back, `feedback` (the reason and notes on steps). Inputs and outputs of scenarios called with `scenario.call` (`subscenarios`), and the scenarios that call this one (`calledBy`) |
+|  | `validate_scenario` | Validates a saved scenario (`scenarioId`) or an unsaved document (`scenario`). Returns every error with a JSON Pointer |
+|  | `list_step_types` / `get_step_schema` | Available step types, the JSON Schema of their params, and examples to copy (`examples`) |
+|  | `get_history` | Who (Studio / MCP client name / CLI) changed what and when, with the AI's explanation (`summary`) and the steps touched (`stepIds`) |
+|  | `get_review` | What the review desk shows: changes since the last approval, the AI's test runs, the screens it relied on, and reviews (reasons for sending back). [Design](design/review-evidence.md) |
+|  | `get_run_status` / `get_run_logs` / `list_runs` | Status of a run, its final report, and its event log (`afterSeq` for what is new, `variable` for one variable's changes only) |
+|  | `list_versions` / `get_version` | Named versions, and a version's snapshot |
+|  | `diff_versions` | Differences between versions, or a version and now (by step ID; by default "latest version → now") |
+|  | `export_scenario` | The scenario, its versions and the subscenarios it calls, as one bundle (without defaults of secret variables) |
+|  | `list_secrets` | Names, sites and set fields of the secrets registered in Studio (never the values; see [secrets.md](secrets.md)) |
+| write | `create_scenario` | Create a scenario (step IDs optional) |
+|  | `update_scenario` | Apply several EditOps atomically as one revision |
+|  | `add_step` / `update_step` / `remove_step` / `move_step` | Single edits |
+|  | (common edit arguments) | `summary`: what the change does (shown in review and history). `observations`: the `observationId`s of the screens it is based on |
+|  | `undo` / `redo` | The Undo stack shared with Studio and the CLI |
+|  | `delete_scenario` | Move to the trash. `expectedRevision` required, marked `destructiveHint`. `SCENARIO_IN_USE` while another scenario calls it |
+|  | `create_version` / `restore_version` | Save a version / go back to a version (one edit that can be undone) |
+|  | `import_scenario` | Import a bundle or a scenario document. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subscenarios in the bundle come along |
+|  | `extract_subscenario` | Move consecutive steps of one block into a new scenario and replace them with a single `scenario.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subscenarios.md)) |
+|  | `request_secret` | Ask the person for login details. Studio shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Studio and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
+| run | `run_scenario` | Run with the Runtime (the AI takes no part in running it). `waitMs` waits for it to finish. Input variables marked `secret: true` cannot be passed |
+|  | `stop_scenario` | Cancel a run |
+| browser | `inspect_page` | The page's accessibility tree (how to choose a `target`: [browser.md](browser.md)). Saves the tree and a screenshot as evidence and returns an `observationId` |
+| desktop | `inspect_ui` | The open windows, or the elements of one window (how to choose a `target`: [desktop.md](desktop.md)). When it looks at a window it saves the element tree as evidence and returns an `observationId` |
+| try | `test_step` | Run one step on the spot and return its output (for a browser step also the page after it, for a desktop step the window it worked on). Does not change the scenario. Saves the result as evidence and returns an `observationId` |
 
-- 検証結果の各 issue には直し方のヒント（`hint`：近い名前の候補、必須・使える params、式とテンプレートの書き分けなど）が付きます。AI が 1 回で直せるようにするためです。
-- 入力スキーマは Rust の型から自動生成しています。結果は `structuredContent`（JSON）で返します。
-- 失敗は MCP のツールエラー（`isError: true`）として `{ code, message, details }` を返すので、AI がエラーコードを見て対処できます。例：`REVISION_CONFLICT`（`details.actual` が現在のリビジョン）、`VALIDATION_FAILED`、`SCENARIO_NOT_FOUND`。
-- 書き込み系は `expectedRevision` を受け付けます。省略時は最新に適用、指定時は他者の変更と競合すると `REVISION_CONFLICT` になり、上書きしません。
-- 各ツールには `readOnlyHint` / `destructiveHint` / `openWorldHint` の注釈を付けています（クライアントの承認 UI が利用します）。
+- Each validation issue carries a hint for fixing it (`hint`: close names, required and allowed params, when to use expressions vs. templates…), so the AI can fix it in one go.
+- Input schemas are generated from the Rust types. Results come back as `structuredContent` (JSON).
+- Failures are MCP tool errors (`isError: true`) with `{ code, message, details }`, so the AI can act on the code. For example: `REVISION_CONFLICT` (`details.actual` is the current revision), `VALIDATION_FAILED`, `SCENARIO_NOT_FOUND`.
+- Write tools accept `expectedRevision`. Without it the edit applies to the latest revision; with it, a conflicting change by someone else gives `REVISION_CONFLICT` instead of overwriting.
+- Every tool is annotated with `readOnlyHint` / `destructiveHint` / `openWorldHint` (clients use them in their approval UI).
 
-## 監査ログ
+## Audit log
 
-すべてのツール呼び出し（成功・失敗とも）を `<workspace>/audit/mcp.jsonl` に 1 行ずつ記録します。
+Every tool call (successful or not) is written as one line to `<workspace>/audit/mcp.jsonl`.
 
 ```json
 {"at":"2026-10-28T04:18:04Z","tool":"run_scenario","class":"run","client":"claude-code","ok":true,"scenarioId":"scn_example_invoice_summary","runId":"run_01a1…"}
 ```
 
-シナリオの変更内容そのもの（EditOp と逆操作）は、従来どおり `history/<id>/journal.jsonl` にクライアント名付きで記録されます。
+The scenario changes themselves (EditOps and their inverses) are recorded with the client name in `history/<id>/journal.jsonl`, as before.
 
-## 確認済みの事項と制約
+## Verified and limits
 
-- **確認済み**：rmcp のクライアントを使った自動 E2E（作成 → 追加 → 検証 → 実行 → ログ取得 → 別プロセスからの参照 → Undo/Redo、リビジョン競合、実行の停止、権限による公開ツールの制限、全ツールのスキーマ）。Claude Code CLI 2.1 から `claude mcp add` で登録し、接続（ヘルスチェック）が成功することを確認。Studio を開いたまま MCP で編集すると Studio に反映され、Studio の「元に戻す」が履歴に Studio として記録されることを確認。
-- **未確認**：Claude Code に実際にツールを使わせてシナリオを作らせる対話の確認、Codex / Cursor からの接続、Windows 実機での動作。
-- MCP サーバーから開始した実行はサーバープロセス（＝ AI クライアントのセッション）が終わると止まります。長時間・無人の実行は `shikigami run` を使います。
-- 削除の「Studio 上での人間の承認」、ツール権限のクライアント別設定、シナリオ単位の「MCP からの実行可否」は未実装です（現状は `--allow` によるサーバー単位の制限のみ）。
-- 監査ログは JSONL です。SQLite への索引化は未実装です。
-- Streamable HTTP トランスポートは未実装です（stdio のみ）。
-- 画面を調べるツールは、ブラウザ用が `inspect_page`（[browser.md](browser.md)）、Windows のアプリ用が `inspect_ui`（[desktop.md](desktop.md)）です。どちらも `test_step` で 1 ステップずつ試せます。
+- **Verified**: automated E2E with the rmcp client (create → add → validate → run → read logs → read from another process → Undo/Redo, revision conflicts, stopping a run, tools limited by `--allow`, the schemas of every tool). Registered with `claude mcp add` from Claude Code CLI 2.1 and the connection (health check) succeeds. Editing over MCP with Studio open shows up in Studio, and Studio's Undo is recorded in the history as Studio.
+- **Not yet verified**: a conversation where Claude Code actually builds a scenario with the tools, connecting from Codex / Cursor, and running on real Windows machines.
+- Runs started from the MCP server stop when the server process (= the AI client's session) ends. Use `shikigami run` for long or unattended runs.
+- Human approval in Studio for deletions, per-client tool permissions, and per-scenario "may run from MCP" are not implemented (only the server-wide `--allow`).
+- The audit log is JSONL. Indexing it in SQLite is not implemented.
+- The Streamable HTTP transport is not implemented (stdio only).
+- Screens are inspected with `inspect_page` for browsers ([browser.md](browser.md)) and `inspect_ui` for Windows apps ([desktop.md](desktop.md)). Both can be tried step by step with `test_step`.

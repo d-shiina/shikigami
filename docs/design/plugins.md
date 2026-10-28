@@ -143,7 +143,7 @@ hello/
 1. 環境変数 `SHIKIGAMI_PLUGINS`（`;` 区切り）：プラグインのフォルダ、またはプラグインのフォルダを並べたフォルダ
 2. `%LOCALAPPDATA%\Shikigami\plugins\<名前>\`
 
-ワークスペースのフォルダからは読み込まない。共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動くのを避けるため。代わりに、シナリオは使っているプラグインと版を `requires`（`{ "plugin:hello": "^0.1.0" }`）に記録し、入っていない PC では `PLUGIN_NOT_INSTALLED`、版が合わなければ `PLUGIN_VERSION_MISMATCH` で実行前に止まる（[compatibility.md](../compatibility.md) §4）。
+ワークスペースのフォルダからは読み込まない。共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動くのを避けるため。代わりに、シナリオは使っているプラグインと版を `requires`（`{ "plugin:hello": "^0.1.0" }`）に記録し、入っていない PC では `PLUGIN_NOT_INSTALLED`、版が合わなければ `PLUGIN_VERSION_MISMATCH` で実行前に止まる（[compatibility.md](../ja/compatibility.md) §4）。
 
 読み込めなかったプラグイン（マニフェストの誤り、組込や他のプラグインと名前が重なる、記述例が通らない）は飛ばして、理由を残す。`shikigami plugin list` で読み込んだものと問題を、`shikigami plugin check <フォルダ>` で作成中のプラグインの検査ができる。
 

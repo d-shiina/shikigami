@@ -4,81 +4,92 @@
 
 # Shikigami
 
+English | [日本語](README.ja.md)
+
 MCP-native desktop RPA where AI and humans build, edit, and run the same automation scenarios.
 
-AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したシナリオは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
+Shikigami is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same scenarios**. AI builds them; finished scenarios run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
 
-![Shikigami Studio（Phase 1）](docs/assets/studio-phase1.png)
+![Shikigami Studio (Phase 1)](docs/assets/studio-phase1.png)
 
-## 現在の状態
+## Status
 
-**Phase 1（基盤）と Phase 2（MCP サーバー）を実装済み。** Scenario Core / Runtime / CLI / Studio（Tauri 2 + React）/ MCP サーバーが動作します。ブラウザ操作（Phase 3）も動作します（[docs/browser.md](docs/browser.md)、`pnpm demo:browser` でデモ）。Windows のデスクトップアプリ操作（Phase 4）は UI Automation で動作します（[docs/desktop.md](docs/desktop.md)）。Excel のブックは Excel なしで直接読み書きできます（[docs/office.md](docs/office.md)）。詳細は [アーキテクチャ設計 §13](docs/architecture.md#13-実装状況と制約)。
+**Phase 1 (foundation) and Phase 2 (MCP server) are done.** Scenario Core, Runtime, CLI, Studio (Tauri 2 + React) and the MCP server work. Browser automation (Phase 3) works too ([docs/browser.md](docs/browser.md); try `pnpm demo:browser`). Windows desktop apps (Phase 4) are automated through UI Automation ([docs/desktop.md](docs/desktop.md)). Excel workbooks are read and written directly, without Excel ([docs/office.md](docs/office.md)). Details: [architecture §13](docs/architecture.md#13-implementation-status-and-limits).
 
-| ドキュメント | 内容 |
+Studio's UI is available in English and Japanese (JA / EN switch in the status bar; it follows the OS language until you choose).
+
+| Document | Contents |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | システム構成、シナリオ形式、Adapter / MCP / IPC / DB / エラー / セキュリティ設計、設計判断、MVP 受け入れ基準 |
-| [docs/mcp.md](docs/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
-| [docs/design/plugins.md](docs/design/plugins.md) | ノードのプラグイン：社内システムなど向けのステップを、本体を作り直さずに足す（マニフェスト + 別プロセス） |
-| [docs/compatibility.md](docs/compatibility.md) | 互換性の方針：シナリオ形式（`schemaVersion`・移行・`requires`）、MCP・CLI で何を壊さないか |
-| [docs/research.md](docs/research.md) | 採用ライブラリのバージョン・ライセンス・Windows 対応状況 |
+| [docs/architecture.md](docs/architecture.md) | System layout, scenario format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
+| [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
+| [docs/expressions.md](docs/expressions.md) | Functions available in scenario expressions |
+| [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md) | Built-in steps: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF |
+| [docs/secrets.md](docs/secrets.md) | Logins: secrets the AI refers to by name only |
+| [docs/adapters.md](docs/adapters.md) | Where each step type comes from, and node plugins |
+| [docs/release.md](docs/release.md) | Installer, updates and release signing |
+| [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add steps for in-house systems without rebuilding Shikigami (manifest + separate process) |
+| [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the scenario format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |
+| [docs/research.md](docs/research.md) (Japanese) | Versions, licenses and Windows support of the libraries used |
 
-## 構成
+The design notes under `docs/design/` and `docs/research.md` are in Japanese. Japanese versions of the guides above are in [docs/ja/](docs/ja/).
+
+## Layout
 
 ```text
-crates/shikigami-core      Scenario Core（唯一の正規データ層）
-crates/shikigami-runtime   RPA Runtime（AI・GUI なしで実行）
-crates/shikigami-cli       CLI（shikigami コマンド。`shikigami mcp` で MCP サーバー）
-crates/shikigami-mcp       MCP サーバー（rmcp）
-apps/studio                Shikigami Studio（Tauri 2 + React + React Flow）
-packages/schema            Rust から生成した TypeScript 型
-plugins/shikigami          Claude Code プラグイン（MCP 設定＋スキル）
-schemas/                   生成された JSON Schema
-examples/                  サンプルシナリオ
+crates/shikigami-core      Scenario Core (the only source of truth for scenario data)
+crates/shikigami-runtime   RPA Runtime (runs without AI or GUI)
+crates/shikigami-cli       CLI (the `shikigami` command; `shikigami mcp` is the MCP server)
+crates/shikigami-mcp       MCP server (rmcp)
+apps/studio                Shikigami Studio (Tauri 2 + React + React Flow)
+packages/schema            TypeScript types generated from Rust
+plugins/shikigami          Claude Code plugin (MCP settings + skill)
+schemas/                   Generated JSON Schema
+examples/                  Sample scenarios
 ```
 
-## 開発環境
+## Development
 
-| 必要なもの | バージョン |
+| Requirement | Version |
 |---|---|
-| Rust | 1.90 以上（Windows は MSVC ツールチェーン） |
+| Rust | 1.90 or later (MSVC toolchain on Windows) |
 | Node.js | 22 LTS |
-| pnpm | 10（`corepack enable` で自動） |
+| pnpm | 10 (`corepack enable` sets it up) |
 
-**Windows**：Visual Studio IDE は不要ですが、[Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) の「Desktop development with C++」ワークロード（Windows SDK を含む）と WebView2（Windows 10 1803 以降は標準搭載）が必要です。Build Tools は 2022 でも 2026 でも動きます。インストールには管理者権限が要ります（会社 PC では管理者に依頼してください）。winget なら次のとおりです。
+**Windows**: Visual Studio itself is not needed, but you need the "Desktop development with C++" workload of [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (it includes the Windows SDK) and WebView2 (built into Windows 10 1803 and later). Build Tools 2022 and 2026 both work. Installing them requires administrator rights (ask your administrator on a company PC). With winget:
 
 ```powershell
 winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 ```
 
-Rust を rustup で入れた場合は `rustup default stable-msvc` を設定してください。スタンドアロンのインストーラー（MSVC 版）でも、1.90 以上なら clippy・rustfmt 込みでそのまま使えます。
+If you installed Rust with rustup, run `rustup default stable-msvc`. The standalone (MSVC) installer works as is, clippy and rustfmt included, as long as it is 1.90 or later.
 
-**Linux（コアの開発・CI 用。製品の対象外）**：`libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
+**Linux (for core development and CI only; not a product target)**: `libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
 ```sh
 pnpm install
 
-# Studio のフロントエンドをビルド（Tauri のビルドスクリプトが dist を要求するため、
-# clone 直後は cargo test / cargo build の前に一度必要）
+# Build Studio's frontend (Tauri's build script needs dist, so after a fresh
+# clone this is needed once before cargo test / cargo build)
 pnpm --filter @shikigami/studio build
 
-# テスト
+# Tests
 cargo test --workspace
 pnpm -r test
 
-# CLI でサンプルを実行（AI・GUI なし）
+# Run a sample with the CLI (no AI, no GUI)
 cargo run -p shikigami-cli -- run examples/invoice-summary.json
 cargo run -p shikigami-cli -- run examples/invoice-summary.json -i threshold=10000
 
-# Studio を起動
+# Start Studio
 pnpm studio:dev
 
-# Rust の型を変更したら JSON Schema と TS 型を再生成
+# Regenerate the JSON Schema and TS types after changing Rust types
 pnpm schema:generate
 ```
 
-ワークスペース（シナリオ・履歴・実行記録の保存先）は既定で `%APPDATA%\Shikigami\workspace` です。環境変数 `SHIKIGAMI_HOME` または CLI の `--workspace` で変更できます。
+The workspace (where scenarios, history and run records are stored) defaults to `%APPDATA%\Shikigami\workspace`. Change it with the `SHIKIGAMI_HOME` environment variable or the CLI's `--workspace`.
 
-### CLI の例
+### CLI examples
 
 ```sh
 shikigami scenario import examples/invoice-summary.json
@@ -89,28 +100,28 @@ shikigami scenario undo scn_example_invoice_summary
 shikigami run scn_example_invoice_summary --json
 ```
 
-Studio を開いたまま CLI でシナリオを編集すると、変更が Studio に即座に反映されます。
+Edits made with the CLI while Studio is open show up in Studio immediately.
 
-## AI から使う（MCP）
+## Using it from AI (MCP)
 
-Claude Code ならプラグインを入れるだけです（`shikigami` コマンドに PATH が通っている必要があります）。
+In Claude Code, install the plugin (the `shikigami` command must be on PATH):
 
 ```text
 /plugin install shikigami --marketplace d-shiina/shikigami
 ```
 
-Studio をインストールしている場合は、Studio と同じフォルダーにある `shikigami.exe` を登録すると Studio の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Studio 右上のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/release.md)）。
+If you installed Studio, register the `shikigami.exe` in Studio's folder so the MCP server is updated together with Studio (copy the command from the version menu at the bottom right of Studio; see [docs/release.md](docs/release.md)).
 
-MCP サーバーだけを登録する場合は `claude mcp add shikigami -- shikigami mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p shikigami-cli` で更新されます）。
+To register only the MCP server: `claude mcp add shikigami -- shikigami mcp`. When developing from the repository without `shikigami` on PATH, register the built executable by its absolute path (`cargo build -p shikigami-cli` updates it):
 
 ```powershell
 claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shikigami.exe mcp
 ```
 
-この登録とプラグインを併用すると、プラグイン側の `shikigami` サーバー（PATH 上の `shikigami` を起動）は接続に失敗しますが、スキルは使えます。
+With this registration and the plugin both in place, the plugin's own `shikigami` server (which starts `shikigami` from PATH) fails to connect, but its skill still works.
 
-Codex / Cursor の設定例とツール一覧は [docs/mcp.md](docs/mcp.md) を参照してください。AI の変更は Studio に即座に反映され、Studio から元に戻せます。
+See [docs/mcp.md](docs/mcp.md) for Codex / Cursor settings and the tool list. AI edits show up in Studio immediately and can be undone from Studio.
 
-## ライセンス
+## License
 
-[Apache License 2.0](LICENSE)。貢献のしかたは [CONTRIBUTING.md](CONTRIBUTING.md)、脆弱性の報告は [SECURITY.md](SECURITY.md)、ファイル形式・MCP・CLI の互換方針は [docs/compatibility.md](docs/compatibility.md)、変更履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
+[Apache License 2.0](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for contributing, [SECURITY.md](SECURITY.md) for reporting vulnerabilities, [docs/compatibility.md](docs/compatibility.md) for the file format, MCP and CLI compatibility policy, and [CHANGELOG.md](CHANGELOG.md) for changes.

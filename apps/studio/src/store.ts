@@ -526,7 +526,9 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "control.while": { condition: "false" },
   "control.repeat": { count: 1 },
   "control.forEach": { items: "[]", itemVar: "item" },
-  "control.fail": { message: "エラー" },
+  get "control.fail"() {
+    return { message: t.severity.error };
+  },
   "variable.set": { name: "value", value: "" },
   "log.message": { message: "" },
   "flow.delay": { ms: 1000 },
@@ -543,16 +545,6 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
 export function newStepId(): string {
   return `stp_${crypto.randomUUID().replaceAll("-", "")}`;
 }
-
-const RESUME_LABEL: Record<string, string> = {
-  continue: "続行",
-  stepOver: "次のステップへ",
-  stepInto: "中に入る",
-  stepOut: "ブロックの外へ",
-  retry: "もう一度",
-  skip: "飛ばして続行",
-  abort: "終了",
-};
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -1021,18 +1013,18 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         // Resuming runs the stored revision: never with AI edits nobody has looked at.
         const resumes = !["pause", "setBreakpoints", "abort"].includes(command.action);
         if (resumes && run.pause && get().scenario?.revision !== run.pause.revision && pendingReview(get()).length > 0) {
-          set({ error: "AIの修正を確認してから再開できます" });
+          set({ error: t.runMsg.reviewBeforeResume });
           return false;
         }
         try {
           const outcome = await api.debugRun(run.runId, command);
-          if (outcome.updated) set({ notice: `リビジョン ${outcome.revision} の内容で続けます` });
+          if (outcome.updated) set({ notice: t.runMsg.continuingAt(outcome.revision) });
           return true;
         } catch (e) {
           set({
             error:
               e instanceof ApiError && e.code === "RESUME_INCOMPATIBLE"
-                ? "止まっている場所が変更で無くなったため、ここからは再開できません。止めて最初から実行してください。"
+                ? t.runMsg.pausedStepGone
                 : message(e),
           });
           return false;
@@ -1119,7 +1111,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               if (human?.stepId === env.stepId) human = null;
               run.steps[env.stepId] = env.outcome;
               if (env.error) {
-                push("error", `${env.error.code}: ${env.error.message}${env.willRetry ? "（リトライします）" : ""}`, env.stepId);
+                push("error", `${env.error.code}: ${env.error.message}${env.willRetry ? t.runMsg.willRetry : ""}`, env.stepId);
                 secretFix = secretFixOf(env.error) ?? secretFix;
               }
               break;
@@ -1139,7 +1131,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               };
               run.evidence = null;
               run.steps[env.stepId] = env.reason === "error" ? "failed" : "paused";
-              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? "❚❚ エラーで一時停止しました" : "❚❚ 一時停止", env.stepId);
+              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, env.stepId);
               reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
               break;
             }
@@ -1149,7 +1141,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.pause = null;
               run.evidence = null;
               if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
-              push("info", `▶ ${RESUME_LABEL[env.action]}${env.revision != null ? `（リビジョン ${env.revision} の内容で）` : ""}`);
+              push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`);
               break;
             }
             case "runFinished":

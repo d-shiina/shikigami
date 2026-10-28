@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { formatValue, relativeTime } from "../lib/changes";
-import { t } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
 
 const KIND_STYLE: Record<DiffKind, string> = {
   added: "bg-moegi-100 text-moegi-500",
@@ -12,12 +12,7 @@ const KIND_STYLE: Record<DiffKind, string> = {
   moved: "bg-slate-100 text-slate-600",
 };
 
-const SCENARIO_FIELD: Record<string, string> = {
-  name: "シナリオ名",
-  description: "説明",
-  tags: "タグ",
-  settings: "シナリオ設定",
-};
+const scenarioField = (field: string) => (t.versionField as Record<string, string>)[field] ?? field;
 
 function Kind({ kind }: { kind: DiffKind }) {
   return <span className={`rounded px-1 text-[10px] font-semibold ${KIND_STYLE[kind]}`}>{t.diffKind[kind]}</span>;
@@ -32,7 +27,7 @@ function DiffView({ diff, defs }: { diff: ScenarioDiff; defs: Map<string, StepTy
       {diff.scenario.map((f) => (
         <li key={`s-${f.field}`} className="flex flex-wrap items-baseline gap-1.5">
           <Kind kind="changed" />
-          <span>{SCENARIO_FIELD[f.field] ?? f.field}</span>
+          <span>{scenarioField(f.field)}</span>
         </li>
       ))}
       {diff.variables.map((v) => (
@@ -52,8 +47,8 @@ function DiffView({ diff, defs }: { diff: ScenarioDiff; defs: Map<string, StepTy
             className="flex w-full items-baseline gap-1.5 text-left enabled:hover:text-brand-600"
           >
             <Kind kind={s.kind} />
-            <span className="truncate">{s.name || defs.get(s.type)?.label || s.type}</span>
-            {s.stepCount != null && s.stepCount > 1 && <span className="text-slate-400">（{s.stepCount}）</span>}
+            <span className="truncate">{s.name || stepLabel(s.type, defs.get(s.type)?.label)}</span>
+            {s.stepCount != null && s.stepCount > 1 && <span className="text-slate-400">{t.paren(String(s.stepCount))}</span>}
           </button>
           {s.fields && s.fields.length > 0 && (
             <dl className="mt-0.5 space-y-0.5 pl-6 font-mono text-[11px]">
@@ -108,7 +103,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
         </div>
         <div className="text-xs text-slate-500">
           {t.actor[version.createdBy.kind]}
-          {version.createdBy.name ? `（${version.createdBy.name}）` : ""} · rev {version.revision} · {version.stepCount} steps
+          {version.createdBy.name ? t.paren(version.createdBy.name) : ""} · rev {version.revision} · {version.stepCount} steps
         </div>
         {version.note && <p className="mt-1 text-xs whitespace-pre-wrap text-slate-700">{version.note}</p>}
         <div className="mt-1 flex gap-3 text-xs">
@@ -125,7 +120,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
             }}
             onBlur={() => setConfirm(false)}
           >
-            ↶ {confirm ? `${t.confirmRestore}（もう一度押す）` : t.restore}
+            ↶ {confirm ? t.confirmRestoreAgain : t.restore}
           </button>
         </div>
         {diff && (

@@ -5,40 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type ChatItem, useAgent } from "../agent";
 import { agent } from "../lib/api";
 import { useStudio } from "../context";
+import { t, useKeptState } from "../lib/i18n";
 
-const TOOL_LABELS: Record<string, string> = {
-  list_scenarios: "シナリオ一覧",
-  get_scenario: "シナリオを確認",
-  validate_scenario: "検証",
-  list_step_types: "手順の種類を確認",
-  get_step_schema: "手順の仕様を確認",
-  get_history: "変更履歴を確認",
-  get_review: "差し戻しを確認",
-  get_run_status: "実行状況を確認",
-  get_run_logs: "実行ログを確認",
-  list_runs: "実行履歴を確認",
-  list_secrets: "シークレット名を確認",
-  list_versions: "版の一覧",
-  get_version: "版を確認",
-  diff_versions: "版を比較",
-  create_scenario: "シナリオを作成",
-  update_scenario: "シナリオを変更",
-  add_step: "手順を追加",
-  update_step: "手順を変更",
-  remove_step: "手順を削除",
-  move_step: "手順を移動",
-  undo: "元に戻す",
-  redo: "やり直し",
-  create_version: "版を作成",
-  restore_version: "版を復元",
-  run_scenario: "試し実行",
-  stop_scenario: "実行を停止",
-  inspect_page: "Web画面を確認",
-  inspect_ui: "アプリ画面を確認",
-  test_step: "手順を試行",
-};
-
-const toolLabel = (name: string) => TOOL_LABELS[name] ?? name;
+const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[name] ?? name;
 
 /** Header button that opens the pane. */
 export function AgentButton() {
@@ -71,7 +40,7 @@ export function AgentPane() {
   const reset = useAgent((s) => s.reset);
   const scenario = useStudio((s) => s.scenario);
   const selection = useStudio((s) => s.selection);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useKeptState("agent.draft", "");
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Newer WebView2 returns a promise here; an effect must not.
@@ -81,7 +50,7 @@ export function AgentPane() {
   const stepId = selection?.kind === "step" ? selection.stepId : null;
   const submit = async () => {
     const ref = scenario ? { id: scenario.id, name: scenario.name, stepId } : null;
-    const context = scenario ? `${scenario.name}${stepId ? " ・ 選択中の手順" : ""}` : null;
+    const context = scenario ? `${scenario.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
     if (await send(draft, ref, context)) setDraft("");
   };
   return (
@@ -93,8 +62,8 @@ export function AgentPane() {
           onClick={reset}
           disabled={turnId !== null || sending || items.length === 0}
           className="grid h-6 w-6 place-items-center rounded-[5px] text-[15px] text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
-          title="新しい会話"
-          aria-label="新しい会話"
+          title={t.agent.newChat}
+          aria-label={t.agent.newChat}
         >
           ＋
         </button>
@@ -102,7 +71,7 @@ export function AgentPane() {
           type="button"
           onClick={() => setOpen(false)}
           className="grid h-6 w-6 place-items-center rounded-[5px] text-slate-400 hover:bg-slate-100 hover:text-ink"
-          aria-label="閉じる"
+          aria-label={t.close}
         >
           ✕
         </button>
@@ -126,7 +95,7 @@ export function AgentPane() {
         {scenario && (
           <div className="mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
             <span className="truncate rounded-full bg-slate-100 px-2 py-0.5">{scenario.name}</span>
-            {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">選択中の手順</span>}
+            {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
           </div>
         )}
         <textarea
@@ -140,18 +109,18 @@ export function AgentPane() {
           }}
           rows={3}
           disabled={!info?.available}
-          placeholder={scenario ? "例：ログインの後で受注一覧をCSVに保存して" : "例：受注システムから未出荷の注文を集めるシナリオを作って"}
+          placeholder={scenario ? t.agent.placeholderEdit : t.agent.placeholderNew}
           className="w-full resize-none rounded-[6px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
-          <span className="text-[10.5px] text-slate-400">Ctrl+Enter で送信</span>
+          <span className="text-[10.5px] text-slate-400">{t.agent.sendHint}</span>
           {turnId ? (
             <button
               type="button"
               onClick={() => void stop()}
               className="ml-auto h-8 shrink-0 rounded-[6px] border border-slate-300 px-3 text-[12px] text-slate-600 hover:bg-slate-100"
             >
-              停止
+              {t.stop}
             </button>
           ) : (
             <button
@@ -160,7 +129,7 @@ export function AgentPane() {
               onClick={() => void submit()}
               className="ml-auto h-8 shrink-0 rounded-[6px] bg-ink px-4 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400"
             >
-              送信
+              {t.agent.send}
             </button>
           )}
         </div>
@@ -186,13 +155,13 @@ function Item({ item }: { item: ChatItem }) {
       {item.status === "running" && (
         <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
-          作業中
+          {t.agent.working}
         </div>
       )}
       {/* An expired login is explained by the sign-in box below instead. */}
       {item.status === "failed" && !item.needsLogin && (
         <div className="rounded-[6px] border border-shu-100 bg-shu-50 px-2.5 py-1.5 text-[12px] whitespace-pre-wrap text-shu-600">
-          {item.message ?? "失敗しました"}
+          {item.message ?? t.agent.failed}
         </div>
       )}
     </div>
@@ -214,7 +183,7 @@ function Part({ part }: { part: AgentPart }) {
         </div>
       );
     case "toolFailed":
-      return <div className="pl-3 text-[11px] text-shu-600">失敗：{part.message}</div>;
+      return <div className="pl-3 text-[11px] text-shu-600">{t.agent.toolFailed}{part.message}</div>;
   }
 }
 
@@ -236,13 +205,13 @@ function LoginBox({ name }: { name: string }) {
   if (login.phase === "waiting") {
     return (
       <div className={box}>
-        <div className="font-semibold">ブラウザでサインインしてください</div>
+        <div className="font-semibold">{t.agent.signIn}</div>
         {login.url ? (
           <button type="button" onClick={() => void agent.openUrl(login.url!)} className="text-brand-600 underline-offset-2 hover:underline">
-            ブラウザが開かないときはここから開く
+            {t.agent.openBrowser}
           </button>
         ) : (
-          <div className="text-slate-500">サインイン画面を開いています…</div>
+          <div className="text-slate-500">{t.agent.opening}</div>
         )}
         <form
           className="flex gap-1.5"
@@ -254,25 +223,25 @@ function LoginBox({ name }: { name: string }) {
           <input
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            placeholder="コードが表示されたら貼り付け"
+            placeholder={t.agent.pasteCode}
             className="min-w-0 flex-1 rounded-[6px] border border-slate-300 bg-sheet px-2 text-[12px] outline-none focus:border-brand-500"
           />
           <button type="submit" disabled={!code.trim() || login.sendingCode} className={primary}>
-            送信
+            {t.agent.send}
           </button>
         </form>
         <button type="button" onClick={() => void cancel()} className="text-slate-500 hover:text-ink">
-          やめる
+          {t.cancel}
         </button>
       </div>
     );
   }
   return (
     <div className={box}>
-      <div className="font-semibold">{name} のログインが切れています</div>
+      <div className="font-semibold">{t.agent.loginExpired(name)}</div>
       {login.phase === "failed" && <div className="whitespace-pre-wrap text-shu-600">{login.message}</div>}
       <button type="button" onClick={() => void start()} className={primary}>
-        ログイン
+        {t.agent.login}
       </button>
     </div>
   );

@@ -154,7 +154,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 1. **式の関数**（この PR）：文字列・正規表現・全角半角・数値・リスト（`x => …`）・オブジェクト・日付（和暦）・パス・JSON・`env`。MCP `list_step_types` が `functions` で一覧と例を返す。一覧：[../expressions.md](../expressions.md)
 2. **`file.*`**（[../files.md](../files.md)）：テキスト・CSV（Shift_JIS）・コピー/移動/削除・一覧・フォルダー作成・zip。ファイルのパスを資源キーにして同じファイルへの操作は自動で順番待ち
 3. **`http.request`・`process.run`・`clipboard.*`・`dialog.*`**（[../system.md](../system.md)）
-4. **`pdf.readText`**（[../pdf.md](../pdf.md)）
+4. **`pdf.readText`**（[../pdf.md](../ja/pdf.md)）
 
 ## 式の言語に入れた拡張
 
