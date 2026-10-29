@@ -32,7 +32,10 @@ export function AgentPane({ width }: { width: number }) {
   const submit = async () => {
     const ref = scenario ? { id: scenario.id, name: scenario.name, stepId } : null;
     const context = scenario ? `${scenario.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
-    if (await send(draft, ref, context)) setDraft("");
+    // Cleared as it is sent, like any chat; back again if it was not taken.
+    const text = draft;
+    setDraft("");
+    if (!(await send(text, ref, context))) setDraft((now) => now || text);
   };
   return (
     <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col border-r border-slate-200 bg-sheet">
@@ -133,18 +136,36 @@ function Item({ item }: { item: ChatItem }) {
       {item.parts.map((part, i) => (
         <Part key={i} part={part} />
       ))}
-      {item.status === "running" && (
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
-          {t.agent.working}
-        </div>
-      )}
+      {item.status === "running" && <Progress starting={item.turnId === ""} quiet={item.parts.length === 0} />}
       {/* An expired login is explained by the sign-in box below instead. */}
       {item.status === "failed" && !item.needsLogin && (
         <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-2.5 py-1.5 text-[12px] whitespace-pre-wrap text-shu-600">
           {item.message ?? t.agent.failed}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * What a running reply is doing, with the seconds since it began so a long
+ * wait still visibly moves: starting the agent, thinking before it has said
+ * or done anything, then working.
+ */
+function Progress({ starting, quiet }: { starting: boolean; quiet: boolean }) {
+  const [began] = useState(() => Date.now());
+  const [now, setNow] = useState(began);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.floor((now - began) / 1000);
+  const label = starting ? t.agent.starting : quiet ? t.agent.thinking : t.agent.working;
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
+      {label}
+      {seconds >= 2 && <span className="text-slate-400 tabular-nums">{t.agent.elapsed(seconds)}</span>}
     </div>
   );
 }

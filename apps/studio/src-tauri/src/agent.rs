@@ -213,6 +213,12 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 #[tauri::command]
 pub fn agent_info() -> AgentInfo {
+    // A dev build rebuilds the MCP server before the first message; start
+    // now, while the person is still typing, instead of after they send.
+    #[cfg(debug_assertions)]
+    tauri::async_runtime::spawn(async {
+        let _ = refresh_dev_cli().await;
+    });
     let config = AgentConfig::load();
     let command = config.executable();
     let problem = match (&command, cli_path()) {
@@ -790,22 +796,23 @@ async fn refresh_dev_cli() -> CmdResult<()> {
     FRESH
         .get_or_try_init(|| async {
             let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-            let mut command = Command::new("cargo");
-            command
-                .args(["build", "--quiet", "--package", "shikigami-cli"])
-                .current_dir(root)
-                .stdin(Stdio::null())
-                .kill_on_drop(true);
-            #[cfg(windows)]
-            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-            match command.output().await {
+            let mut out = build_cli(&root).await;
+            // Windows cannot replace a running exe, and the person's own
+            // Claude Code keeps this MCP server running. It can rename one,
+            // though: move the old exe aside and build again.
+            if let Ok(o) = &out
+                && !o.status.success()
+                && String::from_utf8_lossy(&o.stderr).contains("failed to remove file")
+                && set_aside_cli(&root.join("target/debug"))
+            {
+                out = build_cli(&root).await;
+            }
+            match out {
                 Ok(out) if out.status.success() => Ok(()),
-                // Windows cannot replace a running exe: another Claude Code
-                // with this MCP server registered keeps it in use.
                 Ok(out) => Err(err(
                     "AGENT_FAILED",
                     format!(
-                        "shikigami コマンド（MCP サーバー）を最新のソースでビルドできませんでした。shikigami.exe を使っている Claude Code などを閉じてから、もう一度送ってください。\n{}",
+                        "shikigami コマンド（MCP サーバー）を最新のソースでビルドできませんでした。\n{}",
                         tail(String::from_utf8_lossy(&out.stderr).trim(), 1500)
                     ),
                 )),
@@ -815,6 +822,45 @@ async fn refresh_dev_cli() -> CmdResult<()> {
         })
         .await
         .map(|_| ())
+}
+
+#[cfg(debug_assertions)]
+async fn build_cli(root: &Path) -> std::io::Result<std::process::Output> {
+    let mut command = Command::new("cargo");
+    command
+        .args(["build", "--quiet", "--package", "shikigami-cli"])
+        .current_dir(root)
+        // Only the errors, not a progress bar per crate.
+        .env("CARGO_TERM_PROGRESS_WHEN", "never")
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    command.output().await
+}
+
+/// Renames `shikigami(.exe)` in `dir` to a `.old-*` name a running process
+/// can keep, and removes earlier ones nothing uses any more. Whether there
+/// was one to move.
+#[cfg(debug_assertions)]
+fn set_aside_cli(dir: &Path) -> bool {
+    let name = exe("shikigami");
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(&format!("{name}.old-"))
+            {
+                // Still running ones refuse; they go next time.
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    std::fs::rename(dir.join(&name), dir.join(format!("{name}.old-{stamp}"))).is_ok()
 }
 
 fn find_claude() -> Option<PathBuf> {
