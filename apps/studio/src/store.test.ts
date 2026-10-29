@@ -400,7 +400,7 @@ describe("studio store", () => {
     await store.getState().open("scn_a");
     store.getState().toggleBreakpoint("x", "scn_b");
     await store.getState().startRun();
-    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["x"], step: false });
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["scn_b/x"], step: false });
     store.getState().setFollowRun(false);
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "x", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1, callPath: ["c1"] } as unknown as RunEventEnvelope);

@@ -381,6 +381,7 @@ pub async fn run_scenario(
                         emit_app.clone(),
                         event.run_id.clone(),
                         id.clone(),
+                        event.call_path.clone(),
                         step_id.clone(),
                         step_type.clone(),
                         event.seq,

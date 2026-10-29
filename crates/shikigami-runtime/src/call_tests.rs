@@ -548,7 +548,8 @@ async fn breakpoints_inside_a_called_scenario_pause() {
         vec![],
     );
     let options = crate::DebugOptions {
-        breakpoints: vec!["t2".into()],
+        // `t2` alone would be a step of the caller's.
+        breakpoints: vec!["scn_tax/t2".into(), "t1".into()],
         ..Default::default()
     };
     let (paused_at, report) = debug_run(main, vec![tax()], options, vec![]).await;
