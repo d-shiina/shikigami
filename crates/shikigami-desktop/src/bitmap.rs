@@ -91,7 +91,7 @@ impl Bitmap {
     /// From BGRA rows (as Windows GDI and WinRT give them); alpha is set
     /// to opaque, since screen captures carry none.
     pub fn from_bgra(width: u32, height: u32, mut bgra: Vec<u8>) -> Self {
-        for px in bgra.chunks_exact_mut(4) {
+        for px in bgra.as_chunks_mut::<4>().0.iter_mut() {
             px.swap(0, 2);
             px[3] = 255;
         }
@@ -100,7 +100,7 @@ impl Bitmap {
 
     pub fn to_bgra(&self) -> Vec<u8> {
         let mut out = self.rgba.clone();
-        for px in out.chunks_exact_mut(4) {
+        for px in out.as_chunks_mut::<4>().0.iter_mut() {
             px.swap(0, 2);
         }
         out
@@ -134,12 +134,12 @@ impl Bitmap {
             match info.color_type {
                 png::ColorType::Rgba => rgba.extend_from_slice(row),
                 png::ColorType::Rgb => {
-                    for px in row.chunks_exact(3) {
+                    for px in row.as_chunks::<3>().0.iter() {
                         rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
                     }
                 }
                 png::ColorType::GrayscaleAlpha => {
-                    for px in row.chunks_exact(2) {
+                    for px in row.as_chunks::<2>().0.iter() {
                         rgba.extend_from_slice(&[px[0], px[0], px[0], px[1]]);
                     }
                 }
@@ -186,7 +186,7 @@ impl Bitmap {
     /// Every pixel the same colour (a window that could not be captured
     /// comes back black).
     pub fn is_blank(&self) -> bool {
-        let mut pixels = self.rgba.chunks_exact(4);
+        let mut pixels = self.rgba.as_chunks::<4>().0.iter();
         match pixels.next() {
             Some(first) => pixels.all(|px| px[..3] == first[..3]),
             None => true,
@@ -234,7 +234,9 @@ impl Bitmap {
     pub fn gray(&self) -> Gray {
         let values = self
             .rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|px| {
                 let [r, g, b, a] = [px[0], px[1], px[2], px[3]].map(f32::from);
                 let luma = 0.299 * r + 0.587 * g + 0.114 * b;

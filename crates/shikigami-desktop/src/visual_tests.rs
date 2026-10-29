@@ -100,7 +100,7 @@ fn brightness_changes_still_match_but_other_pictures_do_not() {
     let icon = noise(24, 24, 42);
     // The same icon, a little darker on screen (a hover or theme tint).
     let mut darker = icon.clone();
-    for px in darker.rgba.chunks_exact_mut(4) {
+    for px in darker.rgba.as_chunks_mut::<4>().0.iter_mut() {
         for c in &mut px[..3] {
             *c = (f32::from(*c) * 0.8) as u8 + 10;
         }
@@ -364,7 +364,7 @@ async fn a_missing_image_waits_then_says_how_close_it_came() {
     // A faded copy: alike, but not enough.
     let button = Bitmap::from_png(&std::fs::read(&path).unwrap()).unwrap();
     let mut faded = button.clone();
-    for (i, px) in faded.rgba.chunks_exact_mut(4).enumerate() {
+    for (i, px) in faded.rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         if i % 6 == 0 {
             px[..3].copy_from_slice(&[128, 128, 128]);
         }

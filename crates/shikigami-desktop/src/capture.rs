@@ -263,7 +263,13 @@ pub fn load_image(path: &str) -> Result<Bitmap, StepError> {
             .DetachPixelData()?;
         let mut bitmap = Bitmap::from_bgra(w, h, data.to_vec());
         // from_bgra makes screen pictures opaque; files keep their alpha.
-        for (px, src) in bitmap.rgba.chunks_exact_mut(4).zip(data.chunks_exact(4)) {
+        for (px, src) in bitmap
+            .rgba
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(data.as_chunks::<4>().0.iter())
+        {
             px[3] = src[3];
         }
         Ok(bitmap)

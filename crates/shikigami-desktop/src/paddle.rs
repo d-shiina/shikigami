@@ -287,7 +287,7 @@ fn rec_input(image: &Bitmap) -> Vec<f32> {
 fn planes(image: &Bitmap, f: impl Fn(usize, f32) -> f32) -> Vec<f32> {
     let n = image.width as usize * image.height as usize;
     let mut out = vec![0.0; 3 * n];
-    for (i, px) in image.rgba.chunks_exact(4).enumerate() {
+    for (i, px) in image.rgba.as_chunks::<4>().0.iter().enumerate() {
         // B, G, R.
         for (plane, channel) in [2usize, 1, 0].into_iter().enumerate() {
             out[plane * n + i] = f(plane, f32::from(px[channel]));
