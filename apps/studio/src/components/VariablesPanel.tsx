@@ -1,5 +1,6 @@
 import type { VarDirection, VariableDef, VarType } from "@shikigami/schema";
 import { focus, varFocus } from "../lib/focus";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -78,39 +79,83 @@ function VariableRow({ variable }: { variable: VariableDef }) {
       ? ""
       : type === "string"
         ? String(variable.default)
-        : JSON.stringify(variable.default);
+        : // Lists and records are read one entry per line, not as one long line.
+          JSON.stringify(variable.default, null, typeof variable.default === "object" ? 2 : undefined);
   const [draft, setDraft] = useState(defaultText);
+  const multiline = type === "array" || type === "object" || draft.includes("\n");
   const update = (patch: Partial<VariableDef>) => setVariable({ ...variable, ...patch });
   const color = TYPE_COLOR[type] ?? TYPE_COLOR.any;
   const direction = variable.direction ?? "local";
 
   return (
+    // One box per variable: what it is on top, its starting value below, both always in view.
     <li
-      className={`rounded-[4px] ${open ? "bg-slate-50 ring-1 ring-slate-200" : "hover:bg-slate-50"}`}
+      className={`rounded-[4px] border bg-sheet shadow-sheet ${open ? "border-slate-300" : "border-slate-200"}`}
       // Lights up where the flow chart reads and writes this variable.
       onMouseEnter={() => focus.set(varFocus(variable.name))}
       onMouseLeave={() => focus.set(null)}
     >
-      <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-2 py-1.5 text-left">
-        {direction !== "output" && <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white" style={{ background: color }} />}
-        <VarIcon size={13} className="text-slate-400" />
-        <span className="truncate font-mono text-[13px] font-semibold">{variable.name}</span>
-        {variable.secret && <span className="rounded bg-slate-200 px-1 text-[9px] text-slate-600">{t.secret}</span>}
-        <span className="ml-auto shrink-0 text-[10px] font-medium" style={{ color }}>
+      <div className="flex items-center gap-2 px-2.5 pt-2">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+        <VarIcon size={13} className="shrink-0 text-slate-400" />
+        <span className="min-w-0 truncate font-mono text-[13px] font-semibold" title={variable.name}>
+          {variable.name}
+        </span>
+        {variable.secret && <span className="shrink-0 rounded-[2px] bg-slate-200 px-1 text-[9px] text-slate-600">{t.secret}</span>}
+        <span
+          className="ml-auto shrink-0 rounded-[2px] px-1.5 text-[10px] leading-4 font-semibold"
+          style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}
+        >
           {t.varType[type]}
         </span>
-        {last ? (
-          <span className="max-w-[110px] truncate rounded bg-brand-50 px-1.5 font-mono text-[10px] text-brand-700" title={t.vars.afterRun(traced.length)}>
-            {valueText(last)}
-          </span>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          title={t.vars.details}
+          className="-mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-[3px] text-slate-400 hover:bg-slate-100 hover:text-ink"
+        >
+          <ChevronDown size={14} strokeWidth={1.75} className={open ? "rotate-180" : ""} aria-hidden="true" />
+        </button>
+      </div>
+      {variable.description && <p className="px-2.5 pt-0.5 text-[11px] leading-snug text-slate-500">{variable.description}</p>}
+      <div className="grid grid-cols-[48px_1fr] items-baseline gap-x-2 gap-y-1 px-2.5 pt-1.5 pb-2">
+        <span className="text-[11px] text-slate-500">{t.defaultValue}</span>
+        {variable.secret ? (
+          // A default would be stored in plain text in the scenario.
+          <span className="text-[11px] text-slate-400">—</span>
         ) : (
-          <span className="max-w-[90px] truncate rounded bg-slate-100 px-1.5 font-mono text-[10px] text-slate-500">{defaultText || "—"}</span>
+          multiline ? (
+            <textarea
+              className={`${cell} max-h-48 resize-y font-mono leading-snug`}
+              rows={Math.min(8, draft.split("\n").length)}
+              placeholder={t.values.none}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
+            />
+          ) : (
+            <input
+              className={`${cell} font-mono`}
+              placeholder={t.values.none}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            />
+          )
         )}
-        {direction === "output" && <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white" style={{ background: color }} />}
-      </button>
+        {last && (
+          <>
+            <span className="text-[11px] text-brand-600">{t.vars.after}</span>
+            <span className="truncate rounded-[3px] bg-brand-50 px-1.5 py-0.5 font-mono text-xs text-brand-700" title={t.vars.afterRun(traced.length)}>
+              {valueText(last)}
+            </span>
+          </>
+        )}
+      </div>
       {open && (
-        <div className="space-y-1 px-2 pb-2">
-          {variable.description && <p className="pb-1 text-[11px] text-slate-500">{variable.description}</p>}
+        <div className="space-y-1 border-t border-slate-100 px-2.5 py-2">
           <label className={row}>
             <span className={rowLabel}>{t.type}</span>
             <select className={cell} value={type} onChange={(e) => update({ type: e.target.value as VarType })}>
@@ -131,21 +176,6 @@ function VariableRow({ variable }: { variable: VariableDef }) {
               ))}
             </select>
           </label>
-          {variable.secret ? (
-            // A default would be stored in plain text in the scenario.
-            <p className="text-[11px] text-slate-400">{t.secretNoDefault}</p>
-          ) : (
-            <label className={row}>
-              <span className={rowLabel}>{t.defaultValue}</span>
-              <input
-                className={`${cell} font-mono`}
-                placeholder={t.values.none}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
-              />
-            </label>
-          )}
           <label className={row}>
             <span className={rowLabel}>{t.secret}</span>
             <input
@@ -155,6 +185,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
               onChange={(e) => update(e.target.checked ? { secret: true, default: undefined } : { secret: false })}
             />
           </label>
+          {variable.secret && <p className="text-[11px] text-slate-400">{t.secretNoDefault}</p>}
           {changes && (
             <div className="pt-2">
               <div className="pb-1 text-[11px] font-bold text-slate-600">{t.vars.changes(traced.length)}</div>
@@ -187,7 +218,7 @@ export function VariablesPanel() {
         const members = variables.filter((v) => group.directions.includes(v.direction ?? "local"));
         return (
           <section key={group.key}>
-            <div className="flex items-baseline gap-2 px-2 pb-1">
+            <div className="flex items-baseline gap-2 pb-1.5">
               <span className="text-[11px] font-bold tracking-wider text-slate-600">{t.vars.groups[group.key].title}</span>
               <span className="text-[10px] text-slate-400">{t.vars.groups[group.key].hint}</span>
               <span className="ml-auto text-[10px] text-slate-400">{members.length}</span>
@@ -195,7 +226,7 @@ export function VariablesPanel() {
             {members.length === 0 ? (
               <p className="rounded-[4px] border border-dashed border-slate-200 px-2 py-1.5 text-[11px] text-slate-400">{t.vars.nothing}</p>
             ) : (
-              <ul className="space-y-0.5">
+              <ul className="space-y-2">
                 {members.map((v) => (
                   <VariableRow key={`${v.name}:${JSON.stringify(v.default)}`} variable={v} />
                 ))}

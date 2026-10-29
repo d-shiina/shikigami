@@ -64,7 +64,7 @@ export const ja = {
   extracted: (name: string) => `新しいシナリオ「${name}」にまとめました`,
   close: "閉じる",
   cancel: "やめる",
-  secretNoDefault: "機密の変数には既定値を書けません。パスワードは右上の「シークレット」に登録して、入力ステップで選びます",
+  secretNoDefault: "機密の変数には既定値を書けません。パスワードはサイドバーの「シークレット」に登録して、入力ステップで選びます",
   scenarios: "シナリオ",
   newScenario: "新規作成",
   newScenarioPrompt: "シナリオ名",
@@ -649,6 +649,8 @@ export const ja = {
     direction: "向き",
     changes: (n: number) => `実行中の変化（${n}回）`,
     nothing: "なし",
+    after: "実行後",
+    details: "型・向き・機密の設定",
   },
   askCopied: "AI への依頼文をコピーしました。Claude Code などの AI に貼り付けてください。直した内容を確認したら、ここから再開できます。",
   paramLabels: {

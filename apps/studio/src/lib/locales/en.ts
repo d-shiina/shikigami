@@ -65,7 +65,7 @@ export const en: Dict = {
   extracted: (name: string) => `Moved into the new scenario "${name}"`,
   close: "Close",
   cancel: "Cancel",
-  secretNoDefault: "Secret variables cannot have a default. Register the password under Secrets (top right) and pick it in the input step",
+  secretNoDefault: "Secret variables cannot have a default. Register the password under Secrets in the sidebar and pick it in the input step",
   scenarios: "Scenarios",
   newScenario: "New scenario",
   newScenarioPrompt: "Scenario name",
@@ -650,6 +650,8 @@ export const en: Dict = {
     direction: "Direction",
     changes: (n: number) => `Changes during the run (${n})`,
     nothing: "None",
+    after: "After run",
+    details: "Type, direction and secrecy",
   },
   askCopied: "Copied the request for the AI. Paste it into an AI such as Claude Code. Once you have reviewed the fix, resume from here.",
   paramLabels: {
