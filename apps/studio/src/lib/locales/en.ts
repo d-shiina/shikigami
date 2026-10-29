@@ -614,6 +614,7 @@ export const en: Dict = {
     extract: "Extract…",
     extractTitle: "Move the selected steps into a sub-scenario",
     closePanel: "Close the panel",
+    resize: "Drag to resize, double-click to reset",
     workspaceSection: "Workspace",
     displaySection: "Display",
     agentSection: "AI agent",

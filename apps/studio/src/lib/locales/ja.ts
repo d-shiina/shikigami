@@ -613,6 +613,7 @@ export const ja = {
     extract: "まとめる…",
     extractTitle: "選んだノードをサブシナリオにまとめる",
     closePanel: "パネルを閉じる",
+    resize: "ドラッグで大きさを変更・ダブルクリックで元に戻す",
     workspaceSection: "保存先",
     displaySection: "表示",
     agentSection: "AI エージェント",

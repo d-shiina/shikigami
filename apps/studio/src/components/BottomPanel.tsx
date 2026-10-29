@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import type { BottomTab } from "../store";
 import { IssuesPanel } from "./IssuesPanel";
+import { Resizer } from "./Resizer";
 
 const LEVEL_STYLE = {
   debug: "text-slate-400",
@@ -16,19 +17,44 @@ const LEVEL_STYLE = {
  * scenario (issues). Both are lists over time or over the whole scenario, read
  * side by side with the chart, so they sit below it rather than beside it.
  */
+const HEIGHT_KEY = "shikigami.studio.bottom";
+const HEIGHT = 192;
+const MIN_HEIGHT = 96;
+
+function readHeight(): number {
+  try {
+    const saved = Number(globalThis.localStorage?.getItem(HEIGHT_KEY));
+    return saved >= MIN_HEIGHT ? saved : HEIGHT;
+  } catch {
+    return HEIGHT;
+  }
+}
+
 export function BottomPanel() {
   const tab = useStudio((s) => s.bottom);
   const setTab = useStudio((s) => s.setBottom);
   const run = useStudio((s) => s.run);
   const clear = useStudio((s) => s.clearLog);
   const issueCount = useStudio((s) => s.validation?.issues.length ?? 0);
+  const [height, setHeight] = useState(readHeight);
   if (!tab) return null;
+  const resize = (next: number) => {
+    setHeight(next);
+    try {
+      globalThis.localStorage?.setItem(HEIGHT_KEY, String(next));
+    } catch {
+      // Only a remembered preference.
+    }
+  };
+  // Leave the chart most of the window.
+  const max = Math.max(MIN_HEIGHT, Math.round((globalThis.innerHeight ?? 800) * 0.6));
   const tabs: [BottomTab, string, number][] = [
     ["log", t.log, 0],
     ["issues", t.issues, issueCount],
   ];
   return (
-    <section className="flex h-48 min-h-0 shrink-0 flex-col border-t border-slate-200 bg-sheet">
+    <section style={{ height: Math.min(height, max) }} className="relative flex min-h-0 shrink-0 flex-col border-t border-slate-200 bg-sheet">
+      <Resizer edge="top" size={Math.min(height, max)} min={MIN_HEIGHT} max={max} onSize={resize} onReset={() => resize(HEIGHT)} />
       <div className="flex h-8 shrink-0 items-center gap-1 border-b border-slate-100 px-2">
         {tabs.map(([key, label, count]) => (
           <button
