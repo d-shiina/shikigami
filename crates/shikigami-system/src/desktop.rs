@@ -239,13 +239,22 @@ pub async fn select_file(params: &Value) -> Result<Value, StepError> {
 mod snapshots {
     use super::powershell;
 
+    /// Picture name, dialog mode, theme, SHIKIGAMI_* values, expected answer.
+    type Case = (
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static [(&'static str, &'static str)],
+        &'static str,
+    );
+
     #[tokio::test]
     async fn dialogs_draw_in_both_themes_and_languages() {
         let temp = tempfile::tempdir().unwrap();
         let dir = std::env::var_os("SHIKIGAMI_SNAPSHOT_DIR")
             .map_or_else(|| temp.path().to_path_buf(), std::path::PathBuf::from);
         std::fs::create_dir_all(&dir).unwrap();
-        let cases: [(&str, &str, &str, &[(&str, &str)], &str); 6] = [
+        let cases: [Case; 6] = [
             (
                 "message-info",
                 "message",
