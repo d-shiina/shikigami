@@ -23,6 +23,7 @@
 
 ### 変更
 
+- `dialog.message` / `dialog.input` のダイアログを Studio と同じ見た目に（白地と濃紺の文字、Windows のアプリがダークならダーク、日本語は Yu Gothic UI、ボタンは Windows の表示言語）。`dialog.selectFile` のフォルダー選択はエクスプローラーの画面に。Studio なしの `shikigami run` でも同じに出ます。ノードの指定と結果は変わりません
 - シナリオのファイル形式を `schemaVersion` 2 にしました（`requires` の追加）。1 のファイルはそのまま読めて、次に保存したときに 2 になります。**2 で保存したファイルは、この版より古い Shikigami では開けません**
 - プラグインのマニフェストの `version` は semver（`0.1.0` の形）が必須になりました
 - 名前付きの版とバンドルの中のシナリオも、ファイルと同じ移行を通るようにしました

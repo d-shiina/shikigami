@@ -2,9 +2,10 @@
 //! fail with PLATFORM_UNSUPPORTED (their definitions and validation still
 //! work, so scenarios can be written and checked on any OS).
 //!
-//! Dialogs run in their own PowerShell process (Windows Forms) rather than
-//! in this one: when the step is stopped or times out, the process is
-//! killed and the dialog closes with it.
+//! Dialogs run in their own PowerShell process (dialog.ps1: WPF in Studio's
+//! look, Explorer pickers for files) rather than in this one: when the step
+//! is stopped or times out, the process is killed and the dialog closes with
+//! it.
 
 use serde_json::Value;
 use shikigami_runtime::StepError;
@@ -56,24 +57,30 @@ pub fn clipboard_set(params: &Value) -> Result<Value, StepError> {
     }
 }
 
-/// Shared start of every dialog script: UTF-8 output and a topmost owner
-/// window, so the dialog is not hidden behind the application being
-/// automated.
+/// The dialogs, drawn in Studio's look (see the script's header).
 #[cfg(windows)]
-const PRELUDE: &str = "[Console]::OutputEncoding = [Text.Encoding]::UTF8; \
-    Add-Type -AssemblyName System.Windows.Forms; \
-    $owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false }; ";
+const DIALOG_SCRIPT: &str = include_str!("dialog.ps1");
+/// The logo mark for the dialog's corner and taskbar button.
+#[cfg(windows)]
+const MARK_PNG: &[u8] = include_bytes!("dialog-mark.png");
 
-/// Runs a dialog script. Values reach it only through environment
-/// variables (`SHIKIGAMI_*`), never inside the script text. Exit code 0 →
-/// the printed answer; 3 → cancelled.
+/// Runs dialog.ps1 in `mode` (message, input or file). Values reach it only
+/// through environment variables (`SHIKIGAMI_*`), never inside the script
+/// text. Exit code 0 → the printed answer; 3 → cancelled.
 #[cfg(windows)]
-async fn powershell(script: &str, env: &[(&str, String)]) -> Result<Option<String>, StepError> {
+async fn powershell(mode: &str, env: &[(&str, String)]) -> Result<Option<String>, StepError> {
+    use base64::Engine as _;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let mut command = tokio::process::Command::new("powershell.exe");
     command
         .args(["-NoProfile", "-NonInteractive", "-STA", "-Command"])
-        .arg(format!("{PRELUDE}{script}"))
+        .arg("& ([scriptblock]::Create($env:SHIKIGAMI_SCRIPT))")
+        .env("SHIKIGAMI_SCRIPT", DIALOG_SCRIPT)
+        .env("SHIKIGAMI_MODE", mode)
+        .env(
+            "SHIKIGAMI_MARK",
+            base64::engine::general_purpose::STANDARD.encode(MARK_PNG),
+        )
         .creation_flags(CREATE_NO_WINDOW)
         .kill_on_drop(true);
     for (key, value) in env {
@@ -97,49 +104,46 @@ async fn powershell(script: &str, env: &[(&str, String)]) -> Result<Option<Strin
     }
 }
 
-/// Shows a message box; returns the button pressed: ok, cancel, yes or no.
+/// Shows a message; returns the button pressed: ok, cancel, yes or no.
 pub async fn message(params: &Value) -> Result<Value, StepError> {
     let message = text(params, "message").unwrap_or_default();
-    let title = text(params, "title").unwrap_or_else(|| "Shikigami".into());
-    // Mapped to fixed Windows Forms names here, so the script never sees
-    // scenario text in these two.
+    let title = text(params, "title").unwrap_or_default();
+    // Mapped to fixed names here, so the script never sees scenario text in
+    // these two.
     let buttons = match text(params, "buttons").as_deref() {
-        Some("okCancel") => "OKCancel",
-        Some("yesNo") => "YesNo",
-        Some("yesNoCancel") => "YesNoCancel",
-        _ => "OK",
+        Some("okCancel") => "okCancel",
+        Some("yesNo") => "yesNo",
+        Some("yesNoCancel") => "yesNoCancel",
+        _ => "ok",
     };
-    let icon = match text(params, "level").as_deref() {
-        Some("warning") => "Warning",
-        Some("error") => "Error",
-        _ => "Information",
+    let level = match text(params, "level").as_deref() {
+        Some("warning") => "warning",
+        Some("error") => "error",
+        _ => "info",
     };
     #[cfg(windows)]
     {
-        const SCRIPT: &str = "$r = [System.Windows.Forms.MessageBox]::Show($owner, $env:SHIKIGAMI_MESSAGE, $env:SHIKIGAMI_TITLE, \
-            [System.Windows.Forms.MessageBoxButtons]::$env:SHIKIGAMI_BUTTONS, [System.Windows.Forms.MessageBoxIcon]::$env:SHIKIGAMI_ICON); \
-            Write-Output $r";
         let answer = powershell(
-            SCRIPT,
+            "message",
             &[
                 ("MESSAGE", message),
                 ("TITLE", title),
                 ("BUTTONS", buttons.to_owned()),
-                ("ICON", icon.to_owned()),
+                ("LEVEL", level.to_owned()),
             ],
         )
         .await?
         .unwrap_or_default();
         Ok(serde_json::json!(match answer.trim() {
-            "Yes" => "yes",
-            "No" => "no",
-            "Cancel" => "cancel",
+            "yes" => "yes",
+            "no" => "no",
+            "cancel" => "cancel",
             _ => "ok",
         }))
     }
     #[cfg(not(windows))]
     {
-        let _ = (message, title, buttons, icon);
+        let _ = (message, title, buttons, level);
         Err(unsupported())
     }
 }
@@ -147,14 +151,12 @@ pub async fn message(params: &Value) -> Result<Value, StepError> {
 /// Asks for one line of text. Returns "" when the person cancels.
 pub async fn input(params: &Value) -> Result<Value, StepError> {
     let message = text(params, "message").unwrap_or_default();
-    let title = text(params, "title").unwrap_or_else(|| "Shikigami".into());
+    let title = text(params, "title").unwrap_or_default();
     let default = text(params, "default").unwrap_or_default();
     #[cfg(windows)]
     {
-        const SCRIPT: &str = "Add-Type -AssemblyName Microsoft.VisualBasic; \
-            [Microsoft.VisualBasic.Interaction]::InputBox($env:SHIKIGAMI_MESSAGE, $env:SHIKIGAMI_TITLE, $env:SHIKIGAMI_DEFAULT)";
         let answer = powershell(
-            SCRIPT,
+            "input",
             &[("MESSAGE", message), ("TITLE", title), ("DEFAULT", default)],
         )
         .await?;
@@ -197,35 +199,8 @@ pub async fn select_file(params: &Value) -> Result<Value, StepError> {
             let patterns: Vec<String> = extensions.iter().map(|e| format!("*.{e}")).collect();
             format!("{0}|{0}", patterns.join(";"))
         };
-        let script = match kind.as_str() {
-            "folder" => {
-                "$d = New-Object System.Windows.Forms.FolderBrowserDialog; \
-                $d.Description = $env:SHIKIGAMI_TITLE; \
-                if ($env:SHIKIGAMI_FOLDER) { $d.SelectedPath = $env:SHIKIGAMI_FOLDER }; \
-                if ($d.ShowDialog($owner) -ne 'OK') { exit 3 }; Write-Output $d.SelectedPath"
-            }
-            other => {
-                if other == "save" {
-                    "$d = New-Object System.Windows.Forms.SaveFileDialog; "
-                } else {
-                    "$d = New-Object System.Windows.Forms.OpenFileDialog; \
-                     $d.Multiselect = ($env:SHIKIGAMI_KIND -eq 'files'); "
-                }
-            }
-        };
-        let script = if kind == "folder" {
-            script.to_owned()
-        } else {
-            format!(
-                "{script}if ($env:SHIKIGAMI_TITLE) {{ $d.Title = $env:SHIKIGAMI_TITLE }}; \
-                 if ($env:SHIKIGAMI_FOLDER) {{ $d.InitialDirectory = $env:SHIKIGAMI_FOLDER }}; \
-                 if ($env:SHIKIGAMI_FILE) {{ $d.FileName = $env:SHIKIGAMI_FILE }}; \
-                 if ($env:SHIKIGAMI_FILTER) {{ $d.Filter = $env:SHIKIGAMI_FILTER }}; \
-                 if ($d.ShowDialog($owner) -ne 'OK') {{ exit 3 }}; $d.FileNames | ForEach-Object {{ Write-Output $_ }}"
-            )
-        };
         let answer = powershell(
-            &script,
+            "file",
             &[
                 ("KIND", kind.clone()),
                 ("TITLE", title),
@@ -253,5 +228,100 @@ pub async fn select_file(params: &Value) -> Result<Value, StepError> {
     {
         let _ = (kind, title, folder, file_name, extensions);
         Err(unsupported())
+    }
+}
+
+/// Draws each kind of dialog into a PNG (dialog.ps1's snapshot mode), which
+/// checks that the script and its layout load on this Windows. The pictures
+/// go to SHIKIGAMI_SNAPSHOT_DIR when set (CI keeps them), otherwise to a
+/// temporary folder.
+#[cfg(all(test, windows))]
+mod snapshots {
+    use super::powershell;
+
+    #[tokio::test]
+    async fn dialogs_draw_in_both_themes_and_languages() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = std::env::var_os("SHIKIGAMI_SNAPSHOT_DIR")
+            .map_or_else(|| temp.path().to_path_buf(), std::path::PathBuf::from);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cases: [(&str, &str, &str, &[(&str, &str)], &str); 5] = [
+            (
+                "message-info",
+                "message",
+                "light",
+                &[
+                    ("MESSAGE", "12 件を登録します。よろしいですか？"),
+                    ("TITLE", "受注の登録"),
+                    ("BUTTONS", "yesNo"),
+                    ("LEVEL", "info"),
+                ],
+                "yes",
+            ),
+            (
+                "message-warning-dark",
+                "message",
+                "dark",
+                &[
+                    (
+                        "MESSAGE",
+                        "請求書フォルダーに同じ名前のファイルがあります。上書きしますか？",
+                    ),
+                    ("BUTTONS", "yesNoCancel"),
+                    ("LEVEL", "warning"),
+                ],
+                "yes",
+            ),
+            (
+                "message-error-en",
+                "message",
+                "light",
+                &[
+                    (
+                        "MESSAGE",
+                        "The order system did not answer. Try again later.",
+                    ),
+                    ("TITLE", "Upload failed"),
+                    ("BUTTONS", "okCancel"),
+                    ("LEVEL", "error"),
+                ],
+                "ok",
+            ),
+            (
+                "input",
+                "input",
+                "light",
+                &[
+                    ("MESSAGE", "対象月を入力してください（例: 2026-10）"),
+                    ("TITLE", "月次集計"),
+                    ("DEFAULT", "2026-10"),
+                ],
+                "2026-10",
+            ),
+            (
+                "input-dark",
+                "input",
+                "dark",
+                &[
+                    ("MESSAGE", "担当者名を入力してください"),
+                    ("DEFAULT", "山田"),
+                ],
+                "山田",
+            ),
+        ];
+        for (name, mode, theme, params, expected) in cases {
+            let file = dir.join(format!("{name}.png"));
+            let mut env: Vec<(&str, String)> =
+                params.iter().map(|(k, v)| (*k, (*v).to_owned())).collect();
+            env.push(("THEME", theme.to_owned()));
+            env.push((
+                "LANG",
+                if name.ends_with("-en") { "en" } else { "ja" }.to_owned(),
+            ));
+            env.push(("SNAPSHOT", file.display().to_string()));
+            let answer = powershell(mode, &env).await.unwrap();
+            assert_eq!(answer.as_deref(), Some(expected), "{name}");
+            assert!(std::fs::metadata(&file).unwrap().len() > 1000, "{name}");
+        }
     }
 }

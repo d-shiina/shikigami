@@ -34,6 +34,7 @@ Crate `shikigami-system`. Built-in nodes for things outside app windows. Value p
 ## Clipboard and dialogs
 
 - Windows only. Elsewhere `PLATFORM_UNSUPPORTED` (definitions and validation work everywhere).
-- Each dialog is shown by its own PowerShell process (Windows Forms). Stopping or a timeout closes the process.
+- Each dialog is shown by its own PowerShell process, so it works without Studio too (`shikigami run`). Stopping or a timeout closes the process.
+- Messages and text input look like Studio: white (dark when Windows apps are set to dark), navy text, Japanese text in Yu Gothic UI, button labels in the Windows display language. Enter presses the filled button; Esc and × cancel (with `yesNo` an answer is required, as in a Windows message box). Ctrl+C copies the message. File and folder pickers are the Windows Explorer ones.
 - Use dialogs only in runs a person is watching. They wait 10 minutes by default (change with `timeoutMs`); unattended runs stop there until the timeout. While waiting, Studio asks the person to answer the dialog.
 - Never ask for passwords with `dialog.input` (use secrets).

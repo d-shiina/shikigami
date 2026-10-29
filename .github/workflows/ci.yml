@@ -53,6 +53,15 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+        env:
+          SHIKIGAMI_SNAPSHOT_DIR: ${{ runner.temp }}/dialogs
+      # Pictures of the dialog.* dialogs, drawn by the Windows test.
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows' && always()
+        with:
+          name: dialogs
+          path: ${{ runner.temp }}/dialogs
+          if-no-files-found: ignore
 
   frontend:
     name: TypeScript
