@@ -9,7 +9,7 @@ import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
 import { fixRequest } from "../lib/fixRequest";
 import { plain, sentence } from "../lib/sentence";
-import { findStep, isActive } from "../store";
+import { diveChain, findStep, isActive } from "../store";
 import { usePendingReview } from "./Timeline";
 import { shortText } from "./ValueView";
 import { stepLabel as typeName, t } from "../lib/i18n";
@@ -90,6 +90,9 @@ function Screenshot({ src, title }: { src: string; title: string }) {
 export function RunPausePanel() {
   const run = useStudio((s) => s.run);
   const scenario = useStudio((s) => s.scenario);
+  const called = useStudio((s) => s.called);
+  const leaveCalls = useStudio((s) => s.leaveCalls);
+  const enterCall = useStudio((s) => s.enterCall);
   const stepTypes = useStudio((s) => s.stepTypes);
   const debug = useStudio((s) => s.debug);
   const startRun = useStudio((s) => s.startRun);
@@ -111,7 +114,16 @@ export function RunPausePanel() {
   if (!pause && !failure) return null;
 
   const stepId = pause?.stepId ?? failure?.stepId ?? null;
-  const step = stepId ? findStep(scenario.steps ?? [], stepId) : null;
+  // Paused inside a call: the step and its fix belong to the called scenario.
+  const inCall = pause?.callPath ?? [];
+  const owner = inCall.length > 0 ? (diveChain(scenario, called, inCall).at(-1)?.scenario ?? scenario) : scenario;
+  const step = stepId ? findStep(owner.steps ?? [], stepId) : null;
+  const show = () => {
+    if (!stepId) return;
+    if (inCall.length === 0) return goTo(stepId);
+    leaveCalls(0);
+    for (const id of inCall) enterCall(id);
+  };
   const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
   const stepLabel = step ? step.name || plain(sentence(step, def)) : stepId ? t.evidence.goneStep : null;
   const kind = step ? typeName(step.type, def?.label) : undefined;
@@ -125,10 +137,10 @@ export function RunPausePanel() {
     if (!pause) return;
     setAsking(true);
     try {
-      const text = fixRequest({ scenario, runId: run.runId, pause, evidence: run.evidence, defs: stepTypes });
+      const text = fixRequest({ scenario: owner, runId: run.runId, pause, evidence: run.evidence, defs: stepTypes });
       if (agentAvailable) {
         // Straight to the AI pane; its edits come back through the review queue.
-        const sent = await askAgent(text, { id: scenario.id, name: scenario.name, stepId: pause.stepId }, `${scenario.name} ・ ${t.pause.fixContext}`);
+        const sent = await askAgent(text, { id: owner.id, name: owner.name, stepId: pause.stepId }, `${owner.name} ・ ${t.pause.fixContext}`);
         setTold(sent ? t.pause.asked(agentName) : t.pause.notSent(agentName));
       } else {
         setTold(await clipboardAi.ask(text));
@@ -159,7 +171,7 @@ export function RunPausePanel() {
         {stepLabel && (
           <button
             type="button"
-            onClick={() => stepId && goTo(stepId)}
+            onClick={show}
             className="min-w-0 truncate text-[14px] font-bold hover:text-brand-600 hover:underline"
             title={t.pause.showStep}
           >

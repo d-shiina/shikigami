@@ -14,7 +14,7 @@ Office work is based on reading and writing the files directly; the Office apps 
 | What it can do | Read and write cells, ranges, tables, sheets | Macros, recalculation, printing, PDF export… |
 | Tests | Run in Linux CI too | Only on Windows with Office |
 
-To keep the number of ways the AI has to learn small, the same action is never available both ways. Reading and writing cells is always `excel.*` (files directly); COM steps exist only for what files cannot do, such as "run a macro". Driving the Excel window with `desktop.*` is the last resort.
+To keep the number of ways the AI has to learn small, the same action is never available both ways. Reading and writing cells is always `excel.*` (files directly); COM nodes exist only for what files cannot do, such as "run a macro". Driving the Excel window with `desktop.*` is the last resort.
 
 ## Excel (`excel.*`, implemented)
 
@@ -32,7 +32,7 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 | `excel.addSheet` | `path`, `sheet` | – (does nothing if it exists) |
 
 - Without `sheet`, the first sheet. A wrong name gives `SHEET_NOT_FOUND` (`details.sheets` lists the sheets)
-- Writing steps create the workbook when the file does not exist (but not the folder). They do not create sheets; add new sheets with `excel.addSheet`
+- Writing nodes create the workbook when the file does not exist (but not the folder). They do not create sheets; add new sheets with `excel.addSheet`
 - **A common shape**: `excel.readRows` → `control.forEach` → work on each row → `excel.writeCell` (`cell: "F{{ row._row }}"`) to write the result on the same row. To collect results in another workbook use `excel.appendRows` (on an empty sheet it also writes the header row from the record keys)
 - `excel.appendRows` keys must match the headers exactly. Others give `UNKNOWN_COLUMN` (`details.columns` lists the headers). Columns are never added on their own
 
@@ -49,17 +49,17 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 | Empty | `null` | `null` (clears the value, keeps the formatting) |
 
 - Dates are recognized by the cell's number format (`yyyy/mm/dd`, `ggge年m月d日`…). When writing a date to a cell without a date format, `yyyy/mm/dd` is applied
-- Results of formulas you write are calculated the next time the workbook is opened in Excel (Shikigami does not calculate). If you need the result right away, use the COM recalculation step (planned)
+- Results of formulas you write are calculated the next time the workbook is opened in Excel (Shikigami does not calculate). If you need the result right away, use the COM recalculation node (planned)
 
 ### Locking and saving
 
-- Every step uses `path` as a resource, so steps on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Scenarios never declare locks
-- Each writing step saves before it finishes. It writes to a temporary file in the same folder and then replaces the original, so a failure never corrupts it. There are no "open / save / close workbook" steps (so no way of linking distant steps by name is needed)
+- Every node uses `path` as a resource, so nodes on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Scenarios never declare locks
+- Each writing node saves before it finishes. It writes to a temporary file in the same folder and then replaces the original, so a failure never corrupts it. There are no "open / save / close workbook" nodes (so no way of linking distant nodes by name is needed)
 - While the workbook is open in Excel (a `~$name` file exists), writes fail with `FILE_IN_USE` (retryable). Reading still works
 
 ### Limits
 
-- Each step reads and writes the whole workbook, so a step on a large workbook takes time. Collecting the results and writing them once at the end with `excel.appendRows` / `excel.writeRange` is faster than `excel.writeCell` per row
+- Each node reads and writes the whole workbook, so a node on a large workbook takes time. Collecting the results and writing them once at the end with `excel.appendRows` / `excel.writeRange` is faster than `excel.writeCell` per row
 - Formatting, merged cells, conditional formatting and macros (`.xlsm`) are meant to be kept on save, but some parts such as pivot tables and charts depend on what the library (umya-spreadsheet) supports. Try important workbooks on a copy first
 - Password-protected workbooks cannot be opened (`WORKBOOK_UNREADABLE`)
 
@@ -77,11 +77,11 @@ Only "run a workbook's VBA macro", which files alone cannot do, goes through Exc
 
 - `macro`: `Summarize` or `Module1.Summarize` (a Public Sub / Function in a standard module). A Function's return value is the output (text, numbers, true/false; dates as ISO text; anything else null)
 - `args`: arguments (text, numbers, true/false, null; up to 30). `save`: whether to save after running (default true; false discards the changes and closes)
-- Each step starts **its own hidden Excel** and goes open → run → save → close → quit. Excel windows the person has open are never touched. Warning dialogs are off (`DisplayAlerts = false`) and external links are not updated
-- The default timeout is 5 minutes. A macro that shows a MsgBox / InputBox waits for a person and never ends, so on timeout that Excel is quit (without saving) and the step returns `MACRO_TIMEOUT`
-- It waits its turn automatically with other `excel.*` steps on the same workbook. `FILE_IN_USE` while the person has the workbook open in Excel
+- Each node starts **its own hidden Excel** and goes open → run → save → close → quit. Excel windows the person has open are never touched. Warning dialogs are off (`DisplayAlerts = false`) and external links are not updated
+- The default timeout is 5 minutes. A macro that shows a MsgBox / InputBox waits for a person and never ends, so on timeout that Excel is quit (without saving) and the node returns `MACRO_TIMEOUT`
+- It waits its turn automatically with other `excel.*` nodes on the same workbook. `FILE_IN_USE` while the person has the workbook open in Excel
 - Workbooks downloaded from the internet and blocked ("Unblock" not checked in the file's properties) cannot run macros and give `MACRO_FAILED`
-- Any code can run, so the step's risk is `Dangerous`
+- Any code can run, so the node's risk is `Dangerous`
 
 ## Word (`word.*`, implemented)
 
@@ -94,10 +94,10 @@ Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`)
 
 - Write `{{ name }}` in the template's body, headers and footers and it is replaced with the value from `values`. Formatting (bold, fonts…) stays as in the template. `\n` in a value becomes a line break. `{{ customer.name }}` is a field of a record
 - **Repeating table rows**: write `{{ items.product }}` `{{ items.qty }}` in a table row and pass `"items": [ { "product": …, "qty": … }, … ]` in `values`; the row repeats once per record (an empty list removes the row)
-- If any `{{ }}` has no value, no document is created and the step gives `TEMPLATE_VALUE_MISSING` (`details.missing` lists the names), so documents with unreplaced fields are never produced
+- If any `{{ }}` has no value, no document is created and the node gives `TEMPLATE_VALUE_MISSING` (`details.missing` lists the names), so documents with unreplaced fields are never produced
 - Placeholders such as `{{ name }}` that Word split internally (spell checking and formatting changes do this) are replaced just the same
 - The template is never changed. `path` is written as a temporary file in the same folder, then replaced. Writing to a document open in Word gives `FILE_IN_USE`
-- Both `template` and `path` are resources, so steps on the same file wait their turn automatically
+- Both `template` and `path` are resources, so nodes on the same file wait their turn automatically
 - Running `word.readText` on a template with MCP's `test_step` adds the list of placeholders to `state`
 
 ## Mail (`mail.*`, implemented)

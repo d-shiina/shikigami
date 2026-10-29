@@ -10,9 +10,9 @@ Shikigami の外に出ていく「約束」と、それをどう変えてよい�
 |---|---|---|
 | シナリオのファイル形式（`schemaVersion`） | `crates/shikigami-core/src/model.rs` → `schemas/scenario.schema.json` | 保存済みのシナリオ、共有ワークスペース |
 | 名前付きの版・バンドル（`*.shikigami.json`、`formatVersion`） | `version.rs` → `schemas/api.schema.json` | 他の PC・ワークスペースへの受け渡し |
-| 組込のステップ型（型名・params・ブロック・`saveAs` の有無・`risk`） | 各アダプター → `schemas/contract/step-types.json` | シナリオ、AI が覚えた書き方 |
+| 組込のノード型（型名・params・ブロック・`saveAs` の有無・`risk`） | 各アダプター → `schemas/contract/step-types.json` | シナリオ、AI が覚えた書き方 |
 | MCP のツール（名前・引数・戻り値・許可クラス・注釈） | `crates/shikigami-mcp` → `schemas/contract/mcp-tools.json` | AI クライアント、スキル |
-| エラーコード（`code` と `retryable`） | `CoreError::code`、各ステップのエラー | AI の修正、`onError`・リトライの判断 |
+| エラーコード（`code` と `retryable`） | `CoreError::code`、各ノードのエラー | AI の修正、`onError`・リトライの判断 |
 | CLI（コマンド・引数・終了コード・`--json` の出力） | `crates/shikigami-cli` → `schemas/contract/cli.json`、`schemas/run-api.schema.json` | タスクスケジューラー、バッチ、CI |
 | プラグインのマニフェストと JSON-RPC（`manifestVersion`） | [design/plugins.md](../design/plugins.md) | プラグインの作者 |
 
@@ -22,20 +22,20 @@ Shikigami の外に出ていく「約束」と、それをどう変えてよい�
 
 **いつでもよい（追加）**
 
-- ステップ型・MCP ツール・CLI のサブコマンドやフラグの追加
+- ノード型・MCP ツール・CLI のサブコマンドやフラグの追加
 - 省略できる params・引数の追加（省略時は今までと同じ動き）
 - 戻り値・`--json` の出力にフィールドを足す（読む側は知らないフィールドを無視すること）
 - エラーコードの追加、文章やヒントの改善
 
 **移行か非推奨の期間が要る（破壊的変更）**
 
-- 名前の変更・削除（ステップ型、params、ツール、引数、フラグ、エラーコード）
+- 名前の変更・削除（ノード型、params、ツール、引数、フラグ、エラーコード）
 - 必須の params・引数を増やす、受け付ける値を狭める、意味を変える
 - 終了コードの意味を変える
 
 0.x の間も、破壊的変更は次のどちらかで行います。
 
-1. **シナリオ形式・組込ステップの params**：`schemaVersion` を上げて移行を書く（§3）。古いファイルは読み込み時に自動で新しい形になる
+1. **シナリオ形式・組込ノードの params**：`schemaVersion` を上げて移行を書く（§3）。古いファイルは読み込み時に自動で新しい形になる
 2. **MCP・CLI**：古い名前を残したまま新しい名前を足し、古い方を非推奨にする（§5）。少なくとも次のマイナー版までは両方動かす
 
 どちらも [CHANGELOG.md](../../CHANGELOG.md) の「破壊的変更」に書きます。1.0 以降は破壊的変更をメジャー版でだけ行います。
@@ -44,7 +44,7 @@ Shikigami の外に出ていく「約束」と、それをどう変えてよい�
 
 - `schemaVersion` はファイルの形の版です。**形が変わるたびに 1 上げます**。シナリオは知らない項目を拒否する（書き間違いに気づくため）ので、省略できる項目を足すだけでも上げます。古い Shikigami は「新しい版で保存されたので更新してください」（`UNSUPPORTED_SCHEMA_VERSION`）と分かりやすく止まります
 - 上げたら `crates/shikigami-core/src/migrate.rs` の `MIGRATIONS` に「1 つ前の版 → 今の版」の関数を足します。読み込みは古い版から 1 段ずつ順に変換するので、各関数は直前の版だけを知っていればよい。途切れていればテストが落ちます
-- 組込ステップの params の破壊的変更も、ここで移行します（`for_each_step` で全ステップを書き換える）。組込ステップは本体と一緒に配布されるので、ステップごとの版は持たせません。シナリオに版を書かせると、AI が書く量と間違える場所が増えるためです（[design/ai-authoring.md](../design/ai-authoring.md)）
+- 組込ノードの params の破壊的変更も、ここで移行します（`for_each_step` で全ノードを書き換える）。組込ノードは本体と一緒に配布されるので、ノードごとの版は持たせません。シナリオに版を書かせると、AI が書く量と間違える場所が増えるためです（[design/ai-authoring.md](../design/ai-authoring.md)）
 - ファイル・名前付きの版・バンドルの中のシナリオ・サブシナリオは、すべて同じ移行を通ります（`migrate::from_value` / `migrate::deserialize`）
 - 移行したシナリオは、次に保存したときに新しい版で書かれます。読むだけではファイルを書き換えません
 - 未来の版は読み込みません（黙って項目を落とすと、保存したときに消えるため）
@@ -64,17 +64,17 @@ Shikigami の外に出ていく「約束」と、それをどう変えてよい�
 "requires": { "plugin:kintone": "^0.3.1" }
 ```
 
-- **Core が自動で管理します**。プラグインのステップを足すとそのとき入っている版で `^<版>` が入り、使わなくなると消えます。人や AI が書く必要はありません
+- **Core が自動で管理します**。プラグインのノードを足すとそのとき入っている版で `^<版>` が入り、使わなくなると消えます。人や AI が書く必要はありません
 - 範囲を広げたい・狭めたいときだけ `update_scenario` の `patch.requires` で書き換えます（使っている間は保たれます）
 - 範囲は semver（`^0.3.1`、`>=1.2, <3` など）。プラグインの `version` は semver で書く必要があります
-- **入っていない PC**：シナリオは読み込めて、ステップもそのまま残ります。検証で `PLUGIN_NOT_INSTALLED`（どのプラグインのどの版が要るか、どこに入れるか）になり、実行前に止まります
+- **入っていない PC**：シナリオは読み込めて、ノードもそのまま残ります。検証で `PLUGIN_NOT_INSTALLED`（どのプラグインのどの版が要るか、どこに入れるか）になり、実行前に止まります
 - **範囲外の版が入っている PC**：`PLUGIN_VERSION_MISMATCH` で実行前に止まります
 
 プラグインの作者へ：params を互換でない形に変えるときはメジャー版を上げてください（0.x ならマイナー版）。古いシナリオが `PLUGIN_VERSION_MISMATCH` で止まるので、黙って壊れることはありません。続けて古い書き方も受け付けられるなら、版は互換のまま新しい params を足すのが一番です。
 
 ## 5. 非推奨（deprecation）
 
-- **ステップ型**：`StepTypeDef.deprecated`（プラグインはマニフェストの `steps[].deprecated`）に、理由と代わりの型を書きます。動き続けますが、検証で `DEPRECATED_STEP_TYPE` の警告と代わりの型が出ます。AI は警告を見て書き換えます
+- **ノード型**：`StepTypeDef.deprecated`（プラグインはマニフェストの `steps[].deprecated`）に、理由と代わりの型を書きます。動き続けますが、検証で `DEPRECATED_STEP_TYPE` の警告と代わりの型が出ます。AI は警告を見て書き換えます
 - **MCP のツール・引数**：古い名前を残し、説明の先頭に `Deprecated: use <新しい名前>.` と書きます。戻り値に `deprecated` の注意を入れてもよい
 - **CLI**：古いコマンド・フラグを残し、使われたら標準エラーに警告を出します
 - 非推奨にしたことと、削除する予定の版を CHANGELOG に書きます。削除は次のマイナー版以降（1.0 以降は次のメジャー版）
@@ -109,7 +109,7 @@ Shikigami の外に出ていく「約束」と、それをどう変えてよい�
 | ファイル | 中身 |
 |---|---|
 | `mcp-tools.json` | ツールの名前・許可クラス・注釈・引数と戻り値の JSON Schema |
-| `step-types.json` | 組込ステップ型の名前・params の JSON Schema・ブロック・`saveAs` の有無・`risk` など |
+| `step-types.json` | 組込ノード型の名前・params の JSON Schema・ブロック・`saveAs` の有無・`risk` など |
 | `cli.json` | サブコマンド・引数・フラグ |
 
 - コミット済みのファイルと Rust の定義がずれるとテストが落ちます（`schemas/*.schema.json` と同じ仕組み）

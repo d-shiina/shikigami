@@ -2,9 +2,9 @@
 
 English | [日本語](ja/pdf.md)
 
-Crate `shikigami-pdf`. A built-in step that reads the text of PDFs. Pulling values out of the text is done with expression functions ([expressions.md](expressions.md)).
+Crate `shikigami-pdf`. A built-in node that reads the text of PDFs. Pulling values out of the text is done with expression functions ([expressions.md](expressions.md)).
 
-| Step | What it does | Output | Risk |
+| Node | What it does | Output | Risk |
 |---|---|---|---|
 | `pdf.readText` | Reads the text of a PDF | `{ text, pages }` | safe |
 

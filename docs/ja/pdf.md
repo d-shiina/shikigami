@@ -2,9 +2,9 @@
 
 [English](../pdf.md) | 日本語
 
-クレート `shikigami-pdf`。PDF の文字を読む組込ステップです。読んだ文字から値を取り出すのは式の関数で書きます（[expressions.md](expressions.md)）。
+クレート `shikigami-pdf`。PDF の文字を読む組込ノードです。読んだ文字から値を取り出すのは式の関数で書きます（[expressions.md](expressions.md)）。
 
-| ステップ | 内容 | 出力 | リスク |
+| ノード | 内容 | 出力 | リスク |
 |---|---|---|---|
 | `pdf.readText` | PDF の文字を読む | `{ text, pages }` | safe |
 

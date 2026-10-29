@@ -2,7 +2,7 @@
 
 English | [日本語](ja/expressions.md)
 
-The functions available in scenario expressions (the values of `expressionParams`, and inside `{{ }}`). AI clients get the same list (`functions`: signature, description, examples) from MCP's `list_step_types`. The source is `FUNCTION_DOCS` in `crates/shikigami-core/src/expr/functions.rs`, and a test keeps it in step with these tables.
+The functions available in scenario expressions (the values of `expressionParams`, and inside `{{ }}`). AI clients get the same list (`functions`: signature, description, examples) from MCP's `list_step_types`. The source is `FUNCTION_DOCS` in `crates/shikigami-core/src/expr/functions.rs`, and a test keeps it in node with these tables.
 
 Functions have no side effects (they never touch files, the screen or the network). Only `now()` / `today()` / `env()` read the clock and environment variables.
 

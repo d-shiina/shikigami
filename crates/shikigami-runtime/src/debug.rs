@@ -23,6 +23,12 @@
 //! `control.parallel` / `control.forEach` step, and a retry runs that step
 //! again as a whole.
 //!
+//! Called scenarios (`scenario.call`) pause like the caller: breakpoints on
+//! their steps, step into a call to stop at its first step, step out of it,
+//! and errors inside that the call step does not handle. Their steps come
+//! from the run's snapshot, so an edit swapped in while paused inside a call
+//! applies to the caller once the call returns, not to the call itself.
+//!
 //! Unattended runs (CLI, scheduler, MCP) do not pass [`DebugOptions`] and
 //! fail as before.
 
@@ -125,7 +131,13 @@ pub(crate) struct Frame {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum BlockKey {
     Top,
-    Child { parent: StepId, name: String },
+    Child {
+        parent: StepId,
+        name: String,
+    },
+    /// A block of a called scenario (run from the run's snapshot, not the
+    /// live revision): it only counts towards the depth for stepping.
+    Called,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -407,6 +419,7 @@ pub(crate) fn block_of<'a>(scenario: &'a Scenario, key: &BlockKey) -> Option<&'a
             let parent = scenario.find_step(parent)?;
             Some(parent.block(name))
         }
+        BlockKey::Called => None,
     }
 }
 
@@ -419,6 +432,10 @@ fn check_position(old: &Scenario, new: &Scenario, frames: &[Frame]) -> Result<()
         ..RunError::new("RESUME_INCOMPATIBLE", message)
     };
     for (index, frame) in frames.iter().enumerate() {
+        // Inside a call: the called scenario is not the one being swapped.
+        if frame.key == BlockKey::Called {
+            break;
+        }
         if let BlockKey::Child { parent, .. } = &frame.key {
             let old_parent = old.find_step(parent);
             let new_parent = new.find_step(parent);

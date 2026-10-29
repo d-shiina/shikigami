@@ -2,9 +2,9 @@
 
 [English](../files.md) | 日本語
 
-クレート `shikigami-files`。何もインストールせずに動き、Windows 以外でもテストできます。値の加工（パスの組み立て、行の絞り込みなど）はステップではなく式の関数で書きます（[expressions.md](expressions.md)）。
+クレート `shikigami-files`。何もインストールせずに動き、Windows 以外でもテストできます。値の加工（パスの組み立て、行の絞り込みなど）はノードではなく式の関数で書きます（[expressions.md](expressions.md)）。
 
-| ステップ | 内容 | 出力 |
+| ノード | 内容 | 出力 |
 |---|---|---|
 | `file.readText` | テキストファイルを丸ごと読む | 文字列 |
 | `file.writeText` | 書く（`append: true` で末尾に追加）。フォルダーがなければ作る | パス |

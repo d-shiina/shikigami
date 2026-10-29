@@ -67,6 +67,8 @@ export type Pause = {
   variables: Record<string, unknown>;
   /** The scenario revision the run executes. */
   revision: number;
+  /** The `scenario.call` steps it paused inside (outermost first); empty in the open scenario. */
+  callPath: string[];
 };
 
 export type LogEntry = {
@@ -161,6 +163,12 @@ export function diveChain(root: Scenario | null, called: Record<string, Scenario
     current = callee;
   }
   return chain;
+}
+
+/** Breakpoints a run of the open scenario stops at: its own and those of every scenario it calls. */
+function runBreakpoints(s: Pick<StudioState, "scenario" | "called" | "breakpoints">): string[] {
+  if (!s.scenario) return [];
+  return [s.scenario.id, ...Object.keys(s.called)].flatMap((id) => s.breakpoints[id] ?? []);
 }
 
 /** Scenarios a step tree calls directly. */
@@ -285,7 +293,8 @@ export type StudioState = {
   stopRun(): Promise<void>;
   /** Step command for the paused (or running) run; false when it was refused. */
   debug(command: DebugCommand): Promise<boolean>;
-  toggleBreakpoint(stepId: string): void;
+  /** `scenarioId`: the scenario the step is in, when it is a called one shown on the chart. */
+  toggleBreakpoint(stepId: string, scenarioId?: string): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -1027,7 +1036,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const scenario = get().scenario;
         if (!scenario) return;
         try {
-          const breakpoints = get().breakpoints[scenario.id] ?? [];
+          const breakpoints = runBreakpoints(get());
           const runId = await api.run(scenario.id, undefined, { breakpoints, step: options?.step ?? false });
           set((s) => ({
             // Events may have arrived before the command returned.
@@ -1076,8 +1085,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
-      toggleBreakpoint(stepId) {
-        const id = get().scenario?.id;
+      toggleBreakpoint(stepId, scenarioId) {
+        const id = scenarioId ?? get().scenario?.id;
         if (!id) return;
         const current = get().breakpoints[id] ?? [];
         const next = current.includes(stepId) ? current.filter((s) => s !== stepId) : [...current, stepId];
@@ -1086,8 +1095,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         saveBreakpoints(breakpoints);
         set({ breakpoints });
         const run = get().run;
-        if (run && isActive(run) && run.scenarioId === id) {
-          void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: next }).catch(() => {});
+        if (run && isActive(run) && run.scenarioId === get().scenario?.id) {
+          void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: runBreakpoints(get()) }).catch(() => {});
         }
       },
 
@@ -1119,8 +1128,14 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             if (path.length === 0) dive = [];
             else if (diveChain(s.scenario, s.called, path).length === path.length) dive = path;
           }
+          // A pause shows where it stopped, followed or not: inside a call, or
+          // back in the open scenario (a breakpoint after a call, a call that failed).
+          if (env.type === "paused" && callKey(path) !== callKey(s.dive)) {
+            if (path.length === 0) dive = [];
+            else if (diveChain(s.scenario, s.called, path).length === path.length) dive = path;
+          }
           const moved = dive !== s.dive ? { dive, selection: null } : {};
-          if (path.length > 0) {
+          if (path.length > 0 && env.type !== "paused" && env.type !== "resumed") {
             // Inside a called scenario: its steps and variables are not the
             // chart's. They show when their call is unfolded or entered.
             const call = path[0]!;
@@ -1172,8 +1187,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push(env.level, env.message, env.stepId);
               break;
             case "paused": {
+              // Inside a call, the step's state lives with the call's (see `inner`).
+              const states = path.length > 0 ? { ...(run.inner[callKey(path)] ?? {}) } : run.steps;
               run.status = "paused";
               run.pause = {
+                callPath: path,
                 seq: env.seq,
                 stepId: env.stepId,
                 stepType: env.stepType,
@@ -1183,9 +1201,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
                 revision: env.revision,
               };
               run.evidence = null;
-              run.steps[env.stepId] = env.reason === "error" ? "failed" : "paused";
-              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, env.stepId);
-              reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
+              states[env.stepId] = env.reason === "error" ? "failed" : "paused";
+              if (path.length > 0) run.inner = { ...run.inner, [callKey(path)]: states };
+              // The log points at what the open scenario shows: the call step.
+              const at = path[0] ?? env.stepId;
+              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, at);
+              if (path.length === 0) reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
               break;
             }
             case "resumed": {
@@ -1193,7 +1214,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = "running";
               run.pause = null;
               run.evidence = null;
-              if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
+              if (pause && pause.callPath.length > 0) {
+                const key = callKey(pause.callPath);
+                const states = { ...(run.inner[key] ?? {}) };
+                if (states[pause.stepId] === "paused") delete states[pause.stepId];
+                run.inner = { ...run.inner, [key]: states };
+              } else if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
               push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`);
               break;
             }

@@ -34,7 +34,7 @@ This starts a demo business site, an order management system for a sample tradin
 
 The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Studio can load and run the same scenario.
 
-## Steps
+## Nodes
 
 | type | Main params | Output |
 |---|---|---|
@@ -51,7 +51,7 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 | `browser.waitForHuman` | `message`, `until` (an element that appears when the person is done) | – |
 | `browser.close` | – | – |
 
-Every step has a `context` (default `default`). Each `context` has its own cookies and tabs; **steps on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so scenarios never declare locks). Contexts opened by a run are closed when it ends.
+Every node has a `context` (default `default`). Each `context` has its own cookies and tabs; **nodes on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so scenarios never declare locks). Contexts opened by a run are closed when it ends.
 
 For logins, passwords and MFA, see [secrets.md](secrets.md).
 
@@ -67,7 +67,7 @@ By meaning; CSS is the last resort.
 // common: exact (exact match), nth (0-based index when several match)
 ```
 
-Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the step's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
+Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the node's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
 
 ### Errors
 
@@ -87,9 +87,9 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 The MCP server has two tools for this (class `run`):
 
 - `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is
-- `test_step`: runs one step on the spot and returns its output and the page after it (works for steps of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario
+- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario
 
-With these the AI checks the site while it builds the steps, then confirms an AI-free run with `validate_scenario` → `run_scenario`.
+With these the AI checks the site while it builds the nodes, then confirms an AI-free run with `validate_scenario` → `run_scenario`.
 
 ## How it works
 
@@ -99,5 +99,5 @@ Runtime ──(JSON-RPC over stdio)──▶ node packages/browser-adapter/src/m
 ```
 
 - Browser support is one "adapter". To add other apps, see [adapters.md](adapters.md).
-- The adapter starts with the first browser step and is shared by every run. If it dies, the running step fails with `ADAPTER_CRASHED` and the adapter restarts on the next request.
+- The adapter starts with the first browser node and is shared by every run. If it dies, the running node fails with `ADAPTER_CRASHED` and the adapter restarts on the next request.
 - The adapter's stderr goes to Rust's tracing (`shikigami_browser::adapter`).
