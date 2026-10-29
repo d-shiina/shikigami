@@ -69,6 +69,7 @@ args = ["mcp"]
 |  | `list_versions` / `get_version` | Named versions, and a version's snapshot |
 |  | `diff_versions` | Differences between versions, or a version and now (by node ID; by default "latest version → now") |
 |  | `export_scenario` | The scenario, its versions and the subscenarios it calls, as one bundle (without defaults of secret variables) |
+|  | `list_project_files` / `read_project_file` | The files in the scenario's folder (input, config, templates, output, work, logs), and a text file's contents ([files.md](files.md#the-scenarios-folder)) |
 |  | `list_secrets` | Names, sites and set fields of the secrets registered in Studio (never the values; see [secrets.md](secrets.md)) |
 | write | `create_scenario` | Create a scenario (node IDs optional) |
 |  | `update_scenario` | Apply several EditOps atomically as one revision |
@@ -79,6 +80,7 @@ args = ["mcp"]
 |  | `create_version` / `restore_version` | Save a version / go back to a version (one edit that can be undone) |
 |  | `import_scenario` | Import a bundle or a scenario document. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subscenarios in the bundle come along |
 |  | `extract_subscenario` | Move consecutive nodes of one block into a new scenario and replace them with a single `scenario.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subscenarios.md)) |
+|  | `write_project_file` / `delete_project_file` | Put a file in the scenario's folder (`text`, or `copyFrom` a file on this PC; `overwrite` to replace) / move one to the trash |
 |  | `request_secret` | Ask the person for login details. Studio shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Studio and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
 | run | `run_scenario` | Run with the Runtime (the AI takes no part in running it). `waitMs` waits for it to finish. Input variables marked `secret: true` cannot be passed |
 |  | `stop_scenario` | Cancel a run |

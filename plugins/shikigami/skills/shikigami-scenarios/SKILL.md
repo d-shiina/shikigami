@@ -67,7 +67,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 ## ファイル・CSV を扱うシナリオ
 
 - `file.*`：`readText` / `writeText`、`readCsv` / `writeCsv`、`list` / `exists`、`copy` / `move` / `delete` / `createFolder`、`zip` / `unzip`（docs/files.md）。
-- パスは絶対パスで書き、組み立ては `pathJoin(folder, name)`・`fileName(path)`。`copy` / `move` の `to` は新しいパスそのもの（フォルダーを渡さない）。
+- シナリオで使うファイルはシナリオのフォルダー（`input/`・`config/`・`templates/`・`output/`・`work/`・`logs/`）に置き、相対パス（`input/受注一覧.xlsx`）で書く。置くのは `write_project_file`、一覧は `list_project_files`。変えたくなる値は `config/` の設定ファイルにして `config.read` で読む。シナリオの外のファイルは絶対パス。組み立ては `pathJoin(folder, name)`・`fileName(path)`。`copy` / `move` の `to` は新しいパスそのもの（フォルダーを渡さない）。
 - CSV は見出しをキーにしたレコードの配列になり、セルは文字列（金額は `num()`）。加工は `filter` / `map` で行い、`writeCsv` の `rows` に `"{{ 変数 }}"` で渡す。Excel で開く CSV は `encoding: "utf-8-bom"` か `"shift_jis"`。
 - PDF の文字は `pdf.readText`（出力 `{ text, pages }`）で読み、値は `regexFind(res.text, '請求金額\\s*([\\d,]+)', 1)` のように式で取り出す（JSON の中では `\\` を `\\\\` と書く）。スキャンした PDF は文字が空になる。パスワードは `password` にシークレットで渡す（docs/pdf.md）。
 - ファイルの到着を待つときは `wait.until` の `check` に `file.list`（`saveAs`）を入れ、`condition` で `len(files) > 0`。
@@ -89,7 +89,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 
 ## Excel のブックを扱うシナリオ
 
-1. セルの読み書きは `excel.*`（ファイルを直接読み書き、Excel 不要）。Excel の画面を `desktop.*` で操作しない。`path` はフルパス（`C:\work\受注.xlsx`）。
+1. セルの読み書きは `excel.*`（ファイルを直接読み書き、Excel 不要）。Excel の画面を `desktop.*` で操作しない。`path` はシナリオのフォルダーからの相対パス（`input/受注.xlsx`）かフルパス。
 2. 書く前に `test_step` で `excel.listSheets` か `excel.readRange` を実行し、返る `state`（全シートの使用範囲と先頭の数行）で見出しの位置とシート名を確かめる。
 3. 見出し行のある表は `excel.readRows`（見出しをキーにしたレコード、行番号 `_row` つき）→ `control.forEach`。同じ行に結果を書くときは `excel.writeCell` の `cell` を `"F{{ row._row }}"` にする。結果を貯めるときは `excel.appendRows`（キーは見出しと完全一致）。
 4. 日付は読むと `"2026-10-28"`、書くときは `{ "date": "2026-10-28" }`。数式は `{ "formula": "SUM(B2:B9)" }`。ただの文字列は文字のまま書かれる。

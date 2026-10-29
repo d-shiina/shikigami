@@ -1200,7 +1200,12 @@ impl ScenarioService {
         }
         Ok(ScenarioBundle {
             format: BUNDLE_FORMAT.into(),
-            format_version: BUNDLE_FORMAT_VERSION,
+            // An older build would drop the files without a word.
+            format_version: if files.is_empty() {
+                version::BUNDLE_FORMAT_VERSION_WITHOUT_FILES
+            } else {
+                BUNDLE_FORMAT_VERSION
+            },
             exported_at: now(),
             scenario,
             versions,

@@ -487,6 +487,10 @@
               "type": "null"
             }
           ]
+        },
+        "keepWork": {
+          "description": "Leave the files in the scenario's `work/` folder when a run starts.\nBy default a run starts with `work/` emptied.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false

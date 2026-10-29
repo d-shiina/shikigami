@@ -212,6 +212,11 @@ export type VarType = "string" | "number" | "boolean" | "object" | "array" | "an
  * via the `definition` "VarDirection".
  */
 export type VarDirection = "local" | "input" | "output" | "inOut";
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ConfigType".
+ */
+export type ConfigType = ("text" | "number" | "boolean") | "date" | "list";
 
 /**
  * Bundle of the IPC/API payload types used by Studio and MCP tools.
@@ -241,6 +246,9 @@ export interface ShikigamiApi {
   evidence: Evidence;
   new_review: NewReview;
   observation_content: ObservationContent;
+  project_files: ProjectFiles;
+  project_file: ProjectFile;
+  config_file: ConfigFile;
 }
 /**
  * A scenario: the unit that AI clients, Studio and the Runtime share.
@@ -388,6 +396,11 @@ export interface ScenarioSettings {
   defaultTimeoutMs?: number | null;
   defaultRetry?: RetryPolicy | null;
   onError?: OnError | null;
+  /**
+   * Leave the files in the scenario's `work/` folder when a run starts.
+   * By default a run starts with `work/` emptied.
+   */
+  keepWork?: boolean;
 }
 export interface Metadata {
   createdAt?: string | null;
@@ -524,6 +537,11 @@ export interface ScenarioSettings1 {
   defaultTimeoutMs?: number | null;
   defaultRetry?: RetryPolicy | null;
   onError?: OnError | null;
+  /**
+   * Leave the files in the scenario's `work/` folder when a run starts.
+   * By default a run starts with `work/` emptied.
+   */
+  keepWork?: boolean;
 }
 /**
  * Result of a committed change.
@@ -626,6 +644,12 @@ export interface StepTypeDef {
    * Secrets are rejected everywhere else.
    */
   secretParams?: string[];
+  /**
+   * Params that name a file or folder (a string, or a list of strings).
+   * A relative path there is resolved from the scenario's folder
+   * (`input/orders.xlsx`). File resources are included automatically.
+   */
+  pathParams?: string[];
   /**
    * Timeout when the step sets none (takes precedence over the
    * scenario's default), for steps that wait on people (manual login).
@@ -921,6 +945,31 @@ export interface ScenarioBundle {
    * versions, so the bundle runs on its own.
    */
   subscenarios?: Scenario[];
+  /**
+   * Files of the scenarios' folders (`input/`, `config/`, `templates/`
+   * and the author's own; not `output/`, `work/` or `logs/`).
+   */
+  files?: BundledFile[];
+}
+/**
+ * A file carried in a bundle.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "BundledFile".
+ */
+export interface BundledFile {
+  /**
+   * Identifier of a scenario. Also used as its file name in the store.
+   */
+  scenarioId: string;
+  /**
+   * Relative to that folder, `/`-separated.
+   */
+  path: string;
+  /**
+   * The contents, base64 (standard alphabet, padded).
+   */
+  data: string;
 }
 /**
  * Result of importing a bundle or scenario file.
@@ -1144,6 +1193,79 @@ export interface ObservationContent {
 export interface ObservationLink {
   scenarioId: ScenarioId;
   revision: number;
+}
+/**
+ * What a scenario's project folder holds.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ProjectFiles".
+ */
+export interface ProjectFiles {
+  scenarioId: ScenarioId;
+  /**
+   * Absolute path of the folder.
+   */
+  dir: string;
+  /**
+   * Every folder, relative and `/`-separated: the standard ones first,
+   * then the author's own (`input/2026`), sorted.
+   */
+  folders: string[];
+  /**
+   * Every file except `scenario.json`, sorted by path.
+   */
+  files: ProjectFile[];
+}
+/**
+ * One file in a project folder.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ProjectFile".
+ */
+export interface ProjectFile {
+  /**
+   * Relative to the project folder, `/`-separated (`input/orders.xlsx`).
+   * Write it as is in a step's path param.
+   */
+  path: string;
+  size: number;
+  modified?: string | null;
+}
+/**
+ * A settings file (`config/*.json`) kept out of the scenario: values a
+ * person changes without touching the flow (a cut-off day, a recipient, a
+ * folder). Studio edits it as a form; `config.read` turns it into
+ * `{ "締め日": 25, … }`.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ConfigFile".
+ */
+export interface ConfigFile {
+  /**
+   * Always `shikigami.config`.
+   */
+  format: string;
+  items?: ConfigItem[];
+}
+/**
+ * One setting of a [`ConfigFile`].
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ConfigItem".
+ */
+export interface ConfigItem {
+  /**
+   * The key in the object `config.read` returns (`settings.締め日`).
+   */
+  name: string;
+  type?: ("text" | "number" | "boolean") | "date" | "list";
+  value?: {
+    [k: string]: unknown;
+  };
+  /**
+   * What the setting is for, shown under it in the form.
+   */
+  description?: string;
 }
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema

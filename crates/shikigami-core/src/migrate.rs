@@ -28,10 +28,16 @@ struct Migration {
 
 /// Every migration, oldest first. Each one only has to know the version
 /// right before it.
-const MIGRATIONS: &[Migration] = &[Migration {
-    from: 1,
-    apply: v1_to_v2,
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        from: 1,
+        apply: v1_to_v2,
+    },
+    Migration {
+        from: 2,
+        apply: v2_to_v3,
+    },
+];
 
 /// Parses scenario JSON text, applying migrations when needed.
 pub fn parse_scenario(text: &str) -> CoreResult<Scenario> {
@@ -118,6 +124,12 @@ pub(crate) fn for_each_step(value: &mut Value, f: &mut dyn FnMut(&mut Map<String
 /// the bump makes older builds say "update Shikigami" instead of failing
 /// on an unknown field.
 fn v1_to_v2(_value: &mut Value) {}
+
+/// 2 → 3: adds `settings.keepWork`. Relative paths in path params now
+/// resolve from the scenario's folder; before they depended on the folder
+/// the process started in (and validation warned against them), so there
+/// is nothing to rewrite.
+fn v2_to_v3(_value: &mut Value) {}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

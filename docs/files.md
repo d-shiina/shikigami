@@ -16,6 +16,44 @@ Crate `shikigami-files`. Works without installing anything and is tested off Win
 | `file.delete` | Deletes (not to the Recycle Bin). Folders with contents need `recursive: true` | whether it deleted |
 | `file.createFolder` | Creates a folder (and the ones above it; an existing folder is fine) | the path |
 | `file.zip` / `file.unzip` | Compress into a zip / extract | the zip path / list of extracted files |
+| `config.read` | Reads a settings file (see below) into `{ name: value }`. A plain JSON object comes back as it is | record |
+
+## The scenario's folder
+
+Each scenario is a folder in the workspace, and its files live next to it:
+
+```text
+scenarios/<id>/
+  scenario.json   the scenario
+  input/          files the scenario reads (Excel, CSV…)
+  config/         settings files people change without touching the flow
+  templates/      layouts the output is made from (Excel, Word)
+  output/         what runs produce
+  work/           scratch space, emptied at the start of every run
+  logs/           a readable log per run: 20261029-140512_failed.log (the newest 100 are kept)
+```
+
+- Relative paths in a node's file params (`input/orders.xlsx`) resolve from the scenario's folder, so the scenario keeps working when the workspace moves or is shared. A subscenario resolves from its own folder. Paths that leave the folder (`..`) get the `PATH_OUTSIDE_PROJECT` warning; absolute paths work as before.
+- `work/` is emptied when a run starts. Set `settings.keepWork: true` on the scenario to keep it. Trying one node (`test_step`) neither empties `work/` nor writes a log.
+- Bundles (`export_scenario`) and duplicates take the files along, except `output/`, `work/` and `logs/`.
+- Older workspaces with `scenarios/<id>.json` are moved into folders when the workspace is opened.
+- Add files from Studio, from the AI (`write_project_file`), or with `shikigami scenario add-file <id> <file> --to input`.
+
+### Settings files
+
+A settings file in `config/` lists named values with a type and a description, so Studio can show it as a form:
+
+```json
+{
+  "format": "shikigami.config",
+  "items": [
+    { "name": "threshold", "type": "number", "value": 10000, "description": "Orders at or above this need approval" },
+    { "name": "sendTo", "type": "text", "value": "accounts@example.com" }
+  ]
+}
+```
+
+Types are `text`, `number`, `boolean`, `date` and `list`. `config.read` with `{ "path": "config/settings.json" }` saved as `settings` gives `settings.threshold`. A wrong format gives `CONFIG_INVALID`.
 
 ## Encodings
 

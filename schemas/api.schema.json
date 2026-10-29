@@ -75,6 +75,15 @@
     },
     "observation_content": {
       "$ref": "#/$defs/ObservationContent"
+    },
+    "project_files": {
+      "$ref": "#/$defs/ProjectFiles"
+    },
+    "project_file": {
+      "$ref": "#/$defs/ProjectFile"
+    },
+    "config_file": {
+      "$ref": "#/$defs/ConfigFile"
     }
   },
   "required": [
@@ -101,7 +110,10 @@
     "review_timeline",
     "evidence",
     "new_review",
-    "observation_content"
+    "observation_content",
+    "project_files",
+    "project_file",
+    "config_file"
   ],
   "$defs": {
     "Scenario": {
@@ -408,6 +420,10 @@
               "type": "null"
             }
           ]
+        },
+        "keepWork": {
+          "description": "Leave the files in the scenario's `work/` folder when a run starts.\nBy default a run starts with `work/` emptied.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -992,6 +1008,13 @@
         },
         "secretParams": {
           "description": "Params that may take a registered secret,\n`{ \"secret\": \"<name>\", \"field\": \"password\" }`, instead of text.\nSecrets are rejected everywhere else.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pathParams": {
+          "description": "Params that name a file or folder (a string, or a list of strings).\nA relative path there is resolved from the scenario's folder\n(`input/orders.xlsx`). File resources are included automatically.",
           "type": "array",
           "items": {
             "type": "string"
@@ -1622,6 +1645,13 @@
           "items": {
             "$ref": "#/$defs/Scenario"
           }
+        },
+        "files": {
+          "description": "Files of the scenarios' folders (`input/`, `config/`, `templates/`\nand the author's own; not `output/`, `work/` or `logs/`).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BundledFile"
+          }
         }
       },
       "required": [
@@ -1629,6 +1659,29 @@
         "formatVersion",
         "exportedAt",
         "scenario"
+      ]
+    },
+    "BundledFile": {
+      "description": "A file carried in a bundle.",
+      "type": "object",
+      "properties": {
+        "scenarioId": {
+          "description": "The scenario (the bundle's own or one of its sub-scenarios) whose\nfolder it belongs to.",
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "path": {
+          "description": "Relative to that folder, `/`-separated.",
+          "type": "string"
+        },
+        "data": {
+          "description": "The contents, base64 (standard alphabet, padded).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scenarioId",
+        "path",
+        "data"
       ]
     },
     "ImportOutcome": {
@@ -2236,6 +2289,130 @@
       "required": [
         "scenarioId",
         "revision"
+      ]
+    },
+    "ProjectFiles": {
+      "description": "What a scenario's project folder holds.",
+      "type": "object",
+      "properties": {
+        "scenarioId": {
+          "$ref": "#/$defs/ScenarioId"
+        },
+        "dir": {
+          "description": "Absolute path of the folder.",
+          "type": "string"
+        },
+        "folders": {
+          "description": "Every folder, relative and `/`-separated: the standard ones first,\nthen the author's own (`input/2026`), sorted.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files": {
+          "description": "Every file except `scenario.json`, sorted by path.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProjectFile"
+          }
+        }
+      },
+      "required": [
+        "scenarioId",
+        "dir",
+        "folders",
+        "files"
+      ]
+    },
+    "ProjectFile": {
+      "description": "One file in a project folder.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Relative to the project folder, `/`-separated (`input/orders.xlsx`).\nWrite it as is in a step's path param.",
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "modified": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "size"
+      ]
+    },
+    "ConfigFile": {
+      "description": "A settings file (`config/*.json`) kept out of the scenario: values a\nperson changes without touching the flow (a cut-off day, a recipient, a\nfolder). Studio edits it as a form; `config.read` turns it into\n`{ \"締め日\": 25, … }`.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "description": "Always `shikigami.config`.",
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigItem"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "format"
+      ]
+    },
+    "ConfigItem": {
+      "description": "One setting of a [`ConfigFile`].",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The key in the object `config.read` returns (`settings.締め日`).",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ConfigType",
+          "default": "text"
+        },
+        "value": {
+          "default": null
+        },
+        "description": {
+          "description": "What the setting is for, shown under it in the form.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "ConfigType": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "text",
+            "number",
+            "boolean"
+          ]
+        },
+        {
+          "description": "`yyyy-MM-dd` text.",
+          "type": "string",
+          "const": "date"
+        },
+        {
+          "description": "A list of texts.",
+          "type": "string",
+          "const": "list"
+        }
       ]
     }
   },

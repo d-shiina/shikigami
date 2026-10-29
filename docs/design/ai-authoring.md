@@ -35,7 +35,7 @@
 - `StepTypeDef` に非公開（スキーマに出ない）の `resources` を持たせる：固定（`desktop.input`）または param 由来（`file` / `window` / `browserContext`）。
 - `ActionHandler::exclusive_resources()` は廃止し、宣言場所を `StepTypeDef` に一本化。
 - Runtime はテンプレート展開後の params からキーを作り、既存のロック（ソート・重複除去済み）で取得。
-- `file:` キーの正規化（Windows）：絶対パス化（存在不要）→ `\\?\` 除去 → 区切りを `\` に → `.`/`..` を畳み込み → 小文字化 → 末尾 `\` 除去。相対パスは検証で `RELATIVE_PATH` warning。
+- `file:` キーの正規化（Windows）：絶対パス化（存在不要）→ `\\?\` 除去 → 区切りを `\` に → `.`/`..` を畳み込み → 小文字化 → 末尾 `\` 除去。相対パスはシナリオのフォルダーから解決し、外（`..`）を指すと検証で `PATH_OUTSIDE_PROJECT` warning。
 - 同じキー文字列を Phase 4 のプロセス間排他（名前付きミューテックス）でもそのまま使う。
 
 ## C. `wait.until`

@@ -141,7 +141,7 @@ The canonical format is JSON (`schemas/scenario.schema.json`). Example: [example
 
 ```jsonc
 {
-  "schemaVersion": 2,             // file format version
+  "schemaVersion": 3,             // file format version
   "id": "scn_…",                  // stable ID (also the file name)
   "name": "Invoice summary",
   "description": "…",
@@ -425,7 +425,7 @@ Running several things at once is meant to be a feature of the product. There ar
 | Between scenarios | Several scenarios (including several runs of the same one) at once. Each run is an independent async task with its own variables, cancellation and records | **Implemented** (call the Runtime / MCP `run_scenario` several times) |
 | Within a scenario | `control.parallel` (runs each node of `branches` at once and waits for all; if one fails the rest are cancelled; `maxConcurrency` limits how many). Wrap multi-step branches in `control.group` | **Implemented** |
 | Within a scenario (loops) | `control.forEach`'s `concurrency` ("100 items, 5 at a time"). Each iteration works on a copy of the variables; only the `collect` value comes out (in `saveAs`, as a list in the order of `items`). Aggregate after the loop, e.g. `sum(results)`. The first failure cancels the rest, with the item number in the error's `details.index` | **Implemented** |
-| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing scenarios never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths give the `RELATIVE_PATH` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented (within one process)**. Exclusion between processes (Studio, CLI, MCP server) comes in Phase 4 with Windows named mutexes |
+| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing scenarios never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths resolve from the scenario's folder, and paths leaving it give the `PATH_OUTSIDE_PROJECT` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented (within one process)**. Exclusion between processes (Studio, CLI, MCP server) comes in Phase 4 with Windows named mutexes |
 
 - **Desktop operations are physically one set**: Windows has only one mouse/keyboard input (SendInput) and one foreground window, so nodes using them take the `desktop.input` right before running (time spent waiting for it does not count toward the timeout). Many UI Automation pattern operations (Invoke / Value / SelectionItem…) need no focus, so each type declares whether it can run in parallel without the right (implemented: `desktop.click` / `setValue` etc. do not take it; `desktop.mouseClick` / `type` / `press` do; all go one at a time to the same app, `window:<process>`).
 - **Browsers suit parallel work**: Playwright browser contexts are independent, and many can run at once headless (Phase 3).
