@@ -30,7 +30,8 @@ import { isErrorPayload } from "@shikigami/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type SecretField = "username" | "password" | "totp";
+/** `accessToken` is obtained by oauth.signIn, not typed by a person. */
+export type SecretField = "username" | "password" | "totp" | "accessToken";
 
 /** A registered secret as Studio lists it: never the password or TOTP key. */
 export type SecretInfo = {
@@ -39,6 +40,8 @@ export type SecretInfo = {
   sites: string[];
   fields: SecretField[];
   description?: string;
+  /** oauth.signIn saved tokens for it. */
+  signedIn?: boolean;
   updatedAt: string;
 };
 

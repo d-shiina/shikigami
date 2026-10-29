@@ -338,6 +338,8 @@ export type StudioState = {
    */
   saveSecretAdding(input: Omit<SecretInput, "sites">, addSites: string[]): Promise<boolean>;
   removeSecret(name: string): Promise<void>;
+  /** Forgets the saved sign-in (browser login, OAuth tokens) of a name. */
+  signOutSecret(name: string): Promise<void>;
   resetSecrets(): Promise<void>;
   setSecretsOpen(open: boolean): void;
   loadSecretRequests(): Promise<void>;
@@ -714,6 +716,15 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async removeSecret(name) {
         try {
           await api.removeSecret(name);
+          await get().loadSecrets();
+        } catch (e) {
+          set({ error: message(e) });
+        }
+      },
+
+      async signOutSecret(name) {
+        try {
+          await api.forgetLogin(name);
           await get().loadSecrets();
         } catch (e) {
           set({ error: message(e) });

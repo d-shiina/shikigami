@@ -132,6 +132,12 @@ impl ActionInput {
     }
 
     /// The Runtime's secret store (also holds saved browser logins).
+    /// Masks `value` in this run's logs, errors and outputs from now on
+    /// (for values a step obtains itself, such as an OAuth access token).
+    pub fn mask_secret(&self, value: &str) {
+        self.emitter.add_secret(&Value::String(value.to_owned()));
+    }
+
     pub fn secret_provider(&self) -> Result<&Arc<dyn SecretProvider>, StepError> {
         self.secrets.as_ref().ok_or_else(|| {
             StepError::permanent("SECRETS_UNAVAILABLE", "this runtime has no secret store")

@@ -20,6 +20,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ**
 |---|---|
 | [docs/architecture.md](docs/ja/architecture.md) | システム構成、シナリオ形式、Adapter / MCP / IPC / DB / エラー / セキュリティ設計、設計判断、MVP 受け入れ基準 |
 | [docs/mcp.md](docs/ja/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
+| [docs/oauth.md](docs/ja/oauth.md) | OAuth でサインインする Web API（Box など）。リダイレクト URL は固定のどんな URL でもよい |
 | [docs/design/plugins.md](docs/design/plugins.md) | ノードのプラグイン：社内システムなど向けのノードを、本体を作り直さずに足す（マニフェスト + 別プロセス） |
 | [docs/design/ui-principles.md](docs/design/ui-principles.md) | Studio の画面の決まり：ボタンをどこに置き、どう見せるか、その理由 |
 | [docs/ja/compatibility.md](docs/ja/compatibility.md) | 互換性の方針：シナリオ形式（`schemaVersion`・移行・`requires`）、MCP・CLI で何を壊さないか |

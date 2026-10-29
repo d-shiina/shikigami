@@ -58,7 +58,7 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 ] } }
 ```
 
-- `field` は `username` / `password` / `totp`（いまのワンタイムコード）。
+- `field` は `username` / `password` / `totp`（いまのワンタイムコード）。OAuth でサインインする Web API には、`http.request` で `accessToken` も使えます（[oauth.md](oauth.md)）。
 - シークレットを書けるのは入力ノードの値（`browser.fill` の `value`）だけです。ログやメッセージ、URL などに書くと検証エラー `SECRET_NOT_ALLOWED` になります。
 - `secret: true` の変数に既定値を書くと、平文でシナリオに残るので検証エラー `SECRET_DEFAULT` になります。
 - Studio のプロパティでは、入力欄の値を「文字 / 🔑 シークレット」で切り替えて名前と項目を選びます。

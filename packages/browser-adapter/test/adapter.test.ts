@@ -218,3 +218,92 @@ describe("browser adapter", () => {
     expect(existsSync(new URL("../../../examples/web/index.html", import.meta.url))).toBe(true);
   });
 });
+
+describe("OAuth sign-in", () => {
+  // The provider shows a consent page whose button redirects (302) to the
+  // fixed redirect URL on another site, as Box and others do.
+  let provider: Server;
+  let company: Server;
+  let providerBase: string;
+  let redirectUrl: string;
+  const companyHits: string[] = [];
+  const person = new Adapter({ forceHeadless: true, scriptedHuman: true, timeoutMs: 3000, executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+
+  const listen = async (server: Server): Promise<string> => {
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  };
+
+  beforeAll(async () => {
+    company = createServer((req, res) => {
+      companyHits.push(req.url ?? "");
+      res.end("company site");
+    });
+    redirectUrl = `${await listen(company)}/callback`;
+    provider = createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://x");
+      const back = `${redirectUrl}?code=c-123&state=${url.searchParams.get("state") ?? ""}`;
+      if (url.pathname === "/auto") {
+        res.writeHead(302, { location: back }).end();
+      } else if (url.pathname === "/authorize") {
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end(`<form method="post" action="/allow?state=${url.searchParams.get("state")}"><button>Allow</button></form>`);
+      } else if (url.pathname === "/allow") {
+        res.writeHead(302, { location: back }).end();
+      } else {
+        res.writeHead(404).end();
+      }
+    });
+    providerBase = await listen(provider);
+  });
+
+  afterAll(async () => {
+    await person.shutdown();
+    provider.close();
+    company.close();
+  });
+
+  it("catches the redirect to a fixed URL without loading it", async () => {
+    const r = { runId: "run_oauth" };
+    const signIn = person.call("authorize", { ...r, url: `${providerBase}/authorize?state=s1`, redirectUrl, timeoutMs: 5000 });
+    // The person clicks Allow once the window is there.
+    for (let i = 0; ; i++) {
+      try {
+        await person.call("click", { ...r, target: { role: "button", name: "Allow" } });
+        break;
+      } catch (e) {
+        if (i > 50 || !(e instanceof AdapterError) || e.code !== "BROWSER_NOT_OPEN") throw e;
+        await new Promise((ok) => setTimeout(ok, 100));
+      }
+    }
+    const { url } = (await signIn) as { url: string };
+    expect(url).toBe(`${redirectUrl}?code=c-123&state=s1`);
+    expect(companyHits).toEqual([]);
+    const page = (await person.call("snapshot", r)) as { url: string; snapshot: string };
+    expect(page.snapshot).toContain("サインインが終わりました");
+    expect(page.url).not.toContain("c-123");
+    await person.call("closeRun", r);
+  });
+
+  it("handles a provider that sends the browser straight back", async () => {
+    const r = { runId: "run_oauth_auto" };
+    const { url } = (await person.call("authorize", { ...r, url: `${providerBase}/auto?state=s2`, redirectUrl, timeoutMs: 5000 })) as { url: string };
+    expect(url).toContain("state=s2");
+    expect(companyHits).toEqual([]);
+    await person.call("closeRun", r);
+  });
+
+  it("gives up when nobody signs in in time", async () => {
+    const r = { runId: "run_oauth_timeout" };
+    const err = await failure(person.call("authorize", { ...r, url: `${providerBase}/authorize?state=s3`, redirectUrl, timeoutMs: 800 }));
+    expect(err.code).toBe("HUMAN_TIMEOUT");
+    await person.call("closeRun", r);
+  });
+
+  it("needs a person when the browser has no window", async () => {
+    const r = { runId: "run_oauth_headless" };
+    const err = await failure(adapter.call("authorize", { ...r, url: `${providerBase}/authorize`, redirectUrl }));
+    expect(err.code).toBe("HUMAN_REQUIRED");
+    await adapter.call("closeRun", r);
+  });
+});

@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use serde_json::{Map, Value, json};
+use shikigami_core::secret::SecretField;
 use shikigami_runtime::{ActionInput, StepError};
 
 /// Most of a response body kept in error details.
@@ -13,7 +14,7 @@ const ERROR_BODY_CHARS: usize = 2000;
 /// requests carrying a secret that follows them only within the original
 /// origin (a redirect elsewhere comes back as the 3xx response), so a
 /// token in a custom header never reaches another site.
-fn client(with_secret: bool) -> Result<&'static reqwest::Client, StepError> {
+pub(crate) fn client(with_secret: bool) -> Result<&'static reqwest::Client, StepError> {
     static CLIENTS: OnceLock<Result<[reqwest::Client; 2], String>> = OnceLock::new();
     let clients = CLIENTS.get_or_init(|| {
         // reqwest is built without its own crypto provider (the same
@@ -58,31 +59,28 @@ fn origin(url: &reqwest::Url) -> String {
 }
 
 /// A secret is sent only to the origins registered with it.
-fn check_site(
-    secret: &shikigami_core::secret::ResolvedSecret,
+pub(crate) fn check_site(
+    name: &str,
+    sites: &[String],
     url: &reqwest::Url,
 ) -> Result<(), StepError> {
     let origin = origin(url);
-    if secret
-        .sites
-        .iter()
-        .any(|s| s.trim_end_matches('/') == origin)
-    {
+    if sites.iter().any(|s| s.trim_end_matches('/') == origin) {
         return Ok(());
     }
     Err(StepError::permanent(
-        if secret.sites.is_empty() { "SECRET_SITE_NOT_SET" } else { "SECRET_SITE_MISMATCH" },
-        format!("secret '{}' may not be sent to {origin}", secret.name),
+        if sites.is_empty() { "SECRET_SITE_NOT_SET" } else { "SECRET_SITE_MISMATCH" },
+        format!("secret '{name}' may not be sent to {origin}"),
     )
     .with_details(json!({
-        "secret": secret.name,
-        "sites": secret.sites,
+        "secret": name,
+        "sites": sites,
         "url": origin,
         "hint": "Call request_secret with this name and the API's origin (e.g. https://api.example.com) so the user can allow it in Studio.",
     })))
 }
 
-fn authorize(
+async fn authorize(
     input: &ActionInput,
     request: reqwest::RequestBuilder,
     url: &reqwest::Url,
@@ -102,19 +100,27 @@ fn authorize(
         let password = input
             .resolve_secret(&json!({ "secret": reference.secret, "field": "password" }))?
             .ok_or_else(|| StepError::permanent("INVALID_PARAMS", "auth must be a secret"))?;
-        check_site(&password, url)?;
+        check_site(&password.name, &password.sites, url)?;
         let user = input
             .resolve_secret(&json!({ "secret": reference.secret, "field": "username" }))?
             .map(|s| s.value)
             .unwrap_or_default();
         return Ok(request.basic_auth(user, Some(password.value)));
     }
-    let value = match input.resolve_secret(auth)? {
-        Some(secret) => {
-            check_site(&secret, url)?;
-            secret.value
+    let value = match shikigami_core::secret::SecretRef::from_value(auth) {
+        // The OAuth access token from oauth.signIn, refreshed as needed.
+        Some(Ok(reference)) if reference.field == SecretField::AccessToken => {
+            let (token, sites) = crate::oauth::access_token(input, &reference.secret).await?;
+            check_site(&reference.secret, &sites, url)?;
+            token
         }
-        None => shikigami_core::expr::to_display(auth),
+        _ => match input.resolve_secret(auth)? {
+            Some(secret) => {
+                check_site(&secret.name, &secret.sites, url)?;
+                secret.value
+            }
+            None => shikigami_core::expr::to_display(auth),
+        },
     };
     Ok(match kind.as_str() {
         "header" => {
@@ -197,7 +203,7 @@ pub async fn request(input: &ActionInput) -> Result<Value, StepError> {
             request = request.header(name.as_str(), shikigami_core::expr::to_display(value));
         }
     }
-    request = authorize(input, request, &url)?;
+    request = authorize(input, request, &url).await?;
     let bodies = ["json", "form", "body"]
         .iter()
         .filter(|k| params.get(**k).is_some_and(|v| !v.is_null()))

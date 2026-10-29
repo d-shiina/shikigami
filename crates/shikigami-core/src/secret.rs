@@ -30,9 +30,15 @@ pub enum SecretField {
     Password,
     /// The current one-time code computed from the stored TOTP key (MFA).
     Totp,
+    /// The OAuth access token `oauth.signIn` obtained with this secret's
+    /// client ID and secret. Only `http.request` `auth` takes it: it is
+    /// refreshed there when it expires.
+    AccessToken,
 }
 
 impl SecretField {
+    /// The fields a person registers (the access token is obtained by
+    /// `oauth.signIn`).
     pub const ALL: [SecretField; 3] = [Self::Username, Self::Password, Self::Totp];
 
     pub fn as_str(self) -> &'static str {
@@ -40,6 +46,7 @@ impl SecretField {
             Self::Username => "username",
             Self::Password => "password",
             Self::Totp => "totp",
+            Self::AccessToken => "accessToken",
         }
     }
 
@@ -175,6 +182,21 @@ pub trait SecretProvider: Send + Sync {
     fn load_session(&self, name: &str) -> Result<Option<Value>, SecretError>;
 
     fn save_session(&self, name: &str, state: &Value) -> Result<(), SecretError>;
+
+    /// OAuth tokens `oauth.signIn` saved for a secret (see
+    /// `shikigami-system`'s `oauth` module for the shape).
+    fn load_oauth_tokens(&self, name: &str) -> Result<Option<Value>, SecretError> {
+        let _ = name;
+        Ok(None)
+    }
+
+    fn save_oauth_tokens(&self, name: &str, tokens: &Value) -> Result<(), SecretError> {
+        let _ = (name, tokens);
+        Err(SecretError::new(
+            "SECRETS_UNAVAILABLE",
+            "this secret store cannot keep OAuth tokens",
+        ))
+    }
 }
 
 /// JSON Schema of a param that takes literal text, a template, or a secret
@@ -185,6 +207,24 @@ pub fn text_or_secret_schema(description: &str) -> Value {
         "oneOf": [
             { "type": "string" },
             secret_ref_schema(),
+        ]
+    })
+}
+
+/// Like [`text_or_secret_schema`], for params that also take the OAuth
+/// access token of a secret (`http.request` `auth`).
+pub fn token_or_secret_schema(description: &str) -> Value {
+    let mut reference = secret_ref_schema();
+    reference["properties"]["field"] =
+        json!({ "enum": ["password", "accessToken", "username", "totp"] });
+    reference["description"] = json!(
+        "A registered secret, e.g. { \"secret\": \"受注API\", \"field\": \"password\" }, or the OAuth access token obtained by oauth.signIn: { \"secret\": \"Box\", \"field\": \"accessToken\" }."
+    );
+    json!({
+        "description": description,
+        "oneOf": [
+            { "type": "string" },
+            reference,
         ]
     })
 }

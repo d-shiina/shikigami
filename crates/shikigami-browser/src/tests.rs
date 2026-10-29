@@ -25,6 +25,11 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   }
   if (method === "open" && params.session) sessions.push(params.session);
   const saved = sessions.splice(0).map((name) => ({ name, state: { cookies: [{ name: "sid", value: "abc" }] } }));
+  if (method === "authorize") {
+    const state = params.url.includes("forge=") ? "forged" : new URL(params.url).searchParams.get("state");
+    process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result: { url: `${params.redirectUrl}?code=c-1&state=${state}` } }) + "\n");
+    return;
+  }
   const result = method === "open" ? (sessions.push(...saved.map((s) => s.name)), { url: params.url, title: "fake" })
     : method === "getTable" ? [{ a: "1" }]
     : method === "closeRun" || method === "close" ? { sessions: saved }
@@ -260,4 +265,182 @@ async fn logins_are_saved_when_the_run_ends_and_loaded_next_time() {
     let opens: Vec<&Value> = calls.iter().filter(|c| c["method"] == "open").collect();
     assert!(opens[0]["params"].get("storageState").is_none());
     assert_eq!(opens[1]["params"]["storageState"], saved);
+}
+
+/// A one-shot token endpoint: records the request, answers with tokens.
+async fn token_endpoint() -> (String, Arc<std::sync::Mutex<String>>) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let seen = Arc::new(std::sync::Mutex::new(String::new()));
+    let record = seen.clone();
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        loop {
+            let n = socket.read(&mut chunk).await.unwrap();
+            buf.extend_from_slice(&chunk[..n]);
+            let text = String::from_utf8_lossy(&buf).to_string();
+            if let Some(end) = text.find("\r\n\r\n") {
+                let length: usize = text[..end]
+                    .lines()
+                    .find_map(|l| {
+                        l.to_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|v| v.trim().parse().unwrap())
+                    })
+                    .unwrap_or(0);
+                if buf.len() >= end + 4 + length {
+                    *record.lock().unwrap() = text;
+                    break;
+                }
+            }
+            if n == 0 {
+                break;
+            }
+        }
+        let body = r#"{"access_token":"at-1","refresh_token":"rt-1","expires_in":3600,"token_type":"bearer"}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        socket.write_all(response.as_bytes()).await.unwrap();
+        socket.shutdown().await.unwrap();
+    });
+    (base, seen)
+}
+
+async fn sign_in(runtime: &Runtime, params: Value) -> RunReport {
+    use shikigami_core::{VarDirection, VarType, VariableDef};
+    let mut s = Scenario::new("oauth");
+    s.variables.push(VariableDef {
+        direction: VarDirection::Output,
+        ..VariableDef::new("out", VarType::Any)
+    });
+    let mut step = Step::new(types::OAUTH_SIGN_IN);
+    for (k, v) in params.as_object().unwrap() {
+        step = step.with_param(k, v.clone());
+    }
+    step.save_as = Some("out".into());
+    shikigami_core::ops::assign_missing_ids(&mut step);
+    s.steps = vec![step];
+    runtime
+        .start(s, RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn oauth_sign_in_catches_the_code_and_keeps_the_tokens() {
+    use shikigami_core::secret::SecretProvider;
+    let f = fake();
+    let dir = tempfile::tempdir().unwrap();
+    let (token, seen) = token_endpoint().await;
+    let secrets = vault(dir.path());
+    secrets
+        .set(shikigami_secrets::SecretInput {
+            name: "Box".into(),
+            username: Some("cid".into()),
+            password: Some("csecret".into()),
+            sites: Some(vec![token.clone()]),
+            ..Default::default()
+        })
+        .unwrap();
+    let runtime = f.runtime.clone().with_secrets(secrets.clone());
+    let params = json!({
+        "secret": "Box",
+        "authorizeUrl": "https://account.example.com/authorize",
+        "tokenUrl": format!("{token}/token"),
+        "redirectUrl": "https://www.example.com/",
+        "scope": "root_readonly",
+    });
+
+    let report = sign_in(&runtime, params.clone()).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["via"], "browser");
+    assert!(!report.outputs["out"].to_string().contains("at-1"));
+    let authorize = calls(&f.log)
+        .into_iter()
+        .find(|c| c["method"] == "authorize")
+        .unwrap();
+    assert_eq!(
+        authorize["params"]["redirectUrl"],
+        "https://www.example.com/"
+    );
+    assert!(
+        authorize["params"]["url"]
+            .as_str()
+            .unwrap()
+            .contains("code_challenge=")
+    );
+    let request = seen.lock().unwrap().clone();
+    assert!(request.starts_with("POST /token "), "{request}");
+    for part in [
+        "grant_type=authorization_code",
+        "code=c-1",
+        "redirect_uri=https%3A%2F%2Fwww.example.com%2F",
+        "code_verifier=",
+        "client_id=cid",
+        "client_secret=csecret",
+    ] {
+        assert!(request.contains(part), "{part} in {request}");
+    }
+    let saved = secrets.load_oauth_tokens("Box").unwrap().unwrap();
+    assert_eq!(saved["accessToken"], "at-1");
+    assert_eq!(saved["refreshToken"], "rt-1");
+
+    // Next time the saved tokens do: no browser, no person.
+    let before = calls(&f.log).len();
+    let report = sign_in(&runtime, params.clone()).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["via"], "saved");
+    assert!(
+        calls(&f.log)[before..]
+            .iter()
+            .all(|c| c["method"] != "authorize")
+    );
+}
+
+#[tokio::test]
+async fn oauth_sign_in_rejects_a_forged_state_and_unlisted_token_sites() {
+    let f = fake();
+    let dir = tempfile::tempdir().unwrap();
+    let secrets = vault(dir.path());
+    secrets
+        .set(shikigami_secrets::SecretInput {
+            name: "Box".into(),
+            username: Some("cid".into()),
+            sites: Some(vec!["https://api.box.com".into()]),
+            ..Default::default()
+        })
+        .unwrap();
+    let runtime = f.runtime.clone().with_secrets(secrets);
+    let report = sign_in(
+        &runtime,
+        json!({
+            "secret": "Box",
+            "authorizeUrl": "https://account.box.com/api/oauth2/authorize",
+            "tokenUrl": "https://api.box.com/oauth2/token",
+            "redirectUrl": "https://www.example.com/",
+            "authorizeParams": { "forge": "1" },
+        }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "OAUTH_STATE_MISMATCH");
+
+    // The client secret and the code only go to the secret's sites.
+    let report = sign_in(
+        &runtime,
+        json!({
+            "secret": "Box",
+            "authorizeUrl": "https://account.box.com/api/oauth2/authorize",
+            "tokenUrl": "https://evil.example.com/token",
+            "redirectUrl": "https://www.example.com/",
+        }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "SECRET_SITE_MISMATCH");
 }

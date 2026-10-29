@@ -19,6 +19,7 @@ Crate `shikigami-system`. Built-in nodes for things outside app windows. Value p
 - When the response is JSON, `body` is a value (use it as `res.body.items`). Otherwise it is text (decoded by charset, or detected as UTF-8 / Shift_JIS). With `saveTo` the body is saved to a file and `body` is the path.
 - Status 400 and above gives `HTTP_ERROR` (`details.status` and `details.body`). 5xx, 429 and 408 are retried by `retry`. To treat 404 as "not there", wrap the node in `control.try`.
 - Authentication: put a registered secret in `auth`, `{ "secret": "Orders API", "field": "password" }`. `authType` is `bearer` (default, `Authorization: Bearer …`), `basic` (the secret's username and password) or `header` (into the header named by `authHeader`; for API keys). It is sent only to the sites registered on the secret (in the form `https://api.example.com`); otherwise `SECRET_SITE_MISMATCH`.
+- OAuth (Box and other APIs a person signs in to): `auth: { "secret": "Box", "field": "accessToken" }` after an `oauth.signIn` node. The token is refreshed when it is about to expire ([oauth.md](oauth.md)).
 - Requests with a secret do not follow redirects to another site (the 3xx response is returned as is), so the key never reaches another site.
 - Proxies follow the OS settings. Certificates are checked against the Windows certificate store (in-house CAs work as they are).
 

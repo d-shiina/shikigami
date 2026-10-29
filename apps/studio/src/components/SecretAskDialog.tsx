@@ -13,6 +13,8 @@ const FIELD_INPUT: Record<SecretField, { type: string; autoComplete: string; mon
   username: { type: "text", autoComplete: "off" },
   password: { type: "password", autoComplete: "new-password" },
   totp: { type: "password", autoComplete: "off", mono: true },
+  // Obtained by oauth.signIn; never asked for (the vault drops it from requests).
+  accessToken: { type: "password", autoComplete: "off", mono: true },
 };
 
 function siteLabel(site: string) {

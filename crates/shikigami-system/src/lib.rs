@@ -12,13 +12,14 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use shikigami_core::registry::{RiskLevel, StepCategory, StepTypeDef};
 use shikigami_core::resource::ResourceDef;
-use shikigami_core::secret::text_or_secret_schema;
+use shikigami_core::secret::token_or_secret_schema;
 use shikigami_runtime::{
     ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
 };
 
 mod desktop;
 mod http;
+pub mod oauth;
 mod process;
 
 #[cfg(test)]
@@ -184,7 +185,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 step_type: types::HTTP_REQUEST,
                 category: StepCategory::Network,
                 label: "Web API を呼ぶ",
-                description: "Sends an HTTP request and outputs { status, headers, body }. `body` is parsed into a value when the response is JSON, otherwise it is text (or, with `saveTo`, the response is saved to that file and body is the path). Send data as `json` (a value), `form` (fields) or `body` (text); add URL parameters with `query`. `auth` takes a registered secret (sent only to the sites registered with it): authType bearer (default, Authorization: Bearer), basic (the secret's username and password) or header (the value in the header named by authHeader). A status of 400 or more fails the step with HTTP_ERROR (details: status, body); 5xx and 429 are retried when the step has retry.",
+                description: "Sends an HTTP request and outputs { status, headers, body }. `body` is parsed into a value when the response is JSON, otherwise it is text (or, with `saveTo`, the response is saved to that file and body is the path). Send data as `json` (a value), `form` (fields) or `body` (text); add URL parameters with `query`. `auth` takes a registered secret (sent only to the sites registered with it), or { \"secret\": \"<name>\", \"field\": \"accessToken\" } for the OAuth access token oauth.signIn obtained (refreshed automatically when it expires): authType bearer (default, Authorization: Bearer), basic (the secret's username and password) or header (the value in the header named by authHeader). A status of 400 or more fails the step with HTTP_ERROR (details: status, body); 5xx and 429 are retried when the step has retry.",
                 params_schema: json!({
                     "type": "object",
                     "properties": {
@@ -195,7 +196,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                         "json": {},
                         "form": object,
                         "body": text,
-                        "auth": text_or_secret_schema("トークン。登録済みのシークレット { \"secret\": \"名前\", \"field\": \"password\" } を使う"),
+                        "auth": token_or_secret_schema("トークン。登録済みのシークレット { \"secret\": \"名前\", \"field\": \"password\" }、OAuth なら { \"secret\": \"名前\", \"field\": \"accessToken\" }"),
                         "authType": { "enum": ["bearer", "basic", "header"] },
                         "authHeader": { "type": "string", "minLength": 1 },
                         "saveTo": path,
@@ -209,6 +210,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 default_timeout_ms: None,
                 examples: vec![
                     json!({ "type": types::HTTP_REQUEST, "params": { "url": "https://api.example.com/orders", "query": { "date": "{{ formatDate(today(), 'yyyy-MM-dd') }}" }, "auth": { "secret": "受注API", "field": "password" } }, "saveAs": "res" }),
+                    json!({ "type": types::HTTP_REQUEST, "params": { "url": "https://api.box.com/2.0/folders/0/items", "auth": { "secret": "Box", "field": "accessToken" } }, "saveAs": "res" }),
                     json!({ "type": types::HTTP_REQUEST, "params": { "method": "POST", "url": "https://hooks.example.com/notify", "json": { "text": "{{ count }} 件を処理しました" } } }),
                     json!({ "type": types::HTTP_REQUEST, "params": { "url": "https://example.com/report.pdf", "saveTo": "C:\\work\\report.pdf" } }),
                 ],
