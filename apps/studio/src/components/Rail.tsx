@@ -88,15 +88,11 @@ export function Rail() {
   const asks = useStudio((s) => s.secretRequests.length);
   const update = useUpdate();
   return (
-<<<<<<< HEAD
     <nav aria-label={t.shell.places} className="flex w-[72px] shrink-0 flex-col items-stretch border-r border-slate-200 bg-paper pb-1">
       {/* The top of the window: the mark, and room to drag it by. */}
       <div data-tauri-drag-region className="mb-1 grid h-10 shrink-0 place-items-center select-none">
         <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
       </div>
-=======
-    <nav aria-label={t.shell.places} className="row-span-1 flex w-[72px] shrink-0 flex-col items-stretch border-r border-slate-200 bg-paper py-1">
->>>>>>> origin/claude/project-thread-jekwf7
       <RailButton place="scenarios" label={t.scenarios} />
       <RailButton place="review" label={t.awaitingReview} badge={inbox.length} title={t.bar.reviewTitle} onEnter={enterReview} />
       <RailButton place="secrets" label={t.secrets} badge={asks} tone="accent" title={asks > 0 ? t.bar.secretAskTitle : t.secretsIntro} />

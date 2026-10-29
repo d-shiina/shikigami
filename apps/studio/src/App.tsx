@@ -2,11 +2,7 @@ import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 import { AgentContext, createAgentStore, useAgent } from "./agent";
-<<<<<<< HEAD
 import { AgentPane } from "./components/AgentPane";
-=======
-import { AgentButton, AgentPane } from "./components/AgentPane";
->>>>>>> origin/claude/project-thread-jekwf7
 import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -23,13 +19,8 @@ import { SecretsPage } from "./components/SecretsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { StatusBar } from "./components/StatusBar";
 import { StoryView } from "./components/StoryView";
-<<<<<<< HEAD
 import { TitleBar } from "./components/TitleBar";
 import { CanvasDock, OutlineButton, type View } from "./components/Toolbar";
-=======
-import { CanvasDock, ScenarioBar, type View } from "./components/Toolbar";
-import { WindowControls } from "./components/WindowControls";
->>>>>>> origin/claude/project-thread-jekwf7
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
 import { t, useLocale } from "./lib/i18n";
@@ -94,7 +85,6 @@ function useRemembered<T extends string>(key: string, fallback: T, read: (raw: s
 }
 
 /**
-<<<<<<< HEAD
  * The editor: the open scenario's chart (or procedure), what the run did and
  * what is wrong underneath, and the inspector on the right. The scenario's
  * name and its actions are in the title bar. The scenario list and the review
@@ -103,20 +93,10 @@ function useRemembered<T extends string>(key: string, fallback: T, read: (raw: s
 function Editor({ view, list, right }: { view: View; list: React.ReactNode; right: React.ReactNode }) {
   const hasScenario = useStudio((s) => s.scenario !== null);
   const outlineOpen = useStudio((s) => s.outlineOpen);
-=======
- * The editor: the open scenario's bar, its chart (or procedure), what the run
- * did and what is wrong underneath, and the inspector on the right. The
- * scenario list and the review desk both open scenarios into it.
- */
-function Editor({ list, right }: { list: React.ReactNode; right: React.ReactNode }) {
-  const hasScenario = useStudio((s) => s.scenario !== null);
-  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" ? "story" : "flow"));
->>>>>>> origin/claude/project-thread-jekwf7
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)_340px]">
       <div className="min-h-0">{list}</div>
       <main className="flex min-h-0 min-w-0 flex-col">
-        <ScenarioBar view={view} onView={setView} />
         <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
             <StoryView />
@@ -124,15 +104,12 @@ function Editor({ list, right }: { list: React.ReactNode; right: React.ReactNode
             <ReactFlowProvider>
               <FlowCanvas />
               {hasScenario && <OutlinePanel />}
-<<<<<<< HEAD
               {/* The outline unfolds from this corner, so its button sits there. */}
               {hasScenario && !outlineOpen && (
                 <div className="absolute top-3 left-3 z-10">
                   <OutlineButton />
                 </div>
               )}
-=======
->>>>>>> origin/claude/project-thread-jekwf7
             </ReactFlowProvider>
           )}
           {/* Clear of the zoom controls in the bottom-left corner. */}
@@ -148,20 +125,13 @@ function Editor({ list, right }: { list: React.ReactNode; right: React.ReactNode
   );
 }
 
-<<<<<<< HEAD
 function ScenariosPlace({ view }: { view: View }) {
-=======
-function ScenariosPlace() {
->>>>>>> origin/claude/project-thread-jekwf7
   const [list, setList] = useRemembered<"open" | "closed">(LIST_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
   // The AI pane takes its width from the list first: the chart is the last thing to shrink.
   const agentOpen = useAgent((s) => s.open);
   return (
     <Editor
-<<<<<<< HEAD
       view={view}
-=======
->>>>>>> origin/claude/project-thread-jekwf7
       // Fixed widths: a long scenario name must not widen the list into the chart.
       list={
         list === "open" && !agentOpen ? (
@@ -180,18 +150,11 @@ function ScenariosPlace() {
 }
 
 /** The review desk: what waits, the chart with the AI's changes marked, and the verdict on the right. */
-<<<<<<< HEAD
 function ReviewPlace({ view }: { view: View }) {
   const hasScenario = useStudio((s) => s.scenario !== null);
   return (
     <Editor
       view={view}
-=======
-function ReviewPlace() {
-  const hasScenario = useStudio((s) => s.scenario !== null);
-  return (
-    <Editor
->>>>>>> origin/claude/project-thread-jekwf7
       list={
         <div className="h-full w-[248px]">
           <ReviewInbox />
@@ -213,7 +176,6 @@ function ReviewPlace() {
 
 function Shell() {
   const place = useStudio((s) => s.place);
-<<<<<<< HEAD
   const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" ? "story" : "flow"));
   return (
     <div className="flex h-full flex-col">
@@ -240,40 +202,6 @@ function Shell() {
             <AgentPane />
           </div>
         </div>
-=======
-  return (
-    <div className="flex h-full flex-col">
-      {/*
-        The window's title bar: the mark, room to drag the window, the AI pane
-        (it opens below, at the right edge, from any place) and the caption
-        buttons. Drag anywhere that is not a control, double-click to maximize.
-      */}
-      <header data-tauri-drag-region className="relative flex h-10 shrink-0 items-center gap-3 border-b border-slate-200 bg-sheet pl-[24px] select-none">
-        <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
-        <span data-tauri-drag-region className="flex-1 self-stretch" />
-        <AgentButton />
-        <WindowControls />
-      </header>
-      <HumanBanner />
-      <Banner />
-      <div className="flex min-h-0 flex-1">
-        <Rail />
-        <div className="flex min-h-0 min-w-0 flex-1">
-          {place === "scenarios" && <ScenariosPlace />}
-          {place === "review" && <ReviewPlace />}
-          {place === "secrets" && (
-            <div className="min-w-0 flex-1">
-              <SecretsPage />
-            </div>
-          )}
-          {place === "settings" && (
-            <div className="min-w-0 flex-1">
-              <SettingsPage />
-            </div>
-          )}
-        </div>
-        <AgentPane />
->>>>>>> origin/claude/project-thread-jekwf7
       </div>
       <StatusBar />
       <CommandPalette />
