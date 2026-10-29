@@ -332,6 +332,38 @@ pub struct TestStepParams {
     /// { "type": "browser.click", "params": { "target": { "role": "button", "name": "ログイン" } } }.
     /// `id` may be omitted.
     pub step: Step,
+    /// The scenario the step is for: relative paths (input/orders.xlsx) are
+    /// resolved from its folder, as in a run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenario_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFileRef {
+    pub scenario_id: String,
+    /// Relative to the scenario's folder, e.g. "config/settings.json".
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteProjectFileParams {
+    pub scenario_id: String,
+    /// Where in the scenario's folder, e.g. "config/settings.json",
+    /// "input/受注一覧.xlsx", "templates/請求書.docx".
+    pub path: String,
+    /// The file's text (UTF-8). Give `text` or `copyFrom`, not both.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Absolute path of a file on this PC to copy in (an Excel workbook the
+    /// user named, a template).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy_from: Option<String>,
+    /// Replace an existing file. Without it an existing file gives
+    /// PROJECT_FILE_EXISTS.
+    #[serde(default)]
+    pub overwrite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

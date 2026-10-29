@@ -108,6 +108,10 @@ pub struct ScenarioBundle {
         deserialize_with = "crate::migrate::deserialize_vec"
     )]
     pub subscenarios: Vec<Scenario>,
+    /// Files of the scenarios' folders (`input/`, `config/`, `templates/`
+    /// and the author's own; not `output/`, `work/` or `logs/`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<crate::project::BundledFile>,
 }
 
 /// What to do when an imported scenario's ID already exists.

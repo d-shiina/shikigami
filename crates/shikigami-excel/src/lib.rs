@@ -323,7 +323,7 @@ fn schema(properties: Value, required: &[&str]) -> Value {
 
 fn props(extra: Value) -> Value {
     let mut properties = json!({
-        "path": { "type": "string", "minLength": 1, "description": "ブックのフルパス（.xlsx / .xlsm）。例 C:\\work\\受注.xlsx" },
+        "path": { "type": "string", "minLength": 1, "description": "ブック（.xlsx / .xlsm）：シナリオのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\\work\\受注.xlsx）" },
         "sheet": { "type": "string", "minLength": 1, "description": "シート名（完全一致）。省略すると先頭のシート" }
     });
     if let (Value::Object(map), Value::Object(extra)) = (&mut properties, extra) {
@@ -378,7 +378,7 @@ struct Def {
     examples: Vec<Value>,
 }
 
-const PATH: &str = "C:\\work\\受注.xlsx";
+const PATH: &str = "input/受注.xlsx";
 
 /// Step type definitions with the operation each one performs.
 fn step_defs() -> Vec<(StepTypeDef, Kind)> {
@@ -422,8 +422,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             writes: true,
             excel_app: false,
             examples: vec![
-                json!({ "type": APPEND_ROWS, "name": "結果を 1 行追加", "params": { "path": "C:\\work\\結果.xlsx", "rows": [ { "受注番号": "{{ order.受注番号 }}", "金額": "{{ order.金額 }}", "受注日": { "date": "{{ order.受注日 }}" } } ] } }),
-                json!({ "type": APPEND_ROWS, "params": { "path": "C:\\work\\結果.xlsx", "sheet": "集計", "rows": "{{ results }}" } }),
+                json!({ "type": APPEND_ROWS, "name": "結果を 1 行追加", "params": { "path": "output/結果.xlsx", "rows": [ { "受注番号": "{{ order.受注番号 }}", "金額": "{{ order.金額 }}", "受注日": { "date": "{{ order.受注日 }}" } } ] } }),
+                json!({ "type": APPEND_ROWS, "params": { "path": "output/結果.xlsx", "sheet": "集計", "rows": "{{ results }}" } }),
             ],
         },
         Def {
@@ -490,7 +490,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             writes: true,
             excel_app: false,
             examples: vec![
-                json!({ "type": WRITE_RANGE, "name": "見出しを書く", "params": { "path": "C:\\work\\結果.xlsx", "cell": "A1", "values": [["受注番号", "金額", "状態"]] } }),
+                json!({ "type": WRITE_RANGE, "name": "見出しを書く", "params": { "path": "output/結果.xlsx", "cell": "A1", "values": [["受注番号", "金額", "状態"]] } }),
             ],
         },
         Def {
@@ -518,7 +518,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             writes: true,
             excel_app: false,
             examples: vec![
-                json!({ "type": ADD_SHEET, "params": { "path": "C:\\work\\結果.xlsx", "sheet": "{{ month }}月" } }),
+                json!({ "type": ADD_SHEET, "params": { "path": "output/結果.xlsx", "sheet": "{{ month }}月" } }),
             ],
         },
         Def {
@@ -537,8 +537,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             writes: true,
             excel_app: true,
             examples: vec![
-                json!({ "type": RUN_MACRO, "name": "集計マクロを実行", "params": { "path": "C:\\work\\集計.xlsm", "macro": "Module1.集計" } }),
-                json!({ "type": RUN_MACRO, "params": { "path": "C:\\work\\集計.xlsm", "macro": "月次レポート", "args": ["{{ month }}", 2026] }, "saveAs": "result" }),
+                json!({ "type": RUN_MACRO, "name": "集計マクロを実行", "params": { "path": "templates/集計.xlsm", "macro": "Module1.集計" } }),
+                json!({ "type": RUN_MACRO, "params": { "path": "templates/集計.xlsm", "macro": "月次レポート", "args": ["{{ month }}", 2026] }, "saveAs": "result" }),
             ],
         },
     ];
@@ -568,6 +568,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 default_timeout_ms: d.excel_app.then_some(300_000),
                 deprecated: None,
                 plugin: None,
+                path_params: vec!["path".into()],
             };
             (def, d.kind)
         })

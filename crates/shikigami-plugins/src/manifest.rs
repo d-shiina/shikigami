@@ -390,6 +390,7 @@ impl Manifest {
                 name: self.name.clone(),
                 version: self.version.clone(),
             }),
+            path_params: Vec::new(),
         })
     }
 }

@@ -670,6 +670,12 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 default_timeout_ms: None,
                 deprecated: None,
                 plugin: None,
+                // `path` may be a program on PATH (notepad.exe): not resolved.
+                path_params: if d.step_type == "desktop.launch" {
+                    vec!["workingDir".into()]
+                } else {
+                    vec![]
+                },
             };
             (def, d.kind)
         })

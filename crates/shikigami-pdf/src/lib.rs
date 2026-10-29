@@ -129,7 +129,7 @@ fn read_text_def() -> StepTypeDef {
         params_schema: json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string", "minLength": 1, "description": "PDF の絶対パス" },
+                "path": { "type": "string", "minLength": 1, "description": "PDF：シナリオのフォルダーからの相対パス（例 input/請求書.pdf）か絶対パス" },
                 "password": text_or_secret_schema("開くためのパスワード。登録済みのシークレット { \"secret\": \"名前\", \"field\": \"password\" } を使う"),
             },
             "required": ["path"],
@@ -141,7 +141,7 @@ fn read_text_def() -> StepTypeDef {
         binds_variables: vec![],
         risk: RiskLevel::Safe,
         examples: vec![
-            json!({ "type": types::READ_TEXT, "params": { "path": "C:\\work\\請求書.pdf" }, "saveAs": "invoice" }),
+            json!({ "type": types::READ_TEXT, "params": { "path": "input/請求書.pdf" }, "saveAs": "invoice" }),
             json!({ "type": types::READ_TEXT, "params": { "path": "{{ pdfPath }}", "password": { "secret": "請求書PDF", "field": "password" } }, "saveAs": "invoice" }),
         ],
         resources: vec![ResourceDef::file("path")],
@@ -149,5 +149,6 @@ fn read_text_def() -> StepTypeDef {
         default_timeout_ms: None,
         deprecated: None,
         plugin: None,
+        path_params: Vec::new(),
     }
 }

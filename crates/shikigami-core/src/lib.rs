@@ -11,6 +11,7 @@ pub mod ids;
 pub mod migrate;
 pub mod model;
 pub mod ops;
+pub mod project;
 pub mod registry;
 pub mod requires;
 pub mod resource;
@@ -30,6 +31,7 @@ pub use model::{
     Step, VarDirection, VarType, VariableDef,
 };
 pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
+pub use project::{BundledFile, ConfigFile, ConfigItem, ConfigType, ProjectFile, ProjectFiles};
 pub use registry::{Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef};
 pub use review::{
     ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,

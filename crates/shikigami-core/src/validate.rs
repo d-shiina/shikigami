@@ -15,7 +15,6 @@ use crate::ids::StepId;
 use crate::model::{SCHEMA_VERSION, Scenario, Step};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
 use crate::requires::{self, PLUGIN_PREFIX};
-use crate::resource::{ResourceDef, ResourceKind, is_absolute_windows_path};
 use crate::secret::{self, SecretRef};
 
 /// Name of the implicit variable holding the last error when `onError: continue`.
@@ -644,33 +643,35 @@ impl Cx<'_> {
         }
     }
 
-    /// File locks and later re-runs depend on where the scenario is started
-    /// from when a path is relative.
+    /// Relative paths are resolved from the scenario's folder; one that
+    /// climbs out of it with `..` depends on where the folder sits, and is
+    /// left behind when the scenario is exported.
     fn file_paths(&mut self, step: &Step, def: &StepTypeDef, path: &str) {
-        for resource in &def.resources {
-            let ResourceDef::Param {
-                key,
-                kind: ResourceKind::File,
-                ..
-            } = resource
-            else {
+        for key in &def.path_params {
+            let values: Vec<&str> = match step.params.get(key) {
+                Some(Value::String(value)) => vec![value.as_str()],
+                Some(Value::Array(items)) => items.iter().filter_map(Value::as_str).collect(),
+                _ => continue,
+            };
+            let Some(value) = values.into_iter().find(|v| {
+                !v.contains("{{")
+                    && crate::project::is_relative(v)
+                    && v.trim()
+                        .replace('\\', "/")
+                        .split('/')
+                        .any(|part| part == "..")
+            }) else {
                 continue;
             };
-            let Some(Value::String(value)) = step.params.get(key) else {
-                continue;
-            };
-            if value.contains("{{") || is_absolute_windows_path(value) {
-                continue;
-            }
             self.warn(
-                "RELATIVE_PATH",
-                format!("'{key}' is a relative path: {value}"),
+                "PATH_OUTSIDE_PROJECT",
+                format!("'{key}' leaves the scenario's folder: {value}"),
                 format!("{path}/params/{key}"),
                 Some(&step.id),
             );
-            self.hint(format!(
-                "Use an absolute path (e.g. C:\\work\\{value}) or build one from a variable: \"{{{{ baseDir }}}}\\{value}\"."
-            ));
+            self.hint(
+                "Put the file in the scenario's folder (input/, config/, templates/) and write e.g. input/orders.xlsx, or use an absolute path (C:\\work\\orders.xlsx).".to_owned(),
+            );
         }
     }
 
@@ -1076,6 +1077,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
 mod tests {
     use super::*;
     use crate::model::{VarType, VariableDef};
+    use crate::resource::ResourceDef;
     use serde_json::json;
 
     fn validator() -> Validator {
@@ -1112,6 +1114,7 @@ mod tests {
             default_timeout_ms: None,
             deprecated: None,
             plugin: None,
+            path_params: Vec::new(),
         });
         registry
     }
@@ -1349,7 +1352,7 @@ mod tests {
     }
 
     #[test]
-    fn relative_file_paths_are_warned() {
+    fn paths_leaving_the_project_are_warned() {
         let mut registry = StepRegistry::with_builtins();
         let mut def = registry.get("log.message").unwrap().clone();
         def.step_type = "test.write".into();
@@ -1362,9 +1365,10 @@ mod tests {
         };
         let mut s = Scenario::new("paths");
         s.steps = vec![
-            write("a", "book.xlsx"),
+            write("a", "input/book.xlsx"),
             write("b", r"C:\work\book.xlsx"),
-            write("c", "{{ dir }}\\book.xlsx"),
+            write("c", "{{ dir }}\\..\\book.xlsx"),
+            write("d", r"..\other\book.xlsx"),
         ];
         s.variables.push(VariableDef::new("dir", VarType::String));
         let report = Validator::new(registry).validate(&s);
@@ -1372,11 +1376,11 @@ mod tests {
         let warned: Vec<_> = report
             .issues
             .iter()
-            .filter(|i| i.code == "RELATIVE_PATH")
+            .filter(|i| i.code == "PATH_OUTSIDE_PROJECT")
             .map(|i| i.step_id.as_ref().map(ToString::to_string))
             .collect();
-        assert_eq!(warned, [Some("a".to_owned())]);
-        assert!(hint_of(&report, "RELATIVE_PATH").contains("baseDir"));
+        assert_eq!(warned, [Some("d".to_owned())]);
+        assert!(hint_of(&report, "PATH_OUTSIDE_PROJECT").contains("input/"));
     }
 
     #[test]

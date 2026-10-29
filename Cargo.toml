@@ -55,7 +55,7 @@ tokio-util = "0.7.20"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 uuid = { version = "1.29.0", features = ["v7", "serde"] }
-time = { version = "0.3.55", features = ["serde", "formatting", "parsing", "macros"] }
+time = { version = "0.3.55", features = ["serde", "formatting", "parsing", "macros", "local-offset"] }
 notify = "8.2.1"
 regex = "1.13.1"
 semver = "1.0.28"
@@ -63,6 +63,7 @@ jiff = "0.2.38"
 clap = { version = "4.6.7", features = ["derive"] }
 tempfile = "3.27.0"
 dirs = "7.0.0"
+base64 = "0.22.1"
 rmcp = { version = "3.8.0", default-features = false }
 
 [workspace.lints.rust]

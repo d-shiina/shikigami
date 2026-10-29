@@ -5,9 +5,11 @@
 //! ```text
 //! <root>/                                 shared part (may live on a file server)
 //!   workspace.json                         optional manifest (`"shared": true`)
-//!   scenarios/<scenario-id>.json           canonical scenario documents
+//!   scenarios/<scenario-id>/               one folder per scenario (its project)
+//!     scenario.json                        the canonical scenario document
+//!     input/ config/ templates/ output/ work/   files the scenario works with
 //!   versions/<scenario-id>/<number>.json   named versions (snapshots)
-//!   trash/<scenario-id>.<unix-ts>.json     deleted scenarios (recoverable)
+//!   trash/<scenario-id>.<unix-ts>/         deleted scenarios with their files
 //!   .lock                                  advisory lock for read-modify-write
 //! <local root>/                            per-PC part
 //!   history/<scenario-id>/journal.jsonl    append-only change journal (audit)
@@ -26,6 +28,10 @@
 //! workspace. Every mutation takes an exclusive OS file lock, re-reads the
 //! document, checks the revision, and replaces the file atomically
 //! (write temp file + rename), so readers never observe partial writes.
+//!
+//! Workspaces written before scenario folders kept each document as
+//! `scenarios/<scenario-id>.json`. Opening a workspace moves those into
+//! folders; reading still accepts them, for files an older build writes.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Write};
@@ -236,11 +242,53 @@ impl FileStore {
             fs::create_dir_all(root.join(dir))?;
         }
         fs::create_dir_all(local.join("history"))?;
-        Ok(Self {
+        let store = Self {
             root,
             local,
             shared,
-        })
+        };
+        store.migrate_flat_files();
+        Ok(store)
+    }
+
+    /// Moves `scenarios/<id>.json` (the layout before scenario folders) to
+    /// `scenarios/<id>/scenario.json`. A file that cannot be moved stays
+    /// where it is and is still read from there.
+    fn migrate_flat_files(&self) {
+        let Ok(entries) = fs::read_dir(self.scenarios_dir()) else {
+            return;
+        };
+        let flat: Vec<ScenarioId> = entries
+            .filter_map(|e| flat_scenario_id(&e.ok()?.path()))
+            .collect();
+        if flat.is_empty() {
+            return;
+        }
+        let Ok(_lock) = self.lock() else {
+            return;
+        };
+        for id in flat {
+            let from = self.flat_path(&id);
+            let to = self.scenario_path(&id);
+            let moved = if to.is_file() {
+                // Both exist: an older build wrote the flat file after the
+                // move. Keep the newer one.
+                let newer = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).ok();
+                if newer(&from) > newer(&to) {
+                    fs::rename(&from, &to)
+                } else {
+                    fs::remove_file(&from)
+                }
+            } else {
+                fs::create_dir_all(self.project_dir(&id)).and_then(|()| fs::rename(&from, &to))
+            };
+            match moved {
+                Ok(()) => self.ensure_project_folders(&id),
+                Err(e) => {
+                    tracing::warn!(path = %from.display(), error = %e, "could not move scenario into its folder");
+                }
+            }
+        }
     }
 
     /// Writes (or updates) `<root>/workspace.json`. Takes effect the next time
@@ -310,8 +358,37 @@ impl FileStore {
         }
     }
 
+    /// `scenarios/<id>/scenario.json`.
     pub fn scenario_path(&self, id: &ScenarioId) -> PathBuf {
+        self.project_dir(id).join(crate::project::SCENARIO_FILE)
+    }
+
+    /// The scenario's own folder: its document and the files it works with.
+    /// Relative paths in its steps are resolved from here.
+    pub fn project_dir(&self, id: &ScenarioId) -> PathBuf {
+        self.scenarios_dir().join(id.as_str())
+    }
+
+    /// `scenarios/<id>.json`, the layout before scenario folders.
+    fn flat_path(&self, id: &ScenarioId) -> PathBuf {
         self.scenarios_dir().join(format!("{id}.json"))
+    }
+
+    /// Where the document is now: its folder, or the old flat file.
+    fn existing_path(&self, id: &ScenarioId) -> Option<PathBuf> {
+        [self.scenario_path(id), self.flat_path(id)]
+            .into_iter()
+            .find(|p| p.is_file())
+    }
+
+    /// Creates the standard folders (`input/`, `config/`, …) that are missing.
+    pub(crate) fn ensure_project_folders(&self, id: &ScenarioId) {
+        let dir = self.project_dir(id);
+        for folder in crate::project::FOLDERS {
+            if let Err(e) = fs::create_dir_all(dir.join(folder.name)) {
+                tracing::warn!(dir = %dir.display(), error = %e, "could not create project folder");
+            }
+        }
     }
 
     fn history_dir(&self, id: &ScenarioId) -> PathBuf {
@@ -319,12 +396,14 @@ impl FileStore {
     }
 
     pub fn exists(&self, id: &ScenarioId) -> bool {
-        id.is_well_formed() && self.scenario_path(id).is_file()
+        id.is_well_formed() && self.existing_path(id).is_some()
     }
 
     pub fn load(&self, id: &ScenarioId) -> CoreResult<Scenario> {
         self.checked(id)?;
-        let path = self.scenario_path(id);
+        let path = self
+            .existing_path(id)
+            .unwrap_or_else(|| self.scenario_path(id));
         let text = match fs::read_to_string(&path) {
             Ok(text) => text,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -345,16 +424,25 @@ impl FileStore {
 
     /// Loads every scenario; unreadable files are skipped and logged.
     pub fn load_all(&self) -> CoreResult<Vec<Scenario>> {
-        let mut out = Vec::new();
+        let mut ids = std::collections::BTreeSet::new();
         for entry in fs::read_dir(self.scenarios_dir())? {
             let path = entry?.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-                continue;
+            let id = if path.is_dir() {
+                if !path.join(crate::project::SCENARIO_FILE).is_file() {
+                    continue;
+                }
+                path.file_name()
+                    .and_then(|s| s.to_str())
+                    .map(ScenarioId::new)
+            } else {
+                flat_scenario_id(&path)
             };
-            match self.load(&ScenarioId::new(stem)) {
+            ids.extend(id);
+        }
+        let mut out = Vec::new();
+        for id in ids {
+            let path = self.project_dir(&id);
+            match self.load(&id) {
                 Ok(s) => out.push(s),
                 Err(e) => {
                     tracing::warn!(path = %path.display(), error = %e, "skipping unreadable scenario")
@@ -366,21 +454,40 @@ impl FileStore {
     }
 
     pub(crate) fn save(&self, scenario: &Scenario) -> CoreResult<()> {
-        self.checked(&scenario.id)?;
+        let id = &scenario.id;
+        self.checked(id)?;
         let mut json = serde_json::to_vec_pretty(scenario)?;
         json.push(b'\n');
-        write_atomic(&self.scenario_path(&scenario.id), &json)
+        fs::create_dir_all(self.project_dir(id))?;
+        write_atomic(&self.scenario_path(id), &json)?;
+        self.ensure_project_folders(id);
+        // Written by an older build after the folder existed: the folder
+        // copy is now the current one.
+        match fs::remove_file(self.flat_path(id)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.into()),
+        }
     }
 
+    /// Moves the scenario's folder (document and files) to the trash.
     pub(crate) fn trash(&self, id: &ScenarioId) -> CoreResult<PathBuf> {
         self.checked(id)?;
-        let from = self.scenario_path(id);
-        if !from.is_file() {
+        if !self.exists(id) {
             return Err(CoreError::ScenarioNotFound(id.clone()));
         }
         let ts = OffsetDateTime::now_utc().unix_timestamp();
-        let to = self.root.join("trash").join(format!("{id}.{ts}.json"));
-        fs::rename(&from, &to)?;
+        let to = self.root.join("trash").join(format!("{id}.{ts}"));
+        let dir = self.project_dir(id);
+        if dir.is_dir() {
+            fs::rename(&dir, &to)?;
+        } else {
+            fs::create_dir_all(&to)?;
+        }
+        let flat = self.flat_path(id);
+        if flat.is_file() {
+            fs::rename(&flat, to.join(crate::project::SCENARIO_FILE))?;
+        }
         Ok(to)
     }
 
@@ -625,6 +732,15 @@ impl FileStore {
 }
 
 const MANIFEST_FILE: &str = "workspace.json";
+
+/// The ID of `scenarios/<id>.json` (the layout before scenario folders).
+fn flat_scenario_id(path: &Path) -> Option<ScenarioId> {
+    if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("json") {
+        return None;
+    }
+    let id = ScenarioId::new(path.file_stem()?.to_str()?);
+    id.is_well_formed().then_some(id)
+}
 
 fn read_manifest(root: &Path) -> CoreResult<WorkspaceManifest> {
     match fs::read(root.join(MANIFEST_FILE)) {

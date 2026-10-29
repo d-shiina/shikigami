@@ -255,6 +255,10 @@ pub struct ScenarioSettings {
     pub default_retry: Option<RetryPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_error: Option<OnError>,
+    /// Leave the files in the scenario's `work/` folder when a run starts.
+    /// By default a run starts with `work/` emptied.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub keep_work: bool,
 }
 
 impl ScenarioSettings {

@@ -42,6 +42,7 @@ pub mod types {
     pub const CREATE_FOLDER: &str = "file.createFolder";
     pub const ZIP: &str = "file.zip";
     pub const UNZIP: &str = "file.unzip";
+    pub const CONFIG_READ: &str = "config.read";
 }
 
 /// File steps; needs nothing installed.
@@ -81,6 +82,7 @@ enum Kind {
     CreateFolder,
     Zip,
     Unzip,
+    ConfigRead,
 }
 
 struct FileStep {
@@ -170,6 +172,22 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
             let path = path(params, "path")?;
             let bytes = ops::read_bytes(&path)?;
             encoding::decode(&bytes, &read_encoding, &path.display().to_string()).map(Value::String)
+        }
+        Kind::ConfigRead => {
+            let path = path(params, "path")?;
+            let bytes = ops::read_bytes(&path)?;
+            let shown = path.display().to_string();
+            let text = encoding::decode(&bytes, "auto", &shown)?;
+            let invalid = |why: String| {
+                StepError::permanent("CONFIG_INVALID", format!("{shown}: {why}")).with_details(json!({
+                    "hint": "A settings file is a JSON object, or a shikigami.config file made in Studio (config/ in the scenario's folder → New settings file).",
+                }))
+            };
+            let json: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+                .map_err(|e| invalid(e.to_string()))?;
+            shikigami_core::ConfigFile::values(&json)
+                .map(Value::Object)
+                .map_err(invalid)
         }
         Kind::WriteText => {
             let path = path(params, "path")?;
@@ -310,7 +328,6 @@ fn def(
         category: StepCategory::File,
         label: label.into(),
         description: description.into(),
-        params_schema,
         blocks: vec![],
         has_output: true,
         expression_params: vec![],
@@ -322,19 +339,40 @@ fn def(
         default_timeout_ms: None,
         deprecated: None,
         plugin: None,
+        // Every path-like param, written or only read.
+        path_params: ["path", "from", "to", "folder"]
+            .into_iter()
+            .filter(|key| params_schema["properties"].get(key).is_some())
+            .map(Into::into)
+            .collect(),
+        params_schema,
     }
 }
 
 #[allow(clippy::too_many_lines)]
 fn step_defs() -> Vec<(StepTypeDef, Kind)> {
-    let path = json!({ "type": "string", "minLength": 1, "description": "絶対パス（例: C:\\work\\in.csv、\"{{ pathJoin(baseDir, 'in.csv') }}\"）" });
-    let folder = json!({ "type": "string", "minLength": 1, "description": "フォルダーの絶対パス" });
+    let path = json!({ "type": "string", "minLength": 1, "description": "シナリオのフォルダーからの相対パス（例: input/in.csv、output/result.csv）、または絶対パス（C:\\work\\in.csv）" });
+    let folder = json!({ "type": "string", "minLength": 1, "description": "フォルダー：シナリオのフォルダーからの相対パス（例: input）、または絶対パス" });
     let read_encoding = json!({ "enum": encoding::READ_ENCODINGS, "description": "auto (default): BOM, then UTF-8, else Shift_JIS" });
     let write_encoding = json!({ "enum": encoding::WRITE_ENCODINGS, "description": "utf-8 (default). For files opened in Excel use utf-8-bom or shift_jis" });
     let flag = json!({ "type": "boolean" });
     let delimiter = json!({ "type": "string", "minLength": 1, "maxLength": 2, "description": "区切り文字（既定 \",\"。TSV は \"\\t\"）" });
     let any = json!({});
     vec![
+        (
+            def(
+                types::CONFIG_READ,
+                "設定ファイルを読む",
+                "Reads a settings file (usually config/settings.json in the scenario's folder, made as a form in Studio) into an object of its values, e.g. { 締め日: 25, 送り先: \"...\" }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.",
+                object_schema(json!({ "path": path }), &["path"]),
+                RiskLevel::Safe,
+                vec![ResourceDef::file("path")],
+                vec![
+                    json!({ "type": types::CONFIG_READ, "params": { "path": "config/settings.json" }, "saveAs": "settings" }),
+                ],
+            ),
+            Kind::ConfigRead,
+        ),
         (
             def(
                 types::READ_TEXT,
@@ -347,7 +385,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Safe,
                 vec![ResourceDef::file("path")],
                 vec![
-                    json!({ "type": types::READ_TEXT, "params": { "path": "C:\\work\\memo.txt" }, "saveAs": "memo" }),
+                    json!({ "type": types::READ_TEXT, "params": { "path": "input/memo.txt" }, "saveAs": "memo" }),
                 ],
             ),
             Kind::ReadText,
@@ -364,8 +402,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Interactive,
                 vec![ResourceDef::file("path")],
                 vec![
-                    json!({ "type": types::WRITE_TEXT, "params": { "path": "C:\\work\\report.txt", "text": "合計 {{ total }} 円" } }),
-                    json!({ "type": types::WRITE_TEXT, "params": { "path": "C:\\work\\log.txt", "text": "{{ now() }} 完了\r\n", "append": true } }),
+                    json!({ "type": types::WRITE_TEXT, "params": { "path": "output/report.txt", "text": "合計 {{ total }} 円" } }),
+                    json!({ "type": types::WRITE_TEXT, "params": { "path": "work/log.txt", "text": "{{ now() }} 完了\r\n", "append": true } }),
                 ],
             ),
             Kind::WriteText,
@@ -382,7 +420,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Safe,
                 vec![ResourceDef::file("path")],
                 vec![
-                    json!({ "type": types::READ_CSV, "params": { "path": "C:\\work\\orders.csv" }, "saveAs": "orders" }),
+                    json!({ "type": types::READ_CSV, "params": { "path": "input/orders.csv" }, "saveAs": "orders" }),
                 ],
             ),
             Kind::ReadCsv,
@@ -408,7 +446,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 vec![ResourceDef::file("path")],
                 vec![json!({
                     "type": types::WRITE_CSV,
-                    "params": { "path": "C:\\work\\result.csv", "rows": "{{ results }}", "columns": ["注文番号", "金額", "状態"], "encoding": "utf-8-bom" }
+                    "params": { "path": "output/result.csv", "rows": "{{ results }}", "columns": ["注文番号", "金額", "状態"], "encoding": "utf-8-bom" }
                 })],
             ),
             Kind::WriteCsv,
@@ -422,7 +460,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Safe,
                 vec![],
                 vec![
-                    json!({ "type": types::EXISTS, "params": { "path": "C:\\work\\done.flag" }, "saveAs": "done" }),
+                    json!({ "type": types::EXISTS, "params": { "path": "work/done.flag" }, "saveAs": "done" }),
                 ],
             ),
             Kind::Exists,
@@ -461,7 +499,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Interactive,
                 vec![ResourceDef::file("from"), ResourceDef::file("to")],
                 vec![
-                    json!({ "type": types::COPY, "params": { "from": "C:\\work\\template.xlsx", "to": "C:\\work\\out\\{{ formatDate(today(), 'yyyyMMdd') }}.xlsx" } }),
+                    json!({ "type": types::COPY, "params": { "from": "templates/template.xlsx", "to": "output/{{ formatDate(today(), 'yyyyMMdd') }}.xlsx" } }),
                 ],
             ),
             Kind::Copy,
@@ -491,9 +529,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 object_schema(json!({ "path": path, "recursive": flag }), &["path"]),
                 RiskLevel::Dangerous,
                 vec![ResourceDef::file("path")],
-                vec![
-                    json!({ "type": types::DELETE, "params": { "path": "C:\\work\\tmp\\{{ name }}.csv" } }),
-                ],
+                vec![json!({ "type": types::DELETE, "params": { "path": "work/{{ name }}.csv" } })],
             ),
             Kind::Delete,
         ),
@@ -506,7 +542,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Interactive,
                 vec![],
                 vec![
-                    json!({ "type": types::CREATE_FOLDER, "params": { "path": "C:\\work\\{{ formatDate(today(), 'yyyyMM') }}" } }),
+                    json!({ "type": types::CREATE_FOLDER, "params": { "path": "output/{{ formatDate(today(), 'yyyyMM') }}" } }),
                 ],
             ),
             Kind::CreateFolder,
@@ -527,7 +563,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Interactive,
                 vec![ResourceDef::file("to")],
                 vec![
-                    json!({ "type": types::ZIP, "params": { "from": "C:\\work\\out", "to": "C:\\work\\out.zip" } }),
+                    json!({ "type": types::ZIP, "params": { "from": "output", "to": "work/output.zip" } }),
                 ],
             ),
             Kind::Zip,
@@ -544,7 +580,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 RiskLevel::Interactive,
                 vec![ResourceDef::file("path")],
                 vec![
-                    json!({ "type": types::UNZIP, "params": { "path": "C:\\work\\download.zip", "to": "C:\\work\\in" }, "saveAs": "files" }),
+                    json!({ "type": types::UNZIP, "params": { "path": "input/download.zip", "to": "work/unzipped" }, "saveAs": "files" }),
                 ],
             ),
             Kind::Unzip,

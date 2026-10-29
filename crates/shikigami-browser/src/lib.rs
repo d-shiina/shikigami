@@ -623,6 +623,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 default_timeout_ms: d.default_timeout_ms,
                 deprecated: None,
                 plugin: None,
+                path_params: Vec::new(),
             };
             (def, d.method)
         })

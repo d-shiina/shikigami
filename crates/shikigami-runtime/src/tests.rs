@@ -96,6 +96,7 @@ fn flaky_def() -> StepTypeDef {
         default_timeout_ms: None,
         deprecated: None,
         plugin: None,
+        path_params: Vec::new(),
     }
 }
 
@@ -1650,4 +1651,135 @@ async fn errors_in_parallel_branches_pause_at_the_parallel_step() {
     .await;
     assert_eq!(pauses, vec![("s1".to_owned(), PauseReason::Error)]);
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+}
+
+/// Writes `text` to `path` (as the step got it, after resolving).
+struct WriteFile;
+impl ActionHandler for WriteFile {
+    fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+        Box::pin(async move {
+            let path = input.params["path"].as_str().unwrap_or_default().to_owned();
+            let text = input.params["text"].as_str().unwrap_or_default().to_owned();
+            if let Some(dir) = std::path::Path::new(&path).parent() {
+                std::fs::create_dir_all(dir).map_err(|e| StepError::new("IO", e.to_string()))?;
+            }
+            std::fs::write(&path, text).map_err(|e| StepError::new("IO", e.to_string()))?;
+            Ok(json!(path))
+        })
+    }
+}
+
+fn write_file_runtime() -> Runtime {
+    let def = StepTypeDef {
+        step_type: "test.writeFile".into(),
+        label: "ファイルに書く".into(),
+        params_schema: json!({ "type": "object" }),
+        has_output: true,
+        resources: vec![],
+        secret_params: vec![],
+        path_params: vec!["path".into()],
+        default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
+        ..flaky_def()
+    };
+    Runtime::builder().register(def, WriteFile).build()
+}
+
+async fn run_project(
+    runtime: &Runtime,
+    s: Scenario,
+    options: RunOptions,
+) -> (RunReport, Vec<RunEventEnvelope>) {
+    let mut handle = runtime.start(s, options).expect("start");
+    let mut events = Vec::new();
+    while let Some(e) = handle.next_event().await {
+        events.push(e);
+    }
+    (handle.wait().await.expect("report"), events)
+}
+
+#[tokio::test]
+async fn relative_paths_are_resolved_from_each_scenarios_folder() {
+    let main_dir = tempfile::tempdir().unwrap();
+    let sub_dir = tempfile::tempdir().unwrap();
+    let runtime = write_file_runtime();
+    let write = |path: &str| {
+        Step::new("test.writeFile")
+            .with_param("path", path)
+            .with_param("text", "x")
+    };
+    let mut sub = scenario(vec![write("output/from-sub.txt")]);
+    sub.id = "scn_sub".into();
+    let s = scenario(vec![
+        write("output/{{ 'a' }}.txt"),
+        Step::new("scenario.call").with_param("scenario", "scn_sub"),
+    ]);
+    let (report, _) = run_project(
+        &runtime,
+        s,
+        RunOptions {
+            project_dir: Some(main_dir.path().to_path_buf()),
+            subscenarios: vec![Subscenario {
+                scenario: sub,
+                version: None,
+                project_dir: Some(sub_dir.path().to_path_buf()),
+            }],
+            ..RunOptions::default()
+        },
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert!(main_dir.path().join("output").join("a.txt").is_file());
+    assert!(sub_dir.path().join("output").join("from-sub.txt").is_file());
+    // Not a full run: no log.
+    assert!(!main_dir.path().join("logs").exists());
+}
+
+#[tokio::test]
+async fn a_full_run_starts_with_work_emptied_and_writes_a_log() {
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path().join("work");
+    std::fs::create_dir_all(work.join("old")).unwrap();
+    std::fs::write(work.join("stale.csv"), "x").unwrap();
+    let runtime = write_file_runtime();
+    let s = scenario(vec![
+        Step::new("test.writeFile")
+            .with_param("path", "work/new.csv")
+            .with_param("text", "y"),
+        Step::new("control.fail").with_param("message", "締め日がありません"),
+    ]);
+    let options = || RunOptions {
+        project_dir: Some(dir.path().to_path_buf()),
+        full_run: true,
+        ..RunOptions::default()
+    };
+    let (report, _) = run_project(&runtime, s.clone(), options()).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let mut left: Vec<String> = std::fs::read_dir(&work)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    left.sort();
+    assert_eq!(left, ["new.csv"]);
+
+    let logs: Vec<std::path::PathBuf> = std::fs::read_dir(dir.path().join("logs"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(logs.len(), 1);
+    let name = logs[0].file_name().unwrap().to_string_lossy().into_owned();
+    assert!(name.ends_with("_failed.log"), "{name}");
+    let text = std::fs::read_to_string(&logs[0]).unwrap();
+    assert!(text.contains("START test"), "{text}");
+    assert!(text.contains("ファイルに書く"), "{text}");
+    assert!(text.contains("締め日がありません"), "{text}");
+    assert!(text.contains("END FAILED"), "{text}");
+
+    // keepWork leaves work/ as it is.
+    let mut keep = s;
+    keep.settings.keep_work = true;
+    std::fs::write(work.join("keep.csv"), "x").unwrap();
+    run_project(&runtime, keep, options()).await;
+    assert!(work.join("keep.csv").is_file());
 }

@@ -16,9 +16,11 @@ mod exec;
 pub mod handler;
 pub mod node;
 pub mod record;
+mod runlog;
 pub mod sidecar;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -65,6 +67,14 @@ pub struct RunOptions {
     /// `ScenarioService::subscenarios`). The run uses them as given, so
     /// edits made while it runs do not affect it.
     pub subscenarios: Vec<Subscenario>,
+    /// The scenario's folder (`ScenarioService::project_dir`): relative paths
+    /// in path params (`StepTypeDef::path_params`) are resolved from it.
+    /// Without it they are left as written.
+    pub project_dir: Option<PathBuf>,
+    /// A run of the whole scenario, as opposed to a single step an AI tries:
+    /// it starts with each scenario's `work/` folder emptied (unless its
+    /// settings say `keepWork`) and writes a readable log to `logs/`.
+    pub full_run: bool,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -73,6 +83,7 @@ pub struct Runtime {
     registry: StepRegistry,
     handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
     resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
+    path_params: Arc<HashMap<String, Vec<String>>>,
     run_finished_hooks: Arc<Vec<RunFinishedHook>>,
     validator: Arc<Validator>,
     resources: Arc<ResourceLocks>,
@@ -110,6 +121,11 @@ impl Runtime {
             .iter()
             .map(|s| (s.scenario.id.clone(), Arc::new(s.scenario.clone())))
             .collect();
+        let project_dirs: HashMap<ScenarioId, PathBuf> = options
+            .subscenarios
+            .iter()
+            .filter_map(|s| Some((s.scenario.id.clone(), s.project_dir.clone()?)))
+            .collect();
         let report = self
             .validator
             .validate_with_calls(&scenario, &|id| library.get(id).map(|s| (**s).clone()));
@@ -129,7 +145,31 @@ impl Runtime {
             current_step: None,
             steps_executed: 0,
         }));
-        let emitter = Emitter::new(run_id.clone(), tx, snapshot.clone());
+        let log = match (&options.project_dir, options.full_run) {
+            (Some(dir), true) => runlog::RunLog::create(
+                dir,
+                std::iter::once(&scenario).chain(library.values().map(|s| &**s)),
+                &self.registry,
+            ),
+            _ => None,
+        };
+        let emitter = Emitter::new(run_id.clone(), tx, snapshot.clone(), log);
+        // Folders whose `work/` the run starts empty.
+        let fresh_work: Vec<PathBuf> = if options.full_run {
+            options
+                .project_dir
+                .iter()
+                .filter(|_| !scenario.settings.keep_work)
+                .cloned()
+                .chain(options.subscenarios.iter().filter_map(|s| {
+                    s.project_dir
+                        .clone()
+                        .filter(|_| !s.scenario.settings.keep_work)
+                }))
+                .collect()
+        } else {
+            Vec::new()
+        };
         let cancel = CancellationToken::new();
         let debugger = options.debug.map(|debug| {
             Arc::new(debug::Debugger::new(
@@ -145,6 +185,9 @@ impl Runtime {
                 run_id: run_id.clone(),
                 handlers: self.handlers.clone(),
                 resource_defs: self.resource_defs.clone(),
+                path_params: self.path_params.clone(),
+                project_dir: options.project_dir.clone().map(Arc::from),
+                project_dirs: Arc::new(project_dirs),
                 default_timeouts: self.default_timeouts.clone(),
                 secrets: self.secrets.clone(),
                 vars: Map::new(),
@@ -197,6 +240,16 @@ impl Runtime {
                 revision: scenario.revision,
             });
 
+            for dir in &fresh_work {
+                for problem in shikigami_core::project::clear_work(dir) {
+                    emitter.emit(RunEvent::Log {
+                        level: LogLevel::Warn,
+                        message: problem,
+                        step_id: None,
+                    });
+                }
+            }
+
             // After `runStarted`, so the inputs' `variableChanged` events
             // come first in the run.
             let init = init_variables(&scenario, &inputs, &mut executor);
@@ -242,6 +295,7 @@ impl Runtime {
                 error: error.clone(),
                 duration_ms,
             });
+            emitter.finish_log(status);
 
             RunReport {
                 run_id: task_run_id,
@@ -340,6 +394,13 @@ impl RuntimeBuilder {
                     .iter()
                     .filter(|def| !def.resources.is_empty())
                     .map(|def| (def.step_type.clone(), def.resources.clone()))
+                    .collect(),
+            ),
+            path_params: Arc::new(
+                self.registry
+                    .iter()
+                    .filter(|def| !def.path_params.is_empty())
+                    .map(|def| (def.step_type.clone(), def.path_params.clone()))
                     .collect(),
             ),
             resources: Arc::default(),
