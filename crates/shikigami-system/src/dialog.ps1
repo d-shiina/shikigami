@@ -163,7 +163,7 @@ $xaml = @'
         UseLayoutRounding="True" SnapsToDevicePixels="True">
   <!-- Fonts, colours and styles live on this root rather than the window,
        so the sheet looks the same when tests draw it without a window. -->
-  <Grid x:Name="Root" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI" FontSize="14"
+  <Grid x:Name="Root" TextElement.FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI" TextElement.FontSize="14"
         TextElement.Foreground="@INK@" Language="ja-JP" TextOptions.TextFormattingMode="Display">
   <Grid.Resources>
     <Style x:Key="Ring">
