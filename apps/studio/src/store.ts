@@ -44,8 +44,11 @@ export type Selection =
   | { kind: "slot"; parentId: string | null; block: string | null }
   | null;
 
-/** The places on the left rail; each fills the window below the title bar. */
-export type Place = "scenarios" | "review" | "secrets" | "settings";
+/**
+ * The places in the sidebar; each fills the window right of it. "library" is
+ * the page of all scenarios, "scenarios" the editor of the open one.
+ */
+export type Place = "library" | "scenarios" | "review" | "secrets" | "settings";
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues";
@@ -630,7 +633,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
-      place: "scenarios",
+      place: "library",
       bottom: null,
       historyOpen: false,
       versions: [],
@@ -766,6 +769,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
           set({
+            // Opened from the library (or by the AI while it shows): show it in the editor.
+            ...(get().place === "library" ? { place: "scenarios" as const } : {}),
             scenario,
             validation,
             canUndo: undo.canUndo,

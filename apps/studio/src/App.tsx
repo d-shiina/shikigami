@@ -15,15 +15,17 @@ import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
 import { SecretsPage } from "./components/SecretsPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { ScenariosPage } from "./components/ScenariosPage";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { StoryView } from "./components/StoryView";
+import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
 import { CanvasDock, OutlineButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
 import { t, useLocale } from "./lib/i18n";
-import { type Fit, fit as fitPanels, INBOX, RIGHT } from "./lib/fit";
+import { type Fit, fit as fitPanels, INBOX, RIGHT, SIDEBAR } from "./lib/fit";
 import { createStudioStore, isActive, type StudioState } from "./store";
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
@@ -103,7 +105,7 @@ function useWidth(): [number, (el: HTMLElement | null) => void] {
  * name and its actions are in the title bar. The sidebar and the review desk
  * both open scenarios into it.
  */
-function Editor({ view, list, right }: { view: View; list?: React.ReactNode; right: React.ReactNode | null }) {
+function Editor({ view, onView, list, right }: { view: View; onView: (view: View) => void; list?: React.ReactNode; right: React.ReactNode | null }) {
   const hasScenario = useStudio((s) => s.scenario !== null);
   const outlineOpen = useStudio((s) => s.outlineOpen);
   return (
@@ -113,6 +115,8 @@ function Editor({ view, list, right }: { view: View; list?: React.ReactNode; rig
         <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
             <StoryView />
+          ) : view === "variables" ? (
+            <VariablesView onView={onView} />
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
@@ -126,9 +130,11 @@ function Editor({ view, list, right }: { view: View; list?: React.ReactNode; rig
             </ReactFlowProvider>
           )}
           {/* Clear of the zoom controls in the bottom-left corner. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
-            <CanvasDock />
-          </div>
+          {view !== "variables" && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
+              <CanvasDock />
+            </div>
+          )}
         </div>
         <RunPausePanel />
         <BottomPanel />
@@ -182,16 +188,19 @@ function InboxSlot({ room }: { room: boolean }) {
   );
 }
 
-function ScenariosPlace({ view, fit }: { view: View; fit: Fit }) {
-  return <Editor view={view} right={fit.right ? <Inspector /> : null} />;
+type PlaceProps = { view: View; onView: (view: View) => void; fit: Fit };
+
+function ScenariosPlace({ view, onView, fit }: PlaceProps) {
+  return <Editor view={view} onView={onView} right={fit.right ? <Inspector /> : null} />;
 }
 
 /** The review desk: what waits, the chart with the AI's changes marked, and the verdict on the right. */
-function ReviewPlace({ view, fit }: { view: View; fit: Fit }) {
+function ReviewPlace({ view, onView, fit }: PlaceProps) {
   const hasScenario = useStudio((s) => s.scenario !== null);
   return (
     <Editor
       view={view}
+      onView={onView}
       list={<InboxSlot room={fit.inbox} />}
       right={
         !fit.right || !hasScenario ? null : (
@@ -209,7 +218,7 @@ function ReviewPlace({ view, fit }: { view: View; fit: Fit }) {
 
 function Shell() {
   const place = useStudio((s) => s.place);
-  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" ? "story" : "flow"));
+  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" || raw === "variables" ? raw : "flow"));
   const [sidebar, setSidebar] = useRemembered<"open" | "closed">(SIDEBAR_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
   const [peek, setPeek] = useState(false);
   const agentOpen = useAgent((s) => s.open);
@@ -240,10 +249,10 @@ function Shell() {
   return (
     <div className="flex h-full flex-col">
       <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
-        {showSidebar && <Sidebar onCollapse={() => setSidebar("closed")} />}
+        {showSidebar && <Sidebar width={SIDEBAR} onCollapse={() => setSidebar("closed")} />}
         {!showSidebar && peek && (
           <Peek onClose={() => setPeek(false)}>
-            <Sidebar onCollapse={() => setPeek(false)} />
+            <Sidebar width={SIDEBAR} onCollapse={() => setPeek(false)} />
           </Peek>
         )}
         <div className="flex min-w-0 flex-1 flex-col">
@@ -251,8 +260,14 @@ function Shell() {
           <HumanBanner />
           <Banner />
           <div className="flex min-h-0 flex-1">
-            {place === "scenarios" && <ScenariosPlace view={view} fit={fit} />}
-            {place === "review" && <ReviewPlace view={view} fit={fit} />}
+            {/* With nothing open, the editor has nothing to show: the library does. */}
+            {(place === "library" || (place === "scenarios" && !hasScenario)) && (
+              <div className="min-w-0 flex-1">
+                <ScenariosPage />
+              </div>
+            )}
+            {place === "scenarios" && hasScenario && <ScenariosPlace view={view} onView={setView} fit={fit} />}
+            {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} />}
             {place === "secrets" && (
               <div className="min-w-0 flex-1">
                 <SecretsPage />

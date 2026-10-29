@@ -13,6 +13,8 @@ import { ScenarioActions, ScenarioTitle, type View } from "./Toolbar";
 import { WindowControls } from "./WindowControls";
 
 const PAGE_TITLE: Partial<Record<Place, () => string>> = {
+  library: () => t.scenarios,
+  scenarios: () => t.scenarios,
   review: () => t.awaitingReview,
   secrets: () => t.secrets,
   settings: () => t.shell.settings,

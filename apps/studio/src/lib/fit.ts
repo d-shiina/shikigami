@@ -6,7 +6,7 @@
 // (closing it brings the inspector back). The window's own minimum (960px)
 // always fits.
 
-export const SIDEBAR = 240;
+export const SIDEBAR = 208;
 export const INBOX = 248;
 export const INBOX_FOLDED = 44;
 export const RIGHT = 340;

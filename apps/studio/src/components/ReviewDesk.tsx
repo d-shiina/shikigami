@@ -9,7 +9,7 @@ import { headline, summarize } from "../lib/review";
 import { sentence, plain } from "../lib/sentence";
 import { approvedUpTo, groupRevertBlocker, pendingIn } from "../store";
 import { Explanations, FeedbackBox, Observations, type Observed, type Review, SendBackForm, Section, TestRuns, type TestRun } from "./Evidence";
-import { Monogram } from "./ScenarioList";
+import { Monogram } from "./ScenariosPage";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
 import { t, useKeptState } from "../lib/i18n";
 
