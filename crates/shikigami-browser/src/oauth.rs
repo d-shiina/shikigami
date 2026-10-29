@@ -43,7 +43,8 @@ impl ActionHandler for SignIn {
             let client = oauth::client(&input, name)?;
             oauth::check_token_url(&client, token_url)?;
 
-            if let Some((tokens, via)) = oauth::reuse(&input, &client, token_url).await? {
+            let scope = params.get("scope").and_then(Value::as_str);
+            if let Some((tokens, via)) = oauth::reuse(&input, &client, token_url, scope).await? {
                 return Ok(tokens.summary(name, via));
             }
 
@@ -54,7 +55,7 @@ impl ActionHandler for SignIn {
                 &oauth::Request {
                     authorize_url: text(params, "authorizeUrl")?,
                     redirect_url,
-                    scope: params.get("scope").and_then(Value::as_str),
+                    scope,
                     extra: params.get("authorizeParams").and_then(Value::as_object),
                     pkce,
                 },
@@ -99,6 +100,7 @@ impl ActionHandler for SignIn {
                 &code,
                 redirect_url,
                 pkce.then_some(attempt.verifier.as_str()),
+                scope,
             )
             .await?;
             Ok(tokens.summary(name, "browser"))

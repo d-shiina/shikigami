@@ -783,6 +783,20 @@ impl SecretProvider for Vault {
         self.load_sealed(&self.oauth_path(name), &oauth_aad(name))
     }
 
+    fn lock_oauth_tokens(&self, name: &str) -> Result<Box<dyn Send>, SecretError> {
+        let path = self.oauth_path(name).with_extension("lock");
+        std::fs::create_dir_all(self.dir.join(OAUTH_DIR)).map_err(io_error)?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)
+            .map_err(io_error)?;
+        file.lock().map_err(io_error)?;
+        Ok(Box::new(file))
+    }
+
     fn save_oauth_tokens(&self, name: &str, tokens: &Value) -> Result<(), SecretError> {
         secret::check_name(name).map_err(|m| SecretError::new("INVALID_SECRET_NAME", m))?;
         self.save_sealed(&self.oauth_path(name), &oauth_aad(name), tokens)

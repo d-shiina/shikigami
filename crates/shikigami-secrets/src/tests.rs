@@ -162,6 +162,9 @@ fn oauth_tokens_are_kept_encrypted_with_the_secret() {
     assert!(!raw.contains("s3cr3t"));
     assert!(v.summaries().unwrap()[0].signed_in);
     assert!(v.list().unwrap()[0].signed_in);
+    // The refresh lock is per secret and released on drop.
+    drop(v.lock_oauth_tokens("Box").unwrap());
+    drop(v.lock_oauth_tokens("Box").unwrap());
     // A session file of the same name is a different thing.
     assert_eq!(v.load_session("Box").unwrap(), None);
 

@@ -402,6 +402,17 @@ async fn oauth_sign_in_catches_the_code_and_keeps_the_tokens() {
             .iter()
             .all(|c| c["method"] != "authorize")
     );
+
+    // Asking for more than was granted needs the person again.
+    let before = calls(&f.log).len();
+    let mut wider = params.clone();
+    wider["scope"] = json!("root_readonly item_upload");
+    sign_in(&runtime, wider).await;
+    assert!(
+        calls(&f.log)[before..]
+            .iter()
+            .any(|c| c["method"] == "authorize")
+    );
 }
 
 #[tokio::test]

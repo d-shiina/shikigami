@@ -69,7 +69,8 @@ It waits for the person for 5 minutes by default (`timeoutMs`). The client secre
 ## Tokens
 
 - Saved encrypted in the workspace (`secrets/oauth/`), with the same key as the secrets ([secrets.md](secrets.md)). They never appear in outputs, logs or MCP results; the access token is masked like a password.
-- `http.request` refreshes the access token when it has less than 2 minutes left. Refreshes are one at a time, so a provider that replaces the refresh token on every refresh (Box does) never loses it.
+- `http.request` refreshes the access token when it has less than 2 minutes left (a token that cannot be refreshed is used until it really expires). Refreshes are one at a time, also across Studio, the CLI and the MCP server on the same workspace, so a provider that replaces the refresh token on every refresh (Box does) never loses it.
+- Saved tokens are reused only for the same client ID, `tokenUrl` and a `scope` they cover; asking for more scopes signs in again.
 - When the provider no longer accepts the refresh token, `http.request` fails with `OAUTH_SIGN_IN_REQUIRED` and the next `oauth.signIn` lets the person sign in again. Put `oauth.signIn` at the start of the scenario so it happens there.
 - Studio shows "Signed in (OAuth)" on the secret, with Sign out. The CLI: `shikigami secret logout <name>`. Changing the client ID makes the old tokens unusable; removing the secret removes them.
 - `list_secrets` shows `signedIn: true` for secrets with saved tokens.

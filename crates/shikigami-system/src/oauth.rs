@@ -24,7 +24,7 @@ use shikigami_runtime::{ActionInput, StepError};
 /// Tokens closer than this to expiry are refreshed before use.
 const EXPIRY_MARGIN_SECS: i64 = 120;
 
-/// Refreshes are one at a time: many providers (Box among them) replace
+/// Refreshes in this process are one at a time (see [`turn`]): many providers (Box among them) replace
 /// the refresh token on every refresh, so two at once would lose one.
 static REFRESH: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -43,6 +43,10 @@ pub struct Tokens {
     pub expires_at: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+    /// The `scope` oauth.signIn asked for (providers may leave `scope` out
+    /// of the answer).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_scope: Option<String>,
 }
 
 impl std::fmt::Debug for Tokens {
@@ -58,6 +62,23 @@ impl Tokens {
     fn expiring(&self) -> bool {
         self.expires_at
             .is_some_and(|at| at - now_secs() < EXPIRY_MARGIN_SECS)
+    }
+
+    fn expired(&self) -> bool {
+        self.expires_at.is_some_and(|at| at <= now_secs())
+    }
+
+    /// Whether the grant covers every scope in `wanted` (space-separated).
+    fn covers(&self, wanted: Option<&str>) -> bool {
+        let granted: Vec<&str> = [&self.scope, &self.requested_scope]
+            .into_iter()
+            .flatten()
+            .flat_map(|s| s.split_whitespace())
+            .collect();
+        wanted
+            .unwrap_or_default()
+            .split_whitespace()
+            .all(|w| granted.contains(&w))
     }
 
     /// The step output: never the tokens themselves.
@@ -251,6 +272,7 @@ pub async fn exchange(
     code: &str,
     redirect_url: &str,
     verifier: Option<&str>,
+    scope: Option<&str>,
 ) -> Result<Tokens, StepError> {
     let mut form = vec![
         ("grant_type", "authorization_code".to_owned()),
@@ -260,34 +282,62 @@ pub async fn exchange(
     if let Some(verifier) = verifier {
         form.push(("code_verifier", verifier.to_owned()));
     }
-    let tokens = token_request(input, client, token_url, form, None).await?;
+    let mut tokens = token_request(input, client, token_url, form, None).await?;
+    tokens.requested_scope = scope.filter(|s| !s.trim().is_empty()).map(str::to_owned);
     save(input, &client.name, &tokens)?;
     Ok(tokens)
 }
 
-/// Saved tokens of this client and token endpoint that still work,
-/// refreshed when about to expire: with the source (`saved` or
-/// `refreshed`). `None` when a person has to sign in.
+/// Saved tokens of this client and token endpoint that still work and
+/// cover `scope`, refreshed when about to expire: with the source (`saved`
+/// or `refreshed`). `None` when a person has to sign in.
 pub async fn reuse(
     input: &ActionInput,
     client: &Client,
     token_url: &str,
+    scope: Option<&str>,
 ) -> Result<Option<(Tokens, &'static str)>, StepError> {
-    let _turn = REFRESH.lock().await;
+    let _turn = turn(input, &client.name).await?;
     let Some(tokens) = load(input, &client.name)? else {
         return Ok(None);
     };
-    if tokens.client_id != client.id || tokens.token_url != token_url {
+    if tokens.client_id != client.id || tokens.token_url != token_url || !tokens.covers(scope) {
         return Ok(None);
     }
+    fresh(input, client, tokens).await
+}
+
+/// `tokens` as they can be used now: refreshed when about to expire, kept
+/// as they are while still valid when they cannot be refreshed.
+async fn fresh(
+    input: &ActionInput,
+    client: &Client,
+    tokens: Tokens,
+) -> Result<Option<(Tokens, &'static str)>, StepError> {
     if !tokens.expiring() {
         return Ok(Some((tokens, "saved")));
     }
-    match refresh(input, client, tokens).await {
-        Ok(Some(tokens)) => Ok(Some((tokens, "refreshed"))),
-        Ok(None) => Ok(None),
-        Err(e) => Err(e),
-    }
+    let still_valid = (!tokens.expired()).then(|| tokens.clone());
+    Ok(match refresh(input, client, tokens).await? {
+        Some(tokens) => Some((tokens, "refreshed")),
+        None => still_valid.map(|t| (t, "saved")),
+    })
+}
+
+/// The right to refresh the tokens of `name`: one task in this process and
+/// one process on the workspace at a time, since many providers (Box among
+/// them) replace the refresh token on every refresh.
+async fn turn(
+    input: &ActionInput,
+    name: &str,
+) -> Result<(tokio::sync::MutexGuard<'static, ()>, Box<dyn Send>), StepError> {
+    let local = REFRESH.lock().await;
+    let provider = input.secret_provider()?.clone();
+    let name = name.to_owned();
+    let shared = tokio::task::spawn_blocking(move || provider.lock_oauth_tokens(&name))
+        .await
+        .map_err(|e| StepError::permanent("INTERNAL", e.to_string()))??;
+    Ok((local, shared))
 }
 
 /// The access token of the secret `name` for `http.request`, refreshed
@@ -297,16 +347,14 @@ pub async fn access_token(
     name: &str,
 ) -> Result<(String, Vec<String>), StepError> {
     let client = client(input, name)?;
-    let _turn = REFRESH.lock().await;
-    let mut tokens = load(input, name)?.ok_or_else(|| sign_in_required(name))?;
+    let _turn = turn(input, name).await?;
+    let tokens = load(input, name)?.ok_or_else(|| sign_in_required(name))?;
     if tokens.client_id != client.id {
         return Err(sign_in_required(name));
     }
-    if tokens.expiring() {
-        tokens = refresh(input, &client, tokens)
-            .await?
-            .ok_or_else(|| sign_in_required(name))?;
-    }
+    let (tokens, _) = fresh(input, &client, tokens)
+        .await?
+        .ok_or_else(|| sign_in_required(name))?;
     input.mask_secret(&tokens.access_token);
     Ok((tokens.access_token, client.sites))
 }
@@ -448,6 +496,7 @@ async fn token_request(
         refresh_token,
         expires_at: expires_in.map(|secs| now_secs() + secs),
         scope: text("scope").or_else(|| old.and_then(|o| o.scope.clone())),
+        requested_scope: old.and_then(|o| o.requested_scope.clone()),
     })
 }
 

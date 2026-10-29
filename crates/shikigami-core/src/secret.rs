@@ -190,6 +190,14 @@ pub trait SecretProvider: Send + Sync {
         Ok(None)
     }
 
+    /// Holds off other processes sharing the store (Studio, the CLI, the
+    /// MCP server) from refreshing the tokens of `name` until the guard is
+    /// dropped. Blocks while another one holds it.
+    fn lock_oauth_tokens(&self, name: &str) -> Result<Box<dyn Send>, SecretError> {
+        let _ = name;
+        Ok(Box::new(()))
+    }
+
     fn save_oauth_tokens(&self, name: &str, tokens: &Value) -> Result<(), SecretError> {
         let _ = (name, tokens);
         Err(SecretError::new(

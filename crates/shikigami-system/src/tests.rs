@@ -591,3 +591,30 @@ fn oauth_builds_the_request_and_checks_the_answer() {
         "OAUTH_DENIED"
     );
 }
+
+#[tokio::test]
+async fn http_keeps_using_a_valid_token_that_cannot_be_refreshed() {
+    let (api, seen) = serve(OK).await;
+    let mut tokens = saved_tokens("https://auth.example.com/token", 0);
+    // Valid for one more minute, and no refresh token.
+    let soon = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        + 60;
+    tokens["expiresAt"] = json!(soon);
+    tokens.as_object_mut().unwrap().remove("refreshToken");
+    let report = run(
+        &runtime().with_secrets(OAuthClient::new(vec![api.clone()], Some(tokens))),
+        types::HTTP_REQUEST,
+        json!({ "url": api, "auth": { "secret": "Box", "field": "accessToken" } }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert!(
+        seen.lock()
+            .unwrap()
+            .to_lowercase()
+            .contains("authorization: bearer at-old")
+    );
+}
