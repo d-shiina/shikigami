@@ -72,7 +72,9 @@ describe("agent store", () => {
     const first = store.getState().send("一つ目");
     expect(await store.getState().send("二つ目")).toBe(false);
     store.getState().reset();
-    expect(store.getState().items).toHaveLength(1);
+    // The message and its reply, which shows while the agent starts.
+    expect(store.getState().items).toHaveLength(2);
+    expect(store.getState().items[1]).toMatchObject({ role: "ai", status: "running", turnId: "" });
     release("turn_1");
     await first;
     expect(api.send).toHaveBeenCalledOnce();

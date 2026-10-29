@@ -363,10 +363,11 @@ pub(crate) struct Executor {
     /// Set for interactive runs, on the main line only (not in parallel
     /// branches), called scenarios included.
     pub debug: Option<Arc<Debugger>>,
-    /// Running a called scenario: its steps are the snapshot the run was
-    /// given, not the live revision `debug` holds, so blocks run as written
-    /// (still pausing) and a swapped-in revision waits for the caller.
-    pub in_call: bool,
+    /// The called scenario this runs, if any: its steps are the snapshot
+    /// the run was given, not the live revision `debug` holds, so blocks run
+    /// as written (still pausing) and a swapped-in revision waits for the
+    /// caller.
+    pub in_call: Option<ScenarioId>,
     /// How many enclosing steps handle an error (a `try` with a `catch`, a
     /// `wait.until` with `onError: continue`): errors there do not pause.
     pub handled_depth: u32,
@@ -420,7 +421,7 @@ impl Executor {
             default_on_error: self.default_on_error,
             resources: self.resources.clone(),
             debug: None,
-            in_call: self.in_call,
+            in_call: self.in_call.clone(),
             handled_depth: 0,
             library: self.library.clone(),
         }
@@ -466,14 +467,16 @@ impl Executor {
     /// the current revision as they reach it (see `debug`).
     fn sub_block<'a>(&'a mut self, parent: &'a Step, name: &'a str) -> BoxFuture<'a, StepResult> {
         match self.debug.clone() {
-            Some(debug) if self.in_call => self.called_block(debug, parent.block(name)),
-            Some(debug) => self.live_block(
-                debug,
-                BlockKey::Child {
-                    parent: parent.id.clone(),
-                    name: name.to_owned(),
-                },
-            ),
+            Some(debug) => match self.in_call.clone() {
+                Some(scenario) => self.called_block(debug, scenario, parent.block(name)),
+                None => self.live_block(
+                    debug,
+                    BlockKey::Child {
+                        parent: parent.id.clone(),
+                        name: name.to_owned(),
+                    },
+                ),
+            },
             None => self.block(parent.block(name)),
         }
     }
@@ -523,10 +526,11 @@ impl Executor {
     fn called_block<'a>(
         &'a mut self,
         debug: Arc<Debugger>,
+        scenario: ScenarioId,
         steps: &'a [Step],
     ) -> BoxFuture<'a, StepResult> {
         Box::pin(async move {
-            debug.push_frame(BlockKey::Called);
+            debug.push_frame(BlockKey::Called { scenario });
             let mut index = 0;
             let result = loop {
                 let Some(step) = steps.get(index) else {
@@ -620,7 +624,7 @@ impl Executor {
         debug.add_paused(duration_ms(waited));
         // Inside a call the steps and variables are the callee's: the caller
         // adopts a new revision when it gets back (see `live_block`).
-        let updated = !self.in_call && debug.take_updated();
+        let updated = self.in_call.is_none() && debug.take_updated();
         if updated {
             self.adopt(&debug.scenario());
         }
@@ -1249,7 +1253,7 @@ impl Executor {
         // Interactive runs pause inside the call too. Errors the call step
         // handles (`onError: continue`, an enclosing `try`) do not pause there.
         child.debug = self.debug.clone();
-        child.in_call = true;
+        child.in_call = Some(callee.id.clone());
         child.handled_depth =
             self.handled_depth + u32::from(self.effective_on_error(step) == OnError::Continue);
         child.vars = Map::new();
@@ -1271,7 +1275,7 @@ impl Executor {
         let initial = child.vars.clone();
 
         let body = match child.debug.clone() {
-            Some(debug) => child.called_block(debug, &callee.steps),
+            Some(debug) => child.called_block(debug, callee.id.clone(), &callee.steps),
             None => child.block(&callee.steps),
         };
         // No timeout counts while paused, so a call that can pause has none.

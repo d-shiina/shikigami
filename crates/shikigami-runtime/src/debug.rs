@@ -37,7 +37,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use shikigami_core::{Scenario, Step, StepId, Validator};
+use shikigami_core::{Scenario, ScenarioId, Step, StepId, Validator};
 use tokio::sync::Notify;
 
 use crate::event::{RunError, RunStatus};
@@ -47,7 +47,8 @@ use crate::event::{RunError, RunStatus};
 pub struct DebugOptions {
     /// Pause when a step fails with an error the scenario does not handle.
     pub pause_on_error: bool,
-    /// Pause before these steps.
+    /// Pause before these steps. A step of a called scenario is written
+    /// `<scenarioId>/<stepId>`, since copies of a scenario share step IDs.
     pub breakpoints: Vec<StepId>,
     /// Pause before the first step (start in single-step mode).
     pub pause_at_start: bool,
@@ -135,9 +136,12 @@ pub(crate) enum BlockKey {
         parent: StepId,
         name: String,
     },
-    /// A block of a called scenario (run from the run's snapshot, not the
-    /// live revision): it only counts towards the depth for stepping.
-    Called,
+    /// A block of the called scenario `scenario` (run from the run's
+    /// snapshot, not the live revision): it counts towards the depth for
+    /// stepping and says whose breakpoints apply.
+    Called {
+        scenario: ScenarioId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -283,7 +287,12 @@ impl Debugger {
             Mode::StepInto => Some(PauseReason::Step),
             Mode::StepOver(d) if depth <= d => Some(PauseReason::Step),
             Mode::StepOut(d) if depth < d => Some(PauseReason::Step),
-            _ if state.breakpoints.contains(step) => Some(PauseReason::Breakpoint),
+            _ if state
+                .breakpoints
+                .contains(&breakpoint_key(&state.frames, step)) =>
+            {
+                Some(PauseReason::Breakpoint)
+            }
             _ => None,
         }
     }
@@ -411,6 +420,19 @@ impl Debugger {
     }
 }
 
+/// How a breakpoint on `step` is written where the run is: the bare ID in
+/// the run's own scenario, `<scenarioId>/<stepId>` inside a called one.
+fn breakpoint_key(frames: &[Frame], step: &StepId) -> StepId {
+    let called = frames.iter().rev().find_map(|f| match &f.key {
+        BlockKey::Called { scenario } => Some(scenario),
+        _ => None,
+    });
+    match called {
+        Some(scenario) => StepId::new(format!("{scenario}/{step}")),
+        None => step.clone(),
+    }
+}
+
 /// The steps of a block in `scenario`.
 pub(crate) fn block_of<'a>(scenario: &'a Scenario, key: &BlockKey) -> Option<&'a [Step]> {
     match key {
@@ -419,7 +441,7 @@ pub(crate) fn block_of<'a>(scenario: &'a Scenario, key: &BlockKey) -> Option<&'a
             let parent = scenario.find_step(parent)?;
             Some(parent.block(name))
         }
-        BlockKey::Called => None,
+        BlockKey::Called { .. } => None,
     }
 }
 
@@ -433,7 +455,7 @@ fn check_position(old: &Scenario, new: &Scenario, frames: &[Frame]) -> Result<()
     };
     for (index, frame) in frames.iter().enumerate() {
         // Inside a call: the called scenario is not the one being swapped.
-        if frame.key == BlockKey::Called {
+        if matches!(frame.key, BlockKey::Called { .. }) {
             break;
         }
         if let BlockKey::Child { parent, .. } = &frame.key {

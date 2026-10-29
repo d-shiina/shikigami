@@ -165,10 +165,14 @@ export function diveChain(root: Scenario | null, called: Record<string, Scenario
   return chain;
 }
 
-/** Breakpoints a run of the open scenario stops at: its own and those of every scenario it calls. */
+/**
+ * Breakpoints a run of the open scenario stops at: its own, and those of every
+ * scenario it calls as `<scenarioId>/<stepId>` (copies of a scenario share step IDs).
+ */
 function runBreakpoints(s: Pick<StudioState, "scenario" | "called" | "breakpoints">): string[] {
   if (!s.scenario) return [];
-  return [s.scenario.id, ...Object.keys(s.called)].flatMap((id) => s.breakpoints[id] ?? []);
+  const called = Object.keys(s.called).flatMap((id) => (s.breakpoints[id] ?? []).map((step) => `${id}/${step}`));
+  return [...(s.breakpoints[s.scenario.id] ?? []), ...called];
 }
 
 /** Scenarios a step tree calls directly. */
