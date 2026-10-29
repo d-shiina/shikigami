@@ -230,7 +230,8 @@ pub fn relative_path(path: &str) -> CoreResult<PathBuf> {
     if out.as_os_str().is_empty() {
         return Err(invalid("the path is empty"));
     }
-    if out == Path::new(SCENARIO_FILE) {
+    // Windows paths ignore case: SCENARIO.JSON is the scenario too.
+    if out.to_string_lossy().eq_ignore_ascii_case(SCENARIO_FILE) {
         return Err(invalid(
             "scenario.json is the scenario itself; edit it with edit operations",
         ));
@@ -512,6 +513,7 @@ mod tests {
             "input/../../x",
             "a:b",
             "scenario.json",
+            "SCENARIO.JSON",
             "input/x?.txt",
             "input/trailing. ",
         ] {

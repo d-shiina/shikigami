@@ -441,7 +441,7 @@ export function App() {
   const { locale } = useLocale();
   const store = useMemo(() => createStudioStore(api), []);
   const agentStore = useMemo(() => createAgentStore(agent), []);
-  const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder) }), []);
+  const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), discard: () => t.project.sheet.discard }), []);
 
   useEffect(() => {
     void store.getState().init();

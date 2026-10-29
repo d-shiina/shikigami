@@ -62,6 +62,12 @@ impl RunLog {
                 } else {
                     format!("{base}-{n}")
                 };
+                // A finished run's log keeps its stamp too (it was renamed
+                // from _running), so the stamp must be free under any status.
+                if stamp_taken(&dir, &stamp) && n < 100 {
+                    n += 1;
+                    continue;
+                }
                 match fs::OpenOptions::new()
                     .write(true)
                     .create_new(true)
@@ -242,6 +248,15 @@ impl RunLog {
     }
 }
 
+fn stamp_taken(dir: &Path, stamp: &str) -> bool {
+    let prefix = format!("{stamp}_");
+    fs::read_dir(dir).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+    })
+}
+
 fn file_name(stamp: &str, status: &str) -> String {
     format!("{stamp}_{status}.log")
 }
@@ -306,6 +321,14 @@ fn preview(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_finished_runs_stamp_is_not_reused() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("20261029-140512_succeeded.log"), "").unwrap();
+        assert!(stamp_taken(dir.path(), "20261029-140512"));
+        assert!(!stamp_taken(dir.path(), "20261029-140512-2"));
+    }
 
     #[test]
     fn run_logs_are_told_from_other_files() {

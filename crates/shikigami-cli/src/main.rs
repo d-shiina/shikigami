@@ -416,8 +416,7 @@ fn real_main() -> Result<ExitCode> {
             let (scenario, bundled) = resolve(&svc, target)?;
             let version = svc.matching_version(&scenario).ok().flatten();
             let mut subscenarios = subscenarios(&svc, &scenario, bundled)?;
-            let (project_dir, _unpacked) =
-                project_dirs(&svc, target, &scenario, &mut subscenarios)?;
+            let project_dir = project_dirs(&svc, target, &scenario, &mut subscenarios)?;
             let inputs = parse_inputs(inputs)?;
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -811,30 +810,44 @@ fn resolve(svc: &ScenarioService, target: &str) -> Result<(Scenario, Vec<Scenari
 
 /// Where the run's relative paths point. A scenario in the workspace uses its
 /// folder; a `scenario.json` file the folder it is in (a copied scenario
-/// folder); a bundle's scenarios get their files unpacked into a temporary
-/// folder (returned so it lives until the run ends). Any other JSON file runs
-/// from the folder it is in.
+/// folder); a bundle's scenarios get their files unpacked next to it, into
+/// `<bundle>.files/<id>/`, which stays after the run so its output/ and logs/
+/// can be read. Any other JSON file runs from the folder it is in.
 fn project_dirs(
     svc: &ScenarioService,
     target: &str,
     scenario: &Scenario,
     subscenarios: &mut [shikigami_core::Subscenario],
-) -> Result<(Option<PathBuf>, Option<tempfile::TempDir>)> {
+) -> Result<Option<PathBuf>> {
     let path = Path::new(target);
     if !(target.ends_with(".json") || path.is_file()) {
-        return Ok((Some(svc.project_dir(&scenario.id)?), None));
+        return Ok(Some(svc.project_dir(&scenario.id)?));
     }
     let value: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+    let file = std::path::absolute(path)?;
     if !shikigami_core::version::is_bundle(&value) {
-        let dir = std::path::absolute(path)?.parent().map(Path::to_path_buf);
-        return Ok((dir, None));
+        return Ok(file.parent().map(Path::to_path_buf));
     }
     let bundle: shikigami_core::ScenarioBundle = serde_json::from_value(value)?;
-    let temp = tempfile::Builder::new()
-        .prefix("shikigami-run-")
-        .tempdir()?;
+    let name = file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let base = name
+        .strip_suffix(".shikigami.json")
+        .or_else(|| name.strip_suffix(".json"))
+        .unwrap_or(&name)
+        .to_owned();
+    let root = file
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(format!("{base}.files"));
     let unpack = |id: &ScenarioId| -> Result<PathBuf> {
-        let dir = temp.path().join(id.as_str());
+        // The ID comes from the file: never let it name a folder elsewhere.
+        if !id.is_well_formed() {
+            bail!("the bundle has an invalid scenario ID: {}", id.as_str());
+        }
+        let dir = root.join(id.as_str());
         std::fs::create_dir_all(&dir)?;
         shikigami_core::project::unpack(&bundle.files, id, &dir)?;
         Ok(dir)
@@ -845,7 +858,8 @@ fn project_dirs(
             sub.project_dir = Some(unpack(&sub.scenario.id)?);
         }
     }
-    Ok((Some(main), Some(temp)))
+    eprintln!("files: {}", main.display());
+    Ok(Some(main))
 }
 
 /// What the run's calls may use: a bundle's own sub-scenarios first, then

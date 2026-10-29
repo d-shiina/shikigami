@@ -36,6 +36,7 @@ scenarios/<id>/
 - ノードのファイルの項目に書いた相対パス（`input/受注一覧.xlsx`）は、シナリオのフォルダーから解決します。保存先を移しても共有しても動きます。サブシナリオは自分のフォルダーから解決します。フォルダーの外（`..`）を指すと `PATH_OUTSIDE_PROJECT` の警告。絶対パスは従来どおり使えます。
 - `work/` は実行のはじめに空にします。残したいときはシナリオの `settings.keepWork: true`。1 ノードだけ試す（`test_step`）ときは空にせず、ログも書きません。
 - バンドル（`export_scenario`）と複製はファイルも持っていきます（`output/`・`work/`・`logs/` を除く）。
+- バンドルのファイルを `shikigami run 受注.shikigami.json` で直接実行すると、ファイルを隣の `受注.files/<id>/` に展開してそこで実行します。実行後も `output/` と `logs/` が残ります。
 - 従来の `scenarios/<id>.json` は、保存先を開いたときにフォルダーへ移します。
 - ファイルは Studio、AI（`write_project_file`）、`shikigami scenario add-file <id> <ファイル> --to input` で追加できます。
 

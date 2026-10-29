@@ -181,7 +181,7 @@ function message(e: unknown): string {
 
 const nameOf = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
-export function createProjectStore(api: ProjectApi, labels: { added: (n: number, folder: string) => string }): StoreApi<ProjectState> {
+export function createProjectStore(api: ProjectApi, labels: { added: (n: number, folder: string) => string; discard: () => string }): StoreApi<ProjectState> {
   let panelOpen = true;
   try {
     panelOpen = globalThis.localStorage?.getItem(PANEL_KEY) !== "closed";
@@ -241,6 +241,11 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         if (!isText(path)) {
           await get().open(path);
           return;
+        }
+        // Unsaved edits are not dropped by opening a file over them.
+        const sheet = get().sheet;
+        if (sheet && sheet.text !== sheet.saved) {
+          if (sheet.path === path || !(globalThis.confirm?.(labels.discard()) ?? true)) return;
         }
         try {
           const text = await api.readText(id, path);

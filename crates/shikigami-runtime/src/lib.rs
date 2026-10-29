@@ -240,7 +240,19 @@ impl Runtime {
                 revision: scenario.revision,
             });
 
+            let (_lease, busy) = WorkLease::take(&fresh_work);
             for dir in &fresh_work {
+                if busy.contains(dir) {
+                    emitter.emit(RunEvent::Log {
+                        level: LogLevel::Info,
+                        message: format!(
+                            "work/ in {} is not emptied: another run is using it",
+                            dir.display()
+                        ),
+                        step_id: None,
+                    });
+                    continue;
+                }
                 for problem in shikigami_core::project::clear_work(dir) {
                     emitter.emit(RunEvent::Log {
                         level: LogLevel::Warn,
@@ -566,4 +578,45 @@ pub fn run_api_schema() -> Value {
         );
     }
     value
+}
+
+/// The project folders whose `work/` a run in this process is using: a run
+/// that starts while another uses the same folder (the same scenario twice,
+/// or a sub-scenario two callers share) leaves `work/` alone.
+static WORK_IN_USE: std::sync::Mutex<Vec<(std::path::PathBuf, usize)>> =
+    std::sync::Mutex::new(Vec::new());
+
+struct WorkLease(Vec<std::path::PathBuf>);
+
+impl WorkLease {
+    /// Marks `dirs` in use until the lease drops; returns those another run
+    /// was already using.
+    fn take(dirs: &[std::path::PathBuf]) -> (Self, Vec<std::path::PathBuf>) {
+        let mut busy = Vec::new();
+        let mut used = WORK_IN_USE.lock().unwrap_or_else(|e| e.into_inner());
+        for dir in dirs {
+            match used.iter_mut().find(|(d, _)| d == dir) {
+                Some((_, n)) => {
+                    if *n > 0 {
+                        busy.push(dir.clone());
+                    }
+                    *n += 1;
+                }
+                None => used.push((dir.clone(), 1)),
+            }
+        }
+        (Self(dirs.to_vec()), busy)
+    }
+}
+
+impl Drop for WorkLease {
+    fn drop(&mut self) {
+        let mut used = WORK_IN_USE.lock().unwrap_or_else(|e| e.into_inner());
+        for dir in &self.0 {
+            if let Some((_, n)) = used.iter_mut().find(|(d, _)| d == dir) {
+                *n = n.saturating_sub(1);
+            }
+        }
+        used.retain(|(_, n)| *n > 0);
+    }
 }

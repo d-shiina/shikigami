@@ -57,3 +57,24 @@ describe("project files", () => {
     expect(logStatus("logs/20261029-100000_failed.log")).toBe("failed");
   });
 });
+
+describe("the open sheet", () => {
+  it("keeps unsaved edits when another file is opened and the person cancels", async () => {
+    const { createProjectStore } = await import("./project");
+    const api = {
+      list: async () => ({ scenarioId: "s", dir: "", folders: [], files: [] }),
+      readText: async (_: string, path: string) => `text of ${path}`,
+    } as unknown as Parameters<typeof createProjectStore>[0];
+    const store = createProjectStore(api, { added: () => "", discard: () => "discard?" });
+    await store.getState().load("s");
+    await store.getState().openFile("input/a.csv");
+    store.getState().editSheet("edited");
+    globalThis.confirm = () => false;
+    await store.getState().openFile("input/b.csv");
+    expect(store.getState().sheet?.path).toBe("input/a.csv");
+    expect(store.getState().sheet?.text).toBe("edited");
+    globalThis.confirm = () => true;
+    await store.getState().openFile("input/b.csv");
+    expect(store.getState().sheet?.text).toBe("text of input/b.csv");
+  });
+});

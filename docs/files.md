@@ -36,6 +36,7 @@ scenarios/<id>/
 - Relative paths in a node's file params (`input/orders.xlsx`) resolve from the scenario's folder, so the scenario keeps working when the workspace moves or is shared. A subscenario resolves from its own folder. Paths that leave the folder (`..`) get the `PATH_OUTSIDE_PROJECT` warning; absolute paths work as before.
 - `work/` is emptied when a run starts. Set `settings.keepWork: true` on the scenario to keep it. Trying one node (`test_step`) neither empties `work/` nor writes a log.
 - Bundles (`export_scenario`) and duplicates take the files along, except `output/`, `work/` and `logs/`.
+- `shikigami run orders.shikigami.json` (a bundle file) unpacks its files into `orders.files/<id>/` next to it and runs there, so `output/` and `logs/` stay after the run.
 - Older workspaces with `scenarios/<id>.json` are moved into folders when the workspace is opened.
 - Add files from Studio, from the AI (`write_project_file`), or with `shikigami scenario add-file <id> <file> --to input`.
 
