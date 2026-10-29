@@ -46,7 +46,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
-use crate::backend::{Backend, MouseButton, Op, Text};
+use crate::backend::{Backend, Capture, MouseButton, OcrEngine, OcrOptions, Op, Text};
+use crate::bitmap::{Bitmap, Rect};
+use crate::capture;
 use crate::engine::Engine;
 use crate::keys::{Chord, Key};
 use crate::roles;
@@ -54,6 +56,7 @@ use crate::target::{
     ElementQuery, NodeInfo, Target, WindowInfo, WindowQuery, app_allowed, pick_element,
     pick_window, render_tree,
 };
+use crate::vision::OcrLine;
 
 /// Most elements read from one window when looking for a target.
 const FIND_LIMIT: usize = 20_000;
@@ -104,8 +107,12 @@ impl UiaBackend {
     }
 }
 
-impl Backend for UiaBackend {
-    fn call(&self, op: Op) -> BoxFuture<'static, Result<Value, StepError>> {
+impl UiaBackend {
+    /// Runs `work` on the UIA thread.
+    fn on_thread<T: Send + 'static>(
+        &self,
+        work: impl FnOnce(Result<&Uia, &StepError>) -> Result<T, StepError> + Send + 'static,
+    ) -> BoxFuture<'static, Result<T, StepError>> {
         let (tx, rx) = oneshot::channel();
         let submitted = self.submit(Box::new(move |uia| {
             // The step gave up (timed out, was cancelled or retried) while
@@ -114,11 +121,7 @@ impl Backend for UiaBackend {
             if tx.is_closed() {
                 return;
             }
-            let result = match uia {
-                Ok(uia) => uia.run(op),
-                Err(e) => Err(e.clone()),
-            };
-            let _ = tx.send(result);
+            let _ = tx.send(work(uia));
         }));
         Box::pin(async move {
             submitted?;
@@ -129,6 +132,43 @@ impl Backend for UiaBackend {
                 ))
             })
         })
+    }
+}
+
+impl Backend for UiaBackend {
+    fn call(&self, op: Op) -> BoxFuture<'static, Result<Value, StepError>> {
+        self.on_thread(move |uia| uia.map_err(Clone::clone)?.run(op))
+    }
+
+    fn capture(&self, target: Target) -> BoxFuture<'static, Result<Capture, StepError>> {
+        self.on_thread(move |uia| uia.map_err(Clone::clone)?.capture(&target))
+    }
+
+    fn recognize(
+        &self,
+        image: Bitmap,
+        options: OcrOptions,
+    ) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
+        let windows = match options.engine {
+            Some(OcrEngine::Windows) => true,
+            Some(OcrEngine::Paddle) => false,
+            None => match crate::paddle::engine() {
+                Ok(_) => false,
+                Err(reason) => {
+                    tracing::warn!(%reason, "PaddleOCR is not available; using Windows OCR");
+                    true
+                }
+            },
+        };
+        if !windows {
+            return crate::backend::paddle_recognize(image);
+        }
+        // Windows OCR needs only the thread's apartment, not UI Automation.
+        self.on_thread(move |_| capture::recognize(&image, options.language.as_deref()))
+    }
+
+    fn load_image(&self, path: String) -> BoxFuture<'static, Result<Bitmap, StepError>> {
+        self.on_thread(move |_| capture::load_image(&path))
     }
 }
 
@@ -665,6 +705,50 @@ impl Uia {
             }
         }
         Ok(Value::Null)
+    }
+
+    // -- pictures -------------------------------------------------------------------
+
+    /// A picture of the target's window, from the top-left of its UI
+    /// Automation rectangle (the origin of `target.point`). Drawn by the
+    /// window itself where it can, so it may stay behind others; otherwise
+    /// it is brought to the front and copied from the screen.
+    fn capture(&self, target: &Target) -> Result<Capture, StepError> {
+        let found = self.resolve(target)?;
+        let window = hwnd(found.window.handle);
+        // SAFETY: Win32 / UIA calls on the UIA thread.
+        unsafe {
+            if !window.0.is_null() && IsIconic(window).as_bool() {
+                let _ = ShowWindow(window, SW_RESTORE);
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+            let rect = found.window_el.CurrentBoundingRectangle().or_fail()?;
+            let image = match capture::print_window(window, rect) {
+                Some(image) => image,
+                None => {
+                    self.bring_to_front(&found, false)?;
+                    capture::copy_screen(rect)?
+                }
+            };
+            let element = if found.is_element {
+                let r = found.el.CurrentBoundingRectangle().or_fail()?;
+                if r.right <= r.left || r.bottom <= r.top {
+                    return Err(StepError::new(
+                        "ELEMENT_NOT_VISIBLE",
+                        "the element has no area on screen",
+                    ));
+                }
+                Some(Rect {
+                    x: r.left - rect.left,
+                    y: r.top - rect.top,
+                    width: (r.right - r.left) as u32,
+                    height: (r.bottom - r.top) as u32,
+                })
+            } else {
+                None
+            };
+            Ok(Capture { image, element })
+        }
     }
 
     // -- the real mouse and keyboard ---------------------------------------------

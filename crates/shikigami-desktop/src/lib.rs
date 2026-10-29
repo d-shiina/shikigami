@@ -12,6 +12,12 @@
 //! Steps that use the real mouse and keyboard (`desktop.mouseClick`,
 //! `desktop.type`, `desktop.press`) also take `desktop.input`, so they never
 //! run at the same time as each other.
+//!
+//! Where an app shows no elements (Citrix, remote desktops, drawn screens),
+//! targets find their place on the picture of the window instead: an image
+//! (`target.image`, template matching) or a text (`target.ocr`, offline
+//! OCR: PaddleOCR, or Windows OCR where its models are not installed). `desktop.readText` reads a window's text with OCR and
+//! `desktop.screenshot` saves its picture (see `visual`).
 
 // StepError is the Runtime's handler error type; boxing it here would only
 // move the allocation.
@@ -29,15 +35,22 @@ use shikigami_runtime::{
 };
 
 pub mod backend;
+pub mod bitmap;
+#[cfg(windows)]
+mod capture;
 pub mod engine;
 pub mod keys;
+pub mod paddle;
 pub mod roles;
 pub mod target;
 #[cfg(windows)]
 mod uia;
+pub mod vision;
+pub mod visual;
 
 use backend::{Backend, MouseButton, Op, Text};
-use target::{APP_SITE_PREFIX, ElementQuery, Target, WindowQuery};
+use target::{APP_SITE_PREFIX, Allow, ElementQuery, Target, WindowQuery};
+use visual::Looking;
 
 pub mod types {
     pub const LAUNCH: &str = "desktop.launch";
@@ -51,6 +64,8 @@ pub mod types {
     pub const WAIT_FOR: &str = "desktop.waitFor";
     pub const IS_VISIBLE: &str = "desktop.isVisible";
     pub const CLOSE_WINDOW: &str = "desktop.closeWindow";
+    pub const READ_TEXT: &str = "desktop.readText";
+    pub const SCREENSHOT: &str = "desktop.screenshot";
 }
 
 /// How much earlier than the step timeout the adapter stops waiting.
@@ -137,14 +152,67 @@ impl Adapter for DesktopAdapter {
                 .get("maxNodes")
                 .and_then(Value::as_u64)
                 .map_or(DEFAULT_MAX_NODES, |n| n.clamp(1, 10_000) as usize);
-            self.backend
+            let mut result = self
+                .backend
                 .call(Op::Inspect {
-                    window,
+                    window: window.clone(),
                     element,
                     max_nodes,
                 })
-                .await
+                .await?;
+            let screenshot = params.get("screenshotPath").and_then(Value::as_str);
+            let ocr = params.get("ocr").and_then(Value::as_bool).unwrap_or(false);
+            if screenshot.is_some() || ocr {
+                self.look_at_window(&mut result, window, screenshot, ocr, &params)
+                    .await;
+            }
+            Ok(result)
         })
+    }
+}
+
+impl DesktopAdapter {
+    /// Adds the window's picture (to `screenshot`) and, with `ocr`, the
+    /// text read on it to an inspect_ui result. A window that cannot be
+    /// pictured still has its element tree, so failures become a note.
+    async fn look_at_window(
+        &self,
+        result: &mut Value,
+        window: WindowQuery,
+        screenshot: Option<&str>,
+        ocr: bool,
+        params: &Value,
+    ) {
+        let target = Target::window_only(window);
+        let picture = match visual::picture(self.backend.as_ref(), &target).await {
+            Ok(picture) => picture,
+            Err(e) => {
+                result["pictureError"] = json!(e.message);
+                return;
+            }
+        };
+        result["size"] = json!({ "width": picture.image.width, "height": picture.image.height });
+        if let Some(path) = screenshot {
+            let _ = std::fs::write(path, picture.image.to_png());
+        }
+        if ocr {
+            let options = match visual::ocr_options(params) {
+                Ok(options) => options,
+                Err(e) => {
+                    result["ocrError"] = json!(e.message);
+                    return;
+                }
+            };
+            match visual::read_lines(self.backend.as_ref(), &picture, options).await {
+                Ok(lines) => {
+                    result["ocr"] = vision::ocr_lines_json(&lines, 0, 0);
+                    result["ocrHint"] = json!(
+                        "Each line is text OCR read, at pixels from the window's top-left. Target it with { \"window\": …, \"ocr\": { \"text\": \"<text>\" } }, or read a part with desktop.readText and target.region."
+                    );
+                }
+                Err(e) => result["ocrError"] = json!(e.message),
+            }
+        }
     }
 }
 
@@ -161,6 +229,8 @@ enum Kind {
     WaitFor,
     IsVisible,
     CloseWindow,
+    ReadText,
+    Screenshot,
 }
 
 struct DesktopStep {
@@ -178,41 +248,70 @@ impl ActionHandler for DesktopStep {
                 Kind::Launch => return launch(params),
                 Kind::WaitFor => return self.wait_for(&input, deadline).await,
                 Kind::IsVisible => return self.is_visible(&input).await,
+                Kind::ReadText => return self.read_text(&input, deadline).await,
+                Kind::Screenshot => return self.screenshot(&input, deadline).await,
                 Kind::Click => Op::Click {
-                    target: target(params)?,
+                    target: target(params, Allow::Plain)?,
                 },
                 Kind::SetValue => Op::SetValue {
-                    target: target(params)?,
+                    target: target(params, Allow::Plain)?,
                     text: text(&input, "value")?,
                 },
                 Kind::GetValue => Op::GetValue {
-                    target: target(params)?,
+                    target: target(params, Allow::Plain)?,
                 },
                 Kind::Select => Op::Select {
-                    target: target(params)?,
+                    target: target(params, Allow::Plain)?,
                     option: string(params, "value")?,
                 },
-                Kind::MouseClick => Op::MouseClick {
-                    target: target(params)?,
-                    button: match params.get("button").and_then(Value::as_str) {
-                        Some("right") => MouseButton::Right,
-                        _ => MouseButton::Left,
-                    },
-                    double: params
-                        .get("double")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false),
-                },
-                Kind::Type => Op::Type {
-                    target: target(params)?,
-                    text: text(&input, "text")?,
-                },
+                Kind::MouseClick => {
+                    let mut target = target(params, Allow::Mouse)?;
+                    if target.is_visual() {
+                        target = self.located(&target, &input, deadline).await?;
+                    }
+                    Op::MouseClick {
+                        target,
+                        button: match params.get("button").and_then(Value::as_str) {
+                            Some("right") => MouseButton::Right,
+                            _ => MouseButton::Left,
+                        },
+                        double: params
+                            .get("double")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false),
+                    }
+                }
+                Kind::Type => {
+                    let target = target(params, Allow::Visual)?;
+                    let text = text(&input, "text")?;
+                    if target.is_visual() {
+                        // Click the place to focus it, then type into
+                        // whatever has the focus in that window.
+                        let at = self.located(&target, &input, deadline).await?;
+                        self.until_found(
+                            Op::MouseClick {
+                                target: at,
+                                button: MouseButton::Left,
+                                double: false,
+                            },
+                            &input,
+                            deadline,
+                        )
+                        .await?;
+                        Op::Type {
+                            target: Target::window_only(target.window),
+                            text,
+                        }
+                    } else {
+                        Op::Type { target, text }
+                    }
+                }
                 Kind::Press => Op::Press {
-                    target: target(params)?,
+                    target: target(params, Allow::Plain)?,
                     chord: keys::parse(&string(params, "key")?)?,
                 },
                 Kind::CloseWindow => Op::CloseWindow {
-                    target: target(params)?,
+                    target: target(params, Allow::Plain)?,
                 },
             };
             let output = self.until_found(op, &input, deadline).await?;
@@ -250,6 +349,67 @@ impl DesktopStep {
         }
     }
 
+    /// The target with `point` set where its image or text is now, waiting
+    /// for it to appear.
+    async fn located(
+        &self,
+        target: &Target,
+        input: &ActionInput,
+        deadline: Instant,
+    ) -> Result<Target, StepError> {
+        let looking = self.looking(target).await?;
+        loop {
+            let result = match visual::look(self.backend.as_ref(), target, &looking).await {
+                Ok(seen) => visual::pick(target, &looking, &seen),
+                Err(e) => Err(e),
+            };
+            match result {
+                Ok(point) => {
+                    let mut at = Target::window_only(target.window.clone());
+                    at.point = Some(point);
+                    return Ok(at);
+                }
+                Err(e)
+                    if (is_not_ready(&e) || visual::is_not_seen(&e))
+                        && Instant::now() + POLL < deadline =>
+                {
+                    tokio::select! {
+                        () = tokio::time::sleep(POLL) => {}
+                        () = input.cancel.cancelled() => return Err(e),
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    async fn looking(&self, target: &Target) -> Result<Looking, StepError> {
+        Looking::new(self.backend.as_ref(), target)
+            .await?
+            .ok_or_else(|| StepError::invalid_params("target needs image or ocr"))
+    }
+
+    /// `(found, visible, enabled)` of the target now. A visual target is
+    /// found when its image or text is on the screen (the `nth` match, if
+    /// given).
+    async fn probe_any(
+        &self,
+        target: &Target,
+        looking: Option<&Looking>,
+    ) -> Result<(bool, bool, bool), StepError> {
+        let Some(looking) = looking else {
+            return self.probe(target).await;
+        };
+        match visual::look(self.backend.as_ref(), target, looking).await {
+            Ok(seen) => {
+                let shown = seen.shows(looking);
+                Ok((shown, shown, shown))
+            }
+            Err(e) if is_not_ready(&e) || e.code == "REGION_OUTSIDE" => Ok((false, false, false)),
+            Err(e) => Err(e),
+        }
+    }
+
     async fn probe(&self, target: &Target) -> Result<(bool, bool, bool), StepError> {
         let state = self
             .backend
@@ -262,7 +422,11 @@ impl DesktopStep {
     }
 
     async fn wait_for(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
-        let target = target(&input.params)?;
+        let target = target(&input.params, Allow::Visual)?;
+        let looking = match target.is_visual() {
+            true => Some(self.looking(&target).await?),
+            false => None,
+        };
         let state = input
             .params
             .get("state")
@@ -270,7 +434,7 @@ impl DesktopStep {
             .unwrap_or("visible")
             .to_owned();
         loop {
-            let (found, visible, enabled) = self.probe(&target).await?;
+            let (found, visible, enabled) = self.probe_any(&target, looking.as_ref()).await?;
             let done = match state.as_str() {
                 "hidden" => !(found && visible),
                 "enabled" => found && visible && enabled,
@@ -297,7 +461,11 @@ impl DesktopStep {
     }
 
     async fn is_visible(&self, input: &ActionInput) -> Result<Value, StepError> {
-        let target = target(&input.params)?;
+        let target = target(&input.params, Allow::Visual)?;
+        let looking = match target.is_visual() {
+            true => Some(self.looking(&target).await?),
+            false => None,
+        };
         let wait = input
             .params
             .get("waitMs")
@@ -306,7 +474,7 @@ impl DesktopStep {
             .min(input.timeout_ms.saturating_sub(TIMEOUT_MARGIN_MS));
         let until = Instant::now() + Duration::from_millis(wait);
         loop {
-            let (found, visible, _) = self.probe(&target).await?;
+            let (found, visible, _) = self.probe_any(&target, looking.as_ref()).await?;
             if found && visible {
                 return Ok(Value::Bool(true));
             }
@@ -319,10 +487,69 @@ impl DesktopStep {
             }
         }
     }
+
+    /// The picture of the target's window (or its element or region),
+    /// waiting for the window like other steps.
+    async fn picture(
+        &self,
+        target: &Target,
+        input: &ActionInput,
+        deadline: Instant,
+    ) -> Result<visual::Picture, StepError> {
+        loop {
+            match visual::picture(self.backend.as_ref(), target).await {
+                Err(e) if is_not_ready(&e) && Instant::now() + POLL < deadline => {
+                    tokio::select! {
+                        () = tokio::time::sleep(POLL) => {}
+                        () = input.cancel.cancelled() => return Err(e),
+                    }
+                }
+                other => return other,
+            }
+        }
+    }
+
+    async fn read_text(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
+        let params = &input.params;
+        let options = visual::ocr_options(params)?;
+        let picture = match (params.get("file"), params.get("target")) {
+            (Some(_), Some(_)) => {
+                return Err(StepError::invalid_params("give target or file, not both"));
+            }
+            (Some(_), None) => visual::Picture {
+                image: self.backend.load_image(string(params, "file")?).await?,
+                origin: (0, 0),
+            },
+            (None, _) => {
+                let target = target(params, Allow::Picture)?;
+                self.picture(&target, input, deadline).await?
+            }
+        };
+        let lines = visual::read_lines(self.backend.as_ref(), &picture, options).await?;
+        Ok(visual::read_output(&lines))
+    }
+
+    async fn screenshot(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
+        let target = target(&input.params, Allow::Picture)?;
+        let path = string(&input.params, "path")?;
+        let picture = self.picture(&target, input, deadline).await?;
+        let write = || -> std::io::Result<()> {
+            if let Some(dir) = std::path::Path::new(&path).parent()
+                && !dir.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(dir)?;
+            }
+            std::fs::write(&path, picture.image.to_png())
+        };
+        write().map_err(|e| {
+            StepError::permanent("WRITE_FAILED", format!("cannot write {path}: {e}"))
+        })?;
+        Ok(Value::String(path))
+    }
 }
 
-fn target(params: &Value) -> Result<Target, StepError> {
-    Target::from_params(params, "target")
+fn target(params: &Value, allow: Allow) -> Result<Target, StepError> {
+    Target::from_params(params, "target", allow)
 }
 
 fn string(params: &Value, key: &str) -> Result<String, StepError> {
@@ -395,7 +622,7 @@ fn launch(params: &Value) -> Result<Value, StepError> {
 
 // -- step type definitions ----------------------------------------------------
 
-fn target_schema(point: bool) -> Value {
+fn target_schema(allow: Allow) -> Value {
     let mut properties = json!({
         "window": {
             "type": "object",
@@ -425,17 +652,67 @@ fn target_schema(point: bool) -> Value {
             "anyOf": [ { "required": ["id"] }, { "required": ["name"] }, { "required": ["role"] }, { "required": ["className"] } ]
         }
     });
-    if point && let Value::Object(map) = &mut properties {
-        map.insert(
-            "point".into(),
-            json!({
-                "type": "object",
-                "description": "最終手段：ウィンドウ左上からの座標（px）。部品が inspect_ui に出ないときだけ使う。element と同時には書けない",
-                "properties": { "x": { "type": "integer" }, "y": { "type": "integer" } },
-                "required": ["x", "y"],
-                "additionalProperties": false
-            }),
-        );
+    let xy = |description: &str| {
+        json!({
+            "type": "object",
+            "description": description,
+            "properties": { "x": { "type": "integer" }, "y": { "type": "integer" } },
+            "required": ["x", "y"],
+            "additionalProperties": false
+        })
+    };
+    let region = json!({
+        "type": "object",
+        "description": "ウィンドウの一部（ウィンドウ左上からの px）。image / ocr を探す範囲、または読む・保存する範囲。element と同時には書けない",
+        "properties": {
+            "x": { "type": "integer" }, "y": { "type": "integer" },
+            "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 }
+        },
+        "required": ["x", "y", "width", "height"],
+        "additionalProperties": false
+    });
+    let image = json!({
+        "type": "object",
+        "description": "画面上で探す画像（部品が inspect_ui に出ないアプリ用）。同じアプリの画面から desktop.screenshot で切り出した PNG",
+        "properties": {
+            "path": { "type": "string", "minLength": 1, "description": "PNG ファイルのフルパス" },
+            "threshold": { "type": "number", "minimum": 0.5, "maximum": 1, "description": "似ている度合いの下限（既定 0.9）" },
+            "nth": { "type": "integer", "minimum": 0, "description": "複数見つかったときの 0 始まりの番号（上から、同じ行は左から）" }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+    });
+    let ocr = json!({
+        "type": "object",
+        "description": "画面上で探す文字（OCR、オフライン）。空白・大文字小文字・全角半角は無視",
+        "properties": {
+            "text": { "type": "string", "minLength": 1 },
+            "exact": { "type": "boolean", "description": "行全体がこの文字のときだけ" },
+            "nth": { "type": "integer", "minimum": 0, "description": "複数見つかったときの 0 始まりの番号（上から、同じ行は左から）" },
+            "language": { "type": "string", "minLength": 2, "description": "Windows OCR の言語（ja, en-US など。既定はユーザーの言語）。PaddleOCR は日本語・中国語・英語をまとめて読むので不要" },
+            "engine": { "enum": ["paddle", "windows"], "description": "OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）" }
+        },
+        "required": ["text"],
+        "additionalProperties": false
+    });
+    if let Value::Object(map) = &mut properties {
+        if allow == Allow::Mouse {
+            map.insert(
+                "point".into(),
+                xy("最終手段：ウィンドウ左上からの座標（px）。部品が inspect_ui に出ないときだけ使う。element と同時には書けない"),
+            );
+        }
+        if matches!(allow, Allow::Mouse | Allow::Visual) {
+            map.insert("image".into(), image);
+            map.insert("ocr".into(), ocr);
+            map.insert(
+                "offset".into(),
+                xy("image / ocr で見つけた場所の中心からずらす px（例：ラベルの右の入力欄 { \"x\": 120, \"y\": 0 }）"),
+            );
+        }
+        if allow != Allow::Plain {
+            map.insert("region".into(), region);
+        }
     }
     json!({
         "type": "object",
@@ -472,7 +749,10 @@ struct Def {
 /// Step type definitions with the operation each one performs.
 fn step_defs() -> Vec<(StepTypeDef, Kind)> {
     use types::*;
-    let target = target_schema(false);
+    let target = target_schema(Allow::Plain);
+    let visual = target_schema(Allow::Visual);
+    let picture = target_schema(Allow::Picture);
+    let citrix = json!({ "window": { "title": "Citrix" }, "image": { "path": "C:\\RPA\\images\\保存ボタン.png" } });
     let save = json!({ "window": { "title": "請求システム", "process": "billing.exe" }, "element": { "id": "btnSave" } });
     let customer =
         json!({ "window": { "process": "billing.exe" }, "element": { "id": "txtCustomer" } });
@@ -558,9 +838,9 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: MOUSE_CLICK,
             kind: Kind::MouseClick,
             label: "マウスでクリック",
-            description: "Brings the window to the front and clicks `target` with the real mouse (`button`: left or right; `double: true` for a double click). Use desktop.click first; this is for elements that ignore it. `target.point` (pixels from the window's top-left) is the last resort when the element is not in inspect_ui.",
+            description: "Brings the window to the front and clicks `target` with the real mouse (`button`: left or right; `double: true` for a double click). Use desktop.click first; this is for elements that ignore it. When the element is not in inspect_ui (Citrix, remote desktops, drawn screens), find the place on the screen instead: `target.ocr` { text } clicks a text OCR reads, `target.image` { path } clicks where a PNG cut from the screen appears (waits until it does), `target.offset` moves the click from its centre. `target.point` (pixels from the window's top-left) is the very last resort.",
             params: json!({
-                "target": target_schema(true),
+                "target": target_schema(Allow::Mouse),
                 "button": { "enum": ["left", "right"] },
                 "double": { "type": "boolean" }
             }),
@@ -568,6 +848,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: false,
             examples: vec![
                 json!({ "type": MOUSE_CLICK, "name": "行をダブルクリック", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ orderNo }}" } }, "double": true } }),
+                json!({ "type": MOUSE_CLICK, "name": "保存ボタン（画像）を押す", "params": { "target": citrix } }),
+                json!({ "type": MOUSE_CLICK, "name": "「検索」を押す", "params": { "target": { "window": { "title": "Citrix" }, "ocr": { "text": "検索" } } } }),
             ],
             secret_params: &[],
             input: true,
@@ -576,12 +858,13 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: TYPE,
             kind: Kind::Type,
             label: "キーボードで入力",
-            description: "Brings the window to the front, focuses `target` and types `text` with the keyboard (does not clear the field first). For apps that ignore desktop.setValue. `text` may be a registered secret, typed only into the apps registered with it.",
-            params: json!({ "target": target, "text": text_or_secret_schema("打ち込む文字。パスワードは登録済みシークレット") }),
+            description: "Brings the window to the front, focuses `target` and types `text` with the keyboard (does not clear the field first). For apps that ignore desktop.setValue. With `target.image` / `target.ocr` it first clicks that place (e.g. a label's text with `offset` to the field beside it). `text` may be a registered secret, typed only into the apps registered with it.",
+            params: json!({ "target": visual, "text": text_or_secret_schema("打ち込む文字。パスワードは登録済みシークレット") }),
             required: &["target", "text"],
             has_output: false,
             examples: vec![
                 json!({ "type": TYPE, "params": { "target": customer, "text": "{{ customerCode }}" } }),
+                json!({ "type": TYPE, "name": "顧客コード欄に入力", "params": { "target": { "window": { "title": "Citrix" }, "ocr": { "text": "顧客コード" }, "offset": { "x": 150, "y": 0 } }, "text": "{{ customerCode }}" } }),
             ],
             secret_params: &["text"],
             input: true,
@@ -604,12 +887,13 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: WAIT_FOR,
             kind: Kind::WaitFor,
             label: "画面を待つ",
-            description: "Waits until `target` reaches `state`: visible (default), hidden (closed or gone, e.g. a progress dialog), or enabled. The limit is the step's timeoutMs (default 30000). Other desktop steps already wait for their target, so use this for screens that must disappear or for slow apps.",
-            params: json!({ "target": target, "state": { "enum": ["visible", "hidden", "enabled"] } }),
+            description: "Waits until `target` reaches `state`: visible (default), hidden (closed or gone, e.g. a progress dialog), or enabled. The limit is the step's timeoutMs (default 30000). Other desktop steps already wait for their target, so use this for screens that must disappear or for slow apps. `target.image` / `target.ocr` wait for a picture or text on the screen (visible or hidden).",
+            params: json!({ "target": visual, "state": { "enum": ["visible", "hidden", "enabled"] } }),
             required: &["target"],
             has_output: false,
             examples: vec![
                 json!({ "type": WAIT_FOR, "name": "処理中ダイアログが閉じるのを待つ", "params": { "target": { "window": { "process": "billing.exe", "title": "処理中" } }, "state": "hidden" } }),
+                json!({ "type": WAIT_FOR, "name": "「登録完了」が出るのを待つ", "params": { "target": { "window": { "title": "Citrix" }, "ocr": { "text": "登録完了" } } } }),
             ],
             secret_params: &[],
             input: false,
@@ -618,12 +902,13 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: IS_VISIBLE,
             kind: Kind::IsVisible,
             label: "表示されているか",
-            description: "Output: true when `target` is shown (waiting up to `waitMs`, default 2000), otherwise false. Never fails for a missing window or element: use it with control.if, e.g. to close a dialog only when it appears.",
-            params: json!({ "target": target, "waitMs": { "type": "integer", "minimum": 0, "maximum": 20000 } }),
+            description: "Output: true when `target` is shown (waiting up to `waitMs`, default 2000), otherwise false. Never fails for a missing window or element: use it with control.if, e.g. to close a dialog only when it appears. Works with `target.image` / `target.ocr` too (is that picture or text on the screen).",
+            params: json!({ "target": visual, "waitMs": { "type": "integer", "minimum": 0, "maximum": 20000 } }),
             required: &["target"],
             has_output: true,
             examples: vec![
                 json!({ "type": IS_VISIBLE, "name": "確認ダイアログが出たか", "params": { "target": { "window": { "process": "billing.exe", "title": "確認" } } }, "saveAs": "confirmShown" }),
+                json!({ "type": IS_VISIBLE, "name": "エラーアイコンが出たか", "params": { "target": { "window": { "title": "Citrix" }, "image": { "path": "C:\\RPA\\images\\エラー.png" } } }, "saveAs": "confirmShown" }),
             ],
             secret_params: &[],
             input: false,
@@ -642,13 +927,51 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             secret_params: &[],
             input: false,
         },
+        Def {
+            step_type: READ_TEXT,
+            kind: Kind::ReadText,
+            label: "文字を読み取る（OCR）",
+            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height }] } (places in window pixels). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
+            params: json!({
+                "target": picture,
+                "file": { "type": "string", "minLength": 1, "description": "画面の代わりに読む画像ファイルのフルパス" },
+                "language": { "type": "string", "minLength": 2, "description": "Windows OCR の言語（ja, en-US など）。PaddleOCR では不要" },
+                "engine": { "enum": ["paddle", "windows"], "description": "OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）" }
+            }),
+            required: &[],
+            has_output: true,
+            examples: vec![
+                json!({ "type": READ_TEXT, "name": "合計欄を読む", "params": { "target": { "window": { "title": "Citrix" }, "region": { "x": 620, "y": 410, "width": 180, "height": 32 } } }, "saveAs": "total" }),
+                json!({ "type": READ_TEXT, "name": "請求書画像を読む", "params": { "file": "{{ outDir }}\\請求書.png" }, "saveAs": "total" }),
+            ],
+            secret_params: &[],
+            input: false,
+        },
+        Def {
+            step_type: SCREENSHOT,
+            kind: Kind::Screenshot,
+            label: "スクリーンショット",
+            description: "Saves a PNG of `target` (the window, `target.element`, or `target.region` in pixels from the window's top-left) to `path` (absolute). Output: the path. Also the way to make the image for `target.image`: cut out just the button or icon with target.region.",
+            params: json!({ "target": picture, "path": { "type": "string", "minLength": 1 } }),
+            required: &["target", "path"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": SCREENSHOT, "name": "画面を記録", "params": { "target": { "window": { "process": "billing.exe" } }, "path": "{{ outDir }}\\請求画面.png" } }),
+                json!({ "type": SCREENSHOT, "name": "保存ボタンの画像を切り出す", "params": { "target": { "window": { "title": "Citrix" }, "region": { "x": 860, "y": 640, "width": 90, "height": 30 } }, "path": "C:\\RPA\\images\\保存ボタン.png" } }),
+            ],
+            secret_params: &[],
+            input: false,
+        },
     ];
 
     defs.into_iter()
         .map(|d| {
             let mut resources = Vec::new();
-            if d.required.contains(&"target") {
+            if d.params.get("target").is_some() {
                 resources.push(ResourceDef::window("target"));
+            }
+            if d.kind == Kind::Screenshot {
+                resources.push(ResourceDef::file("path"));
             }
             if d.input {
                 resources.push(ResourceDef::Static(DESKTOP_INPUT.into()));
@@ -658,7 +981,14 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 category: StepCategory::Windows,
                 label: d.label.into(),
                 description: d.description.into(),
-                params_schema: schema(d.params, d.required),
+                params_schema: {
+                    let mut schema = schema(d.params, d.required);
+                    if d.kind == Kind::ReadText {
+                        schema["oneOf"] =
+                            json!([{ "required": ["target"] }, { "required": ["file"] }]);
+                    }
+                    schema
+                },
                 blocks: vec![],
                 has_output: d.has_output,
                 expression_params: vec![],
@@ -684,3 +1014,6 @@ pub fn definitions() -> Vec<StepTypeDef> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod visual_tests;

@@ -93,7 +93,7 @@ fn examples_validate_and_targets_are_checked() {
     let runtime = runtime(Scripted::new(vec![]));
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 11);
+    assert_eq!(defs.len(), 13);
     for def in &defs {
         assert!(def.step_type.starts_with("desktop."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
