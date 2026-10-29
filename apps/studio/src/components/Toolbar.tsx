@@ -53,25 +53,43 @@ function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => 
   );
 }
 
+<<<<<<< HEAD
 /** Opens the outline, which unfolds from the canvas corner this button sits in. */
 export function OutlineButton() {
+=======
+/** Opens the outline, which unfolds right below this button. */
+function OutlineButton() {
+  const open = useStudio((s) => s.outlineOpen);
+>>>>>>> origin/claude/project-thread-jekwf7
   const setOpen = useStudio((s) => s.setOutlineOpen);
   return (
     <button
       type="button"
+<<<<<<< HEAD
       onClick={() => setOpen(true)}
       title={t.outline.title}
       className="flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-200 bg-sheet/95 px-2.5 text-[12px] text-slate-600 shadow-raised backdrop-blur hover:text-ink"
+=======
+      onClick={() => setOpen(!open)}
+      title={t.outline.title}
+      aria-pressed={open}
+      className={`flex h-7 shrink-0 items-center gap-1.5 rounded-[3px] px-2 text-[12px] ${open ? "bg-slate-200 text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
+>>>>>>> origin/claude/project-thread-jekwf7
     >
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
         <path d="M1 2.5h10M3 6h8M3 9.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
+<<<<<<< HEAD
       {t.outline.toggle}
+=======
+      <span className="@max-[640px]/bar:hidden">{t.outline.toggle}</span>
+>>>>>>> origin/claude/project-thread-jekwf7
     </button>
   );
 }
 
 /**
+<<<<<<< HEAD
  * The open scenario in the title bar, after the workspace it is stored in:
  * its name, its revision (opens History) and whether it is sound (opens
  * Issues). The window holds one scenario, so the window's bar names it.
@@ -118,6 +136,13 @@ export function ScenarioTitle() {
  * show it, then running it, the one filled button, at the very end.
  */
 export function ScenarioActions({ view, onView }: { view: View; onView: (view: View) => void }) {
+=======
+ * The bar over the chart: everything here acts on the open scenario. Read left
+ * to right it says which scenario, whether it is sound, how it is shown, and
+ * ends with running it, the one filled button.
+ */
+export function ScenarioBar({ view, onView }: { view: View; onView: (view: View) => void }) {
+>>>>>>> origin/claude/project-thread-jekwf7
   const scenario = useStudio((s) => s.scenario);
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
@@ -126,6 +151,8 @@ export function ScenarioActions({ view, onView }: { view: View; onView: (view: V
   const followRun = useStudio((s) => s.followRun);
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const debug = useStudio((s) => s.debug);
+  const setBottom = useStudio((s) => s.setBottom);
+  const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
 
   if (!scenario) return null;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
@@ -133,7 +160,39 @@ export function ScenarioActions({ view, onView }: { view: View; onView: (view: V
   const paused = run?.status === "paused";
 
   return (
+<<<<<<< HEAD
     <div className="flex shrink-0 items-center gap-2">
+=======
+    // A container: on a narrow chart the secondary labels give way, never the run button.
+    <div className="@container/bar flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-sheet pr-2 pl-2">
+      {view === "flow" && <OutlineButton />}
+      <div className="flex min-w-0 flex-1 items-center gap-2 pl-1">
+        <span className="truncate text-[14px] font-bold">{scenario.name}</span>
+        {/* The revision opens how the scenario got here: its record and versions. */}
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          title={t.shell.historyTitle}
+          className="flex h-6 shrink-0 items-center gap-1 rounded-[3px] bg-slate-100 px-1.5 text-[11px] text-slate-500 hover:bg-slate-200 hover:text-ink"
+        >
+          <span className="@max-[640px]/bar:hidden">{t.revision}</span> {scenario.revision}
+          <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
+            <path d="m1.5 3 2.5 2.5L6.5 3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={() => setBottom("issues")}
+          className={`flex h-6 shrink-0 items-center gap-1 rounded-[3px] px-1.5 text-[12px] font-medium ${
+            errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : "text-moegi-500 hover:bg-slate-100"
+          }`}
+          title={t.toolbar.issuesTitle}
+        >
+          {errors ? <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span> : <CheckIcon />}
+          <span className="@max-[640px]/bar:hidden">{errors ? t.toolbar.errors(errors) : t.toolbar.valid}</span>
+        </button>
+      </div>
+>>>>>>> origin/claude/project-thread-jekwf7
       <ViewSwitch view={view} onChange={onView} />
       <span className="mx-1 h-5 w-px bg-slate-200" />
       {running ? (
@@ -179,8 +238,13 @@ export function ScenarioActions({ view, onView }: { view: View; onView: (view: V
             title={t.toolbar.stepRunTitle}
             className="flex h-8 items-center gap-1 rounded-[4px] border border-slate-300 px-2.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
           >
+<<<<<<< HEAD
             <span className="@max-[640px]/title:hidden">{t.toolbar.stepRun}</span>
             <span className="hidden @max-[640px]/title:inline" aria-hidden="true">
+=======
+            <span className="@max-[520px]/bar:hidden">{t.toolbar.stepRun}</span>
+            <span className="hidden @max-[520px]/bar:inline" aria-hidden="true">
+>>>>>>> origin/claude/project-thread-jekwf7
               ⇥
             </span>
           </button>
