@@ -140,11 +140,18 @@
   --xy-attribution-background-color: transparent;
 }
 
+/*
+ * The window is the app, not a page: a touchpad swipe must never pull the
+ * whole screen down (WebView2's elastic overscroll). Panels and the chart
+ * still scroll and pan inside their own boxes.
+ */
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
