@@ -499,6 +499,7 @@ export const ja = {
   },
   desk: {
     title: "AIからの変更",
+    expand: "確認待ちの一覧を開く",
     hint: "見て「残す」と、そのまま本番の実行に使われます",
     empty: "確認待ちはありません",
     sentBack: "差し戻し中（AIの修正待ち）",

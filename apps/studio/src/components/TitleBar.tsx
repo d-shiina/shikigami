@@ -23,13 +23,13 @@ function Workspace() {
       type="button"
       onClick={() => setPlace("settings")}
       title={t.bar.workspaceTitle(workspace.root, workspace.localRoot)}
-      className="flex h-7 min-w-0 shrink items-center gap-1.5 rounded-[3px] px-1.5 text-[12px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+      className="flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-[3px] px-1.5 text-[12px] text-slate-500 hover:bg-slate-100 hover:text-ink"
     >
       <svg width="12" height="12" viewBox="0 0 16 16" className="shrink-0" aria-hidden="true">
         <path d="M1.5 3.5h5l1.5 1.5h6.5v8.5h-13z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
       </svg>
-      <span className="truncate">{name}</span>
-      {workspace.shared && <span className="shrink-0 rounded-[2px] bg-mizu-100 px-1 text-[10px] text-mizu-500">{t.workspaceShared}</span>}
+      <span className="truncate @max-[1040px]/title:hidden">{name}</span>
+      {workspace.shared && <span className="shrink-0 rounded-[2px] @max-[1040px]/title:hidden bg-mizu-100 px-1 text-[10px] text-mizu-500">{t.workspaceShared}</span>}
     </button>
   );
 }

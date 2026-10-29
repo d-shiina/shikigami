@@ -9,6 +9,7 @@ import { headline, summarize } from "../lib/review";
 import { sentence, plain } from "../lib/sentence";
 import { approvedUpTo, groupRevertBlocker, pendingIn } from "../store";
 import { Explanations, FeedbackBox, Observations, type Observed, type Review, SendBackForm, Section, TestRuns, type TestRun } from "./Evidence";
+import { Monogram } from "./ScenarioList";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
 import { t, useKeptState } from "../lib/i18n";
 
@@ -42,14 +43,50 @@ export function useInbox(): InboxItem[] {
   );
 }
 
-export function ReviewInbox() {
+/** The inbox folded to a strip when the window is narrow: one mark per scenario that waits. */
+export function ReviewRail({ onExpand }: { onExpand: () => void }) {
+  const inbox = useInbox();
+  const open = useStudio((s) => s.open);
+  const currentId = useStudio((s) => s.scenario?.id);
+  return (
+    <aside className="flex h-full flex-col items-center gap-2 border-r border-slate-200 bg-paper pt-3">
+      <button
+        type="button"
+        onClick={onExpand}
+        title={t.desk.expand}
+        className="grid h-7 w-7 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-200 hover:text-ink"
+      >
+        »
+      </button>
+      {inbox.map((item) => (
+        <button key={item.scenarioId} type="button" title={item.name} onClick={() => void open(item.scenarioId)}>
+          <Monogram name={item.name} active={item.scenarioId === currentId} />
+        </button>
+      ))}
+    </aside>
+  );
+}
+
+export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
   const inbox = useInbox();
   const open = useStudio((s) => s.open);
   const currentId = useStudio((s) => s.scenario?.id);
   return (
     <aside className="flex h-full flex-col border-r border-slate-200 bg-paper">
       <div className="px-3 pt-3 pb-1">
-        <div className="text-[12px] font-bold">{t.desk.title}</div>
+        <div className="flex items-center text-[12px] font-bold">
+          {t.desk.title}
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              title={t.list.collapse}
+              className="ml-auto grid h-6 w-6 place-items-center rounded-[4px] font-normal text-slate-500 hover:bg-slate-200 hover:text-ink"
+            >
+              «
+            </button>
+          )}
+        </div>
         <div className="text-[11px] leading-relaxed text-slate-400">{t.desk.hint}</div>
       </div>
       <ul className="flex-1 space-y-1 overflow-y-auto px-2 py-2">

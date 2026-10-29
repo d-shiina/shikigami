@@ -500,6 +500,7 @@ export const en: Dict = {
   },
   desk: {
     title: "Changes from AI",
+    expand: "Open the review list",
     hint: "Keep makes them the version that runs in production",
     empty: "Nothing to review",
     sentBack: "Sent back (waiting for the AI)",

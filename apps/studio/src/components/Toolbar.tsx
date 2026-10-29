@@ -85,7 +85,9 @@ export function ScenarioTitle() {
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="truncate text-[13px] font-bold">{scenario.name}</span>
+      <span className="min-w-[5em] truncate text-[13px] font-bold" title={scenario.name}>
+        {scenario.name}
+      </span>
       {/* The revision opens how the scenario got here: its record and versions. */}
       <button
         type="button"
@@ -93,7 +95,7 @@ export function ScenarioTitle() {
         title={t.shell.historyTitle}
         className="flex h-6 shrink-0 items-center gap-1 rounded-[3px] bg-slate-100 px-1.5 text-[11px] text-slate-500 hover:bg-slate-200 hover:text-ink"
       >
-        <span className="@max-[760px]/title:hidden">{t.revision}</span> {scenario.revision}
+        <span className="@max-[920px]/title:hidden">{t.revision}</span> {scenario.revision}
         <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
           <path d="m1.5 3 2.5 2.5L6.5 3" fill="none" stroke="currentColor" strokeWidth="1.3" />
         </svg>
@@ -107,7 +109,7 @@ export function ScenarioTitle() {
         title={t.toolbar.issuesTitle}
       >
         {errors ? <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span> : <CheckIcon />}
-        <span className="@max-[760px]/title:hidden">{errors ? t.toolbar.errors(errors) : t.toolbar.valid}</span>
+        <span className="@max-[920px]/title:hidden">{errors ? t.toolbar.errors(errors) : t.toolbar.valid}</span>
       </button>
     </div>
   );
@@ -179,8 +181,8 @@ export function ScenarioActions({ view, onView }: { view: View; onView: (view: V
             title={t.toolbar.stepRunTitle}
             className="flex h-8 items-center gap-1 rounded-[4px] border border-slate-300 px-2.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
           >
-            <span className="@max-[640px]/title:hidden">{t.toolbar.stepRun}</span>
-            <span className="hidden @max-[640px]/title:inline" aria-hidden="true">
+            <span className="@max-[920px]/title:hidden">{t.toolbar.stepRun}</span>
+            <span className="hidden @max-[920px]/title:inline" aria-hidden="true">
               ⇥
             </span>
           </button>
