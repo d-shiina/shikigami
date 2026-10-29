@@ -312,8 +312,8 @@ export type StudioState = {
   createVersion(name: string, note: string): Promise<boolean>;
   restoreVersion(number: number): Promise<void>;
   exportScenario(): Promise<void>;
-  /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. */
-  importFile(contents: string, onConflict?: ImportConflict): Promise<void>;
+  /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. True once it is in. */
+  importFile(contents: string, onConflict?: ImportConflict): Promise<boolean>;
   cancelImport(): void;
   setWorkspace(path: string, shared: boolean): Promise<void>;
   loadSecrets(): Promise<void>;
@@ -1392,6 +1392,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           applyOutcome(outcome);
           set({ pendingImport: null, selection: null, history: [], versions: [], notice: `${t.imported}: ${outcome.scenario.name}` });
           await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
+          return true;
         } catch (e) {
           if (e instanceof ApiError && e.code === "IMPORT_CONFLICT") {
             const name = (e.details as { name?: string } | undefined)?.name ?? "";
@@ -1399,6 +1400,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           } else {
             set({ pendingImport: null, error: message(e) });
           }
+          return false;
         }
       },
 

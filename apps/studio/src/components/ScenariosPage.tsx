@@ -72,9 +72,8 @@ function ImportConflict() {
   const pending = useStudio((s) => s.pendingImport);
   const cancelImport = useStudio((s) => s.cancelImport);
   if (!pending) return null;
-  const resolve = (mode: "update" | "copy") => {
-    setPlace("scenarios");
-    void importFile(pending.contents, mode);
+  const resolve = async (mode: "update" | "copy") => {
+    if (await importFile(pending.contents, mode)) setPlace("scenarios");
   };
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[4px] border border-accent-100 bg-accent-50 px-3 py-2 text-[13px]">
@@ -202,8 +201,8 @@ export function ScenariosPage() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    setPlace("scenarios");
-    await importFile(await file.text());
+    // A conflict is answered on this page, so only move to the editor once it is in.
+    if (await importFile(await file.text())) setPlace("scenarios");
   };
 
   return (
