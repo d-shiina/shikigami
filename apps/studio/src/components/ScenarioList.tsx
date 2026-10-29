@@ -74,7 +74,7 @@ function save(key: string, value: unknown) {
 }
 
 /** A small square with the name's first letter, so scenarios are told apart at a glance. */
-function Monogram({ name, active }: { name: string; active: boolean }) {
+export function Monogram({ name, active }: { name: string; active: boolean }) {
   return (
     <span
       className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] text-[11px] font-bold ${

@@ -20,7 +20,7 @@ export function AgentButton() {
       type="button"
       onClick={() => setOpen(!open)}
       title={`${name}（Ctrl+J）`}
-      className={`flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-semibold ${open ? "bg-ink text-sheet" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
+      className={`flex h-8 shrink-0 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-semibold whitespace-nowrap ${open ? "bg-ink text-sheet" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
     >
       {busy && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />}
       {name}
@@ -28,7 +28,7 @@ export function AgentButton() {
   );
 }
 
-export function AgentPane() {
+export function AgentPane({ width }: { width: number }) {
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
   const info = useAgent((s) => s.info);
@@ -54,7 +54,7 @@ export function AgentPane() {
     if (await send(draft, ref, context)) setDraft("");
   };
   return (
-    <aside className="flex h-full min-h-0 w-[380px] flex-col border-l border-slate-200 bg-sheet">
+    <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col border-l border-slate-200 bg-sheet">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5">
         <div className="min-w-0 flex-1 text-[13px] font-bold">{info?.name ?? "AI"}</div>
         <button
