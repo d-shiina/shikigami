@@ -245,7 +245,7 @@ mod snapshots {
         let dir = std::env::var_os("SHIKIGAMI_SNAPSHOT_DIR")
             .map_or_else(|| temp.path().to_path_buf(), std::path::PathBuf::from);
         std::fs::create_dir_all(&dir).unwrap();
-        let cases: [(&str, &str, &str, &[(&str, &str)], &str); 5] = [
+        let cases: [(&str, &str, &str, &[(&str, &str)], &str); 6] = [
             (
                 "message-info",
                 "message",
@@ -285,6 +285,13 @@ mod snapshots {
                     ("BUTTONS", "okCancel"),
                     ("LEVEL", "error"),
                 ],
+                "ok",
+            ),
+            (
+                "message-ok",
+                "message",
+                "light",
+                &[("MESSAGE", "請求書を 12 件作りました。")],
                 "ok",
             ),
             (

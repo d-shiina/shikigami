@@ -342,7 +342,7 @@ if ($mode -eq 'input') {
     $dismiss = 'cancel'
 } else {
     $glyphs = @{ info = [char]0xE946; warning = [char]0xE7BA; error = [char]0xEA39 }
-    $level = $env:SHIKIGAMI_LEVEL
+    $level = if ($env:SHIKIGAMI_LEVEL) { $env:SHIKIGAMI_LEVEL } else { 'info' }
     $glyph = $window.FindName('Glyph')
     $glyph.Text = $glyphs[$level]
     $glyph.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString($colors[$level.ToUpper()])
@@ -362,7 +362,8 @@ if ($mode -eq 'input') {
             $dismiss = 'cancel'
         }
         default {
-            $buttons = @(@('ok', 'Primary', $true, $true))
+            # The comma keeps the one button a list of one tuple.
+            $buttons = @(, @('ok', 'Primary', $true, $true))
             $dismiss = 'ok'
         }
     }
