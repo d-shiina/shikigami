@@ -10,21 +10,23 @@ import { FlowCanvas } from "./components/FlowCanvas";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
-import { Rail } from "./components/Rail";
 import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
+import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
-import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
 import { SecretAskDialog } from "./components/SecretAskDialog";
 import { SecretsPage } from "./components/SecretsPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { ScenariosPage } from "./components/ScenariosPage";
+import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { StoryView } from "./components/StoryView";
+import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
 import { CanvasDock, OutlineButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
 import { t, useLocale } from "./lib/i18n";
-import { type Fit, fit as fitPanels, RIGHT } from "./lib/fit";
+import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { createStudioStore, isActive, type StudioState } from "./store";
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
@@ -64,7 +66,7 @@ function Banner() {
 }
 
 const VIEW_KEY = "shikigami.studio.view";
-const LIST_KEY = "shikigami.studio.list";
+const SIDEBAR_KEY = "shikigami.studio.list";
 
 function useRemembered<T extends string>(key: string, fallback: T, read: (raw: string | null) => T): [T, (next: T) => void] {
   const [value, setValue] = useState<T>(() => {
@@ -85,6 +87,31 @@ function useRemembered<T extends string>(key: string, fallback: T, read: (raw: s
   return [value, set];
 }
 
+const SIZES_KEY = "shikigami.studio.sizes";
+
+/** Panel widths the person dragged to, remembered across launches. */
+function useSizes(): [Sizes, (next: Sizes) => void] {
+  const [sizes, setSizes] = useState<Sizes>(() => {
+    try {
+      return readSizes(globalThis.localStorage?.getItem(SIZES_KEY) ?? null);
+    } catch {
+      return DEFAULT_SIZES;
+    }
+  });
+  const set = (next: Sizes) => {
+    setSizes(next);
+    try {
+      globalThis.localStorage?.setItem(SIZES_KEY, JSON.stringify(next));
+    } catch {
+      // Only a remembered preference.
+    }
+  };
+  return [sizes, set];
+}
+
+/** The grip on a panel's inner edge; the panel is positioned relative. */
+type Grip = (panel: keyof Sizes) => React.ReactNode;
+
 /** The width of an element, kept up to date as the window is resized. */
 function useWidth(): [number, (el: HTMLElement | null) => void] {
   const [width, setWidth] = useState(() => globalThis.innerWidth ?? 1400);
@@ -101,10 +128,24 @@ function useWidth(): [number, (el: HTMLElement | null) => void] {
 /**
  * The editor: the open scenario's chart (or procedure), what the run did and
  * what is wrong underneath, and the inspector on the right. The scenario's
- * name and its actions are in the title bar. The scenario list and the review
- * desk both open scenarios into it.
+ * name and its actions are in the title bar. The sidebar and the review desk
+ * both open scenarios into it.
  */
-function Editor({ view, list, right }: { view: View; list: React.ReactNode; right: React.ReactNode | null }) {
+function Editor({
+  view,
+  onView,
+  list,
+  right,
+  rightWidth,
+  grip,
+}: {
+  view: View;
+  onView: (view: View) => void;
+  list?: React.ReactNode;
+  right: React.ReactNode | null;
+  rightWidth: number;
+  grip: Grip;
+}) {
   const hasScenario = useStudio((s) => s.scenario !== null);
   const outlineOpen = useStudio((s) => s.outlineOpen);
   return (
@@ -114,6 +155,8 @@ function Editor({ view, list, right }: { view: View; list: React.ReactNode; righ
         <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
             <StoryView />
+          ) : view === "variables" ? (
+            <VariablesView onView={onView} />
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
@@ -127,16 +170,19 @@ function Editor({ view, list, right }: { view: View; list: React.ReactNode; righ
             </ReactFlowProvider>
           )}
           {/* Clear of the zoom controls in the bottom-left corner. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
-            <CanvasDock />
-          </div>
+          {view !== "variables" && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
+              <CanvasDock />
+            </div>
+          )}
         </div>
         <RunPausePanel />
         <BottomPanel />
       </main>
       {right !== null && (
-        <div className="min-h-0" style={{ width: RIGHT }}>
+        <div className="relative min-h-0" style={{ width: rightWidth }}>
           {right}
+          {grip("right")}
         </div>
       )}
     </div>
@@ -144,75 +190,65 @@ function Editor({ view, list, right }: { view: View; list: React.ReactNode; righ
 }
 
 /**
- * The list column of a place. With room it is open (unless folded by hand);
- * without, it is a strip whose » lays the list over the chart for a moment,
- * as narrow windows do in Linear and Notion. Opening a scenario closes it.
+ * Something that gives way when the window is narrow, laid over the chart for
+ * a moment instead, as narrow windows do in Linear and Notion. Opening a
+ * scenario, moving to another place, or clicking outside closes it.
  */
-function ListSlot({
-  room,
-  open,
-  onOpen,
-  full,
-  strip,
-}: {
-  room: boolean;
-  open: boolean;
-  onOpen: () => void;
-  full: (fold: () => void) => React.ReactNode;
-  strip: (expand: () => void) => React.ReactNode;
-}) {
+function Peek({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const key = useStudio((s) => `${s.place}:${s.scenario?.id}`);
+  const [opened] = useState(key);
+  useEffect(() => {
+    if (key !== opened) onClose();
+  }, [key, opened, onClose]);
+  return (
+    <>
+      <div className="fixed inset-0 z-30" onClick={onClose} />
+      <div className="absolute inset-y-0 left-0 z-40 shadow-lifted">{children}</div>
+    </>
+  );
+}
+
+/** The review inbox: open with room, else a strip whose » lays it over the chart. */
+function InboxSlot({ room, width, grip }: { room: boolean; width: number; grip: Grip }) {
   const [peek, setPeek] = useState(false);
-  const currentId = useStudio((s) => s.scenario?.id);
-  useEffect(() => setPeek(false), [currentId, room]);
   // Fixed widths: a long scenario name must not widen the list into the chart.
-  if (open && room) return <div className="h-full w-[248px]">{full(() => {})}</div>;
+  if (room)
+    return (
+      <div className="relative h-full" style={{ width }}>
+        <ReviewInbox />
+        {grip("inbox")}
+      </div>
+    );
   return (
     <div className="relative h-full w-[44px]">
-      {strip(() => (room ? onOpen() : setPeek(true)))}
+      <ReviewRail onExpand={() => setPeek(true)} />
       {peek && (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setPeek(false)} />
-          <div className="absolute inset-y-0 left-0 z-30 w-[248px] shadow-lifted">{full(() => setPeek(false))}</div>
-        </>
+        <Peek onClose={() => setPeek(false)}>
+          <div className="h-full" style={{ width }}>
+            <ReviewInbox onCollapse={() => setPeek(false)} />
+          </div>
+        </Peek>
       )}
     </div>
   );
 }
 
-function ScenariosPlace({ view, fit }: { view: View; fit: Fit }) {
-  const [list, setList] = useRemembered<"open" | "closed">(LIST_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
-  return (
-    <Editor
-      view={view}
-      list={
-        <ListSlot
-          room={fit.list}
-          open={list === "open"}
-          onOpen={() => setList("open")}
-          full={(close) => <ScenarioList onCollapse={list === "open" && fit.list ? () => setList("closed") : close} />}
-          strip={(expand) => <ScenarioRail onExpand={expand} />}
-        />
-      }
-      right={fit.right ? <Inspector /> : null}
-    />
-  );
+type PlaceProps = { view: View; onView: (view: View) => void; fit: Fit; sizes: Sizes; grip: Grip };
+
+function ScenariosPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
+  return <Editor view={view} onView={onView} right={fit.right ? <Inspector /> : null} rightWidth={sizes.right} grip={grip} />;
 }
 
 /** The review desk: what waits, the chart with the AI's changes marked, and the verdict on the right. */
-function ReviewPlace({ view, fit }: { view: View; fit: Fit }) {
+function ReviewPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
   const hasScenario = useStudio((s) => s.scenario !== null);
   return (
     <Editor
       view={view}
-      list={
-        <ListSlot
-          room={fit.list}
-          open
-          onOpen={() => {}}
-          full={(close) => <ReviewInbox onCollapse={fit.list ? undefined : close} />}
-          strip={(expand) => <ReviewRail onExpand={expand} />}
-        />
-      }
+      onView={onView}
+      list={<InboxSlot room={fit.inbox} width={sizes.inbox} grip={grip} />}
+      rightWidth={sizes.right}
+      grip={grip}
       right={
         !fit.right || !hasScenario ? null : (
           <aside className="flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
@@ -229,23 +265,83 @@ function ReviewPlace({ view, fit }: { view: View; fit: Fit }) {
 
 function Shell() {
   const place = useStudio((s) => s.place);
-  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" ? "story" : "flow"));
+  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" || raw === "variables" ? raw : "flow"));
+  const [sidebar, setSidebar] = useRemembered<"open" | "closed">(SIDEBAR_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
+  const [peek, setPeek] = useState(false);
   const agentOpen = useAgent((s) => s.open);
   const [width, measure] = useWidth();
   const hasScenario = useStudio((s) => s.scenario !== null);
-  const fit = fitPanels(width, agentOpen, hasScenario);
+  const editing = place === "scenarios" || place === "review";
+  const shown = { agent: agentOpen, right: editing && hasScenario, inbox: place === "review" };
+  const [sizes, setSizes] = useSizes();
+  const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);
+  // Whether the sidebar would fit if it were shown, whatever the person chose.
+  const room = fitPanels(width, { ...shown, sidebar: true }, sizes).sidebar;
+  // A panel can grow only into the chart's room above its minimum.
+  const grip: Grip = (panel) => {
+    const [min, max] = LIMITS[panel];
+    const size = panel === "agent" ? fit.agent : sizes[panel];
+    return (
+      <Resizer
+        edge={panel === "right" ? "left" : "right"}
+        size={size}
+        min={min}
+        max={Math.max(size, Math.min(max, size + fit.chart - CHART_MIN))}
+        onSize={(next) => setSizes({ ...sizes, [panel]: next })}
+        onReset={() => setSizes({ ...sizes, [panel]: DEFAULT_SIZES[panel] })}
+      />
+    );
+  };
+  const showSidebar = sidebar === "open" && room;
+  // Hidden by hand with room, it comes back; without room, it is laid over the chart.
+  const toggleSidebar = () => {
+    if (showSidebar) setSidebar("closed");
+    else if (room) setSidebar("open");
+    else setPeek(!peek);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   return (
     <div className="flex h-full flex-col">
-      {/* The rail runs to the top edge: it is where you are, the title bar is what is open. */}
-      <div className="flex min-h-0 flex-1">
-        <Rail />
+      <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
+        {showSidebar && (
+          <div className="relative flex">
+            <Sidebar width={sizes.sidebar} onCollapse={() => setSidebar("closed")} />
+            {grip("sidebar")}
+          </div>
+        )}
+        {!showSidebar && peek && (
+          <Peek onClose={() => setPeek(false)}>
+            <Sidebar width={sizes.sidebar} onCollapse={() => setPeek(false)} />
+          </Peek>
+        )}
         <div className="flex min-w-0 flex-1 flex-col">
-          <TitleBar view={view} onView={setView} />
+          <TitleBar view={view} onView={setView} onShowSidebar={showSidebar ? undefined : toggleSidebar} />
           <HumanBanner />
           <Banner />
-          <div ref={measure} className="flex min-h-0 flex-1 overflow-hidden">
-            {place === "scenarios" && <ScenariosPlace view={view} fit={fit} />}
-            {place === "review" && <ReviewPlace view={view} fit={fit} />}
+          <div className="flex min-h-0 flex-1">
+            {/* The AI's chat, beside the sidebar it is opened from. */}
+            {/* Kept mounted while closed, so an unsent draft survives (the pane draws nothing then). */}
+            <div className="relative flex">
+              <AgentPane width={fit.agent} />
+              {fit.agent > 0 && grip("agent")}
+            </div>
+            {/* With nothing open, the editor has nothing to show: the library does. */}
+            {(place === "library" || (place === "scenarios" && !hasScenario)) && (
+              <div className="min-w-0 flex-1">
+                <ScenariosPage />
+              </div>
+            )}
+            {place === "scenarios" && hasScenario && <ScenariosPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+            {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
             {place === "secrets" && (
               <div className="min-w-0 flex-1">
                 <SecretsPage />
@@ -256,7 +352,6 @@ function Shell() {
                 <SettingsPage />
               </div>
             )}
-            <AgentPane width={fit.agent} />
           </div>
         </div>
       </div>

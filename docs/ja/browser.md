@@ -34,7 +34,7 @@ pnpm demo:browser
 
 CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\shikigami.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Studio からも同じシナリオを読み込んで実行できます。
 
-## ステップ
+## ノード
 
 | type | 主な params | 出力 |
 |---|---|---|
@@ -51,7 +51,7 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 | `browser.waitForHuman` | `message`, `until`（人の操作が終わると出る要素） | – |
 | `browser.close` | – | – |
 
-すべてのステップに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、**同じ `context` のステップは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、シナリオにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
+すべてのノードに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、**同じ `context` のノードは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、シナリオにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
 
 ログイン・パスワード・MFA の扱いは [secrets.md](secrets.md) を見てください。
 
@@ -67,7 +67,7 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 // 共通：exact（完全一致）, nth（複数一致したときの 0 始まりの番号）
 ```
 
-待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。待つ上限はステップの `timeoutMs`（既定 30 秒）で、アダプター側の操作もその直前で止まるため、タイムアウトしたクリックが再試行の後で遅れて実行されることはありません。
+待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。待つ上限はノードの `timeoutMs`（既定 30 秒）で、アダプター側の操作もその直前で止まるため、タイムアウトしたクリックが再試行の後で遅れて実行されることはありません。
 
 ### エラー
 
@@ -87,9 +87,9 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 MCP サーバーに 2 つのツールがあります（権限区分は `run`）。
 
 - `inspect_page`：ページを開いて（または開いているページの）アクセシビリティツリーを返す。`- button "ログイン"` と出ていれば `{ "role": "button", "name": "ログイン" }` がそのまま `target` になる
-- `test_step`：ステップを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのステップでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。シナリオは変更しない
+- `test_step`：ノードを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのノードでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。シナリオは変更しない
 
-AI はこれでサイトを確かめながらステップを組み、`validate_scenario` → `run_scenario` で AI なしの実行を確認します。
+AI はこれでサイトを確かめながらノードを組み、`validate_scenario` → `run_scenario` で AI なしの実行を確認します。
 
 ## 仕組み
 
@@ -99,5 +99,5 @@ Runtime ──(JSON-RPC over stdio)──▶ node packages/browser-adapter/src/m
 ```
 
 - ブラウザ対応は「アダプター」の 1 つです。ほかのアプリを足す方法は [adapters.md](adapters.md)。
-- アダプターは最初のブラウザステップで起動し、全実行で共有します。異常終了すると実行中のステップは `ADAPTER_CRASHED` で失敗し、次の要求で起動し直します。
+- アダプターは最初のブラウザノードで起動し、全実行で共有します。異常終了すると実行中のノードは `ADAPTER_CRASHED` で失敗し、次の要求で起動し直します。
 - アダプターの stderr は Rust の tracing（`shikigami_browser::adapter`）に流れます。

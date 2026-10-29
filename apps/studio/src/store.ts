@@ -44,8 +44,11 @@ export type Selection =
   | { kind: "slot"; parentId: string | null; block: string | null }
   | null;
 
-/** The places on the left rail; each fills the window below the title bar. */
-export type Place = "scenarios" | "review" | "secrets" | "settings";
+/**
+ * The places in the sidebar; each fills the window right of it. "library" is
+ * the page of all scenarios, "scenarios" the editor of the open one.
+ */
+export type Place = "library" | "scenarios" | "review" | "secrets" | "settings";
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues";
@@ -64,6 +67,8 @@ export type Pause = {
   variables: Record<string, unknown>;
   /** The scenario revision the run executes. */
   revision: number;
+  /** The `scenario.call` steps it paused inside (outermost first); empty in the open scenario. */
+  callPath: string[];
 };
 
 export type LogEntry = {
@@ -158,6 +163,12 @@ export function diveChain(root: Scenario | null, called: Record<string, Scenario
     current = callee;
   }
   return chain;
+}
+
+/** Breakpoints a run of the open scenario stops at: its own and those of every scenario it calls. */
+function runBreakpoints(s: Pick<StudioState, "scenario" | "called" | "breakpoints">): string[] {
+  if (!s.scenario) return [];
+  return [s.scenario.id, ...Object.keys(s.called)].flatMap((id) => s.breakpoints[id] ?? []);
 }
 
 /** Scenarios a step tree calls directly. */
@@ -282,7 +293,8 @@ export type StudioState = {
   stopRun(): Promise<void>;
   /** Step command for the paused (or running) run; false when it was refused. */
   debug(command: DebugCommand): Promise<boolean>;
-  toggleBreakpoint(stepId: string): void;
+  /** `scenarioId`: the scenario the step is in, when it is a called one shown on the chart. */
+  toggleBreakpoint(stepId: string, scenarioId?: string): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -309,8 +321,8 @@ export type StudioState = {
   createVersion(name: string, note: string): Promise<boolean>;
   restoreVersion(number: number): Promise<void>;
   exportScenario(): Promise<void>;
-  /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. */
-  importFile(contents: string, onConflict?: ImportConflict): Promise<void>;
+  /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. True once it is in. */
+  importFile(contents: string, onConflict?: ImportConflict): Promise<boolean>;
   cancelImport(): void;
   setWorkspace(path: string, shared: boolean): Promise<void>;
   loadSecrets(): Promise<void>;
@@ -630,7 +642,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
-      place: "scenarios",
+      place: "library",
       bottom: null,
       historyOpen: false,
       versions: [],
@@ -766,6 +778,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
           set({
+            // Opened from the library (or by the AI while it shows): show it in the editor.
+            ...(get().place === "library" ? { place: "scenarios" as const } : {}),
             scenario,
             validation,
             canUndo: undo.canUndo,
@@ -1022,7 +1036,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const scenario = get().scenario;
         if (!scenario) return;
         try {
-          const breakpoints = get().breakpoints[scenario.id] ?? [];
+          const breakpoints = runBreakpoints(get());
           const runId = await api.run(scenario.id, undefined, { breakpoints, step: options?.step ?? false });
           set((s) => ({
             // Events may have arrived before the command returned.
@@ -1071,8 +1085,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
-      toggleBreakpoint(stepId) {
-        const id = get().scenario?.id;
+      toggleBreakpoint(stepId, scenarioId) {
+        const id = scenarioId ?? get().scenario?.id;
         if (!id) return;
         const current = get().breakpoints[id] ?? [];
         const next = current.includes(stepId) ? current.filter((s) => s !== stepId) : [...current, stepId];
@@ -1081,8 +1095,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         saveBreakpoints(breakpoints);
         set({ breakpoints });
         const run = get().run;
-        if (run && isActive(run) && run.scenarioId === id) {
-          void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: next }).catch(() => {});
+        if (run && isActive(run) && run.scenarioId === get().scenario?.id) {
+          void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: runBreakpoints(get()) }).catch(() => {});
         }
       },
 
@@ -1107,7 +1121,21 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
           };
           const path = callPathOf(env);
-          if (path.length > 0) {
+          // Followed, the chart goes where the run is: into a called scenario
+          // when a step starts inside it, back out when one starts outside.
+          let dive = s.dive;
+          if (env.type === "stepStarted" && s.followRun && callKey(path) !== callKey(s.dive)) {
+            if (path.length === 0) dive = [];
+            else if (diveChain(s.scenario, s.called, path).length === path.length) dive = path;
+          }
+          // A pause shows where it stopped, followed or not: inside a call, or
+          // back in the open scenario (a breakpoint after a call, a call that failed).
+          if (env.type === "paused" && callKey(path) !== callKey(s.dive)) {
+            if (path.length === 0) dive = [];
+            else if (diveChain(s.scenario, s.called, path).length === path.length) dive = path;
+          }
+          const moved = dive !== s.dive ? { dive, selection: null } : {};
+          if (path.length > 0 && env.type !== "paused" && env.type !== "resumed") {
             // Inside a called scenario: its steps and variables are not the
             // chart's. They show when their call is unfolded or entered.
             const call = path[0]!;
@@ -1128,7 +1156,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push("warn", `${t.waitingForYou}: ${env.message}`, call);
             }
             run.inner = { ...run.inner, [key]: states };
-            return { run, human, secretFix };
+            return { run, human, secretFix, ...moved };
           }
           const change = asVariableChange(env);
           if (change) run.changes = [...run.changes, change];
@@ -1159,8 +1187,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push(env.level, env.message, env.stepId);
               break;
             case "paused": {
+              // Inside a call, the step's state lives with the call's (see `inner`).
+              const states = path.length > 0 ? { ...(run.inner[callKey(path)] ?? {}) } : run.steps;
               run.status = "paused";
               run.pause = {
+                callPath: path,
                 seq: env.seq,
                 stepId: env.stepId,
                 stepType: env.stepType,
@@ -1170,9 +1201,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
                 revision: env.revision,
               };
               run.evidence = null;
-              run.steps[env.stepId] = env.reason === "error" ? "failed" : "paused";
-              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, env.stepId);
-              reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
+              states[env.stepId] = env.reason === "error" ? "failed" : "paused";
+              if (path.length > 0) run.inner = { ...run.inner, [callKey(path)]: states };
+              // The log points at what the open scenario shows: the call step.
+              const at = path[0] ?? env.stepId;
+              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, at);
+              if (path.length === 0) reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
               break;
             }
             case "resumed": {
@@ -1180,7 +1214,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = "running";
               run.pause = null;
               run.evidence = null;
-              if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
+              if (pause && pause.callPath.length > 0) {
+                const key = callKey(pause.callPath);
+                const states = { ...(run.inner[key] ?? {}) };
+                if (states[pause.stepId] === "paused") delete states[pause.stepId];
+                run.inner = { ...run.inner, [key]: states };
+              } else if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
               push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`);
               break;
             }
@@ -1192,7 +1231,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]} (${env.durationMs} ms)`);
               break;
           }
-          return { run, human, secretFix, reveal };
+          return { run, human, secretFix, reveal, ...moved };
         });
       },
 
@@ -1387,6 +1426,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           applyOutcome(outcome);
           set({ pendingImport: null, selection: null, history: [], versions: [], notice: `${t.imported}: ${outcome.scenario.name}` });
           await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
+          return true;
         } catch (e) {
           if (e instanceof ApiError && e.code === "IMPORT_CONFLICT") {
             const name = (e.details as { name?: string } | undefined)?.name ?? "";
@@ -1394,6 +1434,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           } else {
             set({ pendingImport: null, error: message(e) });
           }
+          return false;
         }
       },
 

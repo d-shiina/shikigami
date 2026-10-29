@@ -74,7 +74,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -100,7 +100,7 @@ const RUN_STYLE: Record<StepRunState, string> = {
 };
 
 /** Click target left of a step's header: a red dot when the run pauses before it. */
-function BreakpointDot({ stepId, on }: { stepId: string; on: boolean }) {
+function BreakpointDot({ stepId, on, owner }: { stepId: string; on: boolean; owner: string }) {
   const toggle = useStudio((s) => s.toggleBreakpoint);
   return (
     <button
@@ -108,7 +108,7 @@ function BreakpointDot({ stepId, on }: { stepId: string; on: boolean }) {
       title={on ? t.flow.breakpointOff : t.flow.breakpointOn}
       onClick={(e) => {
         e.stopPropagation();
-        toggle(stepId);
+        toggle(stepId, owner);
       }}
       className={`nodrag absolute -top-[7px] -left-[7px] z-10 h-[14px] w-[14px] rounded-full border-2 ${
         on ? "border-sheet bg-shu-500 shadow" : "border-transparent bg-transparent group-hover:border-shu-500/60 group-hover:bg-sheet"
@@ -536,7 +536,8 @@ function StepNode({ data }: StepNodeProps) {
         </NodeToolbar>
       )}
       <FlowHandles />
-      {!data.readOnly && <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} />}
+      {/* Read-only inside a call, but a run still stops there. */}
+      <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} owner={data.owner} />
       {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
         <span
           className={`absolute top-full left-1 z-10 mt-1.5 rounded-[4px] px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
@@ -675,6 +676,13 @@ function FollowInside({ path }: { path: string }) {
   useEffect(() => {
     if (running) bring.current(running);
   }, [running]);
+  // Where a run paused in here, once the pause panel has taken its room.
+  const paused = useStudio((s) => (s.run?.status === "paused" && s.run.pause && callKey(s.run.pause.callPath) === path ? s.run.pause : undefined));
+  useEffect(() => {
+    if (!paused) return;
+    const timer = setTimeout(() => bring.current(paused.stepId), 120);
+    return () => clearTimeout(timer);
+  }, [paused]);
   return null;
 }
 
@@ -694,7 +702,7 @@ function Follow() {
   }, [running]);
   // Where a run paused, once the pause panel has taken its room from the canvas.
   const paused = useStudio((s) => (s.run?.status === "paused" ? s.run.pause?.seq : undefined));
-  const pausedAt = useStudio((s) => s.run?.pause?.stepId);
+  const pausedAt = useStudio((s) => (s.run?.pause?.callPath.length === 0 ? s.run.pause.stepId : undefined));
   useEffect(() => {
     if (paused === undefined || !pausedAt) return;
     const timer = setTimeout(() => bring.current(pausedAt), 120);
@@ -777,7 +785,7 @@ export function FlowCanvas() {
   const selection = useStudio((s) => s.selection);
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
-  const breakpoints = useStudio((s) => (s.scenario ? s.breakpoints[s.scenario.id] : undefined)) ?? NO_BREAKPOINTS;
+  const breakpoints = useStudio((s) => (scenario ? s.breakpoints[scenario.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const theme = useTheme().mode;
@@ -861,8 +869,9 @@ export function FlowCanvas() {
           ...n.data,
           runState: states[id],
           readOnly: inside,
-          breakpoint: !inside && breakpoints.includes(id),
-          pausedHere: !inside && run?.pause?.stepId === id,
+          breakpoint: breakpoints.includes(id),
+          owner: scenario?.id ?? "",
+          pausedHere: run?.pause?.stepId === id && callKey(run.pause.callPath) === callKey(path),
           issueCount: issueCounts.get(id) ?? 0,
           selected: !inside && selection?.kind === "step" && selection.stepId === id,
           byAi: !inside && !reviewing && reviews.has(id),

@@ -18,6 +18,7 @@ describe("fix request", () => {
         error: { code: "ELEMENT_NOT_FOUND", message: "no button", details: { target: { role: "button" } } },
         variables: { user: "taro", big: "x".repeat(500) },
         revision: 4,
+        callPath: [],
       },
       evidence: {
         runId: "run_1",

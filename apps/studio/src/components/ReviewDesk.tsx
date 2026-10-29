@@ -9,7 +9,7 @@ import { headline, summarize } from "../lib/review";
 import { sentence, plain } from "../lib/sentence";
 import { approvedUpTo, groupRevertBlocker, pendingIn } from "../store";
 import { Explanations, FeedbackBox, Observations, type Observed, type Review, SendBackForm, Section, TestRuns, type TestRun } from "./Evidence";
-import { Monogram } from "./ScenarioList";
+import { Monogram } from "./ScenariosPage";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
 import { t, useKeptState } from "../lib/i18n";
 
@@ -80,7 +80,7 @@ export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
             <button
               type="button"
               onClick={onCollapse}
-              title={t.list.collapse}
+              title={t.close}
               className="ml-auto grid h-6 w-6 place-items-center rounded-[4px] font-normal text-slate-500 hover:bg-slate-200 hover:text-ink"
             >
               «

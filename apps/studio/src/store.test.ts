@@ -362,6 +362,62 @@ describe("studio store", () => {
     expect(run.changes.map((c) => c.variable)).not.toContain("scratch");
   });
 
+  it("follows a run into called scenarios and back out", async () => {
+    const scenarios: Record<string, Scenario> = {
+      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }, { id: "s2", type: "log.message" }]) },
+      scn_b: { ...scenario(1, [{ id: "c2", type: "scenario.call", params: { scenario: "scn_c" } }]), id: "scn_b", name: "B" },
+      scn_c: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
+    };
+    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
+    const store = createStudioStore(fakeApi({ getScenario, listVersions: vi.fn(async () => []) }));
+    await store.getState().open("scn_a");
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z", stepType: "log.message", attempt: 1 };
+    const start = (seq: number, stepId: string, callPath?: string[]) =>
+      store.getState().onRunEvent({ ...base, seq, type: "stepStarted", stepId, ...(callPath ? { callPath } : {}) } as unknown as RunEventEnvelope);
+    store.getState().onRunEvent({ runId: "run_1", at: base.at, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 } as unknown as RunEventEnvelope);
+    start(1, "c1");
+    expect(store.getState().dive).toEqual([]);
+    start(2, "c2", ["c1"]);
+    expect(store.getState().dive).toEqual(["c1"]);
+    start(3, "x", ["c1", "c2"]);
+    expect(store.getState().dive).toEqual(["c1", "c2"]);
+    start(4, "s2");
+    expect(store.getState().dive).toEqual([]);
+    // Not followed, the chart stays where the person put it.
+    store.getState().setFollowRun(false);
+    start(5, "x", ["c1", "c2"]);
+    expect(store.getState().dive).toEqual([]);
+  });
+
+  it("shows a pause inside a call there, and passes the called scenarios' breakpoints", async () => {
+    const scenarios: Record<string, Scenario> = {
+      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }]) },
+      scn_b: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_b", name: "B" },
+    };
+    const run = vi.fn(async () => "run_1");
+    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
+    const store = createStudioStore(fakeApi({ run, getScenario, listVersions: vi.fn(async () => []) }));
+    await store.getState().open("scn_a");
+    store.getState().toggleBreakpoint("x", "scn_b");
+    await store.getState().startRun();
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["x"], step: false });
+    store.getState().setFollowRun(false);
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "x", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1, callPath: ["c1"] } as unknown as RunEventEnvelope);
+    const paused = store.getState().run!;
+    expect(paused.status).toBe("paused");
+    expect(paused.pause).toMatchObject({ stepId: "x", callPath: ["c1"] });
+    expect(paused.inner.c1).toEqual({ x: "paused" });
+    expect(paused.steps).toEqual({});
+    expect(store.getState().dive).toEqual(["c1"]);
+    store.getState().onRunEvent({ ...base, seq: 2, type: "resumed", action: "continue", callPath: ["c1"] } as unknown as RunEventEnvelope);
+    expect(store.getState().run!.status).toBe("running");
+    expect(store.getState().run!.inner.c1).toEqual({});
+    // Paused back in the open scenario, the chart comes back out.
+    store.getState().onRunEvent({ ...base, seq: 3, type: "paused", stepId: "c1", stepType: "scenario.call", reason: "error", variables: {}, revision: 1 } as unknown as RunEventEnvelope);
+    expect(store.getState().dive).toEqual([]);
+  });
+
   it("enters calls on the chart, nested ones too, and goes back up", async () => {
     const scenarios: Record<string, Scenario> = {
       scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }]) },

@@ -10,14 +10,14 @@ Shikigami が操作できるアプリは「アダプター」単位で増やし�
 
 ## アダプターが用意するもの
 
-1. **ステップ型の定義**（`StepTypeDef`）：型名は `<アダプター名>.<操作>`（例 `excel.writeCell`）。
+1. **ノード型の定義**（`StepTypeDef`）：型名は `<アダプター名>.<操作>`（例 `excel.writeCell`）。
    - params の JSON Schema と説明（AI が読む英語の説明でよい）
    - コピーして使える記述例（`examples`）
    - 資源の宣言（`resources`）：どの params がファイル・ウィンドウ・ブラウザの作業領域を指すか。たとえば `ResourceDef::file("path")` と書けば、同じブックへの操作は自動で 1 つずつになり、別のブックは並行に動く
 2. **ハンドラー**（`ActionHandler`）：テンプレート展開済みの params を受け取って操作し、値を返すだけ。タイムアウト・リトライ・キャンセル・`onError` は Runtime が一律に処理する。失敗は `StepError`（コード・再試行可否・`details` に直し方のヒント）で返す
 3. **`Adapter` の実装**（`crates/shikigami-runtime/src/adapter.rs`）
    - `name()`：型名の接頭辞
-   - `install()`：ステップ型とハンドラーの登録、実行終了時の後片付け（`on_run_finished`）
+   - `install()`：ノード型とハンドラーの登録、実行終了時の後片付け（`on_run_finished`）
    - `inspect()`（任意）：いまアプリに何が映っているかを AI 向けに返す。MCP の `test_step` は実行後にこれを付けて返す
 4. **一覧への登録**：`crates/shikigami-adapters/src/lib.rs` の `all()` に 1 行足す。CLI・MCP サーバー・Studio はすべてここから Runtime を作るので、ほかに触る場所はない
 
@@ -25,7 +25,7 @@ Shikigami が操作できるアプリは「アダプター」単位で増やし�
 
 ## 別の言語のライブラリを使う（サイドカー）
 
-Playwright（Node.js）のように Rust 以外のライブラリを使うときは、子プロセスとして動かして改行区切りの JSON-RPC 2.0 で話します。通信・異常終了の検知・自動再起動は `shikigami_runtime::sidecar::SidecarClient` が持っているので、アダプター側は起動方法（`SidecarConfig`）とメソッドの対応を書くだけです。エラーは `error.data = { code, retryable, details }` で返すと、そのままステップのエラーになります。
+Playwright（Node.js）のように Rust 以外のライブラリを使うときは、子プロセスとして動かして改行区切りの JSON-RPC 2.0 で話します。通信・異常終了の検知・自動再起動は `shikigami_runtime::sidecar::SidecarClient` が持っているので、アダプター側は起動方法（`SidecarConfig`）とメソッドの対応を書くだけです。エラーは `error.data = { code, retryable, details }` で返すと、そのままノードのエラーになります。
 
 例：`crates/shikigami-browser`（Rust 側、約 400 行）と `packages/browser-adapter`（Node.js 側）。
 
@@ -35,4 +35,4 @@ Excel は `excel.*`（`crates/shikigami-excel`）で、xlsx を直接読み書�
 
 ## Windows API を使うアダプター
 
-ワークスペースは `unsafe` を禁止しています。Windows API を呼ぶクレートは Cargo.toml の `[lints]` を自前で持ち（`unsafe_code = "deny"`）、API を呼ぶ 1 つのモジュールだけで `#![allow(unsafe_code)]` にします（例：`shikigami-desktop` の `uia.rs`）。Windows 以外ではそのモジュールを `#[cfg(windows)]` で外し、ステップは `PLATFORM_UNSUPPORTED` を返すようにして、定義・検証・テストは Linux の CI でも回します。
+ワークスペースは `unsafe` を禁止しています。Windows API を呼ぶクレートは Cargo.toml の `[lints]` を自前で持ち（`unsafe_code = "deny"`）、API を呼ぶ 1 つのモジュールだけで `#![allow(unsafe_code)]` にします（例：`shikigami-desktop` の `uia.rs`）。Windows 以外ではそのモジュールを `#[cfg(windows)]` で外し、ノードは `PLATFORM_UNSUPPORTED` を返すようにして、定義・検証・テストは Linux の CI でも回します。

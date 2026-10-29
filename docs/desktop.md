@@ -2,7 +2,7 @@
 
 English | [日本語](ja/desktop.md)
 
-Scenarios drive Windows apps (business systems, Notepad, the Excel window, SAP GUI…). Steps are not split by app technology (Win32 / WinForms / WPF / UWP / SAP / Java): there is **only one set, `desktop.*`**. Shikigami looks at the target window and decides which technology to look inside it with. No AI is involved in running a scenario.
+Scenarios drive Windows apps (business systems, Notepad, the Excel window, SAP GUI…). Nodes are not split by app technology (Win32 / WinForms / WPF / UWP / SAP / Java): there is **only one set, `desktop.*`**. Shikigami looks at the target window and decides which technology to look inside it with. No AI is involved in running a scenario.
 
 ## Writing a target
 
@@ -18,7 +18,7 @@ Scenarios drive Windows apps (business systems, Notepad, the Excel window, SAP G
 
 When several elements match, Shikigami does not pick "one of them": it fails with `ELEMENT_AMBIGUOUS` and the candidates, so a run never presses a different element each time.
 
-## Steps
+## Nodes
 
 | type | Main params | Output | Mouse / keyboard |
 |---|---|---|---|
@@ -34,9 +34,9 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
 | `desktop.type` | `target`, `text` (text or a secret) | – | **used** |
 | `desktop.press` | `target`, `key` (`Enter` `Control+S` `Alt+F4`…, written as for the browser) | – | **used** |
 
-- **No waits to write**: every step keeps looking until the window or element appears (and is enabled). The limit is the step's `timeoutMs` (default 30 s). Use `desktop.waitFor` with `state: "hidden"` only to wait for something to go away
+- **No waits to write**: every node keeps looking until the window or element appears (and is enabled). The limit is the node's `timeoutMs` (default 30 s). Use `desktop.waitFor` with `state: "hidden"` only to wait for something to go away
 - **Mouse-free first**: `desktop.click` presses buttons, toggles checkboxes, selects items and expands trees without moving the mouse. It works on windows in the background and alongside other work. Only for apps that do not respond, use `desktop.mouseClick` / `desktop.type`
-- **One mouse and keyboard**: steps marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Steps on the same app (same `process`) also run one at a time. Scenarios never declare locks
+- **One mouse and keyboard**: nodes marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Nodes on the same app (same `process`) also run one at a time. Scenarios never declare locks
 
 ## How the AI inspects screens (MCP)
 
@@ -52,7 +52,7 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
     - button "Save" id=btnSave
 ```
 
-- `test_step`: runs a single step on the spot and returns its output and the windows after it, so the AI can walk through the screens before writing the scenario
+- `test_step`: runs a single node on the spot and returns its output and the windows after it, so the AI can walk through the screens before writing the scenario
 - The contents of password fields appear neither in the list nor in `desktop.getValue`
 
 ## Logins (secrets)
@@ -70,19 +70,19 @@ Register passwords under 🔑 Secrets in Studio and write only the name in the s
 | App | Visible today | Planned |
 |---|---|---|
 | Win32 / WinForms / WPF / UWP, Office windows | Elements are visible through UI Automation | – |
-| SAP GUI for Windows | UI Automation often shows only part of it (`inspect_ui` notes this) | SAP GUI Scripting as another way in. Steps stay `desktop.*`; only SAP-specific actions (transaction codes…) get their own types. Scripting must be enabled with `sapgui/user_scripting` on the SAP server and in the SAP GUI options |
+| SAP GUI for Windows | UI Automation often shows only part of it (`inspect_ui` notes this) | SAP GUI Scripting as another way in. Nodes stay `desktop.*`; only SAP-specific actions (transaction codes…) get their own types. Scripting must be enabled with `sapgui/user_scripting` on the SAP server and in the SAP GUI options |
 | Java (Swing…) | Often only the frame (noted) | Java Access Bridge (enable with `jabswitch -enable`) |
 | Inside Citrix / Remote Desktop | No elements visible | Image recognition and coordinates (`point`) |
 | Excel data | – | `excel.*`, reading and writing xlsx directly ([adapters.md](adapters.md)) |
 
 ## How it works
 
-- UI Automation is called from a **dedicated thread without windows** that joins the multithreaded apartment (MTA), as Microsoft recommends (so it does not freeze even when Studio's own window is the target). Steps only send requests to that thread and element references never leave it; each step finds its `target` again
+- UI Automation is called from a **dedicated thread without windows** that joins the multithreaded apartment (MTA), as Microsoft recommends (so it does not freeze even when Studio's own window is the target). Nodes only send requests to that thread and element references never leave it; each node finds its `target` again
 - UI Automation timeouts are set to 2 s for connecting and 10 s for calls, so an unresponsive app does not hang the run (`APP_NOT_RESPONDING`). A timeout during an action such as a click means "it may have happened", so it is not retried, to avoid pressing twice
 - Classic Win32 buttons are clicked by posting the click, so a dialog opened by the button does not block
 - Apps running as administrator cannot be driven from Shikigami running with normal rights (a Windows restriction). This is reported as `ELEVATION_REQUIRED`
-- Requests whose step timed out or was stopped while waiting in the queue are dropped without running (no double clicks or typing after a stop or retry)
-- Before using the mouse or keyboard the window is brought to the front. When Windows refuses (e.g. the screen is locked) the step stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`
+- Requests whose node timed out or was stopped while waiting in the queue are dropped without running (no double clicks or typing after a stop or retry)
+- Before using the mouse or keyboard the window is brought to the front. When Windows refuses (e.g. the screen is locked) the node stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`
 - The thread is Per-Monitor DPI aware so coordinates stay right on high-DPI screens
 
 ## Main errors
@@ -101,7 +101,7 @@ Register passwords under 🔑 Secrets in Studio and write only the name in the s
 
 ## Verified and limits
 
-- **Verified**: step definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI starts Notepad and types and reads text through UI Automation
+- **Verified**: node definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI starts Notepad and types and reads text through UI Automation
 - **Not yet verified**: real business apps, SAP GUI and Java apps; mouse and keyboard actions (CI does not test screen input); high DPI and multiple monitors
 - Mouse and keyboard exclusion **across processes** (Studio, CLI, MCP server) is not implemented (within one process only)
 - Screenshots, reading a whole grid at once, and walking through menus are not implemented

@@ -398,42 +398,160 @@ async fn a_failed_call_still_hands_back_what_it_assigned() {
     assert_eq!(report.outputs.get("y"), Some(&json!("keep")));
 }
 
-#[tokio::test]
-async fn an_interactive_run_pauses_at_the_call_step_not_inside_the_callee() {
-    let mut broken = Scenario::new("壊れている");
-    broken.id = "scn_broken".into();
-    broken.steps = vec![Step::new("control.fail").with_param("message", "boom")];
-    let broken = with_ids(broken, "b");
-    let main = caller(
-        vec![call("scn_broken", json!({}), json!({})), set("after", "1")],
-        vec![],
-    );
+/// Starts `main` interactively and answers each pause with the next of
+/// `commands`, returning where it paused (`callPath/stepId`) and the report.
+async fn debug_run(
+    main: Scenario,
+    called: Vec<Scenario>,
+    options: crate::DebugOptions,
+    commands: Vec<crate::DebugCommand>,
+) -> (Vec<String>, RunReport) {
     let mut handle = Runtime::new()
         .start(
             main,
             RunOptions {
-                subscenarios: subs(vec![broken]),
-                debug: Some(crate::DebugOptions {
-                    pause_on_error: true,
-                    ..Default::default()
-                }),
+                subscenarios: subs(called),
+                debug: Some(options),
                 ..RunOptions::default()
             },
         )
         .expect("start");
     let control = handle.debug_control().expect("debug control");
+    let mut commands = commands.into_iter();
     let mut paused_at = Vec::new();
     while let Some(event) = tokio::time::timeout(Duration::from_secs(5), handle.next_event())
         .await
         .expect("the run stalled")
     {
         if let RunEvent::Paused { step_id, .. } = &event.event {
-            paused_at.push(step_id.to_string());
-            control.send(crate::DebugCommand::Skip).expect("skip");
+            let mut at: Vec<String> = event.call_path.iter().map(ToString::to_string).collect();
+            at.push(step_id.to_string());
+            paused_at.push(at.join("/"));
+            let command = commands.next().unwrap_or(crate::DebugCommand::Continue);
+            control.send(command).expect("resume");
         }
     }
-    let report = handle.wait().await.expect("wait");
-    assert_eq!(paused_at, vec!["m1".to_owned()]);
+    (paused_at, handle.wait().await.expect("wait"))
+}
+
+fn broken() -> Scenario {
+    let mut broken = Scenario::new("壊れている");
+    broken.id = "scn_broken".into();
+    broken.steps = vec![Step::new("control.fail").with_param("message", "boom")];
+    with_ids(broken, "b")
+}
+
+#[tokio::test]
+async fn an_interactive_run_pauses_on_an_error_inside_the_callee() {
+    let main = caller(
+        vec![call("scn_broken", json!({}), json!({})), set("after", "1")],
+        vec![],
+    );
+    let options = crate::DebugOptions {
+        pause_on_error: true,
+        ..Default::default()
+    };
+    let (paused_at, report) = debug_run(
+        main,
+        vec![broken()],
+        options,
+        vec![crate::DebugCommand::Skip],
+    )
+    .await;
+    // Where it failed, not the call step; skipped there, the call goes on.
+    assert_eq!(paused_at, vec!["m1/b1".to_owned()]);
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
-    assert_eq!(report.outputs.get("after"), None);
+}
+
+#[tokio::test]
+async fn giving_up_inside_a_call_does_not_pause_again_at_the_call() {
+    let main = caller(vec![call("scn_broken", json!({}), json!({}))], vec![]);
+    let options = crate::DebugOptions {
+        pause_on_error: true,
+        ..Default::default()
+    };
+    let (paused_at, report) = debug_run(
+        main,
+        vec![broken()],
+        options,
+        vec![crate::DebugCommand::Abort],
+    )
+    .await;
+    assert_eq!(paused_at, vec!["m1/b1".to_owned()]);
+    assert_eq!(report.status, RunStatus::Failed);
+}
+
+#[tokio::test]
+async fn errors_a_call_handles_do_not_pause_inside_it() {
+    let mut handled = call("scn_broken", json!({}), json!({}));
+    handled.on_error = Some(OnError::Continue);
+    let main = caller(vec![handled, set("after", "1")], vec![]);
+    let options = crate::DebugOptions {
+        pause_on_error: true,
+        ..Default::default()
+    };
+    let (paused_at, report) = debug_run(main, vec![broken()], options, vec![]).await;
+    assert!(paused_at.is_empty(), "{paused_at:?}");
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+}
+
+#[tokio::test]
+async fn stepping_goes_into_a_call_and_back_out() {
+    let main = caller(
+        vec![
+            set("price", "1000"),
+            call(
+                "scn_tax",
+                json!({ "amount": "{{ price }}" }),
+                json!({ "taxed": "total" }),
+            ),
+            set("after", "1"),
+        ],
+        vec![],
+    );
+    use crate::DebugCommand::{StepInto, StepOut, StepOver};
+    let start = || crate::DebugOptions {
+        pause_at_start: true,
+        ..Default::default()
+    };
+    // Into the call, one step inside, then out to the step after it.
+    let (paused_at, report) = debug_run(
+        main.clone(),
+        vec![tax()],
+        start(),
+        vec![
+            StepOver,
+            StepInto,
+            StepOver,
+            StepOut,
+            crate::DebugCommand::Continue,
+        ],
+    )
+    .await;
+    assert_eq!(paused_at, vec!["m1", "m2", "m2/t1", "m2/t2", "m3"]);
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    // Over the call: nothing inside stops.
+    let (paused_at, _) = debug_run(
+        main,
+        vec![tax()],
+        start(),
+        vec![StepOver, StepOver, StepOver, crate::DebugCommand::Continue],
+    )
+    .await;
+    assert_eq!(paused_at, vec!["m1", "m2", "m3"]);
+}
+
+#[tokio::test]
+async fn breakpoints_inside_a_called_scenario_pause() {
+    let main = caller(
+        vec![call("scn_tax", json!({ "amount": 1 }), json!({}))],
+        vec![],
+    );
+    let options = crate::DebugOptions {
+        breakpoints: vec!["t2".into()],
+        ..Default::default()
+    };
+    let (paused_at, report) = debug_run(main, vec![tax()], options, vec![]).await;
+    assert_eq!(paused_at, vec!["m1/t2".to_owned()]);
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
 }

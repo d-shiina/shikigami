@@ -5,7 +5,7 @@
 ## 5 原則
 
 1. 構文を増やさない。同じことは 1 通りで書く。
-2. 離れたステップ同士を名前で参照しない（background/await のようなハンドルは作らない。「先に始めて後で待つ」は `control.parallel` のブランチとブロック末尾の合流で書く）。
+2. 離れたノード同士を名前で参照しない（background/await のようなハンドルは作らない。「先に始めて後で待つ」は `control.parallel` のブランチとブロック末尾の合流で書く）。
 3. 排他・ロックは Runtime が params から推論する。AI に宣言させない。
 4. 検証エラーには直し方（`hint`）を付け、`get_step_schema` はコピーできる記述例（`examples`）を返す。
 5. 結果がタイミングで変わる書き方は、実行時ではなく検証時にエラーにする。
@@ -40,9 +40,9 @@
 
 ## C. `wait.until`
 
-- Runtime 組み込みの制御ステップ。params：`condition`（式、必須）、`intervalMs`（既定 500）。
-- 任意の `check` ブロックを毎回のポーリング前に実行（ファイル存在確認・要素状態などの通常ステップを `saveAs` で変数に入れ、`condition` で判定）。式言語に副作用のあるプローブ関数は入れない。
-- 上限はステップ共通の `timeoutMs`。専用 timeout は作らない。超えたら `WAIT_TIMEOUT`（`details: { elapsedMs, polls }`）。
+- Runtime 組み込みの制御ノード。params：`condition`（式、必須）、`intervalMs`（既定 500）。
+- 任意の `check` ブロックを毎回のポーリング前に実行（ファイル存在確認・要素状態などの通常ノードを `saveAs` で変数に入れ、`condition` で判定）。式言語に副作用のあるプローブ関数は入れない。
+- 上限はノード共通の `timeoutMs`。専用 timeout は作らない。超えたら `WAIT_TIMEOUT`（`details: { elapsedMs, polls }`）。
 - `retry` 付きは `REDUNDANT_RETRY` warning。
 
 ## D. 現仕様の見直し（優先度順）

@@ -162,6 +162,7 @@ impl Runtime {
                 default_on_error: OnError::Fail,
                 resources: self.resources.clone(),
                 debug: debugger.clone(),
+                in_call: false,
                 handled_depth: 0,
                 library: Arc::new(library),
             },

@@ -5,7 +5,7 @@ English | [日本語](ja/secrets.md)
 How IDs and passwords for business sites and apps are handled. Three principles:
 
 1. **People register the values**, under a name, in Studio's 🔑 Secrets (or with the CLI), e.g. "Order system".
-2. **Scenarios and the AI only get the name.** A scenario says only `{ "secret": "Order system", "field": "password" }`. The value is handed only to the running step and never appears in scenario files, MCP results, logs or screenshots.
+2. **Scenarios and the AI only get the name.** A scenario says only `{ "secret": "Order system", "field": "password" }`. The value is handed only to the running node and never appears in scenario files, MCP results, logs or screenshots.
 3. **Values are typed only into registered sites.** Each secret has its allowed sites; every other page is refused (against look-alike sites, and against an AI misled by instructions planted in a page). The check is made against the page the input field is on, so it also refuses a site that changed while waiting, and input fields in another site's iframe.
 
 ## Registering
@@ -59,7 +59,7 @@ From scripts, use `--password-stdin` (the first line of standard input).
 ```
 
 - `field` is `username` / `password` / `totp` (the current one-time code).
-- Secrets may appear only as the value of input steps (`browser.fill`'s `value`). In logs, messages, URLs and the like they give the validation error `SECRET_NOT_ALLOWED`.
+- Secrets may appear only as the value of input nodes (`browser.fill`'s `value`). In logs, messages, URLs and the like they give the validation error `SECRET_NOT_ALLOWED`.
 - A default value on a `secret: true` variable would stay in the scenario as plain text, so it gives the validation error `SECRET_DEFAULT`.
 - In Studio's properties, switch an input's value between "Text / 🔑 Secret" and pick the name and field.
 

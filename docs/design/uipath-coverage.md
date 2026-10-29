@@ -9,12 +9,12 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 | 層 | 何を置くか | 例 |
 |---|---|---|
 | **式の関数**（Core、副作用なし） | 値の計算・加工すべて。文字列・数値・日付・リスト・JSON・パス | `trim`、`replace`、`slice`、`formatDate`、`filter`、`sum` |
-| **組込ステップ**（Runtime / アダプター） | 外部に触れる操作だけ。ファイル・ネットワーク・プロセス・クリップボード・ダイアログ | `file.readCsv`、`http.request`、`process.run` |
+| **組込ノード**（Runtime / アダプター） | 外部に触れる操作だけ。ファイル・ネットワーク・プロセス・クリップボード・ダイアログ | `file.readCsv`、`http.request`、`process.run` |
 | **プラグイン** | 社内システム・個別 SaaS など | [plugins.md](plugins.md) |
 
-文字の加工のためにステップを増やさない理由：
+文字の加工のためにノードを増やさない理由：
 
-- 「連結」「トリミング」「置換」をステップにすると、AI は `variable.set` の式で書くかステップで書くかを毎回選ぶことになり、出力がぶれる（原則 1）。
+- 「連結」「トリミング」「置換」をノードにすると、AI は `variable.set` の式で書くかノードで書くかを毎回選ぶことになり、出力がぶれる（原則 1）。
 - 式なら `trim(replace(name, '　', ' '))` のように 1 行で組み合わせられ、Studio の手順書でも 1 行で読める。UiPath でも上級者は Assign + VB.NET 式で書いており、アクティビティを並べるのは入門向け。
 - Studio のパレットには「文字」カテゴリの**プリセット**（中身は式を入れた `variable.set`）を置き、UiPath の「アクティビティを探して置く」体験は残す（Studio 側で対応）。
 
@@ -35,13 +35,13 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 | Break / Continue | `control.break` / `control.continue` | ✅ |
 | Parallel / Parallel For Each | `control.parallel` / `control.forEach` の `concurrency` | ✅ |
 | Try Catch / Throw / Rethrow | `control.try` / `control.fail`（catch 内で `control.fail` に `error.message`） | ✅ |
-| Retry Scope | ステップ共通の `retry`、状態待ちは `wait.until` | ✅ |
+| Retry Scope | ノード共通の `retry`、状態待ちは `wait.until` | ✅ |
 | Delay | `flow.delay` | ✅ |
 | Element Exists 待ち / Check App State | `wait.until`、`browser.waitFor`、`desktop.waitFor` | ✅ |
 | Log Message / Write Line | `log.message` | ✅ |
 | Sequence / Flowchart | `control.group`（フロー図は Studio の表示） | ✅ |
 | Invoke Workflow File | サブシナリオ（別スレッドで実装中） | 🔜 |
-| Comment | ステップの `name`・メモ | ✅ |
+| Comment | ノードの `name`・メモ | ✅ |
 | Get Credential / Get Asset | シークレット（`{ "secret": … }`） | ✅ |
 | Invoke Code / Invoke VBA / Invoke PowerShell | 任意コードは実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro`（Office スレッド） | ✅ / 🔜 |
 

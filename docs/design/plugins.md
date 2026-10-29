@@ -16,7 +16,7 @@ SAP GUI や Java アプリは `desktop.*` のバックエンドとして組込�
 プラグインは子プロセスとして動き、改行区切りの JSON-RPC 2.0 で本体と話す。ブラウザ操作（`packages/browser-adapter`）と同じ仕組み（`shikigami_runtime::sidecar`）をそのまま使う。
 
 - **言語は自由**：Node.js、Python、.NET、PowerShell、Go など、標準入出力が使えれば何でもよい
-- **壊れても本体は落ちない**：プラグインが異常終了しても、そのステップが `ADAPTER_CRASHED`（再試行可）で失敗するだけ。次の呼び出しで自動的に起動し直す
+- **壊れても本体は落ちない**：プラグインが異常終了しても、そのノードが `ADAPTER_CRASHED`（再試行可）で失敗するだけ。次の呼び出しで自動的に起動し直す
 - **DLL を本体に読み込む方式は採らない**：Rust には安定した ABI がなく、プラグインの不具合で本体ごと落ちる。ワークスペースは `unsafe` を禁止している（[判断9](../architecture.md) と同じく、仕組みを増やさない）
 - WASM は将来の選択肢として残す（Windows の COM や業務アプリのライブラリが使えないため、最初の方式にはしない）
 
@@ -64,7 +64,7 @@ hello/
 | 項目 | 必須 | 意味 |
 |---|---|---|
 | `manifestVersion` | ○ | いまは `1` |
-| `name` | ○ | ステップ型の接頭辞（`hello` → `hello.greet`）。英小文字で始まる英小文字・数字（`^[a-z][a-z0-9]*$`、32 文字まで） |
+| `name` | ○ | ノード型の接頭辞（`hello` → `hello.greet`）。英小文字で始まる英小文字・数字（`^[a-z][a-z0-9]*$`、32 文字まで） |
 | `version` | ○ | プラグインのバージョン（semver、`0.1.0` の形）。シナリオの `requires` に記録される。params を互換でない形に変えたらメジャー版（0.x ならマイナー版）を上げる |
 | `label` / `description` | ○ / - | 表示名と説明 |
 | `command.program` | ○ | 起動するプログラム。`./` や `bin\` のように区切りを含むときはプラグインのフォルダからの相対、それ以外は PATH から探す。`node` はインストーラーに同梱の Node.js を優先するので、利用者の PC に Node.js がなくても動く |
@@ -79,13 +79,13 @@ hello/
 | `steps[].secretParams` | - | 登録済みシークレットを受け取れる param（§5） |
 | `steps[].resources` | - | 排他する資源（§4） |
 | `steps[].defaultTimeoutMs` | - | `timeoutMs` 省略時の時間制限 |
-| `steps[].deprecated` | - | 使うのをやめてほしいステップ：`{ "note": "理由", "replacement": "hello.greet2" }`。動き続けるが、検証で `DEPRECATED_STEP_TYPE` の警告が出る |
+| `steps[].deprecated` | - | 使うのをやめてほしいノード：`{ "note": "理由", "replacement": "hello.greet2" }`。動き続けるが、検証で `DEPRECATED_STEP_TYPE` の警告が出る |
 
 不明な項目はエラーにする（書き間違いに気づけるように）。
 
 ### AI が組みやすい仕様との関係（[ai-authoring.md](ai-authoring.md)）
 
-- プラグインのステップも組込と同じく `list_step_types` / `get_step_schema` に出る。AI はプラグインかどうかを区別しない
+- プラグインのノードも組込と同じく `list_step_types` / `get_step_schema` に出る。AI はプラグインかどうかを区別しない
 - 記述例は必須で、読み込み時に検証する（原則 4）
 - 式として扱う param（`expressionParams`）はプラグインには持たせない。文字列はすべてテンプレート（原則 1）
 - 排他は `resources` で宣言し、シナリオには書かせない（原則 3）
@@ -99,14 +99,14 @@ hello/
 | `{ "kind": "desktopInput" }` | マウス・キーボード（`desktop.*` の入力操作と順番待ち） |
 | `{ "kind": "plugin" }` | このプラグイン全体で 1 つずつ（並行に呼ばれると困るプラグイン向け） |
 
-キーは組込と同じ形（`file:c:\data\a.xlsx` など）なので、組込のステップとプラグインのステップが同じファイルを触っても順番待ちになる。
+キーは組込と同じ形（`file:c:\data\a.xlsx` など）なので、組込のノードとプラグインのノードが同じファイルを触っても順番待ちになる。
 
 ## 5. 本体が守ること
 
 プラグインに任せず、本体が一律に処理する。
 
 - **params の検証**：マニフェストの JSON Schema で検証し、エラーには直し方のヒントを付ける
-- **タイムアウト・リトライ・キャンセル・`onError`**：Runtime が処理する。プラグインには `timeoutMs`（ステップの制限より 0.5 秒短い値）を渡すので、それまでに処理を止める
+- **タイムアウト・リトライ・キャンセル・`onError`**：Runtime が処理する。プラグインには `timeoutMs`（ノードの制限より 0.5 秒短い値）を渡すので、それまでに処理を止める
 - **シークレット**：`secretParams` に挙げた param だけが `{ "secret": "<名前>", "field": "password" }` を受け取れる（それ以外は検証エラー）。本体が値を取り出し、シークレットの「使ってよい先」に `plugin:<name>`（例 `plugin:hello`）が登録されているときだけ、文字列にしてプラグインに渡す。登録がなければ `SECRET_PLUGIN_NOT_ALLOWED`。渡した値はログ・エラー・結果、プラグインの標準エラー出力から自動で伏せ字になる
 - **許可レベル**：`risk` を MCP の承認に使う
 
@@ -120,7 +120,7 @@ hello/
 {"jsonrpc":"2.0","id":1,"method":"greet","params":{"name":"佐藤","runId":"…","timeoutMs":29500}}
 ```
 
-- `method` はステップの `action`。`params` はテンプレート展開済みの params に `runId`（実行ごとの ID。プラグインが実行単位で状態を持つときのキー）と `timeoutMs` を足したもの
+- `method` はノードの `action`。`params` はテンプレート展開済みの params に `runId`（実行ごとの ID。プラグインが実行単位で状態を持つときのキー）と `timeoutMs` を足したもの
 - 実行が終わると `closeRun`（`{ "runId": "…" }`）を呼ぶ。後片付けがなければ `null` かエラーを返せばよい。5 秒待って応答がなければ本体は先に進む
 - `inspect: true` のプラグインには `inspect`（`{ "runId": "…", … }`）を呼ぶ
 - 標準入力が閉じたら終了する
@@ -132,7 +132,7 @@ hello/
 {"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"not found","data":{"code":"ORDER_NOT_FOUND","retryable":false,"details":{"hint":"…"}}}}
 ```
 
-- `error.data.code` がステップのエラーコード、`retryable` が再試行するか、`details.hint` が直し方（AI にも人にも見える）
+- `error.data.code` がノードのエラーコード、`retryable` が再試行するか、`details.hint` が直し方（AI にも人にも見える）
 - 複数の呼び出しが同時に来ることがある（並行ブランチ）。順番に処理したいなら `resources` に `plugin` を書く
 - 標準出力は応答専用。ログは標準エラーへ（本体のログに入る）
 

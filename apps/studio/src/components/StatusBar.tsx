@@ -103,7 +103,7 @@ function findName(steps: Step[], id: string): string | undefined {
   return undefined;
 }
 
-/** "手順 3 / 12" for the selected step, in reading order. */
+/** "ノード 3 / 12" for the selected step, in reading order. */
 function Position() {
   const scenario = useStudio((s) => s.scenario);
   const stepTypes = useStudio((s) => s.stepTypes);

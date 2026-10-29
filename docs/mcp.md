@@ -60,17 +60,17 @@ args = ["mcp"]
 | Class | Tool | What it does |
 |---|---|---|
 | read | `list_scenarios` | List scenarios |
-|  | `get_scenario` | The scenario (with step IDs) and whether Undo/Redo is possible. While a person has sent it back, `feedback` (the reason and notes on steps). Inputs and outputs of scenarios called with `scenario.call` (`subscenarios`), and the scenarios that call this one (`calledBy`) |
+|  | `get_scenario` | The scenario (with node IDs) and whether Undo/Redo is possible. While a person has sent it back, `feedback` (the reason and notes on nodes). Inputs and outputs of scenarios called with `scenario.call` (`subscenarios`), and the scenarios that call this one (`calledBy`) |
 |  | `validate_scenario` | Validates a saved scenario (`scenarioId`) or an unsaved document (`scenario`). Returns every error with a JSON Pointer |
-|  | `list_step_types` / `get_step_schema` | Available step types, the JSON Schema of their params, and examples to copy (`examples`) |
-|  | `get_history` | Who (Studio / MCP client name / CLI) changed what and when, with the AI's explanation (`summary`) and the steps touched (`stepIds`) |
+|  | `list_step_types` / `get_step_schema` | Available node types, the JSON Schema of their params, and examples to copy (`examples`) |
+|  | `get_history` | Who (Studio / MCP client name / CLI) changed what and when, with the AI's explanation (`summary`) and the nodes touched (`stepIds`) |
 |  | `get_review` | What the review desk shows: changes since the last approval, the AI's test runs, the screens it relied on, and reviews (reasons for sending back). [Design](design/review-evidence.md) |
 |  | `get_run_status` / `get_run_logs` / `list_runs` | Status of a run, its final report, and its event log (`afterSeq` for what is new, `variable` for one variable's changes only) |
 |  | `list_versions` / `get_version` | Named versions, and a version's snapshot |
-|  | `diff_versions` | Differences between versions, or a version and now (by step ID; by default "latest version → now") |
+|  | `diff_versions` | Differences between versions, or a version and now (by node ID; by default "latest version → now") |
 |  | `export_scenario` | The scenario, its versions and the subscenarios it calls, as one bundle (without defaults of secret variables) |
 |  | `list_secrets` | Names, sites and set fields of the secrets registered in Studio (never the values; see [secrets.md](secrets.md)) |
-| write | `create_scenario` | Create a scenario (step IDs optional) |
+| write | `create_scenario` | Create a scenario (node IDs optional) |
 |  | `update_scenario` | Apply several EditOps atomically as one revision |
 |  | `add_step` / `update_step` / `remove_step` / `move_step` | Single edits |
 |  | (common edit arguments) | `summary`: what the change does (shown in review and history). `observations`: the `observationId`s of the screens it is based on |
@@ -78,13 +78,13 @@ args = ["mcp"]
 |  | `delete_scenario` | Move to the trash. `expectedRevision` required, marked `destructiveHint`. `SCENARIO_IN_USE` while another scenario calls it |
 |  | `create_version` / `restore_version` | Save a version / go back to a version (one edit that can be undone) |
 |  | `import_scenario` | Import a bundle or a scenario document. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subscenarios in the bundle come along |
-|  | `extract_subscenario` | Move consecutive steps of one block into a new scenario and replace them with a single `scenario.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subscenarios.md)) |
+|  | `extract_subscenario` | Move consecutive nodes of one block into a new scenario and replace them with a single `scenario.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subscenarios.md)) |
 |  | `request_secret` | Ask the person for login details. Studio shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Studio and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
 | run | `run_scenario` | Run with the Runtime (the AI takes no part in running it). `waitMs` waits for it to finish. Input variables marked `secret: true` cannot be passed |
 |  | `stop_scenario` | Cancel a run |
 | browser | `inspect_page` | The page's accessibility tree (how to choose a `target`: [browser.md](browser.md)). Saves the tree and a screenshot as evidence and returns an `observationId` |
 | desktop | `inspect_ui` | The open windows, or the elements of one window (how to choose a `target`: [desktop.md](desktop.md)). When it looks at a window it saves the element tree as evidence and returns an `observationId` |
-| try | `test_step` | Run one step on the spot and return its output (for a browser step also the page after it, for a desktop step the window it worked on). Does not change the scenario. Saves the result as evidence and returns an `observationId` |
+| try | `test_step` | Run one node on the spot and return its output (for a browser node also the page after it, for a desktop node the window it worked on). Does not change the scenario. Saves the result as evidence and returns an `observationId` |
 
 - Each validation issue carries a hint for fixing it (`hint`: close names, required and allowed params, when to use expressions vs. templates…), so the AI can fix it in one go.
 - Input schemas are generated from the Rust types. Results come back as `structuredContent` (JSON).
@@ -110,4 +110,4 @@ The scenario changes themselves (EditOps and their inverses) are recorded with t
 - Human approval in Studio for deletions, per-client tool permissions, and per-scenario "may run from MCP" are not implemented (only the server-wide `--allow`).
 - The audit log is JSONL. Indexing it in SQLite is not implemented.
 - The Streamable HTTP transport is not implemented (stdio only).
-- Screens are inspected with `inspect_page` for browsers ([browser.md](browser.md)) and `inspect_ui` for Windows apps ([desktop.md](desktop.md)). Both can be tried step by step with `test_step`.
+- Screens are inspected with `inspect_page` for browsers ([browser.md](browser.md)) and `inspect_ui` for Windows apps ([desktop.md](desktop.md)). Both can be tried step by node with `test_step`.

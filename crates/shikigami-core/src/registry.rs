@@ -713,7 +713,7 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
             "params": { "condition": "status == 'done'", "intervalMs": 2000 },
             "timeoutMs": 600000,
             "blocks": { "check": [
-                { "type": "log.message", "name": "状態を読む（実際は読み取りステップに saveAs: status）", "params": { "message": "確認中: {{ status }}" } }
+                { "type": "log.message", "name": "状態を読む（実際は読み取りノードに saveAs: status）", "params": { "message": "確認中: {{ status }}" } }
             ] }
         })],
         builtin::FLOW_DELAY => vec![json!({ "type": "flow.delay", "params": { "ms": 1000 } })],

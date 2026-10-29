@@ -2,9 +2,9 @@
 
 English | [日本語](ja/files.md)
 
-Crate `shikigami-files`. Works without installing anything and is tested off Windows too. Value processing (building paths, filtering rows…) is written with expression functions, not steps ([expressions.md](expressions.md)).
+Crate `shikigami-files`. Works without installing anything and is tested off Windows too. Value processing (building paths, filtering rows…) is written with expression functions, not nodes ([expressions.md](expressions.md)).
 
-| Step | What it does | Output |
+| Node | What it does | Output |
 |---|---|---|
 | `file.readText` | Reads a whole text file | text |
 | `file.writeText` | Writes (`append: true` adds to the end). Creates missing folders | the path |

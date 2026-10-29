@@ -27,13 +27,14 @@ const CheckIcon = () => (
   </svg>
 );
 
-export type View = "story" | "flow";
+export type View = "story" | "flow" | "variables";
 
-/** Flow chart or procedure: two ways to read the same scenario. */
+/** Flow chart, procedure or variables: three ways to read the same scenario. */
 function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => void }) {
   const options: [View, string][] = [
     ["flow", t.viewFlow],
     ["story", t.viewStory],
+    ["variables", t.vars.table.view],
   ];
   return (
     <div className="flex h-7 items-center rounded-[4px] bg-slate-100 p-0.5 text-[12px]" role="radiogroup">

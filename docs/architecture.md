@@ -83,7 +83,7 @@ sequenceDiagram
   Note over M: The Runtime runs it again without AI
 ```
 
-**AI operations (exploring) and saving the scenario are separate tools.** UI tools such as `click_element` never change the scenario. To keep a step, the AI calls `add_step` explicitly.
+**AI operations (exploring) and saving the scenario are separate tools.** UI tools such as `click_element` never change the scenario. To keep a node, the AI calls `add_step` explicitly.
 
 ## 2. Monorepo layout
 
@@ -167,15 +167,16 @@ The canonical format is JSON (`schemas/scenario.schema.json`). Example: [example
 
 ### Key points
 
-- **Every step has the same shape** (`id` / `type` / `params` / `blocks` / common options). Control flow is a tree, with named child lists in `blocks`.
-- **Steps are always referenced by stable ID.** Positions (indexes) are never used as references, so adding, removing or moving steps does not break other references. IDs are `stp_` + UUIDv7.
-- **`params` are validated with a JSON Schema per type** (held by `StepRegistry`). New step types can be added without changing the scenario schema itself.
+- **Nodes are `steps` in the file.** Studio and these docs call each item of a scenario a node; the scenario file and the MCP tools keep the name `step` (`steps`, `stepId`, `add_step`, `StepRegistry`).
+- **Every node has the same shape** (`id` / `type` / `params` / `blocks` / common options). Control flow is a tree, with named child lists in `blocks`.
+- **Nodes are always referenced by stable ID.** Positions (indexes) are never used as references, so adding, removing or moving nodes does not break other references. IDs are `stp_` + UUIDv7.
+- **`params` are validated with a JSON Schema per type** (held by `StepRegistry`). New node types can be added without changing the scenario schema itself.
 - **Expression language** (§11 decision 5): conditions are expressions (`count > 3 && status == 'OK'`), string params are `{{ expression }}` templates. No arbitrary code can run.
-- **Common step options**: `disabled`, `timeoutMs`, `retry`, `onError` (`fail`/`continue`), `saveAs` (output into a variable), `meta` (for Studio display and the AI's evidence; the Runtime ignores it).
+- **Common node options**: `disabled`, `timeoutMs`, `retry`, `onError` (`fail`/`continue`), `saveAs` (output into a variable), `meta` (for Studio display and the AI's evidence; the Runtime ignores it).
 - **Backward compatibility**: on load, `schemaVersion` drives step-by-step migration (`migrate.rs`). Future versions are rejected with `UNSUPPORTED_SCHEMA_VERSION` rather than silently truncated. Unknown keys in `metadata` are kept. When the version goes up, plugin `requires`, deprecation, and MCP / CLI compatibility: [compatibility.md](compatibility.md).
 - **YAML** is a possible future import/export format, not the canonical one.
 
-### Built-in step types (Phase 1)
+### Built-in node types (Phase 1)
 
 | type | Contents |
 |---|---|
@@ -190,12 +191,12 @@ The canonical format is JSON (`schemas/scenario.schema.json`). Example: [example
 | `control.fail` | Fails with `message`, `code` |
 | `variable.set` | Assigns `value` (templates allowed) or `expression` to `name` |
 | `log.message` | Writes to the run log |
-| `scenario.call` | Calls another scenario as one step, with `scenario` (ID), `inputs`, `outputs` ([design](design/subscenarios.md), Japanese) |
+| `scenario.call` | Calls another scenario as one node, with `scenario` (ID), `inputs`, `outputs` ([design](design/subscenarios.md), Japanese) |
 | `flow.delay` | Waits for a fixed time (use `wait.until` to wait for something to finish) |
 
 ## 5. Adapter interface
 
-An adapter registers pairs of **step type definition (metadata) + handler (execution)** with the Runtime.
+An adapter registers pairs of **node type definition (metadata) + handler (execution)** with the Runtime.
 
 ```rust
 pub trait ActionHandler: Send + Sync + 'static {
@@ -236,18 +237,18 @@ Semantic information first; coordinates as a fallback.
 - `CoInitializeEx(COINIT_MULTITHREADED)` on a **dedicated worker thread** (with no window). Every UIA call goes through a request queue to this thread (Microsoft's recommendation).
 - Elements are held only within a request; raw pointers never leave the thread. Scenarios store only Targets (semantic information), resolved again on every run.
 - `IUIAutomation2` connection and transaction timeouts protect against hung apps. Privilege differences (an elevated app cannot be operated from a non-elevated process) give the dedicated error `ELEVATION_REQUIRED`.
-- **Implemented** ([desktop.md](desktop.md)): crate `shikigami-desktop`, 11 `desktop.*` step types, MCP's `inspect_ui`. Steps are one set regardless of the app's technology (Win32 / WPF / SAP GUI / Java); how to grab elements is chosen from the window automatically (currently UI Automation only; SAP GUI and Java windows are detected and noted).
+- **Implemented** ([desktop.md](desktop.md)): crate `shikigami-desktop`, 11 `desktop.*` node types, MCP's `inspect_ui`. Nodes are one set regardless of the app's technology (Win32 / WPF / SAP GUI / Java); how to grab elements is chosen from the window automatically (currently UI Automation only; SAP GUI and Java windows are detected and noted).
 
 ### 4.2 Browser adapter
 
 - Starts Node.js + Playwright as a **child process** and talks newline-delimited JSON-RPC 2.0 over stdin/stdout (§7.3).
 - Waiting uses Playwright's auto-waiting / `locator.waitFor` / `page.waitForLoadState`, never fixed sleeps.
-- The Rust side detects a crashed child process, fails the running step with `ADAPTER_CRASHED`, and restarts it on the next request.
-- **Implemented** ([browser.md](browser.md)): crate `shikigami-browser` (child process management, 10 `browser.*` steps), `packages/browser-adapter` (runs TypeScript directly on Node 22.18+). The browser is Edge by default on Windows and is not bundled. Pages are split into one BrowserContext per "run × `context` name" and closed when the run ends.
+- The Rust side detects a crashed child process, fails the running node with `ADAPTER_CRASHED`, and restarts it on the next request.
+- **Implemented** ([browser.md](browser.md)): crate `shikigami-browser` (child process management, 10 `browser.*` nodes), `packages/browser-adapter` (runs TypeScript directly on Node 22.18+). The browser is Edge by default on Windows and is not bundled. Pages are split into one BrowserContext per "run × `context` name" and closed when the run ends.
 
 ## 6. MCP tool interface (Phase 2)
 
-> **Status**: the scenario, step and run tools (except the UI tools and `debug_scenario` / `test_step`) are implemented. `get_history`, `list_runs` and `undo` / `redo` were added, and run logs are `get_run_logs(runId, afterSeq?)`. Usage and per-client settings: [mcp.md](mcp.md). The UI tools are Phase 3 / 4.
+> **Status**: the scenario, node and run tools (except the UI tools and `debug_scenario` / `test_step`) are implemented. `get_history`, `list_runs` and `undo` / `redo` were added, and run logs are `get_run_logs(runId, afterSeq?)`. Usage and per-client settings: [mcp.md](mcp.md). The UI tools are Phase 3 / 4.
 
 Every tool is a thin layer that only calls Core / Runtime / adapters. Input schemas are generated from Rust types; output is structured JSON (`structuredContent`). Errors are §9's `ErrorPayload` as is.
 
@@ -259,7 +260,7 @@ Every tool is a thin layer that only calls Core / Runtime / adapters. Input sche
 |  | `update_scenario` | `id, expectedRevision?, patch \| ops[]` → `EditOutcome` | write |
 |  | `delete_scenario` | `id, expectedRevision` → ok (to the trash) | write, **needs approval** |
 |  | `validate_scenario` | `id \| scenario` → `ValidationReport` | read |
-| Steps | `add_step` / `update_step` / `remove_step` / `move_step` | each `EditOp` + `expectedRevision?` → `EditOutcome` | write |
+| Nodes | `add_step` / `update_step` / `remove_step` / `move_step` | each `EditOp` + `expectedRevision?` → `EditOutcome` | write |
 |  | `list_step_types` | → `StepTypeDef[]` | read |
 |  | `get_step_schema` | `type` → params JSON Schema | read |
 | UI | `inspect_ui` | target (window/page), depth → element tree (semantic info + suggested Target) | ui.read |
@@ -336,14 +337,14 @@ In a shared workspace, `history/` and `runs/` are kept on each PC ([design/shari
   shikigami.db                SQLite (Phase 2 on)
 ```
 
-`events.jsonl` also records variable assignments as `variableChanged`, so after a run you can trace which value went into which variable, and when and in which step it changed (MCP: `get_run_logs(runId, variable)`, CLI: `shikigami run --vars`).
+`events.jsonl` also records variable assignments as `variableChanged`, so after a run you can trace which value went into which variable, and when and in which node it changed (MCP: `get_run_logs(runId, variable)`, CLI: `shikigami run --vars`).
 
 ```json
 { "seq": 7, "at": "…", "runId": "run_…", "type": "variableChanged",
   "variable": "amount", "value": 13200, "stepId": "stp_…", "iteration": 0 }
 ```
 
-- `stepId`: the step that assigned it (`variable.set`, `saveAs`, `forEach` / `repeat` item and index variables, `errorVar` / `lastError`). Inputs and defaults appear right after `runStarted` without a `stepId`.
+- `stepId`: the node that assigned it (`variable.set`, `saveAs`, `forEach` / `repeat` item and index variables, `errorVar` / `lastError`). Inputs and defaults appear right after `runStarted` without a `stepId`.
 - `iteration`: present only on changes inside a parallel `forEach` (with `concurrency`), the element number (from 0), to tell concurrent iterations apart.
 - Variables with `secret: true` have the value `"***"`. Secret values that slipped into other variables are masked too.
 - Values over 1000 characters are cut to a preview with `truncated: true` (the start of strings; the start of the JSON text for lists and objects).
@@ -394,7 +395,7 @@ CREATE TABLE proposals (                  -- AI repair proposals (applied after 
 
 - **Validation reports everything.** It does not stop at the first error, so Studio and the AI can fix it all at once.
 - **Drafts are allowed**: incomplete scenarios mid-edit (an `if` without a condition, etc.) can be saved. **Structural breakage** such as duplicate or invalid IDs is rejected. Runs do not start while there are validation errors.
-- On failure, the failing step ID, type, code, message and details are always kept in `RunReport` and the events. `control.try`'s `errorVar` and `onError: continue`'s `lastError` get the same structure.
+- On failure, the failing node ID, type, code, message and details are always kept in `RunReport` and the events. `control.try`'s `errorVar` and `onError: continue`'s `lastError` get the same structure.
 - Inside Rust, no `unwrap` / `panic`; errors propagate as `Result` (clippy warns, CI rejects).
 
 ## 10. Security
@@ -409,7 +410,7 @@ CREATE TABLE proposals (                  -- AI repair proposals (applied after 
 | MCP access control | stdio by default (only the AI client that started it can connect). HTTP is localhost + token + Origin check | P2 |
 | Tool permissions | Tools are classed as `read / write / run / ui.read / ui.act / dangerous` and allowed per client in workspace settings. `dangerous` (deletion, file operations, starting apps outside the allowlist) needs user approval in Studio | P2 |
 | Allowlist of targets | `launch_application` / `navigate_browser` only for the allowlist in settings (executable paths, domains). The Runtime checks the same list when running | P2–P4 |
-| File operation limits | File steps only under directories allowed in workspace settings | P3 |
+| File operation limits | File nodes only under directories allowed in workspace settings | P3 |
 | Credentials | People register them by name in Studio / the CLI. Values are encrypted with AES-256-GCM in the workspace; the key is one entry per workspace in Windows Credential Manager. Scenarios and AI get only the name. Input to unregistered sites is refused. Sign-in states (sessions) are encrypted with the same key ([secrets.md](secrets.md)) | **Done** |
 | Prompt injection | Results such as `inspect_ui` and page text are returned as structured data clearly labeled "untrusted data", and SKILL / tool descriptions say not to treat them as instructions. UI tools do not change scenarios; saving is a separate operation. Dangerous operations need human approval | P2 |
 | Audit | Every MCP tool call, approval and run in `audit_log` (scenario changes are journaled since P1) | P2 |
@@ -422,11 +423,11 @@ Running several things at once is meant to be a feature of the product. There ar
 | Level | Contents | Status |
 |---|---|---|
 | Between scenarios | Several scenarios (including several runs of the same one) at once. Each run is an independent async task with its own variables, cancellation and records | **Implemented** (call the Runtime / MCP `run_scenario` several times) |
-| Within a scenario | `control.parallel` (runs each step of `branches` at once and waits for all; if one fails the rest are cancelled; `maxConcurrency` limits how many). Wrap multi-step branches in `control.group` | **Implemented** |
+| Within a scenario | `control.parallel` (runs each node of `branches` at once and waits for all; if one fails the rest are cancelled; `maxConcurrency` limits how many). Wrap multi-step branches in `control.group` | **Implemented** |
 | Within a scenario (loops) | `control.forEach`'s `concurrency` ("100 items, 5 at a time"). Each iteration works on a copy of the variables; only the `collect` value comes out (in `saveAs`, as a list in the order of `items`). Aggregate after the loop, e.g. `sum(results)`. The first failure cancels the rest, with the item number in the error's `details.index` | **Implemented** |
-| Resource arbitration | Step type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs steps with the same key at once. People and AI writing scenarios never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths give the `RELATIVE_PATH` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented (within one process)**. Exclusion between processes (Studio, CLI, MCP server) comes in Phase 4 with Windows named mutexes |
+| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing scenarios never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths give the `RELATIVE_PATH` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented (within one process)**. Exclusion between processes (Studio, CLI, MCP server) comes in Phase 4 with Windows named mutexes |
 
-- **Desktop operations are physically one set**: Windows has only one mouse/keyboard input (SendInput) and one foreground window, so steps using them take the `desktop.input` right before running (time spent waiting for it does not count toward the timeout). Many UI Automation pattern operations (Invoke / Value / SelectionItem…) need no focus, so each type declares whether it can run in parallel without the right (implemented: `desktop.click` / `setValue` etc. do not take it; `desktop.mouseClick` / `type` / `press` do; all go one at a time to the same app, `window:<process>`).
+- **Desktop operations are physically one set**: Windows has only one mouse/keyboard input (SendInput) and one foreground window, so nodes using them take the `desktop.input` right before running (time spent waiting for it does not count toward the timeout). Many UI Automation pattern operations (Invoke / Value / SelectionItem…) need no focus, so each type declares whether it can run in parallel without the right (implemented: `desktop.click` / `setValue` etc. do not take it; `desktop.mouseClick` / `type` / `press` do; all go one at a time to the same app, `window:<process>`).
 - **Browsers suit parallel work**: Playwright browser contexts are independent, and many can run at once headless (Phase 3).
 - **Variables**: each branch works on a copy of the variables at its start; after all branches finish, the variables each branch changed are written back in branch order. If two branches change the same variable to different values, it fails with `PARALLEL_VARIABLE_CONFLICT` (so results never depend on timing). Two or more branches writing the same variable is also `PARALLEL_VARIABLE_CONFLICT` in validation before the run. `break` / `continue` from a branch to an outer loop is a validation error (`NOT_IN_LOOP`).
 - **Validating parallel forEach**: writing to declared variables in the body (`FOREACH_SHARED_WRITE`) and `break` (`FOREACH_BREAK_IN_CONCURRENT`) are errors; variables updated from their own value (`total = total + x`, `FOREACH_ACCUMULATOR`) and `collect` without `saveAs` are warnings. All come with hints for fixing them.
@@ -435,7 +436,7 @@ Running several things at once is meant to be a feature of the product. There ar
 
 ## 11. Key design decisions (reasons, alternatives, trade-offs)
 
-### Decision 1: scenarios are a step tree (block structure)
+### Decision 1: scenarios are a node tree (block structure)
 
 - **Reason**: easy for AI to read and write (JSON nesting is the processing structure), easy to validate (is a break inside a loop?). References are by ID, so edits do not break them. Flowcharts are drawn from the tree with automatic layout.
 - **Alternative**: a graph of nodes and edges (BPMN-like). Any branching and joining can be written.
@@ -457,14 +458,14 @@ Running several things at once is meant to be a feature of the product. There ar
 ### Decision 4: every edit is an EditOp with an inverse
 
 - **Reason**: Undo/Redo, conflict detection, history, showing AI fixes as diffs and applying them after approval all come from one mechanism. MCP's `add_step` and the like map directly to EditOps.
-- **Alternative**: history as snapshot diffs (JSON Patch). General, but loses meaning ("moved a step"), making review harder for AI and people.
+- **Alternative**: history as snapshot diffs (JSON Patch). General, but loses meaning ("moved a node"), making review harder for AI and people.
 - **Trade-off**: every new kind of edit needs an inverse and tests (round-trip tests exist for every op).
 
 ### Decision 5: our own expression language
 
 - **Reason**: conditions and templates must be writable without allowing arbitrary code. The candidate evalexpr had moved to AGPL. What is needed is small (comparison, logic, arithmetic, path access, a few pure functions).
 - **Alternative**: embed a JavaScript engine (QuickJS / Boa) or a scripting language such as Rhai. More expressive, but heavy on sandbox design, dependency size and security review.
-- **Trade-off**: advanced transformations cannot be written. When needed, individual allowlisted "data transformation steps" are added.
+- **Trade-off**: advanced transformations cannot be written. When needed, individual allowlisted "data transformation nodes" are added.
 
 ### Decision 6: Rust types are the only source of type definitions
 
@@ -474,9 +475,9 @@ Running several things at once is meant to be a feature of the product. There ar
 
 ### Decision 7: the Runtime is an interpreter that walks the tree directly
 
-- **Reason**: step IDs in run events match the scenario being edited one to one, which keeps highlighting and debugging in Studio and AI error analysis simple.
+- **Reason**: node IDs in run events match the scenario being edited one to one, which keeps highlighting and debugging in Studio and AI error analysis simple.
 - **Alternative**: compile to bytecode / a state machine. Better for pausing and resuming (persistence).
-- **Trade-off**: long runs cannot currently resume midway (after a crash). If needed, it can be extended by recording the run position (a stack of step IDs).
+- **Trade-off**: long runs cannot currently resume midway (after a crash). If needed, it can be extended by recording the run position (a stack of node IDs).
 
 ### Decision 8: the browser adapter is a Node.js child process
 
@@ -500,10 +501,10 @@ The first product milestone: **create a web scenario from an MCP client in natur
 | A2 | The AI gets elements with `navigate_browser` → `inspect_ui` and can `click_element` / `type_text` with Role/Label Targets | Automated E2E (a local test web app) + manual |
 | A3 | The AI saves a scenario with `create_scenario` / `add_step` and `validate_scenario` returns 0 errors | Automated E2E |
 | A4 | With Studio running, AI changes show up on screen within 1 second | Automated (file watching test) + manual |
-| A5 | Studio can edit, add, delete and move steps, with Undo/Redo, and MCP's `get_scenario` returns the result immediately | Automated (Core tests) + manual |
+| A5 | Studio can edit, add, delete and move nodes, with Undo/Redo, and MCP's `get_scenario` returns the result immediately | Automated (Core tests) + manual |
 | A6 | Nothing is lost when Studio and the AI edit at the same time (conflicts are detected and reloaded) | Automated (Core tests) |
 | A7 | `shikigami run <id>` (no AI, no GUI) does the same web work successfully, exit code 0 | Automated E2E |
-| A8 | On failure, the failing step ID, error code, screenshot and UI information are saved and available from MCP's `get_run_logs` | Automated E2E |
+| A8 | On failure, the failing node ID, error code, screenshot and UI information are saved and available from MCP's `get_run_logs` | Automated E2E |
 | A9 | Secret variable values never appear in logs or record files | Automated |
 | A10 | On **a real Windows 11 machine**, A1–A9 E2E pass with Studio / CLI / MCP server installed from the installer (NSIS / MSI) | Manual E2E (required) + CI (build and test on windows-latest) |
 
@@ -515,8 +516,8 @@ The first product milestone: **create a web scenario from an MCP client in natur
 - Scenario Core: model, JSON Schema output, validation (reports everything, JSON Pointer), expression language, EditOp (inverses for every kind), Undo/Redo (persistent, shared between processes), change journal, file store (lock, atomic writes, revision conflict detection), schema version migration framework
 - Runtime: every kind of control flow, variables and inputs/outputs, template expansion, timeouts, retries (exponential backoff), cancellation, `onError`, secret masking, run events and records (JSONL), live state (snapshots)
 - CLI: `scenario list/show/create/import/edit/undo/redo/delete/history`, `run` (inputs, JSON output, Ctrl+C cancels), `validate`, `step-types`, `schema export`
-- Studio (Tauri 2 + React): scenario list, create, duplicate, delete; flowchart (automatic layout from the tree); add, delete and move steps; property forms generated from schemas; variable editing; validation results; Undo/Redo (Ctrl+Z / Ctrl+Y); run, stop, run log and step state highlighting; **live updates from outside changes (MCP / CLI)**; automatic reload on conflict; Japanese / English UI
-- MCP server (Phase 2): `shikigami mcp` (stdio), 20 tools for scenarios, steps, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
+- Studio (Tauri 2 + React): scenario list, create, duplicate, delete; flowchart (automatic layout from the tree); add, delete and move nodes; property forms generated from schemas; variable editing; validation results; Undo/Redo (Ctrl+Z / Ctrl+Y); run, stop, run log and node state highlighting; **live updates from outside changes (MCP / CLI)**; automatic reload on conflict; Japanese / English UI
+- MCP server (Phase 2): `shikigami mcp` (stdio), 20 tools for scenarios, nodes, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
 - Desktop apps (Phase 4): 11 `desktop.*` types (dedicated UI Automation MTA thread, automatic waiting, separating mouse-free operations from those taking `desktop.input`, per-app exclusion, secrets typed only into apps registered with `app:`) and MCP's `inspect_ui` ([desktop.md](desktop.md))
 - Excel (8 `excel.*` types): reads and writes xlsx / xlsm directly without Excel (read a table row by row, append rows, read and write cells / ranges, list / add sheets). Automatic exclusion by workbook path, saving through a temporary file, `FILE_IN_USE` when writing a workbook open in Excel ([office.md](office.md))
 - Claude Code plugin: `plugins/shikigami` (MCP settings + skill `shikigami-scenarios`) and the marketplace definition. Passes `claude plugin validate`
