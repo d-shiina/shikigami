@@ -6,9 +6,9 @@ use serde_json::{Map, Value};
 use shikigami_core::{
     Actor, ActorKind, ChangeNote, EditOp, EditOutcome, ErrorPayload, Evidence, ExtractOutcome,
     FileStore, HistoryEntry, ImportConflict, ImportOutcome, NewReview, NewScenario, NewVersion,
-    ObservationContent, ObservationId, ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId,
-    ScenarioSummary, StepId, StepTypeDef, UserConfig, ValidationReport, VersionSummary,
-    WorkspaceInfo, WorkspaceManifest,
+    ObservationContent, ObservationId, ProjectFile, ProjectFiles, ReviewTimeline, RunId, Scenario,
+    ScenarioDiff, ScenarioId, ScenarioSummary, StepId, StepTypeDef, UserConfig, ValidationReport,
+    VersionSummary, WorkspaceInfo, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunSnapshot};
@@ -146,6 +146,174 @@ pub fn import_scenario(
     let value: Value = serde_json::from_str(&contents)
         .map_err(|e| err("PARSE_ERROR", format!("JSON として読めません: {e}")))?;
     Ok(state.service.import_bundle(value, on_conflict, studio())?)
+}
+
+// -- the scenario's folder ----------------------------------------------------
+
+#[tauri::command]
+pub fn project_files(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<ProjectFiles> {
+    Ok(state.service.project_files(&id)?)
+}
+
+/// A text file of the scenario's folder (settings, CSV, notes) for the
+/// editor. Files that are not UTF-8 text are opened with their app instead.
+#[tauri::command]
+pub fn read_project_text(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    path: String,
+) -> CmdResult<String> {
+    let bytes = state.service.read_project_file(&id, &path)?;
+    if bytes.len() as u64 > shikigami_core::project::MAX_TEXT_READ {
+        return Err(err(
+            "PROJECT_FILE_TOO_LARGE",
+            "大きすぎるため Studio では開けません",
+        ));
+    }
+    let text = String::from_utf8(bytes)
+        .ok()
+        .filter(|t| !t.contains('\0'))
+        .ok_or_else(|| err("PROJECT_FILE_NOT_TEXT", "テキストファイルではありません"))?;
+    Ok(text
+        .strip_prefix('\u{feff}')
+        .map(str::to_owned)
+        .unwrap_or(text))
+}
+
+#[tauri::command]
+pub fn write_project_text(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    path: String,
+    text: String,
+    overwrite: bool,
+) -> CmdResult<ProjectFile> {
+    Ok(state
+        .service
+        .write_project_file(&id, &path, text.as_bytes(), overwrite)?)
+}
+
+/// A file picked in the browser's file dialog (its bytes, base64).
+#[tauri::command]
+pub fn upload_project_file(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    path: String,
+    data: String,
+    overwrite: bool,
+) -> CmdResult<ProjectFile> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| err("INVALID_INPUT", e.to_string()))?;
+    Ok(state
+        .service
+        .write_project_file(&id, &path, &bytes, overwrite)?)
+}
+
+/// Files dropped from Explorer onto a folder of the tree. Each keeps its
+/// name; an existing file is replaced only with `overwrite`.
+#[tauri::command]
+pub fn copy_into_project(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    folder: String,
+    paths: Vec<String>,
+    overwrite: bool,
+) -> CmdResult<Vec<ProjectFile>> {
+    let mut added = Vec::new();
+    for from in paths {
+        let from = std::path::PathBuf::from(from);
+        let Some(name) = from.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+            continue;
+        };
+        let to = if folder.is_empty() {
+            name
+        } else {
+            format!("{folder}/{name}")
+        };
+        added.push(
+            state
+                .service
+                .copy_into_project(&id, &from, &to, overwrite)?,
+        );
+    }
+    Ok(added)
+}
+
+#[tauri::command]
+pub fn create_project_folder(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    path: String,
+) -> CmdResult<()> {
+    Ok(state.service.create_project_folder(&id, &path)?)
+}
+
+#[tauri::command]
+pub fn rename_project_file(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    from: String,
+    to: String,
+) -> CmdResult<ProjectFile> {
+    Ok(state.service.rename_project_file(&id, &from, &to)?)
+}
+
+/// To the workspace trash; a standard folder (work/…) is emptied.
+#[tauri::command]
+pub fn delete_project_file(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    path: String,
+) -> CmdResult<()> {
+    Ok(state.service.delete_project_file(&id, &path)?)
+}
+
+/// Opens a file with its app (Excel, Word, Notepad) or a folder in Explorer.
+/// `reveal` shows the file selected in Explorer instead.
+#[tauri::command]
+pub fn open_project_file(
+    state: State<'_, AppState>,
+    id: ScenarioId,
+    path: String,
+    reveal: bool,
+) -> CmdResult<()> {
+    let target = if path.is_empty() {
+        state.service.project_dir(&id)?
+    } else {
+        state.service.project_path(&id, &path)?
+    };
+    if !target.exists() {
+        return Err(err(
+            "PROJECT_FILE_NOT_FOUND",
+            format!("{path} がありません"),
+        ));
+    }
+    let mut command = if cfg!(windows) {
+        let mut c = std::process::Command::new("explorer");
+        if reveal {
+            c.arg(format!("/select,{}", target.display()));
+        } else {
+            c.arg(&target);
+        }
+        c
+    } else {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(if reveal {
+            target
+                .parent()
+                .map(std::path::Path::to_path_buf)
+                .unwrap_or(target)
+        } else {
+            target
+        });
+        c
+    };
+    command
+        .spawn()
+        .map(drop)
+        .map_err(|e| err("OPEN_FAILED", format!("開けません: {e}")))
 }
 
 #[tauri::command]
@@ -321,11 +489,14 @@ pub async fn run_scenario(
     let scenario = state.service.get_runnable(&id)?;
     let version = state.service.matching_version(&scenario).ok().flatten();
     let subscenarios = state.service.subscenarios(&scenario)?;
+    let project_dir = Some(state.service.project_dir(&id)?);
     let handle = state
         .runtime
         .start(
             scenario,
             RunOptions {
+                project_dir,
+                full_run: true,
                 inputs: inputs.unwrap_or_default(),
                 run_id: None,
                 version,

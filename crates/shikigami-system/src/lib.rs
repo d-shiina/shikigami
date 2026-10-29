@@ -158,6 +158,12 @@ impl From<Def> for StepTypeDef {
             default_timeout_ms: d.default_timeout_ms,
             deprecated: None,
             plugin: None,
+            // A program name (`program`) may be on PATH: not resolved.
+            path_params: match d.step_type {
+                types::PROCESS_RUN => vec!["cwd".into()],
+                types::DIALOG_SELECT_FILE => vec!["folder".into()],
+                _ => vec![],
+            },
         }
     }
 }
@@ -166,7 +172,7 @@ impl From<Def> for StepTypeDef {
 fn step_defs() -> Vec<(StepTypeDef, Kind)> {
     let text = json!({ "type": "string" });
     let object = json!({ "type": "object" });
-    let path = json!({ "type": "string", "minLength": 1, "description": "絶対パス" });
+    let path = json!({ "type": "string", "minLength": 1, "description": "シナリオのフォルダーからの相対パス（例 output/data.json）か絶対パス" });
     let dialog = |step_type, label, description, params_schema, examples| Def {
         step_type,
         category: StepCategory::System,

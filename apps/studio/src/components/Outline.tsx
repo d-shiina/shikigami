@@ -16,7 +16,8 @@ const RUN_DOT: Record<string, string> = {
   skipped: "bg-slate-300",
 };
 
-export function OutlinePanel() {
+/** `left`: clear of the project panel when it is open. */
+export function OutlinePanel({ left = 12 }: { left?: number }) {
   const open = useStudio((s) => s.outlineOpen);
   const setOpen = useStudio((s) => s.setOutlineOpen);
   const scenario = useStudio((s) => s.scenario);
@@ -43,7 +44,7 @@ export function OutlinePanel() {
   if (!open || !scenario) return null;
 
   return (
-    <nav className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
+    <nav style={{ left }} className="absolute top-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
       <div className="flex items-center gap-2 border-b border-slate-100 py-1 pr-1 pl-3 text-[11px] text-slate-500">
         <span className="font-bold text-ink">{t.outline.steps}</span>
         <span>{items.length}</span>

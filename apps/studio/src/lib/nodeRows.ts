@@ -14,7 +14,15 @@ export const MAX_PARAM_ROWS = 5;
 export const paramLabel = (key: string) => (t.paramLabels as Record<string, string>)[key] ?? key;
 
 export type Row =
-  | { kind: "param"; key: string; label: string; value: string; refs: string[] }
+  | {
+      kind: "param";
+      key: string;
+      label: string;
+      value: string;
+      refs: string[];
+      /** A file of the scenario's folder (`input/orders.xlsx`) in a path param: shown in its shelf's colour. */
+      file?: { path: string; role: "input" | "config" | "templates" | "output" | "work" | "logs" };
+    }
   | { kind: "more"; count: number }
   | { kind: "output"; label: string; variable: string };
 
@@ -94,6 +102,16 @@ function callRows(step: Step, known: ReadonlySet<string>): Row[] {
   return rows;
 }
 
+const FOLDERS = new Set(["input", "config", "templates", "output", "work", "logs"]);
+
+/** The scenario-folder file a path param names, when it names one. */
+function projectFile(key: string, value: unknown, def: StepTypeDef | undefined): Extract<Row, { kind: "param" }>["file"] {
+  if (typeof value !== "string" || !def?.pathParams?.includes(key)) return undefined;
+  const path = value.replace(/\\/g, "/").replace(/^\.\//, "");
+  const role = path.split("/")[0] ?? "";
+  return FOLDERS.has(role) && path.includes("/") ? { path, role: role as "input" } : undefined;
+}
+
 export function nodeRows(step: Step, def: StepTypeDef | undefined, known: ReadonlySet<string> = new Set()): Row[] {
   if (step.type === CALL) return callRows(step, known);
   const skip = new Set(OUTPUT_KEYS[step.type] ?? []);
@@ -104,6 +122,7 @@ export function nodeRows(step: Step, def: StepTypeDef | undefined, known: Readon
     label: paramLabel(key),
     value: display(key, step.params?.[key]),
     refs: referencedVariables(step.params?.[key], known),
+    ...(projectFile(key, step.params?.[key], def) ? { file: projectFile(key, step.params?.[key], def) } : {}),
   }));
   if (params.length > MAX_PARAM_ROWS) rows.push({ kind: "more", count: params.length - MAX_PARAM_ROWS });
   for (const o of outputs(step)) rows.push({ kind: "output", ...o });

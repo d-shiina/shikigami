@@ -10,6 +10,8 @@ import { FlowCanvas } from "./components/FlowCanvas";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
+import { FileSheet } from "./components/FileSheet";
+import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
 import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
 import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
@@ -27,6 +29,7 @@ import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
 import { t, useLocale } from "./lib/i18n";
 import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
+import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
@@ -148,6 +151,8 @@ function Editor({
 }) {
   const hasScenario = useStudio((s) => s.scenario !== null);
   const outlineOpen = useStudio((s) => s.outlineOpen);
+  const projectOpen = useProject((s) => s.panelOpen);
+  const outlineLeft = projectOpen ? 12 + 264 + 12 : 12;
   return (
     <div className={`grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
       <div className="min-h-0">{list}</div>
@@ -160,15 +165,23 @@ function Editor({
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
-              {hasScenario && <OutlinePanel />}
+              {/* The scenario's files float over the left of the chart; the outline sits beside them. */}
+              {hasScenario && projectOpen && (
+                <div className="absolute top-3 bottom-3 left-3 z-10">
+                  <ProjectPanel />
+                </div>
+              )}
+              {hasScenario && <OutlinePanel left={outlineLeft} />}
               {/* The outline unfolds from this corner, so its button sits there. */}
               {hasScenario && !outlineOpen && (
-                <div className="absolute top-3 left-3 z-10">
+                <div className="absolute top-3 z-10 flex gap-2" style={{ left: outlineLeft }}>
+                  {!projectOpen && <ProjectButton />}
                   <OutlineButton />
                 </div>
               )}
             </ReactFlowProvider>
           )}
+          <FileSheet />
           {/* Clear of the zoom controls in the bottom-left corner. */}
           {view !== "variables" && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
@@ -428,6 +441,7 @@ export function App() {
   const { locale } = useLocale();
   const store = useMemo(() => createStudioStore(api), []);
   const agentStore = useMemo(() => createAgentStore(agent), []);
+  const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), discard: () => t.project.sheet.discard }), []);
 
   useEffect(() => {
     void store.getState().init();
@@ -440,6 +454,12 @@ export function App() {
       agent.onLogin((e) => agentStore.getState().onLoginEvent(e)),
     ];
     void agentStore.getState().init();
+    // The files follow the open scenario, and the watcher's word that its folder changed.
+    void projectStore.getState().load(store.getState().scenario?.id ?? null);
+    const stopProject = store.subscribe((s, prev) => {
+      if (s.scenario?.id !== prev.scenario?.id) void projectStore.getState().load(s.scenario?.id ?? null);
+    });
+    unlisten.push(projectApi.onChanged((id) => void projectStore.getState().onChanged(id)));
     // Requests come from another process (the MCP server): re-read on refocus too.
     const onFocus = () => void store.getState().loadSecretRequests();
     window.addEventListener("focus", onFocus);
@@ -488,16 +508,19 @@ export function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("focus", onFocus);
       stopAttention();
+      stopProject();
       for (const p of unlisten) void p.then((off) => off());
     };
-  }, [store, agentStore]);
+  }, [store, agentStore, projectStore]);
 
   return (
     <StudioContext.Provider value={store}>
       <AgentContext.Provider value={agentStore}>
-        <ErrorBoundary>
-          <Shell key={locale} />
-        </ErrorBoundary>
+        <ProjectContext.Provider value={projectStore}>
+          <ErrorBoundary>
+            <Shell key={locale} />
+          </ErrorBoundary>
+        </ProjectContext.Provider>
       </AgentContext.Provider>
     </StudioContext.Provider>
   );

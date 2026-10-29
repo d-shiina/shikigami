@@ -340,7 +340,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 34);
+    assert_eq!(tools.len(), 38);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -765,4 +765,106 @@ async fn ai_asks_for_a_login_and_the_user_registers_it_in_studio() {
     dismiss.await.unwrap();
     assert_eq!(declined["status"], "dismissed");
     h.client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn ai_puts_files_in_the_scenario_folder_and_runs_with_relative_paths() {
+    let h = start(ServerOptions::default()).await;
+    let created = h
+        .ok(
+            "create_scenario",
+            json!({
+                "name": "設定を読む",
+                "variables": [{ "name": "day", "type": "number", "direction": "output", "default": 0 }]
+            }),
+        )
+        .await;
+    let id = created["scenario"]["id"].as_str().unwrap().to_owned();
+
+    // A settings file the AI writes, and a file copied in from the PC.
+    let settings = json!({
+        "format": "shikigami.config",
+        "items": [{ "name": "締め日", "type": "number", "value": 25, "description": "毎月の締め日" }]
+    });
+    h.ok(
+        "write_project_file",
+        json!({ "scenarioId": id, "path": "config/settings.json", "text": settings.to_string() }),
+    )
+    .await;
+    let outside = h.root.join("受注.csv");
+    std::fs::write(&outside, "番号\n1\n").unwrap();
+    let copied = h
+        .ok(
+            "write_project_file",
+            json!({ "scenarioId": id, "path": "input/受注.csv", "copyFrom": outside }),
+        )
+        .await;
+    assert_eq!(copied["path"], "input/受注.csv");
+    let (is_error, both) = h
+        .call(
+            "write_project_file",
+            json!({ "scenarioId": id, "path": "input/x.csv", "text": "a", "copyFrom": outside }),
+        )
+        .await;
+    assert!(is_error, "{both}");
+    let (is_error, outside_folder) = h
+        .call(
+            "write_project_file",
+            json!({ "scenarioId": id, "path": "../x.csv", "text": "a" }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(outside_folder["code"], "INVALID_PROJECT_PATH");
+
+    let listed = h
+        .ok("list_project_files", json!({ "scenarioId": id }))
+        .await;
+    let paths: Vec<&str> = listed["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(paths, ["config/settings.json", "input/受注.csv"]);
+    assert_eq!(listed["folders"][0], "input");
+
+    let read = h
+        .ok(
+            "read_project_file",
+            json!({ "scenarioId": id, "path": "input/受注.csv" }),
+        )
+        .await;
+    assert_eq!(read["text"], "番号\n1\n");
+
+    // The run resolves the relative path from the folder; test_step too
+    // when told which scenario.
+    h.ok(
+        "update_scenario",
+        json!({
+            "scenarioId": id,
+            "expectedRevision": 1,
+            "ops": [{ "op": "addStep", "step": { "type": "variable.set", "params": { "name": "day", "value": 25 } } }]
+        }),
+    )
+    .await;
+    let run = h
+        .ok("run_scenario", json!({ "scenarioId": id, "waitMs": 5000 }))
+        .await;
+    assert_eq!(run["report"]["status"], "succeeded", "{run}");
+    let logs: Vec<_> = std::fs::read_dir(h.root.join("scenarios").join(&id).join("logs"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(logs.len(), 1, "{logs:?}");
+    assert!(logs[0].ends_with("_succeeded.log"));
+
+    h.ok(
+        "delete_project_file",
+        json!({ "scenarioId": id, "path": "input/受注.csv" }),
+    )
+    .await;
+    let listed = h
+        .ok("list_project_files", json!({ "scenarioId": id }))
+        .await;
+    assert_eq!(listed["files"].as_array().unwrap().len(), 2, "{listed}");
 }

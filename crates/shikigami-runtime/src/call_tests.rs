@@ -73,6 +73,7 @@ fn subs(list: Vec<Scenario>) -> Vec<Subscenario> {
         .map(|scenario| Subscenario {
             scenario,
             version: None,
+            project_dir: None,
         })
         .collect()
 }

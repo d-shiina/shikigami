@@ -69,6 +69,7 @@ args = ["mcp"]
 |  | `list_versions` / `get_version` | 名前付きの版の一覧と、版のスナップショット |
 |  | `diff_versions` | 版どうし・版と現在の差分（ノード ID 単位。既定は「最新の版 → 現在」） |
 |  | `export_scenario` | シナリオと版、呼び出すサブシナリオを 1 つのバンドルに（機密変数の初期値は除く） |
+|  | `list_project_files` / `read_project_file` | シナリオのフォルダー（入力・設定・ひな形・出力・作業・ログ）のファイル一覧と、テキストファイルの中身（[files.md](files.md#シナリオのフォルダー)） |
 |  | `list_secrets` | Studio で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
 | write | `create_scenario` | 新規作成（ノード ID は省略可） |
 |  | `update_scenario` | 複数の EditOp を 1 リビジョンとして原子的に適用 |
@@ -79,6 +80,7 @@ args = ["mcp"]
 |  | `create_version` / `restore_version` | 版を保存／版の内容に戻す（Undo できる 1 回の編集） |
 |  | `import_scenario` | バンドルかシナリオ文書を取り込む。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブシナリオもいっしょに取り込む |
 |  | `extract_subscenario` | 同じブロックに並んだノードを新しいシナリオに切り出し、`scenario.call` 1 つに置き換える。読み書きする変数は入力・出力として受け渡すので動きは変わらない（[設計](../design/subscenarios.md)） |
+|  | `write_project_file` / `delete_project_file` | シナリオのフォルダーにファイルを置く（`text`、またはこの PC のファイルを `copyFrom`。置き換えは `overwrite`）/ ごみ箱へ移す |
 |  | `request_secret` | ログイン情報をユーザーに求める。Studio に「ログイン情報が必要です」と出て、名前とサイトが入った登録フォームが開く。値は Studio でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
 | run | `run_scenario` | Runtime で実行（AI は実行に関与しない）。`waitMs` で完了まで待てる。`secret: true` の入力変数には値を渡せない |
 |  | `stop_scenario` | 実行のキャンセル |

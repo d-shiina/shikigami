@@ -362,7 +362,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             schema(
                 json!({
                     "id": { "type": "string", "minLength": 1, "description": "mail.list の id" },
-                    "folder": { "type": "string", "minLength": 1, "description": "保存先フォルダーのフルパス" },
+                    "folder": { "type": "string", "minLength": 1, "description": "保存先フォルダー：シナリオのフォルダーからの相対パス（例 input/添付）か絶対パス" },
                     "nameContains": { "type": "string", "minLength": 1, "description": "ファイル名に含む文字（例 .pdf）" }
                 }),
                 &["id", "folder"],
@@ -394,6 +394,12 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                         default_timeout_ms: Some(120_000),
                         deprecated: None,
                         plugin: None,
+                        // An Outlook folder in mail.list, a disk folder here.
+                        path_params: match step_type {
+                            "mail.createDraft" => vec!["attachments".into()],
+                            "mail.saveAttachments" => vec!["folder".into()],
+                            _ => vec![],
+                        },
                     },
                     kind,
                 )

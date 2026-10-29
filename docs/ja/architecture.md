@@ -141,7 +141,7 @@ shikigami/
 
 ```jsonc
 {
-  "schemaVersion": 2,             // ファイル形式のバージョン
+  "schemaVersion": 3,             // ファイル形式のバージョン
   "id": "scn_…",                  // 安定ID（ファイル名にもなる）
   "name": "請求書の集計",
   "description": "…",
@@ -425,7 +425,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 | シナリオ間 | 複数のシナリオ（同じシナリオの複数実行を含む）を同時に実行。各実行は独立した非同期タスクで、変数・キャンセル・記録も実行ごとに独立 | **実装済み**（Runtime / MCP の `run_scenario` を複数呼べる） |
 | シナリオ内 | `control.parallel`（`branches` の各ノードを同時実行し全完了を待つ。1 つ失敗したら残りをキャンセル。`maxConcurrency` で同時数を制限）。複数ノードのブランチは `control.group` で包む | **実装済み** |
 | シナリオ内（ループ） | `control.forEach` の `concurrency`（「100 件を 5 並列」）。各回は変数のコピーで動き、外へ出せるのは `collect` の値だけ（`saveAs` に `items` と同じ順の配列で入る）。集計はループ後に `sum(results)` などで行う。最初の失敗で残りをキャンセルし、エラーの `details.index` に何件目かを入れる | **実装済み** |
-| 資源の調停 | ノード型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのノードを同時に動かさない。シナリオを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスは検証で `RELATIVE_PATH` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み（同一プロセス内）**。Studio・CLI・MCP サーバーなど別プロセス間の排他は Phase 4 で Windows の名前付きミューテックスにより実装 |
+| 資源の調停 | ノード型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのノードを同時に動かさない。シナリオを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスはシナリオのフォルダーから解決し、フォルダーの外を指すと検証で `PATH_OUTSIDE_PROJECT` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み（同一プロセス内）**。Studio・CLI・MCP サーバーなど別プロセス間の排他は Phase 4 で Windows の名前付きミューテックスにより実装 |
 
 - **デスクトップ操作は物理的に 1 組**：Windows のマウス・キーボード入力（SendInput）と前面ウィンドウは画面に 1 つしかないため、これらを使うノードは `desktop.input` の使用権を取得してから実行する（取得待ちの時間はタイムアウトに含めない）。UI Automation のパターン操作（Invoke / Value / SelectionItem など）はフォーカス不要なものが多く、使用権なしで並行実行できるよう型ごとに宣言する（実装済み：`desktop.click` / `setValue` などは使用権なし、`desktop.mouseClick` / `type` / `press` は使用権あり。どれも同じアプリ（`window:<process>`）へは 1 つずつ）。
 - **ブラウザは並列向き**：Playwright のブラウザコンテキストは独立しており、ヘッドレスなら多数を同時に動かせる（Phase 3）。

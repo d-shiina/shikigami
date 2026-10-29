@@ -22,7 +22,11 @@ use crate::store::Actor;
 
 /// Format marker of scenario bundles.
 pub const BUNDLE_FORMAT: &str = "shikigami.scenarioBundle";
-pub const BUNDLE_FORMAT_VERSION: u32 = 1;
+pub const BUNDLE_FORMAT_VERSION: u32 = 2;
+
+/// Bundles without files are still written as version 1, so builds from
+/// before scenario folders can read them.
+pub const BUNDLE_FORMAT_VERSION_WITHOUT_FILES: u32 = 1;
 
 /// One named snapshot of a scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -108,6 +112,10 @@ pub struct ScenarioBundle {
         deserialize_with = "crate::migrate::deserialize_vec"
     )]
     pub subscenarios: Vec<Scenario>,
+    /// Files of the scenarios' folders (`input/`, `config/`, `templates/`
+    /// and the author's own; not `output/`, `work/` or `logs/`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<crate::project::BundledFile>,
 }
 
 /// What to do when an imported scenario's ID already exists.

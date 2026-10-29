@@ -22,7 +22,7 @@ use crate::ids::{ScenarioId, StepId};
 /// Current scenario schema version. Bump on every change to the file shape
 /// (readers reject unknown fields, so new optional fields count too) and add
 /// a migration in [`crate::migrate`]. See docs/compatibility.md.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// A scenario: the unit that AI clients, Studio and the Runtime share.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -255,6 +255,10 @@ pub struct ScenarioSettings {
     pub default_retry: Option<RetryPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_error: Option<OnError>,
+    /// Leave the files in the scenario's `work/` folder when a run starts.
+    /// By default a run starts with `work/` emptied.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub keep_work: bool,
 }
 
 impl ScenarioSettings {

@@ -12,6 +12,7 @@ use crate::error::ErrorPayload;
 use crate::model::Scenario;
 use crate::model::ScenarioSummary;
 use crate::ops::EditOp;
+use crate::project::{ConfigFile, ProjectFile, ProjectFiles};
 use crate::registry::StepTypeDef;
 use crate::review::{Evidence, NewReview, ObservationContent, ReviewTimeline};
 use crate::service::{
@@ -91,6 +92,9 @@ struct Api {
     evidence: Evidence,
     new_review: NewReview,
     observation_content: ObservationContent,
+    project_files: ProjectFiles,
+    project_file: ProjectFile,
+    config_file: ConfigFile,
 }
 
 fn api_schema() -> Value {

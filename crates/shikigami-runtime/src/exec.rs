@@ -6,12 +6,14 @@
 //! one-to-one to the document Studio and AI clients edit.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
 use shikigami_core::call::MAX_CALL_DEPTH;
 use shikigami_core::expr::{self, Expr};
+use shikigami_core::project;
 use shikigami_core::registry::{builtin, control, is_control_type, scenario};
 use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_core::secret::SecretProvider;
@@ -27,6 +29,7 @@ use crate::event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunSnapshot, RunStatus, StepOutcome,
 };
 use crate::handler::{ActionHandler, ActionInput, BoxFuture, StepError};
+use crate::runlog::RunLog;
 
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS: u64 = 500;
@@ -55,6 +58,8 @@ struct EmitterInner {
     tx: mpsc::UnboundedSender<RunEventEnvelope>,
     secrets: RwLock<Vec<String>>,
     snapshot: Arc<Mutex<RunSnapshot>>,
+    /// The readable log in the scenario's `logs/` folder, for full runs.
+    log: Mutex<Option<RunLog>>,
 }
 
 impl Emitter {
@@ -62,6 +67,7 @@ impl Emitter {
         run_id: RunId,
         tx: mpsc::UnboundedSender<RunEventEnvelope>,
         snapshot: Arc<Mutex<RunSnapshot>>,
+        log: Option<RunLog>,
     ) -> Self {
         Self {
             inner: Arc::new(EmitterInner {
@@ -70,6 +76,7 @@ impl Emitter {
                 tx,
                 secrets: RwLock::new(Vec::new()),
                 snapshot,
+                log: Mutex::new(log),
             }),
             call_path: Arc::from([]),
         }
@@ -210,9 +217,25 @@ impl Emitter {
             event,
         };
         *seq += 1;
+        if let Ok(mut log) = self.inner.log.lock()
+            && let Some(log) = log.as_mut()
+        {
+            log.write(&envelope);
+        }
         // The receiver may have been dropped (fire-and-forget runs); the run
         // continues regardless.
         let _ = self.inner.tx.send(envelope);
+    }
+
+    /// Names the run's log after how it ended. Call after `RunFinished`.
+    pub(crate) fn finish_log(&self, status: RunStatus) {
+        let log = match self.inner.log.lock() {
+            Ok(mut log) => log.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
+        };
+        if let Some(log) = log {
+            log.finish(status);
+        }
     }
 
     pub(crate) fn variable_changed(
@@ -346,6 +369,13 @@ pub(crate) struct Executor {
     pub handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
     /// Exclusive resources per step type.
     pub resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
+    /// Params naming files or folders, per step type.
+    pub path_params: Arc<HashMap<String, Vec<String>>>,
+    /// Folder of the scenario this executor runs: relative paths in path
+    /// params are resolved from it.
+    pub project_dir: Option<Arc<Path>>,
+    /// Folders of the scenarios `scenario.call` can run.
+    pub project_dirs: Arc<HashMap<ScenarioId, PathBuf>>,
     /// Step types with their own default timeout.
     pub default_timeouts: Arc<HashMap<String, u64>>,
     pub secrets: Option<Arc<dyn SecretProvider>>,
@@ -409,6 +439,9 @@ impl Executor {
             run_id: self.run_id.clone(),
             handlers: self.handlers.clone(),
             resource_defs: self.resource_defs.clone(),
+            path_params: self.path_params.clone(),
+            project_dir: self.project_dir.clone(),
+            project_dirs: self.project_dirs.clone(),
             default_timeouts: self.default_timeouts.clone(),
             secrets: self.secrets.clone(),
             vars: self.vars.clone(),
@@ -1254,6 +1287,11 @@ impl Executor {
         // handles (`onError: continue`, an enclosing `try`) do not pause there.
         child.debug = self.debug.clone();
         child.in_call = Some(callee.id.clone());
+        // Its relative paths are its own folder's.
+        child.project_dir = self
+            .project_dirs
+            .get(&callee.id)
+            .map(|dir| Arc::from(dir.as_path()));
         child.handled_depth =
             self.handled_depth + u32::from(self.effective_on_error(step) == OnError::Continue);
         child.vars = Map::new();
@@ -1405,8 +1443,12 @@ impl Executor {
             )
         })?;
 
-        let params = expr::render_value(&Value::Object(step.params.clone()), &self.vars)
+        let mut params = expr::render_value(&Value::Object(step.params.clone()), &self.vars)
             .map_err(expr_error)?;
+        if let (Some(dir), Some(keys)) = (&self.project_dir, self.path_params.get(&step.step_type))
+        {
+            project::resolve_params(&mut params, keys, dir);
+        }
         let retry = step.retry.or(self.default_retry);
         let max_attempts = retry.map_or(1, |r| r.max_attempts.max(1));
         let mut delay_ms = retry.map_or(0, |r| r.backoff_ms) as f64;

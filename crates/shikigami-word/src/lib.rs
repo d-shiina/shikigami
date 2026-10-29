@@ -384,8 +384,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 risk: RiskLevel::Interactive,
                 examples: vec![
                     json!({ "type": FILL_TEMPLATE, "name": "請求書を作る", "params": {
-                        "template": "C:\\work\\請求書テンプレート.docx",
-                        "path": "C:\\work\\請求書\\{{ order.受注番号 }}.docx",
+                        "template": "templates/請求書.docx",
+                        "path": "output/請求書_{{ order.受注番号 }}.docx",
                         "values": { "宛名": "{{ order.顧客名 }}", "金額": "{{ order.金額 }}", "明細": "{{ order.明細 }}" }
                     } }),
                 ],
@@ -394,6 +394,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 default_timeout_ms: None,
                 deprecated: None,
                 plugin: None,
+                path_params: Vec::new(),
             },
             Kind::FillTemplate,
         ),
@@ -410,13 +411,14 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 binds_variables: vec![],
                 risk: RiskLevel::Safe,
                 examples: vec![
-                    json!({ "type": READ_TEXT, "params": { "path": "C:\\work\\契約書.docx" }, "saveAs": "contractText" }),
+                    json!({ "type": READ_TEXT, "params": { "path": "input/契約書.docx" }, "saveAs": "contractText" }),
                 ],
                 resources: vec![ResourceDef::file("path")],
                 secret_params: vec![],
                 default_timeout_ms: None,
                 deprecated: None,
                 plugin: None,
+                path_params: Vec::new(),
             },
             Kind::ReadText,
         ),

@@ -8,6 +8,12 @@
 
 ### 追加
 
+- シナリオをプロジェクト（フォルダー）として保存：`scenarios/<id>/scenario.json` の隣に `input/`・`config/`・`templates/`・`output/`・`work/`・`logs/` を置き、入力の Excel・設定ファイル・出力のひな形をシナリオと一緒に持てます。ステップのファイルの項目（ステップ型の `pathParams`）に書いた相対パスは、そのシナリオのフォルダーから解決します（サブシナリオは自分のフォルダーから）。従来の `scenarios/<id>.json` は保存先を開いたときにフォルダーへ移します（docs/files.md）
+- 実行のたびに `work/` を空にし（`settings.keepWork` で残せる）、人が読む実行ログを `logs/<日時>_<結果>.log` に書きます（新しい 100 件を残す）
+- 設定ファイルの形式 `{"format":"shikigami.config","items":[…]}` と、それを `{名前: 値}` で読む `config.read`
+- MCP ツール `list_project_files` / `read_project_file` / `write_project_file` / `delete_project_file`、`test_step` の `scenarioId`、CLI の `shikigami scenario files` / `scenario add-file`
+- Studio：フロー図の左に浮かぶ「プロジェクト」の棚。入力・設定・テンプレート・出力をロゴの 4 色で分け、どのノードが使っているか、Excel で開いたままか（`ProjectFile.inUse`）を出します。エクスプローラーからのドロップで追加（棚の上ならその棚、ほかは名前で振り分け）。設定ファイルはフォームで作って編集し、項目ごとに使っているノードを出します。テキストと実行ログもその場で開けます。ノードのファイルの項目は棚と同じ色で表示します
+- バンドルとシナリオの複製に、プロジェクトのファイル（`output/`・`work/`・`logs/` を除く）を含めます
 - 画像認識と OCR：部品が見えない画面（Citrix・リモートデスクトップ・独自描画）でも、`desktop.mouseClick` / `desktop.type` / `desktop.waitFor` / `desktop.isVisible` の `target` に `image`（PNG を画面から探す）か `ocr`（文字を OCR で探す）を書けます。`offset` で見つけた場所からずらし、`region` で探す範囲を絞り、複数見つかれば `nth` で選びます。新しいノード `desktop.readText`（ウィンドウ・部品・範囲・画像ファイルの文字を位置つきで OCR）と `desktop.screenshot`（PNG で保存。探す画像の切り出しにも使う）。OCR は PaddleOCR（PP-OCRv6 small、ONNX Runtime、オフラインで日本語・中国語・英語）が既定でインストーラに同梱（`pnpm studio:bundle-ocr`）、入っていなければ Windows OCR。MCP の `inspect_ui` に `ocr`（文字と位置）と `image`（ウィンドウの絵を AI に返す）、ウィンドウの絵を観察に残す。Studio のノードにデスクトップの対象を言葉で表示（docs/desktop.md）
 - `oauth.signIn`：Web API（Box など）に OAuth 2.0 の認可コードフローでサインイン。ブラウザの中でリダイレクト URL への要求を受け止めるので、リダイレクト URL は自社サイトなど固定のどんな URL でもよく（localhost で待ち受けない）、その先のサイトは読み込まれません。`state` の確認と PKCE 付き。トークンはシークレットと同じ鍵で暗号化して保存し、次回からは人なしで使い回し・更新します。`http.request` の `auth` に `{ "secret": "Box", "field": "accessToken" }`（期限が近ければ自動で更新）。シークレットの項目 `accessToken`、`list_secrets` の `signedIn`、Studio の「OAuth サインイン済み」と「サインアウト」（docs/oauth.md）
 - Studio の表示を日本語と英語で切り替え（ステータスバーの JA / EN。選ぶまでは OS の言語に合わせる）。README と利用者向けドキュメントは英語を主にし、日本語版は `README.ja.md` と `docs/ja/` に
@@ -24,6 +30,8 @@
 
 ### 変更
 
+- シナリオのファイル形式を `schemaVersion` 3 にしました（`settings.keepWork` の追加。2 のファイルはそのまま読めます）。ファイルを含むバンドルは形式の版 2 で書き出し、**この版より古い Shikigami では読み込めません**（ファイルのないバンドルは従来どおり 1）
+- 検証の `RELATIVE_PATH` をなくし、プロジェクトのフォルダーの外（`..`）を指すパスに `PATH_OUTSIDE_PROJECT` の警告を出すようにしました
 - `dialog.message` / `dialog.input` のダイアログを Studio と同じ見た目に（白地と濃紺の文字、Windows のアプリがダークならダーク、日本語は Yu Gothic UI、ボタンは Windows の表示言語）。`dialog.selectFile` のフォルダー選択はエクスプローラーの画面に。Studio なしの `shikigami run` でも同じに出ます。ノードの指定と結果は変わりません
 - シナリオのファイル形式を `schemaVersion` 2 にしました（`requires` の追加）。1 のファイルはそのまま読めて、次に保存したときに 2 になります。**2 で保存したファイルは、この版より古い Shikigami では開けません**
 - プラグインのマニフェストの `version` は semver（`0.1.0` の形）が必須になりました

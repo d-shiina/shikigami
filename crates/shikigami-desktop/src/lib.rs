@@ -967,7 +967,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
     defs.into_iter()
         .map(|d| {
             let mut resources = Vec::new();
-            if d.params.get("target").is_some() {
+            let has_target = d.params.get("target").is_some();
+            if has_target {
                 resources.push(ResourceDef::window("target"));
             }
             if d.kind == Kind::Screenshot {
@@ -1000,6 +1001,14 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 default_timeout_ms: None,
                 deprecated: None,
                 plugin: None,
+                // `path` may be a program on PATH (notepad.exe): not resolved.
+                path_params: match d.step_type {
+                    "desktop.launch" => vec!["workingDir".into()],
+                    types::SCREENSHOT => vec!["path".into()],
+                    types::READ_TEXT => vec!["file".into(), "target.image.path".into()],
+                    _ if has_target => vec!["target.image.path".into()],
+                    _ => vec![],
+                },
             };
             (def, d.kind)
         })
