@@ -283,11 +283,15 @@ pub fn resolve(dir: &Path, path: &str) -> String {
 /// Resolves the relative paths among `keys` of rendered `params` (strings,
 /// or arrays of strings) from `dir`.
 pub fn resolve_params(params: &mut Value, keys: &[String], dir: &Path) {
-    let Some(map) = params.as_object_mut() else {
-        return;
-    };
     for key in keys {
-        match map.get_mut(key) {
+        // `target.image.path`: a param inside an object param.
+        let mut value = Some(&mut *params);
+        for part in key.split('.') {
+            value = value
+                .and_then(|v| v.as_object_mut())
+                .and_then(|m| m.get_mut(part));
+        }
+        match value {
             Some(Value::String(s)) => *s = resolve(dir, s),
             Some(Value::Array(items)) => {
                 for item in items {
@@ -442,6 +446,26 @@ pub fn is_bundled(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn params_inside_objects_resolve_too() {
+        let dir = Path::new("/ws/scenarios/s");
+        let mut params = serde_json::json!({ "target": { "image": { "path": "input/ok.png" } }, "file": "/abs.png" });
+        resolve_params(
+            &mut params,
+            &[
+                "target.image.path".into(),
+                "file".into(),
+                "missing.key".into(),
+            ],
+            dir,
+        );
+        assert_eq!(
+            params["target"]["image"]["path"],
+            resolve(dir, "input/ok.png")
+        );
+        assert_eq!(params["file"], "/abs.png");
+    }
+
     #[test]
     fn files_open_in_office_are_marked() {
         let dir = tempfile::tempdir().unwrap();

@@ -323,6 +323,21 @@ pub struct InspectUiParams {
     /// Most elements to list (default 1500).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_nodes: Option<u64>,
+    /// Also read the window's text with OCR: each line with its place in pixels from the window's
+    /// top-left (for apps whose elements are not listed, e.g. Citrix or remote desktops).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ocr: Option<bool>,
+    /// OCR language, e.g. "ja" or "en-US" (default: the user's languages).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// Return the picture of the window to you as an image (default false), to see icons and
+    /// layout when there are no elements, or to choose a region to cut out with
+    /// desktop.screenshot for target.image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<bool>,
+    /// Keep a picture of the window with the observation for the human reviewer (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screenshot: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

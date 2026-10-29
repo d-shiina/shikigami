@@ -905,6 +905,30 @@
             ],
             "format": "uint64",
             "minimum": 0
+          },
+          "ocr": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "screenshot": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "type": "object"

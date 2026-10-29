@@ -50,6 +50,12 @@ jobs:
       - name: Bundled Node.js runs the browser adapter (installer contents)
         if: runner.os == 'Windows'
         run: pnpm studio:bundle-node
+      - uses: actions/cache@v4
+        with:
+          path: target/ocr-dist
+          key: ocr-dist-${{ runner.os }}-${{ hashFiles('apps/studio/scripts/bundle-ocr.mjs') }}
+      - name: OCR models and ONNX Runtime (the OCR tests use them)
+        run: pnpm studio:bundle-ocr
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace

@@ -60,18 +60,60 @@ function template(value: unknown): Part[] {
     .map((piece) => (piece.startsWith("{{") ? { code: readable(piece.slice(2, -2).trim()) } : w(piece)));
 }
 
-/** A browser target such as { role: "button", name: "ログイン" } in words. */
+/** A browser target such as { role: "button", name: "ログイン" }, or a desktop one, in words. */
 export function targetText(target: unknown): string {
   return locale === "ja" ? targetJa(target) : targetEn(target);
+}
+
+/** The file name at the end of a Windows or POSIX path. */
+const fileName = (path: unknown) => String(path ?? "").split(/[\\/]/).pop() ?? "";
+
+/** A desktop target ({ window, element | image | ocr | region | point }) in words. */
+function desktopJa(t: Record<string, unknown>): string {
+  const win = (t.window ?? {}) as Record<string, unknown>;
+  const name = `「${String(win.title ?? win.process ?? win.className ?? "")}」`;
+  const image = t.image as Record<string, unknown> | undefined;
+  const ocr = t.ocr as Record<string, unknown> | undefined;
+  const region = t.region as Record<string, number> | undefined;
+  const point = t.point as Record<string, number> | undefined;
+  const nth = (q: Record<string, unknown> | undefined) => (typeof q?.nth === "number" ? `の${q.nth + 1}番目` : "");
+  if (image) return `${name}の画像 ${fileName(image.path)}${nth(image)}`;
+  if (ocr) return `${name}の文字「${String(ocr.text ?? "")}」${nth(ocr)}`;
+  if (point) return `${name}の座標 (${point.x}, ${point.y})`;
+  if (region) return `${name}の範囲 (${region.x}, ${region.y}, ${region.width}×${region.height})`;
+  const el = t.element as Record<string, unknown> | undefined;
+  if (!el) return `${name}ウィンドウ`;
+  if (el.id) return `${name}の [${el.id}]${nth(el)}`;
+  return `${name}の${targetJa(el)}`;
+}
+
+function desktopEn(t: Record<string, unknown>): string {
+  const win = (t.window ?? {}) as Record<string, unknown>;
+  const name = `"${String(win.title ?? win.process ?? win.className ?? "")}"`;
+  const image = t.image as Record<string, unknown> | undefined;
+  const ocr = t.ocr as Record<string, unknown> | undefined;
+  const region = t.region as Record<string, number> | undefined;
+  const point = t.point as Record<string, number> | undefined;
+  const nth = (q: Record<string, unknown> | undefined) => (typeof q?.nth === "number" ? ` #${q.nth + 1}` : "");
+  if (image) return `the image ${fileName(image.path)}${nth(image)} in ${name}`;
+  if (ocr) return `the text "${String(ocr.text ?? "")}"${nth(ocr)} in ${name}`;
+  if (point) return `the point (${point.x}, ${point.y}) in ${name}`;
+  if (region) return `the area (${region.x}, ${region.y}, ${region.width}×${region.height}) of ${name}`;
+  const el = t.element as Record<string, unknown> | undefined;
+  if (!el) return `the ${name} window`;
+  if (el.id) return `[${el.id}]${nth(el)} in ${name}`;
+  return `${targetEn(el)} in ${name}`;
 }
 
 function targetJa(target: unknown): string {
   if (!target || typeof target !== "object") return "（要素未設定）";
   const t = target as Record<string, unknown>;
+  if (t.window) return desktopJa(t);
   const nth = typeof t.nth === "number" ? `の${t.nth + 1}番目` : "";
   if (t.label) return `「${t.label}」欄${nth}`;
   if (t.role && t.name) return `「${t.name}」${ROLE[String(t.role)] ?? String(t.role)}${nth}`;
   if (t.text) return `「${t.text}」${nth}`;
+  if (t.name) return `「${t.name}」${nth}`;
   if (t.placeholder) return `「${t.placeholder}」欄${nth}`;
   if (t.role) return `${ROLE[String(t.role)] ?? String(t.role)}${nth}`;
   if (t.testId) return `[${t.testId}]${nth}`;
@@ -82,11 +124,13 @@ function targetJa(target: unknown): string {
 function targetEn(target: unknown): string {
   if (!target || typeof target !== "object") return "(no element set)";
   const t = target as Record<string, unknown>;
+  if (t.window) return desktopEn(t);
   const nth = typeof t.nth === "number" ? ` #${t.nth + 1}` : "";
   const role = (r: unknown) => ROLE_EN[String(r)] ?? String(r);
   if (t.label) return `the "${t.label}" field${nth}`;
   if (t.role && t.name) return `the "${t.name}" ${role(t.role)}${nth}`;
   if (t.text) return `"${t.text}"${nth}`;
+  if (t.name) return `"${t.name}"${nth}`;
   if (t.placeholder) return `the "${t.placeholder}" field${nth}`;
   if (t.role) return `the ${role(t.role)}${nth}`;
   if (t.testId) return `[${t.testId}]${nth}`;

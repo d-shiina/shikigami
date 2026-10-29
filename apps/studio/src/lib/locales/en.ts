@@ -765,6 +765,8 @@ export const en: Dict = {
     scope: "Scope",
     authorizeParams: "Extra authorization params",
     pkce: "PKCE",
+    file: "File",
+    language: "Language",
   },
   outputLabels: { writes: "Writes", item: "Item", index: "Index", result: "Result" },
   verbs: {
@@ -840,6 +842,8 @@ export const en: Dict = {
     "desktop.launch": "Launch app",
     "desktop.mouseClick": "Mouse click",
     "desktop.press": "Press key",
+    "desktop.readText": "Read text (OCR)",
+    "desktop.screenshot": "Screenshot",
     "desktop.select": "Select",
     "desktop.setValue": "Set value",
     "desktop.type": "Type",
