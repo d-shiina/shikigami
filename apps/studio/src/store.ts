@@ -1112,6 +1112,14 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
           };
           const path = callPathOf(env);
+          // Followed, the chart goes where the run is: into a called scenario
+          // when a step starts inside it, back out when one starts outside.
+          let dive = s.dive;
+          if (env.type === "stepStarted" && s.followRun && callKey(path) !== callKey(s.dive)) {
+            if (path.length === 0) dive = [];
+            else if (diveChain(s.scenario, s.called, path).length === path.length) dive = path;
+          }
+          const moved = dive !== s.dive ? { dive, selection: null } : {};
           if (path.length > 0) {
             // Inside a called scenario: its steps and variables are not the
             // chart's. They show when their call is unfolded or entered.
@@ -1133,7 +1141,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push("warn", `${t.waitingForYou}: ${env.message}`, call);
             }
             run.inner = { ...run.inner, [key]: states };
-            return { run, human, secretFix };
+            return { run, human, secretFix, ...moved };
           }
           const change = asVariableChange(env);
           if (change) run.changes = [...run.changes, change];
@@ -1197,7 +1205,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]} (${env.durationMs} ms)`);
               break;
           }
-          return { run, human, secretFix, reveal };
+          return { run, human, secretFix, reveal, ...moved };
         });
       },
 
