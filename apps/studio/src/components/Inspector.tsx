@@ -787,18 +787,15 @@ export function Inspector() {
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 px-4 text-[12px]">
         {step ? (
           <>
-            <button type="button" onClick={() => select(null)} className="max-w-[45%] truncate text-slate-500 hover:text-ink hover:underline" title={t.shell.toScenario}>
-              {scenario.name}
+            {/* The scenario's name is in the title bar; here it is the way back to its properties. */}
+            <button type="button" onClick={() => select(null)} className="shrink-0 text-slate-500 hover:text-ink hover:underline" title={t.shell.toScenario}>
+              {t.shell.scenario}
             </button>
             <span className="text-slate-400">›</span>
             <span className="truncate font-semibold">{step.name || stepLabel(step.type, def?.label)}</span>
           </>
         ) : (
-          <>
-            <span className="text-slate-500">{t.shell.scenario}</span>
-            <span className="text-slate-400">›</span>
-            <span className="truncate font-semibold">{scenario.name}</span>
-          </>
+          <span className="font-semibold">{t.shell.scenario}</span>
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">{step ? <StepInspector /> : <ScenarioInspector />}</div>

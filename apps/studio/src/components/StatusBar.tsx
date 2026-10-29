@@ -1,6 +1,6 @@
-// The bar along the bottom reports and never asks: where the data lives, what
-// the AI and the runner are doing, where the selection is, then this PC's
-// preferences (language, theme) and the version. What waits on the person has
+// The bar along the bottom reports and never asks: what the AI and the runner
+// are doing, where the selection is, then this PC's preferences (language,
+// theme) and the version. What waits on the person has
 // its badge on the control that answers it (確認待ち, シークレット), not here.
 import type { HistoryEntry, Step } from "@shikigami/schema";
 import { type ReactNode, useMemo, useState } from "react";
@@ -13,22 +13,6 @@ import { useAppVersion, useUpdate } from "./AppMenu";
 
 const ITEM = "flex h-full shrink-0 items-center gap-1.5 px-2 whitespace-nowrap";
 const BUTTON = `${ITEM} hover:bg-slate-100 hover:text-ink`;
-
-/** Where scenarios are stored; the setting itself lives in Settings. */
-function Workspace() {
-  const workspace = useStudio((s) => s.workspace);
-  const setPlace = useStudio((s) => s.setPlace);
-  if (!workspace) return null;
-  return (
-    <button type="button" className={`${BUTTON} min-w-0 shrink`} title={t.bar.workspaceTitle(workspace.root, workspace.localRoot)} onClick={() => setPlace("settings")}>
-      <svg width="12" height="12" viewBox="0 0 16 16" className="shrink-0" aria-hidden="true">
-        <path d="M1.5 3.5h5l1.5 1.5h6.5v8.5h-13z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-      </svg>
-      <span className="truncate">{workspace.root}</span>
-      {workspace.shared && <span className="shrink-0 rounded-[2px] bg-mizu-100 px-1 text-[10px] text-mizu-500">{t.workspaceShared}</span>}
-    </button>
-  );
-}
 
 /** Changes where scenarios are stored (e.g. a shared folder); Studio restarts on it. */
 export function WorkspaceSection() {
@@ -229,7 +213,6 @@ function Version() {
 export function StatusBar() {
   return (
     <footer className="col-span-full flex h-7 min-w-0 items-center border-t border-slate-200 bg-sheet px-2 text-[11px] text-slate-500">
-      <Workspace />
       <AiActivity />
       <span className="flex-1" />
       <RunStatus />
