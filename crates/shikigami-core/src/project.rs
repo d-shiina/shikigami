@@ -526,11 +526,14 @@ mod tests {
         let dir = Path::new("/w/scenarios/scn_1");
         assert_eq!(
             resolve(dir, "input/a.xlsx"),
-            Path::new("/w/scenarios/scn_1/input/a.xlsx").to_string_lossy()
+            dir.join("input").join("a.xlsx").to_string_lossy()
         );
         assert_eq!(
             resolve(dir, "..\\shared\\b.csv"),
-            Path::new("/w/scenarios/shared/b.csv").to_string_lossy()
+            Path::new("/w/scenarios")
+                .join("shared")
+                .join("b.csv")
+                .to_string_lossy()
         );
         for absolute in ["C:\\work\\a.xlsx", "\\\\server\\share\\a", "/tmp/a", "C:a"] {
             assert_eq!(resolve(dir, absolute), absolute);
@@ -543,9 +546,7 @@ mod tests {
         );
         assert_eq!(
             params["path"],
-            Path::new("/w/scenarios/scn_1/out.txt")
-                .to_string_lossy()
-                .as_ref()
+            dir.join("out.txt").to_string_lossy().as_ref()
         );
         assert_eq!(params["from"][1], "C:\\b");
         assert_eq!(params["n"], 1);
