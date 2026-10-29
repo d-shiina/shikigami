@@ -20,6 +20,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Install Tauri system dependencies (Linux)
@@ -62,10 +64,13 @@ jobs:
           name: dialogs
           path: ${{ runner.temp }}/dialogs
           if-no-files-found: ignore
-      - name: TEMP print dialog pictures
+      - name: TEMP push dialog pictures to a ref
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: Get-ChildItem "${{ runner.temp }}/dialogs" -Filter *.png | ForEach-Object { "PNG64 $($_.Name) " + [Convert]::ToBase64String([IO.File]::ReadAllBytes($_.FullName)) }
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/dialogs"
+          git init -q && git add . && git -c user.name=ci -c user.email=ci@localhost commit -qm shots
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/dialog-shots/temp
 
   frontend:
     name: TypeScript
