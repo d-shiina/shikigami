@@ -1143,6 +1143,7 @@ impl ScenarioService {
             path: project::display_path(&rel),
             size: meta.len(),
             modified: meta.modified().ok().map(time::OffsetDateTime::from),
+            in_use: false,
         })
     }
 

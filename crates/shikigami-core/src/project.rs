@@ -91,6 +91,10 @@ pub struct ProjectFile {
     )]
     #[schemars(with = "Option<String>")]
     pub modified: Option<OffsetDateTime>,
+    /// Open in Excel or Word (their `~$` owner file is next to it): a run
+    /// that writes it fails with `FILE_IN_USE`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub in_use: bool,
 }
 
 /// What a scenario's project folder holds.
@@ -327,8 +331,19 @@ fn walk(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e.into()),
     };
+    let entries: Vec<fs::DirEntry> = entries.collect::<Result<_, _>>()?;
+    // Office keeps `~$<name>` (Word: `~$` over the first two characters of
+    // a long name) next to a document while it is open.
+    let owners: Vec<String> = entries
+        .iter()
+        .filter_map(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .strip_prefix("~$")
+                .map(str::to_lowercase)
+        })
+        .collect();
     for entry in entries {
-        let entry = entry?;
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
         if is_hidden(&name_str) {
@@ -344,6 +359,7 @@ fn walk(
                 path: display_path(&path),
                 size: meta.len(),
                 modified: meta.modified().ok().map(OffsetDateTime::from),
+                in_use: in_use(&name_str, &owners),
             });
         }
     }
@@ -352,6 +368,14 @@ fn walk(
 
 /// Temporary files of an atomic write (`.tmpXXXX`), Office's lock files
 /// (`~$Book.xlsx`) and hidden files are not part of a project.
+fn in_use(name: &str, owners: &[String]) -> bool {
+    let lower = name.to_lowercase();
+    let tail: String = lower.chars().skip(2).collect();
+    owners
+        .iter()
+        .any(|o| *o == lower || (!tail.is_empty() && *o == tail))
+}
+
 fn is_hidden(name: &str) -> bool {
     name.starts_with('.') || name.starts_with("~$") || name.eq_ignore_ascii_case("desktop.ini")
 }
@@ -418,6 +442,32 @@ pub fn is_bundled(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn files_open_in_office_are_marked() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input");
+        fs::create_dir_all(&input).unwrap();
+        fs::write(input.join("Orders.xlsx"), "x").unwrap();
+        fs::write(input.join("~$orders.xlsx"), "owner").unwrap();
+        fs::write(input.join("report-long.docx"), "x").unwrap();
+        fs::write(input.join("~$port-long.docx"), "owner").unwrap();
+        fs::write(input.join("closed.xlsx"), "x").unwrap();
+        let listed = list(&ScenarioId::new("s"), dir.path()).unwrap();
+        let used: Vec<(&str, bool)> = listed
+            .files
+            .iter()
+            .map(|f| (f.path.as_str(), f.in_use))
+            .collect();
+        assert_eq!(
+            used,
+            [
+                ("input/Orders.xlsx", true),
+                ("input/closed.xlsx", false),
+                ("input/report-long.docx", true)
+            ]
+        );
+    }
+
     use super::*;
 
     #[test]

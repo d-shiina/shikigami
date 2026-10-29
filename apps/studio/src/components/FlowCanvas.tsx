@@ -25,6 +25,7 @@ import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
 import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { stepLabel, t } from "../lib/i18n";
+import { useProjectMaybe } from "../project";
 import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
@@ -83,6 +84,8 @@ const MAX_INNER_LINES = 24;
 const MIN_READABLE_ZOOM = 0.85;
 /** Width of the outline panel plus its gap, from the canvas's left edge. */
 const OUTLINE_W = 284;
+/** The project panel over the left of the chart, with its margins. */
+const PROJECT_W = 288;
 
 const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: () => string }> = {
   added: { border: "border-moegi-500", tag: "bg-moegi-500", label: () => t.flow.aiAdded },
@@ -398,10 +401,48 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
       <span className="w-16 shrink-0 truncate text-slate-500" title={row.key}>
         {row.label}
       </span>
-      <span className="h-[20px] min-w-0 flex-1 truncate rounded bg-slate-100 px-1.5 leading-[20px] text-ink" title={row.value}>
-        {row.value}
-      </span>
+      {row.file ? (
+        <FileValue file={row.file} />
+      ) : (
+        <span className="h-[20px] min-w-0 flex-1 truncate rounded bg-slate-100 px-1.5 leading-[20px] text-ink" title={row.value}>
+          {row.value}
+        </span>
+      )}
     </div>
+  );
+}
+
+const ROLE_VAR: Record<string, string> = {
+  input: "var(--color-role-input)",
+  config: "var(--color-role-config)",
+  templates: "var(--color-role-templates)",
+  output: "var(--color-role-output)",
+};
+
+/**
+ * A path param naming a file of the scenario's folder: tinted in its shelf's
+ * colour, marked when Excel has it open (a write would fail), and opened in
+ * its sheet or app on double-click.
+ */
+function FileValue({ file }: { file: NonNullable<Extract<Row, { kind: "param" }>["file"]> }) {
+  const color = ROLE_VAR[file.role] ?? "var(--color-slate-400)";
+  const entry = useProjectMaybe((s) => s.files?.files.find((f) => f.path.toLowerCase() === file.path.toLowerCase()) ?? null, null);
+  const known = useProjectMaybe((s) => s.files !== null, false);
+  const openFile = useProjectMaybe((s) => s.openFile, null);
+  const missing = known && !entry && file.role !== "output" && file.role !== "work" && !file.path.includes("{{");
+  return (
+    <span
+      className="flex h-[20px] min-w-0 flex-1 items-center gap-1 rounded px-1.5 leading-[20px] text-ink"
+      style={{ background: `color-mix(in srgb, ${color} 12%, transparent)`, boxShadow: `inset 2px 0 0 ${color}` }}
+      title={entry?.inUse ? `${file.path} · ${t.project.inUse}` : file.path}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (entry && openFile) void openFile(file.path);
+      }}
+    >
+      <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${missing ? "text-shu-500 line-through decoration-1" : ""}`}>{file.path}</span>
+      {entry?.inUse && <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-shu-500" />}
+    </span>
   );
 }
 
@@ -644,7 +685,9 @@ function useBringIntoView() {
   const width = useStore((s) => s.width);
   const height = useStore((s) => s.height);
   // The outline covers the left edge of the chart while it is open.
-  const covered = useStudio((s) => (s.outlineOpen ? OUTLINE_W : 0));
+  const outlineW = useStudio((s) => (s.outlineOpen ? OUTLINE_W : 0));
+  // So does the project panel, with the outline beside it.
+  const covered = outlineW + useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
   return useCallback(
     (id: string) => {
       const node = flow.getInternalNode(id);
@@ -776,6 +819,7 @@ export function FlowCanvas() {
   const called = useStudio((s) => s.called);
   const dive = useStudio((s) => s.dive);
   const enterCall = useStudio((s) => s.enterCall);
+  const projectW = useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
   // Entered calls show their scenario here, read-only; edits stay with the open one.
   const chain = useMemo(() => diveChain(root, called, dive), [root, called, dive]);
   const path = useMemo(() => chain.map((level) => level.stepId), [chain]);
@@ -959,10 +1003,11 @@ export function FlowCanvas() {
         const box = wrapper.current;
         if (!box) return;
         const pad = 64;
-        const fitW = (box.clientWidth - pad) / bounds.width;
+        const boxW = box.clientWidth - projectW;
+        const fitW = (boxW - pad) / bounds.width;
         const fitH = (box.clientHeight - pad) / bounds.height;
         const zoom = Math.max(Math.min(fitW, fitH, 1), MIN_READABLE_ZOOM);
-        const x = zoom > fitW ? pad / 2 : (box.clientWidth - bounds.width * zoom) / 2;
+        const x = projectW + (zoom > fitW ? pad / 2 : (boxW - bounds.width * zoom) / 2);
         // Inside a call, clear of the bar that says where the chart is.
         const y = inside ? 104 : pad / 2;
         void flow.setViewport({ x: x - bounds.x * zoom, y: y - bounds.y * zoom, zoom });

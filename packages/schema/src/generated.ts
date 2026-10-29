@@ -1230,6 +1230,11 @@ export interface ProjectFile {
   path: string;
   size: number;
   modified?: string | null;
+  /**
+   * Open in Excel or Word (their `~$` owner file is next to it): a run
+   * that writes it fails with `FILE_IN_USE`.
+   */
+  inUse?: boolean;
 }
 /**
  * A settings file (`config/*.json`) kept out of the scenario: values a

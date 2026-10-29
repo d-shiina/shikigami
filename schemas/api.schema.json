@@ -2342,6 +2342,10 @@
             "string",
             "null"
           ]
+        },
+        "inUse": {
+          "description": "Open in Excel or Word (their `~$` owner file is next to it): a run\nthat writes it fails with `FILE_IN_USE`.",
+          "type": "boolean"
         }
       },
       "required": [
