@@ -1,4 +1,5 @@
 import type { ScenarioSummary } from "@shikigami/schema";
+import { Search, Workflow } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { relativeTime } from "../lib/changes";
@@ -100,7 +101,13 @@ function Marked({ text, query }: { text: string; query: string }) {
 }
 
 function ScenarioItem({ summary, active, query }: { summary: ScenarioSummary; active: boolean; query: string }) {
-  const open = useStudio((s) => s.open);
+  const openScenario = useStudio((s) => s.open);
+  const setPlace = useStudio((s) => s.setPlace);
+  // Picking a scenario anywhere opens it in the editor.
+  const open = (id: string) => {
+    setPlace("scenarios");
+    void openScenario(id);
+  };
   const duplicate = useStudio((s) => s.duplicate);
   const remove = useStudio((s) => s.remove);
   const [confirming, setConfirming] = useState(false);
@@ -120,7 +127,7 @@ function ScenarioItem({ summary, active, query }: { summary: ScenarioSummary; ac
         }`}
       >
         {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-[1px] bg-brand-500" />}
-        <Monogram name={summary.name} active={active} />
+        <Workflow size={14} strokeWidth={1.75} className={`shrink-0 ${active ? "text-ink" : "text-slate-400"}`} aria-hidden="true" />
         <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "font-bold" : ""}`}>
           <Marked text={summary.name} query={query} />
         </span>
@@ -188,9 +195,11 @@ function Group({
   );
 }
 
-export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
+/** The scenarios section of the sidebar: add, search, and the list grouped by tag. */
+export function ScenarioList() {
   const summaries = useStudio((s) => s.summaries);
-  const currentId = useStudio((s) => s.scenario?.id);
+  // Highlighted only while the editor shows it, not while another place is open.
+  const currentId = useStudio((s) => (s.place === "scenarios" ? s.scenario?.id : undefined));
   const create = useStudio((s) => s.create);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
@@ -243,7 +252,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
   };
 
   return (
-    <aside className="flex h-full flex-col border-r border-slate-200 bg-paper">
+    <section className="flex h-full flex-col">
       <div className="flex items-center gap-1 px-3 pt-3 pb-2">
         <span className="text-[12px] font-bold text-ink">{t.scenarios}</span>
         <span className="text-[11px] text-slate-400">{summaries.length}</span>
@@ -283,14 +292,6 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onCollapse}
-          title={t.list.collapse}
-          className="grid h-6 w-6 place-items-center rounded-[4px] text-slate-400 hover:bg-slate-200 hover:text-ink"
-        >
-          «
-        </button>
       </div>
       {creating && (
         <form onSubmit={submit} className="mx-3 mb-2 flex gap-1">
@@ -311,10 +312,7 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
       <ImportBox input={picker} />
       <div className="flex items-center gap-1 px-3 pb-2">
         <div className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-[4px] border border-slate-200 bg-sheet px-2 focus-within:border-brand-500">
-          <svg viewBox="0 0 16 16" className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true">
-            <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
+          <Search size={13} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -368,24 +366,6 @@ export function ScenarioList({ onCollapse }: { onCollapse: () => void }) {
           </li>
         )}
       </ul>
-    </aside>
-  );
-}
-
-/** The folded list: a strip that opens it again. */
-export function ScenarioRail({ onExpand }: { onExpand: () => void }) {
-  const current = useStudio((s) => s.scenario?.name);
-  return (
-    <aside className="flex h-full flex-col items-center gap-2 border-r border-slate-200 bg-paper pt-3">
-      <button
-        type="button"
-        onClick={onExpand}
-        title={t.list.expand}
-        className="grid h-7 w-7 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-200 hover:text-ink"
-      >
-        »
-      </button>
-      {current && <Monogram name={current} active />}
-    </aside>
+    </section>
   );
 }

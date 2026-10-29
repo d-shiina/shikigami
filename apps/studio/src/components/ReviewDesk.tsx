@@ -80,7 +80,7 @@ export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
             <button
               type="button"
               onClick={onCollapse}
-              title={t.list.collapse}
+              title={t.close}
               className="ml-auto grid h-6 w-6 place-items-center rounded-[4px] font-normal text-slate-500 hover:bg-slate-200 hover:text-ink"
             >
               «
