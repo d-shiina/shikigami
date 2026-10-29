@@ -95,6 +95,46 @@ fn images_are_found_where_they_are_in_reading_order() {
 }
 
 #[test]
+fn odd_sizes_and_fine_patterns_are_searched_safely() {
+    // A 17x17 needle shrinks to 16x16 blocks: a rough match near the edge
+    // must not be checked where the full needle does not fit.
+    let needle = noise(17, 17, 11);
+    let mut screen = noise(20, 20, 12);
+    let part = needle
+        .crop(Rect {
+            x: 0,
+            y: 0,
+            width: 16,
+            height: 16,
+        })
+        .unwrap();
+    paste(&mut screen, &part, 4, 4);
+    assert!(
+        find_image(&screen.gray(), &needle.gray(), 0.9)
+            .unwrap()
+            .is_empty()
+    );
+    // A checkerboard averages to flat grey when shrunk; it is still found.
+    let board: Vec<u8> = (0..16 * 16)
+        .flat_map(|i| {
+            let v = if (i % 16 + i / 16) % 2 == 0 { 0 } else { 255 };
+            [v, v, v, 255]
+        })
+        .collect();
+    let board = Bitmap::new(16, 16, board);
+    let mut screen = noise(60, 40, 13);
+    paste(&mut screen, &board, 30, 10);
+    let found = find_image(&screen.gray(), &board.gray(), 0.9).unwrap();
+    assert_eq!(
+        found
+            .iter()
+            .map(|m| (m.rect.x, m.rect.y))
+            .collect::<Vec<_>>(),
+        [(30, 10)]
+    );
+}
+
+#[test]
 fn brightness_changes_still_match_but_other_pictures_do_not() {
     let mut screen = noise(200, 120, 3);
     let icon = noise(24, 24, 42);
@@ -355,6 +395,18 @@ async fn several_matches_need_nth_and_regions_narrow_the_search() {
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     // nth 1 is the lower one; the region holds only that one too.
     assert_eq!(screen.clicks(), [(40, 188), (40, 188)]);
+
+    // isVisible looks for the nth match, not any match.
+    let visible = |nth: usize| {
+        saving(step(
+            types::IS_VISIBLE,
+            json!({ "target": { "window": { "title": "Citrix" }, "image": { "path": path, "nth": nth } }, "waitMs": 0 }),
+        ))
+    };
+    let report = run_on(screen.clone(), vec![visible(1)]).await;
+    assert_eq!(report.outputs["out"], json!(true), "{:?}", report.error);
+    let report = run_on(screen, vec![visible(2)]).await;
+    assert_eq!(report.outputs["out"], json!(false), "{:?}", report.error);
 }
 
 #[tokio::test]

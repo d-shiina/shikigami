@@ -115,6 +115,22 @@ impl Looking {
         }
         Ok(target.ocr.clone().map(Self::Text))
     }
+
+    /// Which match to act on, when several are expected.
+    pub fn nth(&self) -> Option<usize> {
+        match self {
+            Self::Image { nth, .. } => *nth,
+            Self::Text(q) => q.nth,
+        }
+    }
+}
+
+impl Seen {
+    /// Whether the match `looking` acts on is there (any match, unless
+    /// `nth` picks one).
+    pub fn shows(&self, looking: &Looking) -> bool {
+        self.places.len() > looking.nth().unwrap_or(0)
+    }
 }
 
 /// The places found on one look, in reading order (window coordinates).

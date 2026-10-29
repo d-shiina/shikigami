@@ -43,33 +43,46 @@ pub fn find_image(haystack: &Gray, needle: &Gray, threshold: f32) -> Option<Vec<
     while factor < MAX_FACTOR && needle.width.min(needle.height) / (factor * 2) >= COARSE_MIN_SIDE {
         factor *= 2;
     }
-    let candidates: Vec<(u32, u32)> = if factor == 1 {
-        scan(&hay, &full, threshold)
+    // Shrinking can average a fine pattern (a checkerboard) to one flat
+    // colour; shrink less until it keeps some contrast.
+    let mut small = None;
+    while factor > 1 {
+        small = Template::new(&Summed::new(needle.clone()).shrunk_from(0, 0, factor));
+        if small.is_some() {
+            break;
+        }
+        factor /= 2;
+    }
+    let candidates: Vec<(u32, u32)> = match small {
+        None => scan(&hay, &full, threshold)
             .into_iter()
             .map(|(x, y, _)| (x, y))
-            .collect()
-    } else {
-        let Some(small) = Template::new(&Summed::new(needle.clone()).shrunk_from(0, 0, factor))
-        else {
-            return Some(Vec::new());
-        };
-        let mut rough = Vec::new();
-        for py in 0..factor {
-            for px in 0..factor {
-                let shifted = Summed::new(hay.shrunk_from(px, py, factor));
-                if shifted.gray.width < small.width || shifted.gray.height < small.height {
-                    continue;
+            .collect(),
+        Some(small) => {
+            let mut rough = Vec::new();
+            for py in 0..factor {
+                for px in 0..factor {
+                    let shifted = Summed::new(hay.shrunk_from(px, py, factor));
+                    if shifted.gray.width < small.width || shifted.gray.height < small.height {
+                        continue;
+                    }
+                    rough.extend(
+                        scan(&shifted, &small, threshold - COARSE_SLACK)
+                            .into_iter()
+                            .map(|(x, y, s)| (x * factor + px, y * factor + py, s))
+                            // The shrunk needle drops the edge that does not
+                            // fill a block, so the full one may not fit here.
+                            .filter(|&(x, y, _)| {
+                                x + needle.width <= haystack.width
+                                    && y + needle.height <= haystack.height
+                            }),
+                    );
                 }
-                rough.extend(
-                    scan(&shifted, &small, threshold - COARSE_SLACK)
-                        .into_iter()
-                        .map(|(x, y, s)| (x * factor + px, y * factor + py, s)),
-                );
             }
+            rough.sort_by(|a, b| b.2.total_cmp(&a.2));
+            rough.truncate(MAX_CANDIDATES);
+            rough.into_iter().map(|(x, y, _)| (x, y)).collect()
         }
-        rough.sort_by(|a, b| b.2.total_cmp(&a.2));
-        rough.truncate(MAX_CANDIDATES);
-        rough.into_iter().map(|(x, y, _)| (x, y)).collect()
     };
     let mut found: Vec<Match> = candidates
         .into_iter()

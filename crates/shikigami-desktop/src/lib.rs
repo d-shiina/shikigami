@@ -390,7 +390,8 @@ impl DesktopStep {
     }
 
     /// `(found, visible, enabled)` of the target now. A visual target is
-    /// found when its image or text is on the screen at least once.
+    /// found when its image or text is on the screen (the `nth` match, if
+    /// given).
     async fn probe_any(
         &self,
         target: &Target,
@@ -401,7 +402,7 @@ impl DesktopStep {
         };
         match visual::look(self.backend.as_ref(), target, looking).await {
             Ok(seen) => {
-                let shown = !seen.places.is_empty();
+                let shown = seen.shows(looking);
                 Ok((shown, shown, shown))
             }
             Err(e) if is_not_ready(&e) || e.code == "REGION_OUTSIDE" => Ok((false, false, false)),
