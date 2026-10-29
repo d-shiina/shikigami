@@ -62,6 +62,10 @@ jobs:
           name: dialogs
           path: ${{ runner.temp }}/dialogs
           if-no-files-found: ignore
+      - name: TEMP print dialog pictures
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Get-ChildItem "${{ runner.temp }}/dialogs" -Filter *.png | ForEach-Object { "PNG64 $($_.Name) " + [Convert]::ToBase64String([IO.File]::ReadAllBytes($_.FullName)) }
 
   frontend:
     name: TypeScript
