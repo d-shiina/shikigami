@@ -701,6 +701,8 @@ export const ja = {
     scope: "スコープ",
     authorizeParams: "認可ページの追加パラメータ",
     pkce: "PKCE",
+    file: "ファイル",
+    language: "言語",
   },
   outputLabels: { writes: "書き込む", item: "要素", index: "番号", result: "結果" },
   verbs: {

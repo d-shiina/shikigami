@@ -11,7 +11,8 @@
     "studio:build": "pnpm --filter @shikigami/studio tauri build",
     "studio:bundle-cli": "node apps/studio/scripts/bundle-cli.mjs",
     "studio:bundle-node": "node apps/studio/scripts/bundle-node.mjs",
-    "studio:release": "pnpm studio:bundle-cli && pnpm studio:bundle-node && node apps/studio/scripts/set-pubkey.mjs && pnpm --filter @shikigami/studio tauri build --config src-tauri/tauri.release.gen.json",
+    "studio:bundle-ocr": "node apps/studio/scripts/bundle-ocr.mjs",
+    "studio:release": "pnpm studio:bundle-cli && pnpm studio:bundle-node && pnpm studio:bundle-ocr && node apps/studio/scripts/set-pubkey.mjs && pnpm --filter @shikigami/studio tauri build --config src-tauri/tauri.release.gen.json",
     "demo:site": "node packages/browser-adapter/src/demo-site.ts",
     "demo:browser": "node packages/browser-adapter/src/demo.ts",
     "release:setup": "node scripts/setup-release-signing.mjs"

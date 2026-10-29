@@ -14,6 +14,7 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 - `window`：トップレベルのウィンドウ。`title`（既定は部分一致・大文字小文字無視、`exact: true` で完全一致）か `process`（実行ファイル名、`.exe` は省略可）のどちらかは必須。複数当たるときは `nth`（0 始まり）
 - `element`：ウィンドウ内の部品。`id`（UI Automation の AutomationId、完全一致）が第一候補、なければ `role` + `name`。省略するとウィンドウ自体
 - `role` はブラウザと同じ語彙です（`button` `textbox` `checkbox` `combobox` `list` `listitem` `menuitem` `tab` `tree` `treeitem` `table` `row` `text` …）。`{ "role": "button", "name": "保存" }` はブラウザでもデスクトップでも同じ意味です
+- 部品が見えないアプリ（Citrix・リモートデスクトップ・独自描画の画面）では、`image`（画像）か `ocr`（文字）で画面の上の場所を指せます（下の「部品が見えない画面」）
 - `point`（ウィンドウ左上からの座標）は `desktop.mouseClick` だけで使える最終手段です
 
 部品が複数当たったときは「どれか」を選ばずにエラー（`ELEMENT_AMBIGUOUS`、候補つき）にします。実行のたびに違う部品を押すことがないようにするためです。
@@ -33,6 +34,8 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 | `desktop.mouseClick` | `target`, `button`, `double` | – | **使う** |
 | `desktop.type` | `target`, `text`（文字またはシークレット） | – | **使う** |
 | `desktop.press` | `target`, `key`（`Enter` `Control+S` `Alt+F4` など。ブラウザと同じ書き方） | – | **使う** |
+| `desktop.readText` | `target`（ウィンドウ・`element`・`region`）または `file`（画像ファイル） | `{ text, lines }`（OCR） | 使わない |
+| `desktop.screenshot` | `target`（ウィンドウ・`element`・`region`）, `path` | 保存したパス | 使わない |
 
 - **待ち時間を書かなくてよい**：どのノードも、ウィンドウや部品が現れる（無効なら有効になる）まで自動で探し直します。上限はノードの `timeoutMs`（既定 30 秒）。消えるのを待つときだけ `desktop.waitFor` の `state: "hidden"` を使います
 - **まずマウスを使わない操作**：`desktop.click` はボタンを押す・チェックを切り替える・項目を選ぶ・ツリーを開く操作を、マウスを動かさずに行います。ウィンドウが裏にあっても動き、ほかの作業と並行できます。反応しないアプリだけ `desktop.mouseClick` / `desktop.type` を使います
@@ -65,6 +68,36 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
               "value": { "secret": "請求システム", "field": "password" } } }
 ```
 
+## 部品が見えない画面：画像と文字（OCR）
+
+Citrix やリモートデスクトップの中、独自に描画する画面では `inspect_ui` に部品が出ません。そのときは画面の絵の上で場所を探します。
+
+```json
+{ "window": { "title": "Citrix" }, "ocr": { "text": "検索" } }
+{ "window": { "title": "Citrix" }, "image": { "path": "C:\\RPA\\images\\保存ボタン.png" } }
+{ "window": { "title": "Citrix" }, "ocr": { "text": "顧客コード" }, "offset": { "x": 150, "y": 0 } }
+```
+
+- `ocr`：画面に出ている文字を OCR で探します。空白・大文字小文字・全角半角は無視します。`exact: true` で行全体が一致するものだけ
+- `image`：PNG の画像を画面から探します（正規化相互相関なので明るさの変化には強い）。`threshold`（0.5〜1、既定 0.9）で似ている度合いの下限を決めます。画像は同じアプリの画面から `desktop.screenshot` と `region` で切り出します。**画面の拡大率（DPI）やテーマが違うと見つかりません**
+- `offset`：見つけた場所の中心からずらします（ラベルの右の入力欄など）
+- `region`：探す範囲をウィンドウの一部（ウィンドウ左上からの px）に絞ります。`element` が見えるならそれでも絞れます
+- 複数見つかったときは選ばずに `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS`（候補の位置つき）にします。`nth`（上から、同じ行は左から数えて 0 始まり）か `region` で決めます
+- 使えるノード：`desktop.mouseClick`・`desktop.type`（その場所をクリックしてから入力）・`desktop.waitFor`・`desktop.isVisible`。どれも見つかるまで自動で待ちます
+- 画面の絵はウィンドウ自身に描かせるので、ほかのウィンドウに隠れていても読めます。描けないアプリだけ前面に出して画面から写します
+
+### OCR エンジン
+
+- 既定は **PaddleOCR**（PP-OCRv6 small を ONNX Runtime で実行）です。オフラインで動き、日本語・中国語・英語を 1 つのモデルで読みます。12px 程度の小さい画面の文字も読めます。モデルと ONNX Runtime はインストーラに同梱しています（`ocr\`、約 60 MB。モデルは Apache-2.0、ONNX Runtime は MIT）
+- PaddleOCR が入っていないときは **Windows OCR**（Windows.Media.Ocr）を使います。小さい文字と日本語は苦手なので、2 倍に拡大してから読ませます。`engine: "windows"` で明示もでき、`language`（`ja`・`en-US` など）はこちら用です
+- 開発中のチェックアウトでは `pnpm studio:bundle-ocr` を 1 回実行すると `target\ocr` に入り、開発版の Studio・MCP サーバー・テストが使います
+
+### AI が画面を見るには（MCP）
+
+- `inspect_ui` に `ocr: true` を付けると、ウィンドウの文字を行ごとに位置（ウィンドウ左上からの px）つきで返します。そのまま `target.ocr` や `region` に使えます
+- `image: true` を付けると、ウィンドウの絵が AI に画像として返ります（アイコンや配置を見て、切り出す範囲を決めるため）
+- ウィンドウの絵は観察として残り、レビューする人が見られます
+
 ## アプリの種類と見え方
 
 | アプリ | いまの見え方 | 予定 |
@@ -72,7 +105,7 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 | Win32 / WinForms / WPF / UWP、Office の画面 | UI Automation で部品が見える | – |
 | SAP GUI for Windows | UI Automation では一部しか見えないことが多い（`inspect_ui` に注記） | SAP GUI Scripting を別の掴み方として追加。ノードは同じ `desktop.*`、SAP 固有の操作（トランザクションコードなど）だけ専用の型を足す。SAP サーバー側の `sapgui/user_scripting` と SAP GUI のオプションでスクリプトを有効にする必要がある |
 | Java（Swing など） | 枠しか見えないことが多い（注記） | Java Access Bridge（`jabswitch -enable` で有効化） |
-| Citrix / リモートデスクトップの中 | 部品は見えない | 画像認識と座標（`point`） |
+| Citrix / リモートデスクトップの中 | 部品は見えない。画像（`image`）と文字（`ocr`）で場所を指す | – |
 | Excel のデータ | – | xlsx を直接読み書きする `excel.*`（[adapters.md](adapters.md)） |
 
 ## しくみ
@@ -97,11 +130,16 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 | `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | シークレットにこのアプリ（`app:xxx.exe`）が登録されていない |
 | `FOCUS_FAILED` | キーボード入力の前に部品へフォーカスを移せなかった（別の欄に打ち込まないよう止める）。入力欄そのものを対象にする |
 | `ELEVATION_REQUIRED` | 管理者として動いているアプリ |
+| `IMAGE_NOT_FOUND` / `TEXT_NOT_FOUND` | 画面に見つからない（時間切れまで待ったあと）。画像は惜しかったときの `bestScore`、文字は OCR が読んだ内容 `textRead` つき |
+| `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | 複数見つかった（候補の位置つき）。`nth` か `region` で決める |
+| `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | 画像ファイルがない／一色だけの画像（どこにでも当たる） |
+| `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` なのに PaddleOCR が入っていない／Windows OCR にその言語がない |
 | `PLATFORM_UNSUPPORTED` | Windows 以外で実行した |
 
 ## 確認済みの事項と制約
 
-- **確認済み**：ノード定義・検証・自動待ち・ロック・シークレットの照合を、偽のバックエンドで自動テスト（Linux / Windows の CI）。Windows の CI でメモ帳を起動し、文字の入力と読み取りを UI Automation で行うテスト
-- **未確認**：実際の業務アプリ・SAP GUI・Java アプリでの動作、マウス・キーボード操作（CI では画面操作をテストしていない）、高 DPI・複数モニター
+- **確認済み**：ノード定義・検証・自動待ち・ロック・シークレットの照合を、偽のバックエンドで自動テスト（Linux / Windows の CI）。Windows の CI でメモ帳を起動し、文字の入力と読み取りを UI Automation で行うテスト。画像検索と、日本語の業務画面の絵（12px の文字）を PaddleOCR で読むテスト（Linux / Windows の CI）。Windows の CI でメモ帳の絵を撮って OCR し、切り出した画像をもう一度見つけるテスト
+- **未確認**：実際の業務アプリ・SAP GUI・Java アプリ・Citrix での動作、マウス・キーボード操作（CI では画面操作をテストしていない）、高 DPI・複数モニター
+- 画像検索はフル HD のウィンドウで 1 回 0.2〜0.5 秒、PaddleOCR は小さい画面で 0.3 秒ほど（CPU 4 コア）です。大きなウィンドウ全体の OCR は 1 秒を超えることがあるので、`region` で絞ると速くなります
 - Studio・CLI・MCP サーバーなど **別プロセス間** のマウス・キーボードの排他は未実装です（同じプロセス内のみ）
-- スクリーンショット、表（グリッド）の一括読み取り、メニューを順にたどる書き方は未実装です
+- 表（グリッド）の一括読み取り、メニューを順にたどる書き方は未実装です。回転・拡大縮小した画像は探せません
