@@ -55,7 +55,7 @@ function generatedIds(entry: HistoryEntry): string[] {
     .reverse();
 }
 
-/** "3手順追加・1変更" — what the group did, in a few words. */
+/** "3ノード追加・1変更" — what the group did, in a few words. */
 export function headline(summary: ReviewSummary): string {
   const count = (d: StepDiff) => [...summary.steps.values()].filter((v) => v === d).length;
   const parts = [
