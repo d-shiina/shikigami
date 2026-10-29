@@ -160,11 +160,12 @@ $xaml = @'
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" SizeToContent="WidthAndHeight" Topmost="True"
         WindowStartupLocation="CenterScreen" ShowInTaskbar="True"
-        UseLayoutRounding="True" SnapsToDevicePixels="True"
-        TextOptions.TextFormattingMode="Display"
-        FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI" FontSize="14"
-        Foreground="@INK@" Language="ja-JP">
-  <Window.Resources>
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
+  <!-- Fonts, colours and styles live on this root rather than the window,
+       so the sheet looks the same when tests draw it without a window. -->
+  <Grid x:Name="Root" TextElement.FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI" TextElement.FontSize="14"
+        TextElement.Foreground="@INK@" Language="ja-JP" TextOptions.TextFormattingMode="Display">
+  <Grid.Resources>
     <Style x:Key="Ring">
       <Setter Property="Control.Template">
         <Setter.Value>
@@ -260,7 +261,7 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
-  </Window.Resources>
+  </Grid.Resources>
 
   <!-- The margin leaves room for the dialog's shadow (24dp in Studio). -->
   <Border Margin="28,20,28,36" Background="@SHEET@" BorderBrush="@LINE@" BorderThickness="1" CornerRadius="4">
@@ -307,6 +308,7 @@ $xaml = @'
       </Border>
     </Grid>
   </Border>
+  </Grid>
 </Window>
 '@
 foreach ($key in $colors.Keys) { $xaml = $xaml.Replace("@$key@", $colors[$key]) }
@@ -375,7 +377,7 @@ foreach ($b in $buttons) {
     $button = New-Object System.Windows.Controls.Button
     $button.Tag = $b[0]
     $button.Content = $words[$b[0]]
-    $button.Style = $window.FindResource($b[1])
+    $button.Style = $window.FindName('Root').FindResource($b[1])
     $button.IsDefault = $b[2]
     $button.IsCancel = $b[3]
     $button.Add_Click($choose)
@@ -419,11 +421,12 @@ if ($env:SHIKIGAMI_SNAPSHOT) {
     $sheet = $window.Content
     $window.Content = $null
     $sheet.Measure([System.Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity))
-    $sheet.Arrange([System.Windows.Rect]::new($sheet.DesiredSize))
+    $size = $sheet.DesiredSize
+    $sheet.Arrange([System.Windows.Rect]::new($size))
     $sheet.UpdateLayout()
     $scale = 2
     $bitmap = [System.Windows.Media.Imaging.RenderTargetBitmap]::new(
-        [int]($sheet.ActualWidth * $scale), [int]($sheet.ActualHeight * $scale), 96 * $scale, 96 * $scale,
+        [int][Math]::Ceiling($size.Width * $scale), [int][Math]::Ceiling($size.Height * $scale), 96 * $scale, 96 * $scale,
         [System.Windows.Media.PixelFormats]::Pbgra32)
     $bitmap.Render($sheet)
     $png = [System.Windows.Media.Imaging.PngBitmapEncoder]::new()
