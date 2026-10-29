@@ -216,17 +216,15 @@ function Shell() {
   const [width, measure] = useWidth();
   const hasScenario = useStudio((s) => s.scenario !== null);
   const editing = place === "scenarios" || place === "review";
-  const fit = fitPanels(width, {
-    agent: agentOpen,
-    right: editing && hasScenario,
-    inbox: place === "review",
-    sidebar: sidebar === "open",
-  });
-  const showSidebar = sidebar === "open" && fit.sidebar;
-  // Hidden by hand, it comes back; hidden for room, it is laid over the chart.
+  const shown = { agent: agentOpen, right: editing && hasScenario, inbox: place === "review" };
+  const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" });
+  // Whether the sidebar would fit if it were shown, whatever the person chose.
+  const room = fitPanels(width, { ...shown, sidebar: true }).sidebar;
+  const showSidebar = sidebar === "open" && room;
+  // Hidden by hand with room, it comes back; without room, it is laid over the chart.
   const toggleSidebar = () => {
     if (showSidebar) setSidebar("closed");
-    else if (fit.sidebar) setSidebar("open");
+    else if (room) setSidebar("open");
     else setPeek(!peek);
   };
   useEffect(() => {
