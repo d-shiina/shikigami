@@ -4033,8 +4033,9 @@
                   },
                   "field": {
                     "enum": [
-                      "username",
                       "password",
+                      "accessToken",
+                      "username",
                       "totp"
                     ]
                   }
@@ -4237,6 +4238,61 @@
       "blocks": [],
       "hasOutput": true,
       "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "oauth.signIn",
+      "params": {
+        "type": "object",
+        "properties": {
+          "secret": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "authorizeUrl": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tokenUrl": {
+            "type": "string",
+            "minLength": 1
+          },
+          "redirectUrl": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string"
+          },
+          "authorizeParams": {
+            "type": "object"
+          },
+          "pkce": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "secret",
+          "authorizeUrl",
+          "tokenUrl",
+          "redirectUrl"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
       "expressionParams": [],
       "bindsVariables": [],
       "secretParams": [],

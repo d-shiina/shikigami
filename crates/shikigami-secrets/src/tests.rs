@@ -146,6 +146,45 @@ fn sessions_round_trip_encrypted() {
 }
 
 #[test]
+fn oauth_tokens_are_kept_encrypted_with_the_secret() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    v.set(input("Box")).unwrap();
+    assert_eq!(v.load_oauth_tokens("Box").unwrap(), None);
+    assert!(!v.summaries().unwrap()[0].signed_in);
+    let tokens = json!({ "accessToken": "at-s3cr3t", "refreshToken": "rt-s3cr3t" });
+    v.save_oauth_tokens("Box", &tokens).unwrap();
+    assert_eq!(v.load_oauth_tokens("Box").unwrap(), Some(tokens));
+    let raw = std::fs::read_dir(dir.path().join("secrets/oauth"))
+        .unwrap()
+        .map(|f| std::fs::read_to_string(f.unwrap().path()).unwrap())
+        .collect::<String>();
+    assert!(!raw.contains("s3cr3t"));
+    assert!(v.summaries().unwrap()[0].signed_in);
+    assert!(v.list().unwrap()[0].signed_in);
+    // The refresh lock is per secret and released on drop.
+    drop(v.lock_oauth_tokens("Box").unwrap());
+    drop(v.lock_oauth_tokens("Box").unwrap());
+    // A session file of the same name is a different thing.
+    assert_eq!(v.load_session("Box").unwrap(), None);
+
+    // The token is only for http.request, which reads it from the store.
+    let err = v
+        .resolve(&reference("Box", SecretField::AccessToken))
+        .unwrap_err();
+    assert_eq!(err.code, "SECRET_FIELD_NOT_ALLOWED");
+
+    // Signing out forgets them; so does removing the secret.
+    assert!(v.remove_session("Box").unwrap());
+    assert_eq!(v.load_oauth_tokens("Box").unwrap(), None);
+    assert!(!v.remove_session("Box").unwrap());
+    v.save_oauth_tokens("Box", &json!({ "accessToken": "x" }))
+        .unwrap();
+    v.remove("Box").unwrap();
+    assert_eq!(v.load_oauth_tokens("Box").unwrap(), None);
+}
+
+#[test]
 fn sites_are_normalized_to_origins() {
     assert_eq!(
         normalize_site("HTTPS://Example.com:443/login?x=1").unwrap(),

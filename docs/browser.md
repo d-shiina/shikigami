@@ -53,7 +53,7 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 
 Every node has a `context` (default `default`). Each `context` has its own cookies and tabs; **nodes on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so scenarios never declare locks). Contexts opened by a run are closed when it ends.
 
-For logins, passwords and MFA, see [secrets.md](secrets.md).
+For logins, passwords and MFA, see [secrets.md](secrets.md). For web APIs that need an OAuth sign-in in the browser (`oauth.signIn`), see [oauth.md](oauth.md).
 
 ### Choosing elements (`target`)
 

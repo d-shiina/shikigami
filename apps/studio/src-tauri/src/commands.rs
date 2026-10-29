@@ -470,6 +470,7 @@ pub fn list_secrets(state: State<'_, AppState>) -> CmdResult<SecretList> {
                 sites: s.sites,
                 fields: s.fields,
                 description: s.description,
+                signed_in: s.signed_in,
                 updated_at: String::new(),
             })
             .collect()

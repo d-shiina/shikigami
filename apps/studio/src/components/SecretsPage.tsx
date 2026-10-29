@@ -111,7 +111,7 @@ function SecretForm({
           onChange={(e) => edit({ name: e.target.value })}
         />
       </Labeled>
-      <Labeled label={t.secretUsername}>
+      <Labeled label={t.secretUsername} hint={t.secretUsernameHint}>
         <input
           className={inputClass}
           value={draft.username}
@@ -166,6 +166,7 @@ export function SecretsPage() {
   const secrets = useStudio((s) => s.secrets);
   const keyLocation = useStudio((s) => s.secretKeyLocation);
   const removeSecret = useStudio((s) => s.removeSecret);
+  const signOut = useStudio((s) => s.signOutSecret);
   const keyMissing = useStudio((s) => s.secretKeyMissing);
   const resetSecrets = useStudio((s) => s.resetSecrets);
   const prefill = useStudio((s) => s.secretPrefill);
@@ -248,6 +249,18 @@ export function SecretsPage() {
                         {t.secretField[f]}
                       </span>
                     ))}
+                    {s.signedIn && (
+                      <span className="rounded bg-brand-50 px-1 text-slate-600">
+                        {t.secretSignedIn}
+                        <button
+                          type="button"
+                          className="ml-1 text-brand-600 hover:underline"
+                          onClick={() => window.confirm(t.secretConfirmSignOut(s.name)) && void signOut(s.name)}
+                        >
+                          {t.secretSignOut}
+                        </button>
+                      </span>
+                    )}
                     {s.sites.map((site) => (
                       <span key={site} className="font-mono">
                         {site}

@@ -53,7 +53,7 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 
 すべてのノードに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、**同じ `context` のノードは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、シナリオにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
 
-ログイン・パスワード・MFA の扱いは [secrets.md](secrets.md) を見てください。
+ログイン・パスワード・MFA の扱いは [secrets.md](secrets.md) を見てください。ブラウザで OAuth のサインインをする Web API（`oauth.signIn`）は [oauth.md](oauth.md) です。
 
 ### 要素の指定（`target`）
 

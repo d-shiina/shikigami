@@ -3,6 +3,7 @@
 //! ```text
 //! <workspace>/secrets/vault.json            names, sites and encrypted values
 //! <workspace>/secrets/sessions/<hash>.json  saved browser logins (encrypted)
+//! <workspace>/secrets/oauth/<hash>.json     OAuth tokens from oauth.signIn (encrypted)
 //! <workspace>/secrets/requests.json         logins an AI asked the user for
 //! ```
 //!
@@ -35,6 +36,7 @@ pub use keys::{Key, KeyStore, MemoryKeyStore, platform_key_store};
 
 const VAULT_FILE: &str = "vault.json";
 const SESSIONS_DIR: &str = "sessions";
+const OAUTH_DIR: &str = "oauth";
 const LOCK_FILE: &str = ".lock";
 const REQUESTS_FILE: &str = "requests.json";
 /// Longest `reason` kept on a [`SecretRequest`].
@@ -52,6 +54,9 @@ pub struct SecretInfo {
     pub fields: Vec<SecretField>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
+    /// `oauth.signIn` has saved tokens for this secret.
+    #[serde(default)]
+    pub signed_in: bool,
     pub updated_at: String,
 }
 
@@ -65,6 +70,10 @@ pub struct SecretSummary {
     pub fields: Vec<SecretField>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
+    /// `oauth.signIn` has saved tokens for this secret, so
+    /// `{ "field": "accessToken" }` works without a person.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub signed_in: bool,
 }
 
 /// Registers or updates a secret. `None` keeps the stored value.
@@ -256,6 +265,7 @@ impl Vault {
                     sites: entry.sites.clone(),
                     fields: entry.fields.clone(),
                     description: entry.description.clone(),
+                    signed_in: self.oauth_path(&entry.name).is_file(),
                     updated_at: entry.updated_at.clone(),
                 })
             })
@@ -269,6 +279,7 @@ impl Vault {
             .entries
             .into_iter()
             .map(|e| SecretSummary {
+                signed_in: self.oauth_path(&e.name).is_file(),
                 name: e.name,
                 sites: e.sites,
                 fields: e.fields,
@@ -378,6 +389,7 @@ impl Vault {
             sites,
             fields,
             description,
+            signed_in: self.oauth_path(&input.name).is_file(),
             updated_at: entry.updated_at.clone(),
         };
         match existing {
@@ -416,10 +428,16 @@ impl Vault {
             .filter(|s| !s.trim().is_empty())
             .map(|s| normalize_site(s))
             .collect::<Result<Vec<_>, _>>()?;
-        let mut fields = if input.fields.is_empty() {
+        // The access token comes from oauth.signIn, never from the user.
+        let asked: Vec<SecretField> = input
+            .fields
+            .into_iter()
+            .filter(|f| *f != SecretField::AccessToken)
+            .collect();
+        let mut fields = if asked.is_empty() {
             vec![SecretField::Username, SecretField::Password]
         } else {
-            input.fields
+            asked
         };
         let mut reason: String = input
             .reason
@@ -538,16 +556,18 @@ impl Vault {
         if file.entries.len() == before {
             return Err(not_found(name));
         }
-        self.write(&file)
+        self.write(&file)?;
+        // Tokens obtained with the secret's client ID belong to it.
+        remove_if_present(&self.oauth_path(name))?;
+        Ok(())
     }
 
-    /// Forgets a saved browser login.
+    /// Forgets a saved sign-in: the browser login and the OAuth tokens
+    /// saved under `name`. False when there was neither.
     pub fn remove_session(&self, name: &str) -> Result<bool, SecretError> {
-        match std::fs::remove_file(self.session_path(name)) {
-            Ok(()) => Ok(true),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-            Err(e) => Err(io_error(e)),
-        }
+        let session = remove_if_present(&self.session_path(name))?;
+        let tokens = remove_if_present(&self.oauth_path(name))?;
+        Ok(session || tokens)
     }
 
     /// True when secrets are registered but their key is not on this PC /
@@ -565,10 +585,12 @@ impl Vault {
     pub fn reset(&self) -> Result<usize, SecretError> {
         let _guard = self.lock()?;
         let file = self.read()?;
-        match std::fs::remove_dir_all(self.dir.join(SESSIONS_DIR)) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(io_error(e)),
+        for dir in [SESSIONS_DIR, OAUTH_DIR] {
+            match std::fs::remove_dir_all(self.dir.join(dir)) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(io_error(e)),
+            }
         }
         self.write(&VaultFile {
             version: 1,
@@ -645,9 +667,53 @@ impl Vault {
     }
 
     fn session_path(&self, name: &str) -> PathBuf {
-        let hash = Sha1::digest(name.as_bytes());
-        let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-        self.dir.join(SESSIONS_DIR).join(format!("{hex}.json"))
+        self.dir.join(SESSIONS_DIR).join(hashed_file(name))
+    }
+
+    fn oauth_path(&self, name: &str) -> PathBuf {
+        self.dir.join(OAUTH_DIR).join(hashed_file(name))
+    }
+
+    /// Reads a file sealed with `aad`; `None` when it is missing, there is
+    /// no key, or it cannot be decrypted (saved with another key, damaged).
+    fn load_sealed(&self, path: &Path, aad: &[u8]) -> Result<Option<Value>, SecretError> {
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(io_error(e)),
+        };
+        let file = self.read()?;
+        let Ok(key) = self.key(&file, false) else {
+            return Ok(None);
+        };
+        let sealed: Sealed = serde_json::from_slice(&bytes).map_err(io_error)?;
+        Ok(unseal(&key, aad, &sealed)
+            .ok()
+            .and_then(|plain| serde_json::from_slice(&plain).ok()))
+    }
+
+    fn save_sealed(&self, path: &Path, aad: &[u8], value: &Value) -> Result<(), SecretError> {
+        let _guard = self.lock()?;
+        let file = self.read()?;
+        let key = self.key(&file, true)?;
+        let plain = serde_json::to_vec(value).map_err(io_error)?;
+        let sealed = seal_bytes(&key, aad, &plain)?;
+        let bytes = serde_json::to_vec(&sealed).map_err(io_error)?;
+        write_atomic(path, &bytes)
+    }
+}
+
+fn hashed_file(name: &str) -> String {
+    let hash = Sha1::digest(name.as_bytes());
+    let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
+    format!("{hex}.json")
+}
+
+fn remove_if_present(path: &Path) -> Result<bool, SecretError> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(io_error(e)),
     }
 }
 
@@ -674,6 +740,14 @@ impl SecretProvider for Vault {
             .with_field(reference.field)
         };
         let value = match reference.field {
+            SecretField::AccessToken => {
+                return Err(SecretError::new(
+                    "SECRET_FIELD_NOT_ALLOWED",
+                    "accessToken can only be used as the auth of http.request",
+                )
+                .with_hint("Use { \"secret\": .., \"field\": \"accessToken\" } as http.request auth, after oauth.signIn.")
+                .with_secret(&reference.secret));
+            }
             SecretField::Username => values.username,
             SecretField::Password => values.password,
             SecretField::Totp => {
@@ -695,31 +769,37 @@ impl SecretProvider for Vault {
     }
 
     fn load_session(&self, name: &str) -> Result<Option<Value>, SecretError> {
-        let bytes = match std::fs::read(self.session_path(name)) {
-            Ok(bytes) => bytes,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(io_error(e)),
-        };
-        let file = self.read()?;
-        let Ok(key) = self.key(&file, false) else {
-            return Ok(None);
-        };
-        let sealed: Sealed = serde_json::from_slice(&bytes).map_err(io_error)?;
         // A session saved with another key (or damaged) is just a logout.
-        Ok(unseal(&key, &session_aad(name), &sealed)
-            .ok()
-            .and_then(|plain| serde_json::from_slice(&plain).ok()))
+        self.load_sealed(&self.session_path(name), &session_aad(name))
     }
 
     fn save_session(&self, name: &str, state: &Value) -> Result<(), SecretError> {
         secret::check_name(name).map_err(|m| SecretError::new("INVALID_SESSION_NAME", m))?;
-        let _guard = self.lock()?;
-        let file = self.read()?;
-        let key = self.key(&file, true)?;
-        let plain = serde_json::to_vec(state).map_err(io_error)?;
-        let sealed = seal_bytes(&key, &session_aad(name), &plain)?;
-        let bytes = serde_json::to_vec(&sealed).map_err(io_error)?;
-        write_atomic(&self.session_path(name), &bytes)
+        self.save_sealed(&self.session_path(name), &session_aad(name), state)
+    }
+
+    fn load_oauth_tokens(&self, name: &str) -> Result<Option<Value>, SecretError> {
+        // Unreadable tokens just mean signing in again.
+        self.load_sealed(&self.oauth_path(name), &oauth_aad(name))
+    }
+
+    fn lock_oauth_tokens(&self, name: &str) -> Result<Box<dyn Send>, SecretError> {
+        let path = self.oauth_path(name).with_extension("lock");
+        std::fs::create_dir_all(self.dir.join(OAUTH_DIR)).map_err(io_error)?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)
+            .map_err(io_error)?;
+        file.lock().map_err(io_error)?;
+        Ok(Box::new(file))
+    }
+
+    fn save_oauth_tokens(&self, name: &str, tokens: &Value) -> Result<(), SecretError> {
+        secret::check_name(name).map_err(|m| SecretError::new("INVALID_SECRET_NAME", m))?;
+        self.save_sealed(&self.oauth_path(name), &oauth_aad(name), tokens)
     }
 }
 
@@ -801,6 +881,10 @@ fn entry_aad(name: &str) -> Vec<u8> {
 
 fn session_aad(name: &str) -> Vec<u8> {
     format!("shikigami-session:{name}").into_bytes()
+}
+
+fn oauth_aad(name: &str) -> Vec<u8> {
+    format!("shikigami-oauth:{name}").into_bytes()
 }
 
 fn seal(key: &Key, name: &str, values: &Values) -> Result<Sealed, SecretError> {

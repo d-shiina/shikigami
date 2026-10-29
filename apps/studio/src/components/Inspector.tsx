@@ -99,6 +99,11 @@ function Section({ title, children, aside }: { title: string; children: React.Re
 
 type SecretRef = { secret: string; field: SecretField };
 
+/** The `field` enum of the secret reference in a text-or-secret param schema. */
+function secretFieldsOf(schema: JsonSchema): string[] | undefined {
+  return schema.oneOf?.find((v) => v.properties?.field?.enum)?.properties?.field?.enum?.map(String);
+}
+
 const isSecretRef = (v: unknown): v is SecretRef =>
   typeof v === "object" && v !== null && "secret" in v && "field" in v;
 
@@ -108,10 +113,12 @@ const isSecretRef = (v: unknown): v is SecretRef =>
  */
 function TextOrSecretField({
   label,
+  schema,
   value,
   onChange,
 }: {
   label: string;
+  schema: JsonSchema;
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
@@ -120,7 +127,8 @@ function TextOrSecretField({
   const ref = isSecretRef(value) ? value : null;
   const [mode, setMode] = useState<"text" | "secret">(ref ? "secret" : "text");
   useEffect(() => setMode(ref ? "secret" : "text"), [ref]);
-  const fields: SecretField[] = ["username", "password", "totp"];
+  // The param's schema lists the fields it takes (http.request auth also takes the OAuth access token).
+  const fields = (secretFieldsOf(schema) ?? ["username", "password", "totp"]) as SecretField[];
 
   // A <div>, not Field's <label>: a label would forward clicks to its first button.
   return (
@@ -203,7 +211,7 @@ function ParamField({
 }) {
   const label = `${paramLabel(name)}${required ? " *" : ""}`;
   if (secretCapable) {
-    return <TextOrSecretField label={label} value={value} onChange={onChange} />;
+    return <TextOrSecretField label={label} schema={schema} value={value} onChange={onChange} />;
   }
   let hint = schema.description;
   let editor: React.ReactNode;

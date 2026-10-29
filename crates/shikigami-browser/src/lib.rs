@@ -52,7 +52,10 @@ pub mod types {
     pub const CLOSE: &str = "browser.close";
     pub const IS_VISIBLE: &str = "browser.isVisible";
     pub const WAIT_FOR_HUMAN: &str = "browser.waitForHuman";
+    pub const OAUTH_SIGN_IN: &str = "oauth.signIn";
 }
+
+mod oauth;
 
 /// Browser steps backed by the Node.js + Playwright sidecar.
 #[derive(Debug, Clone)]
@@ -133,13 +136,22 @@ impl Adapter for BrowserAdapter {
     /// contexts when it ends.
     fn install(&self, mut builder: RuntimeBuilder) -> RuntimeBuilder {
         for (def, method) in step_defs() {
-            builder = builder.register(
-                def,
-                BrowserStep {
-                    client: self.client.clone(),
-                    method,
-                },
-            );
+            builder = if method == "authorize" {
+                builder.register(
+                    def,
+                    oauth::SignIn {
+                        client: self.client.clone(),
+                    },
+                )
+            } else {
+                builder.register(
+                    def,
+                    BrowserStep {
+                        client: self.client.clone(),
+                        method,
+                    },
+                )
+            };
         }
         let client = self.client.clone();
         builder.on_run_finished(Arc::new(move |end| {
@@ -539,6 +551,34 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             ..Def::default()
         },
         Def {
+            step_type: OAUTH_SIGN_IN,
+            method: "authorize",
+            label: "OAuth でサインイン",
+            description: "Signs in to a web API with OAuth 2.0 (authorization code flow) so http.request can use { \"secret\": \"<name>\", \"field\": \"accessToken\" } as auth. The secret `secret` holds the app registered at the provider: username = client ID, password = client secret (empty for public clients), sites = the origins of tokenUrl and of the API. When saved tokens work (or can be refreshed) it finishes at once without a person. Otherwise it opens `authorizeUrl` in the browser context `context`, shows `message`, and waits (default 5 minutes) while the person signs in and allows access. The browser's request to `redirectUrl` (the redirect URI registered at the provider, any fixed URL such as https://www.example.com/callback; localhost is not needed) is caught inside the browser, so that page never loads; state is checked and the code is exchanged at `tokenUrl` (PKCE unless `pkce: false`). Output: { secret, signedIn, via: saved | refreshed | browser, expiresAt, scope } (never the tokens). Fails with HUMAN_REQUIRED in headless runs that need a person.",
+            params: json!({
+                "secret": { "type": "string", "minLength": 1, "maxLength": 64, "description": "クライアントを登録したシークレットの名前（ユーザー名 = Client ID、パスワード = Client secret）" },
+                "authorizeUrl": { "type": "string", "minLength": 1, "description": "認可ページの URL（例：https://account.box.com/api/oauth2/authorize）" },
+                "tokenUrl": { "type": "string", "minLength": 1, "description": "トークンの URL（例：https://api.box.com/oauth2/token）" },
+                "redirectUrl": { "type": "string", "minLength": 1, "description": "プロバイダに登録したリダイレクト URL。そのまま一致させる" },
+                "scope": { "type": "string", "description": "空白区切りのスコープ（プロバイダが求めるときだけ）" },
+                "authorizeParams": { "type": "object", "description": "認可ページに付ける追加のパラメータ（例：{ \"prompt\": \"consent\" }）" },
+                "pkce": { "type": "boolean", "description": "PKCE を使う（既定 true）。プロバイダが受け付けないときだけ false" },
+                "message": { "type": "string", "description": "人に頼むこと（既定：ブラウザでサインインして、アクセスを許可してください）" }
+            }),
+            required: &["secret", "authorizeUrl", "tokenUrl", "redirectUrl"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": OAUTH_SIGN_IN, "name": "Box にサインイン", "params": {
+                    "secret": "Box",
+                    "authorizeUrl": "https://account.box.com/api/oauth2/authorize",
+                    "tokenUrl": "https://api.box.com/oauth2/token",
+                    "redirectUrl": "https://www.example.com/"
+                } }),
+            ],
+            default_timeout_ms: Some(300_000),
+            ..Def::default()
+        },
+        Def {
             step_type: CLOSE,
             method: "close",
             label: "ブラウザを閉じる",
@@ -557,9 +597,14 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             if d.step_type == SCREENSHOT {
                 resources.push(ResourceDef::file("path"));
             }
+            let oauth = d.step_type == OAUTH_SIGN_IN;
             let def = StepTypeDef {
                 step_type: d.step_type.into(),
-                category: StepCategory::Browser,
+                category: if oauth {
+                    StepCategory::Network
+                } else {
+                    StepCategory::Browser
+                },
                 label: d.label.into(),
                 description: d.description.into(),
                 params_schema: schema(props(d.params), d.required),
@@ -567,7 +612,11 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 has_output: d.has_output,
                 expression_params: vec![],
                 binds_variables: vec![],
-                risk: RiskLevel::Interactive,
+                risk: if oauth {
+                    RiskLevel::Dangerous
+                } else {
+                    RiskLevel::Interactive
+                },
                 examples: d.examples,
                 resources,
                 secret_params: d.secret_params.iter().map(|p| (*p).to_owned()).collect(),

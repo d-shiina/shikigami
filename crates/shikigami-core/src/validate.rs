@@ -795,7 +795,7 @@ impl Cx<'_> {
                     }
                     Err(message) => {
                         self.error("INVALID_SECRET_REF", message, param_path, id);
-                        self.hint("Write { \"secret\": \"<registered name>\", \"field\": \"username\" | \"password\" | \"totp\" }.");
+                        self.hint("Write { \"secret\": \"<registered name>\", \"field\": \"username\" | \"password\" | \"totp\" }, or \"accessToken\" in http.request auth.");
                     }
                 }
                 continue;

@@ -4250,6 +4250,7 @@ dependencies = [
  "shikigami-core",
  "shikigami-runtime",
  "shikigami-secrets",
+ "shikigami-system",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -4476,18 +4477,24 @@ dependencies = [
 name = "shikigami-system"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "clipboard-win",
  "encoding_rs",
  "form_urlencoded",
+ "getrandom 0.3.4",
+ "jiff",
  "reqwest",
  "rustls",
+ "serde",
  "serde_json",
+ "sha2 0.10.9",
  "shikigami-core",
  "shikigami-files",
  "shikigami-runtime",
  "tempfile",
  "tokio",
  "tokio-util",
+ "tracing",
  "win32job",
 ]
 
