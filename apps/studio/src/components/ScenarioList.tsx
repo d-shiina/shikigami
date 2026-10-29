@@ -7,7 +7,13 @@ import { t } from "../lib/i18n";
 
 /** Picks a bundle or scenario file and asks what to do when it already exists. */
 function ImportBox({ input }: { input: React.RefObject<HTMLInputElement | null> }) {
-  const importFile = useStudio((s) => s.importFile);
+  const importScenario = useStudio((s) => s.importFile);
+  const setPlace = useStudio((s) => s.setPlace);
+  // The sidebar is in every place: what it makes is shown in the editor.
+  const importFile: typeof importScenario = (contents, mode) => {
+    setPlace("scenarios");
+    return importScenario(contents, mode);
+  };
   const pending = useStudio((s) => s.pendingImport);
   const cancelImport = useStudio((s) => s.cancelImport);
 
@@ -141,6 +147,7 @@ function ScenarioItem({ summary, active, query }: { summary: ScenarioSummary; ac
             className="rounded-[4px] px-1 text-[10px] text-slate-500 hover:bg-sheet hover:text-ink"
             onClick={(e) => {
               e.stopPropagation();
+              setPlace("scenarios");
               void duplicate(summary.id);
             }}
           >
@@ -197,6 +204,7 @@ function Group({
 
 /** The scenarios section of the sidebar: add, search, and the list grouped by tag. */
 export function ScenarioList() {
+  const setPlace = useStudio((s) => s.setPlace);
   const summaries = useStudio((s) => s.summaries);
   // Highlighted only while the editor shows it, not while another place is open.
   const currentId = useStudio((s) => (s.place === "scenarios" ? s.scenario?.id : undefined));
@@ -246,6 +254,7 @@ export function ScenarioList() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPlace("scenarios");
     await create(name.trim() || t.defaultScenarioName);
     setName("");
     setCreating(false);
