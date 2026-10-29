@@ -3,7 +3,7 @@
 // the open scenario under it, what waits for review, logins, and settings at
 // the foot, apart from the work. Lists live in their places, not here. A new
 // kind of work (run history, schedules) is a new row here.
-import { Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, Settings, Workflow } from "lucide-react";
+import { Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, Settings2, Workflow } from "lucide-react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import type { Place } from "../store";
@@ -110,7 +110,7 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
       </nav>
       <div className="px-2 py-1.5">
         <Item
-          icon={Settings}
+          icon={Settings2}
           label={t.shell.settings}
           on={place === "settings"}
           onClick={go("settings")}
