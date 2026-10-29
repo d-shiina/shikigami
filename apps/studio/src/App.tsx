@@ -329,12 +329,11 @@ function Shell() {
           <Banner />
           <div className="flex min-h-0 flex-1">
             {/* The AI's chat, beside the sidebar it is opened from. */}
-            {fit.agent > 0 && (
-              <div className="relative flex">
-                <AgentPane width={fit.agent} />
-                {grip("agent")}
-              </div>
-            )}
+            {/* Kept mounted while closed, so an unsent draft survives (the pane draws nothing then). */}
+            <div className="relative flex">
+              <AgentPane width={fit.agent} />
+              {fit.agent > 0 && grip("agent")}
+            </div>
             {/* With nothing open, the editor has nothing to show: the library does. */}
             {(place === "library" || (place === "scenarios" && !hasScenario)) && (
               <div className="min-w-0 flex-1">
