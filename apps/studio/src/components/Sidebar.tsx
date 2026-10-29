@@ -2,8 +2,11 @@
 // top (where the work is stored), then the places: the scenario library with
 // the open scenario under it, what waits for review, logins, and settings at
 // the foot, apart from the work. Lists live in their places, not here. A new
-// kind of work (run history, schedules) is a new row here.
-import { Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, Settings2, Workflow } from "lucide-react";
+// kind of work (run history, schedules) is a new row here. Above the places,
+// the AI: its chat opens right beside this column, as Notion AI and Linear's
+// agent do, since it works on whatever place is open.
+import { Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, Settings2, Workflow } from "lucide-react";
+import { useAgent } from "../agent";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import type { Place } from "../store";
@@ -18,11 +21,13 @@ type ItemProps = {
   count?: number;
   tone?: "shu" | "accent";
   dot?: boolean;
+  /** The dot pulses: something is under way. */
+  busy?: boolean;
   title?: string;
   indent?: boolean;
 };
 
-function Item({ icon: Icon, label, on, onClick, count, tone, dot, title, indent }: ItemProps) {
+function Item({ icon: Icon, label, on, onClick, count, tone, dot, busy, title, indent }: ItemProps) {
   return (
     <button
       type="button"
@@ -39,9 +44,18 @@ function Item({ icon: Icon, label, on, onClick, count, tone, dot, title, indent 
           {count}
         </span>
       )}
-      {dot && <span className="h-2 w-2 rounded-full bg-brand-500" />}
+      {(dot || busy) && <span className={`h-2 w-2 rounded-full bg-brand-500 ${busy ? "animate-pulse" : ""}`} />}
     </button>
   );
+}
+
+/** Opens and closes the AI's chat, which sits right of the sidebar. */
+function AgentItem() {
+  const open = useAgent((s) => s.open);
+  const setOpen = useAgent((s) => s.setOpen);
+  const busy = useAgent((s) => s.turnId !== null || s.sending);
+  const name = useAgent((s) => s.info?.name ?? "AI");
+  return <Item icon={MessageSquareText} label={name} on={open} onClick={() => setOpen(!open)} busy={busy} title={`${name}（Ctrl+J）`} />;
 }
 
 /** The folder the scenarios live in; the full path and the change are in Settings. */
@@ -93,7 +107,10 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
           <PanelLeftClose size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
-      <nav className="flex-1 space-y-px px-2 pt-1">
+      <div className="px-2 pt-1 pb-2">
+        <AgentItem />
+      </div>
+      <nav className="flex-1 space-y-px border-t border-slate-200 px-2 pt-2">
         <Item icon={LayoutList} label={t.scenarios} on={place === "library"} onClick={go("library")} />
         {/* The open scenario, under the library it came from: the way back to the editor. */}
         {scenario && <Item icon={Workflow} label={scenario.name} on={place === "scenarios"} onClick={go("scenarios")} indent />}

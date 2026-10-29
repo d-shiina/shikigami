@@ -283,7 +283,7 @@ function Shell() {
     const size = panel === "agent" ? fit.agent : sizes[panel];
     return (
       <Resizer
-        edge={panel === "sidebar" || panel === "inbox" ? "right" : "left"}
+        edge={panel === "right" ? "left" : "right"}
         size={size}
         min={min}
         max={Math.max(size, Math.min(max, size + fit.chart - CHART_MIN))}
@@ -328,6 +328,13 @@ function Shell() {
           <HumanBanner />
           <Banner />
           <div className="flex min-h-0 flex-1">
+            {/* The AI's chat, beside the sidebar it is opened from. */}
+            {fit.agent > 0 && (
+              <div className="relative flex">
+                <AgentPane width={fit.agent} />
+                {grip("agent")}
+              </div>
+            )}
             {/* With nothing open, the editor has nothing to show: the library does. */}
             {(place === "library" || (place === "scenarios" && !hasScenario)) && (
               <div className="min-w-0 flex-1">
@@ -344,12 +351,6 @@ function Shell() {
             {place === "settings" && (
               <div className="min-w-0 flex-1">
                 <SettingsPage />
-              </div>
-            )}
-            {fit.agent > 0 && (
-              <div className="relative flex">
-                <AgentPane width={fit.agent} />
-                {grip("agent")}
               </div>
             )}
           </div>

@@ -1,14 +1,13 @@
 // The window's title bar, right of the sidebar (which holds the workspace),
 // read left to right like the rest of Studio: what is open, then what to do
-// with it, ending with Run, and the AI pane and the window buttons at the
-// edge. The window holds one scenario at a time, so the bar that names the
+// with it, ending with Run, and the window buttons at the edge (the AI is
+// opened from the sidebar). The window holds one scenario at a time, so the bar that names the
 // window names the scenario too, as an editor names its document. Everything
 // left between controls is room to drag the window; double-click maximizes.
 import { PanelLeftOpen } from "lucide-react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import type { Place } from "../store";
-import { AgentButton } from "./AgentPane";
 import { ScenarioActions, ScenarioTitle, type View } from "./Toolbar";
 import { WindowControls } from "./WindowControls";
 
@@ -43,7 +42,6 @@ export function TitleBar({ view, onView, onShowSidebar }: { view: View; onView: 
       <span data-tauri-drag-region className="min-w-4 flex-1 self-stretch" />
       {editing && <ScenarioActions view={view} onView={onView} />}
       {editing && <span className="mx-1 h-5 w-px bg-slate-200" />}
-      <AgentButton />
       <WindowControls />
     </header>
   );

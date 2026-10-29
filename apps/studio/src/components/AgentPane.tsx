@@ -9,25 +9,6 @@ import { t, useKeptState } from "../lib/i18n";
 
 const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[name] ?? name;
 
-/** Header button that opens the pane. */
-export function AgentButton() {
-  const open = useAgent((s) => s.open);
-  const setOpen = useAgent((s) => s.setOpen);
-  const busy = useAgent((s) => s.turnId !== null || s.sending);
-  const name = useAgent((s) => s.info?.name ?? "AI");
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(!open)}
-      title={`${name}（Ctrl+J）`}
-      className={`flex h-8 shrink-0 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-semibold whitespace-nowrap ${open ? "bg-ink text-sheet" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
-    >
-      {busy && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />}
-      {name}
-    </button>
-  );
-}
-
 export function AgentPane({ width }: { width: number }) {
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
@@ -54,7 +35,7 @@ export function AgentPane({ width }: { width: number }) {
     if (await send(draft, ref, context)) setDraft("");
   };
   return (
-    <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col border-l border-slate-200 bg-sheet">
+    <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col border-r border-slate-200 bg-sheet">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5">
         <div className="min-w-0 flex-1 text-[13px] font-bold">{info?.name ?? "AI"}</div>
         <button
