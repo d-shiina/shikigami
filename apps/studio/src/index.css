@@ -12,6 +12,22 @@
   /* Latin from a code font; kana and kanji from the same Japanese font as the UI. */
   --font-mono: "Cascadia Mono", Consolas, "Noto Sans JP Variable", "BIZ UDGothic", monospace;
 
+  /*
+   * Greys: Tailwind's slate, each step taken darker, so secondary text
+   * (400/500) still reads clearly at 10-11px and borders (200) show.
+   * slate-400 on white is 4.7:1, slate-500 7:1.
+   */
+  --color-slate-50: #f1f4f8;
+  --color-slate-100: #e4e9f0;
+  --color-slate-200: #cbd4df;
+  --color-slate-300: #9eacbd;
+  --color-slate-400: #637387;
+  --color-slate-500: #4a596c;
+  --color-slate-600: #344255;
+  --color-slate-700: #243142;
+  --color-slate-800: #182333;
+  --color-slate-900: #0f1b2a;
+
   --color-paper: #f4f7fb;
   /* The flow chart's desk: a shade under paper, so steps stand out on it. */
   --color-desk: #e9eef4;
@@ -86,12 +102,12 @@
 
   --color-slate-50: #182434;
   --color-slate-100: #1f2d40;
-  --color-slate-200: #2a3a50;
-  --color-slate-300: #3a4c64;
-  --color-slate-400: #6f8199;
-  --color-slate-500: #92a3b8;
-  --color-slate-600: #b2bfce;
-  --color-slate-700: #cdd6e1;
+  --color-slate-200: #34465e;
+  --color-slate-300: #4d617c;
+  --color-slate-400: #8d9fb6;
+  --color-slate-500: #aebccd;
+  --color-slate-600: #c8d2de;
+  --color-slate-700: #dbe2ea;
   --color-slate-800: #e2e8f0;
   --color-slate-900: #f1f5f9;
 
@@ -124,9 +140,9 @@
   --cat-browser: #0a6fa8;
   --cat-windows: #e0301e;
   --cat-office: #1f8a4c;
-  --cat-file: #64748b;
-  --cat-other: #94a3b8;
-  --flow-edge: #5b6b80;
+  --cat-file: #4a596c;
+  --cat-other: #637387;
+  --flow-edge: #4a596c;
 }
 
 :root[data-theme="dark"] {
@@ -138,8 +154,8 @@
   --cat-windows: #ff6e4f;
   --cat-office: #4cc27f;
   --cat-file: #9aa9bb;
-  --cat-other: #8193a8;
-  --flow-edge: #8193a8;
+  --cat-other: #8d9fb6;
+  --flow-edge: #8d9fb6;
 }
 
 /* React Flow's dark mode brings its own greys; keep the app's navy. */
