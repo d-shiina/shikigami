@@ -1,0 +1,252 @@
+{
+  "$schema": "../../../schemas/scenario.schema.json",
+  "schemaVersion": 1,
+  "id": "scn_demo_shipping",
+  "name": "受注システムで未処理の注文を出荷する（サブシナリオ）",
+  "description": "デモ受注システム（pnpm demo:site）にログインし、未処理の注文を出荷する。ログインはシークレット「デモ受注システム」を使い、session で2回目以降は省略。full-demo から scenario.call で呼ばれる。",
+  "revision": 1,
+  "variables": [
+    {
+      "name": "siteUrl",
+      "type": "string",
+      "direction": "input",
+      "default": "http://127.0.0.1:8787/",
+      "description": "デモサイトの URL"
+    },
+    {
+      "name": "shipped",
+      "type": "array",
+      "direction": "output",
+      "default": [],
+      "description": "出荷した注文番号"
+    },
+    {
+      "name": "shippedTotal",
+      "type": "number",
+      "direction": "output",
+      "default": 0,
+      "description": "出荷した金額の合計（円）"
+    },
+    {
+      "name": "orders",
+      "type": "array",
+      "direction": "local",
+      "default": []
+    },
+    {
+      "name": "loggedIn",
+      "type": "boolean",
+      "direction": "local",
+      "default": false
+    }
+  ],
+  "steps": [
+    {
+      "id": "stp_001_open",
+      "type": "browser.open",
+      "name": "受注システムを開く（前回のログインを使う）",
+      "params": {
+        "url": "{{ siteUrl }}orders.html",
+        "context": "orders",
+        "session": "デモ受注システム"
+      }
+    },
+    {
+      "id": "stp_002_isVisible",
+      "type": "browser.isVisible",
+      "name": "ログイン済みか確かめる",
+      "params": {
+        "target": {
+          "role": "heading",
+          "name": "受注一覧"
+        },
+        "context": "orders"
+      },
+      "saveAs": "loggedIn"
+    },
+    {
+      "id": "stp_008_if",
+      "type": "control.if",
+      "name": "未ログインのときだけログイン",
+      "params": {
+        "condition": "!loggedIn"
+      },
+      "blocks": {
+        "then": [
+          {
+            "id": "stp_003_fill",
+            "type": "browser.fill",
+            "name": "ユーザー名を入力",
+            "params": {
+              "target": {
+                "label": "ユーザー名"
+              },
+              "value": {
+                "secret": "デモ受注システム",
+                "field": "username"
+              },
+              "context": "orders"
+            }
+          },
+          {
+            "id": "stp_004_fill",
+            "type": "browser.fill",
+            "name": "パスワードを入力（シークレット）",
+            "params": {
+              "target": {
+                "label": "パスワード"
+              },
+              "value": {
+                "secret": "デモ受注システム",
+                "field": "password"
+              },
+              "context": "orders"
+            }
+          },
+          {
+            "id": "stp_005_click",
+            "type": "browser.click",
+            "name": "ログイン",
+            "params": {
+              "target": {
+                "role": "button",
+                "name": "ログイン"
+              },
+              "context": "orders"
+            }
+          },
+          {
+            "id": "stp_006_waitFor",
+            "type": "browser.waitFor",
+            "name": "受注一覧の表示を待つ",
+            "params": {
+              "target": {
+                "role": "heading",
+                "name": "受注一覧"
+              },
+              "context": "orders"
+            }
+          }
+        ],
+        "else": [
+          {
+            "id": "stp_007_message",
+            "type": "log.message",
+            "name": "ログイン省略",
+            "params": {
+              "message": "保存済みのログイン状態を使いました"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_009_getTable",
+      "type": "browser.getTable",
+      "name": "受注一覧を読み取る",
+      "params": {
+        "target": {
+          "role": "table",
+          "name": "受注"
+        },
+        "context": "orders"
+      },
+      "saveAs": "orders"
+    },
+    {
+      "id": "stp_010_message",
+      "type": "log.message",
+      "name": "件数ログ",
+      "params": {
+        "message": "受注 {{ len(orders) }} 件を確認しました"
+      }
+    },
+    {
+      "id": "stp_016_forEach",
+      "type": "control.forEach",
+      "name": "未処理の注文を出荷",
+      "params": {
+        "items": "orders",
+        "itemVar": "order"
+      },
+      "blocks": {
+        "body": [
+          {
+            "id": "stp_015_if",
+            "type": "control.if",
+            "name": "未処理だけ出荷",
+            "params": {
+              "condition": "order['状態'] == '未処理'"
+            },
+            "blocks": {
+              "then": [
+                {
+                  "id": "stp_011_click",
+                  "type": "browser.click",
+                  "name": "出荷ボタンを押す",
+                  "params": {
+                    "target": {
+                      "role": "button",
+                      "name": "{{ order['注文番号'] }} を出荷"
+                    },
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_012_waitFor",
+                  "type": "browser.waitFor",
+                  "name": "出荷完了を待つ",
+                  "params": {
+                    "target": {
+                      "text": "{{ order['注文番号'] }} を出荷しました"
+                    },
+                    "context": "orders"
+                  }
+                },
+                {
+                  "id": "stp_013_set",
+                  "type": "variable.set",
+                  "name": "出荷済みに追加",
+                  "params": {
+                    "name": "shipped",
+                    "expression": "shipped + [order['注文番号']]"
+                  }
+                },
+                {
+                  "id": "stp_014_set",
+                  "type": "variable.set",
+                  "name": "金額を加算",
+                  "params": {
+                    "name": "shippedTotal",
+                    "expression": "shippedTotal + num(order['金額（円）'])"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_017_close",
+      "type": "browser.close",
+      "name": "ブラウザを閉じる",
+      "params": {
+        "context": "orders"
+      }
+    },
+    {
+      "id": "stp_018_message",
+      "type": "log.message",
+      "name": "出荷サマリ",
+      "params": {
+        "message": "出荷 {{ len(shipped) }} 件、合計 {{ shippedTotal }} 円"
+      }
+    }
+  ],
+  "metadata": {
+    "tags": [
+      "demo"
+    ]
+  }
+}

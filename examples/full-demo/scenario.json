@@ -1,0 +1,975 @@
+{
+  "$schema": "../../schemas/scenario.schema.json",
+  "schemaVersion": 1,
+  "id": "scn_demo_full",
+  "name": "フル機能デモ：受注から請求書作成まで",
+  "description": "今ある機能をできるだけ使ったデモ。設定(config)→CSV読込→Excel書込/読戻し→税込計算(ループ/条件/try)→CSV出力→Word請求書差し込み→ZIP化→ブラウザ出荷(サブシナリオ)→ポーリング(wait.until) までは外部アカウント不要・ヘッドレスで完走する。設定『実環境を使う』を true にすると、ダイアログ・Excelマクロ・クリップボード・画面操作/OCR・外部コマンド・OAuth/HTTP・Outlook下書き も試す（各 try で保護）。",
+  "revision": 1,
+  "settings": {
+    "defaultTimeoutMs": 30000,
+    "defaultRetry": {
+      "maxAttempts": 2,
+      "backoffMs": 500,
+      "backoffMultiplier": 2.0
+    }
+  },
+  "variables": [
+    {
+      "name": "siteUrl",
+      "type": "string",
+      "direction": "input",
+      "default": "http://127.0.0.1:8787/",
+      "description": "ブラウザ出荷デモのサイト URL"
+    },
+    {
+      "name": "invoiceCount",
+      "type": "number",
+      "direction": "output",
+      "default": 0,
+      "description": "作成した請求明細の件数"
+    },
+    {
+      "name": "grandTotal",
+      "type": "number",
+      "direction": "output",
+      "default": 0,
+      "description": "税込合計（円）"
+    },
+    {
+      "name": "flaggedCount",
+      "type": "number",
+      "direction": "output",
+      "default": 0,
+      "description": "高額しきい値を超えた件数"
+    },
+    {
+      "name": "invoiceFiles",
+      "type": "array",
+      "direction": "output",
+      "default": [],
+      "description": "作成した Word 請求書のパス"
+    },
+    {
+      "name": "shipped",
+      "type": "array",
+      "direction": "output",
+      "default": [],
+      "description": "ブラウザで出荷した注文番号"
+    },
+    {
+      "name": "skipped",
+      "type": "array",
+      "direction": "output",
+      "default": [],
+      "description": "書き込みに失敗してスキップした注文"
+    },
+    {
+      "name": "settings",
+      "type": "object",
+      "direction": "local",
+      "default": {}
+    },
+    {
+      "name": "month",
+      "type": "string",
+      "direction": "local",
+      "default": ""
+    },
+    {
+      "name": "ordersCsv",
+      "type": "array",
+      "direction": "local",
+      "default": []
+    },
+    {
+      "name": "sheetRows",
+      "type": "array",
+      "direction": "local",
+      "default": []
+    },
+    {
+      "name": "orderRows",
+      "type": "array",
+      "direction": "local",
+      "default": []
+    },
+    {
+      "name": "withTax",
+      "type": "number",
+      "direction": "local",
+      "default": 0
+    },
+    {
+      "name": "billing",
+      "type": "array",
+      "direction": "local",
+      "default": []
+    },
+    {
+      "name": "byCustomer",
+      "type": "object",
+      "direction": "local",
+      "default": {}
+    },
+    {
+      "name": "details",
+      "type": "array",
+      "direction": "local",
+      "default": []
+    },
+    {
+      "name": "subtotal",
+      "type": "number",
+      "direction": "local",
+      "default": 0
+    },
+    {
+      "name": "madeResult",
+      "type": "object",
+      "direction": "local",
+      "default": {}
+    },
+    {
+      "name": "shippedTotalOut",
+      "type": "number",
+      "direction": "local",
+      "default": 0
+    },
+    {
+      "name": "checks",
+      "type": "number",
+      "direction": "local",
+      "default": 0
+    },
+    {
+      "name": "docxList",
+      "type": "array",
+      "direction": "local",
+      "default": []
+    }
+  ],
+  "steps": [
+    {
+      "id": "stp_001_message",
+      "type": "log.message",
+      "name": "開始",
+      "params": {
+        "message": "=== Shikigami フル機能デモを開始します ==="
+      }
+    },
+    {
+      "id": "stp_002_read",
+      "type": "config.read",
+      "name": "設定を読み込む",
+      "params": {
+        "path": "config/設定.json"
+      },
+      "saveAs": "settings"
+    },
+    {
+      "id": "stp_003_set",
+      "type": "variable.set",
+      "name": "当月を求める",
+      "params": {
+        "name": "month",
+        "expression": "formatDate(today(), 'yyyy年M月')"
+      }
+    },
+    {
+      "id": "stp_004_message",
+      "type": "log.message",
+      "name": "設定ログ",
+      "params": {
+        "message": "当月 {{ month }} / 消費税率 {{ settings['消費税率'] }} / 高額しきい値 {{ settings['高額しきい値'] }} 円 / 実環境 {{ settings['実環境を使う'] }}"
+      }
+    },
+    {
+      "id": "stp_005_createFolder",
+      "type": "file.createFolder",
+      "name": "出力フォルダーを用意",
+      "params": {
+        "path": "output"
+      }
+    },
+    {
+      "id": "stp_006_readCsv",
+      "type": "file.readCsv",
+      "name": "受注 CSV を読む",
+      "params": {
+        "path": "input/受注.csv",
+        "encoding": "utf-8",
+        "header": true
+      },
+      "saveAs": "ordersCsv"
+    },
+    {
+      "id": "stp_007_set",
+      "type": "variable.set",
+      "name": "Excel 用の行に整形",
+      "params": {
+        "name": "sheetRows",
+        "expression": "[['注文番号','顧客','商品','数量','単価']] + map(ordersCsv, r => [r['注文番号'], r['顧客'], r['商品'], num(r['数量']), num(r['単価'])])"
+      }
+    },
+    {
+      "id": "stp_008_writeRange",
+      "type": "excel.writeRange",
+      "name": "受注表を Excel に書き出す",
+      "params": {
+        "path": "output/集計.xlsx",
+        "cell": "A1",
+        "values": "{{ sheetRows }}"
+      }
+    },
+    {
+      "id": "stp_009_writeCell",
+      "type": "excel.writeCell",
+      "name": "税込金額の見出しを追加",
+      "params": {
+        "path": "output/集計.xlsx",
+        "cell": "F1",
+        "value": "税込金額"
+      }
+    },
+    {
+      "id": "stp_010_readRows",
+      "type": "excel.readRows",
+      "name": "Excel から受注行を読み戻す",
+      "params": {
+        "path": "output/集計.xlsx",
+        "headerRow": 1
+      },
+      "saveAs": "orderRows"
+    },
+    {
+      "id": "stp_011_message",
+      "type": "log.message",
+      "name": "読み戻しログ",
+      "params": {
+        "message": "Excel から {{ len(orderRows) }} 行を読み戻しました"
+      }
+    },
+    {
+      "id": "stp_022_forEach",
+      "type": "control.forEach",
+      "name": "明細ごとに税込計算と集計",
+      "params": {
+        "items": "orderRows",
+        "itemVar": "row",
+        "indexVar": "i"
+      },
+      "blocks": {
+        "body": [
+          {
+            "id": "stp_012_set",
+            "type": "variable.set",
+            "name": "税込金額を計算",
+            "params": {
+              "name": "withTax",
+              "expression": "round(num(row['数量']) * num(row['単価']) * (1 + settings['消費税率']))"
+            }
+          },
+          {
+            "id": "stp_016_try",
+            "type": "control.try",
+            "name": "同じ行に税込金額を書き戻す（失敗しても継続）",
+            "params": {
+              "errorVar": "err"
+            },
+            "blocks": {
+              "try": [
+                {
+                  "id": "stp_013_writeCell",
+                  "type": "excel.writeCell",
+                  "name": "F列に書き込む",
+                  "params": {
+                    "path": "output/集計.xlsx",
+                    "cell": "F{{ row['_row'] }}",
+                    "value": "{{ withTax }}"
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "id": "stp_014_message",
+                  "type": "log.message",
+                  "name": "書き込み失敗を記録",
+                  "params": {
+                    "level": "warn",
+                    "message": "{{ row['注文番号'] }} の書き込みに失敗: {{ err['message'] }}"
+                  }
+                },
+                {
+                  "id": "stp_015_set",
+                  "type": "variable.set",
+                  "name": "スキップに追加",
+                  "params": {
+                    "name": "skipped",
+                    "expression": "skipped + [row['注文番号']]"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_019_if",
+            "type": "control.if",
+            "name": "高額チェック",
+            "params": {
+              "condition": "withTax >= settings['高額しきい値']"
+            },
+            "blocks": {
+              "then": [
+                {
+                  "id": "stp_017_set",
+                  "type": "variable.set",
+                  "name": "高額件数を加算",
+                  "params": {
+                    "name": "flaggedCount",
+                    "expression": "flaggedCount + 1"
+                  }
+                },
+                {
+                  "id": "stp_018_message",
+                  "type": "log.message",
+                  "name": "高額警告",
+                  "params": {
+                    "level": "warn",
+                    "message": "高額請求: {{ row['注文番号'] }}（{{ row['顧客'] }}・{{ row['商品'] }}）{{ withTax }} 円"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_020_set",
+            "type": "variable.set",
+            "name": "合計に加算",
+            "params": {
+              "name": "grandTotal",
+              "expression": "grandTotal + withTax"
+            }
+          },
+          {
+            "id": "stp_021_set",
+            "type": "variable.set",
+            "name": "請求一覧に追加",
+            "params": {
+              "name": "billing",
+              "expression": "billing + [ { '注文番号': row['注文番号'], '顧客': row['顧客'], '商品': row['商品'], '金額': withTax } ]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_023_set",
+      "type": "variable.set",
+      "name": "請求件数を数える",
+      "params": {
+        "name": "invoiceCount",
+        "expression": "len(billing)"
+      }
+    },
+    {
+      "id": "stp_024_writeCsv",
+      "type": "file.writeCsv",
+      "name": "請求一覧を CSV に出力",
+      "params": {
+        "path": "output/請求一覧.csv",
+        "rows": "{{ billing }}",
+        "encoding": "utf-8-bom"
+      }
+    },
+    {
+      "id": "stp_025_addSheet",
+      "type": "excel.addSheet",
+      "name": "集計.xlsx に請求シートを追加",
+      "params": {
+        "path": "output/集計.xlsx",
+        "sheet": "請求"
+      }
+    },
+    {
+      "id": "stp_026_appendRows",
+      "type": "excel.appendRows",
+      "name": "請求一覧を請求シートに転記（見出しは自動）",
+      "params": {
+        "path": "output/集計.xlsx",
+        "sheet": "請求",
+        "rows": "{{ billing }}"
+      }
+    },
+    {
+      "id": "stp_027_set",
+      "type": "variable.set",
+      "name": "顧客ごとにまとめる",
+      "params": {
+        "name": "byCustomer",
+        "expression": "groupBy(billing, r => r['顧客'])"
+      }
+    },
+    {
+      "id": "stp_033_forEach",
+      "type": "control.forEach",
+      "name": "顧客ごとに請求書を作成",
+      "params": {
+        "items": "keys(byCustomer)",
+        "itemVar": "customer"
+      },
+      "blocks": {
+        "body": [
+          {
+            "id": "stp_028_set",
+            "type": "variable.set",
+            "name": "この顧客の明細",
+            "params": {
+              "name": "details",
+              "expression": "byCustomer[customer]"
+            }
+          },
+          {
+            "id": "stp_029_set",
+            "type": "variable.set",
+            "name": "この顧客の小計",
+            "params": {
+              "name": "subtotal",
+              "expression": "sum(map(details, r => r['金額']))"
+            }
+          },
+          {
+            "id": "stp_030_fillTemplate",
+            "type": "word.fillTemplate",
+            "name": "請求書 docx を作成",
+            "params": {
+              "template": "templates/請求書.docx",
+              "path": "output/請求書_{{ customer }}.docx",
+              "values": {
+                "顧客": "{{ customer }}",
+                "発行日": "{{ formatDate(today(), 'yyyy年M月d日') }}",
+                "当月": "{{ month }}",
+                "合計": "{{ formatNumber(subtotal) }}",
+                "明細": "{{ map(details, r => { '注文番号': r['注文番号'], '商品': r['商品'], '金額': formatNumber(r['金額']) }) }}"
+              }
+            },
+            "saveAs": "madeResult"
+          },
+          {
+            "id": "stp_031_set",
+            "type": "variable.set",
+            "name": "作成した請求書を記録",
+            "params": {
+              "name": "invoiceFiles",
+              "expression": "invoiceFiles + [madeResult['path']]"
+            }
+          },
+          {
+            "id": "stp_032_message",
+            "type": "log.message",
+            "name": "請求書ログ",
+            "params": {
+              "message": "{{ customer }} の請求書を作成（小計 {{ formatNumber(subtotal) }} 円）"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_034_list",
+      "type": "file.list",
+      "name": "出力ファイルを一覧",
+      "params": {
+        "folder": "output",
+        "pattern": "*.docx"
+      },
+      "saveAs": "docxList"
+    },
+    {
+      "id": "stp_035_zip",
+      "type": "file.zip",
+      "name": "請求書をまとめて ZIP 化",
+      "params": {
+        "from": "output",
+        "to": "output/請求書一式.zip",
+        "overwrite": true
+      }
+    },
+    {
+      "id": "stp_038_try",
+      "type": "control.try",
+      "name": "出荷サブシナリオを呼ぶ（デモサイト必須：pnpm demo:full）",
+      "params": {
+        "errorVar": "err"
+      },
+      "blocks": {
+        "try": [
+          {
+            "id": "stp_036_call",
+            "type": "scenario.call",
+            "name": "受注システムで出荷",
+            "params": {
+              "scenario": "scn_demo_shipping",
+              "inputs": {
+                "siteUrl": "{{ siteUrl }}"
+              },
+              "outputs": {
+                "shipped": "shipped",
+                "shippedTotal": "shippedTotalOut"
+              }
+            }
+          }
+        ],
+        "catch": [
+          {
+            "id": "stp_037_message",
+            "type": "log.message",
+            "name": "出荷スキップ",
+            "params": {
+              "level": "warn",
+              "message": "ブラウザ出荷をスキップ（デモサイト未起動など）: {{ err['message'] }}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_039_set",
+      "type": "variable.set",
+      "name": "確認カウンタ初期化",
+      "params": {
+        "name": "checks",
+        "expression": "0"
+      }
+    },
+    {
+      "id": "stp_042_until",
+      "type": "wait.until",
+      "name": "集計の確定を待つ（ポーリング）",
+      "params": {
+        "condition": "checks >= 3",
+        "intervalMs": 100
+      },
+      "blocks": {
+        "check": [
+          {
+            "id": "stp_040_set",
+            "type": "variable.set",
+            "name": "状態を1つ進める",
+            "params": {
+              "name": "checks",
+              "expression": "checks + 1"
+            }
+          },
+          {
+            "id": "stp_041_message",
+            "type": "log.message",
+            "name": "確認ログ",
+            "params": {
+              "message": "確認 {{ checks }}/3 回目"
+            }
+          }
+        ]
+      },
+      "timeoutMs": 5000
+    },
+    {
+      "id": "stp_078_if",
+      "type": "control.if",
+      "name": "実環境セクション",
+      "params": {
+        "condition": "settings['実環境を使う']"
+      },
+      "blocks": {
+        "then": [
+          {
+            "id": "stp_043_message",
+            "type": "log.message",
+            "name": "実環境セクション開始",
+            "params": {
+              "message": "--- 実環境（Windows/各アプリ）が必要な機能のデモ ---"
+            }
+          },
+          {
+            "id": "stp_047_try",
+            "type": "control.try",
+            "name": "ダイアログで続行確認",
+            "params": {
+              "errorVar": "err"
+            },
+            "blocks": {
+              "try": [
+                {
+                  "id": "stp_044_message",
+                  "type": "dialog.message",
+                  "name": "続行確認",
+                  "params": {
+                    "message": "{{ invoiceCount }} 件の請求書を作成しました。続行しますか？",
+                    "title": "Shikigami デモ",
+                    "buttons": "okCancel",
+                    "level": "info"
+                  },
+                  "saveAs": "choice"
+                },
+                {
+                  "id": "stp_045_message",
+                  "type": "log.message",
+                  "name": "押下ログ",
+                  "params": {
+                    "message": "ダイアログの戻り値: {{ choice }}"
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "id": "stp_046_message",
+                  "type": "log.message",
+                  "name": "ダイアログ不可",
+                  "params": {
+                    "level": "warn",
+                    "message": "ダイアログを表示できません: {{ err['message'] }}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_050_try",
+            "type": "control.try",
+            "name": "Excel マクロで再計算（.xlsm とデスクトップ Excel が必要）",
+            "params": {
+              "errorVar": "err"
+            },
+            "blocks": {
+              "try": [
+                {
+                  "id": "stp_048_runMacro",
+                  "type": "excel.runMacro",
+                  "name": "マクロ実行",
+                  "params": {
+                    "path": "input/集計マクロ.xlsm",
+                    "macro": "再計算",
+                    "save": true
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "id": "stp_049_message",
+                  "type": "log.message",
+                  "name": "マクロ不可",
+                  "params": {
+                    "level": "warn",
+                    "message": "Excel マクロをスキップ: {{ err['message'] }}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_055_try",
+            "type": "control.try",
+            "name": "クリップボード経由で値を受け渡し",
+            "params": {
+              "errorVar": "err"
+            },
+            "blocks": {
+              "try": [
+                {
+                  "id": "stp_051_set",
+                  "type": "clipboard.set",
+                  "name": "合計をコピー",
+                  "params": {
+                    "text": "今月の請求合計: {{ formatNumber(grandTotal) }} 円"
+                  }
+                },
+                {
+                  "id": "stp_052_get",
+                  "type": "clipboard.get",
+                  "name": "クリップボードを読む",
+                  "saveAs": "pasted"
+                },
+                {
+                  "id": "stp_053_message",
+                  "type": "log.message",
+                  "name": "クリップボードログ",
+                  "params": {
+                    "message": "クリップボード: {{ pasted }}"
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "id": "stp_054_message",
+                  "type": "log.message",
+                  "name": "クリップボード不可",
+                  "params": {
+                    "level": "warn",
+                    "message": "クリップボードをスキップ: {{ err['message'] }}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_063_try",
+            "type": "control.try",
+            "name": "メモ帳を操作して画面を OCR で読む",
+            "params": {
+              "errorVar": "err"
+            },
+            "blocks": {
+              "try": [
+                {
+                  "id": "stp_056_launch",
+                  "type": "desktop.launch",
+                  "name": "メモ帳を起動",
+                  "params": {
+                    "path": "notepad.exe"
+                  }
+                },
+                {
+                  "id": "stp_057_type",
+                  "type": "desktop.type",
+                  "name": "本文を入力",
+                  "params": {
+                    "target": {
+                      "window": {
+                        "process": "notepad.exe"
+                      }
+                    },
+                    "text": "Shikigami 請求デモ 合計 {{ formatNumber(grandTotal) }} 円"
+                  }
+                },
+                {
+                  "id": "stp_058_screenshot",
+                  "type": "desktop.screenshot",
+                  "name": "画面を保存",
+                  "params": {
+                    "target": {
+                      "window": {
+                        "process": "notepad.exe"
+                      }
+                    },
+                    "path": "output/notepad.png"
+                  }
+                },
+                {
+                  "id": "stp_059_readText",
+                  "type": "desktop.readText",
+                  "name": "画面の文字を OCR で読む",
+                  "params": {
+                    "target": {
+                      "window": {
+                        "process": "notepad.exe"
+                      }
+                    }
+                  },
+                  "saveAs": "ocr"
+                },
+                {
+                  "id": "stp_060_message",
+                  "type": "log.message",
+                  "name": "OCRログ",
+                  "params": {
+                    "message": "OCR: {{ ocr['text'] }}"
+                  }
+                },
+                {
+                  "id": "stp_061_closeWindow",
+                  "type": "desktop.closeWindow",
+                  "name": "メモ帳を閉じる",
+                  "params": {
+                    "target": {
+                      "window": {
+                        "process": "notepad.exe"
+                      }
+                    }
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "id": "stp_062_message",
+                  "type": "log.message",
+                  "name": "画面操作不可",
+                  "params": {
+                    "level": "warn",
+                    "message": "画面操作/OCR をスキップ: {{ err['message'] }}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_067_try",
+            "type": "control.try",
+            "name": "外部コマンドを実行",
+            "params": {
+              "errorVar": "err"
+            },
+            "blocks": {
+              "try": [
+                {
+                  "id": "stp_064_run",
+                  "type": "process.run",
+                  "name": "バージョン確認",
+                  "params": {
+                    "program": "cmd",
+                    "args": [
+                      "/c",
+                      "ver"
+                    ]
+                  },
+                  "saveAs": "cmd"
+                },
+                {
+                  "id": "stp_065_message",
+                  "type": "log.message",
+                  "name": "コマンドログ",
+                  "params": {
+                    "message": "exitCode={{ cmd['exitCode'] }}"
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "id": "stp_066_message",
+                  "type": "log.message",
+                  "name": "コマンド不可",
+                  "params": {
+                    "level": "warn",
+                    "message": "外部コマンドをスキップ: {{ err['message'] }}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_072_try",
+            "type": "control.try",
+            "name": "OAuth サインインして Web API を呼ぶ",
+            "params": {
+              "errorVar": "err"
+            },
+            "blocks": {
+              "try": [
+                {
+                  "id": "stp_068_signIn",
+                  "type": "oauth.signIn",
+                  "name": "Box にサインイン",
+                  "params": {
+                    "secret": "Box",
+                    "authorizeUrl": "https://account.box.com/api/oauth2/authorize",
+                    "tokenUrl": "https://api.box.com/oauth2/token",
+                    "redirectUrl": "https://www.example.com/"
+                  }
+                },
+                {
+                  "id": "stp_069_request",
+                  "type": "http.request",
+                  "name": "フォルダー一覧を取得",
+                  "params": {
+                    "method": "GET",
+                    "url": "https://api.box.com/2.0/folders/0/items",
+                    "auth": {
+                      "secret": "Box",
+                      "field": "accessToken"
+                    }
+                  },
+                  "saveAs": "apiRes"
+                },
+                {
+                  "id": "stp_070_message",
+                  "type": "log.message",
+                  "name": "APIログ",
+                  "params": {
+                    "message": "{{ join(map(apiRes['body']['entries'], e => e['name']), ', ') }}"
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "id": "stp_071_message",
+                  "type": "log.message",
+                  "name": "OAuth不可",
+                  "params": {
+                    "level": "warn",
+                    "message": "OAuth/HTTP をスキップ: {{ err['message'] }}"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_076_try",
+            "type": "control.try",
+            "name": "Outlook に請求書の下書きを作る（送信はしない）",
+            "params": {
+              "errorVar": "err"
+            },
+            "blocks": {
+              "try": [
+                {
+                  "id": "stp_073_createDraft",
+                  "type": "mail.createDraft",
+                  "name": "下書き作成",
+                  "params": {
+                    "to": [
+                      "{{ settings['送信先'] }}"
+                    ],
+                    "subject": "{{ month }}分 ご請求書（{{ invoiceCount }} 件・合計 {{ formatNumber(grandTotal) }} 円）",
+                    "body": "お世話になっております。\n{{ month }}分の請求書 {{ len(invoiceFiles) }} 通をお送りします（output フォルダー参照）。\n\n合計 {{ formatNumber(grandTotal) }} 円（{{ invoiceCount }} 件）"
+                  },
+                  "saveAs": "draft"
+                },
+                {
+                  "id": "stp_074_message",
+                  "type": "log.message",
+                  "name": "下書きログ",
+                  "params": {
+                    "message": "下書きを作成しました（id={{ draft['id'] }}）"
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "id": "stp_075_message",
+                  "type": "log.message",
+                  "name": "メール不可",
+                  "params": {
+                    "level": "warn",
+                    "message": "メール下書きをスキップ: {{ err['message'] }}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "else": [
+          {
+            "id": "stp_077_message",
+            "type": "log.message",
+            "name": "実環境スキップ",
+            "params": {
+              "message": "実環境セクションはスキップしました（設定『実環境を使う』= false）。組み込み機能だけで完走します。"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stp_079_message",
+      "type": "log.message",
+      "name": "完了",
+      "params": {
+        "message": "=== 完了：請求 {{ invoiceCount }} 件・合計 {{ formatNumber(grandTotal) }} 円・高額 {{ flaggedCount }} 件・請求書 {{ len(invoiceFiles) }} 通・出荷 {{ len(shipped) }} 件 ==="
+      }
+    }
+  ],
+  "metadata": {
+    "tags": [
+      "demo",
+      "full"
+    ]
+  }
+}

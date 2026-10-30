@@ -1,0 +1,29 @@
+{
+  "format": "shikigami.config",
+  "items": [
+    {
+      "name": "消費税率",
+      "type": "number",
+      "value": 0.1,
+      "description": "税込金額の計算に使う消費税率"
+    },
+    {
+      "name": "高額しきい値",
+      "type": "number",
+      "value": 100000,
+      "description": "この金額以上の請求を要確認として警告する（円）"
+    },
+    {
+      "name": "送信先",
+      "type": "text",
+      "value": "keiri@example.com",
+      "description": "請求書ドラフトの宛先（実環境のみ使用）"
+    },
+    {
+      "name": "実環境を使う",
+      "type": "boolean",
+      "value": false,
+      "description": "true にすると Excel マクロ・Outlook・画面操作/OCR・ダイアログ・HTTP/OAuth など実環境が必要な節も実行する（既定 false）"
+    }
+  ]
+}
