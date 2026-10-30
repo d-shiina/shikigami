@@ -84,36 +84,40 @@
 }
 
 /*
- * Dark: the logo's navy as the ground, text in pale ink, and the swirl's
- * accents lifted a step so they stay readable on it. Only the tokens change;
- * components keep their classes (slate is inverted, tints become deep washes).
+ * Dark: a slate-grey ground, text in pale ink, and the swirl's accents lifted
+ * a step so they stay readable on it. Only the tokens change; components keep
+ * their classes (slate is inverted, tints become deep washes).
  */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/*
+ * Dark is slate grey (CSS SlateGray's hue, desaturated), not navy: a blue
+ * ground tires the eyes. Blue stays only where it means something (AI).
+ */
 :root[data-theme="dark"] {
   --color-role-input: #3fcbd5;
   --color-role-config: #4aa8e0;
   --color-role-templates: #5cc27e;
   --color-role-output: #f79a48;
-  --color-paper: #0b1420;
-  --color-desk: #070d16;
-  --color-sheet: #131e2c;
-  --color-ink: #e4ebf3;
+  --color-paper: #1d2125;
+  --color-desk: #16191c;
+  --color-sheet: #25292e;
+  --color-ink: #e7eaed;
 
-  --color-slate-50: #182434;
-  --color-slate-100: #1f2d40;
-  --color-slate-200: #34465e;
-  --color-slate-300: #4d617c;
-  --color-slate-400: #8d9fb6;
-  --color-slate-500: #aebccd;
-  --color-slate-600: #c8d2de;
-  --color-slate-700: #dbe2ea;
-  --color-slate-800: #e2e8f0;
-  --color-slate-900: #f1f5f9;
+  --color-slate-50: #2b3035;
+  --color-slate-100: #32383e;
+  --color-slate-200: #40474e;
+  --color-slate-300: #58616a;
+  --color-slate-400: #8e98a2;
+  --color-slate-500: #acb4bc;
+  --color-slate-600: #c7cdd3;
+  --color-slate-700: #dce0e4;
+  --color-slate-800: #e9ecee;
+  --color-slate-900: #f4f5f7;
 
-  --color-brand-50: #102e48;
-  --color-brand-100: #17426a;
-  --color-brand-300: #2c6fa3;
+  --color-brand-50: #213345;
+  --color-brand-100: #2a4258;
+  --color-brand-300: #3f6d93;
   --color-brand-500: #4aa8e0;
   --color-brand-600: #6dbbea;
   --color-brand-700: #a3d4f3;
@@ -153,9 +157,9 @@
   --cat-browser: #4aa8e0;
   --cat-windows: #ff6e4f;
   --cat-office: #4cc27f;
-  --cat-file: #9aa9bb;
-  --cat-other: #8d9fb6;
-  --flow-edge: #8d9fb6;
+  --cat-file: #a3acb5;
+  --cat-other: #8e98a2;
+  --flow-edge: #8e98a2;
 }
 
 /* React Flow's dark mode brings its own greys; keep the app's navy. */
