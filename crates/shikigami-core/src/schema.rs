@@ -132,8 +132,10 @@ mod tests {
                 vec![&doc]
             };
             for scenario in scenarios {
-                let errors: Vec<String> =
-                    validator.iter_errors(scenario).map(|e| e.to_string()).collect();
+                let errors: Vec<String> = validator
+                    .iter_errors(scenario)
+                    .map(|e| e.to_string())
+                    .collect();
                 assert!(errors.is_empty(), "{}: {errors:?}", path.display());
                 checked += 1;
             }
