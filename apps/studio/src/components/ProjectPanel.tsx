@@ -78,7 +78,7 @@ function FileRow({ file, role, onMenu }: { file: ProjectFile; role: Role; onMenu
         onMenu({ x: e.clientX, y: e.clientY, path: file.path });
       }}
       title={file.path}
-      className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left ${open ? "bg-brand-50" : "hover:bg-slate-100"} ${dim ? "opacity-60" : ""}`}
+      className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left ${open ? "bg-brand-50" : "hover:bg-slate-100"} ${dim ? "opacity-75" : ""}`}
     >
       <span
         className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[4px]"

@@ -354,7 +354,7 @@ function Chips({ side, color, children }: { side: "in" | "out"; color: string; c
 
 function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, string | undefined>; run: RunValues; stepId: string }) {
   const focused = useFocus();
-  const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "#94a3b8";
+  const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "var(--cat-other)";
   if (row.kind === "more") {
     return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[10px] text-slate-400">{t.flow.moreRows(row.count)}</div>;
   }
@@ -961,7 +961,7 @@ export function FlowCanvas() {
       type: "link",
       selectable: false,
       focusable: false,
-      data: { variable: l.variable, color: TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8", from: l.from, to: l.to, selectedId },
+      data: { variable: l.variable, color: TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "var(--cat-other)", from: l.from, to: l.to, selectedId },
       // Beneath the steps, so a lit link never takes a click meant for a step.
       zIndex: 0,
     }));
