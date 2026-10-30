@@ -1,0 +1,1259 @@
+{
+  "format": "shikigami.scenarioBundle",
+  "formatVersion": 2,
+  "exportedAt": "2026-10-30T00:00:00Z",
+  "scenario": {
+    "schemaVersion": 1,
+    "id": "scn_demo_full",
+    "name": "フル機能デモ：受注から請求書作成まで",
+    "description": "今ある機能をできるだけ使ったデモ。設定(config)→CSV読込→Excel書込/読戻し→税込計算(ループ/条件/try)→CSV出力→Word請求書差し込み→ZIP化→ブラウザ出荷(サブシナリオ)→ポーリング(wait.until) までは外部アカウント不要・ヘッドレスで完走する。設定『実環境を使う』を true にすると、ダイアログ・Excelマクロ・クリップボード・画面操作/OCR・外部コマンド・OAuth/HTTP・Outlook下書き も試す（各 try で保護）。",
+    "revision": 1,
+    "settings": {
+      "defaultTimeoutMs": 30000,
+      "defaultRetry": {
+        "maxAttempts": 2,
+        "backoffMs": 500,
+        "backoffMultiplier": 2
+      }
+    },
+    "variables": [
+      {
+        "name": "siteUrl",
+        "type": "string",
+        "direction": "input",
+        "default": "http://127.0.0.1:8787/",
+        "description": "ブラウザ出荷デモのサイト URL"
+      },
+      {
+        "name": "invoiceCount",
+        "type": "number",
+        "direction": "output",
+        "default": 0,
+        "description": "作成した請求明細の件数"
+      },
+      {
+        "name": "grandTotal",
+        "type": "number",
+        "direction": "output",
+        "default": 0,
+        "description": "税込合計（円）"
+      },
+      {
+        "name": "flaggedCount",
+        "type": "number",
+        "direction": "output",
+        "default": 0,
+        "description": "高額しきい値を超えた件数"
+      },
+      {
+        "name": "invoiceFiles",
+        "type": "array",
+        "direction": "output",
+        "default": [],
+        "description": "作成した Word 請求書のパス"
+      },
+      {
+        "name": "shipped",
+        "type": "array",
+        "direction": "output",
+        "default": [],
+        "description": "ブラウザで出荷した注文番号"
+      },
+      {
+        "name": "skipped",
+        "type": "array",
+        "direction": "output",
+        "default": [],
+        "description": "書き込みに失敗してスキップした注文"
+      },
+      {
+        "name": "settings",
+        "type": "object",
+        "direction": "local",
+        "default": {}
+      },
+      {
+        "name": "month",
+        "type": "string",
+        "direction": "local",
+        "default": ""
+      },
+      {
+        "name": "ordersCsv",
+        "type": "array",
+        "direction": "local",
+        "default": []
+      },
+      {
+        "name": "sheetRows",
+        "type": "array",
+        "direction": "local",
+        "default": []
+      },
+      {
+        "name": "orderRows",
+        "type": "array",
+        "direction": "local",
+        "default": []
+      },
+      {
+        "name": "withTax",
+        "type": "number",
+        "direction": "local",
+        "default": 0
+      },
+      {
+        "name": "billing",
+        "type": "array",
+        "direction": "local",
+        "default": []
+      },
+      {
+        "name": "byCustomer",
+        "type": "object",
+        "direction": "local",
+        "default": {}
+      },
+      {
+        "name": "details",
+        "type": "array",
+        "direction": "local",
+        "default": []
+      },
+      {
+        "name": "subtotal",
+        "type": "number",
+        "direction": "local",
+        "default": 0
+      },
+      {
+        "name": "madeResult",
+        "type": "object",
+        "direction": "local",
+        "default": {}
+      },
+      {
+        "name": "shippedTotalOut",
+        "type": "number",
+        "direction": "local",
+        "default": 0
+      },
+      {
+        "name": "checks",
+        "type": "number",
+        "direction": "local",
+        "default": 0
+      },
+      {
+        "name": "docxList",
+        "type": "array",
+        "direction": "local",
+        "default": []
+      }
+    ],
+    "steps": [
+      {
+        "id": "stp_001_message",
+        "type": "log.message",
+        "name": "開始",
+        "params": {
+          "message": "=== Shikigami フル機能デモを開始します ==="
+        }
+      },
+      {
+        "id": "stp_002_read",
+        "type": "config.read",
+        "name": "設定を読み込む",
+        "params": {
+          "path": "config/設定.json"
+        },
+        "saveAs": "settings"
+      },
+      {
+        "id": "stp_003_set",
+        "type": "variable.set",
+        "name": "当月を求める",
+        "params": {
+          "name": "month",
+          "expression": "formatDate(today(), 'yyyy年M月')"
+        }
+      },
+      {
+        "id": "stp_004_message",
+        "type": "log.message",
+        "name": "設定ログ",
+        "params": {
+          "message": "当月 {{ month }} / 消費税率 {{ settings['消費税率'] }} / 高額しきい値 {{ settings['高額しきい値'] }} 円 / 実環境 {{ settings['実環境を使う'] }}"
+        }
+      },
+      {
+        "id": "stp_005_createFolder",
+        "type": "file.createFolder",
+        "name": "出力フォルダーを用意",
+        "params": {
+          "path": "output"
+        }
+      },
+      {
+        "id": "stp_006_delete",
+        "type": "file.delete",
+        "name": "前回の集計ブックを消す（再実行でも一貫した結果に）",
+        "params": {
+          "path": "output/集計.xlsx"
+        },
+        "onError": "continue"
+      },
+      {
+        "id": "stp_007_readCsv",
+        "type": "file.readCsv",
+        "name": "受注 CSV を読む",
+        "params": {
+          "path": "input/受注.csv",
+          "encoding": "utf-8",
+          "header": true
+        },
+        "saveAs": "ordersCsv"
+      },
+      {
+        "id": "stp_008_set",
+        "type": "variable.set",
+        "name": "Excel 用の行に整形",
+        "params": {
+          "name": "sheetRows",
+          "expression": "[['注文番号','顧客','商品','数量','単価']] + map(ordersCsv, r => [r['注文番号'], r['顧客'], r['商品'], num(r['数量']), num(r['単価'])])"
+        }
+      },
+      {
+        "id": "stp_009_writeRange",
+        "type": "excel.writeRange",
+        "name": "受注表を Excel に書き出す",
+        "params": {
+          "path": "output/集計.xlsx",
+          "cell": "A1",
+          "values": "{{ sheetRows }}"
+        }
+      },
+      {
+        "id": "stp_010_writeCell",
+        "type": "excel.writeCell",
+        "name": "税込金額の見出しを追加",
+        "params": {
+          "path": "output/集計.xlsx",
+          "cell": "F1",
+          "value": "税込金額"
+        }
+      },
+      {
+        "id": "stp_011_readRows",
+        "type": "excel.readRows",
+        "name": "Excel から受注行を読み戻す",
+        "params": {
+          "path": "output/集計.xlsx",
+          "headerRow": 1
+        },
+        "saveAs": "orderRows"
+      },
+      {
+        "id": "stp_012_message",
+        "type": "log.message",
+        "name": "読み戻しログ",
+        "params": {
+          "message": "Excel から {{ len(orderRows) }} 行を読み戻しました"
+        }
+      },
+      {
+        "id": "stp_023_forEach",
+        "type": "control.forEach",
+        "name": "明細ごとに税込計算と集計",
+        "params": {
+          "items": "orderRows",
+          "itemVar": "row",
+          "indexVar": "i"
+        },
+        "blocks": {
+          "body": [
+            {
+              "id": "stp_013_set",
+              "type": "variable.set",
+              "name": "税込金額を計算",
+              "params": {
+                "name": "withTax",
+                "expression": "round(num(row['数量']) * num(row['単価']) * (1 + settings['消費税率']))"
+              }
+            },
+            {
+              "id": "stp_017_try",
+              "type": "control.try",
+              "name": "同じ行に税込金額を書き戻す（失敗しても継続）",
+              "params": {
+                "errorVar": "err"
+              },
+              "blocks": {
+                "try": [
+                  {
+                    "id": "stp_014_writeCell",
+                    "type": "excel.writeCell",
+                    "name": "F列に書き込む",
+                    "params": {
+                      "path": "output/集計.xlsx",
+                      "cell": "F{{ row['_row'] }}",
+                      "value": "{{ withTax }}"
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "id": "stp_015_message",
+                    "type": "log.message",
+                    "name": "書き込み失敗を記録",
+                    "params": {
+                      "level": "warn",
+                      "message": "{{ row['注文番号'] }} の書き込みに失敗: {{ err['message'] }}"
+                    }
+                  },
+                  {
+                    "id": "stp_016_set",
+                    "type": "variable.set",
+                    "name": "スキップに追加",
+                    "params": {
+                      "name": "skipped",
+                      "expression": "skipped + [row['注文番号']]"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_020_if",
+              "type": "control.if",
+              "name": "高額チェック",
+              "params": {
+                "condition": "withTax >= settings['高額しきい値']"
+              },
+              "blocks": {
+                "then": [
+                  {
+                    "id": "stp_018_set",
+                    "type": "variable.set",
+                    "name": "高額件数を加算",
+                    "params": {
+                      "name": "flaggedCount",
+                      "expression": "flaggedCount + 1"
+                    }
+                  },
+                  {
+                    "id": "stp_019_message",
+                    "type": "log.message",
+                    "name": "高額警告",
+                    "params": {
+                      "level": "warn",
+                      "message": "高額請求: {{ row['注文番号'] }}（{{ row['顧客'] }}・{{ row['商品'] }}）{{ withTax }} 円"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_021_set",
+              "type": "variable.set",
+              "name": "合計に加算",
+              "params": {
+                "name": "grandTotal",
+                "expression": "grandTotal + withTax"
+              }
+            },
+            {
+              "id": "stp_022_set",
+              "type": "variable.set",
+              "name": "請求一覧に追加",
+              "params": {
+                "name": "billing",
+                "expression": "billing + [ { '注文番号': row['注文番号'], '顧客': row['顧客'], '商品': row['商品'], '金額': withTax } ]"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "stp_024_set",
+        "type": "variable.set",
+        "name": "請求件数を数える",
+        "params": {
+          "name": "invoiceCount",
+          "expression": "len(billing)"
+        }
+      },
+      {
+        "id": "stp_025_writeCsv",
+        "type": "file.writeCsv",
+        "name": "請求一覧を CSV に出力",
+        "params": {
+          "path": "output/請求一覧.csv",
+          "rows": "{{ billing }}",
+          "encoding": "utf-8-bom"
+        }
+      },
+      {
+        "id": "stp_026_addSheet",
+        "type": "excel.addSheet",
+        "name": "集計.xlsx に請求シートを追加",
+        "params": {
+          "path": "output/集計.xlsx",
+          "sheet": "請求"
+        }
+      },
+      {
+        "id": "stp_027_appendRows",
+        "type": "excel.appendRows",
+        "name": "請求一覧を請求シートに転記（見出しは自動）",
+        "params": {
+          "path": "output/集計.xlsx",
+          "sheet": "請求",
+          "rows": "{{ billing }}"
+        }
+      },
+      {
+        "id": "stp_028_set",
+        "type": "variable.set",
+        "name": "顧客ごとにまとめる",
+        "params": {
+          "name": "byCustomer",
+          "expression": "groupBy(billing, r => r['顧客'])"
+        }
+      },
+      {
+        "id": "stp_034_forEach",
+        "type": "control.forEach",
+        "name": "顧客ごとに請求書を作成",
+        "params": {
+          "items": "keys(byCustomer)",
+          "itemVar": "customer"
+        },
+        "blocks": {
+          "body": [
+            {
+              "id": "stp_029_set",
+              "type": "variable.set",
+              "name": "この顧客の明細",
+              "params": {
+                "name": "details",
+                "expression": "byCustomer[customer]"
+              }
+            },
+            {
+              "id": "stp_030_set",
+              "type": "variable.set",
+              "name": "この顧客の小計",
+              "params": {
+                "name": "subtotal",
+                "expression": "sum(map(details, r => r['金額']))"
+              }
+            },
+            {
+              "id": "stp_031_fillTemplate",
+              "type": "word.fillTemplate",
+              "name": "請求書 docx を作成",
+              "params": {
+                "template": "templates/請求書.docx",
+                "path": "output/請求書_{{ customer }}.docx",
+                "values": {
+                  "顧客": "{{ customer }}",
+                  "発行日": "{{ formatDate(today(), 'yyyy年M月d日') }}",
+                  "当月": "{{ month }}",
+                  "合計": "{{ formatNumber(subtotal) }}",
+                  "明細": "{{ map(details, r => { '注文番号': r['注文番号'], '商品': r['商品'], '金額': formatNumber(r['金額']) }) }}"
+                }
+              },
+              "saveAs": "madeResult"
+            },
+            {
+              "id": "stp_032_set",
+              "type": "variable.set",
+              "name": "作成した請求書を記録",
+              "params": {
+                "name": "invoiceFiles",
+                "expression": "invoiceFiles + [madeResult['path']]"
+              }
+            },
+            {
+              "id": "stp_033_message",
+              "type": "log.message",
+              "name": "請求書ログ",
+              "params": {
+                "message": "{{ customer }} の請求書を作成（小計 {{ formatNumber(subtotal) }} 円）"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "stp_035_list",
+        "type": "file.list",
+        "name": "出力ファイルを一覧",
+        "params": {
+          "folder": "output",
+          "pattern": "*.docx"
+        },
+        "saveAs": "docxList"
+      },
+      {
+        "id": "stp_036_zip",
+        "type": "file.zip",
+        "name": "請求書をまとめて ZIP 化",
+        "params": {
+          "from": "output",
+          "to": "output/請求書一式.zip",
+          "overwrite": true
+        }
+      },
+      {
+        "id": "stp_039_try",
+        "type": "control.try",
+        "name": "出荷サブシナリオを呼ぶ（デモサイト必須：pnpm demo:full）",
+        "params": {
+          "errorVar": "err"
+        },
+        "blocks": {
+          "try": [
+            {
+              "id": "stp_037_call",
+              "type": "scenario.call",
+              "name": "受注システムで出荷",
+              "params": {
+                "scenario": "scn_demo_shipping",
+                "inputs": {
+                  "siteUrl": "{{ siteUrl }}"
+                },
+                "outputs": {
+                  "shipped": "shipped",
+                  "shippedTotal": "shippedTotalOut"
+                }
+              }
+            }
+          ],
+          "catch": [
+            {
+              "id": "stp_038_message",
+              "type": "log.message",
+              "name": "出荷スキップ",
+              "params": {
+                "level": "warn",
+                "message": "ブラウザ出荷をスキップ（デモサイト未起動など）: {{ err['message'] }}"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "stp_040_set",
+        "type": "variable.set",
+        "name": "確認カウンタ初期化",
+        "params": {
+          "name": "checks",
+          "expression": "0"
+        }
+      },
+      {
+        "id": "stp_043_until",
+        "type": "wait.until",
+        "name": "集計の確定を待つ（ポーリング）",
+        "params": {
+          "condition": "checks >= 3",
+          "intervalMs": 100
+        },
+        "blocks": {
+          "check": [
+            {
+              "id": "stp_041_set",
+              "type": "variable.set",
+              "name": "状態を1つ進める",
+              "params": {
+                "name": "checks",
+                "expression": "checks + 1"
+              }
+            },
+            {
+              "id": "stp_042_message",
+              "type": "log.message",
+              "name": "確認ログ",
+              "params": {
+                "message": "確認 {{ checks }}/3 回目"
+              }
+            }
+          ]
+        },
+        "timeoutMs": 5000
+      },
+      {
+        "id": "stp_079_if",
+        "type": "control.if",
+        "name": "実環境セクション",
+        "params": {
+          "condition": "settings['実環境を使う']"
+        },
+        "blocks": {
+          "then": [
+            {
+              "id": "stp_044_message",
+              "type": "log.message",
+              "name": "実環境セクション開始",
+              "params": {
+                "message": "--- 実環境（Windows/各アプリ）が必要な機能のデモ ---"
+              }
+            },
+            {
+              "id": "stp_048_try",
+              "type": "control.try",
+              "name": "ダイアログで続行確認",
+              "params": {
+                "errorVar": "err"
+              },
+              "blocks": {
+                "try": [
+                  {
+                    "id": "stp_045_message",
+                    "type": "dialog.message",
+                    "name": "続行確認",
+                    "params": {
+                      "message": "{{ invoiceCount }} 件の請求書を作成しました。続行しますか？",
+                      "title": "Shikigami デモ",
+                      "buttons": "okCancel",
+                      "level": "info"
+                    },
+                    "saveAs": "choice"
+                  },
+                  {
+                    "id": "stp_046_message",
+                    "type": "log.message",
+                    "name": "押下ログ",
+                    "params": {
+                      "message": "ダイアログの戻り値: {{ choice }}"
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "id": "stp_047_message",
+                    "type": "log.message",
+                    "name": "ダイアログ不可",
+                    "params": {
+                      "level": "warn",
+                      "message": "ダイアログを表示できません: {{ err['message'] }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_051_try",
+              "type": "control.try",
+              "name": "Excel マクロで再計算（.xlsm とデスクトップ Excel が必要）",
+              "params": {
+                "errorVar": "err"
+              },
+              "blocks": {
+                "try": [
+                  {
+                    "id": "stp_049_runMacro",
+                    "type": "excel.runMacro",
+                    "name": "マクロ実行",
+                    "params": {
+                      "path": "input/集計マクロ.xlsm",
+                      "macro": "再計算",
+                      "save": true
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "id": "stp_050_message",
+                    "type": "log.message",
+                    "name": "マクロ不可",
+                    "params": {
+                      "level": "warn",
+                      "message": "Excel マクロをスキップ: {{ err['message'] }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_056_try",
+              "type": "control.try",
+              "name": "クリップボード経由で値を受け渡し",
+              "params": {
+                "errorVar": "err"
+              },
+              "blocks": {
+                "try": [
+                  {
+                    "id": "stp_052_set",
+                    "type": "clipboard.set",
+                    "name": "合計をコピー",
+                    "params": {
+                      "text": "今月の請求合計: {{ formatNumber(grandTotal) }} 円"
+                    }
+                  },
+                  {
+                    "id": "stp_053_get",
+                    "type": "clipboard.get",
+                    "name": "クリップボードを読む",
+                    "saveAs": "pasted"
+                  },
+                  {
+                    "id": "stp_054_message",
+                    "type": "log.message",
+                    "name": "クリップボードログ",
+                    "params": {
+                      "message": "クリップボード: {{ pasted }}"
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "id": "stp_055_message",
+                    "type": "log.message",
+                    "name": "クリップボード不可",
+                    "params": {
+                      "level": "warn",
+                      "message": "クリップボードをスキップ: {{ err['message'] }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_064_try",
+              "type": "control.try",
+              "name": "メモ帳を操作して画面を OCR で読む",
+              "params": {
+                "errorVar": "err"
+              },
+              "blocks": {
+                "try": [
+                  {
+                    "id": "stp_057_launch",
+                    "type": "desktop.launch",
+                    "name": "メモ帳を起動",
+                    "params": {
+                      "path": "notepad.exe"
+                    }
+                  },
+                  {
+                    "id": "stp_058_type",
+                    "type": "desktop.type",
+                    "name": "本文を入力",
+                    "params": {
+                      "target": {
+                        "window": {
+                          "process": "notepad.exe"
+                        }
+                      },
+                      "text": "Shikigami 請求デモ 合計 {{ formatNumber(grandTotal) }} 円"
+                    }
+                  },
+                  {
+                    "id": "stp_059_screenshot",
+                    "type": "desktop.screenshot",
+                    "name": "画面を保存",
+                    "params": {
+                      "target": {
+                        "window": {
+                          "process": "notepad.exe"
+                        }
+                      },
+                      "path": "output/notepad.png"
+                    }
+                  },
+                  {
+                    "id": "stp_060_readText",
+                    "type": "desktop.readText",
+                    "name": "画面の文字を OCR で読む",
+                    "params": {
+                      "target": {
+                        "window": {
+                          "process": "notepad.exe"
+                        }
+                      }
+                    },
+                    "saveAs": "ocr"
+                  },
+                  {
+                    "id": "stp_061_message",
+                    "type": "log.message",
+                    "name": "OCRログ",
+                    "params": {
+                      "message": "OCR: {{ ocr['text'] }}"
+                    }
+                  },
+                  {
+                    "id": "stp_062_closeWindow",
+                    "type": "desktop.closeWindow",
+                    "name": "メモ帳を閉じる",
+                    "params": {
+                      "target": {
+                        "window": {
+                          "process": "notepad.exe"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "id": "stp_063_message",
+                    "type": "log.message",
+                    "name": "画面操作不可",
+                    "params": {
+                      "level": "warn",
+                      "message": "画面操作/OCR をスキップ: {{ err['message'] }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_068_try",
+              "type": "control.try",
+              "name": "外部コマンドを実行",
+              "params": {
+                "errorVar": "err"
+              },
+              "blocks": {
+                "try": [
+                  {
+                    "id": "stp_065_run",
+                    "type": "process.run",
+                    "name": "バージョン確認",
+                    "params": {
+                      "program": "cmd",
+                      "args": [
+                        "/c",
+                        "ver"
+                      ]
+                    },
+                    "saveAs": "cmd"
+                  },
+                  {
+                    "id": "stp_066_message",
+                    "type": "log.message",
+                    "name": "コマンドログ",
+                    "params": {
+                      "message": "exitCode={{ cmd['exitCode'] }}"
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "id": "stp_067_message",
+                    "type": "log.message",
+                    "name": "コマンド不可",
+                    "params": {
+                      "level": "warn",
+                      "message": "外部コマンドをスキップ: {{ err['message'] }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_073_try",
+              "type": "control.try",
+              "name": "OAuth サインインして Web API を呼ぶ",
+              "params": {
+                "errorVar": "err"
+              },
+              "blocks": {
+                "try": [
+                  {
+                    "id": "stp_069_signIn",
+                    "type": "oauth.signIn",
+                    "name": "Box にサインイン",
+                    "params": {
+                      "secret": "Box",
+                      "authorizeUrl": "https://account.box.com/api/oauth2/authorize",
+                      "tokenUrl": "https://api.box.com/oauth2/token",
+                      "redirectUrl": "https://www.example.com/"
+                    }
+                  },
+                  {
+                    "id": "stp_070_request",
+                    "type": "http.request",
+                    "name": "フォルダー一覧を取得",
+                    "params": {
+                      "method": "GET",
+                      "url": "https://api.box.com/2.0/folders/0/items",
+                      "auth": {
+                        "secret": "Box",
+                        "field": "accessToken"
+                      }
+                    },
+                    "saveAs": "apiRes"
+                  },
+                  {
+                    "id": "stp_071_message",
+                    "type": "log.message",
+                    "name": "APIログ",
+                    "params": {
+                      "message": "{{ join(map(apiRes['body']['entries'], e => e['name']), ', ') }}"
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "id": "stp_072_message",
+                    "type": "log.message",
+                    "name": "OAuth不可",
+                    "params": {
+                      "level": "warn",
+                      "message": "OAuth/HTTP をスキップ: {{ err['message'] }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_077_try",
+              "type": "control.try",
+              "name": "Outlook に請求書の下書きを作る（送信はしない）",
+              "params": {
+                "errorVar": "err"
+              },
+              "blocks": {
+                "try": [
+                  {
+                    "id": "stp_074_createDraft",
+                    "type": "mail.createDraft",
+                    "name": "下書き作成",
+                    "params": {
+                      "to": [
+                        "{{ settings['送信先'] }}"
+                      ],
+                      "subject": "{{ month }}分 ご請求書（{{ invoiceCount }} 件・合計 {{ formatNumber(grandTotal) }} 円）",
+                      "body": "お世話になっております。\n{{ month }}分の請求書 {{ len(invoiceFiles) }} 通をお送りします（output フォルダー参照）。\n\n合計 {{ formatNumber(grandTotal) }} 円（{{ invoiceCount }} 件）"
+                    },
+                    "saveAs": "draft"
+                  },
+                  {
+                    "id": "stp_075_message",
+                    "type": "log.message",
+                    "name": "下書きログ",
+                    "params": {
+                      "message": "下書きを作成しました（id={{ draft['id'] }}）"
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "id": "stp_076_message",
+                    "type": "log.message",
+                    "name": "メール不可",
+                    "params": {
+                      "level": "warn",
+                      "message": "メール下書きをスキップ: {{ err['message'] }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "else": [
+            {
+              "id": "stp_078_message",
+              "type": "log.message",
+              "name": "実環境スキップ",
+              "params": {
+                "message": "実環境セクションはスキップしました（設定『実環境を使う』= false）。組み込み機能だけで完走します。"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "stp_080_message",
+        "type": "log.message",
+        "name": "完了",
+        "params": {
+          "message": "=== 完了：請求 {{ invoiceCount }} 件・合計 {{ formatNumber(grandTotal) }} 円・高額 {{ flaggedCount }} 件・請求書 {{ len(invoiceFiles) }} 通・出荷 {{ len(shipped) }} 件 ==="
+        }
+      }
+    ],
+    "metadata": {
+      "tags": [
+        "demo",
+        "full"
+      ]
+    }
+  },
+  "versions": [],
+  "subscenarios": [
+    {
+      "schemaVersion": 1,
+      "id": "scn_demo_shipping",
+      "name": "受注システムで未処理の注文を出荷する（サブシナリオ）",
+      "description": "デモ受注システム（pnpm demo:site）にログインし、未処理の注文を出荷する。ログインはシークレット「デモ受注システム」を使い、session で2回目以降は省略。full-demo から scenario.call で呼ばれる。",
+      "revision": 1,
+      "variables": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "direction": "input",
+          "default": "http://127.0.0.1:8787/",
+          "description": "デモサイトの URL"
+        },
+        {
+          "name": "shipped",
+          "type": "array",
+          "direction": "output",
+          "default": [],
+          "description": "出荷した注文番号"
+        },
+        {
+          "name": "shippedTotal",
+          "type": "number",
+          "direction": "output",
+          "default": 0,
+          "description": "出荷した金額の合計（円）"
+        },
+        {
+          "name": "orders",
+          "type": "array",
+          "direction": "local",
+          "default": []
+        },
+        {
+          "name": "loggedIn",
+          "type": "boolean",
+          "direction": "local",
+          "default": false
+        }
+      ],
+      "steps": [
+        {
+          "id": "stp_001_open",
+          "type": "browser.open",
+          "name": "受注システムを開く（前回のログインを使う）",
+          "params": {
+            "url": "{{ siteUrl }}orders.html",
+            "context": "orders",
+            "session": "デモ受注システム"
+          }
+        },
+        {
+          "id": "stp_002_isVisible",
+          "type": "browser.isVisible",
+          "name": "ログイン済みか確かめる",
+          "params": {
+            "target": {
+              "role": "heading",
+              "name": "受注一覧"
+            },
+            "context": "orders"
+          },
+          "saveAs": "loggedIn"
+        },
+        {
+          "id": "stp_008_if",
+          "type": "control.if",
+          "name": "未ログインのときだけログイン",
+          "params": {
+            "condition": "!loggedIn"
+          },
+          "blocks": {
+            "then": [
+              {
+                "id": "stp_003_fill",
+                "type": "browser.fill",
+                "name": "ユーザー名を入力",
+                "params": {
+                  "target": {
+                    "label": "ユーザー名"
+                  },
+                  "value": {
+                    "secret": "デモ受注システム",
+                    "field": "username"
+                  },
+                  "context": "orders"
+                }
+              },
+              {
+                "id": "stp_004_fill",
+                "type": "browser.fill",
+                "name": "パスワードを入力（シークレット）",
+                "params": {
+                  "target": {
+                    "label": "パスワード"
+                  },
+                  "value": {
+                    "secret": "デモ受注システム",
+                    "field": "password"
+                  },
+                  "context": "orders"
+                }
+              },
+              {
+                "id": "stp_005_click",
+                "type": "browser.click",
+                "name": "ログイン",
+                "params": {
+                  "target": {
+                    "role": "button",
+                    "name": "ログイン"
+                  },
+                  "context": "orders"
+                }
+              },
+              {
+                "id": "stp_006_waitFor",
+                "type": "browser.waitFor",
+                "name": "受注一覧の表示を待つ",
+                "params": {
+                  "target": {
+                    "role": "heading",
+                    "name": "受注一覧"
+                  },
+                  "context": "orders"
+                }
+              }
+            ],
+            "else": [
+              {
+                "id": "stp_007_message",
+                "type": "log.message",
+                "name": "ログイン省略",
+                "params": {
+                  "message": "保存済みのログイン状態を使いました"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stp_009_getTable",
+          "type": "browser.getTable",
+          "name": "受注一覧を読み取る",
+          "params": {
+            "target": {
+              "role": "table",
+              "name": "受注"
+            },
+            "context": "orders"
+          },
+          "saveAs": "orders"
+        },
+        {
+          "id": "stp_010_message",
+          "type": "log.message",
+          "name": "件数ログ",
+          "params": {
+            "message": "受注 {{ len(orders) }} 件を確認しました"
+          }
+        },
+        {
+          "id": "stp_016_forEach",
+          "type": "control.forEach",
+          "name": "未処理の注文を出荷",
+          "params": {
+            "items": "orders",
+            "itemVar": "order"
+          },
+          "blocks": {
+            "body": [
+              {
+                "id": "stp_015_if",
+                "type": "control.if",
+                "name": "未処理だけ出荷",
+                "params": {
+                  "condition": "order['状態'] == '未処理'"
+                },
+                "blocks": {
+                  "then": [
+                    {
+                      "id": "stp_011_click",
+                      "type": "browser.click",
+                      "name": "出荷ボタンを押す",
+                      "params": {
+                        "target": {
+                          "role": "button",
+                          "name": "{{ order['注文番号'] }} を出荷"
+                        },
+                        "context": "orders"
+                      }
+                    },
+                    {
+                      "id": "stp_012_waitFor",
+                      "type": "browser.waitFor",
+                      "name": "出荷完了を待つ",
+                      "params": {
+                        "target": {
+                          "text": "{{ order['注文番号'] }} を出荷しました"
+                        },
+                        "context": "orders"
+                      }
+                    },
+                    {
+                      "id": "stp_013_set",
+                      "type": "variable.set",
+                      "name": "出荷済みに追加",
+                      "params": {
+                        "name": "shipped",
+                        "expression": "shipped + [order['注文番号']]"
+                      }
+                    },
+                    {
+                      "id": "stp_014_set",
+                      "type": "variable.set",
+                      "name": "金額を加算",
+                      "params": {
+                        "name": "shippedTotal",
+                        "expression": "shippedTotal + num(order['金額（円）'])"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stp_017_close",
+          "type": "browser.close",
+          "name": "ブラウザを閉じる",
+          "params": {
+            "context": "orders"
+          }
+        },
+        {
+          "id": "stp_018_message",
+          "type": "log.message",
+          "name": "出荷サマリ",
+          "params": {
+            "message": "出荷 {{ len(shipped) }} 件、合計 {{ shippedTotal }} 円"
+          }
+        }
+      ],
+      "metadata": {
+        "tags": [
+          "demo"
+        ]
+      }
+    }
+  ],
+  "files": [
+    {
+      "scenarioId": "scn_demo_full",
+      "path": "input/受注.csv",
+      "data": "5rOo5paH55Wq5Y+3LOmhp+WuoizllYblk4Es5pWw6YePLOWNmOS+oQ0KQS0xMDAxLOOBguOBiuOBsOWVhuW6lyzmuKblt7vjgY3jg47jg7zjg4gsNDAsMzIwDQpBLTEwMDIs44GC44GK44Gw5ZWG5bqXLOW8j+elnuODmuODsywyNSwxMjAwDQpBLTEwMDMs44G/44Gq44Go54mp55SjLOa4puW3u+OBjeODjuODvOODiCwxMCwzMjANCkEtMTAwNCzjgb/jgarjgajniannlKMs5pyx5Y2w44K544K/44Oz44OXLDMsNDgwMDANCkEtMTAwNSzjgZ3jgonlt6XmiL8s5byP56We44Oa44OzLDEyMCwxMjAwDQpBLTEwMDYs44Gd44KJ5bel5oi/LOa4puW3u+OBjeODjuODvOODiCw1LDMyMA0K"
+    },
+    {
+      "scenarioId": "scn_demo_full",
+      "path": "config/設定.json",
+      "data": "ewogICJmb3JtYXQiOiAic2hpa2lnYW1pLmNvbmZpZyIsCiAgIml0ZW1zIjogWwogICAgewogICAgICAibmFtZSI6ICLmtojosrvnqI7njociLAogICAgICAidHlwZSI6ICJudW1iZXIiLAogICAgICAidmFsdWUiOiAwLjEsCiAgICAgICJkZXNjcmlwdGlvbiI6ICLnqI7ovrzph5HpoY3jga7oqIjnrpfjgavkvb/jgYbmtojosrvnqI7njociCiAgICB9LAogICAgewogICAgICAibmFtZSI6ICLpq5jpoY3jgZfjgY3jgYTlgKQiLAogICAgICAidHlwZSI6ICJudW1iZXIiLAogICAgICAidmFsdWUiOiAxMDAwMDAsCiAgICAgICJkZXNjcmlwdGlvbiI6ICLjgZPjga7ph5HpoY3ku6XkuIrjga7oq4vmsYLjgpLopoHnorroqo3jgajjgZfjgaborablkYrjgZnjgovvvIjlhobvvIkiCiAgICB9LAogICAgewogICAgICAibmFtZSI6ICLpgIHkv6HlhYgiLAogICAgICAidHlwZSI6ICJ0ZXh0IiwKICAgICAgInZhbHVlIjogImtlaXJpQGV4YW1wbGUuY29tIiwKICAgICAgImRlc2NyaXB0aW9uIjogIuiri+axguabuOODieODqeODleODiOOBruWum+WFiO+8iOWun+eSsOWig+OBruOBv+S9v+eUqO+8iSIKICAgIH0sCiAgICB7CiAgICAgICJuYW1lIjogIuWun+eSsOWig+OCkuS9v+OBhiIsCiAgICAgICJ0eXBlIjogImJvb2xlYW4iLAogICAgICAidmFsdWUiOiBmYWxzZSwKICAgICAgImRlc2NyaXB0aW9uIjogInRydWUg44Gr44GZ44KL44GoIEV4Y2VsIOODnuOCr+ODreODu091dGxvb2vjg7vnlLvpnaLmk43kvZwvT0NS44O744OA44Kk44Ki44Ot44Kw44O7SFRUUC9PQXV0aCDjgarjganlrp/nkrDlooPjgYzlv4XopoHjgarnr4DjgoLlrp/ooYzjgZnjgovvvIjml6LlrpogZmFsc2XvvIkiCiAgICB9CiAgXQp9"
+    },
+    {
+      "scenarioId": "scn_demo_full",
+      "path": "templates/請求書.docx",
+      "data": "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"
+    }
+  ]
+}

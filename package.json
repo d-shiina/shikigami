@@ -15,6 +15,7 @@
     "studio:release": "pnpm studio:bundle-cli && pnpm studio:bundle-node && pnpm studio:bundle-ocr && node apps/studio/scripts/set-pubkey.mjs && pnpm --filter @shikigami/studio tauri build --config src-tauri/tauri.release.gen.json",
     "demo:site": "node packages/browser-adapter/src/demo-site.ts",
     "demo:browser": "node packages/browser-adapter/src/demo.ts",
+    "demo:full": "node packages/browser-adapter/src/demo-full.ts",
     "release:setup": "node scripts/setup-release-signing.mjs"
   }
 }
