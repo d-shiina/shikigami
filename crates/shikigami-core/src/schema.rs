@@ -120,9 +120,23 @@ mod tests {
             }
             let doc: Value =
                 serde_json::from_slice(&std::fs::read(&path).expect("read")).expect("json");
-            let errors: Vec<String> = validator.iter_errors(&doc).map(|e| e.to_string()).collect();
-            assert!(errors.is_empty(), "{}: {errors:?}", path.display());
-            checked += 1;
+            // A bundle (`*.shikigami.json`) is not a scenario; validate the
+            // scenarios it carries instead of the bundle wrapper.
+            let scenarios: Vec<&Value> = if crate::version::is_bundle(&doc) {
+                let mut v = vec![doc.get("scenario").expect("bundle has a scenario")];
+                if let Some(Value::Array(subs)) = doc.get("subscenarios") {
+                    v.extend(subs.iter());
+                }
+                v
+            } else {
+                vec![&doc]
+            };
+            for scenario in scenarios {
+                let errors: Vec<String> =
+                    validator.iter_errors(scenario).map(|e| e.to_string()).collect();
+                assert!(errors.is_empty(), "{}: {errors:?}", path.display());
+                checked += 1;
+            }
         }
         assert!(checked > 0);
     }
