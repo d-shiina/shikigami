@@ -192,7 +192,16 @@
       }
     },
     {
-      "id": "stp_006_readCsv",
+      "id": "stp_006_delete",
+      "type": "file.delete",
+      "name": "前回の集計ブックを消す（再実行でも一貫した結果に）",
+      "params": {
+        "path": "output/集計.xlsx"
+      },
+      "onError": "continue"
+    },
+    {
+      "id": "stp_007_readCsv",
       "type": "file.readCsv",
       "name": "受注 CSV を読む",
       "params": {
@@ -203,7 +212,7 @@
       "saveAs": "ordersCsv"
     },
     {
-      "id": "stp_007_set",
+      "id": "stp_008_set",
       "type": "variable.set",
       "name": "Excel 用の行に整形",
       "params": {
@@ -212,7 +221,7 @@
       }
     },
     {
-      "id": "stp_008_writeRange",
+      "id": "stp_009_writeRange",
       "type": "excel.writeRange",
       "name": "受注表を Excel に書き出す",
       "params": {
@@ -222,7 +231,7 @@
       }
     },
     {
-      "id": "stp_009_writeCell",
+      "id": "stp_010_writeCell",
       "type": "excel.writeCell",
       "name": "税込金額の見出しを追加",
       "params": {
@@ -232,7 +241,7 @@
       }
     },
     {
-      "id": "stp_010_readRows",
+      "id": "stp_011_readRows",
       "type": "excel.readRows",
       "name": "Excel から受注行を読み戻す",
       "params": {
@@ -242,7 +251,7 @@
       "saveAs": "orderRows"
     },
     {
-      "id": "stp_011_message",
+      "id": "stp_012_message",
       "type": "log.message",
       "name": "読み戻しログ",
       "params": {
@@ -250,7 +259,7 @@
       }
     },
     {
-      "id": "stp_022_forEach",
+      "id": "stp_023_forEach",
       "type": "control.forEach",
       "name": "明細ごとに税込計算と集計",
       "params": {
@@ -261,7 +270,7 @@
       "blocks": {
         "body": [
           {
-            "id": "stp_012_set",
+            "id": "stp_013_set",
             "type": "variable.set",
             "name": "税込金額を計算",
             "params": {
@@ -270,7 +279,7 @@
             }
           },
           {
-            "id": "stp_016_try",
+            "id": "stp_017_try",
             "type": "control.try",
             "name": "同じ行に税込金額を書き戻す（失敗しても継続）",
             "params": {
@@ -279,7 +288,7 @@
             "blocks": {
               "try": [
                 {
-                  "id": "stp_013_writeCell",
+                  "id": "stp_014_writeCell",
                   "type": "excel.writeCell",
                   "name": "F列に書き込む",
                   "params": {
@@ -291,7 +300,7 @@
               ],
               "catch": [
                 {
-                  "id": "stp_014_message",
+                  "id": "stp_015_message",
                   "type": "log.message",
                   "name": "書き込み失敗を記録",
                   "params": {
@@ -300,7 +309,7 @@
                   }
                 },
                 {
-                  "id": "stp_015_set",
+                  "id": "stp_016_set",
                   "type": "variable.set",
                   "name": "スキップに追加",
                   "params": {
@@ -312,7 +321,7 @@
             }
           },
           {
-            "id": "stp_019_if",
+            "id": "stp_020_if",
             "type": "control.if",
             "name": "高額チェック",
             "params": {
@@ -321,7 +330,7 @@
             "blocks": {
               "then": [
                 {
-                  "id": "stp_017_set",
+                  "id": "stp_018_set",
                   "type": "variable.set",
                   "name": "高額件数を加算",
                   "params": {
@@ -330,7 +339,7 @@
                   }
                 },
                 {
-                  "id": "stp_018_message",
+                  "id": "stp_019_message",
                   "type": "log.message",
                   "name": "高額警告",
                   "params": {
@@ -342,7 +351,7 @@
             }
           },
           {
-            "id": "stp_020_set",
+            "id": "stp_021_set",
             "type": "variable.set",
             "name": "合計に加算",
             "params": {
@@ -351,7 +360,7 @@
             }
           },
           {
-            "id": "stp_021_set",
+            "id": "stp_022_set",
             "type": "variable.set",
             "name": "請求一覧に追加",
             "params": {
@@ -363,7 +372,7 @@
       }
     },
     {
-      "id": "stp_023_set",
+      "id": "stp_024_set",
       "type": "variable.set",
       "name": "請求件数を数える",
       "params": {
@@ -372,7 +381,7 @@
       }
     },
     {
-      "id": "stp_024_writeCsv",
+      "id": "stp_025_writeCsv",
       "type": "file.writeCsv",
       "name": "請求一覧を CSV に出力",
       "params": {
@@ -382,7 +391,7 @@
       }
     },
     {
-      "id": "stp_025_addSheet",
+      "id": "stp_026_addSheet",
       "type": "excel.addSheet",
       "name": "集計.xlsx に請求シートを追加",
       "params": {
@@ -391,7 +400,7 @@
       }
     },
     {
-      "id": "stp_026_appendRows",
+      "id": "stp_027_appendRows",
       "type": "excel.appendRows",
       "name": "請求一覧を請求シートに転記（見出しは自動）",
       "params": {
@@ -401,7 +410,7 @@
       }
     },
     {
-      "id": "stp_027_set",
+      "id": "stp_028_set",
       "type": "variable.set",
       "name": "顧客ごとにまとめる",
       "params": {
@@ -410,7 +419,7 @@
       }
     },
     {
-      "id": "stp_033_forEach",
+      "id": "stp_034_forEach",
       "type": "control.forEach",
       "name": "顧客ごとに請求書を作成",
       "params": {
@@ -420,7 +429,7 @@
       "blocks": {
         "body": [
           {
-            "id": "stp_028_set",
+            "id": "stp_029_set",
             "type": "variable.set",
             "name": "この顧客の明細",
             "params": {
@@ -429,7 +438,7 @@
             }
           },
           {
-            "id": "stp_029_set",
+            "id": "stp_030_set",
             "type": "variable.set",
             "name": "この顧客の小計",
             "params": {
@@ -438,7 +447,7 @@
             }
           },
           {
-            "id": "stp_030_fillTemplate",
+            "id": "stp_031_fillTemplate",
             "type": "word.fillTemplate",
             "name": "請求書 docx を作成",
             "params": {
@@ -455,7 +464,7 @@
             "saveAs": "madeResult"
           },
           {
-            "id": "stp_031_set",
+            "id": "stp_032_set",
             "type": "variable.set",
             "name": "作成した請求書を記録",
             "params": {
@@ -464,7 +473,7 @@
             }
           },
           {
-            "id": "stp_032_message",
+            "id": "stp_033_message",
             "type": "log.message",
             "name": "請求書ログ",
             "params": {
@@ -475,7 +484,7 @@
       }
     },
     {
-      "id": "stp_034_list",
+      "id": "stp_035_list",
       "type": "file.list",
       "name": "出力ファイルを一覧",
       "params": {
@@ -485,7 +494,7 @@
       "saveAs": "docxList"
     },
     {
-      "id": "stp_035_zip",
+      "id": "stp_036_zip",
       "type": "file.zip",
       "name": "請求書をまとめて ZIP 化",
       "params": {
@@ -495,7 +504,7 @@
       }
     },
     {
-      "id": "stp_038_try",
+      "id": "stp_039_try",
       "type": "control.try",
       "name": "出荷サブシナリオを呼ぶ（デモサイト必須：pnpm demo:full）",
       "params": {
@@ -504,7 +513,7 @@
       "blocks": {
         "try": [
           {
-            "id": "stp_036_call",
+            "id": "stp_037_call",
             "type": "scenario.call",
             "name": "受注システムで出荷",
             "params": {
@@ -521,7 +530,7 @@
         ],
         "catch": [
           {
-            "id": "stp_037_message",
+            "id": "stp_038_message",
             "type": "log.message",
             "name": "出荷スキップ",
             "params": {
@@ -533,7 +542,7 @@
       }
     },
     {
-      "id": "stp_039_set",
+      "id": "stp_040_set",
       "type": "variable.set",
       "name": "確認カウンタ初期化",
       "params": {
@@ -542,7 +551,7 @@
       }
     },
     {
-      "id": "stp_042_until",
+      "id": "stp_043_until",
       "type": "wait.until",
       "name": "集計の確定を待つ（ポーリング）",
       "params": {
@@ -552,7 +561,7 @@
       "blocks": {
         "check": [
           {
-            "id": "stp_040_set",
+            "id": "stp_041_set",
             "type": "variable.set",
             "name": "状態を1つ進める",
             "params": {
@@ -561,7 +570,7 @@
             }
           },
           {
-            "id": "stp_041_message",
+            "id": "stp_042_message",
             "type": "log.message",
             "name": "確認ログ",
             "params": {
@@ -573,7 +582,7 @@
       "timeoutMs": 5000
     },
     {
-      "id": "stp_078_if",
+      "id": "stp_079_if",
       "type": "control.if",
       "name": "実環境セクション",
       "params": {
@@ -582,7 +591,7 @@
       "blocks": {
         "then": [
           {
-            "id": "stp_043_message",
+            "id": "stp_044_message",
             "type": "log.message",
             "name": "実環境セクション開始",
             "params": {
@@ -590,7 +599,7 @@
             }
           },
           {
-            "id": "stp_047_try",
+            "id": "stp_048_try",
             "type": "control.try",
             "name": "ダイアログで続行確認",
             "params": {
@@ -599,7 +608,7 @@
             "blocks": {
               "try": [
                 {
-                  "id": "stp_044_message",
+                  "id": "stp_045_message",
                   "type": "dialog.message",
                   "name": "続行確認",
                   "params": {
@@ -611,7 +620,7 @@
                   "saveAs": "choice"
                 },
                 {
-                  "id": "stp_045_message",
+                  "id": "stp_046_message",
                   "type": "log.message",
                   "name": "押下ログ",
                   "params": {
@@ -621,7 +630,7 @@
               ],
               "catch": [
                 {
-                  "id": "stp_046_message",
+                  "id": "stp_047_message",
                   "type": "log.message",
                   "name": "ダイアログ不可",
                   "params": {
@@ -633,7 +642,7 @@
             }
           },
           {
-            "id": "stp_050_try",
+            "id": "stp_051_try",
             "type": "control.try",
             "name": "Excel マクロで再計算（.xlsm とデスクトップ Excel が必要）",
             "params": {
@@ -642,7 +651,7 @@
             "blocks": {
               "try": [
                 {
-                  "id": "stp_048_runMacro",
+                  "id": "stp_049_runMacro",
                   "type": "excel.runMacro",
                   "name": "マクロ実行",
                   "params": {
@@ -654,7 +663,7 @@
               ],
               "catch": [
                 {
-                  "id": "stp_049_message",
+                  "id": "stp_050_message",
                   "type": "log.message",
                   "name": "マクロ不可",
                   "params": {
@@ -666,7 +675,7 @@
             }
           },
           {
-            "id": "stp_055_try",
+            "id": "stp_056_try",
             "type": "control.try",
             "name": "クリップボード経由で値を受け渡し",
             "params": {
@@ -675,7 +684,7 @@
             "blocks": {
               "try": [
                 {
-                  "id": "stp_051_set",
+                  "id": "stp_052_set",
                   "type": "clipboard.set",
                   "name": "合計をコピー",
                   "params": {
@@ -683,13 +692,13 @@
                   }
                 },
                 {
-                  "id": "stp_052_get",
+                  "id": "stp_053_get",
                   "type": "clipboard.get",
                   "name": "クリップボードを読む",
                   "saveAs": "pasted"
                 },
                 {
-                  "id": "stp_053_message",
+                  "id": "stp_054_message",
                   "type": "log.message",
                   "name": "クリップボードログ",
                   "params": {
@@ -699,7 +708,7 @@
               ],
               "catch": [
                 {
-                  "id": "stp_054_message",
+                  "id": "stp_055_message",
                   "type": "log.message",
                   "name": "クリップボード不可",
                   "params": {
@@ -711,7 +720,7 @@
             }
           },
           {
-            "id": "stp_063_try",
+            "id": "stp_064_try",
             "type": "control.try",
             "name": "メモ帳を操作して画面を OCR で読む",
             "params": {
@@ -720,7 +729,7 @@
             "blocks": {
               "try": [
                 {
-                  "id": "stp_056_launch",
+                  "id": "stp_057_launch",
                   "type": "desktop.launch",
                   "name": "メモ帳を起動",
                   "params": {
@@ -728,7 +737,7 @@
                   }
                 },
                 {
-                  "id": "stp_057_type",
+                  "id": "stp_058_type",
                   "type": "desktop.type",
                   "name": "本文を入力",
                   "params": {
@@ -741,7 +750,7 @@
                   }
                 },
                 {
-                  "id": "stp_058_screenshot",
+                  "id": "stp_059_screenshot",
                   "type": "desktop.screenshot",
                   "name": "画面を保存",
                   "params": {
@@ -754,7 +763,7 @@
                   }
                 },
                 {
-                  "id": "stp_059_readText",
+                  "id": "stp_060_readText",
                   "type": "desktop.readText",
                   "name": "画面の文字を OCR で読む",
                   "params": {
@@ -767,7 +776,7 @@
                   "saveAs": "ocr"
                 },
                 {
-                  "id": "stp_060_message",
+                  "id": "stp_061_message",
                   "type": "log.message",
                   "name": "OCRログ",
                   "params": {
@@ -775,7 +784,7 @@
                   }
                 },
                 {
-                  "id": "stp_061_closeWindow",
+                  "id": "stp_062_closeWindow",
                   "type": "desktop.closeWindow",
                   "name": "メモ帳を閉じる",
                   "params": {
@@ -789,7 +798,7 @@
               ],
               "catch": [
                 {
-                  "id": "stp_062_message",
+                  "id": "stp_063_message",
                   "type": "log.message",
                   "name": "画面操作不可",
                   "params": {
@@ -801,7 +810,7 @@
             }
           },
           {
-            "id": "stp_067_try",
+            "id": "stp_068_try",
             "type": "control.try",
             "name": "外部コマンドを実行",
             "params": {
@@ -810,7 +819,7 @@
             "blocks": {
               "try": [
                 {
-                  "id": "stp_064_run",
+                  "id": "stp_065_run",
                   "type": "process.run",
                   "name": "バージョン確認",
                   "params": {
@@ -823,7 +832,7 @@
                   "saveAs": "cmd"
                 },
                 {
-                  "id": "stp_065_message",
+                  "id": "stp_066_message",
                   "type": "log.message",
                   "name": "コマンドログ",
                   "params": {
@@ -833,7 +842,7 @@
               ],
               "catch": [
                 {
-                  "id": "stp_066_message",
+                  "id": "stp_067_message",
                   "type": "log.message",
                   "name": "コマンド不可",
                   "params": {
@@ -845,7 +854,7 @@
             }
           },
           {
-            "id": "stp_072_try",
+            "id": "stp_073_try",
             "type": "control.try",
             "name": "OAuth サインインして Web API を呼ぶ",
             "params": {
@@ -854,7 +863,7 @@
             "blocks": {
               "try": [
                 {
-                  "id": "stp_068_signIn",
+                  "id": "stp_069_signIn",
                   "type": "oauth.signIn",
                   "name": "Box にサインイン",
                   "params": {
@@ -865,7 +874,7 @@
                   }
                 },
                 {
-                  "id": "stp_069_request",
+                  "id": "stp_070_request",
                   "type": "http.request",
                   "name": "フォルダー一覧を取得",
                   "params": {
@@ -879,7 +888,7 @@
                   "saveAs": "apiRes"
                 },
                 {
-                  "id": "stp_070_message",
+                  "id": "stp_071_message",
                   "type": "log.message",
                   "name": "APIログ",
                   "params": {
@@ -889,7 +898,7 @@
               ],
               "catch": [
                 {
-                  "id": "stp_071_message",
+                  "id": "stp_072_message",
                   "type": "log.message",
                   "name": "OAuth不可",
                   "params": {
@@ -901,7 +910,7 @@
             }
           },
           {
-            "id": "stp_076_try",
+            "id": "stp_077_try",
             "type": "control.try",
             "name": "Outlook に請求書の下書きを作る（送信はしない）",
             "params": {
@@ -910,7 +919,7 @@
             "blocks": {
               "try": [
                 {
-                  "id": "stp_073_createDraft",
+                  "id": "stp_074_createDraft",
                   "type": "mail.createDraft",
                   "name": "下書き作成",
                   "params": {
@@ -923,7 +932,7 @@
                   "saveAs": "draft"
                 },
                 {
-                  "id": "stp_074_message",
+                  "id": "stp_075_message",
                   "type": "log.message",
                   "name": "下書きログ",
                   "params": {
@@ -933,7 +942,7 @@
               ],
               "catch": [
                 {
-                  "id": "stp_075_message",
+                  "id": "stp_076_message",
                   "type": "log.message",
                   "name": "メール不可",
                   "params": {
@@ -947,7 +956,7 @@
         ],
         "else": [
           {
-            "id": "stp_077_message",
+            "id": "stp_078_message",
             "type": "log.message",
             "name": "実環境スキップ",
             "params": {
@@ -958,7 +967,7 @@
       }
     },
     {
-      "id": "stp_079_message",
+      "id": "stp_080_message",
       "type": "log.message",
       "name": "完了",
       "params": {
