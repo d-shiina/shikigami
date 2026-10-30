@@ -559,45 +559,6 @@
         }
       },
       {
-        "id": "stp_043_if",
-        "type": "control.if",
-        "name": "サイト URL が無ければ同梱のデモサイトを開く",
-        "params": {
-          "condition": "siteUrl == ''"
-        },
-        "blocks": {
-          "then": [
-            {
-              "id": "stp_041_list",
-              "type": "file.list",
-              "name": "同梱のデモサイトを探す",
-              "params": {
-                "folder": "input/web",
-                "pattern": "orders.html"
-              },
-              "saveAs": "webFiles"
-            },
-            {
-              "id": "stp_042_set",
-              "type": "variable.set",
-              "name": "ファイルの URL にする",
-              "params": {
-                "name": "siteUrl",
-                "expression": "'file:///' + regexReplace(replace(dirName(webFiles[0]['path']), '\\\\', '/'), '^/+', '') + '/'"
-              }
-            }
-          ]
-        }
-      },
-      {
-        "id": "stp_044_message",
-        "type": "log.message",
-        "name": "サイトログ",
-        "params": {
-          "message": "受注システム: {{ siteUrl }}"
-        }
-      },
-      {
         "id": "stp_047_try",
         "type": "control.try",
         "name": "出荷サブシナリオを呼ぶ（ブラウザを画面に表示）",
@@ -607,13 +568,53 @@
         "blocks": {
           "try": [
             {
+              "id": "stp_043_if",
+              "type": "control.if",
+              "name": "サイト URL が無ければ同梱のデモサイトを開く",
+              "params": {
+                "condition": "siteUrl == ''"
+              },
+              "blocks": {
+                "then": [
+                  {
+                    "id": "stp_041_list",
+                    "type": "file.list",
+                    "name": "同梱のデモサイトを探す",
+                    "params": {
+                      "folder": "input/web",
+                      "pattern": "orders.html"
+                    },
+                    "saveAs": "webFiles"
+                  },
+                  {
+                    "id": "stp_042_set",
+                    "type": "variable.set",
+                    "name": "ファイルの URL にする",
+                    "params": {
+                      "name": "siteUrl",
+                      "expression": "'file:///' + regexReplace(replace(dirName(webFiles[0]['path']), '\\\\', '/'), '^/+', '') + '/'"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "stp_044_message",
+              "type": "log.message",
+              "name": "サイトログ",
+              "params": {
+                "message": "受注システム: {{ siteUrl }}"
+              }
+            },
+            {
               "id": "stp_045_call",
               "type": "scenario.call",
               "name": "受注システムで出荷",
               "params": {
                 "scenario": "scn_demo_shipping",
                 "inputs": {
-                  "siteUrl": "{{ siteUrl }}"
+                  "siteUrl": "{{ siteUrl }}",
+                  "askHuman": "{{ settings['実環境を使う'] }}"
                 },
                 "outputs": {
                   "shipped": "shipped",
@@ -1183,6 +1184,13 @@
           "description": "出荷した金額の合計（円）"
         },
         {
+          "name": "askHuman",
+          "type": "boolean",
+          "direction": "input",
+          "default": true,
+          "description": "ログインできないとき人の手動ログインを待つ（false の無人実行では失敗にする）"
+        },
+        {
           "name": "orders",
           "type": "array",
           "direction": "local",
@@ -1221,7 +1229,7 @@
           "saveAs": "loggedIn"
         },
         {
-          "id": "stp_010_if",
+          "id": "stp_012_if",
           "type": "control.if",
           "name": "未ログインのときだけログイン",
           "params": {
@@ -1292,24 +1300,47 @@
                       }
                     },
                     {
-                      "id": "stp_007_waitForHuman",
-                      "type": "browser.waitForHuman",
-                      "name": "人がログインするのを待つ",
+                      "id": "stp_009_if",
+                      "type": "control.if",
+                      "name": "人に頼めるときだけ手動ログインを待つ",
                       "params": {
-                        "message": "シークレット「デモ受注システム」が未登録です。ブラウザでユーザー名 demo・パスワード shikigami を入れてログインしてください。",
-                        "until": {
-                          "role": "heading",
-                          "name": "受注一覧"
-                        },
-                        "context": "orders"
+                        "condition": "askHuman"
                       },
-                      "timeoutMs": 300000
+                      "blocks": {
+                        "then": [
+                          {
+                            "id": "stp_007_waitForHuman",
+                            "type": "browser.waitForHuman",
+                            "name": "人がログインするのを待つ",
+                            "params": {
+                              "message": "シークレット「デモ受注システム」でログインできません。ブラウザでユーザー名 demo・パスワード shikigami を入れてログインしてください。",
+                              "until": {
+                                "role": "heading",
+                                "name": "受注一覧"
+                              },
+                              "context": "orders"
+                            },
+                            "timeoutMs": 300000
+                          }
+                        ],
+                        "else": [
+                          {
+                            "id": "stp_008_fail",
+                            "type": "control.fail",
+                            "name": "無人実行ではログインできない",
+                            "params": {
+                              "message": "ログインできません（無人実行のため手動ログインは待ちません）: {{ err['message'] }}",
+                              "code": "LOGIN_UNAVAILABLE"
+                            }
+                          }
+                        ]
+                      }
                     }
                   ]
                 }
               },
               {
-                "id": "stp_008_waitFor",
+                "id": "stp_010_waitFor",
                 "type": "browser.waitFor",
                 "name": "受注一覧の表示を待つ",
                 "params": {
@@ -1323,7 +1354,7 @@
             ],
             "else": [
               {
-                "id": "stp_009_message",
+                "id": "stp_011_message",
                 "type": "log.message",
                 "name": "ログイン省略",
                 "params": {
@@ -1334,7 +1365,7 @@
           }
         },
         {
-          "id": "stp_011_getTable",
+          "id": "stp_013_getTable",
           "type": "browser.getTable",
           "name": "受注一覧を読み取る",
           "params": {
@@ -1347,7 +1378,7 @@
           "saveAs": "orders"
         },
         {
-          "id": "stp_012_message",
+          "id": "stp_014_message",
           "type": "log.message",
           "name": "件数ログ",
           "params": {
@@ -1355,7 +1386,7 @@
           }
         },
         {
-          "id": "stp_018_forEach",
+          "id": "stp_020_forEach",
           "type": "control.forEach",
           "name": "未処理の注文を出荷",
           "params": {
@@ -1365,7 +1396,7 @@
           "blocks": {
             "body": [
               {
-                "id": "stp_017_if",
+                "id": "stp_019_if",
                 "type": "control.if",
                 "name": "未処理だけ出荷",
                 "params": {
@@ -1374,7 +1405,7 @@
                 "blocks": {
                   "then": [
                     {
-                      "id": "stp_013_click",
+                      "id": "stp_015_click",
                       "type": "browser.click",
                       "name": "出荷ボタンを押す",
                       "params": {
@@ -1386,7 +1417,7 @@
                       }
                     },
                     {
-                      "id": "stp_014_waitFor",
+                      "id": "stp_016_waitFor",
                       "type": "browser.waitFor",
                       "name": "出荷完了を待つ",
                       "params": {
@@ -1397,7 +1428,7 @@
                       }
                     },
                     {
-                      "id": "stp_015_set",
+                      "id": "stp_017_set",
                       "type": "variable.set",
                       "name": "出荷済みに追加",
                       "params": {
@@ -1406,7 +1437,7 @@
                       }
                     },
                     {
-                      "id": "stp_016_set",
+                      "id": "stp_018_set",
                       "type": "variable.set",
                       "name": "金額を加算",
                       "params": {
@@ -1421,7 +1452,7 @@
           }
         },
         {
-          "id": "stp_019_close",
+          "id": "stp_021_close",
           "type": "browser.close",
           "name": "ブラウザを閉じる",
           "params": {
@@ -1429,7 +1460,7 @@
           }
         },
         {
-          "id": "stp_020_message",
+          "id": "stp_022_message",
           "type": "log.message",
           "name": "出荷サマリ",
           "params": {

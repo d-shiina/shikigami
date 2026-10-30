@@ -556,45 +556,6 @@
       }
     },
     {
-      "id": "stp_043_if",
-      "type": "control.if",
-      "name": "サイト URL が無ければ同梱のデモサイトを開く",
-      "params": {
-        "condition": "siteUrl == ''"
-      },
-      "blocks": {
-        "then": [
-          {
-            "id": "stp_041_list",
-            "type": "file.list",
-            "name": "同梱のデモサイトを探す",
-            "params": {
-              "folder": "input/web",
-              "pattern": "orders.html"
-            },
-            "saveAs": "webFiles"
-          },
-          {
-            "id": "stp_042_set",
-            "type": "variable.set",
-            "name": "ファイルの URL にする",
-            "params": {
-              "name": "siteUrl",
-              "expression": "'file:///' + regexReplace(replace(dirName(webFiles[0]['path']), '\\\\', '/'), '^/+', '') + '/'"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "stp_044_message",
-      "type": "log.message",
-      "name": "サイトログ",
-      "params": {
-        "message": "受注システム: {{ siteUrl }}"
-      }
-    },
-    {
       "id": "stp_047_try",
       "type": "control.try",
       "name": "出荷サブシナリオを呼ぶ（ブラウザを画面に表示）",
@@ -604,13 +565,53 @@
       "blocks": {
         "try": [
           {
+            "id": "stp_043_if",
+            "type": "control.if",
+            "name": "サイト URL が無ければ同梱のデモサイトを開く",
+            "params": {
+              "condition": "siteUrl == ''"
+            },
+            "blocks": {
+              "then": [
+                {
+                  "id": "stp_041_list",
+                  "type": "file.list",
+                  "name": "同梱のデモサイトを探す",
+                  "params": {
+                    "folder": "input/web",
+                    "pattern": "orders.html"
+                  },
+                  "saveAs": "webFiles"
+                },
+                {
+                  "id": "stp_042_set",
+                  "type": "variable.set",
+                  "name": "ファイルの URL にする",
+                  "params": {
+                    "name": "siteUrl",
+                    "expression": "'file:///' + regexReplace(replace(dirName(webFiles[0]['path']), '\\\\', '/'), '^/+', '') + '/'"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "stp_044_message",
+            "type": "log.message",
+            "name": "サイトログ",
+            "params": {
+              "message": "受注システム: {{ siteUrl }}"
+            }
+          },
+          {
             "id": "stp_045_call",
             "type": "scenario.call",
             "name": "受注システムで出荷",
             "params": {
               "scenario": "scn_demo_shipping",
               "inputs": {
-                "siteUrl": "{{ siteUrl }}"
+                "siteUrl": "{{ siteUrl }}",
+                "askHuman": "{{ settings['実環境を使う'] }}"
               },
               "outputs": {
                 "shipped": "shipped",
