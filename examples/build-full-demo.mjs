@@ -4,14 +4,14 @@
 //   node examples/build-full-demo.mjs
 //
 // The folder (scenario.json, subscenarios/shipping.json and the files under
-// input/ config/ templates/) is the source of truth; the bundle is a single
-// self-contained file that `shikigami run examples/full-demo.shikigami.json`
-// unpacks and runs. Re-run this after editing anything in the folder.
+// input/ config/ templates/) and the demo site in examples/web are the source
+// of truth; the bundle is a single self-contained file that
+// `shikigami run examples/full-demo.shikigami.json` unpacks and runs. Re-run
+// this after editing anything in the folder or the site.
 
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const dir = fileURLToPath(new URL("./full-demo/", import.meta.url));
 const out = fileURLToPath(new URL("./full-demo.shikigami.json", import.meta.url));
 
 // A fixed timestamp keeps the generated bundle stable across rebuilds.
@@ -41,6 +41,17 @@ const files = bundledPaths.map((rel) => ({
   data: readFileSync(new URL(`full-demo/${rel}`, import.meta.url)).toString("base64"),
 }));
 
+// The demo order system (examples/web, the same site `pnpm demo:site` serves)
+// goes in as input/web/, so the browser part can open it as local files and
+// needs no server when the bundle is run from the CLI or Studio.
+for (const name of readdirSync(new URL("./web/", import.meta.url)).sort()) {
+  files.push({
+    scenarioId: main.id,
+    path: `input/web/${name}`,
+    data: readFileSync(new URL(`web/${name}`, import.meta.url)).toString("base64"),
+  });
+}
+
 const bundle = {
   format: "shikigami.scenarioBundle",
   formatVersion: 2,
@@ -52,4 +63,4 @@ const bundle = {
 };
 
 writeFileSync(out, JSON.stringify(bundle, null, 2) + "\n");
-console.log(`wrote ${out} (${files.length} file(s), ${readdirSync(dir).length} folder entries)`);
+console.log(`wrote ${out} (${files.length} file(s))`);

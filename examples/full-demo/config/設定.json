@@ -22,8 +22,8 @@
     {
       "name": "実環境を使う",
       "type": "boolean",
-      "value": false,
-      "description": "true にすると Excel マクロ・Outlook・画面操作/OCR・ダイアログ・HTTP/OAuth など実環境が必要な節も実行する（既定 false）"
+      "value": true,
+      "description": "true（既定）でダイアログ・メモ帳操作/OCR・Excel マクロ・Outlook・OAuth など画面やアプリを使う節も実行する。無人実行や CI では false にする"
     }
   ]
 }
