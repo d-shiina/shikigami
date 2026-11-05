@@ -63,8 +63,22 @@ if (!runtime) throw new Error(`no pinned ONNX Runtime for ${platform}`);
 // Which wheels target/ocr was made from; a new pin makes it stale.
 const stampFile = join(devDir, "bundled-from.txt");
 const stamp = `${MODELS.url}\n${runtime.url}\n`;
-if (process.argv.includes("--if-missing") && existsSync(stampFile) && readFileSync(stampFile, "utf8") === stamp) {
+const needed = ["det.onnx", "rec.onnx", runtime.library.split("/").pop()];
+const ifMissing = process.argv.includes("--if-missing");
+if (
+  ifMissing &&
+  existsSync(stampFile) &&
+  readFileSync(stampFile, "utf8") === stamp &&
+  needed.every((file) => existsSync(join(devDir, file)))
+) {
   process.exit(0);
+}
+if (ifMissing) {
+  // Studio still starts (OCR falls back to Windows OCR) when PyPI is out of reach.
+  process.on("uncaughtException", (error) => {
+    console.warn(`could not fetch the OCR models (${error.message}); OCR falls back to Windows OCR. Run \`pnpm studio:bundle-ocr\` later.`);
+    process.exit(0);
+  });
 }
 
 rmSync(outDir, { recursive: true, force: true });
