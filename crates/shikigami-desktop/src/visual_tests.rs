@@ -824,6 +824,10 @@ fn ctc_never_reads_lookalike_letters() {
     let decoded = crate::paddle::ctc_decode(&scores, 3, classes, &chars, &skip);
     let text: String = decoded.chars.iter().map(|(c, _)| c.as_str()).collect();
     assert_eq!(text, "AI開");
+    // "I" is as sure as "ı" was: a line of just "I" is not dropped as noise.
+    let alone = crate::paddle::ctc_decode(&scores[classes..2 * classes], 1, classes, &chars, &skip);
+    assert_eq!(alone.chars[0].0, "I");
+    assert!((alone.score - 0.98).abs() < 1e-6, "{}", alone.score);
 }
 
 /// Light text on a dark background, in a font whose capital I is a bare

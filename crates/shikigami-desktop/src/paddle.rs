@@ -545,7 +545,16 @@ pub fn ctc_decode(
         if best != 0 && best != previous {
             let c = chars.get(best - 1).cloned().unwrap_or_else(|| " ".into());
             out.push((c, t as f32));
-            confidence.push(score);
+            // A lookalike the model preferred is the same shape: its
+            // probability counts for the letter read instead, or a lone "I"
+            // read as "ı" would be dropped as noise.
+            let lookalikes: f32 = row
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| skip.get(i).copied().unwrap_or(false))
+                .map(|(_, &s)| s)
+                .sum();
+            confidence.push((score + lookalikes).min(1.0));
         }
         previous = best;
     }
