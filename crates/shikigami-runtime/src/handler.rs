@@ -87,6 +87,8 @@ pub struct ActionInput {
     pub timeout_ms: u64,
     pub(crate) emitter: Emitter,
     pub(crate) secrets: Option<Arc<dyn SecretProvider>>,
+    /// The workspace limits which sites steps may reach (`policy.json`).
+    pub(crate) sites_restricted: bool,
 }
 
 impl From<SecretError> for StepError {
@@ -101,6 +103,13 @@ impl From<SecretError> for StepError {
 }
 
 impl ActionInput {
+    /// True when the workspace policy lists the sites steps may reach. The
+    /// Runtime checks the URL a step names; a step that would be sent on to
+    /// another site (an HTTP redirect) must not follow it then.
+    pub fn sites_restricted(&self) -> bool {
+        self.sites_restricted
+    }
+
     /// Writes a message to the run log (secrets are masked automatically).
     pub fn log(&self, level: LogLevel, message: impl Into<String>) {
         self.emitter

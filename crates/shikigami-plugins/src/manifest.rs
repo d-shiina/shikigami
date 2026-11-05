@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
+use shikigami_core::policy::TargetDef;
 use shikigami_core::registry::{
     Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef,
 };
@@ -95,6 +96,10 @@ pub struct StepManifest {
     pub secret_params: Vec<String>,
     #[serde(default)]
     pub resources: Vec<ResourceManifest>,
+    /// Params naming a site or a program, checked against the workspace
+    /// policy (`sites` / `apps`) like `browser.open` and `desktop.launch`.
+    #[serde(default)]
+    pub targets: Vec<TargetDef>,
     #[serde(default)]
     pub default_timeout_ms: Option<u64>,
     /// Marks the step as one to stop using (it keeps working).
@@ -362,6 +367,15 @@ impl Manifest {
                 ResourceManifest::Plugin => ResourceDef::Static(format!("plugin:{}", self.name)),
             });
         }
+        for (i, target) in step.targets.iter().enumerate() {
+            if !properties.contains_key(&target.param) {
+                p.add(
+                    &format!("{at}/targets/{i}/param"),
+                    format!("'{}' is not a param", target.param),
+                    "name a param declared in params.properties",
+                );
+            }
+        }
         if step.label.trim().is_empty() || step.description.trim().is_empty() {
             p.add(
                 at,
@@ -371,6 +385,7 @@ impl Manifest {
         }
 
         Some(StepTypeDef {
+            targets: step.targets.clone(),
             step_type: format!("{}.{}", self.name, step.action),
             category: StepCategory::Other,
             label: step.label.clone(),

@@ -324,6 +324,7 @@ fn def(
     examples: Vec<Value>,
 ) -> StepTypeDef {
     StepTypeDef {
+        targets: Vec::new(),
         step_type: step_type.into(),
         category: StepCategory::File,
         label: label.into(),

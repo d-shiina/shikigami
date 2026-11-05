@@ -10,11 +10,12 @@ use shikigami_runtime::{ActionInput, StepError};
 /// Most of a response body kept in error details.
 const ERROR_BODY_CHARS: usize = 2000;
 
-/// The shared clients: one that follows redirects anywhere, and one for
-/// requests carrying a secret that follows them only within the original
-/// origin (a redirect elsewhere comes back as the 3xx response), so a
-/// token in a custom header never reaches another site.
-pub(crate) fn client(with_secret: bool) -> Result<&'static reqwest::Client, StepError> {
+/// The shared clients: one that follows redirects anywhere, and one that
+/// follows them only within the original origin (a redirect elsewhere comes
+/// back as the 3xx response). The second is for requests carrying a secret, so
+/// a token in a custom header never reaches another site, and for workspaces
+/// that limit the sites steps may reach.
+pub(crate) fn client(same_origin: bool) -> Result<&'static reqwest::Client, StepError> {
     static CLIENTS: OnceLock<Result<[reqwest::Client; 2], String>> = OnceLock::new();
     let clients = CLIENTS.get_or_init(|| {
         // reqwest is built without its own crypto provider (the same
@@ -27,7 +28,7 @@ pub(crate) fn client(with_secret: bool) -> Result<&'static reqwest::Client, Step
                 .build()
                 .map_err(|e| e.to_string())
         };
-        let same_origin = reqwest::redirect::Policy::custom(|attempt| {
+        let within_origin = reqwest::redirect::Policy::custom(|attempt| {
             let first = attempt.previous().first().map(reqwest::Url::origin);
             if attempt.previous().len() > 10 || first != Some(attempt.url().origin()) {
                 attempt.stop()
@@ -37,11 +38,11 @@ pub(crate) fn client(with_secret: bool) -> Result<&'static reqwest::Client, Step
         });
         Ok([
             build(reqwest::redirect::Policy::limited(10))?,
-            build(same_origin)?,
+            build(within_origin)?,
         ])
     });
     match clients {
-        Ok(clients) => Ok(&clients[usize::from(with_secret)]),
+        Ok(clients) => Ok(&clients[usize::from(same_origin)]),
         Err(e) => Err(StepError::permanent("HTTP_UNAVAILABLE", e.clone())),
     }
 }
@@ -197,7 +198,10 @@ pub async fn request(input: &ActionInput) -> Result<Value, StepError> {
         StepError::permanent("INVALID_PARAMS", format!("unknown method {method_name}"))
     })?;
     let with_secret = params.get("auth").is_some_and(|v| !v.is_null());
-    let mut request = client(with_secret)?.request(method, url.clone());
+    // Only the URL the step names was checked against policy.json's sites:
+    // a redirect to another origin comes back as the 3xx response instead.
+    let same_origin = with_secret || input.sites_restricted();
+    let mut request = client(same_origin)?.request(method, url.clone());
     if let Some(headers) = params.get("headers").and_then(Value::as_object) {
         for (name, value) in headers {
             request = request.header(name.as_str(), shikigami_core::expr::to_display(value));
