@@ -6,6 +6,7 @@ import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { AgentApi, AgentEvent, AgentInfo, AgentRequest, LoginEvent } from "./lib/api";
+import { t } from "./lib/i18n";
 
 export type AgentPart =
   | { kind: "text"; text: string }
@@ -100,28 +101,25 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
     const early = new Map<string, AgentEvent[]>();
     // Sends the message already shown as the last person item and adds the reply.
     const dispatch = async (text: string, scenario: AgentRequest["scenario"] | null): Promise<boolean> => {
-      set({ open: true, sending: true });
+      // The reply shows at once, so the person sees the message was taken
+      // while the agent starts (which can take a while: a dev build first
+      // rebuilds the MCP server). It has no turn until the agent is running.
+      const id = nextId();
+      const reply = (change: Partial<Extract<ChatItem, { role: "ai" }>>) =>
+        get().items.map((i) => (i.id === id && i.role === "ai" ? { ...i, ...change } : i));
+      set({
+        open: true,
+        sending: true,
+        items: [...get().items, { role: "ai", id, turnId: "", parts: [], status: "running", message: null, needsLogin: false }],
+      });
       try {
         const turnId = await api.send({ message: text, sessionId: get().info?.remembers ? get().sessionId : null, scenario });
-        set({
-          turnId,
-          sending: false,
-          items: [
-            ...get().items,
-            { role: "ai", id: nextId(), turnId, parts: [], status: "running", message: null, needsLogin: false },
-          ],
-        });
+        set({ turnId, sending: false, items: reply({ turnId }) });
         for (const e of early.get(turnId) ?? []) get().onEvent(e);
         early.delete(turnId);
         return true;
       } catch (e) {
-        set({
-          sending: false,
-          items: [
-            ...get().items,
-            { role: "ai", id: nextId(), turnId: "", parts: [], status: "failed", message: errorText(e), needsLogin: false },
-          ],
-        });
+        set({ sending: false, items: reply({ status: "failed", message: errorText(e) }) });
         return false;
       }
     };
@@ -209,7 +207,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
           return;
         }
         if (!event.ok) {
-          set({ login: { phase: "failed", message: event.message ?? "ログインできませんでした" } });
+          set({ login: { phase: "failed", message: event.message ?? t.agent.loginFailed } });
           return;
         }
         set({ login: { phase: "idle" } });

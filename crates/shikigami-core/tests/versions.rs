@@ -327,7 +327,8 @@ fn shared_workspace_keeps_per_pc_data_outside() {
         shared
             .path()
             .join("scenarios")
-            .join(format!("{}.json", s.id))
+            .join(s.id.as_str())
+            .join("scenario.json")
             .is_file()
     );
     assert!(

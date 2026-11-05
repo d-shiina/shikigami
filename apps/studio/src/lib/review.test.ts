@@ -28,7 +28,7 @@ describe("summarize", () => {
       ["b", "changed"],
     ]);
     expect(s.removed).toEqual([old]);
-    expect(headline(s)).toBe("1手順追加・1手順変更・1手順削除");
+    expect(headline(s)).toBe("1ノード追加・1ノード変更・1ノード削除");
   });
 });
 

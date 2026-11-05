@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { t } from "../lib/i18n";
 
 type Props = { children: ReactNode };
 type State = { error: Error | null };
@@ -27,10 +28,10 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="w-[480px] space-y-3 rounded-[4px] border border-shu-100 bg-sheet p-6 shadow-dialog">
           <div className="flex items-center gap-2">
             <img src="/mark.png" alt="" className="h-6 w-6" />
-            <h1 className="text-lg font-semibold">画面の表示中にエラーが起きました</h1>
+            <h1 className="text-lg font-semibold">{t.crash.title}</h1>
           </div>
           <p className="text-sm text-slate-600">
-            シナリオはCoreに保存されているため失われていません。「再表示」で画面を戻せます。
+            {t.crash.body}
           </p>
           <pre className="max-h-40 overflow-auto rounded border border-slate-200 bg-paper p-2 font-mono text-xs whitespace-pre-wrap text-shu-600">
             {error.message}
@@ -41,14 +42,14 @@ export class ErrorBoundary extends Component<Props, State> {
               onClick={() => this.setState({ error: null })}
               className="rounded-[4px] bg-ink px-3 py-1 text-sm text-paper hover:bg-slate-700"
             >
-              再表示
+              {t.crash.retry}
             </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
               className="rounded-[4px] border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100"
             >
-              再読み込み
+              {t.crash.reload}
             </button>
           </div>
         </div>

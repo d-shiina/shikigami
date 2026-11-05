@@ -25,6 +25,16 @@ describe("sentence", () => {
     expect(targetText({ role: "button", name: "ログイン" })).toBe("「ログイン」ボタン");
     expect(targetText({ text: "次へ", nth: 1 })).toBe("「次へ」の2番目");
   });
+
+  it("describes desktop targets with their window", () => {
+    const win = { title: "Citrix" };
+    expect(targetText({ window: win })).toBe("「Citrix」ウィンドウ");
+    expect(targetText({ window: { process: "billing.exe" }, element: { id: "btnSave" } })).toBe("「billing.exe」の [btnSave]");
+    expect(targetText({ window: win, element: { role: "button", name: "保存" } })).toBe("「Citrix」の「保存」ボタン");
+    expect(targetText({ window: win, image: { path: "C:\\RPA\\images\\保存.png", nth: 0 } })).toBe("「Citrix」の画像 保存.pngの1番目");
+    expect(targetText({ window: win, ocr: { text: "検索" } })).toBe("「Citrix」の文字「検索」");
+    expect(targetText({ window: win, region: { x: 1, y: 2, width: 30, height: 40 } })).toBe("「Citrix」の範囲 (1, 2, 30×40)");
+  });
 });
 
 describe("readable", () => {

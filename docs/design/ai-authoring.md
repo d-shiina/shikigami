@@ -5,7 +5,7 @@
 ## 5 原則
 
 1. 構文を増やさない。同じことは 1 通りで書く。
-2. 離れたステップ同士を名前で参照しない（background/await のようなハンドルは作らない。「先に始めて後で待つ」は `control.parallel` のブランチとブロック末尾の合流で書く）。
+2. 離れたノード同士を名前で参照しない（background/await のようなハンドルは作らない。「先に始めて後で待つ」は `control.parallel` のブランチとブロック末尾の合流で書く）。
 3. 排他・ロックは Runtime が params から推論する。AI に宣言させない。
 4. 検証エラーには直し方（`hint`）を付け、`get_step_schema` はコピーできる記述例（`examples`）を返す。
 5. 結果がタイミングで変わる書き方は、実行時ではなく検証時にエラーにする。
@@ -35,14 +35,14 @@
 - `StepTypeDef` に非公開（スキーマに出ない）の `resources` を持たせる：固定（`desktop.input`）または param 由来（`file` / `window` / `browserContext`）。
 - `ActionHandler::exclusive_resources()` は廃止し、宣言場所を `StepTypeDef` に一本化。
 - Runtime はテンプレート展開後の params からキーを作り、既存のロック（ソート・重複除去済み）で取得。
-- `file:` キーの正規化（Windows）：絶対パス化（存在不要）→ `\\?\` 除去 → 区切りを `\` に → `.`/`..` を畳み込み → 小文字化 → 末尾 `\` 除去。相対パスは検証で `RELATIVE_PATH` warning。
+- `file:` キーの正規化（Windows）：絶対パス化（存在不要）→ `\\?\` 除去 → 区切りを `\` に → `.`/`..` を畳み込み → 小文字化 → 末尾 `\` 除去。相対パスはシナリオのフォルダーから解決し、外（`..`）を指すと検証で `PATH_OUTSIDE_PROJECT` warning。
 - 同じキー文字列を Phase 4 のプロセス間排他（名前付きミューテックス）でもそのまま使う。
 
 ## C. `wait.until`
 
-- Runtime 組み込みの制御ステップ。params：`condition`（式、必須）、`intervalMs`（既定 500）。
-- 任意の `check` ブロックを毎回のポーリング前に実行（ファイル存在確認・要素状態などの通常ステップを `saveAs` で変数に入れ、`condition` で判定）。式言語に副作用のあるプローブ関数は入れない。
-- 上限はステップ共通の `timeoutMs`。専用 timeout は作らない。超えたら `WAIT_TIMEOUT`（`details: { elapsedMs, polls }`）。
+- Runtime 組み込みの制御ノード。params：`condition`（式、必須）、`intervalMs`（既定 500）。
+- 任意の `check` ブロックを毎回のポーリング前に実行（ファイル存在確認・要素状態などの通常ノードを `saveAs` で変数に入れ、`condition` で判定）。式言語に副作用のあるプローブ関数は入れない。
+- 上限はノード共通の `timeoutMs`。専用 timeout は作らない。超えたら `WAIT_TIMEOUT`（`details: { elapsedMs, polls }`）。
 - `retry` 付きは `REDUNDANT_RETRY` warning。
 
 ## D. 現仕様の見直し（優先度順）

@@ -1,49 +1,51 @@
-# 公開版と許可・承認
+# Published versions, permissions and approval
 
-「AI が作り、AI なしで動く」を安心して使うための 2 つの決まりです。
+English | [日本語](ja/policy.md)
 
-1. **無人実行は、人が承認して公開した版だけを動かす。** AI が夜に編集した内容が、翌朝のスケジュール実行でそのまま本番システムを操作することはありません。
-2. **シナリオが触れてよい先と、AI が人の承認なしにしてよいことを、ワークスペースの設定（`policy.json`）で決める。** 検査は Runtime と Core が一律に行うので、Studio・CLI・AI（MCP）のどこから動かしても同じ結果になります。
+Two rules that make "AI builds it, it runs without AI" safe to use:
 
-## 1. 公開版
+1. **Unattended runs execute only the version a person approved and published.** What the AI edited during the night never drives a production system in the next morning's scheduled run.
+2. **The workspace's settings (`policy.json`) decide where scenarios may go and what the AI may do without a person's approval.** The Runtime and Core apply the checks the same way, so the result is the same whether a run starts from Studio, the CLI or the AI (MCP).
 
-### 何が動くか
+## 1. Published versions
 
-| 動かし方 | 動く内容 |
+### What runs
+
+| How it is started | What runs |
 |---|---|
-| `shikigami run <id>`（タスクスケジューラー・バッチなどの無人実行） | **公開版**。呼び出すサブシナリオも、それぞれの公開版 |
-| `shikigami run <id> --draft` | 作業中の内容（明示したときだけ） |
-| `shikigami run <file>` | ファイルに書かれた内容（バンドルを含む） |
-| Studio の「実行」 | 作業中の内容（目の前で試す） |
-| MCP `run_scenario` | 作業中の内容（AI の試し実行）。`published: true` で公開版 |
-| MCP `test_step` | その 1 ステップだけ |
+| `shikigami run <id>` (unattended: Task Scheduler, batch files) | **The published version**. Called subscenarios run their published versions too |
+| `shikigami run <id> --draft` | The work in progress (only when asked for) |
+| `shikigami run <file>` | What the file holds (bundles included) |
+| "Run" in Studio | The work in progress (tried in front of you) |
+| MCP `run_scenario` | The work in progress (the AI's trial run). `published: true` runs the published version |
+| MCP `test_step` | That one node only |
 
-公開版がないシナリオを `shikigami run <id>` すると `NOT_PUBLISHED`、呼び出し先に公開版がないと `SUBSCENARIO_NOT_PUBLISHED` で止まります。作業中の内容に黙って切り替えることはありません。実行レポートの `version` に動いた版の番号が残ります。
+`shikigami run <id>` on a scenario with no published version stops with `NOT_PUBLISHED`, and with `SUBSCENARIO_NOT_PUBLISHED` when a called scenario has none. It never falls back to the work in progress. The run report's `version` records which version ran.
 
-### 公開のしかた
+### How to publish
 
-- **Studio のレビュー台**：AI の変更を見て「✓ 承認して公開」。承認（レビューの記録）と公開を 1 回の操作で行います。現在の内容と同じ版がなければ版を作ってから公開します。
-- **Studio の「版」タブ**：「現在の内容を公開」、または過去の版の「この版を公開」（前の版に戻すときも、作業中の内容を変えずに公開版だけを戻せます）。「公開をやめる」で無人実行を止めます。
-- **CLI**：`shikigami version publish <id> [番号] [--name 名前] [--note メモ]`、`shikigami version unpublish <id>`。`shikigami version list <id>` は公開中の版に `published` を付けます。
+- **Review desk in Studio**: look at the AI's changes and click "✓ Approve and publish". Approving (the review record) and publishing are one action. When no version matches the current content, a version is made first.
+- **"Versions" tab in Studio**: "Publish current content", or "Publish this version" on an earlier version (to go back, you can change only the published version and leave the work in progress as it is). "Unpublish" stops unattended runs.
+- **CLI**: `shikigami version publish <id> [number] [--name NAME] [--note NOTE]`, `shikigami version unpublish <id>`. `shikigami version list <id>` marks the published version with `published`.
 
-公開できるのは人だけです（Studio・CLI）。AI クライアントが Core の公開を呼ぶと `PUBLISH_NOT_ALLOWED` になり、MCP には公開するツール自体がありません。AI は「レビュー台で承認して公開してください」と人に頼みます。
+Only people can publish (Studio and the CLI). An AI client calling Core's publish gets `PUBLISH_NOT_ALLOWED`, and MCP has no tool to publish at all. The AI asks a person to approve and publish on the review desk.
 
-公開の前に、その版が検証を通ること・呼び出すシナリオがすべて公開済みであることを確かめます（呼ばれる側から順に公開します）。
+Before publishing, Shikigami checks that the version validates and that every scenario it calls is published (publish the called ones first).
 
-### 記録
+### Record
 
-公開の記録は `versions/<scenario-id>/publish.jsonl` に追記します（ワークスペースの共有部分なので、同じワークスペースを使う全員が同じ公開版を見ます）。1 行が 1 回の公開・公開停止で、最後の行が今の状態です。
+Publishing is appended to `versions/<scenario-id>/publish.jsonl` (in the shared part of the workspace, so everyone using it sees the same published version). One line is one publish or unpublish; the last line is the current state.
 
 ```json
-{"version":3,"uid":"019a…","at":"2026-10-28T09:12:00Z","by":{"kind":"studio"},"note":"初回"}
-{"version":null,"at":"2026-10-29T08:00:00Z","by":{"kind":"cli"},"note":"止める"}
+{"version":3,"uid":"019a…","at":"2026-10-28T09:12:00Z","by":{"kind":"studio"},"note":"first"}
+{"version":null,"at":"2026-10-29T08:00:00Z","by":{"kind":"cli"},"note":"stop"}
 ```
 
-版そのものは今までどおり不変です。シナリオをゴミ箱に移すと公開も止まります。
+Versions themselves stay immutable. Moving a scenario to the trash unpublishes it too.
 
 ## 2. `policy.json`
 
-ワークスペースのフォルダ直下に置きます（共有部分）。ファイルがなければ下の既定値です。Studio の「許可と承認」で編集できます。CLI は `shikigami policy show`（今効いている内容）、`shikigami policy check`（書き間違いの確認）、`shikigami policy init`（既定値で作る）。
+It sits directly in the workspace folder (the shared part). Without the file the defaults below apply. Edit it in Studio under "Permissions and approval". On the CLI: `shikigami policy show` (what is in effect), `shikigami policy check` (find mistakes), `shikigami policy init` (write the defaults).
 
 ```json
 {
@@ -61,47 +63,47 @@
 }
 ```
 
-| 項目 | 既定 | 意味 |
+| Field | Default | Meaning |
 |---|---|---|
-| `sites` | 空（どこでも） | `browser.open`・`http.request`（と、`targets` で宣言したプラグインのステップ）が開いてよいサイト。オリジン（`https://example.com`、ポート付きも可）か、サブドメインすべての `https://*.example.com`。http と https は別。`about:blank` はいつでも可、`file:` などは不可 |
-| `apps` | 空（どれでも） | `desktop.launch`・`process.run` が起動してよいプログラム。フォルダ付きならそのパスだけ、ファイル名だけならどのフォルダでも。大文字小文字・`/` と `\`・`.exe` の有無は区別しない |
-| `ai.runScenario` | safe/interactive は allow、dangerous は ask | AI の `run_scenario`。実行しうるステップ（呼び出し先を含む）のいちばん高い危険度で決まる |
-| `ai.testStep` | 同上 | AI の `test_step`。ブロックの中のステップと、`scenario.call` の呼び出し先を含めたいちばん高い危険度 |
-| `ai.deleteScenario` | ask | AI の `delete_scenario` |
-| `scenarios.<id>.aiRun` | なし | このシナリオ（と、これを呼ぶ実行・試行）だけ厳しくする。全体の規則より緩くはならない |
-| `scenarios.<id>.unattended` | true | false なら `shikigami run` で動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
+| `sites` | empty (anywhere) | Sites that `browser.open`, `oauth.signIn` (`authorizeUrl` and `tokenUrl`), `http.request` (and plugin nodes that declare `targets`) may open. An origin (`https://example.com`, a port allowed) or every subdomain with `https://*.example.com`. http and https are different. `about:blank` is always allowed, `file:` and the like never |
+| `apps` | empty (any) | Programs that `desktop.launch` and `process.run` may start. With a folder only that path, with a file name alone any folder. Case, `/` vs `\` and a missing `.exe` do not matter |
+| `ai.runScenario` | allow for safe/interactive, ask for dangerous | The AI's `run_scenario`. Decided by the highest risk among the nodes that may run (called scenarios included) |
+| `ai.testStep` | same | The AI's `test_step`. The highest risk including nodes inside blocks and scenarios called with `scenario.call` |
+| `ai.deleteScenario` | ask | The AI's `delete_scenario` |
+| `scenarios.<id>.aiRun` | none | Stricter rules for this scenario only (and runs and tests that call it). Never looser than the global rule |
+| `scenarios.<id>.unattended` | true | When false, `shikigami run` does not run it (`UNATTENDED_NOT_ALLOWED`). Studio still can |
 
-`allow`＝そのまま、`ask`＝人が Studio で承認してから、`deny`＝させない。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
+`allow` = go ahead, `ask` = after a person approves in Studio, `deny` = never. The risk is the node type's `risk` (`safe`: variables, logs, control; `interactive`: operating screens; `dangerous`: deleting and moving files, HTTP to the outside, running programs and so on). Unregistered node types count as `dangerous`.
 
-壊れた `policy.json`（JSON の誤り、知らない項目、オリジンでない `sites`）は「全部許可」にはせず、実行を `POLICY_INVALID` で止めます。設定は実行の開始時に読むので、変更は次の実行から効きます。
+A broken `policy.json` (bad JSON, unknown fields, `sites` that are not origins) never means "allow everything": runs stop with `POLICY_INVALID`. The settings are read when a run starts, so a change applies from the next run.
 
-### サイト・アプリの検査
+### Checking sites and apps
 
-Runtime が、テンプレートを展開した後の params をステップの実行直前に調べます。許可されていなければそのステップは動かず `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED`（`details.allowed` に許可リスト）で失敗します。入力変数や前のステップの結果から URL を組み立てても、許可リストの外には出られません。MCP の `inspect_page` に渡した `url` も同じリストで調べます。
+Right before a node runs, the Runtime checks its params after templates are rendered. If the target is not allowed, the node does not run and fails with `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED` (`details.allowed` holds the allowlist). Building a URL from input variables or an earlier node's result cannot leave the allowlist. The `url` given to MCP's `inspect_page` is checked against the same list.
 
-制約：ページの中のリンクをクリックした先や、リダイレクト先は調べていません（ステップが指定した行き先だけを見ます）。
+Limit: where a clicked link or a redirect leads inside the page is not checked (only the destination the node names).
 
-## 3. AI の操作の承認
+## 3. Approving AI operations
 
-`ask` の操作を AI が呼ぶと、MCP サーバーは実行せずに承認の依頼を作り、`APPROVAL_REQUIRED`（`details.approvalId`）を返します。
+When the AI calls an `ask` operation, the MCP server does not run it. It files a request for approval and returns `APPROVAL_REQUIRED` (`details.approvalId`).
 
-1. Studio の上部に「✋ AI が承認を求めています：ステップを 1 つ試す（file.delete・危険な操作）」が出ます。「内容」で実際に動く内容（ステップ・入力・リビジョン。シークレットの値は伏せ字）、AI の理由（`approvalReason`）を見て「許可する」か「断る」。CLI でも `shikigami approval list` / `approve <id>` / `deny <id>`。
-2. AI は同じ呼び出しに `approvalId` を付けて呼び直します（`approvalWaitMs` で答えを待てます。最初の呼び出しに付けてもよい）。
-3. 許可した内容とまったく同じ操作が **1 回だけ** 動きます。内容が違えば（呼び出し先のシナリオが後から変わった場合も）`APPROVAL_MISMATCH`、使用済みは `APPROVAL_USED`、断られたら `APPROVAL_DENIED`、`deny` の操作は `POLICY_DENIED`。
+1. Studio shows "✋ The AI asks for approval: try one node (file.delete, dangerous)" at the top. "Details" shows exactly what would run (nodes, inputs, revision; secret values masked) and the AI's reason (`approvalReason`). Click "Approve" or "Deny". On the CLI: `shikigami approval list` / `approve <id>` / `deny <id>`.
+2. The AI calls the same tool again with `approvalId` (`approvalWaitMs` waits for the answer; it may also go on the first call).
+3. Exactly the approved operation runs, **once**. Different content (also when a called scenario changed afterwards) gives `APPROVAL_MISMATCH`, a used approval `APPROVAL_USED`, a refusal `APPROVAL_DENIED`, and a `deny` operation `POLICY_DENIED`.
 
-依頼は 30 分、許可は 10 分で失効します。依頼は PC ごとの領域（`approvals/`、MCP の監査ログの隣）に置きます。AI クライアント・MCP サーバー・答える Studio は同じ PC で動く前提です。AI は自分の依頼に答えられません（`APPROVAL_NOT_ALLOWED`）。
+Requests expire after 30 minutes, approvals after 10. Requests live in the per-PC area (`approvals/`, next to MCP's audit log); the AI client, the MCP server and the Studio that answers are expected to run on the same PC. The AI cannot answer its own request (`APPROVAL_NOT_ALLOWED`).
 
-MCP の `get_policy` で AI は今の設定を読めます（書くツールはありません）。
+With MCP's `get_policy` the AI can read the current settings (no tool writes them).
 
-## 4. プラグインのステップ
+## 4. Plugin nodes
 
-マニフェストの `steps[].targets` で、サイトやプログラムを指す param を宣言すると、組込と同じ検査を受けます（[plugins.md](design/plugins.md)）。
+Declare the params that name a site or a program in the manifest's `steps[].targets`, and they get the same checks as built-in nodes ([plugins.md](design/plugins.md), Japanese).
 
 ```json
 "targets": [{ "kind": "site", "param": "baseUrl" }]
 ```
 
-## 5. 守れないこと
+## 5. What this cannot protect against
 
-- 人の操作は人を信用します。Studio・CLI から公開・承認・`policy.json` の編集ができます。AI クライアントに PC のシェル（ファイルの書き込みやコマンドの実行）まで許していると、AI がこれらを直接行うことは防げません。AI クライアントには Shikigami の MCP ツールだけを許してください（Studio の「AI と話す」はそう起動します）。
-- ブラウザ内の遷移（リンク・リダイレクト・フォーム送信先）は `sites` の対象外です。
+- People's actions are trusted. Publishing, approving and editing `policy.json` are possible from Studio and the CLI. If an AI client is also allowed the PC's shell (writing files, running commands), nothing stops the AI from doing these directly. Allow the AI client only Shikigami's MCP tools ("Talk to AI" in Studio starts it that way).
+- Navigation inside the browser (links, redirects, form targets) is outside `sites`.

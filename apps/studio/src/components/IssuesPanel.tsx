@@ -16,7 +16,7 @@ export function IssuesPanel() {
             onClick={() => issue.stepId && goTo(issue.stepId)}
           >
             <div className={`text-xs font-semibold ${issue.severity === "error" ? "text-shu-600" : "text-amber-700"}`}>
-              {issue.severity === "error" ? "エラー" : "警告"} · {issue.code}
+              {issue.severity === "error" ? t.severity.error : t.severity.warning} · {issue.code}
             </div>
             <div className="text-sm">{issue.message}</div>
             {issue.hint && <div className="mt-0.5 text-xs text-slate-600">→ {issue.hint}</div>}

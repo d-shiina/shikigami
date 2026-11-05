@@ -28,6 +28,8 @@ pub const MAX_CALL_DEPTH: usize = 16;
 pub struct Subscenario {
     pub scenario: Scenario,
     pub version: Option<u32>,
+    /// Its folder: relative paths in its steps are resolved from here.
+    pub project_dir: Option<std::path::PathBuf>,
 }
 
 /// The scenario a call step names, if it names one.

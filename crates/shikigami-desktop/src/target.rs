@@ -10,6 +10,9 @@ use crate::roles;
 
 /// `target` of a desktop step: a top-level window, optionally an element
 /// inside it, or (last resort, mouse steps only) a point in the window.
+/// Where the app shows no elements (Citrix, remote desktops, drawn
+/// screens), `image` or `ocr` find the place on the picture of the window,
+/// within `element` or `region` when given.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Target {
@@ -18,7 +21,74 @@ pub struct Target {
     pub element: Option<ElementQuery>,
     #[serde(default)]
     pub point: Option<Point>,
+    /// Part of the window (pixels from its top-left) to look in or read.
+    #[serde(default)]
+    pub region: Option<Region>,
+    #[serde(default)]
+    pub image: Option<ImageQuery>,
+    #[serde(default)]
+    pub ocr: Option<TextQuery>,
+    /// Moves the place found by `image` / `ocr` (from its centre).
+    #[serde(default)]
+    pub offset: Option<Point>,
 }
+
+/// A rectangle of the window, from its top-left corner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Region {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// A picture to find on the screen.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImageQuery {
+    /// PNG file (absolute path), cut from a screenshot of the same app.
+    pub path: String,
+    /// How alike the place must be, 0.5 to 1 (default 0.9).
+    #[serde(default)]
+    pub threshold: Option<f32>,
+    #[serde(default)]
+    pub nth: Option<usize>,
+}
+
+/// Text to find on the screen with OCR.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TextQuery {
+    pub text: String,
+    /// The whole line must be this text.
+    #[serde(default)]
+    pub exact: bool,
+    #[serde(default)]
+    pub nth: Option<usize>,
+    /// OCR language for Windows OCR, e.g. `ja` or `en-US` (default: the
+    /// user's languages).
+    #[serde(default)]
+    pub language: Option<String>,
+    /// `paddle` or `windows` (default: PaddleOCR when installed).
+    #[serde(default)]
+    pub engine: Option<String>,
+}
+
+/// What a step allows in its target besides a window and an element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Allow {
+    /// Window and element only.
+    Plain,
+    /// Also `point`, `image`, `ocr` (desktop.mouseClick).
+    Mouse,
+    /// Also `image` and `ocr` (steps that find a place to act on or wait for).
+    Visual,
+    /// Also `region` (steps that read or save the picture itself).
+    Picture,
+}
+
+pub const DEFAULT_IMAGE_THRESHOLD: f32 = 0.9;
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -63,14 +133,71 @@ pub struct Point {
 }
 
 impl Target {
-    pub fn from_params(params: &Value, key: &str) -> Result<Self, StepError> {
+    pub fn from_params(params: &Value, key: &str, allow: Allow) -> Result<Self, StepError> {
         let value = params
             .get(key)
             .ok_or_else(|| StepError::invalid_params(format!("'{key}' is required")))?;
         let target: Target =
             serde_json::from_value(value.clone()).map_err(StepError::invalid_params)?;
         target.check()?;
+        target.check_allowed(allow)?;
         Ok(target)
+    }
+
+    /// Whether the place is found on the picture of the window.
+    pub fn is_visual(&self) -> bool {
+        self.image.is_some() || self.ocr.is_some()
+    }
+
+    /// The window (and element) alone, for the backend.
+    pub fn window_part(&self) -> Target {
+        Target {
+            element: self.element.clone(),
+            ..Target::window_only(self.window.clone())
+        }
+    }
+
+    pub fn window_only(window: WindowQuery) -> Target {
+        Target {
+            window,
+            element: None,
+            point: None,
+            region: None,
+            image: None,
+            ocr: None,
+            offset: None,
+        }
+    }
+
+    fn check_allowed(&self, allow: Allow) -> Result<(), StepError> {
+        let refuse = |what: &str, steps: &str| {
+            Err(StepError::invalid_params(format!(
+                "target.{what} works only with {steps}"
+            )))
+        };
+        if self.point.is_some() && allow != Allow::Mouse {
+            return refuse("point", "desktop.mouseClick");
+        }
+        let visual_steps =
+            "desktop.mouseClick, desktop.type, desktop.waitFor and desktop.isVisible";
+        if self.image.is_some() && !matches!(allow, Allow::Mouse | Allow::Visual) {
+            return refuse("image", visual_steps);
+        }
+        if self.ocr.is_some() && !matches!(allow, Allow::Mouse | Allow::Visual) {
+            return refuse("ocr", visual_steps);
+        }
+        if self.region.is_some() && allow == Allow::Plain {
+            return refuse(
+                "region",
+                "target.image / target.ocr, desktop.readText and desktop.screenshot",
+            );
+        }
+        if self.region.is_some() && !self.is_visual() && allow != Allow::Picture {
+            return Err(StepError::invalid_params(
+                "target.region narrows target.image or target.ocr; add one of them",
+            ));
+        }
+        Ok(())
     }
 
     fn check(&self) -> Result<(), StepError> {
@@ -104,6 +231,50 @@ impl Target {
             return Err(StepError::invalid_params(
                 "give target.element or target.point, not both",
             ));
+        }
+        if self.point.is_some() && (self.region.is_some() || self.is_visual()) {
+            return Err(StepError::invalid_params(
+                "target.point is a place of its own: leave out region, image and ocr",
+            ));
+        }
+        if self.element.is_some() && self.region.is_some() {
+            return Err(StepError::invalid_params(
+                "give target.element or target.region, not both",
+            ));
+        }
+        if self.image.is_some() && self.ocr.is_some() {
+            return Err(StepError::invalid_params(
+                "give target.image or target.ocr, not both",
+            ));
+        }
+        if self.offset.is_some() && !self.is_visual() {
+            return Err(StepError::invalid_params(
+                "target.offset moves the place found by target.image or target.ocr",
+            ));
+        }
+        if let Some(region) = &self.region
+            && (region.width == 0 || region.height == 0)
+        {
+            return Err(StepError::invalid_params(
+                "target.region needs a width and height",
+            ));
+        }
+        if let Some(image) = &self.image {
+            if image.path.trim().is_empty() {
+                return Err(StepError::invalid_params("target.image.path is empty"));
+            }
+            if let Some(t) = image.threshold
+                && !(0.5..=1.0).contains(&t)
+            {
+                return Err(StepError::invalid_params(
+                    "target.image.threshold must be between 0.5 and 1",
+                ));
+            }
+        }
+        if let Some(ocr) = &self.ocr
+            && ocr.text.trim().is_empty()
+        {
+            return Err(StepError::invalid_params("target.ocr.text is empty"));
         }
         Ok(())
     }

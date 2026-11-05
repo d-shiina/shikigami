@@ -6,6 +6,7 @@
 //! one-to-one to the document Studio and AI clients edit.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -13,6 +14,7 @@ use serde_json::{Map, Value};
 use shikigami_core::call::MAX_CALL_DEPTH;
 use shikigami_core::expr::{self, Expr};
 use shikigami_core::policy::{Policy, TargetDef};
+use shikigami_core::project;
 use shikigami_core::registry::{builtin, control, is_control_type, scenario};
 use shikigami_core::resource::{ResourceDef, resource_keys};
 use shikigami_core::secret::SecretProvider;
@@ -28,6 +30,7 @@ use crate::event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunSnapshot, RunStatus, StepOutcome,
 };
 use crate::handler::{ActionHandler, ActionInput, BoxFuture, StepError};
+use crate::runlog::RunLog;
 
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS: u64 = 500;
@@ -56,6 +59,8 @@ struct EmitterInner {
     tx: mpsc::UnboundedSender<RunEventEnvelope>,
     secrets: RwLock<Vec<String>>,
     snapshot: Arc<Mutex<RunSnapshot>>,
+    /// The readable log in the scenario's `logs/` folder, for full runs.
+    log: Mutex<Option<RunLog>>,
 }
 
 impl Emitter {
@@ -63,6 +68,7 @@ impl Emitter {
         run_id: RunId,
         tx: mpsc::UnboundedSender<RunEventEnvelope>,
         snapshot: Arc<Mutex<RunSnapshot>>,
+        log: Option<RunLog>,
     ) -> Self {
         Self {
             inner: Arc::new(EmitterInner {
@@ -71,6 +77,7 @@ impl Emitter {
                 tx,
                 secrets: RwLock::new(Vec::new()),
                 snapshot,
+                log: Mutex::new(log),
             }),
             call_path: Arc::from([]),
         }
@@ -211,9 +218,25 @@ impl Emitter {
             event,
         };
         *seq += 1;
+        if let Ok(mut log) = self.inner.log.lock()
+            && let Some(log) = log.as_mut()
+        {
+            log.write(&envelope);
+        }
         // The receiver may have been dropped (fire-and-forget runs); the run
         // continues regardless.
         let _ = self.inner.tx.send(envelope);
+    }
+
+    /// Names the run's log after how it ended. Call after `RunFinished`.
+    pub(crate) fn finish_log(&self, status: RunStatus) {
+        let log = match self.inner.log.lock() {
+            Ok(mut log) => log.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
+        };
+        if let Some(log) = log {
+            log.finish(status);
+        }
     }
 
     pub(crate) fn variable_changed(
@@ -347,6 +370,13 @@ pub(crate) struct Executor {
     pub handlers: Arc<HashMap<String, Arc<dyn ActionHandler>>>,
     /// Exclusive resources per step type.
     pub resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
+    /// Params naming files or folders, per step type.
+    pub path_params: Arc<HashMap<String, Vec<String>>>,
+    /// Folder of the scenario this executor runs: relative paths in path
+    /// params are resolved from it.
+    pub project_dir: Option<Arc<Path>>,
+    /// Folders of the scenarios `scenario.call` can run.
+    pub project_dirs: Arc<HashMap<ScenarioId, PathBuf>>,
     /// Step types with their own default timeout.
     pub default_timeouts: Arc<HashMap<String, u64>>,
     pub secrets: Option<Arc<dyn SecretProvider>>,
@@ -361,8 +391,14 @@ pub(crate) struct Executor {
     pub default_retry: Option<RetryPolicy>,
     pub default_on_error: OnError,
     pub resources: Arc<ResourceLocks>,
-    /// Set for interactive runs, on the main line only (not in forks).
+    /// Set for interactive runs, on the main line only (not in parallel
+    /// branches), called scenarios included.
     pub debug: Option<Arc<Debugger>>,
+    /// The called scenario this runs, if any: its steps are the snapshot
+    /// the run was given, not the live revision `debug` holds, so blocks run
+    /// as written (still pausing) and a swapped-in revision waits for the
+    /// caller.
+    pub in_call: Option<ScenarioId>,
     /// How many enclosing steps handle an error (a `try` with a `catch`, a
     /// `wait.until` with `onError: continue`): errors there do not pause.
     pub handled_depth: u32,
@@ -408,6 +444,9 @@ impl Executor {
             run_id: self.run_id.clone(),
             handlers: self.handlers.clone(),
             resource_defs: self.resource_defs.clone(),
+            path_params: self.path_params.clone(),
+            project_dir: self.project_dir.clone(),
+            project_dirs: self.project_dirs.clone(),
             default_timeouts: self.default_timeouts.clone(),
             secrets: self.secrets.clone(),
             vars: self.vars.clone(),
@@ -420,6 +459,7 @@ impl Executor {
             default_on_error: self.default_on_error,
             resources: self.resources.clone(),
             debug: None,
+            in_call: self.in_call.clone(),
             handled_depth: 0,
             library: self.library.clone(),
             target_defs: self.target_defs.clone(),
@@ -467,13 +507,16 @@ impl Executor {
     /// the current revision as they reach it (see `debug`).
     fn sub_block<'a>(&'a mut self, parent: &'a Step, name: &'a str) -> BoxFuture<'a, StepResult> {
         match self.debug.clone() {
-            Some(debug) => self.live_block(
-                debug,
-                BlockKey::Child {
-                    parent: parent.id.clone(),
-                    name: name.to_owned(),
-                },
-            ),
+            Some(debug) => match self.in_call.clone() {
+                Some(scenario) => self.called_block(debug, scenario, parent.block(name)),
+                None => self.live_block(
+                    debug,
+                    BlockKey::Child {
+                        parent: parent.id.clone(),
+                        name: name.to_owned(),
+                    },
+                ),
+            },
             None => self.block(parent.block(name)),
         }
     }
@@ -491,6 +534,11 @@ impl Executor {
             debug.push_frame(key.clone());
             let mut prev: Option<StepId> = None;
             let result = loop {
+                // A revision swapped in while paused inside a call applies
+                // once the run is back in the open scenario.
+                if debug.take_updated() {
+                    self.adopt(&debug.scenario());
+                }
                 let Some(step) = debug.next_step(&key, prev.as_ref()) else {
                     break Ok(Flow::Next);
                 };
@@ -503,6 +551,33 @@ impl Executor {
                         debug.finished(step.id.clone());
                         prev = Some(step.id);
                     }
+                    Ok(Flow::Retry) => {}
+                    other => break other,
+                }
+            };
+            debug.pop_frame();
+            result
+        })
+    }
+
+    /// Runs a block of a called scenario in an interactive run: the steps
+    /// as given, pausing like the caller's, and running a step again when a
+    /// pause says so.
+    fn called_block<'a>(
+        &'a mut self,
+        debug: Arc<Debugger>,
+        scenario: ScenarioId,
+        steps: &'a [Step],
+    ) -> BoxFuture<'a, StepResult> {
+        Box::pin(async move {
+            debug.push_frame(BlockKey::Called { scenario });
+            let mut index = 0;
+            let result = loop {
+                let Some(step) = steps.get(index) else {
+                    break Ok(Flow::Next);
+                };
+                match self.step(step).await {
+                    Ok(Flow::Next) => index += 1,
                     Ok(Flow::Retry) => {}
                     other => break other,
                 }
@@ -531,8 +606,9 @@ impl Executor {
         let Some(debug) = &self.debug else {
             return false;
         };
-        let own_on_error =
-            !is_control_type(&step.step_type) || step.step_type == control::WAIT_UNTIL;
+        let own_on_error = !is_control_type(&step.step_type)
+            || step.step_type == control::WAIT_UNTIL
+            || step.step_type == scenario::CALL;
         debug.pause_on_error()
             && !debug.is_given_up(error)
             && self.handled_depth == 0
@@ -586,7 +662,9 @@ impl Executor {
             command = debug.wait() => command,
         };
         debug.add_paused(duration_ms(waited));
-        let updated = debug.take_updated();
+        // Inside a call the steps and variables are the callee's: the caller
+        // adopts a new revision when it gets back (see `live_block`).
+        let updated = self.in_call.is_none() && debug.take_updated();
         if updated {
             self.adopt(&debug.scenario());
         }
@@ -793,7 +871,7 @@ impl Executor {
             (DebugCommand::Skip, _) => {
                 self.emitter.log(
                     LogLevel::Warn,
-                    format!("失敗したステップを飛ばして続行します: {}", error.message),
+                    format!("失敗したノードを飛ばして続行します: {}", error.message),
                     Some(step.id.clone()),
                 );
                 self.skipped(step);
@@ -1212,6 +1290,17 @@ impl Executor {
 
         let cancel = self.cancel.child_token();
         let mut child = self.fork(cancel.clone());
+        // Interactive runs pause inside the call too. Errors the call step
+        // handles (`onError: continue`, an enclosing `try`) do not pause there.
+        child.debug = self.debug.clone();
+        child.in_call = Some(callee.id.clone());
+        // Its relative paths are its own folder's.
+        child.project_dir = self
+            .project_dirs
+            .get(&callee.id)
+            .map(|dir| Arc::from(dir.as_path()));
+        child.handled_depth =
+            self.handled_depth + u32::from(self.effective_on_error(step) == OnError::Continue);
         child.vars = Map::new();
         child.secret_vars = callee
             .variables
@@ -1230,11 +1319,16 @@ impl Executor {
         crate::init_variables(&callee, &inputs, &mut child)?;
         let initial = child.vars.clone();
 
-        let result = match step.timeout_ms {
-            None => child.block(&callee.steps).await,
+        let body = match child.debug.clone() {
+            Some(debug) => child.called_block(debug, callee.id.clone(), &callee.steps),
+            None => child.block(&callee.steps),
+        };
+        // No timeout counts while paused, so a call that can pause has none.
+        let timeout_ms = step.timeout_ms.filter(|_| self.debug.is_none());
+        let result = match timeout_ms {
+            None => body.await,
             Some(ms) => {
-                let run =
-                    tokio::time::timeout(Duration::from_millis(ms), child.block(&callee.steps));
+                let run = tokio::time::timeout(Duration::from_millis(ms), body);
                 match run.await {
                     Ok(result) => result,
                     Err(_) => Err(Interrupt::Failed(RunError::new(
@@ -1264,6 +1358,9 @@ impl Executor {
             Ok(_) => {}
             Err(Interrupt::Cancelled) => return Err(Interrupt::Cancelled),
             Err(Interrupt::Failed(mut error)) if error.step_id.is_some() => {
+                // Let fail inside (Abort at an error pause there): the call
+                // step must not pause on it again on its way out.
+                let given_up = self.debug.as_ref().is_some_and(|d| d.is_given_up(&error));
                 let mut details = match error.details.take() {
                     Some(Value::Object(map)) => map,
                     Some(other) => Map::from_iter([("cause".to_owned(), other)]),
@@ -1281,6 +1378,9 @@ impl Executor {
                 error.details = Some(Value::Object(details));
                 error.step_id = Some(step.id.clone());
                 error.step_type = Some(step.step_type.clone());
+                if given_up && let Some(debug) = &self.debug {
+                    debug.give_up(error.clone());
+                }
                 return Err(error.into());
             }
             // The call itself failed (timeout): no step inside to point at.
@@ -1350,8 +1450,12 @@ impl Executor {
             )
         })?;
 
-        let params = expr::render_value(&Value::Object(step.params.clone()), &self.vars)
+        let mut params = expr::render_value(&Value::Object(step.params.clone()), &self.vars)
             .map_err(expr_error)?;
+        if let (Some(dir), Some(keys)) = (&self.project_dir, self.path_params.get(&step.step_type))
+        {
+            project::resolve_params(&mut params, keys, dir);
+        }
         // Sites and programs are checked after rendering, so a template
         // cannot lead a step somewhere the workspace does not allow.
         if let Some(defs) = self.target_defs.get(&step.step_type)

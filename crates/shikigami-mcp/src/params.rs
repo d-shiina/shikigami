@@ -350,6 +350,21 @@ pub struct InspectUiParams {
     /// Most elements to list (default 1500).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_nodes: Option<u64>,
+    /// Also read the window's text with OCR: each line with its place in pixels from the window's
+    /// top-left (for apps whose elements are not listed, e.g. Citrix or remote desktops).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ocr: Option<bool>,
+    /// OCR language, e.g. "ja" or "en-US" (default: the user's languages).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// Return the picture of the window to you as an image (default false), to see icons and
+    /// layout when there are no elements, or to choose a region to cut out with
+    /// desktop.screenshot for target.image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<bool>,
+    /// Keep a picture of the window with the observation for the human reviewer (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screenshot: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -361,6 +376,38 @@ pub struct TestStepParams {
     pub step: Step,
     #[serde(flatten)]
     pub approval: ApprovalArgs,
+    /// The scenario the step is for: relative paths (input/orders.xlsx) are
+    /// resolved from its folder, as in a run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenario_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFileRef {
+    pub scenario_id: String,
+    /// Relative to the scenario's folder, e.g. "config/settings.json".
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteProjectFileParams {
+    pub scenario_id: String,
+    /// Where in the scenario's folder, e.g. "config/settings.json",
+    /// "input/受注一覧.xlsx", "templates/請求書.docx".
+    pub path: String,
+    /// The file's text (UTF-8). Give `text` or `copyFrom`, not both.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Absolute path of a file on this PC to copy in (an Excel workbook the
+    /// user named, a template).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy_from: Option<String>,
+    /// Replace an existing file. Without it an existing file gives
+    /// PROJECT_FILE_EXISTS.
+    #[serde(default)]
+    pub overwrite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

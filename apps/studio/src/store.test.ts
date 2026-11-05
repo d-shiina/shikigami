@@ -12,8 +12,8 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
-import { draftFor } from "./components/SecretsDialog";
-import { calledIds, createStudioStore, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
+import { draftFor } from "./components/SecretsPage";
+import { calledIds, createStudioStore, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
 
 const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({
   schemaVersion: 1,
@@ -214,6 +214,23 @@ describe("studio store", () => {
     expect(more.draft.sites).toBe("https://accounts.google.com\nhttps://mail.google.com");
   });
 
+  it("adds requested sites to the sites a secret has now, not to a stale list", async () => {
+    const setSecret = vi.fn(async () => ({}) as never);
+    // The CLI added a site after Studio last listed the secret.
+    const listSecrets = vi.fn(async () => ({
+      secrets: [{ name: "G", username: "me", sites: ["https://a.example", "https://cli.example"], fields: ["username", "password"], updatedAt: "" }] as never,
+      keyLocation: "test",
+      keyMissing: false,
+    }));
+    const store = createStudioStore(fakeApi({ setSecret, listSecrets }));
+    await store.getState().saveSecretAdding({ name: "G", totp: "JBSWY3DPEHPK3PXP" }, ["https://b.example", "https://a.example"]);
+    expect(setSecret).toHaveBeenCalledWith({
+      name: "G",
+      totp: "JBSWY3DPEHPK3PXP",
+      sites: ["https://a.example", "https://cli.example", "https://b.example"],
+    });
+  });
+
   it("offers a reset when the secrets' key is not on this PC", async () => {
     let missing = true;
     const resetSecrets = vi.fn(async () => {
@@ -347,8 +364,96 @@ describe("studio store", () => {
     const run = store.getState().run!;
     expect(run.steps).toEqual({ c1: "running" });
     expect(run.inner.c1).toEqual({ t1: "succeeded" });
+    // A call inside the call keeps its own steps, for when the chart enters it.
+    expect(run.inner["c1/t9"]).toEqual({ u1: "running" });
+    // What an entered call follows: the step started last, not an enclosing loop still running.
+    expect(run.innerLatest).toEqual({ c1: "t1", "c1/t9": "u1" });
     // The callee's variables are not the caller's.
     expect(run.changes.map((c) => c.variable)).not.toContain("scratch");
+  });
+
+  it("follows a run into called scenarios and back out", async () => {
+    const scenarios: Record<string, Scenario> = {
+      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }, { id: "s2", type: "log.message" }]) },
+      scn_b: { ...scenario(1, [{ id: "c2", type: "scenario.call", params: { scenario: "scn_c" } }]), id: "scn_b", name: "B" },
+      scn_c: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
+    };
+    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
+    const store = createStudioStore(fakeApi({ getScenario, listVersions: vi.fn(async () => []) }));
+    await store.getState().open("scn_a");
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z", stepType: "log.message", attempt: 1 };
+    const start = (seq: number, stepId: string, callPath?: string[]) =>
+      store.getState().onRunEvent({ ...base, seq, type: "stepStarted", stepId, ...(callPath ? { callPath } : {}) } as unknown as RunEventEnvelope);
+    store.getState().onRunEvent({ runId: "run_1", at: base.at, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 } as unknown as RunEventEnvelope);
+    start(1, "c1");
+    expect(store.getState().dive).toEqual([]);
+    start(2, "c2", ["c1"]);
+    expect(store.getState().dive).toEqual(["c1"]);
+    start(3, "x", ["c1", "c2"]);
+    expect(store.getState().dive).toEqual(["c1", "c2"]);
+    start(4, "s2");
+    expect(store.getState().dive).toEqual([]);
+    // Not followed, the chart stays where the person put it.
+    store.getState().setFollowRun(false);
+    start(5, "x", ["c1", "c2"]);
+    expect(store.getState().dive).toEqual([]);
+  });
+
+  it("shows a pause inside a call there, and passes the called scenarios' breakpoints", async () => {
+    const scenarios: Record<string, Scenario> = {
+      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }]) },
+      scn_b: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_b", name: "B" },
+    };
+    const run = vi.fn(async () => "run_1");
+    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
+    const store = createStudioStore(fakeApi({ run, getScenario, listVersions: vi.fn(async () => []) }));
+    await store.getState().open("scn_a");
+    store.getState().toggleBreakpoint("x", "scn_b");
+    await store.getState().startRun();
+    expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["scn_b/x"], step: false });
+    store.getState().setFollowRun(false);
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "x", stepType: "log.message", reason: "breakpoint", variables: {}, revision: 1, callPath: ["c1"] } as unknown as RunEventEnvelope);
+    const paused = store.getState().run!;
+    expect(paused.status).toBe("paused");
+    expect(paused.pause).toMatchObject({ stepId: "x", callPath: ["c1"] });
+    expect(paused.inner.c1).toEqual({ x: "paused" });
+    expect(paused.steps).toEqual({});
+    expect(store.getState().dive).toEqual(["c1"]);
+    store.getState().onRunEvent({ ...base, seq: 2, type: "resumed", action: "continue", callPath: ["c1"] } as unknown as RunEventEnvelope);
+    expect(store.getState().run!.status).toBe("running");
+    expect(store.getState().run!.inner.c1).toEqual({});
+    // Paused back in the open scenario, the chart comes back out.
+    store.getState().onRunEvent({ ...base, seq: 3, type: "paused", stepId: "c1", stepType: "scenario.call", reason: "error", variables: {}, revision: 1 } as unknown as RunEventEnvelope);
+    expect(store.getState().dive).toEqual([]);
+  });
+
+  it("enters calls on the chart, nested ones too, and goes back up", async () => {
+    const scenarios: Record<string, Scenario> = {
+      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }]) },
+      scn_b: { ...scenario(1, [{ id: "c2", type: "scenario.call", params: { scenario: "scn_c" } }]), id: "scn_b", name: "B" },
+      scn_c: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
+    };
+    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
+    const store = createStudioStore(fakeApi({ getScenario, listVersions: vi.fn(async () => []) }));
+    await store.getState().open("scn_a");
+    // Called scenarios are loaded however deep they are called.
+    expect(Object.keys(store.getState().called).sort()).toEqual(["scn_b", "scn_c"]);
+    store.getState().select({ kind: "step", stepId: "c1" });
+    store.getState().enterCall("c1");
+    expect(store.getState().dive).toEqual(["c1"]);
+    expect(store.getState().selection).toBeNull();
+    store.getState().enterCall("c2");
+    expect(store.getState().dive).toEqual(["c1", "c2"]);
+    expect(diveChain(store.getState().scenario, store.getState().called, store.getState().dive).map((l) => l.scenario.name)).toEqual(["B", "C"]);
+    // Not a call of the shown level: nothing happens.
+    store.getState().enterCall("x");
+    expect(store.getState().dive).toEqual(["c1", "c2"]);
+    store.getState().leaveCalls(1);
+    expect(store.getState().dive).toEqual(["c1"]);
+    // Picking a step of the open scenario (outline, palette) comes back up.
+    store.getState().goTo("c1");
+    expect(store.getState().dive).toEqual([]);
   });
 
   it("finds the scenarios a scenario calls, nested ones included", () => {

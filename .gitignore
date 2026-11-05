@@ -8,3 +8,6 @@ apps/studio/src-tauri/gen/schemas/
 apps/studio/src-tauri/binaries/
 apps/studio/src-tauri/tauri.release.gen.json
 apps/studio/src-tauri/bundled/
+
+# Generated when running a bundle example from source
+examples/*.files/

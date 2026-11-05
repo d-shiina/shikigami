@@ -2,7 +2,7 @@ import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import type { SecretField } from "../lib/api";
-import { t } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { sentence } from "../lib/sentence";
@@ -11,6 +11,7 @@ import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ActorMark, usePendingReview } from "./Timeline";
 import { VarIcon } from "./VarIcon";
+import { VariablesPanel } from "./VariablesPanel";
 
 type JsonSchema = {
   type?: string;
@@ -98,6 +99,11 @@ function Section({ title, children, aside }: { title: string; children: React.Re
 
 type SecretRef = { secret: string; field: SecretField };
 
+/** The `field` enum of the secret reference in a text-or-secret param schema. */
+function secretFieldsOf(schema: JsonSchema): string[] | undefined {
+  return schema.oneOf?.find((v) => v.properties?.field?.enum)?.properties?.field?.enum?.map(String);
+}
+
 const isSecretRef = (v: unknown): v is SecretRef =>
   typeof v === "object" && v !== null && "secret" in v && "field" in v;
 
@@ -107,10 +113,12 @@ const isSecretRef = (v: unknown): v is SecretRef =>
  */
 function TextOrSecretField({
   label,
+  schema,
   value,
   onChange,
 }: {
   label: string;
+  schema: JsonSchema;
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
@@ -119,7 +127,8 @@ function TextOrSecretField({
   const ref = isSecretRef(value) ? value : null;
   const [mode, setMode] = useState<"text" | "secret">(ref ? "secret" : "text");
   useEffect(() => setMode(ref ? "secret" : "text"), [ref]);
-  const fields: SecretField[] = ["username", "password", "totp"];
+  // The param's schema lists the fields it takes (http.request auth also takes the OAuth access token).
+  const fields = (secretFieldsOf(schema) ?? ["username", "password", "totp"]) as SecretField[];
 
   // A <div>, not Field's <label>: a label would forward clicks to its first button.
   return (
@@ -155,7 +164,7 @@ function TextOrSecretField({
                 {s.name}
               </option>
             ))}
-            {ref && !secrets.some((s) => s.name === ref.secret) && <option value={ref.secret}>{ref.secret}（未登録）</option>}
+            {ref && !secrets.some((s) => s.name === ref.secret) && <option value={ref.secret}>{t.props.unregistered(ref.secret)}</option>}
           </select>
           <select
             className={`${inputClass} w-36`}
@@ -202,14 +211,14 @@ function ParamField({
 }) {
   const label = `${paramLabel(name)}${required ? " *" : ""}`;
   if (secretCapable) {
-    return <TextOrSecretField label={label} value={value} onChange={onChange} />;
+    return <TextOrSecretField label={label} schema={schema} value={value} onChange={onChange} />;
   }
   let hint = schema.description;
   let editor: React.ReactNode;
   if (schema.enum) {
     editor = (
       <select className={inputClass} value={String(value ?? "")} onChange={(e) => onChange(e.target.value || null)}>
-        <option value="">（未設定）</option>
+        <option value="">{t.props.unset}</option>
         {schema.enum.map((v) => (
           <option key={String(v)} value={String(v)}>
             {String(v)}
@@ -221,7 +230,7 @@ function ParamField({
     editor = <input type="checkbox" className="mt-1.5" checked={value === true} onChange={(e) => onChange(e.target.checked)} />;
   } else if (schema.type === "integer" || schema.type === "number" || schema.oneOf) {
     // number | expression string (oneOf), or plain number
-    hint ??= "数値、または式（例: count * 2）";
+    hint ??= t.props.numberHint;
     editor = (
       <CommitInput
         value={value === undefined ? "" : String(value)}
@@ -237,7 +246,7 @@ function ParamField({
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else {
     // Anything else (objects, arrays, untyped values): edit as JSON.
-    hint = "JSON（文字列は {{ 式 }} テンプレートも可）";
+    hint = t.props.jsonHint;
     editor = (
       <CommitInput
         mono
@@ -291,7 +300,7 @@ function ParamsEditor({
         setRaw(!raw);
       }}
     >
-      {raw ? "フォーム" : t.rawJson}
+      {raw ? t.props.form : t.rawJson}
     </button>
   );
 
@@ -347,8 +356,8 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
   const outgoing = links.filter((l) => l.from === stepId);
   if (incoming.length === 0 && outgoing.length === 0) return null;
   const nameOf = (id: string) => {
-    if (id === INPUT_NODE) return "シナリオ入力";
-    if (id === OUTPUT_NODE) return "シナリオ出力";
+    if (id === INPUT_NODE) return t.props.scenarioInput;
+    if (id === OUTPUT_NODE) return t.props.scenarioOutput;
     const s = findStep(scenario?.steps ?? [], id);
     return s?.name || s?.type || id;
   };
@@ -369,14 +378,14 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
     </li>
   );
   return (
-    <Section title="変数のつながり">
+    <Section title={t.props.links}>
       {incoming.length > 0 && (
-        <Row label="受け取る">
+        <Row label={t.props.receives}>
           <ul className="pt-1">{incoming.map((l) => item(l, l.from, "←"))}</ul>
         </Row>
       )}
       {outgoing.length > 0 && (
-        <Row label="渡す">
+        <Row label={t.props.passes}>
           <ul className="pt-1">{outgoing.map((l) => item(l, l.to, "→"))}</ul>
         </Row>
       )}
@@ -410,7 +419,7 @@ function CallEditor({
   return (
     <>
       <Section
-        title="呼ぶシナリオ"
+        title={t.props.callee}
         aside={
           callee && (
             <button
@@ -421,19 +430,19 @@ function CallEditor({
                 void open(target);
               }}
             >
-              開く ↗
+              {t.flow.open} ↗
             </button>
           )
         }
       >
-        <Row label="シナリオ *" hint={target !== "" && !callee ? "このワークスペースに見つかりません" : undefined}>
+        <Row label={`${t.props.scenario} *`} hint={target !== "" && !callee ? t.props.notInWorkspace : undefined}>
           <select
             className={inputClass}
             value={target}
             // Inputs and outputs belong to the old target: start over.
             onChange={(e) => update({ replaceParams: { scenario: e.target.value } })}
           >
-            <option value="">（選んでください）</option>
+            <option value="">{t.props.choose}</option>
             {target !== "" && !choices.some((c) => c.id === target) && <option value={target}>{target}</option>}
             {choices.map((c) => (
               <option key={c.id} value={c.id}>
@@ -444,8 +453,8 @@ function CallEditor({
         </Row>
       </Section>
       {callee && (
-        <Section title="渡す値">
-          {ins.length === 0 && <p className="py-1 text-[11px] text-slate-400">入力はありません</p>}
+        <Section title={t.props.inputs}>
+          {ins.length === 0 && <p className="py-1 text-[11px] text-slate-400">{t.props.noInputs}</p>}
           {ins.map((v) => {
             const value = inputs[v.name];
             const ref = referencedVariables(value, known)[0];
@@ -456,7 +465,7 @@ function CallEditor({
                 label={`${v.name}${required ? " *" : ""}`}
                 title={v.description ?? v.name}
                 socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : TYPE_COLOR[v.type ?? "any"]}
-                hint={v.secret ? "秘密の値：secret 変数から {{ 名前 }} で渡す" : required ? undefined : `省略時: ${JSON.stringify(v.default)}`}
+                hint={v.secret ? t.props.secretInput : required ? undefined : t.props.defaultIs(JSON.stringify(v.default))}
               >
                 <CommitInput
                   mono
@@ -481,8 +490,8 @@ function CallEditor({
         </Section>
       )}
       {callee && (
-        <Section title="受け取る変数">
-          {results.length === 0 && <p className="py-1 text-[11px] text-slate-400">出力はありません</p>}
+        <Section title={t.props.outputs}>
+          {results.length === 0 && <p className="py-1 text-[11px] text-slate-400">{t.props.noOutputs}</p>}
           {results.map((v) => {
             const into = typeof outs[v.name] === "string" ? (outs[v.name] as string) : "";
             return (
@@ -490,7 +499,7 @@ function CallEditor({
                 <CommitInput
                   mono
                   value={into}
-                  placeholder="受け取らない"
+                  placeholder={t.props.ignoreOutput}
                   onCommit={(text) => update({ params: { outputs: { [v.name]: text.trim() === "" ? null : text.trim() } } })}
                 />
               </Row>
@@ -516,7 +525,8 @@ function siblingsFrom(steps: Step[], id: string): Step[] | null {
 }
 
 /** Moves this step (and the next few) into a new scenario called from here. */
-function ExtractSection({ step }: { step: Step }) {
+/** Moves the selected step (and the ones after it) into a new sub-scenario. Opened from the step's tools. */
+export function ExtractForm({ step }: { step: Step }) {
   const scenario = useStudio((s) => s.scenario);
   const extract = useStudio((s) => s.extract);
   const after = useMemo(() => siblingsFrom(scenario?.steps ?? [], step.id ?? "") ?? [step], [scenario, step]);
@@ -529,18 +539,19 @@ function ExtractSection({ step }: { step: Step }) {
   }, [step.id]);
   const picked = after.slice(0, Math.min(count, after.length));
   return (
-    <Section title="サブシナリオにまとめる">
-      <Row label="まとめる範囲" hint={picked.map((s) => s.name || s.type).join(" → ")}>
+    <div className="w-[320px] p-3">
+      <div className="pb-1 text-[11px] font-bold tracking-wider text-slate-600">{t.props.extract}</div>
+      <Row label={t.props.extractRange} hint={picked.map((s) => s.name || s.type).join(" → ")}>
         <select className={inputClass} value={count} onChange={(e) => setCount(Number(e.target.value))}>
           {after.map((_, i) => (
             <option key={i} value={i + 1}>
-              {i === 0 ? "このステップだけ" : `ここから ${i + 1} ステップ`}
+              {i === 0 ? t.props.thisStep : t.props.stepsFromHere(i + 1)}
             </option>
           ))}
         </select>
       </Row>
-      <Row label="新しい名前">
-        <input className={inputClass} value={name} placeholder="例: 請求書を 1 件登録する" onChange={(e) => setName(e.target.value)} />
+      <Row label={t.props.newName}>
+        <input className={inputClass} value={name} placeholder={t.props.newNamePlaceholder} onChange={(e) => setName(e.target.value)} />
       </Row>
       <div className="flex justify-end pt-1">
         <button
@@ -557,17 +568,17 @@ function ExtractSection({ step }: { step: Step }) {
             setBusy(false);
           }}
         >
-          まとめる
+          {t.props.extractButton}
         </button>
       </div>
       <p className="pt-1 text-[10px] leading-snug text-slate-400">
-        選んだステップを新しいシナリオに移し、ここをその呼び出しに置き換えます。読み書きする変数は入力・出力として受け渡すので、動きは変わりません。
+        {t.props.extractHint}
       </p>
-    </Section>
+    </div>
   );
 }
 
-export function PropertyPanel() {
+function StepInspector() {
   const scenario = useStudio((s) => s.scenario);
   const selection = useStudio((s) => s.selection);
   const stepTypes = useStudio((s) => s.stepTypes);
@@ -583,14 +594,8 @@ export function PropertyPanel() {
     return dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys()));
   }, [scenario, stepTypes, vars]);
 
-  if (!scenario || selection?.kind !== "step") {
-    return (
-      <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-xs text-slate-400">
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-lg">◇</span>
-        {t.selectStep}
-      </div>
-    );
-  }
+  if (!scenario) return null;
+  if (selection?.kind !== "step") return <ScenarioInspector />;
   const step = findStep(scenario.steps ?? [], selection.stepId);
   if (!step?.id) return <p className="p-4 text-sm text-slate-400">{t.selectStep}</p>;
   const id = step.id;
@@ -608,9 +613,11 @@ export function PropertyPanel() {
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
             <span className="text-sm font-bold" style={{ color }}>
-              {def?.label ?? step.type}
+              {stepLabel(step.type, def?.label)}
             </span>
-            <span className="ml-auto font-mono text-[10px] text-slate-400">{step.type}</span>
+            <span className="ml-auto font-mono text-[10px] text-slate-400" title={`ID: ${id}`}>
+              {step.type}
+            </span>
           </div>
           <div className="space-y-1 px-3 py-2">
             <div className="text-[13px] leading-snug">
@@ -625,7 +632,7 @@ export function PropertyPanel() {
             <div key={e.revision} className="mt-2 flex items-center gap-2 rounded-[4px] border border-shu-100 bg-shu-50 px-2 py-1.5 text-xs">
               <ActorMark entry={e} size={18} />
               <span className="flex-1">
-                {t.actor[e.actor.kind]}が変更（rev {e.revision}・{t.unreviewed}）
+                {t.props.changedBy(t.actor[e.actor.kind], e.revision)}
               </span>
               <button type="button" className="font-medium hover:underline" onClick={() => approve(e.revision)}>
                 {t.approve}
@@ -651,20 +658,9 @@ export function PropertyPanel() {
           </ul>
         )}
       </div>
-      <Section title="基本">
+      <Section title={t.props.basics}>
         <Row label={t.stepName}>
           <CommitInput value={step.name ?? ""} onCommit={(name) => update({ name })} />
-        </Row>
-        <Row label={t.disabled}>
-          <input
-            type="checkbox"
-            className="mt-1.5"
-            checked={step.disabled ?? false}
-            onChange={(e) => update({ disabled: e.target.checked })}
-          />
-        </Row>
-        <Row label="ID">
-          <span className="block truncate pt-1.5 font-mono text-[10px] text-slate-400">{id}</span>
         </Row>
       </Section>
       {isCall ? (
@@ -673,13 +669,13 @@ export function PropertyPanel() {
         <ParamsEditor step={step} def={def} vars={vars} update={update} />
       )}
       {!isCall && (outs.length > 0 || def?.hasOutput) && (
-        <Section title="出力">
+        <Section title={t.props.output}>
           {def?.hasOutput && (
             <Row label={t.saveAs} socket={step.saveAs ? TYPE_COLOR[vars.get(step.saveAs) ?? "any"] : undefined}>
               <CommitInput
                 mono
                 value={step.saveAs ?? ""}
-                placeholder="変数名"
+                placeholder={t.props.variableName}
                 onCommit={(v) => update({ saveAs: v.trim() === "" ? null : v.trim() })}
               />
             </Row>
@@ -694,13 +690,16 @@ export function PropertyPanel() {
         </Section>
       )}
       <Connections stepId={id} links={links} vars={vars} />
-      <ExtractSection step={step} />
-      {!step.type.startsWith("control.") && (
-        <Section title="実行の設定">
+      <Section title={t.props.execution}>
+        <Row label={t.disabled}>
+          <input type="checkbox" className="mt-1.5" checked={step.disabled ?? false} onChange={(e) => update({ disabled: e.target.checked })} />
+        </Row>
+        {!step.type.startsWith("control.") && (
+          <>
           <Row label={t.timeoutMs}>
             <CommitInput
               value={step.timeoutMs?.toString() ?? ""}
-              placeholder={isCall ? "なし（呼び出し全体の上限）" : "30000"}
+              placeholder={isCall ? t.props.callTimeout : "30000"}
               onCommit={(v) => update({ timeoutMs: v.trim() === "" ? null : Number(v) })}
             />
           </Row>
@@ -722,13 +721,92 @@ export function PropertyPanel() {
               value={step.onError ?? ""}
               onChange={(e) => update({ onError: (e.target.value || null) as StepPatch["onError"] })}
             >
-              <option value="">（シナリオ設定に従う）</option>
+              <option value="">{t.props.followScenario}</option>
               <option value="fail">{t.onErrorFail}</option>
               <option value="continue">{t.onErrorContinue}</option>
             </select>
           </Row>
-        </Section>
-      )}
+          </>
+        )}
+      </Section>
+      <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{id}</p>
     </div>
+  );
+}
+
+/** With nothing selected, the inspector shows the scenario itself: what it is, its variables, how it runs. */
+function ScenarioInspector() {
+  const scenario = useStudio((s) => s.scenario);
+  const updateScenario = useStudio((s) => s.updateScenario);
+  if (!scenario) return null;
+  const settings = scenario.settings ?? {};
+  const setSettings = (patch: Partial<typeof settings>) => updateScenario({ settings: { ...settings, ...patch } });
+  return (
+    <div className="pb-6">
+      <Section title={t.props.basics}>
+        <Row label={t.shell.name}>
+          <CommitInput value={scenario.name} onCommit={(name) => name.trim() && updateScenario({ name: name.trim() })} />
+        </Row>
+        <Row label={t.shell.description}>
+          <CommitInput multiline value={scenario.description ?? ""} placeholder={t.shell.descriptionPlaceholder} onCommit={(description) => updateScenario({ description })} />
+        </Row>
+      </Section>
+      <Section title={t.variables}>
+        <div className="-mx-4 -my-3">
+          <VariablesPanel />
+        </div>
+      </Section>
+      <Section title={t.shell.runSettings}>
+        <Row label={t.shell.defaultTimeout}>
+          <CommitInput
+            value={settings.defaultTimeoutMs?.toString() ?? ""}
+            placeholder="30000"
+            onCommit={(v) => setSettings({ defaultTimeoutMs: v.trim() === "" ? null : Number(v) })}
+          />
+        </Row>
+        <Row label={t.shell.onError}>
+          <select className={inputClass} value={settings.onError ?? ""} onChange={(e) => setSettings({ onError: (e.target.value || null) as typeof settings.onError })}>
+            <option value="">{t.shell.onErrorDefault}</option>
+            <option value="fail">{t.onErrorFail}</option>
+            <option value="continue">{t.onErrorContinue}</option>
+          </select>
+        </Row>
+      </Section>
+      <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{scenario.id}</p>
+    </div>
+  );
+}
+
+/**
+ * The inspector: the properties of what is selected, and nothing else. A
+ * step when one is selected, otherwise the scenario. The path at the top says
+ * which, and steps back up to the scenario.
+ */
+export function Inspector() {
+  const scenario = useStudio((s) => s.scenario);
+  const selection = useStudio((s) => s.selection);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const select = useStudio((s) => s.select);
+  if (!scenario) return null;
+  const step = selection?.kind === "step" ? findStep(scenario.steps ?? [], selection.stepId) : undefined;
+  const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
+  return (
+    <aside className="relative z-[1] flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 px-4 text-[12px]">
+        {step ? (
+          <>
+            {/* The scenario's name is in the title bar; here it is the way back to its properties. */}
+            <button type="button" onClick={() => select(null)} className="shrink-0 text-slate-500 hover:text-ink hover:underline" title={t.shell.toScenario}>
+              {t.shell.scenario}
+            </button>
+            <span className="text-slate-400">›</span>
+            <span className="truncate font-semibold">{step.name || stepLabel(step.type, def?.label)}</span>
+          </>
+        ) : (
+          <span className="font-semibold">{t.shell.scenario}</span>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{step ? <StepInspector /> : <ScenarioInspector />}</div>
+    </aside>
   );
 }

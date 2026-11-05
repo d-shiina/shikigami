@@ -468,6 +468,31 @@
       "class": "write"
     },
     {
+      "name": "delete_project_file",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
       "name": "delete_scenario",
       "annotations": {
         "readOnlyHint": false,
@@ -912,11 +937,55 @@
             ],
             "format": "uint64",
             "minimum": 0
+          },
+          "ocr": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "screenshot": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "type": "object"
       },
       "class": "run"
+    },
+    {
+      "name": "list_project_files",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "read"
     },
     {
       "name": "list_runs",
@@ -1086,6 +1155,30 @@
       "class": "write"
     },
     {
+      "name": "read_project_file",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
       "name": "redo",
       "annotations": {
         "readOnlyHint": false,
@@ -1181,6 +1274,10 @@
               {
                 "type": "string",
                 "const": "totp"
+              },
+              {
+                "type": "string",
+                "const": "accessToken"
               }
             ]
           }
@@ -1490,6 +1587,12 @@
             "minimum": 0
           },
           "approvalReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scenarioId": {
             "type": [
               "string",
               "null"
@@ -1992,6 +2095,9 @@
                     "type": "null"
                   }
                 ]
+              },
+              "keepWork": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false
@@ -2543,6 +2649,9 @@
                     "type": "null"
                   }
                 ]
+              },
+              "keepWork": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false
@@ -2593,6 +2702,47 @@
         }
       },
       "class": "read"
+    },
+    {
+      "name": "write_project_file",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "scenarioId",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "copyFrom": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "class": "write"
     }
   ]
 }

@@ -2,6 +2,7 @@
 //! changes scenarios. Studio (Tauri commands), the MCP server and the CLI are
 //! thin adapters over this type; none of them manipulate documents directly.
 
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use schemars::JsonSchema;
@@ -11,7 +12,8 @@ use crate::call::{self, Subscenario};
 use crate::error::{CoreError, CoreResult};
 use crate::ids::{ObservationId, ScenarioId, StepId};
 use crate::model::{Scenario, ScenarioSummary, Step, VariableDef, now};
-use crate::ops::{self, EditOp};
+use crate::ops::{self, EditOp, ScenarioPatch};
+use crate::project::{self, BundledFile, ProjectFile, ProjectFiles};
 use crate::registry::{RiskLevel, StepRegistry};
 use crate::review::{
     self, Evidence, EvidenceDetail, NewObservation, NewReview, Observation, ObservationContent,
@@ -214,9 +216,13 @@ impl ScenarioService {
             .into_iter()
             .map(|s| {
                 let version = self.matching_version(&s).ok().flatten();
+                // A bundle's own sub-scenarios have no folder here.
+                let project_dir =
+                    (!bundled.iter().any(|b| b.id == s.id)).then(|| self.store.project_dir(&s.id));
                 Subscenario {
                     scenario: s,
                     version,
+                    project_dir,
                 }
             })
             .collect())
@@ -356,7 +362,11 @@ impl ScenarioService {
         copy.settings = source.settings;
         copy.requires = source.requires;
         copy.metadata.tags = source.metadata.tags;
-        self.insert_new(copy, actor, "duplicate scenario", None)
+        let outcome = self.insert_new(copy, actor, "duplicate scenario", None)?;
+        // The copy brings the files it works with, not what runs made.
+        let files = self.bundled_files(id)?;
+        self.write_bundled_files(id, &outcome.scenario.id, &files)?;
+        Ok(outcome)
     }
 
     fn insert_new(
@@ -961,6 +971,7 @@ impl ScenarioService {
                 Some(v) => {
                     queue.extend(call::called_ids(&v.scenario));
                     found.push(Subscenario {
+                        project_dir: Some(self.store.project_dir(&next)),
                         scenario: v.scenario,
                         version: Some(v.number),
                     });
@@ -1276,6 +1287,201 @@ impl ScenarioService {
         })
     }
 
+    // -- project files ----------------------------------------------------
+
+    /// The scenario's folder, where relative paths in its steps point.
+    pub fn project_dir(&self, id: &ScenarioId) -> CoreResult<PathBuf> {
+        if !self.store.exists(id) {
+            return Err(CoreError::ScenarioNotFound(id.clone()));
+        }
+        Ok(self.store.project_dir(id))
+    }
+
+    /// The folders and files of the scenario's folder.
+    pub fn project_files(&self, id: &ScenarioId) -> CoreResult<ProjectFiles> {
+        project::list(id, &self.project_dir(id)?)
+    }
+
+    /// Absolute path of a file (or folder) in the scenario's folder; it need
+    /// not exist.
+    pub fn project_path(&self, id: &ScenarioId, path: &str) -> CoreResult<PathBuf> {
+        Ok(self.project_dir(id)?.join(project::relative_path(path)?))
+    }
+
+    /// Writes a file into the scenario's folder (creating its folders).
+    /// Refuses to replace an existing file unless `overwrite`.
+    pub fn write_project_file(
+        &self,
+        id: &ScenarioId,
+        path: &str,
+        contents: &[u8],
+        overwrite: bool,
+    ) -> CoreResult<ProjectFile> {
+        let target = self.project_path(id, path)?;
+        if target.is_dir() {
+            return Err(CoreError::ProjectFileExists { path: path.into() });
+        }
+        if !overwrite && target.exists() {
+            return Err(CoreError::ProjectFileExists { path: path.into() });
+        }
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        crate::store::write_atomic(&target, contents)?;
+        self.project_file_info(id, path)
+    }
+
+    /// Copies a file from anywhere on the PC into the scenario's folder.
+    pub fn copy_into_project(
+        &self,
+        id: &ScenarioId,
+        from: &Path,
+        path: &str,
+        overwrite: bool,
+    ) -> CoreResult<ProjectFile> {
+        let target = self.project_path(id, path)?;
+        if !from.is_file() {
+            return Err(CoreError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{} is not a file", from.display()),
+            )));
+        }
+        if target.is_dir() || (!overwrite && target.exists()) {
+            return Err(CoreError::ProjectFileExists { path: path.into() });
+        }
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        // Through a temporary file, so a reader never sees half a copy.
+        let dir = target.parent().unwrap_or(&target);
+        let tmp = tempfile::NamedTempFile::new_in(dir)?;
+        std::fs::copy(from, tmp.path())?;
+        tmp.persist(&target).map_err(|e| CoreError::Io(e.error))?;
+        self.project_file_info(id, path)
+    }
+
+    /// Reads a file of the scenario's folder.
+    pub fn read_project_file(&self, id: &ScenarioId, path: &str) -> CoreResult<Vec<u8>> {
+        let target = self.project_path(id, path)?;
+        match std::fs::read(&target) {
+            Ok(bytes) => Ok(bytes),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::IsADirectory
+                ) || target.is_dir() =>
+            {
+                Err(CoreError::ProjectFileNotFound { path: path.into() })
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Creates a folder in the scenario's folder (an existing one is fine).
+    pub fn create_project_folder(&self, id: &ScenarioId, path: &str) -> CoreResult<()> {
+        let target = self.project_path(id, path)?;
+        if target.is_file() {
+            return Err(CoreError::ProjectFileExists { path: path.into() });
+        }
+        Ok(std::fs::create_dir_all(target)?)
+    }
+
+    /// Moves a file or folder of the scenario's folder to the workspace
+    /// trash (`trash/<id>.files.<unix-ts>/<path>`). A standard folder
+    /// (`input/`, …) is emptied instead of removed.
+    pub fn delete_project_file(&self, id: &ScenarioId, path: &str) -> CoreResult<()> {
+        let rel = project::relative_path(path)?;
+        let target = self.project_dir(id)?.join(&rel);
+        if !target.exists() {
+            return Err(CoreError::ProjectFileNotFound { path: path.into() });
+        }
+        let ts = now().unix_timestamp();
+        let trash = self
+            .store
+            .root()
+            .join("trash")
+            .join(format!("{id}.files.{ts}"));
+        let standard = project::FOLDERS.iter().any(|f| rel == Path::new(f.name));
+        if standard {
+            for entry in std::fs::read_dir(&target)? {
+                let entry = entry?;
+                let to = trash.join(&rel).join(entry.file_name());
+                std::fs::create_dir_all(trash.join(&rel))?;
+                std::fs::rename(entry.path(), to)?;
+            }
+            return Ok(());
+        }
+        let to = trash.join(&rel);
+        if let Some(dir) = to.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::rename(&target, &to)?;
+        Ok(())
+    }
+
+    /// Renames (moves) a file or folder within the scenario's folder.
+    pub fn rename_project_file(
+        &self,
+        id: &ScenarioId,
+        from: &str,
+        to: &str,
+    ) -> CoreResult<ProjectFile> {
+        let source = self.project_path(id, from)?;
+        let target = self.project_path(id, to)?;
+        if !source.exists() {
+            return Err(CoreError::ProjectFileNotFound { path: from.into() });
+        }
+        if target.exists() {
+            return Err(CoreError::ProjectFileExists { path: to.into() });
+        }
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::rename(&source, &target)?;
+        self.project_file_info(id, to)
+    }
+
+    fn project_file_info(&self, id: &ScenarioId, path: &str) -> CoreResult<ProjectFile> {
+        let rel = project::relative_path(path)?;
+        let meta = std::fs::metadata(self.project_dir(id)?.join(&rel))?;
+        Ok(ProjectFile {
+            path: project::display_path(&rel),
+            size: meta.len(),
+            modified: meta.modified().ok().map(time::OffsetDateTime::from),
+            in_use: false,
+        })
+    }
+
+    /// The files of a scenario's folder that travel in a bundle.
+    fn bundled_files(&self, id: &ScenarioId) -> CoreResult<Vec<BundledFile>> {
+        use base64::Engine as _;
+        let dir = self.store.project_dir(id);
+        let mut out = Vec::new();
+        for file in project::list(id, &dir)?.files {
+            if !project::is_bundled(&file.path) {
+                continue;
+            }
+            let bytes = std::fs::read(dir.join(project::relative_path(&file.path)?))?;
+            out.push(BundledFile {
+                scenario_id: id.clone(),
+                path: file.path,
+                data: base64::engine::general_purpose::STANDARD.encode(bytes),
+            });
+        }
+        Ok(out)
+    }
+
+    /// Writes the bundle's files of scenario `from` into the folder of `to`
+    /// (the same scenario, or its copy), replacing files of the same name.
+    fn write_bundled_files(
+        &self,
+        from: &ScenarioId,
+        to: &ScenarioId,
+        files: &[BundledFile],
+    ) -> CoreResult<()> {
+        project::unpack(files, from, &self.project_dir(to)?)
+    }
+
     // -- sharing ----------------------------------------------------------
 
     /// Packs a scenario (and optionally its versions) into a bundle for
@@ -1294,13 +1500,23 @@ impl ScenarioService {
         };
         let mut subscenarios = self.called_scenarios(&scenario, &[]);
         subscenarios.iter_mut().for_each(version::strip_secrets);
+        let mut files = self.bundled_files(&scenario.id)?;
+        for sub in &subscenarios {
+            files.extend(self.bundled_files(&sub.id)?);
+        }
         Ok(ScenarioBundle {
             format: BUNDLE_FORMAT.into(),
-            format_version: BUNDLE_FORMAT_VERSION,
+            // An older build would drop the files without a word.
+            format_version: if files.is_empty() {
+                version::BUNDLE_FORMAT_VERSION_WITHOUT_FILES
+            } else {
+                BUNDLE_FORMAT_VERSION
+            },
             exported_at: now(),
             scenario,
             versions,
             subscenarios,
+            files,
         })
     }
 
@@ -1316,6 +1532,7 @@ impl ScenarioService {
         actor: Actor,
     ) -> CoreResult<ImportOutcome> {
         let bundle = parse_bundle(value)?;
+        let files = bundle.files;
         // Sub-scenarios first, so the scenario validates against them.
         let mut subscenarios = Vec::with_capacity(bundle.subscenarios.len());
         for sub in bundle.subscenarios {
@@ -1333,9 +1550,13 @@ impl ScenarioService {
             } else {
                 SubscenarioImport::Kept
             };
+            if mode != SubscenarioImport::Kept {
+                self.write_bundled_files(&id, &id, &files)?;
+            }
             subscenarios.push(ImportedSubscenario { id, name, mode });
         }
         let mut scenario = bundle.scenario;
+        let original_id = scenario.id.clone();
         let exists = scenario.id.is_well_formed() && self.store.exists(&scenario.id);
         let (mode, outcome) = match (exists, on_conflict) {
             (true, None) => {
@@ -1364,6 +1585,7 @@ impl ScenarioService {
                 (ImportMode::Created, self.insert_imported(scenario, actor)?)
             }
         };
+        self.write_bundled_files(&original_id, &outcome.scenario.id, &files)?;
         let versions_added = self.add_versions(&outcome.scenario.id, bundle.versions)?;
         // Validated before the sub-scenarios existed when it was created.
         let outcome = EditOutcome {
@@ -1457,12 +1679,25 @@ impl ScenarioService {
 
         let Commit {
             mut next,
-            applied,
-            inverse,
+            mut applied,
+            mut inverse,
             label,
         } = change(&mut undo, &current)?;
         self.reject_structural_errors(&next)?;
+        let before_sync = next.requires.clone();
         crate::requires::sync(&mut next, self.registry());
+        if next.requires != before_sync {
+            // Core's own change to `requires` is part of the edit, so undo and
+            // redo restore the exact ranges (a hand-set one included).
+            let patch = |requires| EditOp::UpdateScenario {
+                patch: ScenarioPatch {
+                    requires: Some(requires),
+                    ..ScenarioPatch::default()
+                },
+            };
+            applied.push(patch(next.requires.clone()));
+            inverse.insert(0, patch(before_sync));
+        }
         next.id = current.id.clone();
         next.revision = current.revision + 1;
         ops::touch(&mut next.metadata);
@@ -1529,6 +1764,7 @@ fn parse_bundle(value: serde_json::Value) -> CoreResult<ScenarioBundle> {
             scenario: crate::migrate::from_value(value)?,
             versions: Vec::new(),
             subscenarios: Vec::new(),
+            files: Vec::new(),
         });
     }
     let found = value
@@ -1590,7 +1826,7 @@ fn check_revision(expected: Option<u64>, actual: u64) -> CoreResult<()> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::ops::{Position, ScenarioPatch, StepPatch};
+    use crate::ops::{Position, StepPatch};
     use crate::store::ActorKind;
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1839,8 +2075,11 @@ mod tests {
             .edit(&id, None, vec![EditOp::RemoveStep { step_id: step }], mcp())
             .expect("remove");
         assert!(removed.scenario.requires.is_empty());
+        // Undo brings back the hand-set range, not the installed default.
         let undone = svc.undo(&id, None, mcp()).expect("undo");
-        assert_eq!(undone.scenario.requires["plugin:hello"], "^0.3.1");
+        assert_eq!(undone.scenario.requires["plugin:hello"], ">=0.3, <2");
+        let redone = svc.redo(&id, None, mcp()).expect("redo");
+        assert!(redone.scenario.requires.is_empty());
     }
 
     #[test]

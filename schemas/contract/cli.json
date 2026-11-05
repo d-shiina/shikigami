@@ -190,6 +190,60 @@
               "long": "limit"
             }
           ]
+        },
+        {
+          "name": "files",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "add-file",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "file",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "to",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "to"
+            },
+            {
+              "id": "overwrite",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "overwrite",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
         }
       ]
     },

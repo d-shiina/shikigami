@@ -6,7 +6,7 @@
 // tabs. Waiting relies on Playwright's auto-waiting, never on fixed sleeps.
 
 import { chromium } from "playwright-core";
-import type { Browser, BrowserContext, BrowserContextOptions, LaunchOptions, Locator, Page } from "playwright-core";
+import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, LaunchOptions, Locator, Page } from "playwright-core";
 
 import { AdapterError, describe, locate, type Target } from "./targets.ts";
 
@@ -20,6 +20,8 @@ export interface AdapterOptions {
   slowMo?: number;
   /** Upper bound for one operation. */
   timeoutMs?: number;
+  /** Tests: a script plays the person, so steps that need one run headless too. */
+  scriptedHuman?: boolean;
 }
 
 interface Common {
@@ -62,6 +64,12 @@ export function originOf(url: string): string {
 }
 
 const SNAPSHOT_LIMIT = 4000;
+
+/** Shown in place of the redirect URL's page; drops the code from the address bar. */
+const SIGNED_IN_PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>Shikigami</title>
+<style>body{font-family:"Yu Gothic UI","Noto Sans JP",sans-serif;color:#1e2a4a;display:grid;place-items:center;height:90vh;margin:0}</style>
+<script>history.replaceState(null, "", location.pathname)</script></head>
+<body><p>サインインが終わりました。Shikigami が続きを進めます。<br>Signed in. Shikigami takes it from here.</p></body></html>`;
 
 interface SavedSession {
   name: string;
@@ -118,6 +126,8 @@ export class Adapter {
           return await this.isVisible(params);
         case "waitForHuman":
           return await this.waitForHuman(params);
+        case "authorize":
+          return await this.authorize(params);
         case "close":
           return await this.close(params);
         case "closeRun":
@@ -187,9 +197,8 @@ export class Adapter {
     return session;
   }
 
-  private async open(params: Params): Promise<unknown> {
-    const url = String(params.url ?? "");
-    if (!url) throw new AdapterError("INVALID_PARAMS", "url is required");
+  /** The context's session, started (with a new window) on first use. */
+  private async ensureSession(params: Params): Promise<Session> {
     const key = this.key(params);
     let session = this.sessions.get(key);
     if (!session || session.page.isClosed()) {
@@ -201,6 +210,13 @@ export class Adapter {
       session = { context, page, headless, secrets: new Set(), secretFields: [] };
       this.sessions.set(key, session);
     }
+    return session;
+  }
+
+  private async open(params: Params): Promise<unknown> {
+    const url = String(params.url ?? "");
+    if (!url) throw new AdapterError("INVALID_PARAMS", "url is required");
+    const session = await this.ensureSession(params);
     if (typeof params.session === "string" && params.session) session.saveAs = params.session;
     try {
       await session.page.goto(url, { waitUntil: "load", timeout: this.limit(params) });
@@ -394,6 +410,98 @@ export class Adapter {
       throw error;
     }
     return null;
+  }
+
+  /**
+   * OAuth sign-in: opens the authorization page `url` and waits while the
+   * person signs in and allows access. The provider then sends the browser
+   * to `redirectUrl`; that request is caught inside the browser (Chromium's
+   * Fetch domain, which also sees requests a redirect leads to, unlike
+   * Playwright's routes) and answered with a local page, so the site behind
+   * `redirectUrl` never loads or sees the code. Returns the caught URL.
+   */
+  private async authorize(params: Params): Promise<{ url: string }> {
+    const url = String(params.url ?? "");
+    let target: URL;
+    try {
+      target = new URL(String(params.redirectUrl ?? ""));
+    } catch {
+      throw new AdapterError("INVALID_PARAMS", "redirectUrl must be a URL");
+    }
+    const session = await this.ensureSession(params);
+    if (session.headless && !this.options.scriptedHuman) {
+      throw new AdapterError("HUMAN_REQUIRED", "signing in needs a person, but the browser runs without a window", {
+        details: {
+          hint: "Run once with a visible browser (SHIKIGAMI_BROWSER_HEADLESS unset) so the person can sign in. The tokens are kept, so later unattended runs need nobody.",
+        },
+      });
+    }
+    const matches = (candidate: string): boolean => {
+      try {
+        const u = new URL(candidate);
+        return u.origin === target.origin && u.pathname === target.pathname;
+      } catch {
+        return false;
+      }
+    };
+    let resolve!: (url: string) => void;
+    const caught = new Promise<string>((r) => (resolve = r));
+    const watched: CDPSession[] = [];
+    const watch = async (page: Page): Promise<void> => {
+      const cdp = await session.context.newCDPSession(page);
+      watched.push(cdp);
+      cdp.on("Fetch.requestPaused", (event: { requestId: string; request: { url: string } }) => {
+        const answer = matches(event.request.url)
+          ? cdp.send("Fetch.fulfillRequest", {
+              requestId: event.requestId,
+              responseCode: 200,
+              responseHeaders: [{ name: "Content-Type", value: "text/html; charset=utf-8" }],
+              body: Buffer.from(SIGNED_IN_PAGE).toString("base64"),
+            })
+          : cdp.send("Fetch.continueRequest", { requestId: event.requestId });
+        if (matches(event.request.url)) resolve(event.request.url);
+        answer.catch(() => {});
+      });
+      await cdp.send("Fetch.enable", { patterns: [{ urlPattern: `${target.origin}/*`, requestStage: "Request" }] });
+    };
+    const onPage = (page: Page): void => {
+      watch(page).catch(() => {});
+    };
+    session.context.on("page", onPage);
+    const timeout = this.limit(params);
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      for (const page of session.context.pages()) await watch(page);
+      await session.page.bringToFront().catch(() => {});
+      // The provider may send the browser straight back (already allowed),
+      // so the navigation and the catch race.
+      const navigation: Promise<unknown> = session.page.goto(url, { waitUntil: "commit", timeout }).catch((error: Error) => {
+        throw new AdapterError("NAVIGATION_FAILED", `could not open the sign-in page: ${error.message.split("\n")[0]}`, {
+          retryable: true,
+          details: { url: originOf(url) },
+        });
+      });
+      navigation.catch(() => {});
+      const expired = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new AdapterError("HUMAN_TIMEOUT", `nobody finished signing in within ${Math.round(timeout / 1000)} s`, {
+                details: {
+                  hint: "Raise the step's timeoutMs. If the person did finish, check that redirectUrl is exactly the redirect URI registered at the provider.",
+                },
+              }),
+            ),
+          timeout,
+        );
+      });
+      await Promise.race([navigation, caught, expired]);
+      return { url: await Promise.race([caught, expired]) };
+    } finally {
+      clearTimeout(timer);
+      session.context.off("page", onPage);
+      for (const cdp of watched) await cdp.detach().catch(() => {});
+    }
   }
 
   /** Accessibility snapshot for AI clients choosing targets. */

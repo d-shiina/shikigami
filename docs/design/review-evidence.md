@@ -6,7 +6,7 @@
 
 | 種類 | いつ記録されるか | 置き場所 |
 |---|---|---|
-| 変更の説明（`summary`）と触ったステップ（`stepIds`） | 編集ツールの呼び出しごと | `history/<scenario-id>/journal.jsonl`（従来のジャーナルに欄を追加） |
+| 変更の説明（`summary`）と触ったノード（`stepIds`） | 編集ツールの呼び出しごと | `history/<scenario-id>/journal.jsonl`（従来のジャーナルに欄を追加） |
 | テスト実行（`testRun`） | MCP の `run_scenario` が終わったとき | `history/<scenario-id>/evidence.jsonl` |
 | 画面の証跡（`observation`） | `inspect_page` / `inspect_ui`（ウィンドウ指定時）/ `test_step` のたびに保存し、編集が `observations` で名指ししたときにその版と手順に紐づける | 本体：`observations/<obs-id>/`（`observation.json`・`tree.txt`・`screenshot.jpg`）。紐づけ：`evidence.jsonl` |
 | レビュー（`review`） | Studio で承認・差し戻ししたとき | `history/<scenario-id>/evidence.jsonl` |
@@ -62,7 +62,7 @@ Studio 用の Tauri コマンド：`review_timeline(id, since?)`、`submit_revie
 
 - `summary` は前後の空白を除き、2000 文字で切る。空なら記録しない。
 - `observations` に存在しない ID があれば編集全体を `OBSERVATION_NOT_FOUND` で拒否する（何も変わらない）。紐づけは編集の確定後に行う。
-- 差し戻し（`rejected`）には理由かステップへの指摘が 1 つ以上必要（`INVALID_EDIT`）。レビューは現在のリビジョンに対してだけ受け付ける（古ければ `REVISION_CONFLICT`）。指摘先のステップが無ければ `STEP_NOT_FOUND`。
+- 差し戻し（`rejected`）には理由かノードへの指摘が 1 つ以上必要（`INVALID_EDIT`）。レビューは現在のリビジョンに対してだけ受け付ける（古ければ `REVISION_CONFLICT`）。指摘先のノードが無ければ `STEP_NOT_FOUND`。
 - テスト実行の記録は MCP から始めた実行だけ（Studio・CLI の実行は従来どおり `runs/` のみ）。
 
 ## サイズとシークレット

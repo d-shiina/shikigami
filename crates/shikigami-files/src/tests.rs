@@ -19,9 +19,9 @@ fn examples_validate() {
     let runtime = Runtime::builder().adapter(&FileAdapter::new()).build();
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 12);
+    assert_eq!(defs.len(), 13);
     for def in &defs {
-        assert!(def.step_type.starts_with("file."));
+        assert!(def.step_type.starts_with("file.") || def.step_type == "config.read");
         assert!(!def.examples.is_empty(), "{}", def.step_type);
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();

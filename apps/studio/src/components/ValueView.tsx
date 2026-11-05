@@ -2,6 +2,7 @@
 // of records as a table with one row per record, a plain list as numbered
 // lines. Display only.
 import type { VariableChange } from "../store";
+import { locale, t } from "../lib/i18n";
 
 const MAX_ROWS = 8;
 const MAX_COLS = 6;
@@ -11,15 +12,15 @@ const isRecord = (v: unknown): v is Plain => typeof v === "object" && v !== null
 
 /** One value on one line: numbers grouped, lists counted, records as "key: value". */
 export function shortText(v: unknown): string {
-  if (v === null || v === undefined) return "（なし）";
-  if (typeof v === "number") return v.toLocaleString("ja-JP");
-  if (typeof v === "string") return v === "" ? "（空）" : v;
+  if (v === null || v === undefined) return t.values.none;
+  if (typeof v === "number") return v.toLocaleString(locale === "ja" ? "ja-JP" : "en-US");
+  if (typeof v === "string") return v === "" ? t.values.empty : v;
   if (typeof v === "boolean") return v ? "true" : "false";
-  if (Array.isArray(v)) return `${v.length}件`;
+  if (Array.isArray(v)) return t.values.items(v.length);
   if (isRecord(v)) {
     return Object.entries(v)
       .map(([k, x]) => `${k}: ${shortText(x)}`)
-      .join("、");
+      .join(t.listSep);
   }
   return String(v);
 }
@@ -34,7 +35,7 @@ function Cell({ value }: { value: unknown }) {
 }
 
 function More({ count }: { count: number }) {
-  return count > 0 ? <div className="mt-0.5 text-[10px] text-slate-400">…ほか {count} 件</div> : null;
+  return count > 0 ? <div className="mt-0.5 text-[10px] text-slate-400">{t.values.more(count)}</div> : null;
 }
 
 export function ValueView({ value }: { value: unknown }) {
@@ -42,7 +43,7 @@ export function ValueView({ value }: { value: unknown }) {
     const cols = [...new Set(value.flatMap((r) => Object.keys(r)))].slice(0, MAX_COLS);
     return (
       <div>
-        <div className="mb-0.5 text-[10px] text-slate-400">{value.length}件</div>
+        <div className="mb-0.5 text-[10px] text-slate-400">{t.values.items(value.length)}</div>
         <table className="border-collapse text-[11px]">
           <thead>
             <tr className="border-b border-slate-200 text-left text-[10px] text-slate-500">
@@ -70,10 +71,10 @@ export function ValueView({ value }: { value: unknown }) {
     );
   }
   if (Array.isArray(value)) {
-    if (value.length === 0) return <div className="text-slate-400">（0件）</div>;
+    if (value.length === 0) return <div className="text-slate-400">{t.values.zero}</div>;
     return (
       <div>
-        <div className="mb-0.5 text-[10px] text-slate-400">{value.length}件</div>
+        <div className="mb-0.5 text-[10px] text-slate-400">{t.values.items(value.length)}</div>
         <ol className="space-y-0.5">
           {value.slice(0, MAX_ROWS).map((x, i) => (
             <li key={i} className="flex gap-2">

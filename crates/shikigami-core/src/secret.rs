@@ -30,9 +30,15 @@ pub enum SecretField {
     Password,
     /// The current one-time code computed from the stored TOTP key (MFA).
     Totp,
+    /// The OAuth access token `oauth.signIn` obtained with this secret's
+    /// client ID and secret. Only `http.request` `auth` takes it: it is
+    /// refreshed there when it expires.
+    AccessToken,
 }
 
 impl SecretField {
+    /// The fields a person registers (the access token is obtained by
+    /// `oauth.signIn`).
     pub const ALL: [SecretField; 3] = [Self::Username, Self::Password, Self::Totp];
 
     pub fn as_str(self) -> &'static str {
@@ -40,6 +46,7 @@ impl SecretField {
             Self::Username => "username",
             Self::Password => "password",
             Self::Totp => "totp",
+            Self::AccessToken => "accessToken",
         }
     }
 
@@ -110,6 +117,8 @@ pub struct SecretError {
     /// The secret the error is about, so Studio can offer to register or
     /// fix it.
     pub secret: Option<String>,
+    /// The field that is missing (SECRET_FIELD_EMPTY).
+    pub field: Option<SecretField>,
 }
 
 impl SecretError {
@@ -119,6 +128,7 @@ impl SecretError {
             message: message.into(),
             hint: None,
             secret: None,
+            field: None,
         }
     }
 
@@ -132,6 +142,11 @@ impl SecretError {
         self
     }
 
+    pub fn with_field(mut self, field: SecretField) -> Self {
+        self.field = Some(field);
+        self
+    }
+
     pub fn details(&self) -> Option<Value> {
         let mut details = serde_json::Map::new();
         if let Some(hint) = &self.hint {
@@ -139,6 +154,9 @@ impl SecretError {
         }
         if let Some(name) = &self.secret {
             details.insert("secret".into(), json!(name));
+        }
+        if let Some(field) = self.field {
+            details.insert("field".into(), json!(field.as_str()));
         }
         (!details.is_empty()).then_some(Value::Object(details))
     }
@@ -164,6 +182,29 @@ pub trait SecretProvider: Send + Sync {
     fn load_session(&self, name: &str) -> Result<Option<Value>, SecretError>;
 
     fn save_session(&self, name: &str, state: &Value) -> Result<(), SecretError>;
+
+    /// OAuth tokens `oauth.signIn` saved for a secret (see
+    /// `shikigami-system`'s `oauth` module for the shape).
+    fn load_oauth_tokens(&self, name: &str) -> Result<Option<Value>, SecretError> {
+        let _ = name;
+        Ok(None)
+    }
+
+    /// Holds off other processes sharing the store (Studio, the CLI, the
+    /// MCP server) from refreshing the tokens of `name` until the guard is
+    /// dropped. Blocks while another one holds it.
+    fn lock_oauth_tokens(&self, name: &str) -> Result<Box<dyn Send>, SecretError> {
+        let _ = name;
+        Ok(Box::new(()))
+    }
+
+    fn save_oauth_tokens(&self, name: &str, tokens: &Value) -> Result<(), SecretError> {
+        let _ = (name, tokens);
+        Err(SecretError::new(
+            "SECRETS_UNAVAILABLE",
+            "this secret store cannot keep OAuth tokens",
+        ))
+    }
 }
 
 /// JSON Schema of a param that takes literal text, a template, or a secret
@@ -174,6 +215,24 @@ pub fn text_or_secret_schema(description: &str) -> Value {
         "oneOf": [
             { "type": "string" },
             secret_ref_schema(),
+        ]
+    })
+}
+
+/// Like [`text_or_secret_schema`], for params that also take the OAuth
+/// access token of a secret (`http.request` `auth`).
+pub fn token_or_secret_schema(description: &str) -> Value {
+    let mut reference = secret_ref_schema();
+    reference["properties"]["field"] =
+        json!({ "enum": ["password", "accessToken", "username", "totp"] });
+    reference["description"] = json!(
+        "A registered secret, e.g. { \"secret\": \"受注API\", \"field\": \"password\" }, or the OAuth access token obtained by oauth.signIn: { \"secret\": \"Box\", \"field\": \"accessToken\" }."
+    );
+    json!({
+        "description": description,
+        "oneOf": [
+            { "type": "string" },
+            reference,
         ]
     })
 }

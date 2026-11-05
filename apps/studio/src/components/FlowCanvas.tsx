@@ -12,6 +12,7 @@ import {
   type Node,
   type NodeProps,
   NodeToolbar,
+  Panel,
   Position,
   ReactFlow,
   useReactFlow,
@@ -23,7 +24,8 @@ import { useStudio } from "../context";
 import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
 import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
-import { t } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
+import { useProjectMaybe } from "../project";
 import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
@@ -45,10 +47,11 @@ import {
 } from "../lib/nodeRows";
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence } from "../lib/sentence";
-import { revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
+import { callKey, diveChain, type DiveLevel, revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
+import { StepTools } from "./StepTools";
 import { valuesSeenBy } from "../lib/runValues";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
@@ -57,6 +60,8 @@ import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 type CallView = {
   /** The call step itself. */
   stepId: string;
+  /** `callKey` of the call step's path from the open scenario. */
+  key: string;
   /** Id of the called scenario (empty when not chosen yet). */
   target: string;
   /** The called scenario, when it exists in this workspace. */
@@ -70,7 +75,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; breakpoint: boolean; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -79,10 +84,12 @@ const MAX_INNER_LINES = 24;
 const MIN_READABLE_ZOOM = 0.85;
 /** Width of the outline panel plus its gap, from the canvas's left edge. */
 const OUTLINE_W = 284;
+/** The project panel over the left of the chart, with its margins. */
+const PROJECT_W = 288;
 
-const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: string }> = {
-  added: { border: "border-moegi-500", tag: "bg-moegi-500", label: "AIが追加" },
-  changed: { border: "border-accent-500", tag: "bg-accent-500", label: "AIが変更" },
+const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: () => string }> = {
+  added: { border: "border-moegi-500", tag: "bg-moegi-500", label: () => t.flow.aiAdded },
+  changed: { border: "border-accent-500", tag: "bg-accent-500", label: () => t.flow.aiChanged },
 };
 
 /** Which way the chart runs, for rows deciding whether to show chips. */
@@ -96,15 +103,15 @@ const RUN_STYLE: Record<StepRunState, string> = {
 };
 
 /** Click target left of a step's header: a red dot when the run pauses before it. */
-function BreakpointDot({ stepId, on }: { stepId: string; on: boolean }) {
+function BreakpointDot({ stepId, on, owner }: { stepId: string; on: boolean; owner: string }) {
   const toggle = useStudio((s) => s.toggleBreakpoint);
   return (
     <button
       type="button"
-      title={on ? "ブレークポイントを外す (F9)" : "ここで一時停止する（ブレークポイント, F9）"}
+      title={on ? t.flow.breakpointOff : t.flow.breakpointOn}
       onClick={(e) => {
         e.stopPropagation();
-        toggle(stepId);
+        toggle(stepId, owner);
       }}
       className={`nodrag absolute -top-[7px] -left-[7px] z-10 h-[14px] w-[14px] rounded-full border-2 ${
         on ? "border-sheet bg-shu-500 shadow" : "border-transparent bg-transparent group-hover:border-shu-500/60 group-hover:bg-sheet"
@@ -126,7 +133,7 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   return (
     <div title={scope.title} className="flex items-center gap-1.5 rounded-[3px] border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-raised">
       <ActorMark entry={entry} size={18} />
-      <span className="text-slate-600">{actorLabel(entry)}の変更</span>
+      <span className="text-slate-600">{t.flow.changeBy(actorLabel(entry))}</span>
       <button type="button" onClick={() => approve(entry.revision)} className="rounded-[3px] bg-ink px-2 py-0.5 text-paper hover:bg-slate-700">
         {t.approve}
         {scope.suffix}
@@ -159,7 +166,8 @@ function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; co
   );
 }
 
-const FLOW_HANDLE = "!border-0 !bg-slate-300";
+// Flow handles only anchor the lines: nothing connects by hand, so they are not drawn.
+const FLOW_HANDLE = "!h-px !min-h-0 !w-px !min-w-0 !border-0 !bg-transparent";
 
 /** Where step-to-step flow enters (top) and leaves (bottom) a node. */
 function FlowHandles() {
@@ -193,10 +201,38 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
  * A step-to-step edge. Its block label ("forEach：…", "catch：…") sits just
  * above the step it leads to, not halfway, where sibling edges share a line.
  */
-function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd }: EdgeProps) {
-  // Top to bottom, turn right below the source so the label has the run down to the step to itself.
-  const centerY = label && sourcePosition === Position.Bottom ? sourceY + 12 : undefined;
-  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY });
+function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
+  const detourX = (data as { detourX?: number } | undefined)?.detourX;
+  if (detourX !== undefined) {
+    // Around a loop's body: out of the step, along to the side of the body,
+    // then back up into the loop's head (a back edge) or down into the next step.
+    const r = 4;
+    const outY = sourceY + 12;
+    const back = targetY < sourceY;
+    const toward = (from: number, to: number) => (to > from ? 1 : -1);
+    const sx = toward(sourceX, detourX);
+    const path = back
+      ? [
+          `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
+          `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
+          `V ${targetY + 12 + r} Q ${detourX} ${targetY + 12} ${detourX - sx * r} ${targetY + 12}`,
+          `H ${targetX + NODE_W / 2 + 2}`,
+        ].join(" ")
+      : [
+          `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
+          `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY + r}`,
+          `V ${targetY - 16 - r} Q ${detourX} ${targetY - 16} ${detourX - sx * r} ${targetY - 16}`,
+          `H ${targetX - toward(targetX, detourX) * r} Q ${targetX} ${targetY - 16} ${targetX} ${targetY - 16 + r}`,
+          `V ${targetY}`,
+        ].join(" ");
+    return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+  }
+  // Splits turn just below their step; joins turn just above the next step, so
+  // branches of different lengths meet on one line instead of at staggered heights.
+  const down = sourcePosition === Position.Bottom && targetY > sourceY;
+  const centerY = down && label ? sourceY + 12 : down && Math.abs(sourceX - targetX) > 1 ? targetY - 16 : undefined;
+  // The offset must not reach past the turn, or the line runs on below it and doubles back.
+  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset: centerY === undefined ? 20 : 12, borderRadius: 4 });
   return (
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
@@ -241,23 +277,23 @@ function ValuePopover({ name, color, values, side, anchor }: { name: string; col
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
         <span className="font-mono font-semibold">{name}</span>
         <span className="text-slate-400">
-          {side === "in" ? "このステップが受け取った値" : "このステップが書き込んだ値"}
-          {many && `（${values.length}回実行）`}
+          {side === "in" ? t.flow.valuesIn : t.flow.valuesOut}
+          {many && t.flow.runs(values.length)}
         </span>
       </div>
       {values.length === 0 ? (
-        <div className="mt-0.5 text-slate-400">実行すると、ここに値が出ます</div>
+        <div className="mt-0.5 text-slate-400">{t.flow.valuesEmpty}</div>
       ) : (
         <ol className="mt-1.5 space-y-1">
           {values.slice(0, MAX_RUNS).map((w, i) => (
             <li key={`${w.seq}-${i}`} className="flex items-start gap-2">
-              {many && <span className="w-9 shrink-0 pt-1 text-[10px] text-slate-400">{i + 1}回目</span>}
+              {many && <span className="w-9 shrink-0 pt-1 text-[10px] text-slate-400">{t.flow.nth(i + 1)}</span>}
               <div className="min-w-0 flex-1 rounded-[3px] border border-slate-100 bg-paper px-2 py-1">
                 <ChangeView change={w} />
               </div>
             </li>
           ))}
-          {values.length > MAX_RUNS && <li className="text-[10px] text-slate-400">…ほか {values.length - MAX_RUNS} 回</li>}
+          {values.length > MAX_RUNS && <li className="text-[10px] text-slate-400">{t.flow.moreRuns(values.length - MAX_RUNS)}</li>}
         </ol>
       )}
     </div>,
@@ -318,9 +354,9 @@ function Chips({ side, color, children }: { side: "in" | "out"; color: string; c
 
 function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, string | undefined>; run: RunValues; stepId: string }) {
   const focused = useFocus();
-  const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "#94a3b8";
+  const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "var(--cat-other)";
   if (row.kind === "more") {
-    return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[10px] text-slate-400">…ほか {row.count} 項目</div>;
+    return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[10px] text-slate-400">{t.flow.moreRows(row.count)}</div>;
   }
   if (row.kind === "output") {
     const color = typeColor(row.variable);
@@ -332,7 +368,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
           <VarIcon size={11} />
           <span className="truncate">{row.variable}</span>
         </span>
-        <Socket side="out" id={outHandle(row.variable)} color={color} title={`${row.variable} に書き込む`} />
+        <Socket side="out" id={outHandle(row.variable)} color={color} title={t.flow.writes(row.variable)} />
         <Chips side="out" color={color}>
           <VarChip
             side="out"
@@ -349,7 +385,7 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
   const lit = row.refs.some((r) => focused === varFocus(r));
   return (
     <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${first} 12%, transparent)` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
-      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={`読む変数: ${row.refs.join(", ")}`} />}
+      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={t.flow.reads(row.refs.join(", "))} />}
       {row.refs.length > 0 && (
         <Chips side="in" color={first}>
           {row.refs.slice(0, MAX_CHIPS).map((r) => (
@@ -365,10 +401,48 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
       <span className="w-16 shrink-0 truncate text-slate-500" title={row.key}>
         {row.label}
       </span>
-      <span className="h-[20px] min-w-0 flex-1 truncate rounded bg-slate-100 px-1.5 leading-[20px] text-ink" title={row.value}>
-        {row.value}
-      </span>
+      {row.file ? (
+        <FileValue file={row.file} />
+      ) : (
+        <span className="h-[20px] min-w-0 flex-1 truncate rounded bg-slate-100 px-1.5 leading-[20px] text-ink" title={row.value}>
+          {row.value}
+        </span>
+      )}
     </div>
+  );
+}
+
+const ROLE_VAR: Record<string, string> = {
+  input: "var(--color-role-input)",
+  config: "var(--color-role-config)",
+  templates: "var(--color-role-templates)",
+  output: "var(--color-role-output)",
+};
+
+/**
+ * A path param naming a file of the scenario's folder: tinted in its shelf's
+ * colour, marked when Excel has it open (a write would fail), and opened in
+ * its sheet or app on double-click.
+ */
+function FileValue({ file }: { file: NonNullable<Extract<Row, { kind: "param" }>["file"]> }) {
+  const color = ROLE_VAR[file.role] ?? "var(--color-slate-400)";
+  const entry = useProjectMaybe((s) => s.files?.files.find((f) => f.path.toLowerCase() === file.path.toLowerCase()) ?? null, null);
+  const known = useProjectMaybe((s) => s.files !== null, false);
+  const openFile = useProjectMaybe((s) => s.openFile, null);
+  const missing = known && !entry && file.role !== "output" && file.role !== "work" && !file.path.includes("{{");
+  return (
+    <span
+      className="flex h-[20px] min-w-0 flex-1 items-center gap-1 rounded px-1.5 leading-[20px] text-ink"
+      style={{ background: `color-mix(in srgb, ${color} 12%, transparent)`, boxShadow: `inset 2px 0 0 ${color}` }}
+      title={entry?.inUse ? `${file.path} · ${t.project.inUse}` : file.path}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (entry && openFile) void openFile(file.path);
+      }}
+    >
+      <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${missing ? "text-shu-500 line-through decoration-1" : ""}`}>{file.path}</span>
+      {entry?.inUse && <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-shu-500" />}
+    </span>
   );
 }
 
@@ -391,13 +465,17 @@ function CallBar({ call }: { call: CallView }) {
   const count = call.callee ? outline(call.callee.steps ?? [], new Map()).length : 0;
   const button = "nodrag nopan rounded-[3px] px-1.5 leading-[18px] text-[11px] font-medium";
   return (
-    <div style={{ height: CALL_BAR_H }} className="flex items-center gap-1.5 border-t border-slate-100 px-3 text-[11px]">
+    <div
+      style={{ height: CALL_BAR_H }}
+      title={call.callee ? t.callEnterHint : undefined}
+      className="flex items-center gap-1.5 border-t border-slate-100 px-3 text-[11px]"
+    >
       {call.target === "" ? (
-        <span className="text-slate-400">右のパネルで呼ぶシナリオを選びます</span>
+        <span className="text-slate-400">{t.flow.chooseCallee}</span>
       ) : missing ? (
-        <span className="truncate font-semibold text-shu-600">呼ぶシナリオが見つかりません</span>
+        <span className="truncate font-semibold text-shu-600">{t.flow.calleeMissing}</span>
       ) : (
-        <span className="truncate text-slate-500">{count} ステップ</span>
+        <span className="truncate text-slate-500">{t.flow.stepCount(count)}</span>
       )}
       {call.callee && (
         <span className="ml-auto flex shrink-0 items-center gap-1">
@@ -407,22 +485,22 @@ function CallBar({ call }: { call: CallView }) {
             aria-expanded={call.unfolded}
             onClick={(e) => {
               e.stopPropagation();
-              toggle(call.stepId);
+              toggle(call.key);
             }}
             data-call-toggle
           >
-            {call.unfolded ? "たたむ ▴" : "中を見る ▾"}
+            {call.unfolded ? `${t.flow.fold} ▴` : `${t.flow.unfold} ▾`}
           </button>
           <button
             type="button"
             className={`${button} bg-ink text-paper hover:bg-slate-700`}
-            title={`「${call.callee.name}」を開く`}
+            title={t.flow.openCallee(call.callee.name)}
             onClick={(e) => {
               e.stopPropagation();
               void open(call.target);
             }}
           >
-            開く ↗
+            {t.flow.open} ↗
           </button>
         </span>
       )}
@@ -458,7 +536,7 @@ function InnerSteps({ call, defs }: { call: CallView; defs: Map<string, StepType
       })}
       {call.hidden > 0 && (
         <div style={{ height: INNER_LINE_H }} className="flex items-center text-[11px] text-slate-400">
-          …ほか {call.hidden} ステップ（「開く」で全体を見る）
+          {t.flow.moreSteps(call.hidden)}
         </div>
       )}
     </div>
@@ -488,20 +566,26 @@ function StepNode({ data }: StepNodeProps) {
         data.runState ? RUN_STYLE[data.runState] : ""
       }`}
     >
-      {latest && (
-        <NodeToolbar isVisible position={Position.Top} offset={12}>
-          <ReviewToolbar entry={latest} />
+      {(latest || (data.selected && !data.readOnly)) && (
+        // Beside the step's head: the flow line runs through the top and bottom
+        // centres, and variable chips sit beside the rows below the head.
+        <NodeToolbar isVisible position={Position.Right} align="start" offset={8}>
+          <div className="flex items-center gap-1.5">
+            {latest && <ReviewToolbar entry={latest} />}
+            {data.selected && !data.readOnly && <StepTools step={data.step} />}
+          </div>
         </NodeToolbar>
       )}
       <FlowHandles />
-      <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} />
+      {/* Read-only inside a call, but a run still stops there. */}
+      <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} owner={data.owner} />
       {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
         <span
           className={`absolute top-full left-1 z-10 mt-1.5 rounded-[4px] px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
             data.runState === "failed" ? "bg-shu-500" : "bg-mizu-500"
           }`}
         >
-          {data.runState === "failed" ? "✕ ここで止まっています" : "❚❚ ここで一時停止中"}
+          {data.runState === "failed" ? `✕ ${t.flow.stoppedHere}` : `❚❚ ${t.flow.pausedHere}`}
         </span>
       )}
       {data.note && (
@@ -509,12 +593,14 @@ function StepNode({ data }: StepNodeProps) {
           title={data.note}
           className="absolute bottom-full left-1 z-10 mb-1 max-w-[95%] truncate rounded-[4px] border border-shu-500 bg-shu-50 px-2 text-[10px] leading-[18px] font-bold text-shu-600"
         >
-          指摘：{data.note}
+          {t.flow.note}
+          {t.colon}
+          {data.note}
         </span>
       )}
       {data.diff && (
         <span className={`absolute -top-2.5 right-2 z-10 rounded-[3px] px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
-          {DIFF_STYLE[data.diff].label}
+          {DIFF_STYLE[data.diff].label()}
         </span>
       )}
       <div
@@ -530,7 +616,7 @@ function StepNode({ data }: StepNodeProps) {
         {/* With a keyword the type is clear enough: make room for the name. */}
         {!(KEYWORD[data.step.type] && data.step.name) && (
           <span className="truncate text-[12px] font-bold" style={{ color }}>
-            {data.def?.label ?? data.step.type}
+            {stepLabel(data.step.type, data.def?.label)}
           </span>
         )}
         {data.step.name && <span className="truncate text-[12px] text-slate-500">{data.step.name}</span>}
@@ -573,7 +659,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
     >
       <FlowHandles />
       {/* The edge into the slot already carries the block's label. */}
-      {data.parentId ? `空（クリックして ${t.shortcut} で追加）` : t.emptyScenario}
+      {data.parentId ? t.flow.emptySlot(t.shortcut) : t.emptyScenario}
     </div>
   );
 }
@@ -599,7 +685,9 @@ function useBringIntoView() {
   const width = useStore((s) => s.width);
   const height = useStore((s) => s.height);
   // The outline covers the left edge of the chart while it is open.
-  const covered = useStudio((s) => (s.outlineOpen ? OUTLINE_W : 0));
+  const outlineW = useStudio((s) => (s.outlineOpen ? OUTLINE_W : 0));
+  // So does the project panel, with the outline beside it.
+  const covered = outlineW + useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
   return useCallback(
     (id: string) => {
       const node = flow.getInternalNode(id);
@@ -622,6 +710,25 @@ function useBringIntoView() {
   );
 }
 
+/** Inside an entered call: keeps its running step in view while a run is followed. */
+function FollowInside({ path }: { path: string }) {
+  const latest = useBringIntoView();
+  const bring = useRef(latest);
+  bring.current = latest;
+  const running = useStudio((s) => (s.run?.status === "running" && s.followRun ? s.run.innerLatest[path] : undefined));
+  useEffect(() => {
+    if (running) bring.current(running);
+  }, [running]);
+  // Where a run paused in here, once the pause panel has taken its room.
+  const paused = useStudio((s) => (s.run?.status === "paused" && s.run.pause && callKey(s.run.pause.callPath) === path ? s.run.pause : undefined));
+  useEffect(() => {
+    if (!paused) return;
+    const timer = setTimeout(() => bring.current(paused.stepId), 120);
+    return () => clearTimeout(timer);
+  }, [paused]);
+  return null;
+}
+
 /** Follows keyboard / outline jumps, and the running step while a run is followed. */
 function Follow() {
   const latest = useBringIntoView();
@@ -638,7 +745,7 @@ function Follow() {
   }, [running]);
   // Where a run paused, once the pause panel has taken its room from the canvas.
   const paused = useStudio((s) => (s.run?.status === "paused" ? s.run.pause?.seq : undefined));
-  const pausedAt = useStudio((s) => s.run?.pause?.stepId);
+  const pausedAt = useStudio((s) => (s.run?.pause?.callPath.length === 0 ? s.run.pause.stepId : undefined));
   useEffect(() => {
     if (paused === undefined || !pausedAt) return;
     const timer = setTimeout(() => bring.current(pausedAt), 120);
@@ -647,16 +754,82 @@ function Follow() {
   return null;
 }
 
+/**
+ * Where the chart is when it has entered calls: the open scenario, then each
+ * called one, to click back up to; and a way to open the shown one for editing.
+ */
+function DiveBar({ root, chain }: { root: Scenario; chain: DiveLevel[] }) {
+  const leave = useStudio((s) => s.leaveCalls);
+  const open = useStudio((s) => s.open);
+  const shown = chain.at(-1)!.scenario;
+  const levels = [root, ...chain.map((level) => level.scenario)];
+  return (
+    // As wide as its words: a centred panel would otherwise only get half the canvas.
+    <div className="flex w-max max-w-[min(760px,calc(100cqw-32px))] items-center gap-1 rounded-[4px] border border-slate-200 bg-sheet py-1 pr-1 pl-1 text-[12px] shadow-raised">
+      <button
+        type="button"
+        title={t.diveUp}
+        aria-label={t.diveUp}
+        onClick={() => leave(chain.length - 1)}
+        className="shrink-0 rounded-[3px] px-1.5 leading-[22px] text-slate-600 hover:bg-slate-100"
+      >
+        ↑
+      </button>
+      <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-1">
+        {levels.map((level, depth) => (
+          <span key={depth} className="flex max-w-[14em] min-w-0 items-center gap-1">
+            {depth > 0 && <span className="shrink-0 text-slate-400">›</span>}
+            {depth < chain.length ? (
+              <button
+                type="button"
+                onClick={() => leave(depth)}
+                className="truncate rounded-[3px] px-1 leading-[22px] text-brand-600 hover:bg-slate-100 hover:underline"
+              >
+                {level.name}
+              </button>
+            ) : (
+              <span aria-current="page" className="truncate px-1 font-semibold">
+                {level.name}
+              </span>
+            )}
+          </span>
+        ))}
+      </nav>
+      <span title={t.diveReadOnly} className="ml-1 shrink-0 rounded-[3px] bg-slate-100 px-1.5 text-[11px] leading-[20px] text-slate-500">
+        {t.diveViewOnly}
+      </span>
+      <button
+        type="button"
+        onClick={() => void open(shown.id)}
+        title={t.diveOpen}
+        className="ml-1 shrink-0 rounded-[3px] bg-ink px-2 leading-[22px] text-[11px] font-medium text-paper hover:bg-slate-700"
+      >
+        {t.diveOpenLabel} ↗
+      </button>
+    </div>
+  );
+}
+
 const nodeTypes = { step: StepNode, slot: SlotNode };
 const NO_BREAKPOINTS: string[] = [];
+const NO_STATES: Record<string, StepRunState> = {};
 
 export function FlowCanvas() {
-  const scenario = useStudio((s) => s.scenario);
+  const root = useStudio((s) => s.scenario);
+  const called = useStudio((s) => s.called);
+  const dive = useStudio((s) => s.dive);
+  const enterCall = useStudio((s) => s.enterCall);
+  const projectW = useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
+  // Entered calls show their scenario here, read-only; edits stay with the open one.
+  const chain = useMemo(() => diveChain(root, called, dive), [root, called, dive]);
+  const path = useMemo(() => chain.map((level) => level.stepId), [chain]);
+  const inside = chain.length > 0;
+  const scenario = inside ? chain.at(-1)!.scenario : root;
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
-  const breakpoints = useStudio((s) => (s.scenario ? s.breakpoints[s.scenario.id] : undefined)) ?? NO_BREAKPOINTS;
+  const breakpoints = useStudio((s) => (scenario ? s.breakpoints[scenario.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const theme = useTheme().mode;
@@ -681,7 +854,6 @@ export function FlowCanvas() {
 
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const wrapper = useRef<HTMLDivElement>(null);
-  const called = useStudio((s) => s.called);
   const unfolded = useStudio((s) => s.unfolded);
   // What each call node shows, and the room its unfolded steps take.
   const calls = useMemo(() => {
@@ -691,10 +863,12 @@ export function FlowCanvas() {
         if (step.type === CALL && step.id) {
           const target = typeof step.params?.scenario === "string" ? step.params.scenario : "";
           const callee = called[target];
-          const open = Boolean(unfolded[step.id] && callee);
+          const key = callKey([...path, step.id]);
+          const open = Boolean(unfolded[key] && callee);
           const all = open && callee ? outline(callee.steps ?? [], defs) : [];
           map.set(step.id, {
             stepId: step.id,
+            key,
             target,
             callee,
             unfolded: open,
@@ -707,7 +881,7 @@ export function FlowCanvas() {
     };
     walk(scenario?.steps ?? []);
     return map;
-  }, [scenario, called, unfolded, defs]);
+  }, [scenario, called, unfolded, defs, path]);
   const extra = useMemo(
     () =>
       new Map(
@@ -722,11 +896,12 @@ export function FlowCanvas() {
 
   const issueCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const issue of validation?.issues ?? []) {
+    for (const issue of inside ? [] : (validation?.issues ?? [])) {
       if (issue.stepId && issue.severity === "error") counts.set(issue.stepId, (counts.get(issue.stepId) ?? 0) + 1);
     }
     return counts;
-  }, [validation]);
+  }, [validation, inside]);
+  const states = inside ? (run?.inner[callKey(path)] ?? NO_STATES) : (run?.steps ?? NO_STATES);
 
   const nodes: Node[] = layout.nodes.map((n) => {
     if (n.data.kind === "step") {
@@ -736,19 +911,22 @@ export function FlowCanvas() {
         draggable: false,
         data: {
           ...n.data,
-          runState: run?.steps[id],
+          runState: states[id],
+          readOnly: inside,
           breakpoint: breakpoints.includes(id),
-          pausedHere: run?.pause?.stepId === id,
+          owner: scenario?.id ?? "",
+          pausedHere: run?.pause?.stepId === id && callKey(run.pause.callPath) === callKey(path),
           issueCount: issueCounts.get(id) ?? 0,
-          selected: selection?.kind === "step" && selection.stepId === id,
-          byAi: !reviewing && reviews.has(id),
-          reviews: reviewing ? [] : (reviews.get(id) ?? []),
-          diff: reviewing ? diffs.get(id) : undefined,
-          note: reviewing ? notes.get(id) : undefined,
+          selected: !inside && selection?.kind === "step" && selection.stepId === id,
+          byAi: !inside && !reviewing && reviews.has(id),
+          reviews: inside || reviewing ? [] : (reviews.get(id) ?? []),
+          diff: !inside && reviewing ? diffs.get(id) : undefined,
+          note: !inside && reviewing ? notes.get(id) : undefined,
           vars,
-          run: run ? { changes: run.changes, starts: run.starts } : NO_RUN,
+          // Values are recorded for the open scenario's variables only.
+          run: run && !inside ? { changes: run.changes, starts: run.starts } : NO_RUN,
           defs,
-          call: calls.has(id) ? { ...calls.get(id)!, states: run?.inner[id] ?? {} } : undefined,
+          call: calls.has(id) ? { ...calls.get(id)!, states: run?.inner[calls.get(id)!.key] ?? NO_STATES } : undefined,
         },
       };
     }
@@ -758,7 +936,7 @@ export function FlowCanvas() {
       draggable: false,
       data: {
         ...slot,
-        selected: selection?.kind === "slot" && selection.parentId === slot.parentId && selection.block === slot.block,
+        selected: !inside && selection?.kind === "slot" && selection.parentId === slot.parentId && selection.block === slot.block,
       },
     };
   });
@@ -783,7 +961,7 @@ export function FlowCanvas() {
       type: "link",
       selectable: false,
       focusable: false,
-      data: { variable: l.variable, color: TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "#94a3b8", from: l.from, to: l.to, selectedId },
+      data: { variable: l.variable, color: TYPE_COLOR[vars.get(l.variable) ?? "any"] ?? "var(--cat-other)", from: l.from, to: l.to, selectedId },
       // Beneath the steps, so a lit link never takes a click meant for a step.
       zIndex: 0,
     }));
@@ -793,6 +971,7 @@ export function FlowCanvas() {
     sourceHandle: "flow",
     targetHandle: "flow",
     type: "block",
+    data: { detourX: e.detourX },
     animated: e.loop,
     style: { stroke: "var(--flow-edge)", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
     // A plain colour: the marker id is built from it, so no var().
@@ -800,7 +979,7 @@ export function FlowCanvas() {
   }));
   edges.push(...linkEdges);
 
-  if (!scenario) {
+  if (!scenario || !root) {
     return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
         <img src="/mark.png" alt="" className="h-16 w-16 opacity-30 grayscale" />
         {t.noSelection}
@@ -809,7 +988,7 @@ export function FlowCanvas() {
 
   return (
     <ReactFlow
-      key={scenario.id}
+      key={`${root.id}/${callKey(path)}`}
       className="canvas-bg"
       colorMode={theme}
       nodes={nodes}
@@ -824,29 +1003,43 @@ export function FlowCanvas() {
         const box = wrapper.current;
         if (!box) return;
         const pad = 64;
-        const fitW = (box.clientWidth - pad) / bounds.width;
+        const boxW = box.clientWidth - projectW;
+        const fitW = (boxW - pad) / bounds.width;
         const fitH = (box.clientHeight - pad) / bounds.height;
         const zoom = Math.max(Math.min(fitW, fitH, 1), MIN_READABLE_ZOOM);
-        const x = zoom > fitW ? pad / 2 : (box.clientWidth - bounds.width * zoom) / 2;
-        const y = pad / 2;
+        const x = projectW + (zoom > fitW ? pad / 2 : (boxW - bounds.width * zoom) / 2);
+        // Inside a call, clear of the bar that says where the chart is.
+        const y = inside ? 104 : pad / 2;
         void flow.setViewport({ x: x - bounds.x * zoom, y: y - bounds.y * zoom, zoom });
 
       }}
       minZoom={0.2}
       onNodeClick={(_, node) => {
+        if (inside) return;
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
       onPaneClick={() => select(null)}
+      onNodeDoubleClick={(_, node) => {
+        const data = node.data as StepNodeData | SlotNodeData;
+        if (data.kind === "step" && data.step.id && calls.get(data.step.id)?.callee) enterCall(data.step.id);
+      }}
+      // Double-clicking a call enters it; zooming there would only get in the way.
+      zoomOnDoubleClick={false}
       // Dragging the view during a run means the person wants to look elsewhere.
       onMoveStart={(event) => event && run?.status === "running" && setFollowRun(false)}
       onNodeMouseEnter={(_, node) => node.type === "step" && focus.set(node.id)}
       onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="var(--color-slate-300)" />
-      <Follow />
-      {reviewing && <FocusOn id={layout.nodes.find((n) => diffs.has(n.id))?.id} />}
+      {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
+      {inside && (
+        <Panel position="top-center">
+          <DiveBar root={root} chain={chain} />
+        </Panel>
+      )}
+      {!inside && reviewing && <FocusOn id={layout.nodes.find((n) => diffs.has(n.id))?.id} />}
       <Controls showInteractive={false} />
     </ReactFlow>
   );

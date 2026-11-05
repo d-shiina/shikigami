@@ -56,6 +56,15 @@ pub enum CoreError {
     #[error("observation not found: {0}")]
     ObservationNotFound(ObservationId),
 
+    #[error("invalid project file path {path:?}: {reason}")]
+    InvalidProjectPath { path: String, reason: String },
+
+    #[error("no file {path:?} in the scenario's folder")]
+    ProjectFileNotFound { path: String },
+
+    #[error("{path:?} already exists in the scenario's folder")]
+    ProjectFileExists { path: String },
+
     #[error("invalid edit: {0}")]
     InvalidEdit(String),
 
@@ -98,6 +107,9 @@ impl CoreError {
             Self::ImportConflict { .. } => "IMPORT_CONFLICT",
             Self::ScenarioInUse { .. } => "SCENARIO_IN_USE",
             Self::ObservationNotFound(_) => "OBSERVATION_NOT_FOUND",
+            Self::InvalidProjectPath { .. } => "INVALID_PROJECT_PATH",
+            Self::ProjectFileNotFound { .. } => "PROJECT_FILE_NOT_FOUND",
+            Self::ProjectFileExists { .. } => "PROJECT_FILE_EXISTS",
             Self::InvalidEdit(_) => "INVALID_EDIT",
             Self::Rejected { code, .. } => code,
             Self::NothingTo(_) => "NOTHING_TO_UNDO_OR_REDO",
@@ -150,6 +162,18 @@ impl CoreError {
             Self::Rejected {
                 hint: Some(hint), ..
             } => Some(serde_json::json!({ "hint": hint })),
+            Self::InvalidProjectPath { path, .. } => Some(serde_json::json!({
+                "path": path,
+                "hint": "Paths are relative to the scenario's folder and use its folders: input/, config/, templates/, output/, work/ (e.g. input/orders.xlsx).",
+            })),
+            Self::ProjectFileNotFound { path } => Some(serde_json::json!({
+                "path": path,
+                "hint": "list_project_files shows the files the scenario's folder holds.",
+            })),
+            Self::ProjectFileExists { path } => Some(serde_json::json!({
+                "path": path,
+                "hint": "Pass overwrite: true to replace it, or choose another name.",
+            })),
             Self::ScenarioNotFound(id) | Self::ScenarioAlreadyExists(id) => {
                 Some(serde_json::json!({ "scenario_id": id }))
             }

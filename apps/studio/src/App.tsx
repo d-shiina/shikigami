@@ -1,35 +1,37 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AgentContext, createAgentStore } from "./agent";
-import { AgentButton, AgentPane } from "./components/AgentPane";
+import { useEffect, useMemo, useState } from "react";
+import { AgentContext, createAgentStore, useAgent } from "./agent";
+import { AgentPane } from "./components/AgentPane";
+import { ApprovalDialog } from "./components/ApprovalDialog";
+import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
-import { IssuesPanel } from "./components/IssuesPanel";
-import { PropertyPanel } from "./components/PropertyPanel";
-import { RunLog } from "./components/RunLog";
+import { HistoryDialog } from "./components/HistoryDialog";
+import { Inspector } from "./components/Inspector";
+import { OutlinePanel } from "./components/Outline";
+import { FileSheet } from "./components/FileSheet";
+import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
+import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
+import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
-import { OutlinePanel, OutlineToggle } from "./components/Outline";
-import { ReviewInbox, ReviewPanel, useInbox } from "./components/ReviewDesk";
-import { ScenarioList, ScenarioRail } from "./components/ScenarioList";
-import { StoryView } from "./components/StoryView";
-import { SecretAskBanner } from "./components/SecretAskBanner";
-import { SecretsDialog } from "./components/SecretsDialog";
-import { ApprovalBanner } from "./components/ApprovalBanner";
-import { PolicyDialog } from "./components/PolicyDialog";
+import { SecretAskDialog } from "./components/SecretAskDialog";
+import { SecretsPage } from "./components/SecretsPage";
+import { SettingsPage } from "./components/SettingsPage";
+import { ScenariosPage } from "./components/ScenariosPage";
+import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
-import { Timeline, usePendingReview } from "./components/Timeline";
-import { CanvasDock, ScenarioHeader } from "./components/Toolbar";
-import { VariablesPanel } from "./components/VariablesPanel";
-import { VersionsPanel } from "./components/VersionsPanel";
-import { WindowControls } from "./components/WindowControls";
+import { StoryView } from "./components/StoryView";
+import { VariablesView } from "./components/VariablesView";
+import { TitleBar } from "./components/TitleBar";
+import { CanvasDock, OutlineButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
-import { t } from "./lib/i18n";
+import { t, useLocale } from "./lib/i18n";
+import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
+import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
-
-type Tab = "review" | "timeline" | "versions" | "properties" | "variables" | "issues";
 
 /** Shown while a run waits for the person at the PC (manual login, MFA). */
 function HumanBanner() {
@@ -39,7 +41,9 @@ function HumanBanner() {
     <div className="flex items-center gap-2 border-b border-shu-100 bg-shu-50 px-4 py-2 text-sm font-medium text-shu-600">
       <span className="bg-shu-500 h-2 w-2 rounded-full" />
       <span>
-        {t.waitingForYou}：{human.message}
+        {t.waitingForYou}
+        {t.colon}
+        {human.message}
       </span>
     </div>
   );
@@ -59,264 +63,317 @@ function Banner() {
       <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-shu-500" : "bg-brand-500"}`} />
       <span>{error ?? notice}</span>
       <button type="button" className="ml-auto text-xs text-slate-500 hover:underline" onClick={dismiss}>
-        閉じる
+        {t.close}
       </button>
     </div>
   );
 }
 
-function SidePanel() {
-  const reviewing = useStudio((s) => s.reviewing);
-  const [tab, setTab] = useState<Tab>(reviewing ? "review" : "timeline");
-  // The review desk opens on its own tab, and leaving it falls back to the record.
-  useEffect(() => setTab(reviewing ? "review" : "timeline"), [reviewing]);
-  const issueCount = useStudio((s) => s.validation?.issues.length ?? 0);
-  const selection = useStudio((s) => s.selection);
-  const pendingCount = usePendingReview().length;
-  useEffect(() => {
-    if (selection?.kind === "step" && !reviewing) setTab("properties");
-  }, [selection, reviewing]);
-  // New AI edits pull the review to the front.
-  const lastPending = useRef(pendingCount);
-  useEffect(() => {
-    if (pendingCount > lastPending.current && !reviewing) setTab("timeline");
-    lastPending.current = pendingCount;
-  }, [pendingCount]);
-  const tabs: [Tab, string, number][] = [
-    ...(reviewing ? [["review", "確認", pendingCount] as [Tab, string, number]] : []),
-    ["timeline", t.timeline, reviewing ? 0 : pendingCount],
-    ["versions", t.versions, 0],
-    ["properties", t.inspect, 0],
-    ["variables", t.variables, 0],
-    ["issues", t.issues, issueCount],
-  ];
-  return (
-    // A sheet laid over the edge of the desk.
-    <aside className="relative z-[1] flex h-full flex-col border-l border-slate-200 bg-sheet shadow-sheet">
-      <nav className="flex border-b border-slate-200 px-2">
-        {tabs.map(([key, label, count]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={`relative flex flex-1 items-center justify-center gap-1 py-2.5 text-xs font-medium ${
-              tab === key ? "text-ink" : "text-slate-500 hover:text-ink"
-            }`}
-          >
-            {label}
-            {count > 0 && (
-              <span
-                className={`rounded-[3px] px-1.5 text-[10px] ${key === "timeline" || key === "review" ? "bg-shu-500 text-white" : "bg-slate-200 text-slate-600"}`}
-              >
-                {count}
-              </span>
-            )}
-            {tab === key && <span className="absolute inset-x-3 bottom-[-1px] h-[2px] rounded-full bg-ink" />}
-          </button>
-        ))}
-      </nav>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {tab === "review" && <ReviewPanel />}
-        {tab === "timeline" && <Timeline />}
-        {tab === "versions" && <VersionsPanel />}
-        {tab === "properties" && <PropertyPanel />}
-        {tab === "variables" && <VariablesPanel />}
-        {tab === "issues" && <IssuesPanel />}
-      </div>
-    </aside>
-  );
-}
-
-type View = "story" | "flow";
 const VIEW_KEY = "shikigami.studio.view";
-const LIST_KEY = "shikigami.studio.list";
+const SIDEBAR_KEY = "shikigami.studio.list";
 
-function loadView(): View {
-  try {
-    return globalThis.localStorage?.getItem(VIEW_KEY) === "story" ? "story" : "flow";
-  } catch {
-    return "flow";
-  }
-}
-
-function ViewToggle({ view, onChange }: { view: View; onChange: (view: View) => void }) {
-  const options: [View, string][] = [
-    ["flow", t.viewFlow],
-    ["story", t.viewStory],
-  ];
-  return (
-    <div className="absolute top-3 right-4 flex overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-xs shadow-raised">
-      {options.map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange(key)}
-          className={`px-3 py-1 ${view === key ? "bg-ink text-paper" : "text-slate-600 hover:bg-slate-100"}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function SecretsButton() {
-  const setOpen = useStudio((s) => s.setSecretsOpen);
-  const count = useStudio((s) => s.secrets.length);
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      className="flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
-      title={t.secretsIntro}
-    >
-      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
-        <circle cx="5" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M8 8h6.5M12 8v2.5M14 8v2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-      {t.secrets}
-      {count > 0 && <span className="rounded-[3px] bg-slate-200 px-1.5 text-[10px]">{count}</span>}
-    </button>
-  );
-}
-
-function PolicyButton() {
-  const setOpen = useStudio((s) => s.setPolicyOpen);
-  return (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      className="flex h-8 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink"
-      title={t.policyIntro}
-    >
-      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
-        <path d="M8 1.5 13.5 3.5v4c0 3.2-2.3 5.8-5.5 7-3.2-1.2-5.5-3.8-5.5-7v-4z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-        <path d="m5.5 8 1.8 1.8L10.8 6.3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      {t.policy}
-    </button>
-  );
-}
-
-/** Scenarios, or the AI edits waiting for review. */
-function ModeSwitch() {
-  const reviewing = useStudio((s) => s.reviewing);
-  const setReviewing = useStudio((s) => s.setReviewing);
-  const open = useStudio((s) => s.open);
-  const currentId = useStudio((s) => s.scenario?.id);
-  // Sent-back scenarios wait on the AI, not on the person.
-  const inbox = useInbox().filter((i) => !i.waiting);
-  const enterReview = () => {
-    setReviewing(true);
-    // Land on something to review rather than a scenario with nothing new.
-    const first = inbox[0];
-    if (first && !inbox.some((i) => i.scenarioId === currentId)) void open(first.scenarioId);
-  };
-  const tab = (on: boolean) =>
-    `flex h-7 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] font-semibold ${on ? "bg-sheet text-ink shadow-sheet" : "text-slate-500 hover:text-ink"}`;
-  return (
-    <div className="flex items-center gap-0.5 rounded-[4px] bg-slate-100 p-0.5">
-      <button type="button" className={tab(!reviewing)} onClick={() => setReviewing(false)}>
-        シナリオ
-      </button>
-      <button type="button" className={tab(reviewing)} onClick={enterReview}>
-        確認待ち
-        {inbox.length > 0 && <span className="rounded-[3px] bg-shu-500 px-1.5 text-[10px] leading-4 text-white">{inbox.length}</span>}
-      </button>
-    </div>
-  );
-}
-
-function Shell() {
-  const hasScenario = useStudio((s) => s.scenario !== null);
-  const [view, setViewState] = useState<View>(loadView);
-  const setView = (next: View) => {
-    setViewState(next);
+function useRemembered<T extends string>(key: string, fallback: T, read: (raw: string | null) => T): [T, (next: T) => void] {
+  const [value, setValue] = useState<T>(() => {
     try {
-      globalThis.localStorage?.setItem(VIEW_KEY, next);
+      return read(globalThis.localStorage?.getItem(key) ?? null);
     } catch {
-      // Only a remembered preference.
-    }
-  };
-  const hasRun = useStudio((s) => s.run !== null);
-  const reviewing = useStudio((s) => s.reviewing);
-  const [listOpen, setListOpenState] = useState(() => {
-    try {
-      return globalThis.localStorage?.getItem(LIST_KEY) !== "closed";
-    } catch {
-      return true;
+      return fallback;
     }
   });
-  const setListOpen = (open: boolean) => {
-    setListOpenState(open);
+  const set = (next: T) => {
+    setValue(next);
     try {
-      globalThis.localStorage?.setItem(LIST_KEY, open ? "open" : "closed");
+      globalThis.localStorage?.setItem(key, next);
     } catch {
       // Only a remembered preference.
     }
   };
+  return [value, set];
+}
+
+const SIZES_KEY = "shikigami.studio.sizes";
+
+/** Panel widths the person dragged to, remembered across launches. */
+function useSizes(): [Sizes, (next: Sizes) => void] {
+  const [sizes, setSizes] = useState<Sizes>(() => {
+    try {
+      return readSizes(globalThis.localStorage?.getItem(SIZES_KEY) ?? null);
+    } catch {
+      return DEFAULT_SIZES;
+    }
+  });
+  const set = (next: Sizes) => {
+    setSizes(next);
+    try {
+      globalThis.localStorage?.setItem(SIZES_KEY, JSON.stringify(next));
+    } catch {
+      // Only a remembered preference.
+    }
+  };
+  return [sizes, set];
+}
+
+/** The grip on a panel's inner edge; the panel is positioned relative. */
+type Grip = (panel: keyof Sizes) => React.ReactNode;
+
+/** The width of an element, kept up to date as the window is resized. */
+function useWidth(): [number, (el: HTMLElement | null) => void] {
+  const [width, setWidth] = useState(() => globalThis.innerWidth ?? 1400);
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => entry && setWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [el]);
+  return [width, setEl];
+}
+
+/**
+ * The editor: the open scenario's chart (or procedure), what the run did and
+ * what is wrong underneath, and the inspector on the right. The scenario's
+ * name and its actions are in the title bar. The sidebar and the review desk
+ * both open scenarios into it.
+ */
+function Editor({
+  view,
+  onView,
+  list,
+  right,
+  rightWidth,
+  grip,
+}: {
+  view: View;
+  onView: (view: View) => void;
+  list?: React.ReactNode;
+  right: React.ReactNode | null;
+  rightWidth: number;
+  grip: Grip;
+}) {
+  const hasScenario = useStudio((s) => s.scenario !== null);
+  const outlineOpen = useStudio((s) => s.outlineOpen);
+  const projectOpen = useProject((s) => s.panelOpen);
+  const outlineLeft = projectOpen ? 12 + 264 + 12 : 12;
   return (
-    <div className={`grid h-full grid-rows-[auto_auto_1fr_auto] ${listOpen || reviewing ? "grid-cols-[248px_minmax(0,1fr)_360px]" : "grid-cols-[44px_minmax(0,1fr)_360px]"}`}>
-      {/* The window's title bar: drag anywhere that is not a control, double-click to maximize. */}
-      <header data-tauri-drag-region className="relative col-span-3 flex h-12 items-center gap-3 border-b border-slate-200 bg-sheet px-4 select-none">
-        <img data-tauri-drag-region src="/mark.png" alt="Shikigami Studio" className="h-6 w-6" draggable={false} />
-        <ModeSwitch />
-        <ScenarioHeader />
-        <span className="h-5 w-px bg-slate-200" />
-        <AgentButton />
-        <SecretsButton />
-        <PolicyButton />
-        <WindowControls />
-      </header>
-      <div className="col-span-3">
-        <HumanBanner />
-        <ApprovalBanner />
-        <SecretAskBanner />
-        <Banner />
-      </div>
-      <div className="min-h-0">
-        {reviewing ? (
-          <ReviewInbox />
-        ) : listOpen ? (
-          <ScenarioList onCollapse={() => setListOpen(false)} />
-        ) : (
-          <ScenarioRail onExpand={() => setListOpen(true)} />
-        )}
-      </div>
+    <div className={`grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
+      <div className="min-h-0">{list}</div>
       <main className="flex min-h-0 min-w-0 flex-col">
         <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
             <StoryView />
+          ) : view === "variables" ? (
+            <VariablesView onView={onView} />
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
-              {hasScenario && (
-                <>
-                  <OutlineToggle />
-                  <OutlinePanel />
-                </>
+              {/* The scenario's files float over the left of the chart; the outline sits beside them. */}
+              {hasScenario && projectOpen && (
+                <div className="absolute top-3 bottom-3 left-3 z-10">
+                  <ProjectPanel />
+                </div>
+              )}
+              {hasScenario && <OutlinePanel left={outlineLeft} />}
+              {/* The outline unfolds from this corner, so its button sits there. */}
+              {hasScenario && !outlineOpen && (
+                <div className="absolute top-3 z-10 flex gap-2" style={{ left: outlineLeft }}>
+                  {!projectOpen && <ProjectButton />}
+                  <OutlineButton />
+                </div>
               )}
             </ReactFlowProvider>
           )}
-          {hasScenario && <ViewToggle view={view} onChange={setView} />}
+          <FileSheet />
           {/* Clear of the zoom controls in the bottom-left corner. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
-            <CanvasDock />
-          </div>
+          {view !== "variables" && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
+              <CanvasDock />
+            </div>
+          )}
         </div>
         <RunPausePanel />
-        {hasRun && (
-          <div className="h-44 min-h-0">
-            <RunLog />
+        <BottomPanel />
+      </main>
+      {right !== null && (
+        <div className="relative min-h-0" style={{ width: rightWidth }}>
+          {right}
+          {grip("right")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Something that gives way when the window is narrow, laid over the chart for
+ * a moment instead, as narrow windows do in Linear and Notion. Opening a
+ * scenario, moving to another place, or clicking outside closes it.
+ */
+function Peek({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const key = useStudio((s) => `${s.place}:${s.scenario?.id}`);
+  const [opened] = useState(key);
+  useEffect(() => {
+    if (key !== opened) onClose();
+  }, [key, opened, onClose]);
+  return (
+    <>
+      <div className="fixed inset-0 z-30" onClick={onClose} />
+      <div className="absolute inset-y-0 left-0 z-40 shadow-lifted">{children}</div>
+    </>
+  );
+}
+
+/** The review inbox: open with room, else a strip whose » lays it over the chart. */
+function InboxSlot({ room, width, grip }: { room: boolean; width: number; grip: Grip }) {
+  const [peek, setPeek] = useState(false);
+  // Fixed widths: a long scenario name must not widen the list into the chart.
+  if (room)
+    return (
+      <div className="relative h-full" style={{ width }}>
+        <ReviewInbox />
+        {grip("inbox")}
+      </div>
+    );
+  return (
+    <div className="relative h-full w-[44px]">
+      <ReviewRail onExpand={() => setPeek(true)} />
+      {peek && (
+        <Peek onClose={() => setPeek(false)}>
+          <div className="h-full" style={{ width }}>
+            <ReviewInbox onCollapse={() => setPeek(false)} />
+          </div>
+        </Peek>
+      )}
+    </div>
+  );
+}
+
+type PlaceProps = { view: View; onView: (view: View) => void; fit: Fit; sizes: Sizes; grip: Grip };
+
+function ScenariosPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
+  return <Editor view={view} onView={onView} right={fit.right ? <Inspector /> : null} rightWidth={sizes.right} grip={grip} />;
+}
+
+/** The review desk: what waits, the chart with the AI's changes marked, and the verdict on the right. */
+function ReviewPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
+  const hasScenario = useStudio((s) => s.scenario !== null);
+  return (
+    <Editor
+      view={view}
+      onView={onView}
+      list={<InboxSlot room={fit.inbox} width={sizes.inbox} grip={grip} />}
+      rightWidth={sizes.right}
+      grip={grip}
+      right={
+        !fit.right || !hasScenario ? null : (
+          <aside className="flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
+            <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 text-[12px] font-semibold">{t.reviewTab}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ReviewPanel />
+            </div>
+          </aside>
+        )
+      }
+    />
+  );
+}
+
+function Shell() {
+  const place = useStudio((s) => s.place);
+  const [view, setView] = useRemembered<View>(VIEW_KEY, "flow", (raw) => (raw === "story" || raw === "variables" ? raw : "flow"));
+  const [sidebar, setSidebar] = useRemembered<"open" | "closed">(SIDEBAR_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
+  const [peek, setPeek] = useState(false);
+  const agentOpen = useAgent((s) => s.open);
+  const [width, measure] = useWidth();
+  const hasScenario = useStudio((s) => s.scenario !== null);
+  const editing = place === "scenarios" || place === "review";
+  const shown = { agent: agentOpen, right: editing && hasScenario, inbox: place === "review" };
+  const [sizes, setSizes] = useSizes();
+  const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);
+  // Whether the sidebar would fit if it were shown, whatever the person chose.
+  const room = fitPanels(width, { ...shown, sidebar: true }, sizes).sidebar;
+  // A panel can grow only into the chart's room above its minimum.
+  const grip: Grip = (panel) => {
+    const [min, max] = LIMITS[panel];
+    const size = panel === "agent" ? fit.agent : sizes[panel];
+    return (
+      <Resizer
+        edge={panel === "right" ? "left" : "right"}
+        size={size}
+        min={min}
+        max={Math.max(size, Math.min(max, size + fit.chart - CHART_MIN))}
+        onSize={(next) => setSizes({ ...sizes, [panel]: next })}
+        onReset={() => setSizes({ ...sizes, [panel]: DEFAULT_SIZES[panel] })}
+      />
+    );
+  };
+  const showSidebar = sidebar === "open" && room;
+  // Hidden by hand with room, it comes back; without room, it is laid over the chart.
+  const toggleSidebar = () => {
+    if (showSidebar) setSidebar("closed");
+    else if (room) setSidebar("open");
+    else setPeek(!peek);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  return (
+    <div className="flex h-full flex-col">
+      <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
+        {showSidebar && (
+          <div className="relative flex">
+            <Sidebar width={sizes.sidebar} onCollapse={() => setSidebar("closed")} />
+            {grip("sidebar")}
           </div>
         )}
-      </main>
-      <div className="min-h-0">{hasScenario && <SidePanel />}</div>
+        {!showSidebar && peek && (
+          <Peek onClose={() => setPeek(false)}>
+            <Sidebar width={sizes.sidebar} onCollapse={() => setPeek(false)} />
+          </Peek>
+        )}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TitleBar view={view} onView={setView} onShowSidebar={showSidebar ? undefined : toggleSidebar} />
+          <HumanBanner />
+          <Banner />
+          <div className="flex min-h-0 flex-1">
+            {/* The AI's chat, beside the sidebar it is opened from. */}
+            {/* Kept mounted while closed, so an unsent draft survives (the pane draws nothing then). */}
+            <div className="relative flex">
+              <AgentPane width={fit.agent} />
+              {fit.agent > 0 && grip("agent")}
+            </div>
+            {/* With nothing open, the editor has nothing to show: the library does. */}
+            {(place === "library" || (place === "scenarios" && !hasScenario)) && (
+              <div className="min-w-0 flex-1">
+                <ScenariosPage />
+              </div>
+            )}
+            {place === "scenarios" && hasScenario && <ScenariosPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+            {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+            {place === "secrets" && (
+              <div className="min-w-0 flex-1">
+                <SecretsPage />
+              </div>
+            )}
+            {place === "settings" && (
+              <div className="min-w-0 flex-1">
+                <SettingsPage />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
       <StatusBar />
       <CommandPalette />
-      <SecretsDialog />
-      <PolicyDialog />
-      <AgentPane />
+      <HistoryDialog />
+      <SecretAskDialog />
+      <ApprovalDialog />
     </div>
   );
 }
@@ -351,6 +408,7 @@ function navigate(e: KeyboardEvent, state: StudioState) {
     e.preventDefault();
     state.changeBy(e.shiftKey ? -1 : 1);
   } else if (key === "Escape" && state.selection) state.select(null);
+  else if ((key === "Escape" || key === "Backspace") && state.dive.length > 0) state.leaveCalls(state.dive.length - 1);
   else if (key === "o") state.setOutlineOpen(!state.outlineOpen);
 }
 
@@ -381,8 +439,11 @@ function debugKey(e: KeyboardEvent, state: StudioState) {
 }
 
 export function App() {
+  // A language switch redraws the whole shell; the stores (and the open scenario) stay.
+  const { locale } = useLocale();
   const store = useMemo(() => createStudioStore(api), []);
   const agentStore = useMemo(() => createAgentStore(agent), []);
+  const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), discard: () => t.project.sheet.discard }), []);
 
   useEffect(() => {
     void store.getState().init();
@@ -396,6 +457,12 @@ export function App() {
       agent.onLogin((e) => agentStore.getState().onLoginEvent(e)),
     ];
     void agentStore.getState().init();
+    // The files follow the open scenario, and the watcher's word that its folder changed.
+    void projectStore.getState().load(store.getState().scenario?.id ?? null);
+    const stopProject = store.subscribe((s, prev) => {
+      if (s.scenario?.id !== prev.scenario?.id) void projectStore.getState().load(s.scenario?.id ?? null);
+    });
+    unlisten.push(projectApi.onChanged((id) => void projectStore.getState().onChanged(id)));
     // Requests come from another process (the MCP server): re-read on refocus too.
     void store.getState().loadApprovals();
     const onFocus = () => {
@@ -451,16 +518,19 @@ export function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("focus", onFocus);
       stopAttention();
+      stopProject();
       for (const p of unlisten) void p.then((off) => off());
     };
-  }, [store, agentStore]);
+  }, [store, agentStore, projectStore]);
 
   return (
     <StudioContext.Provider value={store}>
       <AgentContext.Provider value={agentStore}>
-        <ErrorBoundary>
-          <Shell />
-        </ErrorBoundary>
+        <ProjectContext.Provider value={projectStore}>
+          <ErrorBoundary>
+            <Shell key={locale} />
+          </ErrorBoundary>
+        </ProjectContext.Provider>
       </AgentContext.Provider>
     </StudioContext.Provider>
   );

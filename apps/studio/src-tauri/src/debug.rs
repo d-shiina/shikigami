@@ -107,6 +107,7 @@ pub(crate) fn capture_pause(
     app: AppHandle,
     run_id: RunId,
     scenario_id: ScenarioId,
+    call_path: Vec<StepId>,
     step_id: StepId,
     step_type: String,
     seq: u64,
@@ -118,7 +119,18 @@ pub(crate) fn capture_pause(
             return;
         };
         let mut params = Map::new();
-        if let Ok(scenario) = state.service.get(&scenario_id)
+        // Paused inside a call: the step is the called scenario's.
+        let mut owner = state.service.get(&scenario_id).ok();
+        for call in &call_path {
+            let target = owner
+                .as_ref()
+                .and_then(|s| s.find_step(call))
+                .and_then(|step| step.params.get("scenario"))
+                .and_then(Value::as_str)
+                .map(ScenarioId::new);
+            owner = target.and_then(|id| state.service.get(&id).ok());
+        }
+        if let Some(scenario) = owner
             && let Some(step) = scenario.find_step(&step_id)
         {
             for key in ["context", "window"] {

@@ -32,12 +32,12 @@ const STDERR_TAIL: usize = 2000;
 const TOOL_ERROR_LEN: usize = 300;
 
 const SYSTEM_PROMPT: &str = "\
-あなたは Shikigami Studio（Windows 向け RPA）の画面の中から呼ばれた AI です。話し相手は Studio を使っている人です。
-- シナリオの読み書き・試し実行は shikigami の MCP ツールだけで行います。ファイルの読み書きやコマンドは使えません。
-- 編集するときは summary に「何を・なぜ」を日本語で一文書きます。あなたの編集は Studio の「確認待ち」に並び、人が確かめてから本番で使われます。
-- 差し戻しを直すよう頼まれたら、get_scenario の feedback（詳しくは get_review）を読み、指摘どおりに直して、何を直したかを短く報告します。
-- パスワードや認証コードを尋ねたり受け取ったりしません。ログインはシークレットの名前で参照し、必要なシークレットが無ければ Studio の「シークレット」から登録してもらうよう伝えます。
-- 返事は日本語で短く。何をしたか、次に人が何をすればよいかを書きます。";
+You are an AI called from inside Shikigami Studio (RPA for Windows). You are talking with the person using Studio.
+- Read, edit and test-run scenarios only with the shikigami MCP tools. Files and commands are not available.
+- When you edit, write one sentence of what and why in `summary`, in the person's language. Your edits queue up in Studio's review, and a person checks them before they run in production.
+- When asked to fix something that was sent back, read the feedback in get_scenario (details in get_review), fix it as noted, and briefly report what you fixed.
+- Never ask for or accept passwords or authentication codes. Refer to logins by secret name; if a secret is missing, ask the person to register it under Secrets in Studio.
+- Reply briefly, in the language the person writes in (Japanese or English): what you did, and what the person should do next.";
 
 type CmdResult<T> = Result<T, ErrorPayload>;
 
@@ -213,6 +213,12 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 #[tauri::command]
 pub fn agent_info() -> AgentInfo {
+    // A dev build rebuilds the MCP server before the first message; start
+    // now, while the person is still typing, instead of after they send.
+    #[cfg(debug_assertions)]
+    tauri::async_runtime::spawn(async {
+        let _ = refresh_dev_cli().await;
+    });
     let config = AgentConfig::load();
     let command = config.executable();
     let problem = match (&command, cli_path()) {
@@ -659,10 +665,10 @@ fn with_context(message: &str, scenario: Option<&ScenarioRef>) -> String {
             let step = s
                 .step_id
                 .as_deref()
-                .map(|id| format!("、選んでいる手順 stepId={id}"))
+                .map(|id| format!(", selected step stepId={id}"))
                 .unwrap_or_default();
             format!(
-                "（Studio で開いているシナリオ：「{}」 id={}{step}）\n\n{message}",
+                "(Open in Studio: scenario \"{}\" id={}{step})\n\n{message}",
                 s.name, s.id
             )
         }
@@ -790,22 +796,23 @@ async fn refresh_dev_cli() -> CmdResult<()> {
     FRESH
         .get_or_try_init(|| async {
             let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-            let mut command = Command::new("cargo");
-            command
-                .args(["build", "--quiet", "--package", "shikigami-cli"])
-                .current_dir(root)
-                .stdin(Stdio::null())
-                .kill_on_drop(true);
-            #[cfg(windows)]
-            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-            match command.output().await {
+            let mut out = build_cli(&root).await;
+            // Windows cannot replace a running exe, and the person's own
+            // Claude Code keeps this MCP server running. It can rename one,
+            // though: move the old exe aside and build again.
+            if let Ok(o) = &out
+                && !o.status.success()
+                && String::from_utf8_lossy(&o.stderr).contains("failed to remove file")
+                && set_aside_cli(&root.join("target/debug"))
+            {
+                out = build_cli(&root).await;
+            }
+            match out {
                 Ok(out) if out.status.success() => Ok(()),
-                // Windows cannot replace a running exe: another Claude Code
-                // with this MCP server registered keeps it in use.
                 Ok(out) => Err(err(
                     "AGENT_FAILED",
                     format!(
-                        "shikigami コマンド（MCP サーバー）を最新のソースでビルドできませんでした。shikigami.exe を使っている Claude Code などを閉じてから、もう一度送ってください。\n{}",
+                        "shikigami コマンド（MCP サーバー）を最新のソースでビルドできませんでした。\n{}",
                         tail(String::from_utf8_lossy(&out.stderr).trim(), 1500)
                     ),
                 )),
@@ -815,6 +822,45 @@ async fn refresh_dev_cli() -> CmdResult<()> {
         })
         .await
         .map(|_| ())
+}
+
+#[cfg(debug_assertions)]
+async fn build_cli(root: &Path) -> std::io::Result<std::process::Output> {
+    let mut command = Command::new("cargo");
+    command
+        .args(["build", "--quiet", "--package", "shikigami-cli"])
+        .current_dir(root)
+        // Only the errors, not a progress bar per crate.
+        .env("CARGO_TERM_PROGRESS_WHEN", "never")
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    command.output().await
+}
+
+/// Renames `shikigami(.exe)` in `dir` to a `.old-*` name a running process
+/// can keep, and removes earlier ones nothing uses any more. Whether there
+/// was one to move.
+#[cfg(debug_assertions)]
+fn set_aside_cli(dir: &Path) -> bool {
+    let name = exe("shikigami");
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(&format!("{name}.old-"))
+            {
+                // Still running ones refuse; they go next time.
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    std::fs::rename(dir.join(&name), dir.join(format!("{name}.old-{stamp}"))).is_ok()
 }
 
 fn find_claude() -> Option<PathBuf> {
@@ -981,14 +1027,14 @@ mod tests {
         };
         assert!(
             with_context("直して", Some(&s))
-                .starts_with("（Studio で開いているシナリオ：「受注」 id=scn_1）")
+                .starts_with("(Open in Studio: scenario \"受注\" id=scn_1)")
         );
         let s = ScenarioRef {
             step_id: Some("stp_9".into()),
             ..s
         };
         assert!(with_context("直して", Some(&s)).starts_with(
-            "（Studio で開いているシナリオ：「受注」 id=scn_1、選んでいる手順 stepId=stp_9）"
+            "(Open in Studio: scenario \"受注\" id=scn_1, selected step stepId=stp_9)"
         ));
         assert_eq!(with_context("直して", None), "直して");
     }

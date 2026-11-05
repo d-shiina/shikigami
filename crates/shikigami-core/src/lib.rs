@@ -13,6 +13,7 @@ pub mod migrate;
 pub mod model;
 pub mod ops;
 pub mod policy;
+pub mod project;
 pub mod registry;
 pub mod requires;
 pub mod resource;
@@ -34,6 +35,7 @@ pub use model::{
 };
 pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
 pub use policy::{Decision, Policy, TargetDef, TargetKind};
+pub use project::{BundledFile, ConfigFile, ConfigItem, ConfigType, ProjectFile, ProjectFiles};
 pub use registry::{Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef};
 pub use review::{
     ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,
