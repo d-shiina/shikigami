@@ -22,6 +22,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | System layout, scenario format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
+| [docs/policy.md](docs/policy.md) | Unattended runs use only an approved, published version; allowed sites and apps; approving AI operations (`policy.json`) |
 | [docs/expressions.md](docs/expressions.md) | Functions available in scenario expressions |
 | [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md) | Built-in nodes: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF |
 | [docs/secrets.md](docs/secrets.md) | Logins: secrets the AI refers to by name only |
@@ -103,7 +104,9 @@ shikigami scenario list
 echo '[{"op":"addStep","step":{"type":"log.message","params":{"message":"hello"}}}]' \
   | shikigami scenario edit scn_example_invoice_summary -
 shikigami scenario undo scn_example_invoice_summary
-shikigami run scn_example_invoice_summary --json
+shikigami run scn_example_invoice_summary --draft --json   # try the work in progress
+shikigami version publish scn_example_invoice_summary       # a person reviews and publishes
+shikigami run scn_example_invoice_summary --json           # unattended runs use only the published version
 ```
 
 Edits made with the CLI while Studio is open show up in Studio immediately.

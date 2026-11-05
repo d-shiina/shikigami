@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Map, Value};
 use shikigami_core::call::MAX_CALL_DEPTH;
 use shikigami_core::expr::{self, Expr};
+use shikigami_core::policy::{Policy, TargetDef};
 use shikigami_core::project;
 use shikigami_core::registry::{builtin, control, is_control_type, scenario};
 use shikigami_core::resource::{ResourceDef, resource_keys};
@@ -403,6 +404,10 @@ pub(crate) struct Executor {
     pub handled_depth: u32,
     /// Scenarios `scenario.call` can run, as they were when the run started.
     pub library: Arc<HashMap<ScenarioId, Arc<Scenario>>>,
+    /// Params naming sites and programs, per step type.
+    pub target_defs: Arc<HashMap<String, Vec<TargetDef>>>,
+    /// The workspace policy as it was when the run started.
+    pub policy: Arc<Policy>,
 }
 
 fn expr_error(e: expr::ExprError) -> RunError {
@@ -457,6 +462,8 @@ impl Executor {
             in_call: self.in_call.clone(),
             handled_depth: 0,
             library: self.library.clone(),
+            target_defs: self.target_defs.clone(),
+            policy: self.policy.clone(),
         }
     }
 
@@ -1449,6 +1456,17 @@ impl Executor {
         {
             project::resolve_params(&mut params, keys, dir);
         }
+        // Sites and programs are checked after rendering, so a template
+        // cannot lead a step somewhere the workspace does not allow.
+        if let Some(defs) = self.target_defs.get(&step.step_type)
+            && let Err(refusal) = self.policy.check_targets(defs, &params)
+        {
+            let error = RunError {
+                details: Some(refusal.details),
+                ..RunError::new(refusal.code, refusal.message)
+            };
+            return Err(error.at_step(&step.id, &step.step_type).into());
+        }
         let retry = step.retry.or(self.default_retry);
         let max_attempts = retry.map_or(1, |r| r.max_attempts.max(1));
         let mut delay_ms = retry.map_or(0, |r| r.backoff_ms) as f64;
@@ -1477,6 +1495,7 @@ impl Executor {
                 timeout_ms,
                 emitter: self.emitter.clone(),
                 secrets: self.secrets.clone(),
+                sites_restricted: !self.policy.sites.is_empty(),
             };
             // Wait for exclusive resources (not counted towards the timeout).
             let resources = self

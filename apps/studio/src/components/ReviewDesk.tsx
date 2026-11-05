@@ -265,7 +265,8 @@ function Legend({ color, label }: { color: string; label: string }) {
 export function ReviewActions() {
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
-  const approveAll = useStudio((s) => s.approveAll);
+  const approveAndPublish = useStudio((s) => s.approveAndPublish);
+  const published = useStudio((s) => s.published);
   const revertAll = useStudio((s) => s.revertAll);
   const [sending, setSending] = useKeptState("review.sending", false);
   if (pending.length === 0) return null;
@@ -302,11 +303,15 @@ export function ReviewActions() {
         </button>
         <button
           type="button"
-          onClick={() => void approveAll()}
+          onClick={() => void approveAndPublish()}
+          title={t.desk.keepTitle}
           className="h-9 flex-[2] rounded-[4px] bg-ink px-4 text-[13px] font-semibold text-paper hover:bg-brand-700"
         >
           ✓ {t.desk.keep}
         </button>
+      </div>
+      <div className="text-[11px] text-slate-400">
+        {published ? t.desk.publishedNow(published.version, published.name) : t.desk.notPublishedYet}
       </div>
     </div>
   );

@@ -71,18 +71,19 @@ args = ["mcp"]
 |  | `export_scenario` | The scenario, its versions and the subscenarios it calls, as one bundle (without defaults of secret variables) |
 |  | `list_project_files` / `read_project_file` | The files in the scenario's folder (input, config, templates, output, work, logs), and a text file's contents ([files.md](files.md#the-scenarios-folder)) |
 |  | `list_secrets` | Names, sites and set fields of the secrets registered in Studio (never the values; see [secrets.md](secrets.md)) |
+|  | `get_policy` | The workspace's `policy.json`: the allowed sites and apps, and what the AI may do (allow / ask / deny). No tool changes it ([policy.md](policy.md)) |
 | write | `create_scenario` | Create a scenario (node IDs optional) |
 |  | `update_scenario` | Apply several EditOps atomically as one revision |
 |  | `add_step` / `update_step` / `remove_step` / `move_step` | Single edits |
 |  | (common edit arguments) | `summary`: what the change does (shown in review and history). `observations`: the `observationId`s of the screens it is based on |
 |  | `undo` / `redo` | The Undo stack shared with Studio and the CLI |
-|  | `delete_scenario` | Move to the trash. `expectedRevision` required, marked `destructiveHint`. `SCENARIO_IN_USE` while another scenario calls it |
+|  | `delete_scenario` | Move to the trash. `expectedRevision` required, marked `destructiveHint`. `SCENARIO_IN_USE` while another scenario calls it. Needs a person's approval by default (see "Approval" below) |
 |  | `create_version` / `restore_version` | Save a version / go back to a version (one edit that can be undone) |
 |  | `import_scenario` | Import a bundle or a scenario document. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subscenarios in the bundle come along |
 |  | `extract_subscenario` | Move consecutive nodes of one block into a new scenario and replace them with a single `scenario.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subscenarios.md)) |
 |  | `write_project_file` / `delete_project_file` | Put a file in the scenario's folder (`text`, or `copyFrom` a file on this PC; `overwrite` to replace) / move one to the trash |
 |  | `request_secret` | Ask the person for login details. Studio shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Studio and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
-| run | `run_scenario` | Run with the Runtime (the AI takes no part in running it). `waitMs` waits for it to finish. Input variables marked `secret: true` cannot be passed |
+| run | `run_scenario` | Run the work in progress with the Runtime (the AI's trial run; the AI takes no part in running it). `waitMs` waits for it to finish. `published: true` runs the published version. Input variables marked `secret: true` cannot be passed |
 |  | `stop_scenario` | Cancel a run |
 | browser | `inspect_page` | The page's accessibility tree (how to choose a `target`: [browser.md](browser.md)). Saves the tree and a screenshot as evidence and returns an `observationId` |
 | desktop | `inspect_ui` | The open windows, or the elements of one window (how to choose a `target`: [desktop.md](desktop.md)). When it looks at a window it saves the element tree as evidence and returns an `observationId` |
@@ -93,6 +94,17 @@ args = ["mcp"]
 - Failures are MCP tool errors (`isError: true`) with `{ code, message, details }`, so the AI can act on the code. For example: `REVISION_CONFLICT` (`details.actual` is the current revision), `VALIDATION_FAILED`, `SCENARIO_NOT_FOUND`.
 - Write tools accept `expectedRevision`. Without it the edit applies to the latest revision; with it, a conflicting change by someone else gives `REVISION_CONFLICT` instead of overwriting.
 - Every tool is annotated with `readOnlyHint` / `destructiveHint` / `openWorldHint` (clients use them in their approval UI).
+- `published` in `get_scenario` is the published version and whether the work in progress matches it (`matchesCurrent`). Unattended runs execute only the published version, and only a person can publish (there is no tool for it).
+
+## Approval
+
+Operations that the workspace's `policy.json` sets to `ask` (by default `run_scenario` and `test_step` with a node of risk `dangerous`, and `delete_scenario`) do not run straight away.
+
+1. The tool returns `APPROVAL_REQUIRED` with the request's ID in `details.approvalId`. Studio shows the request (on the CLI, `shikigami approval list`).
+2. The AI tells the person what it wants to do. Once the person clicks "Approve" in Studio, calling the same tool again with `approvalId` runs it, once. `approvalWaitMs` waits for the answer; `approvalReason` is shown to the person with the request.
+3. Different content gives `APPROVAL_MISMATCH`, a used approval `APPROVAL_USED`, a refusal `APPROVAL_DENIED`, and a `deny` operation `POLICY_DENIED`. Sites and apps outside the allowed ones give `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED`.
+
+See [policy.md](policy.md).
 
 ## Audit log
 
@@ -109,7 +121,7 @@ The scenario changes themselves (EditOps and their inverses) are recorded with t
 - **Verified**: automated E2E with the rmcp client (create → add → validate → run → read logs → read from another process → Undo/Redo, revision conflicts, stopping a run, tools limited by `--allow`, the schemas of every tool). Registered with `claude mcp add` from Claude Code CLI 2.1 and the connection (health check) succeeds. Editing over MCP with Studio open shows up in Studio, and Studio's Undo is recorded in the history as Studio.
 - **Not yet verified**: a conversation where Claude Code actually builds a scenario with the tools, connecting from Codex / Cursor, and running on real Windows machines.
 - Runs started from the MCP server stop when the server process (= the AI client's session) ends. Use `shikigami run` for long or unattended runs.
-- Human approval in Studio for deletions, per-client tool permissions, and per-scenario "may run from MCP" are not implemented (only the server-wide `--allow`).
+- Per-client tool permissions are not implemented (there is the server-wide `--allow` and the workspace-wide `policy.json`).
 - The audit log is JSONL. Indexing it in SQLite is not implemented.
 - The Streamable HTTP transport is not implemented (stdio only).
 - Screens are inspected with `inspect_page` for browsers ([browser.md](browser.md)) and `inspect_ui` for Windows apps ([desktop.md](desktop.md)). Both can be tried step by node with `test_step`.

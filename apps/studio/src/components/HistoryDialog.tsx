@@ -14,7 +14,11 @@ export function HistoryDialog() {
   const open = useStudio((s) => s.historyOpen);
   const setOpen = useStudio((s) => s.setHistoryOpen);
   const name = useStudio((s) => s.scenario?.name);
-  const [tab, setTab] = useState<Tab>("timeline");
+  const initialTab = useStudio((s) => s.historyTab);
+  const [tab, setTab] = useState<Tab>(initialTab);
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [open, initialTab]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);

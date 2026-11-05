@@ -408,13 +408,14 @@ CREATE TABLE proposals (                  -- AI repair proposals (applied after 
 | Irreversible mistakes | Deleting a scenario moves it to the trash. Every change is journaled and can be undone | **P1 done** |
 | Studio permissions | Tauri capabilities are `core:default` only. No file or shell plugins. CSP set | **P1 done** |
 | MCP access control | stdio by default (only the AI client that started it can connect). HTTP is localhost + token + Origin check | P2 |
-| Tool permissions | Tools are classed as `read / write / run / ui.read / ui.act / dangerous` and allowed per client in workspace settings. `dangerous` (deletion, file operations, starting apps outside the allowlist) needs user approval in Studio | P2 |
-| Allowlist of targets | `launch_application` / `navigate_browser` only for the allowlist in settings (executable paths, domains). The Runtime checks the same list when running | P2–P4 |
+| Tool permissions | `--allow read,write,run` limits the tools a server offers. On top of that, `ai` in the workspace's `policy.json` sets the AI's `run_scenario` / `test_step` (by the risk of the nodes) and `delete_scenario` to allow / ask / deny. Ask files a request in Studio, and only the exact content a person approved runs, once ([policy.md](policy.md)) | **Done** |
+| Allowlist of targets | `sites` (`browser.open`, `oauth.signIn`, `http.request`, `inspect_page`) and `apps` (`desktop.launch`, `process.run`) in `policy.json`. Node types declare the params that name a target in `targets`, and the Runtime checks their values after templates are rendered, in every run | **Done** |
 | File operation limits | File nodes only under directories allowed in workspace settings | P3 |
 | Credentials | People register them by name in Studio / the CLI. Values are encrypted with AES-256-GCM in the workspace; the key is one entry per workspace in Windows Credential Manager. Scenarios and AI get only the name. Input to unregistered sites is refused. Sign-in states (sessions) are encrypted with the same key ([secrets.md](secrets.md)) | **Done** |
 | Prompt injection | Results such as `inspect_ui` and page text are returned as structured data clearly labeled "untrusted data", and SKILL / tool descriptions say not to treat them as instructions. UI tools do not change scenarios; saving is a separate operation. Dangerous operations need human approval | P2 |
 | Audit | Every MCP tool call, approval and run in `audit_log` (scenario changes are journaled since P1) | P2 |
-| Run permissions | Per scenario: "may run from MCP", "may run unattended" | P2 |
+| Run permissions | Unattended runs (`shikigami run <id>`) execute only the version a person approved and published. Per scenario, "may run from AI" (`scenarios.<id>.aiRun`) and "may run unattended" (`unattended`) | **Done** |
+| Allowed folders for file operations | Limit where `file.*` nodes may work to allowed folders | Not yet |
 
 ## 10.5 Parallel execution
 
@@ -526,7 +527,7 @@ The first product milestone: **create a web scenario from an MCP client in natur
 
 - SAP GUI Scripting, Java Access Bridge and image recognition for Windows; resource exclusion between processes (§10.5); browser downloads and uploads
 - Drag-and-drop editing in Studio, breakpoints and stepping, a UI element inspector, diff view (Phase 5)
-- SQLite, per-client tool permissions and human approval of deletion, allowlists, credential store integration, MCP's Streamable HTTP
+- SQLite, per-client tool permissions, allowed folders for file operations, credential store integration, MCP's Streamable HTTP
 
 ### Known limits
 

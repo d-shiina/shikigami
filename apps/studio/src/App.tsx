@@ -3,6 +3,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 import { AgentContext, createAgentStore, useAgent } from "./agent";
 import { AgentPane } from "./components/AgentPane";
+import { ApprovalDialog } from "./components/ApprovalDialog";
 import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { ContextMenu } from "./components/ContextMenu";
@@ -374,6 +375,7 @@ function Shell() {
       <CommandPalette />
       <HistoryDialog />
       <SecretAskDialog />
+      <ApprovalDialog />
       <ContextMenu />
     </div>
   );
@@ -453,6 +455,7 @@ export function App() {
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
       events.onRunEvidence((e) => store.getState().onRunEvidence(e)),
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
+      events.onApprovalsChanged(() => void store.getState().loadApprovals()),
       agent.onEvent((e) => agentStore.getState().onEvent(e)),
       agent.onLogin((e) => agentStore.getState().onLoginEvent(e)),
     ];
@@ -464,11 +467,18 @@ export function App() {
     });
     unlisten.push(projectApi.onChanged((id) => void projectStore.getState().onChanged(id)));
     // Requests come from another process (the MCP server): re-read on refocus too.
-    const onFocus = () => void store.getState().loadSecretRequests();
+    void store.getState().loadApprovals();
+    const onFocus = () => {
+      void store.getState().loadSecretRequests();
+      void store.getState().loadApprovals();
+    };
     window.addEventListener("focus", onFocus);
     // A new request flashes Studio in the taskbar: the user is likely in the AI's chat.
     const stopAttention = store.subscribe((s, prev) => {
-      if (s.secretRequests.some((r) => !prev.secretRequests.some((p) => p.name === r.name))) {
+      const asked =
+        s.secretRequests.some((r) => !prev.secretRequests.some((p) => p.name === r.name)) ||
+        s.approvals.some((r) => !prev.approvals.some((p) => p.id === r.id));
+      if (asked) {
         void getCurrentWindow()
           .requestUserAttention(UserAttentionType.Informational)
           .catch(() => {});

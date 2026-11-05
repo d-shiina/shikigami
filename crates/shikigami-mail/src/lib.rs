@@ -378,6 +378,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             |(step_type, kind, label, description, params_schema, risk, examples)| {
                 (
                     StepTypeDef {
+                        targets: Vec::new(),
                         step_type: step_type.into(),
                         category: StepCategory::Office,
                         label: label.into(),
