@@ -83,6 +83,7 @@ export function AgentPane({ width }: { width: number }) {
           </div>
         )}
         <textarea
+          data-agent-input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {

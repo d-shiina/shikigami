@@ -7,6 +7,7 @@
 import type { ProjectFile, Scenario, Step, StepTypeDef } from "@shikigami/schema";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
+  Copy,
   Eraser,
   ExternalLink,
   FileCog,
@@ -17,15 +18,18 @@ import {
   FolderOpen,
   type LucideIcon,
   PanelLeftClose,
+  PenLine,
   Plus,
   ScrollText,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
+import { copyText, menuFor, type MenuSpec } from "../lib/contextMenu";
 import { locale, stepLabel, t } from "../lib/i18n";
-import { latestLog, logStatus, type Role, ROLES, roleOf, useProject, usersOf } from "../project";
+import { latestLog, logStatus, ProjectContext, type Role, ROLES, roleOf, useProject, usersOf } from "../project";
 
 const ROLE_COLOR: Record<Role, string> = {
   input: "var(--color-role-input)",
@@ -57,9 +61,8 @@ function meta(file: ProjectFile, scenario: Scenario | null, types: StepTypeDef[]
   return { text: t.project.usedByMany(users.length), dim: false };
 }
 
-type Menu = { x: number; y: number; path: string } | null;
-
-function FileRow({ file, role, onMenu }: { file: ProjectFile; role: Role; onMenu: (m: Menu) => void }) {
+function FileRow({ file, role }: { file: ProjectFile; role: Role }) {
+  const fileMenu = useFileMenu();
   const scenario = useStudio((s) => s.scenario);
   const types = useStudio((s) => s.stepTypes);
   const openFile = useProject((s) => s.openFile);
@@ -73,10 +76,7 @@ function FileRow({ file, role, onMenu }: { file: ProjectFile; role: Role; onMenu
     <button
       type="button"
       onClick={() => void openFile(file.path)}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onMenu({ x: e.clientX, y: e.clientY, path: file.path });
-      }}
+      onContextMenu={menuFor(() => fileMenu(file.path))}
       title={file.path}
       className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left ${open ? "bg-brand-50" : "hover:bg-slate-100"} ${dim ? "opacity-75" : ""}`}
     >
@@ -95,7 +95,7 @@ function FileRow({ file, role, onMenu }: { file: ProjectFile; role: Role; onMenu
   );
 }
 
-function Shelf({ role, files, over, onMenu }: { role: Role; files: ProjectFile[]; over: boolean; onMenu: (m: Menu) => void }) {
+function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: boolean }) {
   const newSettings = useProject((s) => s.newSettings);
   const color = ROLE_COLOR[role];
   return (
@@ -110,7 +110,7 @@ function Shelf({ role, files, over, onMenu }: { role: Role; files: ProjectFile[]
         <span className="ml-auto font-mono text-[10.5px]">{over ? t.project.dropHere(`${role}/`) : `${role}/`}</span>
       </div>
       {files.map((f) => (
-        <FileRow key={f.path} file={f} role={role} onMenu={onMenu} />
+        <FileRow key={f.path} file={f} role={role} />
       ))}
       {files.length === 0 &&
         (role === "config" ? (
@@ -129,42 +129,29 @@ function Shelf({ role, files, over, onMenu }: { role: Role; files: ProjectFile[]
   );
 }
 
-function ContextMenu({ menu, onClose }: { menu: NonNullable<Menu>; onClose: () => void }) {
-  const p = useProject((s) => s);
-  const isFolder = !menu.path.includes("/");
-  const item = (label: string, action: () => void, danger = false) => (
-    <button
-      type="button"
-      onClick={() => {
-        onClose();
-        action();
-      }}
-      className={`flex h-7 w-full items-center px-3 text-left text-[12.5px] hover:bg-slate-100 ${danger ? "text-shu-500" : "text-ink"}`}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={(e) => (e.preventDefault(), onClose())} />
-      <div
-        className="fixed z-50 w-56 rounded-[4px] border border-slate-200 bg-sheet py-1 shadow-lifted"
-        style={{ left: menu.x, top: Math.min(menu.y, window.innerHeight - 220) }}
-      >
-        {!isFolder && item(t.project.menu.open, () => void p.openFile(menu.path))}
-        {!isFolder && item(t.project.menu.openWithApp, () => void p.open(menu.path))}
-        {item(t.project.menu.reveal, () => void p.open(menu.path, true))}
-        {item(t.project.menu.copyPath, () => void navigator.clipboard.writeText(menu.path))}
-        <div className="my-1 border-t border-slate-100" />
-        {!isFolder &&
-          item(t.project.menu.rename, () => {
-            const name = window.prompt(t.project.renamePrompt, nameOf(menu.path));
-            if (name && name !== nameOf(menu.path)) void p.rename(menu.path, `${menu.path.slice(0, menu.path.lastIndexOf("/") + 1)}${name}`);
-          })}
-        {!isFolder && item(t.project.menu.remove, () => void p.remove(menu.path), true)}
-      </div>
-    </>
-  );
+/** Right-click on a file: open it, find it, or change it. */
+function useFileMenu() {
+  const project = useContext(ProjectContext);
+  return (path: string): MenuSpec[] => {
+    const p = project!.getState();
+    const isFolder = !path.includes("/");
+    return [
+      !isFolder && { label: t.project.menu.open, icon: FileText, run: () => void p.openFile(path) },
+      !isFolder && { label: t.project.menu.openWithApp, icon: ExternalLink, run: () => void p.open(path) },
+      { label: t.project.menu.reveal, icon: FolderOpen, run: () => void p.open(path, true) },
+      { label: t.project.menu.copyPath, icon: Copy, run: () => copyText(path) },
+      "-",
+      !isFolder && {
+        label: t.project.menu.rename,
+        icon: PenLine,
+        run: () => {
+          const name = window.prompt(t.project.renamePrompt, nameOf(path));
+          if (name && name !== nameOf(path)) void p.rename(path, `${path.slice(0, path.lastIndexOf("/") + 1)}${name}`);
+        },
+      },
+      !isFolder && { label: t.project.menu.remove, icon: Trash2, danger: true, run: () => void p.remove(path) },
+    ];
+  };
 }
 
 /** Reads picked files as base64 for upload_project_file. */
@@ -246,7 +233,7 @@ export function ProjectPanel() {
   const files = useProject((s) => s.files);
   const p = useProject((s) => s);
   const keepWork = useStudio((s) => s.scenario?.settings?.keepWork ?? false);
-  const [menu, setMenu] = useState<Menu>(null);
+  const fileMenu = useFileMenu();
   const [over, setOver] = useState<Role | "panel" | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const [adding, setAdding] = useState(false);
@@ -317,7 +304,7 @@ export function ProjectPanel() {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
         {ROLES.map((role) => (
-          <Shelf key={role} role={role} files={byRole(role)} over={over === role} onMenu={setMenu} />
+          <Shelf key={role} role={role} files={byRole(role)} over={over === role} />
         ))}
         {others.length > 0 && (
           <section className="pb-1">
@@ -327,10 +314,7 @@ export function ProjectPanel() {
                 key={f.path}
                 type="button"
                 onClick={() => void p.openFile(f.path)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, path: f.path });
-                }}
+                onContextMenu={menuFor(() => fileMenu(f.path))}
                 className="flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-[12px] text-slate-600 hover:bg-slate-100"
               >
                 <FileText size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -375,7 +359,6 @@ export function ProjectPanel() {
           <span>{t.project.dropHint}</span>
         </div>
       </div>
-      {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
     </aside>
   );
 }

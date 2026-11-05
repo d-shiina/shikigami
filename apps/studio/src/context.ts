@@ -10,3 +10,10 @@ export function useStudio<T>(selector: (state: StudioState) => T): T {
   if (!store) throw new Error("StudioContext is missing");
   return useStore(store, selector);
 }
+
+/** The store itself, for handlers that read the state when they run (menus). */
+export function useStudioApi(): StoreApi<StudioState> {
+  const store = useContext(StudioContext);
+  if (!store) throw new Error("StudioContext is missing");
+  return store;
+}

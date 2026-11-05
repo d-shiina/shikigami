@@ -3,6 +3,8 @@
 // write it and which read it, and what it held after the last run. Editing a
 // variable stays in the inspector (the scenario's properties); a step here
 // opens it on the chart.
+import { menuFor } from "../lib/contextMenu";
+import { useVariableMenu } from "./menus";
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { useMemo } from "react";
 import { useStudio } from "../context";
@@ -58,6 +60,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
   const stepTypes = useStudio((s) => s.stepTypes);
   const changes = useStudio((s) => s.run?.changes);
   const goTo = useStudio((s) => s.goTo);
+  const variableMenu = useVariableMenu();
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const rows = useMemo(() => (scenario ? variableUsage(scenario.steps ?? [], scenario.variables) : []), [scenario]);
   if (!scenario) return null;
@@ -101,6 +104,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                       // Lights up the same variable on the chart and the inspector.
                       onMouseEnter={() => focus.set(varFocus(u.name))}
                       onMouseLeave={() => focus.set(null)}
+                      onContextMenu={menuFor(() => variableMenu(u.name, { writer: u.writers[0], onOpenWriter: open }))}
                     >
                       <td className="px-3 py-2">
                         <span className={`rounded-[2px] px-1.5 text-[10px] leading-4 font-semibold whitespace-nowrap ${DIRECTION_TONE[u.direction]}`}>
