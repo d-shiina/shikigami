@@ -849,8 +849,8 @@ fn a_picture_turns_a_quarter_left() {
     assert_eq!(turned.rgba, vec![0, 0, 255, 255, 255, 0, 0, 255]);
 }
 
-/// Vertical Japanese text is read top to bottom, and its words are placed
-/// down the column.
+/// Vertical Japanese text is read top to bottom, columns right to left, and
+/// its words are placed down the column.
 #[test]
 fn paddle_reads_vertical_text() {
     let Ok(engine) = crate::paddle::engine() else {
@@ -860,13 +860,13 @@ fn paddle_reads_vertical_text() {
     let bytes = include_bytes!("../tests/fixtures/vertical-ja.png");
     let lines = engine.recognize(&Bitmap::from_png(bytes).unwrap()).unwrap();
     let texts: Vec<String> = lines.iter().map(OcrLine::text).collect();
-    assert!(texts.contains(&"請求書の確認".to_owned()), "{texts:?}");
-    assert!(texts.contains(&"OK".to_owned()), "{texts:?}");
+    // Columns from right to left, as a person reads them.
+    assert_eq!(texts, ["請求書の確認", "支払期日"]);
     let found = find_text(&lines, "確認", false);
     assert_eq!(found.len(), 1);
     let (x, y) = found[0].center();
     assert!(
-        (20..=50).contains(&x) && (150..=195).contains(&y),
+        (120..=150).contains(&x) && (150..=195).contains(&y),
         "{:?}",
         found[0]
     );

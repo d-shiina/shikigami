@@ -226,21 +226,35 @@ impl Paddle {
         for batch in crops.chunks(REC_BATCH) {
             for ((rect, _), line) in batch.iter().zip(self.read_lines(batch)?) {
                 if let Some(mut line) = line {
-                    if rect.height as f32 >= rect.width as f32 * VERTICAL_RATIO {
+                    let vertical = rect.height as f32 >= rect.width as f32 * VERTICAL_RATIO;
+                    if vertical {
                         line = line.turned_back(rect.width);
                     }
-                    lines.push(line.offset(rect.x, rect.y));
+                    lines.push((line.offset(rect.x, rect.y), vertical));
                 }
             }
         }
-        Ok(reading_order(lines, |l| {
-            l.rect().unwrap_or(Rect {
+        Ok(reading_order(lines, |(l, vertical)| {
+            let rect = l.rect().unwrap_or(Rect {
                 x: 0,
                 y: 0,
                 width: 1,
                 height: 1,
-            })
-        }))
+            });
+            // Vertical columns are read right to left: mirrored, the
+            // rightmost comes first in its row.
+            if *vertical {
+                Rect {
+                    x: -rect.right(),
+                    ..rect
+                }
+            } else {
+                rect
+            }
+        })
+        .into_iter()
+        .map(|(line, _)| line)
+        .collect())
     }
 
     fn detect(&self, image: &Bitmap) -> Result<Vec<Rect>, StepError> {
