@@ -550,10 +550,16 @@ async fn read_text_reads_a_window_part_or_a_file() {
     .await;
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(screen.ocr_sizes.lock().unwrap()[0], (200, 50));
+    let out = &report.outputs["out"];
+    assert_eq!(out["text"], json!("合計1,200円"));
     assert_eq!(
-        report.outputs["out"],
-        json!({ "text": "合計1,200円", "lines": [{ "text": "合計1,200円", "x": 110, "y": 205, "width": 130, "height": 20 }] })
+        out["lines"],
+        json!([{ "text": "合計1,200円", "x": 110, "y": 205, "width": 130, "height": 20 }])
     );
+    // Which engine read it (Windows OCR, with a warning, when the default
+    // falls back to it).
+    assert!(["paddle", "windows"].contains(&out["engine"].as_str().unwrap()));
+    assert_eq!(out["warning"].is_string(), out["engine"] == "windows");
 
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("invoice.png");
@@ -781,4 +787,20 @@ fn paddle_reads_small_japanese_screen_text() {
     let amount = find_text(&lines, "金額", false);
     let (x, _) = amount[0].center();
     assert!((40..=66).contains(&x), "{:?}", amount[0]);
+}
+
+/// A purple, underlined link cut tight around its text (pasted from the
+/// clipboard): Windows OCR read "ocr" as "。c" and "AI開発" as "A発".
+#[test]
+fn paddle_reads_an_underlined_link() {
+    let Ok(engine) = crate::paddle::engine() else {
+        eprintln!("skipped: PaddleOCR is not installed");
+        return;
+    };
+    let bytes = include_bytes!("../tests/fixtures/link-ja.png");
+    let lines = engine.recognize(&Bitmap::from_png(bytes).unwrap()).unwrap();
+    let text: String = ocr_text(&lines).split_whitespace().collect();
+    for expected in ["ocr手書き", "ノーコードの帳票", "驚くほど簡単なAI開発"] {
+        assert!(text.contains(expected), "{expected} in {text}");
+    }
 }
