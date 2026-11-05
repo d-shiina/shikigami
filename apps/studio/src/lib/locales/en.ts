@@ -767,6 +767,8 @@ export const en: Dict = {
     pkce: "PKCE",
     file: "File",
     language: "Language",
+    engine: "OCR engine",
+    accurate: "Accurate (handwriting, slower)",
   },
   outputLabels: { writes: "Writes", item: "Item", index: "Index", result: "Result" },
   verbs: {

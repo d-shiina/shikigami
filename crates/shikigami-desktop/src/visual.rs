@@ -183,7 +183,9 @@ pub async fn look(
             let options = OcrOptions {
                 language: query.language.clone(),
                 engine: query.engine.as_deref().map(OcrEngine::parse).transpose()?,
-            };
+                accurate: query.accurate,
+            }
+            .check()?;
             let lines = read_lines(backend, &picture, options).await?;
             let places: Vec<(Rect, Option<f32>)> =
                 vision::find_text(&lines, &query.text, query.exact)
@@ -300,13 +302,15 @@ pub fn is_not_seen(e: &StepError) -> bool {
 /// `language` and `engine` of a step or inspect_ui.
 pub fn ocr_options(params: &Value) -> Result<OcrOptions, StepError> {
     let text = |key: &str| params.get(key).and_then(Value::as_str).map(str::to_owned);
-    Ok(OcrOptions {
+    OcrOptions {
         language: text("language"),
         engine: text("engine")
             .as_deref()
             .map(OcrEngine::parse)
             .transpose()?,
-    })
+        accurate: params.get("accurate").and_then(Value::as_bool) == Some(true),
+    }
+    .check()
 }
 
 /// The result of desktop.readText.

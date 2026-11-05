@@ -42,7 +42,10 @@ jobs:
       # adapter next to Studio, so browser steps work without Node.js.
       - run: pnpm studio:bundle-cli
       - run: pnpm studio:bundle-node
+      # The accurate (medium) models must be in the installer.
       - run: pnpm studio:bundle-ocr
+        env:
+          SHIKIGAMI_OCR_ACCURATE: required
       - run: node apps/studio/scripts/set-pubkey.mjs
         env:
           TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}

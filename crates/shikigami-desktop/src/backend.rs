@@ -110,7 +110,7 @@ pub trait Backend: Send + Sync + 'static {
         if options.engine == Some(OcrEngine::Windows) {
             return Box::pin(async { Err(unsupported()) });
         }
-        paddle_recognize(image)
+        paddle_recognize(image, options.accurate)
     }
 
     /// An image file (PNG everywhere; other formats where the platform
@@ -128,12 +128,27 @@ pub struct OcrOptions {
     pub language: Option<String>,
     /// `None`: PaddleOCR when installed, otherwise Windows OCR.
     pub engine: Option<OcrEngine>,
+    /// PaddleOCR's larger models: much better on handwriting, several
+    /// times slower. Always PaddleOCR.
+    pub accurate: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OcrEngine {
     Paddle,
     Windows,
+}
+
+impl OcrOptions {
+    /// `accurate` is PaddleOCR's; it does not go with Windows OCR.
+    pub fn check(self) -> Result<Self, StepError> {
+        if self.accurate && self.engine == Some(OcrEngine::Windows) {
+            return Err(StepError::invalid_params(
+                "accurate uses PaddleOCR's larger models; leave out engine: \"windows\"",
+            ));
+        }
+        Ok(self)
+    }
 }
 
 impl OcrEngine {
@@ -149,10 +164,13 @@ impl OcrEngine {
 }
 
 /// PaddleOCR on a worker thread (it keeps a CPU busy for a moment).
-pub fn paddle_recognize(image: Bitmap) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
+pub fn paddle_recognize(
+    image: Bitmap,
+    accurate: bool,
+) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
     Box::pin(async move {
         tokio::task::spawn_blocking(move || {
-            crate::paddle::engine()
+            crate::paddle::engine_for(accurate)
                 .map_err(|reason| crate::paddle::unavailable(&reason))?
                 .recognize(&image)
         })

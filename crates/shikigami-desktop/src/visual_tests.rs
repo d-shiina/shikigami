@@ -871,3 +871,25 @@ fn paddle_reads_vertical_text() {
         found[0]
     );
 }
+
+/// The accurate models (PP-OCRv6 medium), when installed, read the same
+/// way; `accurate` does not go with Windows OCR.
+#[test]
+fn paddle_accurate_models_read_too() {
+    let windows = crate::visual::ocr_options(&json!({ "accurate": true, "engine": "windows" }));
+    assert_eq!(windows.unwrap_err().code, "INVALID_PARAMS");
+    let options = crate::visual::ocr_options(&json!({ "accurate": true })).unwrap();
+    assert!(options.accurate);
+
+    let engine = match crate::paddle::accurate_engine() {
+        Ok(engine) => engine,
+        Err(reason) => {
+            eprintln!("skipped: {reason}");
+            return;
+        }
+    };
+    let bytes = include_bytes!("../tests/fixtures/vertical-ja.png");
+    let lines = engine.recognize(&Bitmap::from_png(bytes).unwrap()).unwrap();
+    let texts: Vec<String> = lines.iter().map(OcrLine::text).collect();
+    assert!(texts.contains(&"請求書の確認".to_owned()), "{texts:?}");
+}

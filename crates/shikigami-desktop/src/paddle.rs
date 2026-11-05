@@ -67,11 +67,38 @@ pub struct Paddle {
     skip: Vec<bool>,
 }
 
+/// The larger, slower models (PP-OCRv6 medium) in `medium\` next to the
+/// small ones: much better on handwriting, chosen with `accurate: true`.
+pub const ACCURATE_DIR: &str = "medium";
+
+static RUNTIME_ENV: OnceLock<Result<(ort::environment::Environment, PathBuf), String>> =
+    OnceLock::new();
 static ENGINE: OnceLock<Result<Paddle, String>> = OnceLock::new();
+static ACCURATE: OnceLock<Result<Paddle, String>> = OnceLock::new();
 
 /// The engine, loaded on first use. `Err` says why it is not available.
 pub fn engine() -> Result<&'static Paddle, String> {
-    ENGINE.get_or_init(load).as_ref().map_err(Clone::clone)
+    ENGINE
+        .get_or_init(|| load(None))
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+/// The accurate engine (the medium models), loaded on first use.
+pub fn accurate_engine() -> Result<&'static Paddle, String> {
+    ACCURATE
+        .get_or_init(|| load(Some(ACCURATE_DIR)))
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+/// The engine `accurate` asks for.
+pub fn engine_for(accurate: bool) -> Result<&'static Paddle, String> {
+    if accurate {
+        accurate_engine()
+    } else {
+        engine()
+    }
 }
 
 /// Where the models and runtime are, if anywhere.
@@ -112,22 +139,43 @@ fn runtime_path(dir: &Path) -> Option<PathBuf> {
         })
 }
 
-fn load() -> Result<Paddle, String> {
-    let dir = find_dir().ok_or("the PaddleOCR models are not installed")?;
-    let runtime = runtime_path(&dir)
-        .ok_or_else(|| format!("ONNX Runtime ({RUNTIME}) is missing in {}", dir.display()))?;
-    #[cfg(windows)]
-    crate::capture::preload_library(&runtime)?;
+/// ONNX Runtime, loaded once (a process has one environment), and the
+/// folder it came from.
+fn runtime() -> Result<&'static (ort::environment::Environment, PathBuf), String> {
+    RUNTIME_ENV
+        .get_or_init(|| {
+            let dir = find_dir().ok_or("the PaddleOCR models are not installed")?;
+            let runtime = runtime_path(&dir).ok_or_else(|| {
+                format!("ONNX Runtime ({RUNTIME}) is missing in {}", dir.display())
+            })?;
+            #[cfg(windows)]
+            crate::capture::preload_library(&runtime)?;
+            let environment = ort::init_from(&runtime)
+                .map_err(|e| format!("cannot load {}: {e}", runtime.display()))?
+                .with_name("shikigami-ocr")
+                .build()
+                .map_err(|e| format!("ONNX Runtime: {e}"))?;
+            Ok((environment, dir))
+        })
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+/// The models in the OCR folder, or in its `sub` folder.
+fn load(sub: Option<&str>) -> Result<Paddle, String> {
+    let (environment, dir) = runtime()?;
+    let dir = match sub {
+        Some(sub) => dir.join(sub),
+        None => dir.clone(),
+    };
+    if !dir.join(DET_MODEL).is_file() || !dir.join(REC_MODEL).is_file() {
+        return Err(format!("the models are not installed in {}", dir.display()));
+    }
     let threads = std::thread::available_parallelism()
         .map_or(2, |n| n.get())
         .clamp(1, 4);
-    let environment = ort::init_from(&runtime)
-        .map_err(|e| format!("cannot load {}: {e}", runtime.display()))?
-        .with_name("shikigami-ocr")
-        .build()
-        .map_err(|e| format!("ONNX Runtime: {e}"))?;
     let session = |name: &str| -> Result<Session, String> {
-        Session::builder(&environment)
+        Session::builder(environment)
             .and_then(|mut b| {
                 b = b.with_intra_threads(threads)?;
                 b.commit_from_file(dir.join(name))
@@ -521,6 +569,16 @@ impl OcrLine {
 
 /// Why PaddleOCR cannot run, as a step error for `engine: "paddle"`.
 pub fn unavailable(reason: &str) -> StepError {
+    // The hint differs: the accurate models are a separate download.
+    if reason.contains(ACCURATE_DIR) {
+        return StepError::permanent(
+            "OCR_ENGINE_MISSING",
+            format!("PaddleOCR's accurate models are not available: {reason}"),
+        )
+        .with_details(json!({
+            "hint": "Reinstall Shikigami (the installer includes them), run `pnpm studio:bundle-ocr` in a development checkout, or leave out accurate."
+        }));
+    }
     StepError::permanent("OCR_ENGINE_MISSING", format!("PaddleOCR is not available: {reason}"))
         .with_details(json!({
             "hint": "Reinstall Shikigami (the installer includes the OCR models), run `pnpm studio:bundle-ocr` in a development checkout, or leave out engine to use Windows OCR."

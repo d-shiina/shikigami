@@ -527,10 +527,11 @@ impl DesktopStep {
         };
         // Without PaddleOCR the default falls back to Windows OCR, which
         // reads Japanese far worse: say so in the output, not only in a log.
-        let fallback = (cfg!(windows) && options.engine.is_none())
+        let fallback = (cfg!(windows) && options.engine.is_none() && !options.accurate)
             .then(|| paddle::engine().err())
             .flatten();
         let engine = match (options.engine, &fallback) {
+            _ if options.accurate => "paddle-accurate",
             (Some(OcrEngine::Windows), _) | (None, Some(_)) => "windows",
             _ => "paddle",
         };
@@ -706,7 +707,8 @@ fn target_schema(allow: Allow) -> Value {
             "exact": { "type": "boolean", "description": "行全体がこの文字のときだけ" },
             "nth": { "type": "integer", "minimum": 0, "description": "複数見つかったときの 0 始まりの番号（上から、同じ行は左から）" },
             "language": { "type": "string", "minLength": 2, "description": "Windows OCR の言語（ja, en-US など。既定はユーザーの言語）。PaddleOCR は日本語・中国語・英語をまとめて読むので不要" },
-            "engine": { "enum": ["paddle", "windows"], "description": "OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）" }
+            "engine": { "enum": ["paddle", "windows"], "description": "OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）" },
+            "accurate": { "type": "boolean", "description": "高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）" }
         },
         "required": ["text"],
         "additionalProperties": false
@@ -947,12 +949,13 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: READ_TEXT,
             kind: Kind::ReadText,
             label: "文字を読み取る（OCR）",
-            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height }], engine, warning? } (places in window pixels; engine is \"paddle\" or \"windows\", and warning says when the default fell back to Windows OCR). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
+            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"; accurate: true reads with larger models, much better on handwriting but several times slower): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height }], engine, warning? } (places in window pixels; engine is \"paddle\", \"paddle-accurate\" or \"windows\", and warning says when the default fell back to Windows OCR). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
             params: json!({
                 "target": picture,
                 "file": { "type": "string", "minLength": 1, "description": "画面の代わりに読む画像ファイルのフルパス" },
                 "language": { "type": "string", "minLength": 2, "description": "Windows OCR の言語（ja, en-US など）。PaddleOCR では不要" },
-                "engine": { "enum": ["paddle", "windows"], "description": "OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）" }
+                "engine": { "enum": ["paddle", "windows"], "description": "OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）" },
+            "accurate": { "type": "boolean", "description": "高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）" }
             }),
             required: &[],
             has_output: true,

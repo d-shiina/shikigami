@@ -150,6 +150,7 @@ impl Backend for UiaBackend {
         options: OcrOptions,
     ) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
         let windows = match options.engine {
+            _ if options.accurate => false,
             Some(OcrEngine::Windows) => true,
             Some(OcrEngine::Paddle) => false,
             None => match crate::paddle::engine() {
@@ -161,7 +162,7 @@ impl Backend for UiaBackend {
             },
         };
         if !windows {
-            return crate::backend::paddle_recognize(image);
+            return crate::backend::paddle_recognize(image, options.accurate);
         }
         // Windows OCR needs only the thread's apartment, not UI Automation.
         self.on_thread(move |_| capture::recognize(&image, options.language.as_deref()))

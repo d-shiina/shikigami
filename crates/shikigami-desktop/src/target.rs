@@ -73,6 +73,9 @@ pub struct TextQuery {
     /// `paddle` or `windows` (default: PaddleOCR when installed).
     #[serde(default)]
     pub engine: Option<String>,
+    /// PaddleOCR's larger models (handwriting; slower).
+    #[serde(default)]
+    pub accurate: bool,
 }
 
 /// What a step allows in its target besides a window and an element.
