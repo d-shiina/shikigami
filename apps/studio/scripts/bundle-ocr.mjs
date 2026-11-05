@@ -4,6 +4,10 @@
 // rec.onnx) and ONNX Runtime. A copy goes to target/ocr, where development
 // builds and `cargo test` find it (see crates/shikigami-desktop/src/paddle.rs).
 //
+// `--if-missing` (run by `pnpm studio:dev`) does nothing when target/ocr
+// already holds these exact files: without them OCR silently falls back to
+// Windows OCR, which reads Japanese badly.
+//
 // Everything comes from PyPI wheels, pinned to a version and checked against
 // the SHA-256 below; downloads are cached in target/ocr-dist. The models are
 // Apache-2.0 (PaddleOCR, converted by RapidOCR); ONNX Runtime is MIT.
@@ -56,6 +60,13 @@ const platform = `${process.platform}-${arch}`;
 const runtime = RUNTIME[platform];
 if (!runtime) throw new Error(`no pinned ONNX Runtime for ${platform}`);
 
+// Which wheels target/ocr was made from; a new pin makes it stale.
+const stampFile = join(devDir, "bundled-from.txt");
+const stamp = `${MODELS.url}\n${runtime.url}\n`;
+if (process.argv.includes("--if-missing") && existsSync(stampFile) && readFileSync(stampFile, "utf8") === stamp) {
+  process.exit(0);
+}
+
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
@@ -73,6 +84,7 @@ if (process.platform === "win32") copyVcRuntime();
 rmSync(devDir, { recursive: true, force: true });
 mkdirSync(devDir, { recursive: true });
 for (const file of readdirSync(outDir)) copyFileSync(join(outDir, file), join(devDir, file));
+writeFileSync(stampFile, stamp);
 console.log(`bundled PaddleOCR (PP-OCRv6 small) and ONNX Runtime: ${outDir} (and ${devDir})`);
 
 /** The wheel's bytes, from the cache or PyPI, checked against its SHA-256. */

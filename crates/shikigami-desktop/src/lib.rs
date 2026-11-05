@@ -48,7 +48,7 @@ mod uia;
 pub mod vision;
 pub mod visual;
 
-use backend::{Backend, MouseButton, Op, Text};
+use backend::{Backend, MouseButton, OcrEngine, Op, Text};
 use target::{APP_SITE_PREFIX, Allow, ElementQuery, Target, WindowQuery};
 use visual::Looking;
 
@@ -525,8 +525,24 @@ impl DesktopStep {
                 self.picture(&target, input, deadline).await?
             }
         };
+        // Without PaddleOCR the default falls back to Windows OCR, which
+        // reads Japanese far worse: say so in the output, not only in a log.
+        let fallback = (cfg!(windows) && options.engine.is_none())
+            .then(|| paddle::engine().err())
+            .flatten();
+        let engine = match (options.engine, &fallback) {
+            (Some(OcrEngine::Windows), _) | (None, Some(_)) => "windows",
+            _ => "paddle",
+        };
         let lines = visual::read_lines(self.backend.as_ref(), &picture, options).await?;
-        Ok(visual::read_output(&lines))
+        let mut output = visual::read_output(&lines);
+        output["engine"] = json!(engine);
+        if let Some(reason) = fallback {
+            output["warning"] = json!(format!(
+                "Read with Windows OCR because PaddleOCR is not available ({reason}); Japanese is read much worse. Reinstall Shikigami, or run `pnpm studio:bundle-ocr` in a development checkout."
+            ));
+        }
+        Ok(output)
     }
 
     async fn screenshot(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
@@ -931,7 +947,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: READ_TEXT,
             kind: Kind::ReadText,
             label: "文字を読み取る（OCR）",
-            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height }] } (places in window pixels). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
+            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height }], engine, warning? } (places in window pixels; engine is \"paddle\" or \"windows\", and warning says when the default fell back to Windows OCR). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
             params: json!({
                 "target": picture,
                 "file": { "type": "string", "minLength": 1, "description": "画面の代わりに読む画像ファイルのフルパス" },
