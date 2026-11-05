@@ -468,6 +468,7 @@ impl ShikigamiMcp {
         &self,
         policy: &Policy,
         step: &shikigami_core::Step,
+        scenario_id: Option<&str>,
     ) -> Result<(Gate<'static>, Vec<shikigami_core::Subscenario>), ErrorPayload> {
         // A typo is an error to fix, not an action to approve.
         if self.inner.runtime.registry().get(&step.step_type).is_none() {
@@ -492,7 +493,8 @@ impl ShikigamiMcp {
             risk,
             step_types,
             scenario: None,
-            subject: json!({ "step": step, "scenarios": snapshot_ids(&subs) }),
+            // The folder relative paths resolve from is part of what runs.
+            subject: json!({ "step": step, "scenarioId": scenario_id, "scenarios": snapshot_ids(&subs) }),
         };
         Ok((gate, subs))
     }
@@ -1529,7 +1531,7 @@ impl ShikigamiMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let gated = match self
             .policy()
-            .and_then(|policy| self.test_step_gate(&policy, &p.step))
+            .and_then(|policy| self.test_step_gate(&policy, &p.step, p.scenario_id.as_deref()))
         {
             Ok((gate, subs)) => self.gate(&peer, gate, &p.approval).await.map(|()| subs),
             Err(e) => Err(e),

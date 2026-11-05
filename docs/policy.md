@@ -71,7 +71,7 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | `ai.testStep` | same | The AI's `test_step`. The highest risk including nodes inside blocks and scenarios called with `scenario.call` |
 | `ai.deleteScenario` | ask | The AI's `delete_scenario` |
 | `scenarios.<id>.aiRun` | none | Stricter rules for this scenario only (and runs and tests that call it). Never looser than the global rule |
-| `scenarios.<id>.unattended` | true | When false, `shikigami run` does not run it (`UNATTENDED_NOT_ALLOWED`). Studio still can |
+| `scenarios.<id>.unattended` | true | When false, `shikigami run` does not run it, nor any scenario that calls it (`UNATTENDED_NOT_ALLOWED`). Studio still can |
 
 `allow` = go ahead, `ask` = after a person approves in Studio, `deny` = never. The risk is the node type's `risk` (`safe`: variables, logs, control; `interactive`: operating screens; `dangerous`: deleting and moving files, HTTP to the outside, running programs and so on). Unregistered node types count as `dangerous`.
 
@@ -81,7 +81,9 @@ A broken `policy.json` (bad JSON, unknown fields, `sites` that are not origins) 
 
 Right before a node runs, the Runtime checks its params after templates are rendered. If the target is not allowed, the node does not run and fails with `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED` (`details.allowed` holds the allowlist). Building a URL from input variables or an earlier node's result cannot leave the allowlist. The `url` given to MCP's `inspect_page` is checked against the same list.
 
-Limit: where a clicked link or a redirect leads inside the page is not checked (only the destination the node names).
+While `sites` is set, `http.request` follows redirects only within the origin it was sent to; a redirect elsewhere comes back as the 3xx response.
+
+Limit: where a clicked link or a redirect leads inside the browser page is not checked (only the destination the node names).
 
 ## 3. Approving AI operations
 

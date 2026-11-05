@@ -71,7 +71,7 @@
 | `ai.testStep` | 同上 | AI の `test_step`。ブロックの中のステップと、`scenario.call` の呼び出し先を含めたいちばん高い危険度 |
 | `ai.deleteScenario` | ask | AI の `delete_scenario` |
 | `scenarios.<id>.aiRun` | なし | このシナリオ（と、これを呼ぶ実行・試行）だけ厳しくする。全体の規則より緩くはならない |
-| `scenarios.<id>.unattended` | true | false なら `shikigami run` で動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
+| `scenarios.<id>.unattended` | true | false なら `shikigami run` で動かさない。これを呼ぶシナリオも動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
 
 `allow`＝そのまま、`ask`＝人が Studio で承認してから、`deny`＝させない。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
 
@@ -81,7 +81,9 @@
 
 Runtime が、テンプレートを展開した後の params をステップの実行直前に調べます。許可されていなければそのステップは動かず `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED`（`details.allowed` に許可リスト）で失敗します。入力変数や前のステップの結果から URL を組み立てても、許可リストの外には出られません。MCP の `inspect_page` に渡した `url` も同じリストで調べます。
 
-制約：ページの中のリンクをクリックした先や、リダイレクト先は調べていません（ステップが指定した行き先だけを見ます）。
+`sites` を書いているあいだ、`http.request` は送った先と同じオリジンの中だけリダイレクトをたどります。ほかのオリジンへのリダイレクトは 3xx の応答として返ります。
+
+制約：ブラウザのページの中でリンクをクリックした先や、リダイレクト先は調べていません（ステップが指定した行き先だけを見ます）。
 
 ## 3. AI の操作の承認
 

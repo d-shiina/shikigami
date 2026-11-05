@@ -860,6 +860,14 @@ async fn publishing_and_the_policy_keep_people_in_charge() {
         )
         .await;
     assert_eq!(e["code"], "APPROVAL_MISMATCH");
+    // Another scenario's folder is another place for relative paths.
+    let (_, e) = h
+        .call(
+            "test_step",
+            json!({ "step": step, "scenarioId": id, "approvalId": approval }),
+        )
+        .await;
+    assert_eq!(e["code"], "APPROVAL_MISMATCH");
     let out = h
         .ok("test_step", json!({ "step": step, "approvalId": approval }))
         .await;

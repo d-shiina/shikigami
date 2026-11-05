@@ -1495,6 +1495,7 @@ impl Executor {
                 timeout_ms,
                 emitter: self.emitter.clone(),
                 secrets: self.secrets.clone(),
+                sites_restricted: !self.policy.sites.is_empty(),
             };
             // Wait for exclusive resources (not counted towards the timeout).
             let resources = self

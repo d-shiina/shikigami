@@ -903,23 +903,33 @@ fn runnable(
     }
     let id = ScenarioId::new(target);
     let policy = Policy::load(&Policy::path(svc.store().root())).map_err(core_err)?;
-    if !policy.allows_unattended(id.as_str()) {
-        return Err(core_err(shikigami_core::CoreError::Rejected {
+    let unattended = |id: &ScenarioId| -> Result<()> {
+        if policy.allows_unattended(id.as_str()) {
+            return Ok(());
+        }
+        Err(core_err(shikigami_core::CoreError::Rejected {
             code: "UNATTENDED_NOT_ALLOWED",
             message: format!("the workspace policy keeps {id} from running unattended"),
             hint: Some(
                 "Run it from Studio, or change \"unattended\" for it in policy.json.".into(),
             ),
-        }));
-    }
-    if draft {
+        }))
+    };
+    unattended(&id)?;
+    let (scenario, version, subscenarios) = if draft {
         let scenario = svc.get(&id).map_err(core_err)?;
         let version = svc.matching_version(&scenario).ok().flatten();
         let subscenarios = subscenarios(svc, &scenario, Vec::new())?;
-        return Ok((scenario, version, subscenarios));
+        (scenario, version, subscenarios)
+    } else {
+        let run = svc.published_run(&id).map_err(core_err)?;
+        (run.scenario, Some(run.version), run.subscenarios)
+    };
+    // A called scenario kept from unattended runs stops its callers too.
+    for sub in &subscenarios {
+        unattended(&sub.scenario.id)?;
     }
-    let run = svc.published_run(&id).map_err(core_err)?;
-    Ok((run.scenario, Some(run.version), run.subscenarios))
+    Ok((scenario, version, subscenarios))
 }
 
 fn print_diff(diff: &ScenarioDiff) {
