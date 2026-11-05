@@ -6,6 +6,7 @@ import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
+import { ContextMenu } from "./components/ContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
 import { HistoryDialog } from "./components/HistoryDialog";
@@ -28,6 +29,7 @@ import { TitleBar } from "./components/TitleBar";
 import { CanvasDock, OutlineButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio } from "./context";
 import { agent, api, events } from "./lib/api";
+import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
 import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
@@ -374,6 +376,7 @@ function Shell() {
       <HistoryDialog />
       <SecretAskDialog />
       <ApprovalDialog />
+      <ContextMenu />
     </div>
   );
 }
@@ -514,7 +517,10 @@ export function App() {
       }
     };
     window.addEventListener("keydown", onKey);
+    // The browser's right-click menu (back, reload, print…) never shows.
+    const stopMenu = installContextMenu();
     return () => {
+      stopMenu();
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("focus", onFocus);
       stopAttention();

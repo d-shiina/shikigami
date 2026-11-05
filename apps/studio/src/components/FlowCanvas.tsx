@@ -15,6 +15,7 @@ import {
   Panel,
   Position,
   ReactFlow,
+  type ReactFlowInstance,
   useReactFlow,
   useStore,
 } from "@xyflow/react";
@@ -52,6 +53,8 @@ import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
 import { StepTools } from "./StepTools";
+import { menuFor } from "../lib/contextMenu";
+import { usePaneMenu, useSlotMenu, useStepMenu, useVariableMenu } from "./menus";
 import { valuesSeenBy } from "../lib/runValues";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
@@ -309,9 +312,14 @@ function ValuePopover({ name, color, values, side, anchor }: { name: string; col
 function VarChip({ name, color, values, side, owner }: { name: string; color: string; values: VariableChange[]; side: "in" | "out"; owner: string }) {
   const focused = useFocus() === varFocus(name);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const variableMenu = useVariableMenu();
   const last = values.at(-1);
   return (
     <span
+      onContextMenu={menuFor(() => {
+        setAnchor(null);
+        return variableMenu(name);
+      })}
       className={`nodrag flex h-[20px] max-w-[80px] shrink-0 items-center gap-1 rounded-[3px] border bg-sheet px-1.5 font-mono text-[11px] leading-none shadow-sheet ${
         focused ? "ring-2 ring-offset-1" : ""
       }`}
@@ -831,6 +839,10 @@ export function FlowCanvas() {
   const run = useStudio((s) => s.run);
   const breakpoints = useStudio((s) => (scenario ? s.breakpoints[scenario.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
+  const stepMenu = useStepMenu();
+  const slotMenu = useSlotMenu();
+  const paneMenu = usePaneMenu();
+  const flowRef = useRef<ReactFlowInstance | null>(null);
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const theme = useTheme().mode;
   const pending = usePendingReview();
@@ -998,6 +1010,7 @@ export function FlowCanvas() {
       nodesConnectable={false}
       ref={wrapper}
       onInit={(flow) => {
+        flowRef.current = flow;
         // Fit the chart, but never shrink it below reading size: a long
         // scenario starts at its top and scrolls instead.
         const box = wrapper.current;
@@ -1021,6 +1034,27 @@ export function FlowCanvas() {
         else select({ kind: "slot", parentId: data.parentId, block: data.block });
       }}
       onPaneClick={() => select(null)}
+      onNodeContextMenu={(event, node) =>
+        menuFor(() => {
+          const data = node.data as StepNodeData | SlotNodeData;
+          if (data.kind === "slot") return inside ? [] : slotMenu(data.parentId, data.block);
+          const id = data.step.id ?? node.id;
+          const call = calls.get(id);
+          return stepMenu(data.step, {
+            owner: scenario.id,
+            readOnly: inside,
+            call: call && { key: call.key, canEnter: Boolean(call.callee), unfolded: call.unfolded },
+          });
+        })(event)
+      }
+      onPaneContextMenu={(event) =>
+        menuFor(() =>
+          paneMenu({
+            inside,
+            fit: () => void flowRef.current?.fitView({ padding: 0.1, maxZoom: 1, duration: 200 }),
+          }),
+        )(event as React.MouseEvent)
+      }
       onNodeDoubleClick={(_, node) => {
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step" && data.step.id && calls.get(data.step.id)?.callee) enterCall(data.step.id);

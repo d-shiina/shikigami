@@ -2,10 +2,11 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { ScenarioSummary } from "@shikigami/schema";
-import { Copy, Search, Trash2, Upload, Workflow } from "lucide-react";
+import { Copy, FolderOpen, Search, Trash2, Upload, Workflow } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { relativeTime } from "../lib/changes";
+import { copyText, menuFor } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 
 const SORT_KEY = "shikigami.studio.sort";
@@ -105,6 +106,20 @@ function Row({ summary, query }: { summary: ScenarioSummary; query: string }) {
       tabIndex={0}
       onClick={() => open(summary.id)}
       onKeyDown={(e) => e.key === "Enter" && open(summary.id)}
+      onContextMenu={menuFor(() => [
+        { label: t.menu.open, icon: FolderOpen, shortcut: "Enter", run: () => open(summary.id) },
+        {
+          label: t.duplicate,
+          icon: Copy,
+          run: () => {
+            setPlace("scenarios");
+            void duplicate(summary.id);
+          },
+        },
+        { label: t.menu.copyId, icon: Copy, run: () => copyText(summary.id) },
+        "-",
+        { label: t.delete, icon: Trash2, danger: true, confirm: t.menu.confirmDelete, run: () => void remove(summary.id) },
+      ])}
       className="group cursor-pointer border-b border-slate-100 last:border-b-0 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
     >
       <td className="px-3 py-2.5">

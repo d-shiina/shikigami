@@ -271,3 +271,10 @@ export function useAgent<T>(selector: (state: AgentState) => T): T {
   if (!store) throw new Error("AgentContext is missing");
   return useStore(store, selector);
 }
+
+/** The store itself, for handlers that read the state when they run (menus). */
+export function useAgentApi(): StoreApi<AgentState> {
+  const store = useContext(AgentContext);
+  if (!store) throw new Error("AgentContext is missing");
+  return store;
+}

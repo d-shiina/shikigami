@@ -8,6 +8,8 @@ import { type Part, plain, sentence } from "../lib/sentence";
 import { revertBlocker, type StepRunState, touchedSteps } from "../store";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 import { StepTools } from "./StepTools";
+import { menuFor } from "../lib/contextMenu";
+import { useStepMenu } from "./menus";
 
 type Defs = ReadonlyMap<string, StepTypeDef>;
 
@@ -127,6 +129,8 @@ type Ctx = {
 
 function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
   const selection = useStudio((s) => s.selection);
+  const owner = useStudio((s) => s.scenario?.id ?? "");
+  const stepMenu = useStepMenu();
   const select = useStudio((s) => s.select);
   const runState = useStudio((s) => (step.id ? s.run?.steps[step.id] : undefined));
   const issues = useStudio((s) => s.validation?.issues.filter((i) => i.stepId === step.id && i.severity === "error").length ?? 0);
@@ -153,6 +157,7 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
         data-step={id}
         onClick={() => select({ kind: "step", stepId: id })}
         onKeyDown={(e) => e.key === "Enter" && select({ kind: "step", stepId: id })}
+        onContextMenu={menuFor(() => stepMenu(step, { owner }))}
         className={`group flex cursor-pointer gap-3 rounded-[4px] px-2.5 py-2 ${
           added
             ? "bg-gradient-to-r from-moegi-100 to-transparent shadow-[inset_3px_0_var(--color-moegi-500)]"
