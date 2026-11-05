@@ -1972,6 +1972,9 @@
                       "paddle",
                       "windows"
                     ]
+                  },
+                  "accurate": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -2282,6 +2285,9 @@
                       "paddle",
                       "windows"
                     ]
+                  },
+                  "accurate": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -2714,6 +2720,9 @@
               "paddle",
               "windows"
             ]
+          },
+          "accurate": {
+            "type": "boolean"
           }
         },
         "required": [],
@@ -3480,6 +3489,9 @@
                       "paddle",
                       "windows"
                     ]
+                  },
+                  "accurate": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -3768,6 +3780,9 @@
                       "paddle",
                       "windows"
                     ]
+                  },
+                  "accurate": {
+                    "type": "boolean"
                   }
                 },
                 "required": [

@@ -202,6 +202,22 @@ impl Bitmap {
     }
 
     /// Resized to `width` × `height` with bilinear filtering.
+    /// Turned a quarter left: the top edge becomes the left one (a vertical
+    /// line of text then reads left to right).
+    pub fn rotated_left(&self) -> Bitmap {
+        let (w, h) = (self.width as usize, self.height as usize);
+        let mut rgba = vec![0u8; w * h * 4];
+        // Pixel (x, y) moves to (y, w - 1 - x) in an h × w picture.
+        for y in 0..h {
+            for x in 0..w {
+                let from = (y * w + x) * 4;
+                let to = ((w - 1 - x) * h + y) * 4;
+                rgba[to..to + 4].copy_from_slice(&self.rgba[from..from + 4]);
+            }
+        }
+        Bitmap::new(self.height, self.width, rgba)
+    }
+
     pub fn resized(&self, width: u32, height: u32) -> Bitmap {
         let (width, height) = (width.max(1), height.max(1));
         let fx_scale = width as f32 / self.width as f32;

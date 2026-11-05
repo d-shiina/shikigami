@@ -8,7 +8,12 @@
 // already holds these exact files: without them OCR silently falls back to
 // Windows OCR, which reads Japanese badly.
 //
-// Everything comes from PyPI wheels, pinned to a version and checked against
+// The accurate models (PP-OCRv6 medium, `accurate: true`: much better on
+// handwriting, several times slower) go in `medium\`. They are not on PyPI;
+// they come from RapidOCR's ModelScope, which some networks block, so they
+// are best-effort unless SHIKIGAMI_OCR_ACCURATE=required (the release build).
+//
+// Everything else comes from PyPI wheels, pinned to a version and checked against
 // the SHA-256 below; downloads are cached in target/ocr-dist. The models are
 // Apache-2.0 (PaddleOCR, converted by RapidOCR); ONNX Runtime is MIT.
 import { execFileSync } from "node:child_process";
@@ -30,6 +35,21 @@ const MODELS = {
     "rapidocr-3.10.0.dist-info/licenses/MODEL_LICENSES.md": "MODEL_LICENSES.md",
   },
 };
+// The SHA-256s are RapidOCR's own (rapidocr/default_models.yaml in the wheel above).
+const MODELSCOPE = "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6";
+const ACCURATE = [
+  {
+    url: `${MODELSCOPE}/det/PP-OCRv6_det_medium.onnx`,
+    sha256: "92078b7355007ccfffcd4c8cd441a3afd4538904d06881b29a155e1e679907c2",
+    to: "medium/det.onnx",
+  },
+  {
+    url: `${MODELSCOPE}/rec/PP-OCRv6_rec_medium.onnx`,
+    sha256: "eef444829dbbe18d7fea59a3f6eb75647518d2b3a9568d27c92e42940204894b",
+    to: "medium/rec.onnx",
+  },
+];
+const accurateMode = process.env.SHIKIGAMI_OCR_ACCURATE ?? "try"; // try | required | skip
 const RUNTIME = {
   "win32-x64": {
     url: `${PYPI}/59/bf/a1d282b4c753ba3e9b31f4c11abd2bc2390513dc5e3792ca3b78e42401c3/onnxruntime-1.31.1-cp313-cp313-win_amd64.whl`,
@@ -62,14 +82,17 @@ if (!runtime) throw new Error(`no pinned ONNX Runtime for ${platform}`);
 
 // Which wheels target/ocr was made from; a new pin makes it stale.
 const stampFile = join(devDir, "bundled-from.txt");
-const stamp = `${MODELS.url}\n${runtime.url}\n`;
+const stamp = `${MODELS.url}\n${runtime.url}\n${ACCURATE.map((m) => m.url).join("\n")}\n`;
 const needed = ["det.onnx", "rec.onnx", runtime.library.split("/").pop()];
 const ifMissing = process.argv.includes("--if-missing");
+// The stamp's last line says whether the accurate models came too; a failed
+// try is not retried on every start.
+const stamped = existsSync(stampFile) ? readFileSync(stampFile, "utf8") : "";
 if (
   ifMissing &&
-  existsSync(stampFile) &&
-  readFileSync(stampFile, "utf8") === stamp &&
-  needed.every((file) => existsSync(join(devDir, file)))
+  stamped.startsWith(stamp) &&
+  needed.every((file) => existsSync(join(devDir, file))) &&
+  (stamped.endsWith("accurate: no\n") || ACCURATE.every((m) => existsSync(join(devDir, m.to))))
 ) {
   process.exit(0);
 }
@@ -94,12 +117,39 @@ writeFileSync(join(outDir, "LICENSE-onnxruntime.txt"), entry(ort, "onnxruntime/L
 writeFileSync(join(outDir, "ThirdPartyNotices-onnxruntime.txt"), entry(ort, "onnxruntime/ThirdPartyNotices.txt")());
 if (process.platform === "win32") copyVcRuntime();
 
+let accurate = false;
+if (accurateMode !== "skip") {
+  try {
+    const files = [];
+    for (const model of ACCURATE) files.push([model.to, await download(model)]);
+    mkdirSync(join(outDir, "medium"), { recursive: true });
+    for (const [to, data] of files) writeFileSync(join(outDir, to), data);
+    accurate = true;
+  } catch (error) {
+    if (accurateMode === "required") throw error;
+    console.warn(`the accurate OCR models (PP-OCRv6 medium) were not fetched: ${error.message}`);
+  }
+}
+
 // The development copy: the same files.
 rmSync(devDir, { recursive: true, force: true });
 mkdirSync(devDir, { recursive: true });
-for (const file of readdirSync(outDir)) copyFileSync(join(outDir, file), join(devDir, file));
-writeFileSync(stampFile, stamp);
-console.log(`bundled PaddleOCR (PP-OCRv6 small) and ONNX Runtime: ${outDir} (and ${devDir})`);
+copyTree(outDir, devDir);
+writeFileSync(stampFile, `${stamp}accurate: ${accurate ? "yes" : "no"}\n`);
+console.log(
+  `bundled PaddleOCR (PP-OCRv6 small${accurate ? " and medium" : ""}) and ONNX Runtime: ${outDir} (and ${devDir})`,
+);
+
+function copyTree(from, to) {
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      mkdirSync(join(to, entry.name), { recursive: true });
+      copyTree(join(from, entry.name), join(to, entry.name));
+    } else {
+      copyFileSync(join(from, entry.name), join(to, entry.name));
+    }
+  }
+}
 
 /** The wheel's bytes, from the cache or PyPI, checked against its SHA-256. */
 async function download({ url, sha256: expected }) {

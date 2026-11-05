@@ -90,7 +90,9 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 
 - 既定は **PaddleOCR**（PP-OCRv6 small を ONNX Runtime で実行）です。オフラインで動き、日本語・中国語・英語を 1 つのモデルで読みます。12px 程度の小さい画面の文字も読めます。モデルと ONNX Runtime はインストーラに同梱しています（`ocr\`、約 60 MB。モデルは Apache-2.0、ONNX Runtime は MIT）
 - PaddleOCR はラテン文字とそっくりな別の文字（トルコ語の `ı`、ギリシャ文字・キリル文字の大文字など）を選ばないので、「AI」が「Aı」になりません
+- 縦書き（幅の 1.5 倍以上縦に長い行）は 90 度回して上から読みます
 - PaddleOCR が入っていないときは **Windows OCR**（Windows.Media.Ocr）を使います。小さい文字と日本語は苦手なので、2 倍に拡大してから読ませます。`engine: "windows"` で明示もでき、`language`（`ja`・`en-US` など）はこちら用です
+- `accurate: true`（Studio では「高精度」）にすると PaddleOCR の大きいモデル（PP-OCRv6 medium、`ocr\medium\`）で読みます。手書きにかなり強くなる代わりに数倍〜10 倍遅くなります（1000×560 の画像で 0.4 秒 → 約 5 秒）。`desktop.readText` と `ocr` ターゲットで使えます。インストーラに同梱し、開発中は `pnpm studio:bundle-ocr` が ModelScope から取れれば取ります（`SHIKIGAMI_OCR_ACCURATE=required` で取れなければエラー、`skip` で取らない）
 - `desktop.readText` はどちらのエンジンで読んだかを `engine` で返し、既定が Windows OCR に落ちたときは `warning` を付けます
 - 開発中のチェックアウトでは、`pnpm studio:dev` が `target\ocr` がない（または古い）ときに取ってきます（`pnpm studio:bundle-ocr` でも可）。開発版の Studio・MCP サーバー・テストが使います
 

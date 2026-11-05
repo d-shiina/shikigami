@@ -824,6 +824,10 @@ fn ctc_never_reads_lookalike_letters() {
     let decoded = crate::paddle::ctc_decode(&scores, 3, classes, &chars, &skip);
     let text: String = decoded.chars.iter().map(|(c, _)| c.as_str()).collect();
     assert_eq!(text, "AI開");
+    // "I" is as sure as "ı" was: a line of just "I" is not dropped as noise.
+    let alone = crate::paddle::ctc_decode(&scores[classes..2 * classes], 1, classes, &chars, &skip);
+    assert_eq!(alone.chars[0].0, "I");
+    assert!((alone.score - 0.98).abs() < 1e-6, "{}", alone.score);
 }
 
 /// Light text on a dark background, in a font whose capital I is a bare
@@ -838,4 +842,58 @@ fn paddle_reads_ai_in_light_on_dark_text() {
     let lines = engine.recognize(&Bitmap::from_png(bytes).unwrap()).unwrap();
     let text = ocr_text(&lines);
     assert!(text.contains("最新AI開発"), "{text}");
+}
+
+#[test]
+fn a_picture_turns_a_quarter_left() {
+    // 2 × 1: red, blue. Turned left: blue on top, red below.
+    let image = Bitmap::new(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255]);
+    let turned = image.rotated_left();
+    assert_eq!((turned.width, turned.height), (1, 2));
+    assert_eq!(turned.rgba, vec![0, 0, 255, 255, 255, 0, 0, 255]);
+}
+
+/// Vertical Japanese text is read top to bottom, columns right to left, and
+/// its words are placed down the column.
+#[test]
+fn paddle_reads_vertical_text() {
+    let Ok(engine) = crate::paddle::engine() else {
+        eprintln!("skipped: PaddleOCR is not installed");
+        return;
+    };
+    let bytes = include_bytes!("../tests/fixtures/vertical-ja.png");
+    let lines = engine.recognize(&Bitmap::from_png(bytes).unwrap()).unwrap();
+    let texts: Vec<String> = lines.iter().map(OcrLine::text).collect();
+    // Columns from right to left, as a person reads them.
+    assert_eq!(texts, ["請求書の確認", "支払期日"]);
+    let found = find_text(&lines, "確認", false);
+    assert_eq!(found.len(), 1);
+    let (x, y) = found[0].center();
+    assert!(
+        (120..=150).contains(&x) && (150..=195).contains(&y),
+        "{:?}",
+        found[0]
+    );
+}
+
+/// The accurate models (PP-OCRv6 medium), when installed, read the same
+/// way; `accurate` does not go with Windows OCR.
+#[test]
+fn paddle_accurate_models_read_too() {
+    let windows = crate::visual::ocr_options(&json!({ "accurate": true, "engine": "windows" }));
+    assert_eq!(windows.unwrap_err().code, "INVALID_PARAMS");
+    let options = crate::visual::ocr_options(&json!({ "accurate": true })).unwrap();
+    assert!(options.accurate);
+
+    let engine = match crate::paddle::accurate_engine() {
+        Ok(engine) => engine,
+        Err(reason) => {
+            eprintln!("skipped: {reason}");
+            return;
+        }
+    };
+    let bytes = include_bytes!("../tests/fixtures/vertical-ja.png");
+    let lines = engine.recognize(&Bitmap::from_png(bytes).unwrap()).unwrap();
+    let texts: Vec<String> = lines.iter().map(OcrLine::text).collect();
+    assert!(texts.contains(&"請求書の確認".to_owned()), "{texts:?}");
 }
