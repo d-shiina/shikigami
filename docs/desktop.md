@@ -88,7 +88,7 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 
 ### OCR engines
 
-- The default is **PaddleOCR** (PP-OCRv6 small on ONNX Runtime): offline, Japanese, Chinese and English in one model, and good with small screen text (around 12 px). It never reads letters that only look like Latin ones (Turkish `ı`, Greek and Cyrillic capitals), so "AI" is not read as "Aı". The models and ONNX Runtime come with the installer (`ocr\`, about 60 MB; the models are Apache-2.0, ONNX Runtime is MIT)
+- The default is **PaddleOCR** (PP-OCRv6 small on ONNX Runtime): offline, Japanese, Chinese and English in one model, and good with small screen text (around 12 px). It never reads letters that only look like Latin ones (Turkish `ı`, Greek and Cyrillic capitals), so "AI" is not read as "Aı". Vertical lines (taller than 1.5 × their width) are turned a quarter left and read top to bottom. The models and ONNX Runtime come with the installer (`ocr\`, about 60 MB; the models are Apache-2.0, ONNX Runtime is MIT)
 - Without PaddleOCR, **Windows OCR** (Windows.Media.Ocr) is used. It is weak on small text and Japanese, so pictures are enlarged twice first. `engine: "windows"` asks for it; `language` (`ja`, `en-US`…) is for it
 - `desktop.readText` says which engine read the text (`engine`), and adds a `warning` when the default fell back to Windows OCR
 - In a development checkout, `pnpm studio:dev` fills `target\ocr` when it is missing or out of date (or run `pnpm studio:bundle-ocr`); development builds of Studio, the MCP server and the tests use it

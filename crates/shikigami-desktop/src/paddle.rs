@@ -42,6 +42,9 @@ const BOX_THRESHOLD: f32 = 0.5;
 const UNCLIP_RATIO: f32 = 1.6;
 const REC_HEIGHT: u32 = 48;
 const REC_MAX_WIDTH: u32 = 3200;
+/// A line this many times taller than wide is vertical text: it is turned
+/// a quarter left (top first) before reading, as PaddleOCR does.
+const VERTICAL_RATIO: f32 = 1.5;
 /// Lines read at once.
 const REC_BATCH: usize = 8;
 /// Lines read with less confidence than this are dropped (noise).
@@ -161,13 +164,23 @@ impl Paddle {
             .detect(image)?
             .into_iter()
             .filter_map(|rect| image.crop(rect).map(|crop| (rect, crop)))
+            .map(|(rect, crop)| {
+                if is_vertical(&crop) {
+                    (rect, crop.rotated_left())
+                } else {
+                    (rect, crop)
+                }
+            })
             .collect();
         // Lines of similar shape go through recognition together.
         crops.sort_by(|a, b| aspect(&a.1).total_cmp(&aspect(&b.1)));
         let mut lines = Vec::new();
         for batch in crops.chunks(REC_BATCH) {
             for ((rect, _), line) in batch.iter().zip(self.read_lines(batch)?) {
-                if let Some(line) = line {
+                if let Some(mut line) = line {
+                    if rect.height as f32 >= rect.width as f32 * VERTICAL_RATIO {
+                        line = line.turned_back(rect.width);
+                    }
                     lines.push(line.offset(rect.x, rect.y));
                 }
             }
@@ -264,6 +277,10 @@ impl Paddle {
             })
             .collect())
     }
+}
+
+fn is_vertical(image: &Bitmap) -> bool {
+    image.height as f32 >= image.width as f32 * VERTICAL_RATIO
 }
 
 fn aspect(image: &Bitmap) -> f32 {
@@ -479,6 +496,21 @@ pub fn ctc_decode(
 }
 
 impl OcrLine {
+    /// A line read turned a quarter left, with its places back in the
+    /// upright picture `width` pixels wide: a word's span along the line is
+    /// its span down the picture.
+    pub fn turned_back(mut self, width: u32) -> OcrLine {
+        for word in &mut self.words {
+            word.rect = Rect {
+                x: 0,
+                y: word.rect.x,
+                width,
+                height: word.rect.width,
+            };
+        }
+        self
+    }
+
     fn offset(mut self, dx: i32, dy: i32) -> OcrLine {
         for word in &mut self.words {
             word.rect = word.rect.offset(dx, dy);

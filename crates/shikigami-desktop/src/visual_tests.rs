@@ -839,3 +839,35 @@ fn paddle_reads_ai_in_light_on_dark_text() {
     let text = ocr_text(&lines);
     assert!(text.contains("最新AI開発"), "{text}");
 }
+
+#[test]
+fn a_picture_turns_a_quarter_left() {
+    // 2 × 1: red, blue. Turned left: blue on top, red below.
+    let image = Bitmap::new(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255]);
+    let turned = image.rotated_left();
+    assert_eq!((turned.width, turned.height), (1, 2));
+    assert_eq!(turned.rgba, vec![0, 0, 255, 255, 255, 0, 0, 255]);
+}
+
+/// Vertical Japanese text is read top to bottom, and its words are placed
+/// down the column.
+#[test]
+fn paddle_reads_vertical_text() {
+    let Ok(engine) = crate::paddle::engine() else {
+        eprintln!("skipped: PaddleOCR is not installed");
+        return;
+    };
+    let bytes = include_bytes!("../tests/fixtures/vertical-ja.png");
+    let lines = engine.recognize(&Bitmap::from_png(bytes).unwrap()).unwrap();
+    let texts: Vec<String> = lines.iter().map(OcrLine::text).collect();
+    assert!(texts.contains(&"請求書の確認".to_owned()), "{texts:?}");
+    assert!(texts.contains(&"OK".to_owned()), "{texts:?}");
+    let found = find_text(&lines, "確認", false);
+    assert_eq!(found.len(), 1);
+    let (x, y) = found[0].center();
+    assert!(
+        (20..=50).contains(&x) && (150..=195).contains(&y),
+        "{:?}",
+        found[0]
+    );
+}
