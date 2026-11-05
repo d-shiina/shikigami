@@ -181,6 +181,12 @@
               "null"
             ]
           },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "observations": {
             "type": "array",
             "items": {
@@ -417,6 +423,12 @@
               "null"
             ]
           },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "observations": {
             "type": "array",
             "items": {
@@ -642,6 +654,12 @@
               "string",
               "null"
             ]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -1139,6 +1157,12 @@
               "null"
             ]
           },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "observations": {
             "type": "array",
             "items": {
@@ -1241,6 +1265,12 @@
               "string",
               "null"
             ]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "observations": {
             "type": "array",
@@ -2188,6 +2218,12 @@
               "null"
             ]
           },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "observations": {
             "type": "array",
             "items": {
@@ -2353,6 +2389,12 @@
               "string",
               "null"
             ]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "observations": {
             "type": "array",

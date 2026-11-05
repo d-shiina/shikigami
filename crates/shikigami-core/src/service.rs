@@ -49,10 +49,31 @@ pub struct ChangeNote {
     /// Why the change was made, in the author's words. Kept in the journal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Things the author wants a person to decide or confirm before the change
+    /// is approved (assumptions, guesses), one question each. Kept in the journal.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
     /// Observations (screens looked at with inspect_* / test_step) the change
     /// is based on. They are linked to the new revision and its steps.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub observations: Vec<ObservationId>,
+}
+
+impl ChangeNote {
+    /// The parts of the note the journal keeps, trimmed and cut to size.
+    fn remarks(&self) -> Remarks {
+        Remarks {
+            summary: review::clean_text(self.summary.clone(), review::MAX_SUMMARY_CHARS),
+            checks: review::clean_checks(&self.checks),
+        }
+    }
+}
+
+/// What a journal entry keeps from its author's note.
+#[derive(Debug, Clone, Default)]
+struct Remarks {
+    summary: Option<String>,
+    checks: Vec<String>,
 }
 
 /// Result of a committed change.
@@ -328,8 +349,8 @@ impl ScenarioService {
         scenario.variables = input.variables;
         scenario.steps = input.steps;
         scenario.metadata.tags = input.tags;
-        let summary = review::clean_text(note.summary, review::MAX_SUMMARY_CHARS);
-        let outcome = self.insert_new(scenario, actor.clone(), "create scenario", summary)?;
+        let outcome =
+            self.insert_new(scenario, actor.clone(), "create scenario", note.remarks())?;
         let steps: Vec<_> = outcome.scenario.walk().map(|s| s.id.clone()).collect();
         self.link_observations(&outcome.scenario, &steps, &actor, &note.observations);
         Ok(outcome)
@@ -345,7 +366,7 @@ impl ScenarioService {
         let now = now();
         scenario.metadata.created_at.get_or_insert(now);
         scenario.metadata.updated_at = Some(now);
-        self.insert_new(scenario, actor, "import scenario", None)
+        self.insert_new(scenario, actor, "import scenario", Remarks::default())
     }
 
     pub fn duplicate(
@@ -362,7 +383,7 @@ impl ScenarioService {
         copy.settings = source.settings;
         copy.requires = source.requires;
         copy.metadata.tags = source.metadata.tags;
-        let outcome = self.insert_new(copy, actor, "duplicate scenario", None)?;
+        let outcome = self.insert_new(copy, actor, "duplicate scenario", Remarks::default())?;
         // The copy brings the files it works with, not what runs made.
         let files = self.bundled_files(id)?;
         self.write_bundled_files(id, &outcome.scenario.id, &files)?;
@@ -374,7 +395,7 @@ impl ScenarioService {
         mut scenario: Scenario,
         actor: Actor,
         label: &str,
-        summary: Option<String>,
+        remarks: Remarks,
     ) -> CoreResult<EditOutcome> {
         if !scenario.id.is_well_formed() {
             return Err(CoreError::InvalidScenarioId(scenario.id.to_string()));
@@ -401,7 +422,8 @@ impl ScenarioService {
             actor: actor.clone(),
             at: now(),
             label: label.to_owned(),
-            summary,
+            summary: remarks.summary,
+            checks: remarks.checks,
             step_ids: Vec::new(),
             ops: Vec::new(),
             inverse: Vec::new(),
@@ -463,6 +485,7 @@ impl ScenarioService {
             at: now(),
             label: "delete scenario".into(),
             summary: None,
+            checks: Vec::new(),
             step_ids: Vec::new(),
             ops: Vec::new(),
             inverse: Vec::new(),
@@ -514,14 +537,13 @@ impl ScenarioService {
         } else {
             format!("{} edits", ops.len())
         };
-        let summary = review::clean_text(note.summary, review::MAX_SUMMARY_CHARS);
         let mut step_ids = Vec::new();
         let outcome = self.commit(
             id,
             expected_revision,
             actor.clone(),
             ChangeKind::Edit,
-            summary,
+            note.remarks(),
             |_, current| {
                 let (next, inverse) = ops::apply_all(current, ops.clone())?;
                 step_ids = review::touched_steps(&inverse);
@@ -548,7 +570,7 @@ impl ScenarioService {
             expected_revision,
             actor,
             ChangeKind::Undo,
-            None,
+            Remarks::default(),
             |undo, current| {
                 let entry = undo.undo.pop().ok_or(CoreError::NothingTo("undo"))?;
                 let (next, redo_ops) = ops::apply_all(current, entry.inverse.clone())?;
@@ -573,7 +595,7 @@ impl ScenarioService {
             expected_revision,
             actor,
             ChangeKind::Redo,
-            None,
+            Remarks::default(),
             |undo, current| {
                 let entry = undo.redo.pop().ok_or(CoreError::NothingTo("redo"))?;
                 let (next, undo_ops) = ops::apply_all(current, entry.inverse.clone())?;
@@ -720,7 +742,7 @@ impl ScenarioService {
             expected_revision.or(Some(current.revision)),
             actor,
             ChangeKind::Edit,
-            None,
+            Remarks::default(),
             |_, current| {
                 let (next, inverse) = ops::apply_all(current, ops.clone())?;
                 Ok(Commit {
@@ -941,7 +963,7 @@ impl ScenarioService {
                 code: "NOT_PUBLISHED",
                 message: format!("scenario {id} has no published version"),
                 hint: Some(
-                    "Unattended runs execute the published version only. A person approves and publishes it in Studio (レビュー台 → 承認して公開) or with `shikigami version publish <id>`; `shikigami run <id> --draft` runs the working content instead."
+                    "Unattended runs execute the published version only. A person approves and publishes it in Studio (レビュー台 → 確認して公開) or with `shikigami version publish <id>`; `shikigami run <id> --draft` runs the working content instead."
                         .into(),
                 ),
             });
@@ -1245,12 +1267,11 @@ impl ScenarioService {
         let caller = self.get(id)?;
         check_revision(expected_revision, caller.revision)?;
         let plan = call::extract(&caller, step_ids, name, self.registry())?;
-        let summary = review::clean_text(note.summary.clone(), review::MAX_SUMMARY_CHARS);
         let subscenario = self.insert_new(
             plan.subscenario,
             actor.clone(),
             "extract subscenario",
-            summary,
+            note.remarks(),
         )?;
         let mut call_step = plan.call;
         ops::assign_missing_ids(&mut call_step);
@@ -1605,7 +1626,7 @@ impl ScenarioService {
         let now = now();
         scenario.metadata.created_at.get_or_insert(now);
         scenario.metadata.updated_at = Some(now);
-        self.insert_new(scenario, actor, "import scenario", None)
+        self.insert_new(scenario, actor, "import scenario", Remarks::default())
     }
 
     /// Adds versions whose `uid` is not present yet, renumbered after the
@@ -1654,7 +1675,7 @@ impl ScenarioService {
         expected_revision: Option<u64>,
         actor: Actor,
         kind: ChangeKind,
-        summary: Option<String>,
+        remarks: Remarks,
         change: impl FnOnce(&mut UndoState, &Scenario) -> CoreResult<Commit>,
     ) -> CoreResult<EditOutcome> {
         let lock = self.store.lock()?;
@@ -1708,7 +1729,8 @@ impl ScenarioService {
             actor: actor.clone(),
             at: now(),
             label,
-            summary,
+            summary: remarks.summary,
+            checks: remarks.checks,
             step_ids: review::touched_steps(&inverse),
             ops: applied,
             inverse,
@@ -1805,7 +1827,7 @@ fn ensure_person(actor: &Actor, what: &str) -> CoreResult<()> {
             code: "PUBLISH_NOT_ALLOWED",
             message: format!("only a person can {what}"),
             hint: Some(
-                "Ask the user to review the changes in Shikigami Studio (レビュー台) and press 承認して公開."
+                "Ask the user to review the changes in Shikigami Studio (レビュー台) and press 確認して公開."
                     .into(),
             ),
         });
@@ -2374,8 +2396,8 @@ mod tests {
                 },
                 mcp(),
                 ChangeNote {
-                    summary: None,
                     observations: vec![small.id.clone()],
+                    ..Default::default()
                 },
             )
             .expect("create")

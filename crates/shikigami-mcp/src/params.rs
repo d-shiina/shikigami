@@ -39,11 +39,19 @@ pub struct CreateScenarioParams {
     pub steps: Vec<Step>,
     #[serde(default)]
     pub tags: Vec<String>,
-    /// One or two sentences for the human who reviews your change in Studio:
-    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
-    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    /// For the human who reviews your change in Studio, in plain words (no
+    /// step types or expressions). First line: what the scenario now does
+    /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
+    /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
+    /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Questions the reviewer must answer because only a person knows: your
+    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
+    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
+    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
     /// this change is based on. The screens are kept as evidence next to the
     /// steps you touched so the reviewer can see what you saw.
@@ -61,11 +69,19 @@ pub struct UpdateScenarioParams {
     pub expected_revision: Option<u64>,
     /// Edit operations applied atomically as one revision (one undo step).
     pub ops: Vec<EditOp>,
-    /// One or two sentences for the human who reviews your change in Studio:
-    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
-    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    /// For the human who reviews your change in Studio, in plain words (no
+    /// step types or expressions). First line: what the scenario now does
+    /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
+    /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
+    /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Questions the reviewer must answer because only a person knows: your
+    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
+    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
+    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
     /// this change is based on. The screens are kept as evidence next to the
     /// steps you touched so the reviewer can see what you saw.
@@ -84,11 +100,19 @@ pub struct AddStepParams {
     /// Where to insert. Omit to append at the top level.
     #[serde(default)]
     pub position: Position,
-    /// One or two sentences for the human who reviews your change in Studio:
-    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
-    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    /// For the human who reviews your change in Studio, in plain words (no
+    /// step types or expressions). First line: what the scenario now does
+    /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
+    /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
+    /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Questions the reviewer must answer because only a person knows: your
+    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
+    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
+    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
     /// this change is based on. The screens are kept as evidence next to the
     /// steps you touched so the reviewer can see what you saw.
@@ -105,11 +129,19 @@ pub struct UpdateStepParams {
     pub step_id: String,
     /// Partial update. `params` is a JSON Merge Patch (null removes a key).
     pub patch: StepPatch,
-    /// One or two sentences for the human who reviews your change in Studio:
-    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
-    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    /// For the human who reviews your change in Studio, in plain words (no
+    /// step types or expressions). First line: what the scenario now does
+    /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
+    /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
+    /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Questions the reviewer must answer because only a person knows: your
+    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
+    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
+    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
     /// this change is based on. The screens are kept as evidence next to the
     /// steps you touched so the reviewer can see what you saw.
@@ -125,11 +157,19 @@ pub struct RemoveStepParams {
     pub expected_revision: Option<u64>,
     /// Step to remove (its children are removed too).
     pub step_id: String,
-    /// One or two sentences for the human who reviews your change in Studio:
-    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
-    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    /// For the human who reviews your change in Studio, in plain words (no
+    /// step types or expressions). First line: what the scenario now does
+    /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
+    /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
+    /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Questions the reviewer must answer because only a person knows: your
+    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
+    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
+    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
     /// this change is based on. The screens are kept as evidence next to the
     /// steps you touched so the reviewer can see what you saw.
@@ -146,11 +186,19 @@ pub struct MoveStepParams {
     pub step_id: String,
     /// New location. `index` is counted after removing the step.
     pub position: Position,
-    /// One or two sentences for the human who reviews your change in Studio:
-    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
-    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    /// For the human who reviews your change in Studio, in plain words (no
+    /// step types or expressions). First line: what the scenario now does
+    /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
+    /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
+    /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Questions the reviewer must answer because only a person knows: your
+    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
+    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
+    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
     /// observationId values from inspect_page / inspect_ui / test_step that
     /// this change is based on. The screens are kept as evidence next to the
     /// steps you touched so the reviewer can see what you saw.
@@ -170,11 +218,19 @@ pub struct ExtractSubscenarioParams {
     pub step_ids: Vec<String>,
     /// Name of the new scenario and of the call step, e.g. "ログインする".
     pub name: String,
-    /// One or two sentences for the human who reviews your change in Studio:
-    /// what you changed and why (e.g. "受注一覧の読み取りを追加。画面の表は
-    /// 『受注』という名前だった"). Japanese is fine. Kept in the change history.
+    /// For the human who reviews your change in Studio, in plain words (no
+    /// step types or expressions). First line: what the scenario now does
+    /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
+    /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
+    /// Japanese is fine. Kept in the change history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Questions the reviewer must answer because only a person knows: your
+    /// assumptions and guesses about the business (e.g. "「一部入金」も要確認に
+    /// 含めました。それでよいですか？"). One question each, at most 10. Leave it
+    /// out when nothing is uncertain. Studio shows each with 良い／違う.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

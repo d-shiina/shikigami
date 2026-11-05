@@ -284,7 +284,7 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
 }
 
 /** The reason and step notes that go back to the AI. */
-export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSent: () => void }) {
+export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: () => void; onSent: () => void; initialReason?: string }) {
   const selection = useStudio((s) => s.selection);
   const sendBack = useStudio((s) => s.sendBack);
   const scenario = useStudio((s) => s.scenario);
@@ -294,6 +294,10 @@ export function SendBackForm({ onCancel, onSent }: { onCancel: () => void; onSen
   const [fixNow, setFixNow] = useKeptState("sendBack.fixNow", true);
   const label = useStepLabel();
   const [reason, setReason] = useKeptState("sendBack.reason", "");
+  // A "違う…" answer on the review opens the form with the question quoted.
+  useEffect(() => {
+    if (initialReason) setReason((r) => (r.includes(initialReason) ? r : r.trim() ? `${r}\n${initialReason}` : initialReason));
+  }, [initialReason, setReason]);
   const [notes, setNotes] = useKeptState<StepNote[]>("sendBack.notes", []);
   const [busy, setBusy] = useState(false);
   const selected = selection?.kind === "step" ? selection.stepId : null;

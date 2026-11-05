@@ -109,6 +109,9 @@ pub struct HistoryEntry {
     /// The author's own explanation of the change (an AI's `summary`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// What the author asked a person to confirm before approving (an AI's `checks`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
     /// Steps the change added, changed, moved or removed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub step_ids: Vec<StepId>,

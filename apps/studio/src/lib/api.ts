@@ -21,6 +21,7 @@ import type {
   PublishedState,
   ReviewTimeline,
   RunEventEnvelope,
+  RunReport,
   RunSnapshot,
   Scenario,
   ScenarioDiff,
@@ -94,6 +95,8 @@ export class ApiError extends Error {
   }
 }
 
+export type RunRecord = { report: RunReport | null; events: RunEventEnvelope[]; truncated: boolean };
+
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await invoke<T>(command, args);
@@ -154,6 +157,8 @@ export const api = {
   reviewTimeline: (id: string, since?: number) => call<ReviewTimeline>("review_timeline", { id, since }),
   submitReview: (id: string, input: NewReview) => call<Evidence>("submit_review", { id, input }),
   getObservation: (id: string) => call<ObservationContent>("get_observation", { id }),
+  /** A finished run's report and events (runs/<id>/), for what an AI test run did. */
+  runRecord: (runId: string) => call<RunRecord>("run_record", { runId }),
   /** Studio runs pause on unhandled errors and at `debug.breakpoints`; `debug.step` pauses before the first step. */
   run: (id: string, inputs?: Record<string, unknown>, debug?: { breakpoints: string[]; step?: boolean }) =>
     call<string>("run_scenario", { id, inputs, debug }),

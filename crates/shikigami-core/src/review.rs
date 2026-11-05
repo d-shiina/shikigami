@@ -27,6 +27,10 @@ use crate::store::{Actor, ChangeKind, HistoryEntry};
 
 /// Longest change summary kept (characters); longer ones are cut.
 pub const MAX_SUMMARY_CHARS: usize = 2000;
+/// Most questions one change may ask a person to confirm.
+pub const MAX_CHECKS: usize = 10;
+/// Longest single question to confirm (characters).
+pub const MAX_CHECK_CHARS: usize = 500;
 /// Longest review reason or step note kept (characters).
 pub const MAX_REVIEW_TEXT_CHARS: usize = 4000;
 /// Largest UI tree stored with an observation (bytes); longer trees are cut.
@@ -260,6 +264,8 @@ pub struct ChangeRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub step_ids: Vec<StepId>,
 }
 
@@ -272,6 +278,7 @@ impl From<&HistoryEntry> for ChangeRecord {
             at: e.at,
             label: e.label.clone(),
             summary: e.summary.clone(),
+            checks: e.checks.clone(),
             step_ids: e.step_ids.clone(),
         }
     }
@@ -374,6 +381,20 @@ pub(crate) fn clean_text(text: Option<String>, max_chars: usize) -> Option<Strin
     })
 }
 
+/// Questions to confirm: trimmed, empty and repeated ones dropped, cut to size.
+pub(crate) fn clean_checks(checks: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for check in checks {
+        if let Some(c) = clean_text(Some(check.clone()), MAX_CHECK_CHARS)
+            && !out.contains(&c)
+        {
+            out.push(c);
+        }
+    }
+    out.truncate(MAX_CHECKS);
+    out
+}
+
 /// Cuts `text` to at most `max` bytes on a character boundary.
 pub(crate) fn cut_bytes(text: &mut String, max: usize) -> bool {
     if text.len() <= max {
@@ -434,6 +455,23 @@ mod tests {
             clean_text(Some("あいうえお".into()), 3).as_deref(),
             Some("あいう…")
         );
+    }
+
+    #[test]
+    fn clean_checks_drops_empty_and_repeated_questions() {
+        let checks = [
+            " 一部入金も含めてよい？ ",
+            "",
+            "一部入金も含めてよい？",
+            "基準額はこのまま？",
+        ]
+        .map(String::from);
+        assert_eq!(
+            clean_checks(&checks),
+            vec!["一部入金も含めてよい？", "基準額はこのまま？"]
+        );
+        let many: Vec<String> = (0..20).map(|i| format!("q{i}")).collect();
+        assert_eq!(clean_checks(&many).len(), MAX_CHECKS);
     }
 
     #[test]

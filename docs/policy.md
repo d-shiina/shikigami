@@ -24,11 +24,11 @@ Two rules that make "AI builds it, it runs without AI" safe to use:
 
 ### How to publish
 
-- **Review desk in Studio**: look at the AI's changes and click "✓ Approve and publish". Approving (the review record) and publishing are one action. When no version matches the current content, a version is made first.
+- **Review desk in Studio**: look at the AI's changes and click "✓ Review and publish". Approving (the review record) and publishing are one action. When no version matches the current content, a version is made first.
 - **"Versions" tab in Studio**: "Publish current content", or "Publish this version" on an earlier version (to go back, you can change only the published version and leave the work in progress as it is). "Unpublish" stops unattended runs.
 - **CLI**: `shikigami version publish <id> [number] [--name NAME] [--note NOTE]`, `shikigami version unpublish <id>`. `shikigami version list <id>` marks the published version with `published`.
 
-Only people can publish (Studio and the CLI). An AI client calling Core's publish gets `PUBLISH_NOT_ALLOWED`, and MCP has no tool to publish at all. The AI asks a person to approve and publish on the review desk.
+Only people can publish (Studio and the CLI). An AI client calling Core's publish gets `PUBLISH_NOT_ALLOWED`, and MCP has no tool to publish at all. The AI asks a person to review and publish on the review desk.
 
 Before publishing, Shikigami checks that the version validates and that every scenario it calls is published (publish the called ones first).
 

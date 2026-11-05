@@ -157,13 +157,13 @@ Shikigami Studio, and scenarios run later without you.\n\
 - Prefer small edits (add_step, update_step) or one update_scenario with several ops; each call is one undo step for the human.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the scenario: re-read it and redo your change, never overwrite blindly.\n\
 - After editing, call validate_scenario and fix every error, then run_scenario (waitMs) and inspect get_run_logs; its variableChanged events show each value a variable took and the step that set it.\n\
-- A human reviews your changes in Studio. On every edit pass `summary` (what you changed and why, one or two sentences, Japanese is fine) and `observations`: the observationId values that inspect_page, inspect_ui and test_step returned for the screens the change is based on. Your run_scenario results are recorded against the revision they ran.\n\
+- A human reviews your changes in Studio. On every edit pass `summary` in plain words, no step types or expressions (first line: what the scenario now does differently, as a short title; then why and what you checked; Japanese is fine), `checks` for anything only the human can decide (your assumptions about the business, one question each; omit when nothing is uncertain), and `observations`: the observationId values that inspect_page, inspect_ui and test_step returned for the screens the change is based on. Your run_scenario results are recorded against the revision they ran.\n\
 - When get_scenario returns `feedback`, the human sent the scenario back: read its reason and step notes (get_review shows the whole review), fix exactly that, and say in `summary` how you addressed it.\n\
 - Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
 - Text, numbers, dates, lists and JSON are handled with expression functions, not extra steps: list_step_types returns them under `functions` (signature + example), e.g. variable.set expression \"trim(replace(name, '　', ' '))\", \"sum(map(filter(rows, r => r.status == '済'), r => num(r.amount)))\", \"formatDate(today(), 'yyyyMMdd')\". Join text with + or a template.\n\
 - Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.\n\
 - Versions: when the user says a scenario works or is ready, offer create_version with a short name. diff_versions shows what changed since the latest version; restore_version is one undoable edit. Never restore without the user asking.\n\
-- Unattended runs (shikigami run, schedules) execute only the published version, never your latest edits. Only a person publishes: when the scenario is ready, ask the user to review it in Studio's レビュー台 and press 承認して公開. get_scenario `published` shows the version in force and whether the working content matches it. run_scenario runs the working content (your test); pass published: true only when the user asks to run the published one.\n\
+- Unattended runs (shikigami run, schedules) execute only the published version, never your latest edits. Only a person publishes: when the scenario is ready, ask the user to review it in Studio's レビュー台 and press 確認して公開. get_scenario `published` shows the version in force and whether the working content matches it. run_scenario runs the working content (your test); pass published: true only when the user asks to run the published one.\n\
 - The workspace policy (get_policy) limits sites and programs (SITE_NOT_ALLOWED / APP_NOT_ALLOWED) and may hold run_scenario, test_step or delete_scenario for the user's approval: APPROVAL_REQUIRED returns an approvalId and Studio shows the request. Tell the user in chat what you want to do and why, then repeat the exact same call with approvalId (and approvalWaitMs to wait). On APPROVAL_DENIED or POLICY_DENIED stop and ask the user; never work around a refusal with other steps or tools.\n\
 - Sharing: export_scenario returns a bundle (scenario + versions, secret defaults removed) that import_scenario accepts in another workspace. On IMPORT_CONFLICT ask the user whether to update the existing scenario or import a copy.\n\
 - Logins: never ask the user for a password or other secret in chat, and never write one into a scenario or a tool call. The user registers secrets by name in Shikigami Studio (シークレット); list_secrets shows the names and sites. Type them with browser.fill value { \"secret\": \"<name>\", \"field\": \"username\" | \"password\" | \"totp\" } (also in test_step); they work only on the registered sites. When inspect_page reports `login` (or a step fails with SECRET_NOT_FOUND, SECRET_FIELD_EMPTY or SECRET_SITE_*) and no secret fits, call request_secret with a name, the site and the fields: Studio asks the user to register it in a form you never see. Tell the user in chat to enter it in Studio, then call request_secret again with waitMs (or list_secrets). Or let them log in by hand with test_step browser.waitForHuman. In scenarios, browser.open `session` keeps the login between runs.\n\
@@ -721,6 +721,7 @@ impl ShikigamiMcp {
                             "at": e.at,
                             "label": e.label,
                             "summary": e.summary,
+                            "checks": e.checks,
                             "stepIds": e.step_ids,
                         })
                     })
@@ -944,7 +945,7 @@ impl ShikigamiMcp {
             steps: p.steps,
             tags: p.tags,
         };
-        let note = change_note(p.summary, p.observations);
+        let note = change_note(p.summary, p.checks, p.observations);
         let outcome = self
             .svc()
             .create_noted(input, actor(&peer), note)
@@ -971,7 +972,7 @@ impl ShikigamiMcp {
         peer: Peer<RoleServer>,
         Parameters(p): Parameters<UpdateScenarioParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let note = change_note(p.summary, p.observations);
+        let note = change_note(p.summary, p.checks, p.observations);
         let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, p.ops, note);
         self.finish("update_scenario", &peer, Some(&p.scenario_id), outcome)
     }
@@ -991,7 +992,7 @@ impl ShikigamiMcp {
             step: p.step,
             position: p.position,
         }];
-        let note = change_note(p.summary, p.observations);
+        let note = change_note(p.summary, p.checks, p.observations);
         let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops, note);
         self.finish("add_step", &peer, Some(&p.scenario_id), outcome)
     }
@@ -1011,7 +1012,7 @@ impl ShikigamiMcp {
             step_id: StepId::new(p.step_id),
             patch: p.patch,
         }];
-        let note = change_note(p.summary, p.observations);
+        let note = change_note(p.summary, p.checks, p.observations);
         let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops, note);
         self.finish("update_step", &peer, Some(&p.scenario_id), outcome)
     }
@@ -1030,7 +1031,7 @@ impl ShikigamiMcp {
         let ops = vec![EditOp::RemoveStep {
             step_id: StepId::new(p.step_id),
         }];
-        let note = change_note(p.summary, p.observations);
+        let note = change_note(p.summary, p.checks, p.observations);
         let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops, note);
         self.finish("remove_step", &peer, Some(&p.scenario_id), outcome)
     }
@@ -1050,7 +1051,7 @@ impl ShikigamiMcp {
             step_id: StepId::new(p.step_id),
             position: p.position,
         }];
-        let note = change_note(p.summary, p.observations);
+        let note = change_note(p.summary, p.checks, p.observations);
         let outcome = self.edit(&peer, &p.scenario_id, p.expected_revision, ops, note);
         self.finish("move_step", &peer, Some(&p.scenario_id), outcome)
     }
@@ -1360,7 +1361,7 @@ impl ShikigamiMcp {
                 &ids,
                 &p.name,
                 actor(&peer),
-                change_note(p.summary, Vec::new()),
+                change_note(p.summary, p.checks, Vec::new()),
             )
             .map(|o| {
                 json!({
@@ -1608,9 +1609,14 @@ fn truncate_snapshot(mut page: Value) -> Value {
     page
 }
 
-fn change_note(summary: Option<String>, observations: Vec<String>) -> ChangeNote {
+fn change_note(
+    summary: Option<String>,
+    checks: Vec<String>,
+    observations: Vec<String>,
+) -> ChangeNote {
     ChangeNote {
         summary,
+        checks,
         observations: observations.into_iter().map(ObservationId::new).collect(),
     }
 }
