@@ -85,6 +85,12 @@ define_id!(
     "obs"
 );
 
+define_id!(
+    /// Identifier of a request for a person's approval of an AI action.
+    ApprovalId,
+    "apr"
+);
+
 fn is_well_formed(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128

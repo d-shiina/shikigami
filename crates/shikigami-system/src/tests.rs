@@ -325,6 +325,28 @@ async fn secrets_do_not_follow_redirects_to_other_sites() {
     assert!(other_seen.lock().unwrap().is_empty());
 }
 
+#[tokio::test]
+async fn a_site_list_keeps_redirects_on_the_allowed_origin() {
+    let (other, other_seen) = serve("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").await;
+    let redirect: &'static str = Box::leak(
+        format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {other}/steal\r\nContent-Length: 0\r\n\r\n")
+            .into_boxed_str(),
+    );
+    let (base, _) = serve(redirect).await;
+    let dir = tempfile::tempdir().unwrap();
+    let policy = shikigami_core::Policy::path(dir.path());
+    std::fs::write(&policy, json!({ "sites": [base] }).to_string()).unwrap();
+    let report = run(
+        &runtime().with_policy(policy),
+        types::HTTP_REQUEST,
+        json!({ "url": base, "method": "POST", "json": { "order": 1 } }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["status"], 307);
+    assert!(other_seen.lock().unwrap().is_empty());
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn process_streams_large_stdin_through_a_filter() {

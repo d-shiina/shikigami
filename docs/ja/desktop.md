@@ -89,6 +89,7 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 ### OCR エンジン
 
 - 既定は **PaddleOCR**（PP-OCRv6 small を ONNX Runtime で実行）です。オフラインで動き、日本語・中国語・英語を 1 つのモデルで読みます。12px 程度の小さい画面の文字も読めます。モデルと ONNX Runtime はインストーラに同梱しています（`ocr\`、約 60 MB。モデルは Apache-2.0、ONNX Runtime は MIT）
+- PaddleOCR はラテン文字とそっくりな別の文字（トルコ語の `ı`、ギリシャ文字・キリル文字の大文字など）を選ばないので、「AI」が「Aı」になりません
 - PaddleOCR が入っていないときは **Windows OCR**（Windows.Media.Ocr）を使います。小さい文字と日本語は苦手なので、2 倍に拡大してから読ませます。`engine: "windows"` で明示もでき、`language`（`ja`・`en-US` など）はこちら用です
 - `desktop.readText` はどちらのエンジンで読んだかを `engine` で返し、既定が Windows OCR に落ちたときは `warning` を付けます
 - 開発中のチェックアウトでは、`pnpm studio:dev` が `target\ocr` がない（または古い）ときに取ってきます（`pnpm studio:bundle-ocr` でも可）。開発版の Studio・MCP サーバー・テストが使います

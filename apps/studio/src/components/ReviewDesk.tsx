@@ -685,7 +685,8 @@ export function ReviewActions({
 }) {
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
-  const approveAll = useStudio((s) => s.approveAll);
+  const approveAndPublish = useStudio((s) => s.approveAndPublish);
+  const published = useStudio((s) => s.published);
   const revertAll = useStudio((s) => s.revertAll);
   const [hint, setHint] = useState<"keep" | "sendBack" | "revert">("keep");
   if (pending.length === 0) return null;
@@ -726,13 +727,17 @@ export function ReviewActions({
         </button>
         <button
           type="button"
-          onClick={() => void approveAll()}
+          onClick={() => void approveAndPublish()}
+          title={t.desk.keepTitle}
           {...hover("keep")}
           className="h-9 min-w-0 flex-1 truncate rounded-[4px] bg-ink px-3 text-[13px] font-semibold whitespace-nowrap text-paper hover:bg-brand-700"
         >
           ✓ {t.desk.keep}
           {unanswered > 0 && <span className="font-normal opacity-75">{t.desk.unanswered(unanswered)}</span>}
         </button>
+      </div>
+      <div className="text-[11px] text-slate-500">
+        {published ? t.desk.publishedNow(published.version, published.name) : t.desk.notPublishedYet}
       </div>
     </div>
   );

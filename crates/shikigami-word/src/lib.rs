@@ -359,6 +359,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
     vec![
         (
             StepTypeDef {
+                targets: Vec::new(),
                 step_type: FILL_TEMPLATE.into(),
                 category: StepCategory::Office,
                 label: "Word に差し込む".into(),
@@ -400,6 +401,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         ),
         (
             StepTypeDef {
+                targets: Vec::new(),
                 step_type: READ_TEXT.into(),
                 category: StepCategory::Office,
                 label: "Word の文章を読む".into(),

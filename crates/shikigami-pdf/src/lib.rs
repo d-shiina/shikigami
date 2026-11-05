@@ -149,6 +149,7 @@ fn read_text_def() -> StepTypeDef {
         default_timeout_ms: None,
         deprecated: None,
         plugin: None,
+        targets: Vec::new(),
         path_params: Vec::new(),
     }
 }

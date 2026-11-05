@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useAgent } from "../agent";
 import { t } from "../lib/i18n";
 import { AboutSection } from "./AppMenu";
+import { PolicySection } from "./PolicySection";
 import { LanguageSwitch, ThemeSwitch, WorkspaceSection } from "./StatusBar";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -57,6 +58,9 @@ export function SettingsPage() {
           <Row label={t.bar.theme}>
             <ThemeSwitch />
           </Row>
+        </Section>
+        <Section title={t.policy}>
+          <PolicySection />
         </Section>
         <Section title={t.shell.agentSection}>
           <AgentSection />

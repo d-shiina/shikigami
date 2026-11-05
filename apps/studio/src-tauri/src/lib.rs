@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use shikigami_core::ScenarioId;
-use shikigami_core::{FileStore, RunId, ScenarioService};
+use shikigami_core::{ApprovalStore, FileStore, Policy, RunId, ScenarioService};
 use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime};
 use shikigami_secrets::Vault;
 use tokio_util::sync::CancellationToken;
@@ -32,6 +32,8 @@ pub(crate) struct AppState {
     pub runtime: Runtime,
     pub runs: Mutex<HashMap<RunId, ActiveRun>>,
     pub vault: Arc<Vault>,
+    /// Requests from AI clients waiting for the person's answer.
+    pub approvals: ApprovalStore,
     /// For looking at the screen where a run paused.
     pub adapters: Vec<Arc<dyn Adapter>>,
 }
@@ -59,7 +61,10 @@ pub fn run() {
     let vault = Arc::new(Vault::open(service.store().root()));
     let state = AppState {
         service: service.clone(),
-        runtime: runtime.with_secrets(vault.clone()),
+        runtime: runtime
+            .with_secrets(vault.clone())
+            .with_policy(Policy::path(service.store().root())),
+        approvals: ApprovalStore::new(service.store().local_root()),
         runs: Mutex::new(HashMap::new()),
         vault,
         adapters,
@@ -78,6 +83,10 @@ pub fn run() {
                 app.handle().clone(),
                 service.store().root().join("secrets"),
             );
+            watcher::spawn_approvals(
+                app.handle().clone(),
+                service.store().local_root().join("approvals"),
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -87,6 +96,14 @@ pub fn run() {
             commands::create_version,
             commands::diff_versions,
             commands::restore_version,
+            commands::published_state,
+            commands::publish_scenario,
+            commands::approve_and_publish,
+            commands::unpublish_scenario,
+            commands::get_policy,
+            commands::save_policy,
+            commands::list_approvals,
+            commands::decide_approval,
             commands::export_scenario,
             commands::import_scenario,
             commands::list_scenarios,

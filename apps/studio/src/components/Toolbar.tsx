@@ -82,6 +82,7 @@ export function ScenarioTitle() {
   const validation = useStudio((s) => s.validation);
   const setBottom = useStudio((s) => s.setBottom);
   const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
+  const published = useStudio((s) => s.published);
   if (!scenario) return null;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
   return (
@@ -100,6 +101,21 @@ export function ScenarioTitle() {
         <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
           <path d="m1.5 3 2.5 2.5L6.5 3" fill="none" stroke="currentColor" strokeWidth="1.3" />
         </svg>
+      </button>
+      {/* What unattended runs execute; published from the history's versions. */}
+      <button
+        type="button"
+        onClick={() => setHistoryOpen(true, "versions")}
+        title={published ? t.publishedLabel(published.version, published.name) : t.publishedHint}
+        className={`flex h-6 shrink-0 items-center gap-1 rounded-[3px] px-1.5 text-[11px] ${
+          published && !published.matchesCurrent
+            ? "bg-shu-50 text-shu-600 hover:bg-shu-100"
+            : published
+              ? "bg-moegi-100 text-moegi-500 hover:bg-slate-200"
+              : "text-slate-400 hover:bg-slate-100 hover:text-ink"
+        }`}
+      >
+        {published ? t.publishedBadge(published.version) : t.notPublishedBadge}
       </button>
       <button
         type="button"

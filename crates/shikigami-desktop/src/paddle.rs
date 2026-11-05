@@ -46,6 +46,12 @@ const REC_MAX_WIDTH: u32 = 3200;
 const REC_BATCH: usize = 8;
 /// Lines read with less confidence than this are dropped (noise).
 const TEXT_SCORE: f32 = 0.5;
+/// Letters the model knows that look the same as a Latin letter or digit
+/// (Turkish dotless i, Greek and Cyrillic capitals...) but hardly appear on
+/// Japanese business screens. Reading them turns "AI" into "Aı" and breaks
+/// text search, so recognition never chooses them: the next guess (here
+/// "I") wins.
+pub const LOOKALIKES: &str = "ıΑΒΕΖΗΙΚΜΝΟΡΤΥΧιονАВЕКМНОРСТХаеорсухіјѕІЈЅ";
 
 /// The loaded models.
 pub struct Paddle {
@@ -54,6 +60,8 @@ pub struct Paddle {
     /// Characters by class index minus one (0 is CTC's blank); one past the
     /// end is a space.
     chars: Vec<String>,
+    /// Classes recognition never chooses (see [`LOOKALIKES`]).
+    skip: Vec<bool>,
 }
 
 static ENGINE: OnceLock<Result<Paddle, String>> = OnceLock::new();
@@ -125,7 +133,7 @@ fn load() -> Result<Paddle, String> {
     };
     let det = session(DET_MODEL)?;
     let rec = session(REC_MODEL)?;
-    let chars = rec
+    let chars: Vec<String> = rec
         .metadata()
         .ok()
         .and_then(|m| m.custom("character"))
@@ -133,10 +141,12 @@ fn load() -> Result<Paddle, String> {
         .split('\n')
         .map(str::to_owned)
         .collect();
+    let skip = skipped_classes(&chars);
     Ok(Paddle {
         det: Mutex::new(det),
         rec: Mutex::new(rec),
         chars,
+        skip,
     })
 }
 
@@ -243,7 +253,7 @@ impl Paddle {
             .enumerate()
             .map(|(i, ((_, crop), &w))| {
                 let item = &scores[i * steps * classes..(i + 1) * steps * classes];
-                let decoded = ctc_decode(item, steps, classes, &self.chars);
+                let decoded = ctc_decode(item, steps, classes, &self.chars, &self.skip);
                 if decoded.is_empty() || decoded.score < TEXT_SCORE {
                     return None;
                 }
@@ -421,16 +431,35 @@ impl Decoded {
     }
 }
 
+/// Which classes (index = class, 0 is the blank) are [`LOOKALIKES`].
+pub fn skipped_classes(chars: &[String]) -> Vec<bool> {
+    std::iter::once(false)
+        .chain(chars.iter().map(|c| {
+            let mut it = c.chars();
+            matches!((it.next(), it.next()), (Some(ch), None) if LOOKALIKES.contains(ch))
+        }))
+        .collect()
+}
+
 /// Greedy CTC decoding of `[steps, classes]` scores: the best class per
-/// step, repeats merged, blanks (class 0) dropped.
-pub fn ctc_decode(scores: &[f32], steps: usize, classes: usize, chars: &[String]) -> Decoded {
+/// step (never one `skip` marks), repeats merged, blanks (class 0) dropped.
+pub fn ctc_decode(
+    scores: &[f32],
+    steps: usize,
+    classes: usize,
+    chars: &[String],
+    skip: &[bool],
+) -> Decoded {
     let mut out = Vec::new();
     let mut confidence = Vec::new();
     let mut previous = 0;
     for t in 0..steps {
         let row = &scores[t * classes..(t + 1) * classes];
-        let (best, score) =
-            row.iter().enumerate().fold(
+        let (best, score) = row
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| !skip.get(i).copied().unwrap_or(false))
+            .fold(
                 (0, f32::MIN),
                 |acc, (i, &s)| if s > acc.1 { (i, s) } else { acc },
             );
