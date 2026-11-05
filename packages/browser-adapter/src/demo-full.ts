@@ -4,12 +4,13 @@
 //   pnpm demo:full
 //
 // Unlike `pnpm demo:browser` (which runs only the browser flow), this runs the
-// whole full-feature bundle: config, CSV, Excel (write/read, multi-sheet),
-// loops/conditions/try, a Word invoice per customer, a ZIP, the browser
-// shipping sub-scenario and a wait.until poll. Parts that need a real Windows
-// environment (Excel macros, Outlook, screen/OCR, dialogs, OAuth) are skipped
-// unless config/設定.json has 実環境を使う = true; each is wrapped in a try so
-// a missing app never stops the demo.
+// whole full-feature bundle on screen: a start dialog, config, CSV, Excel
+// (write/read, multi-sheet), loops/conditions/try, a Word invoice per
+// customer, a ZIP, the browser shipping sub-scenario, Notepad driven and read
+// back with OCR, an Excel macro, an Outlook draft, OAuth, the output folder in
+// Explorer and a result dialog. Each of those is wrapped in a try, so an app
+// that is missing is skipped. Set 実環境を使う = false in config/設定.json for
+// unattended runs.
 //
 // The browser window is visible and slowed down (set SHIKIGAMI_BROWSER_SLOWMO=0
 // for full speed). The demo account is registered as the secret 「デモ受注システム」

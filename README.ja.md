@@ -73,10 +73,9 @@ pnpm -r test
 cargo run -p shikigami-cli -- run examples/invoice-summary.json
 cargo run -p shikigami-cli -- run examples/invoice-summary.json -i threshold=10000
 
-# フル機能デモ：設定・Excel・Word・CSV・ループ/try・サブシナリオなどを 1 本に
-# （ヘッドレスで完走。詳細は examples/full-demo/README.md）
-cargo run -p shikigami-cli -- run examples/full-demo.shikigami.json
-pnpm demo:full   # デモサイトとブラウザ出荷込みで同じものを実行
+# フル機能デモ：ブラウザ・ダイアログ・Excel・Word・メモ帳+OCR・Outlook などを
+# 1 本で画面に見せる（詳細は examples/full-demo/README.md）
+pnpm demo:full
 
 # Studio を起動
 pnpm studio:dev
