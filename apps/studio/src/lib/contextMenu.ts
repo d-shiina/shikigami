@@ -85,11 +85,13 @@ export function menuFor(build: () => readonly MenuSpec[]) {
 
 function hasSelection(field: Field): boolean {
   if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+    // Number inputs report no selection range (null, or a throw): their
+    // selection cannot be known, so cut / copy stay offered while there is a value.
     try {
-      return (field.selectionStart ?? 0) !== (field.selectionEnd ?? 0);
+      if (field.selectionStart === null || field.selectionEnd === null) return field.value !== "";
+      return field.selectionStart !== field.selectionEnd;
     } catch {
-      // number inputs have no selection range.
-      return false;
+      return field.value !== "";
     }
   }
   return Boolean(window.getSelection()?.toString());
