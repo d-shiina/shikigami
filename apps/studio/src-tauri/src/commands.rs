@@ -462,6 +462,38 @@ pub fn get_observation(
     Ok(state.service.get_observation(&id)?)
 }
 
+/// Most events `run_record` returns; a long loop's tail is dropped.
+const MAX_RECORD_EVENTS: usize = 20_000;
+
+/// A finished run as recorded under `runs/<id>/`: its report and events, for
+/// the review desk to show what an AI test run actually did.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunRecord {
+    report: Option<shikigami_runtime::RunReport>,
+    events: Vec<RunEventEnvelope>,
+    /// Events were dropped after `MAX_RECORD_EVENTS`.
+    truncated: bool,
+}
+
+#[tauri::command]
+pub fn run_record(state: State<'_, AppState>, run_id: RunId) -> CmdResult<RunRecord> {
+    let root = state.service.store().local_root();
+    let io = |e: std::io::Error| match e.kind() {
+        std::io::ErrorKind::NotFound => err("RUN_NOT_FOUND", format!("no run {run_id}")),
+        _ => err("STORAGE_ERROR", e.to_string()),
+    };
+    let report = shikigami_runtime::record::read_report(root, &run_id).map_err(io)?;
+    let mut events = shikigami_runtime::record::read_events(root, &run_id).map_err(io)?;
+    let truncated = events.len() > MAX_RECORD_EVENTS;
+    events.truncate(MAX_RECORD_EVENTS);
+    Ok(RunRecord {
+        report,
+        events,
+        truncated,
+    })
+}
+
 /// How a Studio run pauses (see `shikigami_runtime::debug`).
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]

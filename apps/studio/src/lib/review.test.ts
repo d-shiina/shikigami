@@ -62,3 +62,81 @@ describe("groupRevertBlocker", () => {
     expect(groupRevertBlocker([b, a], [a, b, other])).not.toBeNull();
   });
 });
+
+import { changeCards, checksOf, digest, partDiff, purpose, stepBefore } from "./review";
+
+describe("review cards", () => {
+  const entries: HistoryEntry[] = [
+    {
+      ...entry(2, [{ op: "updateStep", stepId: "if", patch: { params: { condition: "amount >= limit && paid == false" } } }], [
+        { op: "updateStep", stepId: "if", patch: { params: { condition: "amount >= limit" } } },
+      ]),
+      summary: "未払いの高額請求だけを要確認にする\n支払済も入っていたため",
+      checks: ["一部入金も含めてよい？", ""].filter(Boolean),
+      stepIds: ["if"],
+    },
+    {
+      ...entry(3, [{ op: "addStep", step: { id: "log", type: "log.message", params: { message: "done" } } }]),
+      summary: "完了を知らせる",
+      checks: ["一部入金も含めてよい？", "基準額はこのまま？"],
+      stepIds: ["log"],
+    },
+  ];
+  const steps = [
+    { id: "if", type: "control.if", params: { condition: "amount >= limit && paid == false" } },
+    { id: "log", type: "log.message", params: { message: "done" } },
+  ];
+
+  it("takes the purpose from the first line of the oldest summary", () => {
+    expect(purpose(entries, summarize(entries))).toBe("未払いの高額請求だけを要確認にする");
+    expect(purpose([entry(2, [{ op: "addStep", step: { id: "x", type: "log.message" } }])], summarize([]))).toBe(headline(summarize([])));
+  });
+
+  it("collects the questions without repeats", () => {
+    expect(checksOf(entries)).toEqual(["一部入金も含めてよい？", "基準額はこのまま？"]);
+  });
+
+  it("rebuilds a step as it was before the group", () => {
+    expect(stepBefore(steps[0]!, [...entries].reverse()).params).toEqual({ condition: "amount >= limit" });
+  });
+
+  it("makes one card per changed step, marking edits after a send-back", () => {
+    const cards = changeCards(entries, summarize(entries), steps, 2);
+    expect(cards.map((c) => [c.stepId, c.kind, c.afterFeedback, c.said])).toEqual([
+      ["if", "changed", false, ["未払いの高額請求だけを要確認にする\n支払済も入っていたため"]],
+      ["log", "added", true, ["完了を知らせる"]],
+    ]);
+    expect(cards[0]?.before?.params).toEqual({ condition: "amount >= limit" });
+  });
+
+  it("marks the parts two sentences do not share", () => {
+    const d = partDiff([{ text: "もし " }, { code: "a ≥ b" }], [{ text: "もし " }, { code: "a ≥ b かつ c" }]);
+    expect(d).toEqual({ dropped: [false, true], added: [false, true] });
+  });
+
+  it("digests a test run: which changed steps it reached and what came out", () => {
+    const at = "";
+    const d = digest(
+      {
+        report: null,
+        truncated: false,
+        events: [
+          { runId: "r", seq: 0, at, type: "stepStarted", stepId: "if", stepType: "control.if", attempt: 1 },
+          { runId: "r", seq: 1, at, type: "log", level: "info", message: "要確認 3 件" },
+          { runId: "r", seq: 2, at, type: "stepStarted", stepId: "log", stepType: "log.message", attempt: 1, callPath: ["call"] },
+        ],
+      },
+      ["if", "log"],
+    );
+    expect(d).toMatchObject({ covered: 1, total: 2, missed: ["log"], logs: ["要確認 3 件"] });
+  });
+});
+
+import { wordDiff } from "./review";
+
+describe("wordDiff", () => {
+  it("marks only the words an expression gained", () => {
+    const marked = wordDiff("a ≥ b かつ c ≠ 'x'", "a ≥ b").filter((w) => w.changed).map((w) => w.text);
+    expect(marked).toEqual(["かつ", "c", "≠", "'x'"]);
+  });
+});

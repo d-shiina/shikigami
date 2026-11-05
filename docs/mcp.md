@@ -74,7 +74,7 @@ args = ["mcp"]
 | write | `create_scenario` | Create a scenario (node IDs optional) |
 |  | `update_scenario` | Apply several EditOps atomically as one revision |
 |  | `add_step` / `update_step` / `remove_step` / `move_step` | Single edits |
-|  | (common edit arguments) | `summary`: what the change does (shown in review and history). `observations`: the `observationId`s of the screens it is based on |
+|  | (common edit arguments) | `summary`: what the change does, in plain words (first line: what the scenario now does differently; shown as the review's heading). `checks`: questions only a person can answer (assumptions), one each, up to 10; Studio shows them with OK / No. `observations`: the `observationId`s of the screens it is based on |
 |  | `undo` / `redo` | The Undo stack shared with Studio and the CLI |
 |  | `delete_scenario` | Move to the trash. `expectedRevision` required, marked `destructiveHint`. `SCENARIO_IN_USE` while another scenario calls it |
 |  | `create_version` / `restore_version` | Save a version / go back to a version (one edit that can be undone) |

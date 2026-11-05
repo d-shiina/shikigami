@@ -727,6 +727,10 @@ export interface HistoryEntry {
    */
   summary?: string | null;
   /**
+   * What the author asked a person to confirm before approving (an AI's `checks`).
+   */
+  checks?: string[];
+  /**
    * Steps the change added, changed, moved or removed.
    */
   stepIds?: StepId[];
@@ -1069,6 +1073,11 @@ export interface ChangeNote {
    */
   summary?: string | null;
   /**
+   * Things the author wants a person to decide or confirm before the change
+   * is approved (assumptions, guesses), one question each. Kept in the journal.
+   */
+  checks?: string[];
+  /**
    * Observations (screens looked at with inspect_* / test_step) the change
    * is based on. They are linked to the new revision and its steps.
    */
@@ -1129,6 +1138,7 @@ export interface ChangeRecord {
   at: string;
   label: string;
   summary?: string | null;
+  checks?: string[];
   stepIds?: StepId[];
 }
 /**

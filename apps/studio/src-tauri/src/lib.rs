@@ -114,6 +114,7 @@ pub fn run() {
             commands::review_timeline,
             commands::submit_review,
             commands::get_observation,
+            commands::run_record,
             commands::run_scenario,
             commands::stop_run,
             commands::run_status,

@@ -577,6 +577,7 @@ async fn changes_carry_summaries_evidence_and_review_feedback() {
                 "expectedRevision": 1,
                 "step": { "type": "log.message", "params": { "message": "hi" } },
                 "summary": "あいさつを記録する手順を追加",
+                "checks": [" 英語のあいさつでよい？ ", "", "英語のあいさつでよい？"],
                 "observations": [obs],
             }),
         )
@@ -597,6 +598,15 @@ async fn changes_carry_summaries_evidence_and_review_feedback() {
         "あいさつを記録する手順を追加"
     );
     assert_eq!(history["entries"][1]["stepIds"], json!([step_id]));
+    assert_eq!(
+        history["entries"][1]["checks"],
+        json!(["英語のあいさつでよい？"])
+    );
+    assert!(
+        history["entries"][0]
+            .get("checks")
+            .is_none_or(|c| c.as_array().is_some_and(Vec::is_empty))
+    );
 
     // The human sends revision 2 back from Studio (another process).
     let studio = h.other_process();

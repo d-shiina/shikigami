@@ -1192,6 +1192,13 @@
             "null"
           ]
         },
+        "checks": {
+          "description": "What the author asked a person to confirm before approving (an AI's `checks`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "stepIds": {
           "description": "Steps the change added, changed, moved or removed.",
           "type": "array",
@@ -1845,6 +1852,13 @@
             "null"
           ]
         },
+        "checks": {
+          "description": "Things the author wants a person to decide or confirm before the change\nis approved (assumptions, guesses), one question each. Kept in the journal.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "observations": {
           "description": "Observations (screens looked at with inspect_* / test_step) the change\nis based on. They are linked to the new revision and its steps.",
           "type": "array",
@@ -2149,6 +2163,12 @@
             "string",
             "null"
           ]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "stepIds": {
           "type": "array",

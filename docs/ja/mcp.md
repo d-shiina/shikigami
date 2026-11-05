@@ -74,7 +74,7 @@ args = ["mcp"]
 | write | `create_scenario` | 新規作成（ノード ID は省略可） |
 |  | `update_scenario` | 複数の EditOp を 1 リビジョンとして原子的に適用 |
 |  | `add_step` / `update_step` / `remove_step` / `move_step` | 個別の編集 |
-|  | （編集系の共通引数） | `summary`：変更の説明（レビューと履歴に出る）。`observations`：根拠にした画面の `observationId` |
+|  | （編集系の共通引数） | `summary`：変更の説明。ノードの種類や式を使わない言葉で、1 行目は「シナリオが何をするようになったか」（確認の見出しになる）。`checks`：人にしか決められないこと（AI の仮定）を 1 問ずつ、10 問まで。Studio が「よい／違う…」で聞く。`observations`：根拠にした画面の `observationId` |
 |  | `undo` / `redo` | Studio・CLI と共通の Undo スタック |
 |  | `delete_scenario` | ゴミ箱へ移動。`expectedRevision` 必須。`destructiveHint` 付き。他のシナリオから呼ばれていると `SCENARIO_IN_USE` |
 |  | `create_version` / `restore_version` | 版を保存／版の内容に戻す（Undo できる 1 回の編集） |
