@@ -41,10 +41,12 @@ describe("effects", () => {
     ]);
   });
 
-  it("keeps a changed step's effect as unchanged when its target is the same", () => {
-    const now: Step = { id: "d", type: "file.writeText", params: { path: "output/b.txt", text: "new" } };
+  it("marks a changed step's effect as changed unless only its name or settings changed", () => {
+    const now: Step = { id: "d", type: "file.writeText", name: "新しい名前", params: { path: "output/b.txt", text: "new" } };
+    const renamed: Step = { ...now, name: "古い名前" };
+    expect(effects([now], new Map([["d", "changed"]]), [], defs, () => renamed)[0]?.status).toBe("same");
     const before: Step = { ...now, params: { path: "output/b.txt", text: "old" } };
-    expect(effects([now], new Map([["d", "changed"]]), [], defs, () => before)[0]?.status).toBe("same");
+    expect(effects([now], new Map([["d", "changed"]]), [], defs, () => before)[0]?.status).toBe("changed");
     const moved: Step = { ...now, params: { path: "output/c.txt" } };
     expect(effects([moved], new Map([["d", "changed"]]), [], defs, () => before)[0]?.status).toBe("changed");
   });

@@ -563,7 +563,7 @@ function TestResult({ runs, revision, changedIds }: { runs: TestRun[]; revision:
       {!current && <p className="rounded-[4px] bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">{t.desk.staleTest}</p>}
       {result && (
         <div className="grid grid-cols-[6.5em_1fr] gap-x-2 gap-y-0.5 px-1 text-[12px]">
-          {result.total > 0 && (
+          {result.total > 0 && !result.partial && (
             <>
               <span className="text-slate-500">{t.desk.changedNodes}</span>
               <span className={result.missed.length > 0 ? "text-amber-700" : ""}>{t.desk.covered(result.covered, result.total)}</span>

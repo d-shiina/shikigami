@@ -74,7 +74,8 @@ export function effects(
       const old = before(step);
       const was = old ? effectOf(old, def, "same") : null;
       const now = effectOf(step, def, "same");
-      if (was && now && was.target === now.target) status = "same";
+      // Same target and same params (only the name or settings changed): nothing changes outside.
+      if (was && now && was.target === now.target && JSON.stringify(old?.params ?? {}) === JSON.stringify(step.params ?? {})) status = "same";
       else if (was && !now) {
         all.push({ ...was, status: "removed" });
         continue;

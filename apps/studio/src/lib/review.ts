@@ -40,9 +40,34 @@ export function summarize(entries: HistoryEntry[]): ReviewSummary {
       } else if (op.op === "setVariable") vars.add(op.variable.name);
       else if (op.op === "removeVariable") vars.add(op.name);
       else if (op.op === "updateScenario") scenario = true;
+      else if (op.op === "replaceSteps") {
+        // The whole tree at once: compare it with the tree the inverse puts back.
+        const old = entry.inverse?.find((i) => i.op === "replaceSteps");
+        const before = new Map(flatten(old?.op === "replaceSteps" ? old.steps : []).flatMap((s) => (s.id ? [[s.id, s] as const] : [])));
+        const after = new Map(flatten(op.steps).flatMap((s) => (s.id ? [[s.id, s] as const] : [])));
+        for (const [id, step] of after) {
+          const was = before.get(id);
+          if (!was) {
+            steps.set(id, "added");
+            removed.delete(id);
+          } else if (!steps.has(id) && JSON.stringify(own(was)) !== JSON.stringify(own(step))) steps.set(id, "changed");
+        }
+        for (const [id, step] of before) {
+          if (after.has(id)) continue;
+          const wasAdded = steps.get(id) === "added";
+          steps.delete(id);
+          if (!wasAdded) removed.set(id, step);
+        }
+      }
     }
   }
   return { steps, removed: [...removed.values()], variables: vars.size, scenario };
+}
+
+/** A step without its children, to tell whether the step itself changed. */
+function own(step: Step): Omit<Step, "blocks"> {
+  const { blocks: _blocks, ...rest } = step;
+  return rest;
 }
 
 /**
@@ -109,6 +134,10 @@ export function stepBefore(current: Step, newestFirst: HistoryEntry[]): Step {
   for (const entry of newestFirst) {
     for (const op of entry.inverse ?? []) {
       if (op.op === "updateStep" && op.stepId === current.id) step = applyPatch(step, op.patch);
+      else if (op.op === "replaceSteps") {
+        const old = flatten(op.steps).find((s) => s.id === current.id);
+        if (old) step = { ...old, blocks: current.blocks };
+      }
     }
   }
   return step;
@@ -195,6 +224,8 @@ export type TestDigest = {
   total: number;
   /** Changed steps the run never reached. */
   missed: string[];
+  /** The record was cut short, so coverage is unknown (`covered` and `missed` are empty). */
+  partial: boolean;
   outputs: [string, unknown][];
   /** The run's own log lines (log.message and warnings), last few. */
   logs: string[];
@@ -211,9 +242,11 @@ export function digest(record: RunRecord, changedIds: string[]): TestDigest {
     if (event.type === "stepStarted") ran.add(event.stepId);
     else if (event.type === "log" && event.level !== "debug") logs.push(event.message);
   }
-  const missed = changedIds.filter((id) => !ran.has(id));
+  const partial = record.truncated;
+  const missed = partial ? [] : changedIds.filter((id) => !ran.has(id));
   return {
-    covered: changedIds.length - missed.length,
+    partial,
+    covered: partial ? 0 : changedIds.length - missed.length,
     total: changedIds.length,
     missed,
     outputs: Object.entries(record.report?.outputs ?? {}),

@@ -140,3 +140,30 @@ describe("wordDiff", () => {
     expect(marked).toEqual(["かつ", "c", "≠", "'x'"]);
   });
 });
+
+describe("replaceSteps", () => {
+  it("diffs the replaced tree against the one the inverse restores", () => {
+    const old = [
+      { id: "a", type: "log.message", params: { message: "hi" } },
+      { id: "b", type: "log.message", params: { message: "keep" } },
+      { id: "gone", type: "file.delete", params: { path: "x" } },
+    ];
+    const next = [
+      { id: "a", type: "log.message", params: { message: "hello" } },
+      { id: "b", type: "log.message", params: { message: "keep" } },
+      { id: "new", type: "log.message", params: { message: "added" } },
+    ];
+    const entries = [entry(2, [{ op: "replaceSteps", steps: next }], [{ op: "replaceSteps", steps: old }])];
+    const s = summarize(entries);
+    expect([...s.steps]).toEqual([
+      ["a", "changed"],
+      ["new", "added"],
+    ]);
+    expect(s.removed.map((r) => r.id)).toEqual(["gone"]);
+    expect(stepBefore(next[0]!, entries).params).toEqual({ message: "hi" });
+  });
+
+  it("does not judge coverage from a cut-short run record", () => {
+    expect(digest({ report: null, truncated: true, events: [] }, ["a"])).toMatchObject({ partial: true, missed: [], covered: 0 });
+  });
+});
