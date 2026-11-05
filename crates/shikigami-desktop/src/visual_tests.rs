@@ -727,7 +727,7 @@ fn ctc_output_becomes_words_with_places() {
     for (t, &c) in best.iter().enumerate() {
         scores[t * classes + c] = 0.9;
     }
-    let decoded = crate::paddle::ctc_decode(&scores, best.len(), classes, &chars);
+    let decoded = crate::paddle::ctc_decode(&scores, best.len(), classes, &chars, &[]);
     let text: String = decoded.chars.iter().map(|(c, _)| c.as_str()).collect();
     assert_eq!(text, "保存 OK");
     assert!((decoded.score - 0.9).abs() < 1e-6);
@@ -803,4 +803,39 @@ fn paddle_reads_an_underlined_link() {
     for expected in ["ocr手書き", "ノーコードの帳票", "驚くほど簡単なAI開発"] {
         assert!(text.contains(expected), "{expected} in {text}");
     }
+}
+
+/// A letter that only looks like a Latin one ("ı" for "I") loses to the
+/// Latin letter, even when the model is surer of it.
+#[test]
+fn ctc_never_reads_lookalike_letters() {
+    let chars: Vec<String> = ["A", "I", "ı", "開"]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let skip = crate::paddle::skipped_classes(&chars);
+    assert_eq!(skip, [false, false, false, true, false]);
+    let classes = 5;
+    let mut scores = vec![0.0f32; 3 * classes];
+    scores[1] = 0.98; // A
+    scores[classes + 3] = 0.94; // ı
+    scores[classes + 2] = 0.04; // I
+    scores[2 * classes + 4] = 0.9; // 開
+    let decoded = crate::paddle::ctc_decode(&scores, 3, classes, &chars, &skip);
+    let text: String = decoded.chars.iter().map(|(c, _)| c.as_str()).collect();
+    assert_eq!(text, "AI開");
+}
+
+/// Light text on a dark background, in a font whose capital I is a bare
+/// stroke: the model's first guess for "AI" is "Aı".
+#[test]
+fn paddle_reads_ai_in_light_on_dark_text() {
+    let Ok(engine) = crate::paddle::engine() else {
+        eprintln!("skipped: PaddleOCR is not installed");
+        return;
+    };
+    let bytes = include_bytes!("../tests/fixtures/ai-dark.png");
+    let lines = engine.recognize(&Bitmap::from_png(bytes).unwrap()).unwrap();
+    let text = ocr_text(&lines);
+    assert!(text.contains("最新AI開発"), "{text}");
 }
