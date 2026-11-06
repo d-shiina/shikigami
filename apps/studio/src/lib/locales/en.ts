@@ -785,7 +785,7 @@ export const en: Dict = {
     choose: "(choose)",
     inputs: "Inputs",
     noInputs: "No inputs",
-    secretInput: "Pass passwords and other secrets by choosing a secret",
+    secretInput: "Secret: pass a secret variable of this flow as {{ name }} (text typed in directly is not accepted)",
     defaultIs: (value: string) => `Default: ${value}`,
     outputs: "Outputs",
     noOutputs: "No outputs",

@@ -784,7 +784,7 @@ export const ja = {
     choose: "（選んでください）",
     inputs: "渡す値",
     noInputs: "入力はありません",
-    secretInput: "パスワードなどの機密の値は、シークレットから選んで渡します",
+    secretInput: "機密の値：このフローの機密の変数を {{ 変数名 }} の形で渡します（文字を直接入力することはできません）",
     defaultIs: (value: string) => `省略時: ${value}`,
     outputs: "受け取る変数",
     noOutputs: "出力はありません",
