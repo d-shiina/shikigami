@@ -179,6 +179,10 @@ export const en: Dict = {
       REVISION_CONFLICT: "It changed while you were reviewing. Review it again.",
     })[code] ?? message,
   approvalAsked: "The AI asks for approval",
+  pickAsked: "The AI asks you to point at something in the browser",
+  pickHow: (candidates: number) =>
+    `Switch to the browser window and click the element. The click does not reach the page, so nothing is pressed.${candidates > 1 ? ` The candidates it is torn between are numbered 1–${candidates}.` : ""} If you are not sure, press "Not sure" in the browser or decline here.`,
+  pickCancel: "Decline",
   approvalSummary: (action: string, scenario: string | null, types: string[], risk: string) =>
     `${action}${scenario ? ` "${scenario}"` : ""} (${types.length > 0 ? `${types.join(", ")}, ` : ""}${risk.toLowerCase()})`,
   approvalLater: "Later",

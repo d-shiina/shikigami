@@ -202,6 +202,44 @@
       "class": "write"
     },
     {
+      "name": "ask_user_to_pick",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "items": true
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "waitMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "class": "run"
+    },
+    {
       "name": "create_scenario",
       "annotations": {
         "readOnlyHint": false,
@@ -927,6 +965,12 @@
           },
           "target": {},
           "screenshot": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "image": {
             "type": [
               "boolean",
               "null"

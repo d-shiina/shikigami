@@ -35,6 +35,7 @@ import {
   type SecretField,
   type SecretInfo,
   type SecretInput,
+  type PickRequest,
   type SecretRequest,
 } from "./lib/api";
 import { errorLine } from "./lib/errorText";
@@ -252,6 +253,8 @@ export type StudioState = {
   published: PublishedState | null;
   /** Requests from AI clients waiting for the person's approval, oldest first. */
   approvals: ApprovalRequest[];
+  /** AI clients waiting for the person to point at something in the browser, oldest first. */
+  pickRequests: PickRequest[];
   /** The workspace policy, while its dialog is open. */
   policy: Policy | null;
   policyOpen: boolean;
@@ -348,6 +351,8 @@ export type StudioState = {
   unpublish(): Promise<void>;
   loadApprovals(): Promise<void>;
   decideApproval(id: string, approve: boolean): Promise<void>;
+  loadPickRequests(): Promise<void>;
+  cancelPickRequest(id: string): Promise<void>;
   setPolicyOpen(open: boolean): void;
   /** Returns true when saved. */
   savePolicy(policy: Policy): Promise<boolean>;
@@ -755,6 +760,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       versions: [],
       published: null,
       approvals: [],
+      pickRequests: [],
       policy: null,
       policyOpen: false,
       called: {},
@@ -1454,6 +1460,23 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         } catch {
           // The banner is a convenience; the AI's call fails safe without an answer.
         }
+      },
+
+      async loadPickRequests() {
+        try {
+          set({ pickRequests: await api.listPickRequests() });
+        } catch {
+          // A convenience: the banner in the browser asks the person anyway.
+        }
+      },
+
+      async cancelPickRequest(id) {
+        try {
+          await api.cancelPickRequest(id);
+        } catch (e) {
+          set({ error: message(e) });
+        }
+        await get().loadPickRequests();
       },
 
       async decideApproval(id, approve) {

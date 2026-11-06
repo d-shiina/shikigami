@@ -12,6 +12,7 @@ pub mod ids;
 pub mod migrate;
 pub mod model;
 pub mod ops;
+pub mod pick;
 pub mod policy;
 pub mod project;
 pub mod registry;
@@ -28,12 +29,13 @@ pub mod version;
 pub use approval::{AiAction, ApprovalRequest, ApprovalStatus, ApprovalStore, NewApproval, Redeem};
 pub use call::Subscenario;
 pub use error::{CoreError, CoreResult, ErrorPayload};
-pub use ids::{ApprovalId, ObservationId, RunId, ScenarioId, StepId};
+pub use ids::{ApprovalId, ObservationId, PickId, RunId, ScenarioId, StepId};
 pub use model::{
     Metadata, OnError, Part, PartApp, RetryPolicy, SCHEMA_VERSION, Scenario, ScenarioSettings,
     ScenarioSummary, Step, VarDirection, VarType, VariableDef, part_ref, takes_part, target_part,
 };
 pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
+pub use pick::{PickRequest, PickRequestStore, PickWait};
 pub use policy::{Decision, Policy, TargetDef, TargetKind};
 pub use project::{BundledFile, ConfigFile, ConfigItem, ConfigType, ProjectFile, ProjectFiles};
 pub use registry::{Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef};
