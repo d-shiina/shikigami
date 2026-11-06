@@ -1,7 +1,7 @@
-//! Canonical scenario model.
+//! Canonical flow model.
 //!
-//! The JSON produced by these types *is* the scenario file format. Rust is the
-//! single source of truth: the JSON Schema (`schemas/scenario.schema.json`) and
+//! The JSON produced by these types *is* the flow file format. Rust is the
+//! single source of truth: the JSON Schema (`schemas/flow.schema.json`) and
 //! the TypeScript types (`packages/schema`) are generated from it.
 //!
 //! Steps form a tree. Every step has the same shape (`id`, `type`, `params`,
@@ -17,24 +17,24 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
 
-use crate::ids::{ScenarioId, StepId};
+use crate::ids::{FlowId, StepId};
 
-/// Current scenario schema version. Bump on every change to the file shape
+/// Current flow schema version. Bump on every change to the file shape
 /// (readers reject unknown fields, so new optional fields count too) and add
 /// a migration in [`crate::migrate`]. See docs/compatibility.md.
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
-/// A scenario: the unit that AI clients, Studio and the Runtime share.
+/// A flow: the unit that AI clients, Studio and the Runtime share.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[schemars(title = "Scenario")]
-pub struct Scenario {
+#[schemars(title = "Flow")]
+pub struct Flow {
     /// Optional JSON Schema reference for editors. Ignored by Shikigami.
     #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     pub schema_ref: Option<String>,
-    /// Version of the scenario file format.
+    /// Version of the flow file format.
     pub schema_version: u32,
-    pub id: ScenarioId,
+    pub id: FlowId,
     pub name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
@@ -58,21 +58,21 @@ pub struct Scenario {
     /// Top-level steps, executed in order.
     #[serde(default)]
     pub steps: Vec<Step>,
-    /// Scenario-wide defaults for error handling, timeouts and retries.
-    #[serde(default, skip_serializing_if = "ScenarioSettings::is_default")]
-    pub settings: ScenarioSettings,
+    /// Flow-wide defaults for error handling, timeouts and retries.
+    #[serde(default, skip_serializing_if = "FlowSettings::is_default")]
+    pub settings: FlowSettings,
     #[serde(default)]
     pub metadata: Metadata,
 }
 
-impl Scenario {
-    /// Creates an empty scenario with a fresh ID.
+impl Flow {
+    /// Creates an empty flow with a fresh ID.
     pub fn new(name: impl Into<String>) -> Self {
         let now = now();
         Self {
             schema_ref: None,
             schema_version: SCHEMA_VERSION,
-            id: ScenarioId::generate(),
+            id: FlowId::generate(),
             name: name.into(),
             description: String::new(),
             requires: BTreeMap::new(),
@@ -80,7 +80,7 @@ impl Scenario {
             variables: Vec::new(),
             parts: BTreeMap::new(),
             steps: Vec::new(),
-            settings: ScenarioSettings::default(),
+            settings: FlowSettings::default(),
             metadata: Metadata {
                 created_at: Some(now),
                 updated_at: Some(now),
@@ -90,8 +90,8 @@ impl Scenario {
     }
 
     /// Lightweight summary used for listings.
-    pub fn summary(&self) -> ScenarioSummary {
-        ScenarioSummary {
+    pub fn summary(&self) -> FlowSummary {
+        FlowSummary {
             id: self.id.clone(),
             name: self.name.clone(),
             description: self.description.clone(),
@@ -175,7 +175,7 @@ pub struct Step {
     /// Child step lists of control-flow steps, keyed by block name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub blocks: BTreeMap<String, Vec<Step>>,
-    /// Disabled steps are skipped by the Runtime but kept in the scenario.
+    /// Disabled steps are skipped by the Runtime but kept in the flow.
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
     /// Per-attempt timeout. Falls back to `settings.defaultTimeoutMs`.
@@ -283,7 +283,7 @@ pub enum OnError {
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ScenarioSettings {
+pub struct FlowSettings {
     /// Default per-step timeout in milliseconds (30 s when omitted).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_timeout_ms: Option<u64>,
@@ -291,13 +291,13 @@ pub struct ScenarioSettings {
     pub default_retry: Option<RetryPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_error: Option<OnError>,
-    /// Leave the files in the scenario's `work/` folder when a run starts.
+    /// Leave the files in the flow's `work/` folder when a run starts.
     /// By default a run starts with `work/` emptied.
     #[serde(default, skip_serializing_if = "is_false")]
     pub keep_work: bool,
 }
 
-impl ScenarioSettings {
+impl FlowSettings {
     fn is_default(&self) -> bool {
         self == &Self::default()
     }
@@ -460,11 +460,11 @@ pub struct Metadata {
     pub extra: Map<String, Value>,
 }
 
-/// Listing entry returned by `list_scenarios`.
+/// Listing entry returned by `list_flows`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ScenarioSummary {
-    pub id: ScenarioId,
+pub struct FlowSummary {
+    pub id: FlowId,
     pub name: String,
     pub description: String,
     pub revision: u64,
@@ -474,7 +474,7 @@ pub struct ScenarioSummary {
     #[schemars(with = "Option<String>")]
     pub updated_at: Option<OffsetDateTime>,
     /// Input variables (`input` and `inOut`), in declared order: what a
-    /// `scenario.call` to it can pass in.
+    /// `flow.call` to it can pass in.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inputs: Vec<String>,
     /// Output variables (`output` and `inOut`): what a call can receive.
@@ -500,8 +500,8 @@ mod tests {
 
     #[test]
     fn walk_visits_nested_steps_in_document_order() {
-        let mut scenario = Scenario::new("t");
-        scenario.steps = vec![
+        let mut flow = Flow::new("t");
+        flow.steps = vec![
             Step::new("log.message").with_id("a"),
             Step::new("control.if")
                 .with_id("b")
@@ -509,29 +509,29 @@ mod tests {
                 .with_block("else", vec![Step::new("log.message").with_id("d")]),
             Step::new("log.message").with_id("e"),
         ];
-        let ids: Vec<_> = scenario.walk().map(|s| s.id.as_str()).collect();
+        let ids: Vec<_> = flow.walk().map(|s| s.id.as_str()).collect();
         // Blocks are stored in a BTreeMap, so "else" sorts before "then".
         assert_eq!(ids, ["a", "b", "d", "c", "e"]);
     }
 
     #[test]
     fn summary_names_what_a_call_can_pass_in_and_receive() {
-        let mut scenario = Scenario::new("t");
+        let mut flow = Flow::new("t");
         let var = |name: &str, direction| VariableDef {
             direction,
             ..VariableDef::new(name, VarType::Any)
         };
-        scenario.variables = vec![
+        flow.variables = vec![
             var("invoice", VarDirection::Input),
             var("tmp", VarDirection::Local),
             var("count", VarDirection::InOut),
             var("no", VarDirection::Output),
         ];
-        let summary = scenario.summary();
+        let summary = flow.summary();
         assert_eq!(summary.inputs, ["invoice", "count"]);
         assert_eq!(summary.outputs, ["count", "no"]);
         // Nothing to pass: the listing stays as before.
-        let plain = serde_json::to_value(Scenario::new("u").summary()).unwrap();
+        let plain = serde_json::to_value(Flow::new("u").summary()).unwrap();
         assert!(plain.get("inputs").is_none() && plain.get("outputs").is_none());
     }
 
@@ -547,12 +547,9 @@ mod tests {
             ],
             "metadata": { "tags": ["demo"], "x-owner": "team-a" }
         });
-        let scenario: Scenario = serde_json::from_value(value.clone()).expect("parse");
-        assert_eq!(
-            scenario.metadata.extra.get("x-owner"),
-            Some(&json!("team-a"))
-        );
-        let back = serde_json::to_value(&scenario).expect("serialize");
+        let flow: Flow = serde_json::from_value(value.clone()).expect("parse");
+        assert_eq!(flow.metadata.extra.get("x-owner"), Some(&json!("team-a")));
+        let back = serde_json::to_value(&flow).expect("serialize");
         assert_eq!(back, value);
     }
 

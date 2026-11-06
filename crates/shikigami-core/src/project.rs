@@ -1,10 +1,10 @@
-//! A scenario's project folder: its document and the files it works with.
+//! A flow's project folder: its document and the files it works with.
 //!
 //! ```text
-//! scenarios/<scenario-id>/
-//!   scenario.json   the scenario document
-//!   input/          data the scenario reads (Excel, CSV, …)
-//!   config/         settings kept out of the scenario (JSON, CSV, …)
+//! flows/<flow-id>/
+//!   flow.json   the flow document
+//!   input/          data the flow reads (Excel, CSV, …)
+//!   config/         settings kept out of the flow (JSON, CSV, …)
 //!   templates/      forms the output is made from (Excel / Word templates)
 //!   output/         what runs produce
 //!   work/           temporary files of a run
@@ -26,11 +26,11 @@ use serde_json::Value;
 use time::OffsetDateTime;
 
 use crate::error::{CoreError, CoreResult};
-use crate::ids::ScenarioId;
+use crate::ids::FlowId;
 use crate::resource::is_absolute_windows_path;
 
-/// The scenario document inside its folder.
-pub const SCENARIO_FILE: &str = "scenario.json";
+/// The flow document inside its folder.
+pub const FLOW_FILE: &str = "flow.json";
 
 /// A standard folder of every project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,7 +70,7 @@ pub const FOLDERS: [ProjectFolder; 6] = [
 /// Folder of the per-run logs.
 pub const LOGS_FOLDER: &str = "logs";
 
-/// Run logs kept per scenario; older ones are deleted.
+/// Run logs kept per flow; older ones are deleted.
 pub const LOGS_KEPT: usize = 100;
 
 /// Largest file `read_project_file` returns as text.
@@ -97,17 +97,18 @@ pub struct ProjectFile {
     pub in_use: bool,
 }
 
-/// What a scenario's project folder holds.
+/// What a flow's project folder holds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectFiles {
-    pub scenario_id: ScenarioId,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: FlowId,
     /// Absolute path of the folder.
     pub dir: String,
     /// Every folder, relative and `/`-separated: the standard ones first,
     /// then the author's own (`input/2026`), sorted.
     pub folders: Vec<String>,
-    /// Every file except `scenario.json`, sorted by path.
+    /// Every file except `flow.json`, sorted by path.
     pub files: Vec<ProjectFile>,
 }
 
@@ -115,9 +116,10 @@ pub struct ProjectFiles {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BundledFile {
-    /// The scenario (the bundle's own or one of its sub-scenarios) whose
+    /// The flow (the bundle's own or one of its sub-flows) whose
     /// folder it belongs to.
-    pub scenario_id: ScenarioId,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: FlowId,
     /// Relative to that folder, `/`-separated.
     pub path: String,
     /// The contents, base64 (standard alphabet, padded).
@@ -127,7 +129,7 @@ pub struct BundledFile {
 /// `format` of a settings file Studio edits as a form.
 pub const CONFIG_FORMAT: &str = "shikigami.config";
 
-/// A settings file (`config/*.json`) kept out of the scenario: values a
+/// A settings file (`config/*.json`) kept out of the flow: values a
 /// person changes without touching the flow (a cut-off day, a recipient, a
 /// folder). Studio edits it as a form; `config.read` turns it into
 /// `{ "締め日": 25, … }`.
@@ -195,7 +197,7 @@ impl ConfigFile {
 
 /// Checks a path written relative to a project folder and returns it as a
 /// relative `PathBuf`. Rejects absolute paths, `..`, empty parts, the
-/// scenario document itself and names Windows cannot store.
+/// flow document itself and names Windows cannot store.
 pub fn relative_path(path: &str) -> CoreResult<PathBuf> {
     let invalid = |why: &str| CoreError::InvalidProjectPath {
         path: path.to_owned(),
@@ -207,7 +209,7 @@ pub fn relative_path(path: &str) -> CoreResult<PathBuf> {
     }
     if is_absolute_windows_path(&normalized) || normalized.starts_with('/') {
         return Err(invalid(
-            "write the path relative to the scenario's folder (e.g. input/orders.xlsx)",
+            "write the path relative to the flow's folder (e.g. input/orders.xlsx)",
         ));
     }
     let mut out = PathBuf::new();
@@ -216,7 +218,7 @@ pub fn relative_path(path: &str) -> CoreResult<PathBuf> {
             continue;
         }
         if part == ".." {
-            return Err(invalid("'..' would leave the scenario's folder"));
+            return Err(invalid("'..' would leave the flow's folder"));
         }
         if part
             .chars()
@@ -230,10 +232,10 @@ pub fn relative_path(path: &str) -> CoreResult<PathBuf> {
     if out.as_os_str().is_empty() {
         return Err(invalid("the path is empty"));
     }
-    // Windows paths ignore case: SCENARIO.JSON is the scenario too.
-    if out.to_string_lossy().eq_ignore_ascii_case(SCENARIO_FILE) {
+    // Windows paths ignore case: FLOW.JSON is the flow too.
+    if out.to_string_lossy().eq_ignore_ascii_case(FLOW_FILE) {
         return Err(invalid(
-            "scenario.json is the scenario itself; edit it with edit operations",
+            "flow.json is the flow itself; edit it with edit operations",
         ));
     }
     Ok(out)
@@ -307,7 +309,7 @@ pub fn resolve_params(params: &mut Value, keys: &[String], dir: &Path) {
 }
 
 /// Lists a project folder (empty when it does not exist).
-pub fn list(id: &ScenarioId, dir: &Path) -> CoreResult<ProjectFiles> {
+pub fn list(id: &FlowId, dir: &Path) -> CoreResult<ProjectFiles> {
     let mut folders: Vec<String> = Vec::new();
     let mut files = Vec::new();
     walk(dir, Path::new(""), &mut folders, &mut files)?;
@@ -318,7 +320,7 @@ pub fn list(id: &ScenarioId, dir: &Path) -> CoreResult<ProjectFiles> {
     all.extend(folders);
     files.sort_by(|a: &ProjectFile, b| a.path.cmp(&b.path));
     Ok(ProjectFiles {
-        scenario_id: id.clone(),
+        flow_id: id.clone(),
         dir: dir.to_string_lossy().into_owned(),
         folders: all,
         files,
@@ -359,7 +361,7 @@ fn walk(
         if meta.is_dir() {
             folders.push(display_path(&path));
             walk(root, &path, folders, files)?;
-        } else if !(rel.as_os_str().is_empty() && name_str == SCENARIO_FILE) {
+        } else if !(rel.as_os_str().is_empty() && name_str == FLOW_FILE) {
             files.push(ProjectFile {
                 path: display_path(&path),
                 size: meta.len(),
@@ -417,11 +419,11 @@ pub fn clear_work(project_dir: &Path) -> Vec<String> {
     problems
 }
 
-/// Writes the bundle's files of scenario `id` into `dir` (a project folder),
+/// Writes the bundle's files of flow `id` into `dir` (a project folder),
 /// replacing files of the same name.
-pub fn unpack(files: &[BundledFile], id: &ScenarioId, dir: &Path) -> CoreResult<()> {
+pub fn unpack(files: &[BundledFile], id: &FlowId, dir: &Path) -> CoreResult<()> {
     use base64::Engine as _;
-    for file in files.iter().filter(|f| &f.scenario_id == id) {
+    for file in files.iter().filter(|f| &f.flow_id == id) {
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(file.data.as_bytes())
             .map_err(|e| {
@@ -449,7 +451,7 @@ pub fn is_bundled(path: &str) -> bool {
 mod tests {
     #[test]
     fn params_inside_objects_resolve_too() {
-        let dir = Path::new("/ws/scenarios/s");
+        let dir = Path::new("/ws/flows/s");
         let mut params = serde_json::json!({ "target": { "image": { "path": "input/ok.png" } }, "file": "/abs.png" });
         resolve_params(
             &mut params,
@@ -477,7 +479,7 @@ mod tests {
         fs::write(input.join("report-long.docx"), "x").unwrap();
         fs::write(input.join("~$port-long.docx"), "owner").unwrap();
         fs::write(input.join("closed.xlsx"), "x").unwrap();
-        let listed = list(&ScenarioId::new("s"), dir.path()).unwrap();
+        let listed = list(&FlowId::new("s"), dir.path()).unwrap();
         let used: Vec<(&str, bool)> = listed
             .files
             .iter()
@@ -512,8 +514,8 @@ mod tests {
             "../x",
             "input/../../x",
             "a:b",
-            "scenario.json",
-            "SCENARIO.JSON",
+            "flow.json",
+            "FLOW.JSON",
             "input/x?.txt",
             "input/trailing. ",
         ] {
@@ -523,14 +525,14 @@ mod tests {
 
     #[test]
     fn only_relative_paths_are_resolved() {
-        let dir = Path::new("/w/scenarios/scn_1");
+        let dir = Path::new("/w/flows/scn_1");
         assert_eq!(
             resolve(dir, "input/a.xlsx"),
             dir.join("input").join("a.xlsx").to_string_lossy()
         );
         assert_eq!(
             resolve(dir, "..\\shared\\b.csv"),
-            Path::new("/w/scenarios")
+            Path::new("/w/flows")
                 .join("shared")
                 .join("b.csv")
                 .to_string_lossy()

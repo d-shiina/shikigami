@@ -10,7 +10,7 @@ use serde_json::Map;
 use shikigami_agent::ipc::{self, Request};
 use shikigami_agent::schedule::new_id;
 use shikigami_agent::{Agent, Schedule, Schedules, When};
-use shikigami_core::{Policy, ScenarioId, ScenarioService};
+use shikigami_core::{FlowId, FlowService, Policy};
 use shikigami_runtime::Runtime;
 use shikigami_secrets::Vault;
 
@@ -53,9 +53,9 @@ pub enum ScheduleCmd {
 
 #[derive(Args)]
 pub struct AddArgs {
-    /// Scenario ID (its published version runs).
-    scenario: String,
-    /// What to call the schedule (default: the scenario's name).
+    /// Flow ID (its published version runs).
+    flow: String,
+    /// What to call the schedule (default: the flow's name).
     #[arg(long)]
     name: Option<String>,
     /// Every day at HH:MM.
@@ -77,7 +77,7 @@ pub struct AddArgs {
     /// Once, at a local date and time: 2026-11-07T08:00.
     #[arg(long, value_name = "DATETIME")]
     once: Option<String>,
-    /// When a file appears in FOLDER (relative to the scenario's folder, e.g. input).
+    /// When a file appears in FOLDER (relative to the flow's folder, e.g. input).
     #[arg(long, value_name = "FOLDER")]
     file_added: Option<String>,
     /// File name pattern for --file-added, e.g. *.xlsx.
@@ -151,7 +151,7 @@ fn ask(local_root: &Path, request: &Request) -> Result<Option<ipc::Response>> {
 }
 
 pub fn agent_cmd(
-    svc: ScenarioService,
+    svc: FlowService,
     runtime: &Runtime,
     workspace: &Path,
     cmd: &AgentCmd,
@@ -213,10 +213,7 @@ pub fn agent_cmd(
                 println!("! schedules not read: {problem}");
             }
             for run in &status.running {
-                println!(
-                    "▶ {} {} ({})",
-                    run.run_id, run.scenario_name, run.started_at
-                );
+                println!("▶ {} {} ({})", run.run_id, run.flow_name, run.started_at);
             }
             for s in &status.schedules {
                 let next = if !s.enabled {
@@ -293,7 +290,7 @@ fn uninstall() -> Result<()> {
 }
 
 pub fn schedule_cmd(
-    svc: &ScenarioService,
+    svc: &FlowService,
     cmd: &ScheduleCmd,
     parse_inputs: impl Fn(&[String]) -> Result<Map<String, serde_json::Value>>,
 ) -> Result<ExitCode> {
@@ -329,7 +326,7 @@ pub fn schedule_cmd(
                     "{} {} [{}] {} {}{}",
                     s.id,
                     s.name,
-                    s.scenario_id,
+                    s.flow_id,
                     if s.enabled { "on " } else { "off" },
                     serde_json::to_string(&s.when)?,
                     next.map(|n| format!(" → {n}")).unwrap_or_default()
@@ -337,14 +334,14 @@ pub fn schedule_cmd(
             }
         }
         ScheduleCmd::Add(a) => {
-            let id = ScenarioId::new(&a.scenario);
-            let scenario = svc.get(&id).map_err(crate::core_err)?;
+            let id = FlowId::new(&a.flow);
+            let flow = svc.get(&id).map_err(crate::core_err)?;
             let when = when_of(a)?;
             let mut schedules = load()?;
             let schedule = Schedule {
                 id: new_id(),
-                name: a.name.clone().unwrap_or(scenario.name),
-                scenario_id: id.clone(),
+                name: a.name.clone().unwrap_or(flow.name),
+                flow_id: id.clone(),
                 enabled: true,
                 when,
                 inputs: parse_inputs(&a.inputs)?,

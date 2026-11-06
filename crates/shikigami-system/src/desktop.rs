@@ -1,6 +1,6 @@
 //! Clipboard and dialog steps. They need the Windows desktop; elsewhere they
 //! fail with PLATFORM_UNSUPPORTED (their definitions and validation still
-//! work, so scenarios can be written and checked on any OS).
+//! work, so flows can be written and checked on any OS).
 //!
 //! Dialogs run in their own PowerShell process (dialog.ps1: WPF in Studio's
 //! look, Explorer pickers for files) rather than in this one: when the step
@@ -108,7 +108,7 @@ async fn powershell(mode: &str, env: &[(&str, String)]) -> Result<Option<String>
 pub async fn message(params: &Value) -> Result<Value, StepError> {
     let message = text(params, "message").unwrap_or_default();
     let title = text(params, "title").unwrap_or_default();
-    // Mapped to fixed names here, so the script never sees scenario text in
+    // Mapped to fixed names here, so the script never sees flow text in
     // these two.
     let buttons = match text(params, "buttons").as_deref() {
         Some("okCancel") => "okCancel",

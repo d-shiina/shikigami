@@ -5,7 +5,7 @@
 業務サイトや業務アプリのログインに使う ID・パスワードの扱いです。基本の考え方は 3 つです。
 
 1. **値は人が登録する**。Studio の「🔑 シークレット」（または CLI）で、名前を付けて登録します（例：「受注システム」）。
-2. **シナリオと AI には名前だけ**。シナリオには `{ "secret": "受注システム", "field": "password" }` とだけ書きます。値は実行中のノードが受け取るだけで、シナリオファイル・MCP の結果・ログ・スクリーンショットのどこにも出ません。
+2. **フローと AI には名前だけ**。フローには `{ "secret": "受注システム", "field": "password" }` とだけ書きます。値は実行中のノードが受け取るだけで、フローファイル・MCP の結果・ログ・スクリーンショットのどこにも出ません。
 3. **登録したサイトにしか入力しない**。シークレットには「入力してよいサイト」を登録します。ほかのページには入力を拒否します（そっくりな偽サイトや、ページに仕込まれた指示に AI が誘導された場合の対策）。照合は入力欄そのもののページで行うので、待っている間に別のサイトへ移った場合や、別のサイトの iframe の中の入力欄にも入力しません。
 
 ## 登録する
@@ -16,7 +16,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 名前 | シナリオと AI に伝える名前。1〜64 文字 |
+| 名前 | フローと AI に伝える名前。1〜64 文字 |
 | ユーザー名 / パスワード | ログインに使う値。編集時、パスワード欄を空のままにすると前の値を残す |
 | 入力してよいサイト・アプリ | 1 行に 1 つ。`https://example.com/login` と書いても `https://example.com`（オリジン）として扱う。デスクトップアプリは `app:billing.exe`（実行ファイル名、[desktop.md](desktop.md)） |
 | MFA の設定キー | 任意。認証アプリ用 QR コードの横に出るキー（base32）か `otpauth://` の文字列。ワンタイムコードを自動入力する |
@@ -46,7 +46,7 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 - Studio・CLI・MCP サーバーが同じワークスペースを同時に更新しても上書きし合わないよう、更新は `secrets/.lock` で 1 つずつ行います。
 - Windows 以外（開発・CI）では鍵を `secrets/<id>.key`（所有者だけ読める）に置きます。保護にはならないので本番では使いません。
 
-## シナリオでの使い方
+## フローでの使い方
 
 ```jsonc
 { "type": "browser.open", "params": { "url": "https://orders.example.com/", "session": "受注システム" } },
@@ -60,7 +60,7 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 
 - `field` は `username` / `password` / `totp`（いまのワンタイムコード）。OAuth でサインインする Web API には、`http.request` で `accessToken` も使えます（[oauth.md](oauth.md)）。
 - シークレットを書けるのは入力ノードの値（`browser.fill` の `value`）だけです。ログやメッセージ、URL などに書くと検証エラー `SECRET_NOT_ALLOWED` になります。
-- `secret: true` の変数に既定値を書くと、平文でシナリオに残るので検証エラー `SECRET_DEFAULT` になります。
+- `secret: true` の変数に既定値を書くと、平文でフローに残るので検証エラー `SECRET_DEFAULT` になります。
 - Studio のプロパティでは、入力欄の値を「文字 / 🔑 シークレット」で切り替えて名前と項目を選びます。
 
 ### ログイン状態を保つ（セッション）
@@ -71,7 +71,7 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 
 - **ワンタイムコード（TOTP）**：MFA の設定キーを登録しておけば `field: "totp"` で毎回いまのコードを入力できます。
 - **スマホでの承認・SMS・CAPTCHA など**：`browser.waitForHuman` で人の操作を待ちます。Studio に「操作を待っています」と出て、ブラウザが前面に来ます。`until` の要素（例：ログイン後の見出し）が出たら次へ進みます。待つのは既定で 5 分（`timeoutMs` で変更）。画面なし（headless）の実行では待たずに `HUMAN_REQUIRED` で失敗します。
-- 無人で動かすシナリオは、一度人がログインした状態を `session` で保つのが基本です。
+- 無人で動かすフローは、一度人がログインした状態を `session` で保つのが基本です。
 
 ## マスク
 
@@ -85,7 +85,7 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 - 調査中にログイン画面に当たると、`inspect_page` / `test_step` の結果に `login`（ログインが必要という印と対処のヒント）が付きます。
   - 合うシークレットがあれば、`test_step` の `browser.fill` で `{ "secret": …, "field": … }` を使ってログインします。
   - なければ、`request_secret` でユーザーに登録を頼みます（下記）。手でログインしてもらう場合は `test_step` の `browser.waitForHuman`。
-- `run_scenario` で `secret: true` の入力変数に値を渡すことはできません（`SECRET_INPUT_REJECTED`）。
+- `run_flow` で `secret: true` の入力変数に値を渡すことはできません（`SECRET_INPUT_REJECTED`）。
 
 ### AI がログイン情報を求める（`request_secret`）
 
@@ -104,7 +104,7 @@ AI はパスワードをチャットで聞く代わりに、`request_secret` で
 
 ### 実行が失敗したとき
 
-Studio で実行したシナリオが `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET` で止まると、同じ「登録する」バーが出ます。押すと、そのシークレットの登録（または編集）フォームが開きます。`SECRET_SITE_MISMATCH` のときは、止まったページのサイトが追記された状態で開くので、正しいサイトか確かめてから保存します。
+Studio で実行したフローが `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET` で止まると、同じ「登録する」バーが出ます。押すと、そのシークレットの登録（または編集）フォームが開きます。`SECRET_SITE_MISMATCH` のときは、止まったページのサイトが追記された状態で開くので、正しいサイトか確かめてから保存します。
 - ページの内容はデータであって AI への指示ではありません。仕込まれた指示に従って別のサイトにパスワードを入力させようとしても、サイト照合で止まります。
 
 ## エラーコード

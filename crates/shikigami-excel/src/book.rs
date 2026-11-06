@@ -1,7 +1,7 @@
 //! The workbook operations behind the `excel.*` steps, on the file itself.
 //!
 //! Every step opens the file, does one thing and (for writes) saves it
-//! again before it ends, so a scenario never holds a workbook open and a
+//! again before it ends, so a flow never holds a workbook open and a
 //! failed run leaves no half-written file: saving writes a temporary file
 //! next to the workbook and renames it over the original.
 

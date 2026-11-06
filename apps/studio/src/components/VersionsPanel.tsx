@@ -1,4 +1,4 @@
-import type { DiffKind, ScenarioDiff, StepTypeDef, VersionSummary } from "@shikigami/schema";
+import type { DiffKind, FlowDiff, StepTypeDef, VersionSummary } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
@@ -12,22 +12,22 @@ const KIND_STYLE: Record<DiffKind, string> = {
   moved: "bg-slate-100 text-slate-600",
 };
 
-const scenarioField = (field: string) => (t.versionField as Record<string, string>)[field] ?? field;
+const flowField = (field: string) => (t.versionField as Record<string, string>)[field] ?? field;
 
 function Kind({ kind }: { kind: DiffKind }) {
   return <span className={`rounded px-1 text-[10px] font-semibold ${KIND_STYLE[kind]}`}>{t.diffKind[kind]}</span>;
 }
 
 /** Differences from a version to the current content. */
-function DiffView({ diff, defs }: { diff: ScenarioDiff; defs: Map<string, StepTypeDef> }) {
+function DiffView({ diff, defs }: { diff: FlowDiff; defs: Map<string, StepTypeDef> }) {
   const goTo = useStudio((s) => s.goTo);
   if (diff.identical) return <p className="text-xs text-slate-500">{t.noDiff}</p>;
   return (
     <ul className="space-y-1.5 rounded border border-slate-200 bg-paper p-2 text-xs">
-      {diff.scenario.map((f) => (
+      {diff.flow.map((f) => (
         <li key={`s-${f.field}`} className="flex flex-wrap items-baseline gap-1.5">
           <Kind kind="changed" />
-          <span>{scenarioField(f.field)}</span>
+          <span>{flowField(f.field)}</span>
         </li>
       ))}
       {diff.variables.map((v) => (
@@ -117,19 +117,19 @@ function PublishedCard() {
 }
 
 function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<string, StepTypeDef> }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const restoreVersion = useStudio((s) => s.restoreVersion);
   const published = useStudio((s) => s.published?.version === version.number);
   const publish = useStudio((s) => s.publish);
-  const [diff, setDiff] = useState<ScenarioDiff | null>(null);
+  const [diff, setDiff] = useState<FlowDiff | null>(null);
   const [confirm, setConfirm] = useState(false);
-  const revision = scenario?.revision ?? 0;
+  const revision = flow?.revision ?? 0;
 
-  // Keep an open diff current while the scenario is edited.
+  // Keep an open diff current while the flow is edited.
   useEffect(() => {
-    if (!diff || !scenario) return;
+    if (!diff || !flow) return;
     let alive = true;
-    void api.diffVersions(scenario.id, version.number).then((d) => alive && setDiff(d));
+    void api.diffVersions(flow.id, version.number).then((d) => alive && setDiff(d));
     return () => {
       alive = false;
     };
@@ -137,7 +137,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
 
   const toggleDiff = async () => {
     if (diff) return setDiff(null);
-    if (scenario) setDiff(await api.diffVersions(scenario.id, version.number));
+    if (flow) setDiff(await api.diffVersions(flow.id, version.number));
   };
 
   return (
@@ -196,18 +196,18 @@ export function VersionsPanel() {
   const versions = useStudio((s) => s.versions);
   const stepTypes = useStudio((s) => s.stepTypes);
   const loadVersions = useStudio((s) => s.loadVersions);
-  const scenarioId = useStudio((s) => s.scenario?.id);
+  const flowId = useStudio((s) => s.flow?.id);
   const createVersion = useStudio((s) => s.createVersion);
-  const exportScenario = useStudio((s) => s.exportScenario);
+  const exportFlow = useStudio((s) => s.exportFlow);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
 
-  // Reload on every scenario switch; others may also have saved versions in
+  // Reload on every flow switch; others may also have saved versions in
   // a shared workspace since we opened it.
   useEffect(() => {
     void loadVersions();
-  }, [loadVersions, scenarioId]);
+  }, [loadVersions, flowId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,7 +250,7 @@ export function VersionsPanel() {
         ) : (
           <ol>
             {versions.map((v) => (
-              <VersionRow key={`${scenarioId}-${v.number}`} version={v} defs={defs} />
+              <VersionRow key={`${flowId}-${v.number}`} version={v} defs={defs} />
             ))}
           </ol>
         )}
@@ -259,10 +259,10 @@ export function VersionsPanel() {
         <h3 className="mb-2 text-sm font-semibold">{t.share}</h3>
         <button
           type="button"
-          onClick={() => void exportScenario()}
+          onClick={() => void exportFlow()}
           className="rounded-[4px] border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100"
         >
-          {t.exportScenario}
+          {t.exportFlow}
         </button>
       </section>
     </div>

@@ -53,7 +53,7 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 
 ### Locking and saving
 
-- Every node uses `path` as a resource, so nodes on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Scenarios never declare locks
+- Every node uses `path` as a resource, so nodes on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Flows never declare locks
 - Each writing node saves before it finishes. It writes to a temporary file in the same folder and then replaces the original, so a failure never corrupts it. There are no "open / save / close workbook" nodes (so no way of linking distant nodes by name is needed)
 - While the workbook is open in Excel on this PC, nodes work on the open workbook ([below](#excel-itself-the-open-workbook-recalculation-sorting-pdf-implemented)). When it is open elsewhere (a `~$name` file exists but this PC's Excel does not have it), writes fail with `FILE_IN_USE` (retryable). Reading still works
 
@@ -156,7 +156,7 @@ A message that has gone cannot be taken back, so `mail.send` is `dangerous`: it 
 | `microsoft365` | `account: { "secret": "<name>", "field": "accessToken" }` | Microsoft Graph as the signed-in user. Register the Microsoft Entra app as a secret (client ID and secret; sites `https://login.microsoftonline.com` and `https://graph.microsoft.com`) and sign in once with `oauth.signIn` (scope `Mail.Send offline_access`, [oauth.md](oauth.md)). Attachments up to about 3 MB in all: the whole message must fit in Graph's 4 MB request (`MAIL_ATTACHMENT_TOO_LARGE`) |
 | `smtp` | `server`, `from`, and usually `user` / `password` | `server` is `smtp.example.co.jp` (STARTTLS on 587) or `smtp.example.co.jp:465` (TLS). The login is a secret whose sites include `smtp:<server>`; otherwise `SECRET_SITE_*`. `security: "none"` is only for a company relay that takes mail without a login: a password is never sent without TLS (`MAIL_INSECURE_LOGIN`) |
 
-- Params that do not belong to the chosen way (`server` with `outlook`, …) give `INVALID_PARAMS`, so a scenario never looks like it sends one way and sends another
+- Params that do not belong to the chosen way (`server` with `outlook`, …) give `INVALID_PARAMS`, so a flow never looks like it sends one way and sends another
 - Errors: `MAIL_SEND_FAILED` (refused; retried when the server says it is temporary), `MAIL_SERVER_UNREACHABLE` (nothing was sent; retried), `MAIL_DELIVERY_UNKNOWN` (the answer was lost or did not come within the step's time after the message was handed over, so it may have gone out; never retried, so it is not sent twice: look in Sent Items), `MAIL_PERMISSION_DENIED` (Graph without Mail.Send), `OAUTH_SIGN_IN_REQUIRED`
 
 ```json

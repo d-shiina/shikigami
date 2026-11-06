@@ -1,6 +1,6 @@
 // Typed bridge to the Rust backend. Every call maps 1:1 to a Tauri command,
-// which in turn is a thin wrapper over ScenarioService / Runtime. The
-// frontend never edits scenario documents itself; it only sends EditOps.
+// which in turn is a thin wrapper over FlowService / Runtime. The
+// frontend never edits flow documents itself; it only sends EditOps.
 import type {
   ApprovalRequest,
   DebugCommand,
@@ -13,7 +13,7 @@ import type {
   ImportConflict,
   ImportOutcome,
   NewReview,
-  NewScenario,
+  NewFlow,
   NewVersion,
   ObservationContent,
   Policy,
@@ -23,9 +23,9 @@ import type {
   RunEventEnvelope,
   RunReport,
   RunSnapshot,
-  Scenario,
-  ScenarioDiff,
-  ScenarioSummary,
+  Flow,
+  FlowDiff,
+  FlowSummary,
   StepTypeDef,
   ValidationReport,
   VersionSummary,
@@ -126,16 +126,16 @@ export const api = {
     call<VersionSummary>("create_version", { id, expectedRevision, input }),
   /** `from` / `to` are version numbers; omitted means the current content. */
   diffVersions: (id: string, from?: number, to?: number) =>
-    call<ScenarioDiff>("diff_versions", { id, from, to }),
+    call<FlowDiff>("diff_versions", { id, from, to }),
   restoreVersion: (id: string, number: number, expectedRevision: number) =>
     call<EditOutcome>("restore_version", { id, number, expectedRevision }),
   /** The version unattended runs (`shikigami run <id>`) execute; null when none is published. */
   publishedState: (id: string) => call<PublishedState | null>("published_state", { id }),
-  publishScenario: (id: string, input: PublishInput) => call<PublishedState>("publish_scenario", { id, input }),
+  publishFlow: (id: string, input: PublishInput) => call<PublishedState>("publish_flow", { id, input }),
   /** The review desk's 「残して本番に使う」: approves `revision` and publishes it in one step. */
   approveAndPublish: (id: string, revision: number, reason?: string) =>
     call<PublishedState>("approve_and_publish", { id, revision, reason }),
-  unpublishScenario: (id: string) => call<void>("unpublish_scenario", { id }),
+  unpublishFlow: (id: string) => call<void>("unpublish_flow", { id }),
   getPolicy: () => call<Policy>("get_policy"),
   savePolicy: (policy: Policy) => call<Policy>("save_policy", { policy }),
   /** Requests from AI clients waiting for the person's approval. */
@@ -145,29 +145,29 @@ export const api = {
   listPickRequests: () => call<PickRequest[]>("list_pick_requests"),
   cancelPickRequest: (id: string) => call<void>("cancel_pick_request", { id }),
   /** Writes a bundle to the Downloads folder; returns its path. */
-  exportScenario: (id: string) => call<string>("export_scenario", { id }),
-  importScenario: (contents: string, onConflict?: ImportConflict) =>
-    call<ImportOutcome>("import_scenario", { contents, onConflict }),
-  listScenarios: () => call<ScenarioSummary[]>("list_scenarios"),
-  getScenario: (id: string) => call<Scenario>("get_scenario", { id }),
-  createScenario: (input: NewScenario) => call<EditOutcome>("create_scenario", { input }),
-  duplicateScenario: (id: string, name?: string) =>
-    call<EditOutcome>("duplicate_scenario", { id, name }),
-  deleteScenario: (id: string, expectedRevision?: number) =>
-    call<void>("delete_scenario", { id, expectedRevision }),
+  exportFlow: (id: string) => call<string>("export_flow", { id }),
+  importFlow: (contents: string, onConflict?: ImportConflict) =>
+    call<ImportOutcome>("import_flow", { contents, onConflict }),
+  listFlows: () => call<FlowSummary[]>("list_flows"),
+  getFlow: (id: string) => call<Flow>("get_flow", { id }),
+  createFlow: (input: NewFlow) => call<EditOutcome>("create_flow", { input }),
+  duplicateFlow: (id: string, name?: string) =>
+    call<EditOutcome>("duplicate_flow", { id, name }),
+  deleteFlow: (id: string, expectedRevision?: number) =>
+    call<void>("delete_flow", { id, expectedRevision }),
   edit: (id: string, expectedRevision: number, ops: EditOp[]) =>
-    call<EditOutcome>("edit_scenario", { id, expectedRevision, ops }),
-  /** Moves neighbouring steps into a new scenario and calls it from where they were. */
-  extractSubscenario: (id: string, expectedRevision: number, stepIds: string[], name: string) =>
-    call<ExtractOutcome>("extract_subscenario", { id, expectedRevision, stepIds, name }),
+    call<EditOutcome>("edit_flow", { id, expectedRevision, ops }),
+  /** Moves neighbouring steps into a new flow and calls it from where they were. */
+  extractSubflow: (id: string, expectedRevision: number, stepIds: string[], name: string) =>
+    call<ExtractOutcome>("extract_subflow", { id, expectedRevision, stepIds, name }),
   undo: (id: string, expectedRevision: number) =>
     call<EditOutcome>("undo", { id, expectedRevision }),
   redo: (id: string, expectedRevision: number) =>
     call<EditOutcome>("redo", { id, expectedRevision }),
   undoState: (id: string) => call<{ canUndo: boolean; canRedo: boolean }>("undo_state", { id }),
-  validate: (id: string) => call<ValidationReport>("validate_scenario", { id }),
+  validate: (id: string) => call<ValidationReport>("validate_flow", { id }),
   listStepTypes: () => call<StepTypeDef[]>("list_step_types"),
-  history: (id: string, limit = 100) => call<HistoryEntry[]>("scenario_history", { id, limit }),
+  history: (id: string, limit = 100) => call<HistoryEntry[]>("flow_history", { id, limit }),
   reviewTimeline: (id: string, since?: number) => call<ReviewTimeline>("review_timeline", { id, since }),
   submitReview: (id: string, input: NewReview) => call<Evidence>("submit_review", { id, input }),
   getObservation: (id: string) => call<ObservationContent>("get_observation", { id }),
@@ -175,7 +175,7 @@ export const api = {
   runRecord: (runId: string) => call<RunRecord>("run_record", { runId }),
   /** Studio runs pause on unhandled errors and at `debug.breakpoints`; `debug.step` pauses before the first step. */
   run: (id: string, inputs?: Record<string, unknown>, debug?: { breakpoints: string[]; step?: boolean }) =>
-    call<string>("run_scenario", { id, inputs, debug }),
+    call<string>("run_flow", { id, inputs, debug }),
   /** Step commands for a paused run; resuming swaps in the stored revision first (e.g. the AI's fix). */
   debugRun: (runId: string, command: DebugCommand) =>
     call<{ revision: number; updated: boolean }>("debug_run", { runId, command }),
@@ -212,7 +212,7 @@ export interface UpdateProgress {
   total: number | null;
 }
 
-// Kept apart from `api` so the scenario store and its test doubles stay
+// Kept apart from `api` so the flow store and its test doubles stay
 // unaware of app updates.
 export const updates = {
   appInfo: () => call<AppInfo>("app_info"),
@@ -242,7 +242,7 @@ export type AgentRequest = {
   message: string;
   sessionId?: string | null;
   /** `empty`: it has no steps yet, so the AI builds in it instead of making another. */
-  scenario?: { id: string; name: string; stepId?: string | null; empty?: boolean } | null;
+  flow?: { id: string; name: string; stepId?: string | null; empty?: boolean } | null;
 };
 
 export type AgentEvent = { turnId: string } & (
@@ -252,11 +252,11 @@ export type AgentEvent = { turnId: string } & (
   | { kind: "preparing"; name: string }
   | { kind: "tool"; name: string; detail: string | null }
   | { kind: "toolFailed"; message: string }
-  | { kind: "created"; scenarioId: string; name: string }
+  | { kind: "created"; flowId: string; name: string }
   | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null; needsLogin: boolean }
 );
 
-// Kept apart from `api` like `updates`: the scenario store never talks to the AI.
+// Kept apart from `api` like `updates`: the flow store never talks to the AI.
 export const agent = {
   info: () => call<AgentInfo>("agent_info"),
   /** Returns the turn id; progress arrives through `onEvent`. */
@@ -279,8 +279,8 @@ export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: bool
 export type AgentApi = Omit<typeof agent, "onEvent" | "onLogin">;
 
 export const events = {
-  onScenarioChanged: (handler: (scenarioId: string) => void): Promise<UnlistenFn> =>
-    listen<{ scenarioId: string }>("scenario-changed", (e) => handler(e.payload.scenarioId)),
+  onFlowChanged: (handler: (flowId: string) => void): Promise<UnlistenFn> =>
+    listen<{ flowId: string }>("flow-changed", (e) => handler(e.payload.flowId)),
   onRunEvent: (handler: (event: RunEventEnvelope) => void): Promise<UnlistenFn> =>
     listen<RunEventEnvelope>("run-event", (e) => handler(e.payload)),
   onRunEvidence: (handler: (evidence: RunEvidence) => void): Promise<UnlistenFn> =>

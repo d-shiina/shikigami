@@ -33,14 +33,14 @@ const GROUPS: { key: "input" | "output" | "local"; directions: VarDirection[] }[
 
 /** How a variable changed during the last run: when, by which step, to what. */
 function RunTrace({ changes }: { changes: VariableChange[] }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const goTo = useStudio((s) => s.goTo);
   if (changes.length === 0) return <p className="text-[11px] text-slate-400">{t.vars.unchanged}</p>;
   const start = Date.parse(changes[0]?.at ?? "");
   return (
     <ol className="relative space-y-1 border-l border-slate-200 pl-3">
       {changes.map((c) => {
-        const step = c.stepId ? findStep(scenario?.steps ?? [], c.stepId) : null;
+        const step = c.stepId ? findStep(flow?.steps ?? [], c.stepId) : null;
         const ms = Date.parse(c.at) - start;
         return (
           <li key={c.seq} className="relative text-[11px]">
@@ -122,7 +122,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
       <div className="grid grid-cols-[48px_1fr] items-baseline gap-x-2 gap-y-1 px-2.5 pt-1.5 pb-2">
         <span className="text-[11px] text-slate-500">{t.defaultValue}</span>
         {variable.secret ? (
-          // A default would be stored in plain text in the scenario.
+          // A default would be stored in plain text in the flow.
           <span className="text-[11px] text-slate-400">—</span>
         ) : (
           multiline ? (
@@ -208,7 +208,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
 const NO_VARIABLES: VariableDef[] = [];
 
 export function VariablesPanel() {
-  const variables = useStudio((s) => s.scenario?.variables ?? NO_VARIABLES);
+  const variables = useStudio((s) => s.flow?.variables ?? NO_VARIABLES);
   const setVariable = useStudio((s) => s.setVariable);
   const [name, setName] = useState("");
 

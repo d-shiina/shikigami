@@ -400,7 +400,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             schema(
                 json!({
                     "id": { "type": "string", "minLength": 1, "description": "mail.list の id" },
-                    "folder": { "type": "string", "minLength": 1, "description": "保存先フォルダー：シナリオのフォルダーからの相対パス（例 input/添付）か絶対パス" },
+                    "folder": { "type": "string", "minLength": 1, "description": "保存先フォルダー：フローのフォルダーからの相対パス（例 input/添付）か絶対パス" },
                     "nameContains": { "type": "string", "minLength": 1, "description": "ファイル名に含む文字（例 .pdf）" }
                 }),
                 &["id", "folder"],
@@ -423,7 +423,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                     "subject": { "type": "string", "minLength": 1, "description": "件名" },
                     "body": { "type": "string", "description": "本文" },
                     "html": { "type": "boolean", "description": "本文を HTML として扱う" },
-                    "attachments": list("添付するファイル：シナリオのフォルダーからの相対パスか絶対パス"),
+                    "attachments": list("添付するファイル：フローのフォルダーからの相対パスか絶対パス"),
                     "via": { "enum": ["outlook", "microsoft365", "smtp"], "description": "送り方。既定は outlook（この PC の Outlook）" },
                     "account": token_or_secret_schema("microsoft365：oauth.signIn でサインインしたシークレット { \"secret\": \"名前\", \"field\": \"accessToken\" }"),
                     "server": { "type": "string", "minLength": 1, "description": "smtp：メールサーバー（例 smtp.example.co.jp、:465 で TLS）" },

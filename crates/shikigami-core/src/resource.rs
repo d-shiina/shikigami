@@ -1,7 +1,7 @@
 //! Exclusive resources a step uses, derived from its params.
 //!
 //! Step type authors declare *where* a resource comes from (a fixed name or a
-//! param); scenario authors never write lock names. The Runtime turns the
+//! param); flow authors never write lock names. The Runtime turns the
 //! rendered params of each step into keys and lets only one step hold a key
 //! at a time. The same key strings are meant to back cross-process locks
 //! later, so they must not depend on the process.

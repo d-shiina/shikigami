@@ -1,7 +1,7 @@
 //! Excel dates: serial numbers with a date number format.
 //!
 //! Steps exchange dates as ISO text (`2026-10-28`, `2026-10-28T09:30:00`)
-//! so that scenarios can compare and template them without knowing about
+//! so that flows can compare and template them without knowing about
 //! serial numbers.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

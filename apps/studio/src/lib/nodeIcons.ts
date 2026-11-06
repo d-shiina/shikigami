@@ -180,7 +180,7 @@ const BY_TYPE: Record<string, LucideIcon> = {
   "control.break": LogOut,
   "control.continue": SkipForward,
   "control.fail": OctagonX,
-  "scenario.call": Workflow,
+  "flow.call": Workflow,
   "variable.set": Braces,
   "flow.delay": Timer,
   "wait.until": Hourglass,

@@ -1,4 +1,4 @@
-//! Schedules: when the agent starts a scenario by itself.
+//! Schedules: when the agent starts a flow by itself.
 //!
 //! ```text
 //! <per-PC area>/schedules.json        what to run when (edited by Studio and the CLI)
@@ -17,7 +17,7 @@ use jiff::{ToSpan, Zoned};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use shikigami_core::{CoreError, CoreResult, ScenarioId};
+use shikigami_core::{CoreError, CoreResult, FlowId};
 
 pub const SCHEDULES_FILE: &str = "schedules.json";
 pub const SCHEDULES_FORMAT_VERSION: u32 = 1;
@@ -52,7 +52,7 @@ pub enum When {
     },
     /// Once, at a local date and time ("2026-11-07T08:00").
     Once { at: String },
-    /// When a file appears in `folder` (relative to the scenario's folder,
+    /// When a file appears in `folder` (relative to the flow's folder,
     /// or a full path) whose name matches `pattern` ("*.xlsx"). Each new
     /// file starts one run, with its full path in the input variable
     /// `input` when given. Files already there when the agent starts do not.
@@ -77,11 +77,11 @@ pub struct Schedule {
     pub id: String,
     /// What people call it ("毎朝の受注取り込み").
     pub name: String,
-    pub scenario_id: ScenarioId,
+    pub flow_id: FlowId,
     #[serde(default = "yes")]
     pub enabled: bool,
     pub when: When,
-    /// Values for the scenario's input variables.
+    /// Values for the flow's input variables.
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub inputs: Map<String, Value>,
 }
@@ -571,7 +571,7 @@ mod tests {
             schedules: vec![Schedule {
                 id: new_id(),
                 name: "朝".into(),
-                scenario_id: ScenarioId::new("scn_a"),
+                flow_id: FlowId::new("scn_a"),
                 enabled: true,
                 when: When::FileAdded {
                     folder: "input".into(),
@@ -583,7 +583,7 @@ mod tests {
         };
         s.save(&path).unwrap();
         assert_eq!(Schedules::load(&path).unwrap(), s);
-        std::fs::write(&path, r#"{"schedules":[{"id":"x","name":"n","scenarioId":"scn_a","when":{"kind":"daily","at":"25:00"}}]}"#).unwrap();
+        std::fs::write(&path, r#"{"schedules":[{"id":"x","name":"n","flowId":"scn_a","when":{"kind":"daily","at":"25:00"}}]}"#).unwrap();
         assert!(Schedules::load(&path).is_err());
     }
 }

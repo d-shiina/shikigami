@@ -93,8 +93,8 @@ const say = (text: Text, c: ErrorContext) => (typeof text === "function" ? text(
 
 /**
  * Words `error` for people. Codes Studio does not know (a plugin's, or a
- * `control.fail` code the scenario chose) keep their own message, which the
- * scenario's author wrote for people anyway.
+ * `control.fail` code the flow chose) keep their own message, which the
+ * flow's author wrote for people anyway.
  */
 export function explainError(error: ErrorLike, step?: Step | null): Explained {
   const entry = step?.type === "control.fail" ? undefined : t.runErrors[error.code];

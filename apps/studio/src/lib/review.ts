@@ -1,4 +1,4 @@
-// What a group of unreviewed AI edits did to a scenario, for the review desk:
+// What a group of unreviewed AI edits did to a flow, for the review desk:
 // which steps were added, changed or removed, read straight from the ops and
 // inverse ops Core recorded. Display only.
 import type { HistoryEntry, Step, StepPatch } from "@shikigami/schema";
@@ -14,7 +14,7 @@ export type ReviewSummary = {
   /** Steps the group removed that it had not added itself, as they were. */
   removed: Step[];
   variables: number;
-  scenario: boolean;
+  flow: boolean;
 };
 
 /** `entries` oldest first. */
@@ -22,7 +22,7 @@ export function summarize(entries: HistoryEntry[]): ReviewSummary {
   const steps = new Map<string, StepDiff>();
   const removed = new Map<string, Step>();
   const vars = new Set<string>();
-  let scenario = false;
+  let flow = false;
   for (const entry of entries) {
     const generated = generatedIds(entry);
     for (const op of entry.ops ?? []) {
@@ -39,7 +39,7 @@ export function summarize(entries: HistoryEntry[]): ReviewSummary {
         if (!wasAdded && before?.op === "addStep") removed.set(op.stepId, before.step);
       } else if (op.op === "setVariable") vars.add(op.variable.name);
       else if (op.op === "removeVariable") vars.add(op.name);
-      else if (op.op === "updateScenario") scenario = true;
+      else if (op.op === "updateFlow") flow = true;
       else if (op.op === "replaceSteps") {
         // The whole tree at once: compare it with the tree the inverse puts back.
         const old = entry.inverse?.find((i) => i.op === "replaceSteps");
@@ -61,7 +61,7 @@ export function summarize(entries: HistoryEntry[]): ReviewSummary {
       }
     }
   }
-  return { steps, removed: [...removed.values()], variables: vars.size, scenario };
+  return { steps, removed: [...removed.values()], variables: vars.size, flow };
 }
 
 /** A step without its children, to tell whether the step itself changed. */
@@ -90,14 +90,14 @@ export function headline(summary: ReviewSummary): string {
     count("changed") && t.headline.changed(count("changed")),
     summary.removed.length && t.headline.removed(summary.removed.length),
     summary.variables && t.headline.variables(summary.variables),
-    summary.scenario && t.headline.scenario,
+    summary.flow && t.headline.flow,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(t.headline.sep) : t.headline.none;
 }
 
 /**
  * What the group is for, in the AI's words: the first line of the oldest
- * summary (the AI is asked to start with what the scenario now does
+ * summary (the AI is asked to start with what the flow now does
  * differently). Falls back to the counts.
  */
 export function purpose(entries: HistoryEntry[], summary: ReviewSummary): string {

@@ -11,7 +11,7 @@ use shikigami_core::registry::{
 };
 use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef};
 use shikigami_core::secret::text_or_secret_schema;
-use shikigami_core::{Scenario, Step, Validator};
+use shikigami_core::{Flow, Step, Validator};
 
 /// File name of the manifest inside a plugin folder.
 pub const MANIFEST_FILE: &str = "shikigami-plugin.json";
@@ -26,7 +26,7 @@ pub const RESERVED_NAMES: &[&str] = &[
     "variable",
     "log",
     "flow",
-    "scenario",
+    "flow",
     "wait",
     "browser",
     "desktop",
@@ -233,7 +233,7 @@ impl Manifest {
             return Err(p.0);
         }
 
-        // Examples must pass the same validation scenarios get, so AI
+        // Examples must pass the same validation flows get, so AI
         // clients can copy them as they are.
         let mut registry = StepRegistry::with_builtins();
         for def in &defs {
@@ -270,9 +270,9 @@ impl Manifest {
                     continue;
                 }
                 shikigami_core::ops::assign_missing_ids(&mut step);
-                let mut scenario = Scenario::new("example");
-                scenario.steps = vec![step];
-                for issue in validator.validate(&scenario).errors() {
+                let mut flow = Flow::new("example");
+                flow.steps = vec![step];
+                for issue in validator.validate(&flow).errors() {
                     p.add(
                         &at,
                         format!("{} {}", issue.code, issue.message),

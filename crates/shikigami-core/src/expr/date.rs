@@ -1,5 +1,5 @@
 //! Dates as text: `2026-10-28` (date) or `2026-10-28T09:30:00` (local date
-//! and time). Scenarios keep dates in variables as these ISO strings, so they
+//! and time). Flows keep dates in variables as these ISO strings, so they
 //! survive JSON, logs and Excel/CSV round trips unchanged.
 
 use jiff::civil::{Date, DateTime, Time};

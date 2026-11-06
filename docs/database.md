@@ -40,7 +40,7 @@ Crate `shikigami-db`. Built-in nodes that run SQL through ODBC, so one pair of n
 
 `db.execute` runs its SQL in a transaction and commits only while the step is still wanted. When the run is stopped or the step's time runs out meanwhile, the change is rolled back, so a retry never meets half of an attempt that was given up on. The driver is told to give up a little before the step's timeout.
 
-`db.query` also runs in a transaction, which is always rolled back: even a SELECT that calls a function with side effects (PostgreSQL's `lo_unlink`, for example) leaves the database as it was. Some databases do not undo everything (sequences, MySQL MyISAM tables), so give the scenario a login that may only read when it only reads.
+`db.query` also runs in a transaction, which is always rolled back: even a SELECT that calls a function with side effects (PostgreSQL's `lo_unlink`, for example) leaves the database as it was. Some databases do not undo everything (sequences, MySQL MyISAM tables), so give the flow a login that may only read when it only reads.
 
 ## Errors
 

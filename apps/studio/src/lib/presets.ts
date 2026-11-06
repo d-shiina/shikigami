@@ -1,6 +1,6 @@
 // Ready-made "変数に代入" steps for everyday data handling: trimming, joining,
 // replacing, dates, tables. Each is one variable.set with an expression, so
-// the scenario has a single way to say it (the AI writes the same thing) and
+// the flow has a single way to say it (the AI writes the same thing) and
 // the person only renames the variables. Function names: docs/expressions.md.
 // Labels and descriptions come from the dictionary (`t.presets`, keyed by
 // the function), as do expressions whose example column names are words.

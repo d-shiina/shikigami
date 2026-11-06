@@ -1,4 +1,4 @@
-//! Scenario validation.
+//! Flow validation.
 //!
 //! Validation never mutates and never fails fast: it returns every issue so
 //! that Studio can highlight them and AI clients can fix them in one round.
@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::expr::{self, Expr};
 use crate::ids::StepId;
-use crate::model::{SCHEMA_VERSION, Scenario, Step};
+use crate::model::{Flow, SCHEMA_VERSION, Step};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
 use crate::requires::{self, PLUGIN_PREFIX};
 use crate::secret::{self, SecretRef};
@@ -34,7 +34,7 @@ pub struct ValidationIssue {
     /// Stable machine-readable code, e.g. `UNKNOWN_STEP_TYPE`.
     pub code: String,
     pub message: String,
-    /// JSON Pointer into the scenario document.
+    /// JSON Pointer into the flow document.
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_id: Option<StepId>,
@@ -63,7 +63,7 @@ impl ValidationReport {
     }
 }
 
-/// Validates scenarios against a step registry. Compiled parameter schemas
+/// Validates flows against a step registry. Compiled parameter schemas
 /// are cached, so keep one validator around rather than creating one per call.
 pub struct Validator {
     registry: StepRegistry,
@@ -87,17 +87,17 @@ impl Validator {
         &self.registry
     }
 
-    pub fn validate(&self, scenario: &Scenario) -> ValidationReport {
+    pub fn validate(&self, flow: &Flow) -> ValidationReport {
         let mut cx = Cx {
             validator: self,
             issues: Vec::new(),
             seen_ids: HashSet::new(),
-            known_vars: known_variables(scenario, &self.registry),
-            declared_vars: scenario.variables.iter().map(|v| v.name.clone()).collect(),
-            requires: scenario.requires.clone(),
-            parts: scenario.parts.clone(),
+            known_vars: known_variables(flow, &self.registry),
+            declared_vars: flow.variables.iter().map(|v| v.name.clone()).collect(),
+            requires: flow.requires.clone(),
+            parts: flow.parts.clone(),
         };
-        cx.scenario(scenario);
+        cx.flow(flow);
         for issue in &mut cx.issues {
             if issue.hint.is_none() {
                 issue.hint = generic_hint(&issue.code).map(str::to_owned);
@@ -110,26 +110,26 @@ impl Validator {
         }
     }
 
-    /// [`Self::validate`] plus the checks that need the scenarios it calls
-    /// (`scenario.call`): that they exist, are valid, do not call back, and
+    /// [`Self::validate`] plus the checks that need the flows it calls
+    /// (`flow.call`): that they exist, are valid, do not call back, and
     /// take the inputs and give the outputs the call maps.
     pub fn validate_with_calls(
         &self,
-        scenario: &Scenario,
-        lookup: &dyn Fn(&crate::ids::ScenarioId) -> Option<Scenario>,
+        flow: &Flow,
+        lookup: &dyn Fn(&crate::ids::FlowId) -> Option<Flow>,
     ) -> ValidationReport {
-        let mut report = self.validate(scenario);
+        let mut report = self.validate(flow);
         report
             .issues
-            .extend(crate::call::check_calls(self, scenario, lookup));
+            .extend(crate::call::check_calls(self, flow, lookup));
         report.valid = !report.issues.iter().any(|i| i.severity == Severity::Error);
         report
     }
 
     /// Structural integrity only (IDs and tree shape). Edits that break these
     /// invariants are rejected; other issues are allowed in drafts.
-    pub fn structural_errors(&self, scenario: &Scenario) -> Vec<ValidationIssue> {
-        self.validate(scenario)
+    pub fn structural_errors(&self, flow: &Flow) -> Vec<ValidationIssue> {
+        self.validate(flow)
             .issues
             .into_iter()
             .filter(|i| {
@@ -142,14 +142,14 @@ impl Validator {
 /// Issue codes that indicate a broken document rather than an incomplete one.
 pub const STRUCTURAL_CODES: &[&str] = &["MISSING_STEP_ID", "INVALID_STEP_ID", "DUPLICATE_STEP_ID"];
 
-/// Every variable name that can be in scope somewhere in the scenario.
+/// Every variable name that can be in scope somewhere in the flow.
 /// Scoping is intentionally flat (like most RPA tools): a name bound anywhere
 /// is considered known everywhere; the Runtime reports actual undefined uses.
-fn known_variables(scenario: &Scenario, registry: &StepRegistry) -> BTreeSet<String> {
-    let mut names: BTreeSet<String> = scenario.variables.iter().map(|v| v.name.clone()).collect();
+fn known_variables(flow: &Flow, registry: &StepRegistry) -> BTreeSet<String> {
+    let mut names: BTreeSet<String> = flow.variables.iter().map(|v| v.name.clone()).collect();
     names.insert(LAST_ERROR_VAR.to_owned());
     names.insert("error".to_owned());
-    for step in scenario.walk() {
+    for step in flow.walk() {
         if let Some(save_as) = &step.save_as {
             names.insert(save_as.clone());
         }
@@ -165,10 +165,10 @@ fn known_variables(scenario: &Scenario, registry: &StepRegistry) -> BTreeSet<Str
     names
 }
 
-/// Variables of the calling scenario that a `scenario.call` writes (the
+/// Variables of the calling flow that a `flow.call` writes (the
 /// values of its `outputs` map).
 pub(crate) fn call_output_targets(step: &Step) -> impl Iterator<Item = String> + '_ {
-    (step.step_type == crate::registry::scenario::CALL)
+    (step.step_type == crate::registry::flow::CALL)
         .then(|| step.params.get("outputs").and_then(Value::as_object))
         .flatten()
         .into_iter()
@@ -255,43 +255,43 @@ impl Cx<'_> {
                     self.error(
                         "PLUGIN_VERSION_MISMATCH",
                         format!(
-                            "the scenario needs plugin '{name}' {range}, but {installed} is installed"
+                            "the flow needs plugin '{name}' {range}, but {installed} is installed"
                         ),
                         path,
                         None,
                     );
                     self.hint(format!(
-                        "Install a version of '{name}' that matches {range}. If you checked that the steps work with {installed}, change the range with update_scenario (patch.requires)."
+                        "Install a version of '{name}' that matches {range}. If you checked that the steps work with {installed}, change the range with update_flow (patch.requires)."
                     ));
                 }
             }
         }
     }
 
-    fn scenario(&mut self, scenario: &Scenario) {
-        if scenario.schema_version > SCHEMA_VERSION || scenario.schema_version == 0 {
+    fn flow(&mut self, flow: &Flow) {
+        if flow.schema_version > SCHEMA_VERSION || flow.schema_version == 0 {
             self.error(
                 "UNSUPPORTED_SCHEMA_VERSION",
                 format!(
                     "schemaVersion {} is not supported (current: {SCHEMA_VERSION})",
-                    scenario.schema_version
+                    flow.schema_version
                 ),
                 "/schemaVersion".into(),
                 None,
             );
         }
-        if !scenario.id.is_well_formed() {
+        if !flow.id.is_well_formed() {
             self.error(
-                "INVALID_SCENARIO_ID",
-                "scenario id must match [A-Za-z0-9_-]{1,128}".into(),
+                "INVALID_FLOW_ID",
+                "flow id must match [A-Za-z0-9_-]{1,128}".into(),
                 "/id".into(),
                 None,
             );
         }
-        if scenario.name.trim().is_empty() {
+        if flow.name.trim().is_empty() {
             self.error(
                 "EMPTY_NAME",
-                "scenario name must not be empty".into(),
+                "flow name must not be empty".into(),
                 "/name".into(),
                 None,
             );
@@ -299,7 +299,7 @@ impl Cx<'_> {
 
         self.requirements();
 
-        for (name, part) in &scenario.parts {
+        for (name, part) in &flow.parts {
             let path = format!("/parts/{name}");
             if !is_identifier(name) {
                 self.error(
@@ -321,7 +321,7 @@ impl Cx<'_> {
         }
 
         let mut var_names = HashSet::new();
-        for (i, var) in scenario.variables.iter().enumerate() {
+        for (i, var) in flow.variables.iter().enumerate() {
             let path = format!("/variables/{i}");
             if !is_identifier(&var.name) {
                 self.error(
@@ -343,7 +343,7 @@ impl Cx<'_> {
                 self.error(
                     "SECRET_DEFAULT",
                     format!(
-                        "secret variable '{}' has a default value, which is stored as plain text in the scenario",
+                        "secret variable '{}' has a default value, which is stored as plain text in the flow",
                         var.name
                     ),
                     format!("{path}/default"),
@@ -366,7 +366,7 @@ impl Cx<'_> {
             }
         }
 
-        if let Some(retry) = &scenario.settings.default_retry
+        if let Some(retry) = &flow.settings.default_retry
             && retry.max_attempts == 0
         {
             self.error(
@@ -377,7 +377,7 @@ impl Cx<'_> {
             );
         }
 
-        self.steps(&scenario.steps, "/steps", 0);
+        self.steps(&flow.steps, "/steps", 0);
     }
 
     fn steps(&mut self, steps: &[Step], path: &str, loop_depth: usize) {
@@ -487,7 +487,7 @@ impl Cx<'_> {
         self.params(step, def, path);
         self.file_paths(step, def, path);
 
-        if step.step_type == crate::registry::scenario::CALL {
+        if step.step_type == crate::registry::flow::CALL {
             self.call_options(step, path);
         }
         if let Some(save_as) = &step.save_as {
@@ -499,7 +499,7 @@ impl Cx<'_> {
                     id,
                 );
             }
-            if !def.has_output && step.step_type != crate::registry::scenario::CALL {
+            if !def.has_output && step.step_type != crate::registry::flow::CALL {
                 self.warn(
                     "NO_OUTPUT",
                     format!("'{}' produces no output for saveAs", def.step_type),
@@ -576,20 +576,20 @@ impl Cx<'_> {
         if step.save_as.is_some() {
             self.error(
                 "CALL_SAVE_AS",
-                "scenario.call returns values through `outputs`, not `saveAs`".into(),
+                "flow.call returns values through `outputs`, not `saveAs`".into(),
                 format!("{path}/saveAs"),
                 Some(&step.id),
             );
-            self.hint("Remove `saveAs` and add \"outputs\": { \"<output of the called scenario>\": \"<variable here>\" }.");
+            self.hint("Remove `saveAs` and add \"outputs\": { \"<output of the called flow>\": \"<variable here>\" }.");
         }
         if step.retry.is_some() {
             self.error(
                 "CALL_RETRY",
-                "a sub-scenario call is not retried as a whole".into(),
+                "a sub-flow call is not retried as a whole".into(),
                 format!("{path}/retry"),
                 Some(&step.id),
             );
-            self.hint("Remove `retry`. Put `retry` on the steps inside the called scenario that may fail, or wrap the call in control.try.");
+            self.hint("Remove `retry`. Put `retry` on the steps inside the called flow that may fail, or wrap the call in control.try.");
         }
     }
 
@@ -666,9 +666,9 @@ impl Cx<'_> {
         }
     }
 
-    /// Relative paths are resolved from the scenario's folder; one that
+    /// Relative paths are resolved from the flow's folder; one that
     /// climbs out of it with `..` depends on where the folder sits, and is
-    /// left behind when the scenario is exported.
+    /// left behind when the flow is exported.
     fn file_paths(&mut self, step: &Step, def: &StepTypeDef, path: &str) {
         for key in &def.path_params {
             let values: Vec<&str> = match step.params.get(key) {
@@ -688,12 +688,12 @@ impl Cx<'_> {
             };
             self.warn(
                 "PATH_OUTSIDE_PROJECT",
-                format!("'{key}' leaves the scenario's folder: {value}"),
+                format!("'{key}' leaves the flow's folder: {value}"),
                 format!("{path}/params/{key}"),
                 Some(&step.id),
             );
             self.hint(
-                "Put the file in the scenario's folder (input/, config/, templates/) and write e.g. input/orders.xlsx, or use an absolute path (C:\\work\\orders.xlsx).".to_owned(),
+                "Put the file in the flow's folder (input/, config/, templates/) and write e.g. input/orders.xlsx, or use an absolute path (C:\\work\\orders.xlsx).".to_owned(),
             );
         }
     }
@@ -767,7 +767,7 @@ impl Cx<'_> {
                 let known: Vec<String> = self.parts.keys().cloned().collect();
                 self.error(
                     "UNKNOWN_PART",
-                    format!("part '{name}' is not in the scenario's parts"),
+                    format!("part '{name}' is not in the flow's parts"),
                     param_path,
                     id,
                 );
@@ -1055,7 +1055,7 @@ fn find_accumulators(steps: &[Step], out: &mut BTreeSet<String>) {
 fn generic_hint(code: &str) -> Option<&'static str> {
     Some(match code {
         "MISSING_STEP_ID" | "INVALID_STEP_ID" | "DUPLICATE_STEP_ID" => {
-            "Omit `id` when adding steps (Core assigns unique IDs); use existing IDs only to refer to steps from get_scenario."
+            "Omit `id` when adding steps (Core assigns unique IDs); use existing IDs only to refer to steps from get_flow."
         }
         "NOT_IN_LOOP" => {
             "Put break/continue inside control.while, control.repeat or control.forEach. A control.parallel branch cannot leave an outer loop; end the branch or use control.fail."
@@ -1069,8 +1069,8 @@ fn generic_hint(code: &str) -> Option<&'static str> {
             "Make `default` match `type`, or change `type` (any accepts every value)."
         }
         "INVALID_RETRY" => "Set retry.maxAttempts to 1 or more (1 means no retry).",
-        "EMPTY_NAME" => "Give the scenario a short descriptive name.",
-        "INVALID_SCENARIO_ID" => "Omit `id` when creating a scenario; Core assigns one.",
+        "EMPTY_NAME" => "Give the flow a short descriptive name.",
+        "INVALID_FLOW_ID" => "Omit `id` when creating a flow; Core assigns one.",
         "UNSUPPORTED_SCHEMA_VERSION" => {
             "Omit schemaVersion (Core writes the current one). A file from a newer Shikigami needs that newer version to open."
         }
@@ -1078,7 +1078,7 @@ fn generic_hint(code: &str) -> Option<&'static str> {
             "Check quotes and brackets. Strings use '...', comparisons ==, !=, <, >, logic &&, ||, !. In template params wrap expressions in {{ }}."
         }
         "INVALID_STEP_DEFINITION" => {
-            "The step type itself is broken; report it instead of changing the scenario."
+            "The step type itself is broken; report it instead of changing the flow."
         }
         _ => return None,
     })
@@ -1218,7 +1218,7 @@ mod tests {
     #[test]
     fn secrets_are_only_typed_and_never_stored() {
         let v = Validator::new(typing_registry());
-        let mut s = Scenario::new("t");
+        let mut s = Flow::new("t");
         let mut pw = VariableDef::new("pw", VarType::String);
         pw.secret = true;
         pw.default = Some(json!("hunter2"));
@@ -1265,8 +1265,8 @@ mod tests {
     }
 
     #[test]
-    fn valid_scenario_passes() {
-        let mut s = Scenario::new("ok");
+    fn valid_flow_passes() {
+        let mut s = Flow::new("ok");
         s.variables.push(VariableDef::new("count", VarType::Number));
         s.steps = vec![
             Step::new("variable.set")
@@ -1297,7 +1297,7 @@ mod tests {
 
     #[test]
     fn reports_all_problems_with_paths() {
-        let mut s = Scenario::new("bad");
+        let mut s = Flow::new("bad");
         s.steps = vec![
             Step::new("nope.unknown").with_id("a"),
             Step::new("log.message").with_id("a"),
@@ -1340,7 +1340,7 @@ mod tests {
 
     #[test]
     fn missing_required_param_is_reported() {
-        let mut s = Scenario::new("t");
+        let mut s = Flow::new("t");
         s.steps = vec![Step::new("log.message").with_id("a")];
         let report = validator().validate(&s);
         assert_eq!(codes(&report), ["INVALID_PARAMS"]);
@@ -1349,7 +1349,7 @@ mod tests {
 
     #[test]
     fn variable_set_requires_exactly_one_source() {
-        let mut s = Scenario::new("t");
+        let mut s = Flow::new("t");
         s.steps = vec![
             Step::new("variable.set")
                 .with_id("a")
@@ -1362,7 +1362,7 @@ mod tests {
 
     #[test]
     fn bad_variable_defaults_are_errors() {
-        let mut s = Scenario::new("t");
+        let mut s = Flow::new("t");
         let mut v = VariableDef::new("n", VarType::Number);
         v.default = Some(json!("text"));
         s.variables.push(v);
@@ -1396,7 +1396,7 @@ mod tests {
                 .with_param("expression", "count + 1"),
             Step::new("control.break").with_id("b"),
         ];
-        let mut s = Scenario::new("each");
+        let mut s = Flow::new("each");
         s.variables.push(VariableDef::new("total", VarType::Number));
         s.steps = vec![
             Step::new("control.forEach")
@@ -1440,7 +1440,7 @@ mod tests {
             backoff_ms: 100,
             backoff_multiplier: 1.0,
         });
-        let mut s = Scenario::new("wait");
+        let mut s = Flow::new("wait");
         s.steps = vec![wait];
         let report = validator().validate(&s);
         assert_eq!(report.error_count(), 0, "{report:?}");
@@ -1459,7 +1459,7 @@ mod tests {
                 .with_id(id)
                 .with_param("message", path)
         };
-        let mut s = Scenario::new("paths");
+        let mut s = Flow::new("paths");
         s.steps = vec![
             write("a", "input/book.xlsx"),
             write("b", r"C:\work\book.xlsx"),
@@ -1481,7 +1481,7 @@ mod tests {
 
     #[test]
     fn issues_carry_fix_hints() {
-        let mut s = Scenario::new("hints");
+        let mut s = Flow::new("hints");
         s.variables.push(VariableDef::new("total", VarType::Number));
         s.steps = vec![
             Step::new("control.fi").with_id("a"),
@@ -1529,7 +1529,7 @@ mod tests {
                 } else {
                     step
                 };
-                let mut s = Scenario::new("example");
+                let mut s = Flow::new("example");
                 s.steps = vec![step];
                 let report = v.validate(&s);
                 assert!(report.valid, "{}: {:?}", def.step_type, report.issues);
@@ -1549,8 +1549,8 @@ mod tests {
         registry
     }
 
-    fn greet_scenario(range: &str) -> Scenario {
-        let mut s = Scenario::new("plugins");
+    fn greet_flow(range: &str) -> Flow {
+        let mut s = Flow::new("plugins");
         s.steps = vec![
             Step::new("hello.greet")
                 .with_id("a")
@@ -1562,7 +1562,7 @@ mod tests {
 
     #[test]
     fn missing_plugins_name_the_plugin_and_version() {
-        let report = validator().validate(&greet_scenario("^0.3.1"));
+        let report = validator().validate(&greet_flow("^0.3.1"));
         assert_eq!(codes(&report), ["PLUGIN_NOT_INSTALLED"]);
         assert!(report.issues[0].message.contains("'hello' (^0.3.1)"));
         assert!(hint_of(&report, "PLUGIN_NOT_INSTALLED").contains("plugins\\hello"));
@@ -1570,12 +1570,12 @@ mod tests {
 
     #[test]
     fn plugin_versions_are_checked_against_requires() {
-        let ok = Validator::new(plugin_registry("0.3.4")).validate(&greet_scenario("^0.3.1"));
+        let ok = Validator::new(plugin_registry("0.3.4")).validate(&greet_flow("^0.3.1"));
         assert!(ok.valid, "{ok:?}");
-        let newer = Validator::new(plugin_registry("1.0.0")).validate(&greet_scenario("^0.3.1"));
+        let newer = Validator::new(plugin_registry("1.0.0")).validate(&greet_flow("^0.3.1"));
         assert_eq!(codes(&newer), ["PLUGIN_VERSION_MISMATCH"]);
         assert_eq!(newer.issues[0].path, "/requires/plugin:hello");
-        let bad = Validator::new(plugin_registry("0.3.4")).validate(&greet_scenario("latest"));
+        let bad = Validator::new(plugin_registry("0.3.4")).validate(&greet_flow("latest"));
         assert_eq!(codes(&bad), ["INVALID_REQUIREMENT"]);
     }
 
@@ -1589,7 +1589,7 @@ mod tests {
             replacement: Some("log.message".into()),
         });
         registry.register(def);
-        let mut s = Scenario::new("old");
+        let mut s = Flow::new("old");
         s.steps = vec![
             Step::new("test.old")
                 .with_id("a")
@@ -1624,7 +1624,7 @@ mod tests {
                 .with_id(id)
                 .with_param("target", target)
         };
-        let mut s = Scenario::new("parts");
+        let mut s = Flow::new("parts");
         s.parts.insert(
             "saveButton".into(),
             Part {

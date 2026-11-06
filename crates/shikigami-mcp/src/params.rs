@@ -4,29 +4,32 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use shikigami_core::{EditOp, ImportConflict, Position, Scenario, Step, StepPatch, VariableDef};
+use shikigami_core::{EditOp, Flow, ImportConflict, Position, Step, StepPatch, VariableDef};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ScenarioRef {
-    /// Scenario ID, e.g. `scn_...`.
-    pub scenario_id: String,
+pub struct FlowRef {
+    /// Flow ID, e.g. `scn_...`.
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidateParams {
-    /// Validate a stored scenario by ID.
+    /// Validate a stored flow by ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scenario_id: Option<String>,
-    /// Or validate an unsaved scenario document.
+    #[serde(alias = "scenarioId")]
+    pub flow_id: Option<String>,
+    /// Or validate an unsaved flow document.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scenario: Option<Scenario>,
+    #[serde(alias = "scenario")]
+    pub flow: Option<Flow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateScenarioParams {
+pub struct CreateFlowParams {
     /// Display name (Japanese is fine).
     pub name: String,
     #[serde(default)]
@@ -40,7 +43,7 @@ pub struct CreateScenarioParams {
     #[serde(default)]
     pub tags: Vec<String>,
     /// For the human who reviews your change in Studio, in plain words (no
-    /// step types or expressions). First line: what the scenario now does
+    /// step types or expressions). First line: what the flow now does
     /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
     /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
     /// Japanese is fine. Kept in the change history.
@@ -61,8 +64,9 @@ pub struct CreateScenarioParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdateScenarioParams {
-    pub scenario_id: String,
+pub struct UpdateFlowParams {
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// When given, the edit fails with REVISION_CONFLICT unless the stored
     /// revision matches (someone else, e.g. a human in Studio, changed it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,7 +74,7 @@ pub struct UpdateScenarioParams {
     /// Edit operations applied atomically as one revision (one undo step).
     pub ops: Vec<EditOp>,
     /// For the human who reviews your change in Studio, in plain words (no
-    /// step types or expressions). First line: what the scenario now does
+    /// step types or expressions). First line: what the flow now does
     /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
     /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
     /// Japanese is fine. Kept in the change history.
@@ -92,7 +96,8 @@ pub struct UpdateScenarioParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddStepParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_revision: Option<u64>,
     /// The step to insert (children included). Omit `id` to let Core assign one.
@@ -101,7 +106,7 @@ pub struct AddStepParams {
     #[serde(default)]
     pub position: Position,
     /// For the human who reviews your change in Studio, in plain words (no
-    /// step types or expressions). First line: what the scenario now does
+    /// step types or expressions). First line: what the flow now does
     /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
     /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
     /// Japanese is fine. Kept in the change history.
@@ -123,14 +128,15 @@ pub struct AddStepParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateStepParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_revision: Option<u64>,
     pub step_id: String,
     /// Partial update. `params` is a JSON Merge Patch (null removes a key).
     pub patch: StepPatch,
     /// For the human who reviews your change in Studio, in plain words (no
-    /// step types or expressions). First line: what the scenario now does
+    /// step types or expressions). First line: what the flow now does
     /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
     /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
     /// Japanese is fine. Kept in the change history.
@@ -152,13 +158,14 @@ pub struct UpdateStepParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoveStepParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_revision: Option<u64>,
     /// Step to remove (its children are removed too).
     pub step_id: String,
     /// For the human who reviews your change in Studio, in plain words (no
-    /// step types or expressions). First line: what the scenario now does
+    /// step types or expressions). First line: what the flow now does
     /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
     /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
     /// Japanese is fine. Kept in the change history.
@@ -180,14 +187,15 @@ pub struct RemoveStepParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MoveStepParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_revision: Option<u64>,
     pub step_id: String,
     /// New location. `index` is counted after removing the step.
     pub position: Position,
     /// For the human who reviews your change in Studio, in plain words (no
-    /// step types or expressions). First line: what the scenario now does
+    /// step types or expressions). First line: what the flow now does
     /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
     /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
     /// Japanese is fine. Kept in the change history.
@@ -208,18 +216,19 @@ pub struct MoveStepParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ExtractSubscenarioParams {
-    pub scenario_id: String,
+pub struct ExtractSubflowParams {
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_revision: Option<u64>,
     /// IDs of the steps to move, next to each other in one block (same
     /// parent and block), e.g. the three steps that log in. Their children
     /// move with them.
     pub step_ids: Vec<String>,
-    /// Name of the new scenario and of the call step, e.g. "ログインする".
+    /// Name of the new flow and of the call step, e.g. "ログインする".
     pub name: String,
     /// For the human who reviews your change in Studio, in plain words (no
-    /// step types or expressions). First line: what the scenario now does
+    /// step types or expressions). First line: what the flow now does
     /// differently, as a short title (e.g. "未払いの高額請求だけを要確認にする").
     /// Then why, and what you checked (e.g. "受注一覧の画面で『状態』の列を確かめた").
     /// Japanese is fine. Kept in the change history.
@@ -236,16 +245,18 @@ pub struct ExtractSubscenarioParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RevisionedRef {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_revision: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct DeleteScenarioParams {
-    pub scenario_id: String,
-    /// Required: the revision you last read. Deleting moves the scenario to
+pub struct DeleteFlowParams {
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
+    /// Required: the revision you last read. Deleting moves the flow to
     /// the workspace trash.
     pub expected_revision: u64,
     #[serde(flatten)]
@@ -274,7 +285,8 @@ pub struct ApprovalArgs {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// Most recent entries to return (default 20).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
@@ -283,7 +295,8 @@ pub struct HistoryParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GetReviewParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// List changes and evidence after this revision. Default: the last
     /// revision a human approved (so you see everything still unreviewed).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -300,8 +313,9 @@ pub struct StepTypeRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RunScenarioParams {
-    pub scenario_id: String,
+pub struct RunFlowParams {
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// Values for input variables, by name.
     #[serde(default)]
     pub inputs: Map<String, Value>,
@@ -367,9 +381,10 @@ pub struct RunLogsParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ListRunsParams {
-    /// Only runs of this scenario.
+    /// Only runs of this flow.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scenario_id: Option<String>,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: Option<String>,
     /// Most recent runs to return (default 20).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
@@ -450,31 +465,34 @@ pub struct InspectUiParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TestStepParams {
-    /// One step as it would appear in a scenario, e.g.
+    /// One step as it would appear in a flow, e.g.
     /// { "type": "browser.click", "params": { "target": { "role": "button", "name": "ログイン" } } }.
     /// `id` may be omitted.
     pub step: Step,
     #[serde(flatten)]
     pub approval: ApprovalArgs,
-    /// The scenario the step is for: relative paths (input/orders.xlsx) are
+    /// The flow the step is for: relative paths (input/orders.xlsx) are
     /// resolved from its folder, as in a run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scenario_id: Option<String>,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectFileRef {
-    pub scenario_id: String,
-    /// Relative to the scenario's folder, e.g. "config/settings.json".
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
+    /// Relative to the flow's folder, e.g. "config/settings.json".
     pub path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteProjectFileParams {
-    pub scenario_id: String,
-    /// Where in the scenario's folder, e.g. "config/settings.json",
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
+    /// Where in the flow's folder, e.g. "config/settings.json",
     /// "input/受注一覧.xlsx", "templates/請求書.docx".
     pub path: String,
     /// The file's text (UTF-8). Give `text` or `copyFrom`, not both.
@@ -493,7 +511,8 @@ pub struct WriteProjectFileParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateVersionParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// Short name, e.g. "v1" or "本番リリース".
     pub name: String,
     /// What changed or why this version matters.
@@ -508,7 +527,8 @@ pub struct CreateVersionParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionRef {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// Version number from list_versions.
     pub number: u32,
 }
@@ -516,7 +536,8 @@ pub struct VersionRef {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RestoreVersionParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// Version number from list_versions.
     pub number: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -526,7 +547,8 @@ pub struct RestoreVersionParams {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DiffVersionsParams {
-    pub scenario_id: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// Older side: a version number. Omit for the latest version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<u32>,
@@ -537,8 +559,9 @@ pub struct DiffVersionsParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ExportScenarioParams {
-    pub scenario_id: String,
+pub struct ExportFlowParams {
+    #[serde(alias = "scenarioId")]
+    pub flow_id: String,
     /// Include named versions (default true).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub include_versions: Option<bool>,
@@ -546,11 +569,11 @@ pub struct ExportScenarioParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportScenarioParams {
-    /// The `bundle` returned by export_scenario, or a bare scenario document.
+pub struct ImportFlowParams {
+    /// The `bundle` returned by export_flow, or a bare flow document.
     pub bundle: Value,
-    /// Only needed when the scenario ID already exists (IMPORT_CONFLICT):
-    /// "update" applies the content to the existing scenario as one undoable
+    /// Only needed when the flow ID already exists (IMPORT_CONFLICT):
+    /// "update" applies the content to the existing flow as one undoable
     /// edit and adds missing versions; "copy" imports it under a new ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_conflict: Option<ImportConflict>,

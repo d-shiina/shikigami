@@ -3,9 +3,9 @@
 //
 //   node examples/build-tutorials.mjs
 //
-// The folder (scenario.json and the files under input/ config/ templates/) is
-// the source of truth. In Studio, "Import from file" on the Scenarios page
-// opens a bundle as a scenario with its folder; the CLI runs it directly
+// The folder (flow.json and the files under input/ config/ templates/) is
+// the source of truth. In Studio, "Import from file" on the Flows page
+// opens a bundle as a flow with its folder; the CLI runs it directly
 // (`shikigami run examples/tutorials/<name>.shikigami.json`). Re-run this
 // after editing a tutorial's folder.
 
@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("./tutorials/", import.meta.url));
 // A fixed timestamp keeps the generated bundles stable across rebuilds.
 const EXPORTED_AT = "2026-11-06T00:00:00Z";
-// What a scenario's folder carries; runs make output/ work/ logs/.
+// What a flow's folder carries; runs make output/ work/ logs/.
 const CARRIED = ["input", "config", "templates"];
 
 /** Files under `dir`, as `/`-separated paths relative to `base`, sorted. */
@@ -37,20 +37,20 @@ function walk(base, dir) {
 for (const name of readdirSync(root).sort()) {
   const folder = join(root, name);
   if (!statSync(folder).isDirectory() || name.endsWith(".files")) continue;
-  const scenario = JSON.parse(readFileSync(join(folder, "scenario.json"), "utf8"));
-  delete scenario.$schema;
+  const flow = JSON.parse(readFileSync(join(folder, "flow.json"), "utf8"));
+  delete flow.$schema;
   const files = CARRIED.flatMap((dir) => walk(folder, dir)).map((path) => ({
-    scenarioId: scenario.id,
+    flowId: flow.id,
     path,
     data: readFileSync(join(folder, path)).toString("base64"),
   }));
   const bundle = {
-    format: "shikigami.scenarioBundle",
+    format: "shikigami.flowBundle",
     formatVersion: 2,
     exportedAt: EXPORTED_AT,
-    scenario,
+    flow,
     versions: [],
-    subscenarios: [],
+    subflows: [],
     files,
   };
   const out = join(root, `${name}.shikigami.json`);

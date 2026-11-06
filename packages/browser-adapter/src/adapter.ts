@@ -537,7 +537,7 @@ export class Adapter {
     for (const file of files) {
       if (!existsSync(file) || !statSync(file).isFile()) {
         throw new AdapterError("FILE_NOT_FOUND", `no file at ${file}`, {
-          details: { path: file, hint: "Write the path relative to the scenario folder (e.g. output/請求書.pdf) and check that an earlier step made the file." },
+          details: { path: file, hint: "Write the path relative to the flow folder (e.g. output/請求書.pdf) and check that an earlier step made the file." },
         });
       }
     }

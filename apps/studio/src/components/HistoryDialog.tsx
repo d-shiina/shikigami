@@ -1,6 +1,6 @@
-// The open scenario's past: who changed what (record) and the named versions
-// kept of it (versions, sharing). Opened from the revision in the scenario
-// bar, since both are about how the scenario got to this revision; neither is
+// The open flow's past: who changed what (record) and the named versions
+// kept of it (versions, sharing). Opened from the revision in the flow
+// bar, since both are about how the flow got to this revision; neither is
 // a property of what is selected, so they stay out of the inspector.
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
@@ -13,7 +13,7 @@ type Tab = "timeline" | "versions";
 export function HistoryDialog() {
   const open = useStudio((s) => s.historyOpen);
   const setOpen = useStudio((s) => s.setHistoryOpen);
-  const name = useStudio((s) => s.scenario?.name);
+  const name = useStudio((s) => s.flow?.name);
   const initialTab = useStudio((s) => s.historyTab);
   const [tab, setTab] = useState<Tab>(initialTab);
   useEffect(() => {

@@ -7,7 +7,7 @@ import type {
   PublishedState,
   ReviewTimeline,
   RunEventEnvelope,
-  Scenario,
+  Flow,
 } from "@shikigami/schema";
 import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
@@ -15,7 +15,7 @@ import { t } from "./lib/i18n";
 import { draftFor } from "./components/SecretsPage";
 import { calledIds, createStudioStore, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps, trailOf } from "./store";
 
-const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({
+const flow = (revision: number, steps: Flow["steps"] = []): Flow => ({
   schemaVersion: 1,
   id: "scn_a",
   name: "A",
@@ -24,8 +24,8 @@ const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => 
   metadata: {},
 });
 
-const outcome = (s: Scenario): EditOutcome => ({
-  scenario: s,
+const outcome = (s: Flow): EditOutcome => ({
+  flow: s,
   validation: { valid: true, issues: [] },
   canUndo: true,
   canRedo: false,
@@ -33,9 +33,9 @@ const outcome = (s: Scenario): EditOutcome => ({
 
 function fakeApi(overrides: Partial<Api> = {}): Api {
   const base: Partial<Api> = {
-    listScenarios: vi.fn(async () => []),
+    listFlows: vi.fn(async () => []),
     listStepTypes: vi.fn(async () => []),
-    getScenario: vi.fn(async () => scenario(1)),
+    getFlow: vi.fn(async () => flow(1)),
     validate: vi.fn(async () => ({ valid: true, issues: [] })),
     undoState: vi.fn(async () => ({ canUndo: false, canRedo: false })),
     history: vi.fn(async () => []),
@@ -56,7 +56,7 @@ describe("studio store", () => {
     const history: HistoryEntry[] = [
       { kind: "edit", revision: 2, actor: { kind: "mcp", name: "AI" }, at: "2026-10-28T00:00:00Z", label: "update", ops: [{ op: "updateStep", stepId: "s3", patch: { name: "x" } }], inverse: [{ op: "updateStep", stepId: "s3", patch: { name: "" } }] },
     ];
-    const store = createStudioStore(fakeApi({ getScenario: vi.fn(async () => scenario(2, steps)), history: vi.fn(async () => history) }));
+    const store = createStudioStore(fakeApi({ getFlow: vi.fn(async () => flow(2, steps)), history: vi.fn(async () => history) }));
     await store.getState().open("scn_a");
     store.getState().stepBy(1);
     expect(store.getState().selection).toEqual({ kind: "step", stepId: "s1" });
@@ -73,7 +73,7 @@ describe("studio store", () => {
 
   it("sends edits with the current revision and mirrors Core's result", async () => {
     const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) =>
-      outcome(scenario(2, [{ id: "stp_new", type: "log.message" }])),
+      outcome(flow(2, [{ id: "stp_new", type: "log.message" }])),
     );
     const store = createStudioStore(fakeApi({ edit }));
     await store.getState().open("scn_a");
@@ -83,7 +83,7 @@ describe("studio store", () => {
     const [, revision, ops] = edit.mock.calls[0]!;
     expect(revision).toBe(1);
     expect(ops[0]).toMatchObject({ op: "addStep", step: { type: "log.message", params: { message: "" } } });
-    expect(store.getState().scenario?.revision).toBe(2);
+    expect(store.getState().flow?.revision).toBe(2);
     expect(store.getState().canUndo).toBe(true);
     // the new step becomes the selection, so the next add goes after it
     const added = ops[0] as Extract<EditOp, { op: "addStep" }>;
@@ -91,7 +91,7 @@ describe("studio store", () => {
   });
 
   it("adds at the plus button the palette was opened from, even though the palette closes as it adds", async () => {
-    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(scenario(2)));
+    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(2)));
     const store = createStudioStore(fakeApi({ edit }));
     await store.getState().open("scn_a");
     store.getState().setPaletteOpen(true, { parentId: null, block: null, index: 0 });
@@ -104,31 +104,31 @@ describe("studio store", () => {
   });
 
   it("reloads and informs the user on revision conflicts (e.g. an AI edited meanwhile)", async () => {
-    let current = scenario(1);
+    let current = flow(1);
     const api = fakeApi({
-      getScenario: vi.fn(async () => current),
+      getFlow: vi.fn(async () => current),
       edit: vi.fn(async () => {
         throw new ApiError({ code: "REVISION_CONFLICT", message: "conflict" });
       }),
     });
     const store = createStudioStore(api);
     await store.getState().open("scn_a");
-    current = scenario(5, [{ id: "stp_ai", type: "log.message" }]);
+    current = flow(5, [{ id: "stp_ai", type: "log.message" }]);
     const ok = await store.getState().applyOps([{ op: "removeStep", stepId: "x" }]);
 
     expect(ok).toBe(false);
-    expect(store.getState().scenario?.revision).toBe(5);
+    expect(store.getState().flow?.revision).toBe(5);
     expect(store.getState().notice).toBe(t.reloadedByConflict);
     expect(store.getState().error).toBeNull();
   });
 
-  it("picks up external changes to the open scenario", async () => {
-    let current = scenario(1);
-    const store = createStudioStore(fakeApi({ getScenario: vi.fn(async () => current) }));
+  it("picks up external changes to the open flow", async () => {
+    let current = flow(1);
+    const store = createStudioStore(fakeApi({ getFlow: vi.fn(async () => current) }));
     await store.getState().open("scn_a");
-    current = scenario(2, [{ id: "stp_mcp", type: "log.message" }]);
+    current = flow(2, [{ id: "stp_mcp", type: "log.message" }]);
     await store.getState().onExternalChange("scn_a");
-    expect(store.getState().scenario?.steps?.[0]?.id).toBe("stp_mcp");
+    expect(store.getState().flow?.steps?.[0]?.id).toBe("stp_mcp");
     expect(store.getState().notice).toBe(t.externalChange);
   });
 
@@ -193,7 +193,7 @@ describe("studio store", () => {
   it("offers to register the secret a run stopped on", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
-    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     store.getState().onRunEvent({
       ...base,
       seq: 1,
@@ -205,7 +205,7 @@ describe("studio store", () => {
       error: { code: "SECRET_NOT_FOUND", message: "no secret named 'Google'", details: { secret: "Google", hint: "…" } },
     });
     expect(store.getState().secretFix).toEqual({ name: "Google", code: "SECRET_NOT_FOUND", site: undefined });
-    store.getState().onRunEvent({ ...base, seq: 2, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 2, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     expect(store.getState().secretFix).toBeNull();
 
     expect(
@@ -263,7 +263,7 @@ describe("studio store", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     const events: RunEventEnvelope[] = [
-      { ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 },
+      { ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 },
       { ...base, seq: 1, type: "stepStarted", stepId: "s1", stepType: "log.message", attempt: 1 },
       { ...base, seq: 2, type: "log", level: "info", message: "hello", stepId: "s1" },
       { ...base, seq: 3, type: "stepFinished", stepId: "s1", stepType: "log.message", outcome: "succeeded", durationMs: 1 },
@@ -276,30 +276,30 @@ describe("studio store", () => {
     expect(run.logs.map((l) => l.message)).toContain("hello");
   });
 
-  it("keeps the run's way on the chart after it ends, until the scenario is edited", () => {
+  it("keeps the run's way on the chart after it ends, until the flow is edited", () => {
     const store = createStudioStore(fakeApi());
-    store.setState({ scenario: scenario(1, [{ id: "s1", type: "log.message" }]) });
+    store.setState({ flow: flow(1, [{ id: "s1", type: "log.message" }]) });
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     const events: RunEventEnvelope[] = [
-      { ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 },
+      { ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 },
       { ...base, seq: 1, type: "stepStarted", stepId: "s1", stepType: "log.message", attempt: 1 },
       { ...base, seq: 2, type: "stepFinished", stepId: "s1", stepType: "log.message", outcome: "succeeded", durationMs: 1 },
       { ...base, seq: 3, type: "runFinished", status: "succeeded", durationMs: 2 },
     ];
     for (const e of events) store.getState().onRunEvent(e);
     expect(trailOf(store.getState())?.steps.s1).toBe("succeeded");
-    // Another scenario open: its chart is not the run's.
-    store.setState({ scenario: { ...scenario(1), id: "scn_b" } });
+    // Another flow open: its chart is not the run's.
+    store.setState({ flow: { ...flow(1), id: "scn_b" } });
     expect(trailOf(store.getState())).toBeNull();
     // Edited since: the marks would point at steps that changed.
-    store.setState({ scenario: scenario(2, [{ id: "s1", type: "log.message" }]) });
+    store.setState({ flow: flow(2, [{ id: "s1", type: "log.message" }]) });
     expect(trailOf(store.getState())).toBeNull();
     // Cleared by the person.
-    store.setState({ scenario: scenario(1, [{ id: "s1", type: "log.message" }]) });
+    store.setState({ flow: flow(1, [{ id: "s1", type: "log.message" }]) });
     store.getState().hideTrail();
     expect(trailOf(store.getState())).toBeNull();
     // A new run starts afresh.
-    store.getState().onRunEvent({ ...base, runId: "run_2", seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, runId: "run_2", seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     expect(trailOf(store.getState())?.runId).toBe("run_2");
   });
 
@@ -307,7 +307,7 @@ describe("studio store", () => {
     const debugRun = vi.fn(async () => ({ revision: 2, updated: true }));
     const store = createStudioStore(fakeApi({ debugRun }));
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
-    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     store.getState().onRunEvent({
       ...base,
       seq: 3,
@@ -349,10 +349,10 @@ describe("studio store", () => {
     const history: HistoryEntry[] = [
       { kind: "edit", revision: 2, actor: { kind: "mcp", name: "AI" }, at: "2026-10-28T00:00:00Z", label: "update", ops: [{ op: "updateStep", stepId: "s1", patch: { name: "x" } }], inverse: [{ op: "updateStep", stepId: "s1", patch: { name: "" } }] },
     ];
-    const store = createStudioStore(fakeApi({ debugRun, getScenario: vi.fn(async () => scenario(2)), history: vi.fn(async () => history) }));
+    const store = createStudioStore(fakeApi({ debugRun, getFlow: vi.fn(async () => flow(2)), history: vi.fn(async () => history) }));
     await store.getState().open("scn_a");
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
-    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "s1", stepType: "log.message", reason: "error", variables: {}, revision: 1 });
     expect(await store.getState().debug({ action: "retry" })).toBe(false);
     expect(debugRun).not.toHaveBeenCalled();
@@ -366,14 +366,14 @@ describe("studio store", () => {
     });
     const store = createStudioStore(fakeApi({ debugRun }));
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
-    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     store.getState().onRunEvent({ ...base, seq: 1, type: "paused", stepId: "s1", stepType: "log.message", reason: "step", variables: {}, revision: 1 });
     expect(store.getState().run!.steps.s1).toBe("paused");
     expect(await store.getState().debug({ action: "continue" })).toBe(false);
     expect(store.getState().error).toContain("最初から");
   });
 
-  it("keeps breakpoints per scenario and passes them to runs", async () => {
+  it("keeps breakpoints per flow and passes them to runs", async () => {
     const run = vi.fn(async () => "run_1");
     const debugRun = vi.fn(async () => ({ revision: 1, updated: false }));
     const store = createStudioStore(fakeApi({ run, debugRun }));
@@ -384,7 +384,7 @@ describe("studio store", () => {
     expect(store.getState().breakpoints).toEqual({ scn_a: ["s2"] });
     await store.getState().startRun({ step: true });
     expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: true });
-    // A running run of this scenario picks up changes at once.
+    // A running run of this flow picks up changes at once.
     store.getState().toggleBreakpoint("s3");
     expect(debugRun).toHaveBeenCalledWith("run_1", { action: "setBreakpoints", stepIds: ["s2", "s3"] });
   });
@@ -393,8 +393,8 @@ describe("studio store", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
     const events = [
-      { ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 },
-      { ...base, seq: 1, type: "stepStarted", stepId: "c1", stepType: "scenario.call", attempt: 1 },
+      { ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 },
+      { ...base, seq: 1, type: "stepStarted", stepId: "c1", stepType: "flow.call", attempt: 1 },
       { ...base, seq: 2, type: "stepStarted", stepId: "t1", stepType: "variable.set", attempt: 1, callPath: ["c1"] },
       { ...base, seq: 3, type: "variableChanged", variable: "scratch", value: 2, stepId: "t1", callPath: ["c1"] },
       { ...base, seq: 4, type: "stepFinished", stepId: "t1", stepType: "variable.set", outcome: "succeeded", durationMs: 1, callPath: ["c1"] },
@@ -412,19 +412,19 @@ describe("studio store", () => {
     expect(run.changes.map((c) => c.variable)).not.toContain("scratch");
   });
 
-  it("follows a run into called scenarios and back out", async () => {
-    const scenarios: Record<string, Scenario> = {
-      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }, { id: "s2", type: "log.message" }]) },
-      scn_b: { ...scenario(1, [{ id: "c2", type: "scenario.call", params: { scenario: "scn_c" } }]), id: "scn_b", name: "B" },
-      scn_c: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
+  it("follows a run into called flows and back out", async () => {
+    const flows: Record<string, Flow> = {
+      scn_a: { ...flow(1, [{ id: "c1", type: "flow.call", params: { flow: "scn_b" } }, { id: "s2", type: "log.message" }]) },
+      scn_b: { ...flow(1, [{ id: "c2", type: "flow.call", params: { flow: "scn_c" } }]), id: "scn_b", name: "B" },
+      scn_c: { ...flow(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
     };
-    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
-    const store = createStudioStore(fakeApi({ getScenario, listVersions: vi.fn(async () => []) }));
+    const getFlow = vi.fn(async (id: string) => flows[id]!);
+    const store = createStudioStore(fakeApi({ getFlow, listVersions: vi.fn(async () => []) }));
     await store.getState().open("scn_a");
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z", stepType: "log.message", attempt: 1 };
     const start = (seq: number, stepId: string, callPath?: string[]) =>
       store.getState().onRunEvent({ ...base, seq, type: "stepStarted", stepId, ...(callPath ? { callPath } : {}) } as unknown as RunEventEnvelope);
-    store.getState().onRunEvent({ runId: "run_1", at: base.at, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 } as unknown as RunEventEnvelope);
+    store.getState().onRunEvent({ runId: "run_1", at: base.at, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 } as unknown as RunEventEnvelope);
     start(1, "c1");
     expect(store.getState().dive).toEqual([]);
     start(2, "c2", ["c1"]);
@@ -439,14 +439,14 @@ describe("studio store", () => {
     expect(store.getState().dive).toEqual([]);
   });
 
-  it("shows a pause inside a call there, and passes the called scenarios' breakpoints", async () => {
-    const scenarios: Record<string, Scenario> = {
-      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }]) },
-      scn_b: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_b", name: "B" },
+  it("shows a pause inside a call there, and passes the called flows' breakpoints", async () => {
+    const flows: Record<string, Flow> = {
+      scn_a: { ...flow(1, [{ id: "c1", type: "flow.call", params: { flow: "scn_b" } }]) },
+      scn_b: { ...flow(1, [{ id: "x", type: "log.message" }]), id: "scn_b", name: "B" },
     };
     const run = vi.fn(async () => "run_1");
-    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
-    const store = createStudioStore(fakeApi({ run, getScenario, listVersions: vi.fn(async () => []) }));
+    const getFlow = vi.fn(async (id: string) => flows[id]!);
+    const store = createStudioStore(fakeApi({ run, getFlow, listVersions: vi.fn(async () => []) }));
     await store.getState().open("scn_a");
     store.getState().toggleBreakpoint("x", "scn_b");
     await store.getState().startRun();
@@ -463,21 +463,21 @@ describe("studio store", () => {
     store.getState().onRunEvent({ ...base, seq: 2, type: "resumed", action: "continue", callPath: ["c1"] } as unknown as RunEventEnvelope);
     expect(store.getState().run!.status).toBe("running");
     expect(store.getState().run!.inner.c1).toEqual({});
-    // Paused back in the open scenario, the chart comes back out.
-    store.getState().onRunEvent({ ...base, seq: 3, type: "paused", stepId: "c1", stepType: "scenario.call", reason: "error", variables: {}, revision: 1 } as unknown as RunEventEnvelope);
+    // Paused back in the open flow, the chart comes back out.
+    store.getState().onRunEvent({ ...base, seq: 3, type: "paused", stepId: "c1", stepType: "flow.call", reason: "error", variables: {}, revision: 1 } as unknown as RunEventEnvelope);
     expect(store.getState().dive).toEqual([]);
   });
 
   it("enters calls on the chart, nested ones too, and goes back up", async () => {
-    const scenarios: Record<string, Scenario> = {
-      scn_a: { ...scenario(1, [{ id: "c1", type: "scenario.call", params: { scenario: "scn_b" } }]) },
-      scn_b: { ...scenario(1, [{ id: "c2", type: "scenario.call", params: { scenario: "scn_c" } }]), id: "scn_b", name: "B" },
-      scn_c: { ...scenario(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
+    const flows: Record<string, Flow> = {
+      scn_a: { ...flow(1, [{ id: "c1", type: "flow.call", params: { flow: "scn_b" } }]) },
+      scn_b: { ...flow(1, [{ id: "c2", type: "flow.call", params: { flow: "scn_c" } }]), id: "scn_b", name: "B" },
+      scn_c: { ...flow(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
     };
-    const getScenario = vi.fn(async (id: string) => scenarios[id]!);
-    const store = createStudioStore(fakeApi({ getScenario, listVersions: vi.fn(async () => []) }));
+    const getFlow = vi.fn(async (id: string) => flows[id]!);
+    const store = createStudioStore(fakeApi({ getFlow, listVersions: vi.fn(async () => []) }));
     await store.getState().open("scn_a");
-    // Called scenarios are loaded however deep they are called.
+    // Called flows are loaded however deep they are called.
     expect(Object.keys(store.getState().called).sort()).toEqual(["scn_b", "scn_c"]);
     store.getState().select({ kind: "step", stepId: "c1" });
     store.getState().enterCall("c1");
@@ -485,23 +485,23 @@ describe("studio store", () => {
     expect(store.getState().selection).toBeNull();
     store.getState().enterCall("c2");
     expect(store.getState().dive).toEqual(["c1", "c2"]);
-    expect(diveChain(store.getState().scenario, store.getState().called, store.getState().dive).map((l) => l.scenario.name)).toEqual(["B", "C"]);
+    expect(diveChain(store.getState().flow, store.getState().called, store.getState().dive).map((l) => l.flow.name)).toEqual(["B", "C"]);
     // Not a call of the shown level: nothing happens.
     store.getState().enterCall("x");
     expect(store.getState().dive).toEqual(["c1", "c2"]);
     store.getState().leaveCalls(1);
     expect(store.getState().dive).toEqual(["c1"]);
-    // Picking a step of the open scenario (outline, palette) comes back up.
+    // Picking a step of the open flow (outline, palette) comes back up.
     store.getState().goTo("c1");
     expect(store.getState().dive).toEqual([]);
   });
 
-  it("finds the scenarios a scenario calls, nested ones included", () => {
-    const steps: Scenario["steps"] = [
-      { id: "c1", type: "scenario.call", params: { scenario: "scn_b" } },
-      { id: "i1", type: "control.if", params: { condition: "true" }, blocks: { then: [{ id: "c2", type: "scenario.call", params: { scenario: "scn_c" } }] } },
-      { id: "c3", type: "scenario.call", params: { scenario: "scn_b" } },
-      { id: "c4", type: "scenario.call", params: { scenario: "" } },
+  it("finds the flows a flow calls, nested ones included", () => {
+    const steps: Flow["steps"] = [
+      { id: "c1", type: "flow.call", params: { flow: "scn_b" } },
+      { id: "i1", type: "control.if", params: { condition: "true" }, blocks: { then: [{ id: "c2", type: "flow.call", params: { flow: "scn_c" } }] } },
+      { id: "c3", type: "flow.call", params: { flow: "scn_b" } },
+      { id: "c4", type: "flow.call", params: { flow: "" } },
     ];
     expect([...calledIds(steps)].sort()).toEqual(["scn_b", "scn_c"]);
   });
@@ -509,7 +509,7 @@ describe("studio store", () => {
   it("records variable changes the Runtime reports", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
-    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
     const changes = [
       { ...base, seq: 1, type: "variableChanged", variable: "total", value: 0 },
       { ...base, seq: 2, type: "variableChanged", variable: "total", value: 12000, stepId: "s_add" },
@@ -557,7 +557,7 @@ describe("studio store", () => {
 
     it("treats edits up to Core's last approval as reviewed", async () => {
       const timeline = {
-        scenarioId: "scn_a",
+        flowId: "scn_a",
         revision: 2,
         sinceRevision: 2,
         lastApproval: { revision: 2, at: aiEdit.at, actor: { kind: "studio" }, kind: "review", verdict: "approved" },
@@ -582,7 +582,7 @@ describe("studio store", () => {
       } as PublishedState;
       const approveAndPublish = vi
         .fn()
-        .mockRejectedValueOnce(new ApiError({ code: "SUBSCENARIO_NOT_PUBLISHED", message: "x" }))
+        .mockRejectedValueOnce(new ApiError({ code: "SUBFLOW_NOT_PUBLISHED", message: "x" }))
         .mockResolvedValueOnce(published);
       const store = createStudioStore(
         fakeApi({
@@ -595,7 +595,7 @@ describe("studio store", () => {
       await store.getState().open("scn_a");
       await store.getState().approveAndPublish();
       expect(approveAndPublish).toHaveBeenLastCalledWith("scn_a", 1);
-      expect(store.getState().error).toBe(t.publishError("SUBSCENARIO_NOT_PUBLISHED", "x"));
+      expect(store.getState().error).toBe(t.publishError("SUBFLOW_NOT_PUBLISHED", "x"));
       expect(pendingReview(store.getState()).map((e) => e.revision)).toEqual([2]);
       await store.getState().approveAndPublish();
       expect(store.getState().notice).toBe(t.approvedPublished(3));
@@ -630,7 +630,7 @@ describe("studio store", () => {
     });
 
     it("reverts by sending Core's recorded inverse ops as a new edit", async () => {
-      const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(scenario(4)));
+      const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(4)));
       const store = createStudioStore(fakeApi({ edit, history: vi.fn(async () => [aiEdit]) }));
       await store.getState().open("scn_a");
       await store.getState().revert(aiEdit);
@@ -640,7 +640,7 @@ describe("studio store", () => {
     });
 
     it("refuses to revert when a later edit touched the same step", async () => {
-      const edit = vi.fn(async () => outcome(scenario(4)));
+      const edit = vi.fn(async () => outcome(flow(4)));
       const store = createStudioStore(fakeApi({ edit, history: vi.fn(async () => [aiEdit, ownEdit]) }));
       await store.getState().open("scn_a");
       expect(revertBlocker(aiEdit, [aiEdit, ownEdit])).toBe(t.revertBlocked);
@@ -660,7 +660,7 @@ describe("studio store", () => {
         revision: 1,
         stepCount: 0,
       }));
-      const restoreVersion = vi.fn(async () => outcome(scenario(3)));
+      const restoreVersion = vi.fn(async () => outcome(flow(3)));
       const listVersions = vi.fn(async () => []);
       const store = createStudioStore(fakeApi({ createVersion, restoreVersion, listVersions }));
       await store.getState().open("scn_a");
@@ -668,25 +668,25 @@ describe("studio store", () => {
       expect(createVersion).toHaveBeenCalledWith("scn_a", 1, { name: "v1", note: "" });
       await store.getState().restoreVersion(1);
       expect(restoreVersion).toHaveBeenCalledWith("scn_a", 1, 1);
-      expect(store.getState().scenario?.revision).toBe(3);
+      expect(store.getState().flow?.revision).toBe(3);
       expect(store.getState().notice).toBe(t.restored);
     });
 
     it("keeps a conflicting import until the user chooses update or copy", async () => {
-      const importScenario = vi.fn(async (_contents: string, onConflict?: string) => {
+      const importFlow = vi.fn(async (_contents: string, onConflict?: string) => {
         if (!onConflict) {
           throw new ApiError({ code: "IMPORT_CONFLICT", message: "exists", details: { name: "A" } });
         }
-        return { ...outcome(scenario(2)), mode: "updated" as const, versionsAdded: 1 };
+        return { ...outcome(flow(2)), mode: "updated" as const, versionsAdded: 1 };
       });
-      const store = createStudioStore(fakeApi({ importScenario, listVersions: vi.fn(async () => []) }));
+      const store = createStudioStore(fakeApi({ importFlow, listVersions: vi.fn(async () => []) }));
       await store.getState().importFile("{}");
       expect(store.getState().pendingImport).toEqual({ contents: "{}", name: "A" });
       expect(store.getState().error).toBeNull();
       await store.getState().importFile("{}", "update");
-      expect(importScenario).toHaveBeenLastCalledWith("{}", "update");
+      expect(importFlow).toHaveBeenLastCalledWith("{}", "update");
       expect(store.getState().pendingImport).toBeNull();
-      expect(store.getState().scenario?.revision).toBe(2);
+      expect(store.getState().flow?.revision).toBe(2);
     });
   });
 });

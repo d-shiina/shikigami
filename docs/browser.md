@@ -2,7 +2,7 @@
 
 English | [日本語](ja/browser.md)
 
-Shikigami scenarios drive web pages. The Rust Runtime starts the Node.js + Playwright browser adapter (`packages/browser-adapter`) as a child process and talks to it with newline-delimited JSON-RPC 2.0 over stdio. No AI is involved in running a scenario.
+Shikigami flows drive web pages. The Rust Runtime starts the Node.js + Playwright browser adapter (`packages/browser-adapter`) as a child process and talks to it with newline-delimited JSON-RPC 2.0 over stdio. No AI is involved in running a flow.
 
 ## Requirements
 
@@ -25,14 +25,14 @@ Shikigami scenarios drive web pages. The Rust Runtime starts the Node.js + Playw
 pnpm demo:browser
 ```
 
-This starts a demo business site, an order management system for a sample trading company (`examples/web`), at `http://127.0.0.1:8787/` and runs `examples/browser-demo.json` with the CLI. The demo account is first registered as a secret, so the scenario contains no password (it also shows under 🔑 Secrets in Studio).
+This starts a demo business site, an order management system for a sample trading company (`examples/web`), at `http://127.0.0.1:8787/` and runs `examples/browser-demo.json` with the CLI. The demo account is first registered as a secret, so the flow contains no password (it also shows under 🔑 Secrets in Studio).
 
 1. An order clerk and a stock clerk work **at the same time**: the order clerk logs in and reads the order list while the stock clerk reads the stock list in another window (`control.parallel` with separate `context`s)
 2. For each open order, press "Ship" and wait for the confirmation (`control.forEach` + `control.if`)
 3. Output the shipped order numbers, the total amount and the out-of-stock items
 4. The login is kept with `session`, so **the second run skips the login page**
 
-The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Studio can load and run the same scenario.
+The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Studio can load and run the same flow.
 
 ## Nodes
 
@@ -59,7 +59,7 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 | `browser.waitForHuman` | `message`, `until` (an element that appears when the person is done) | – |
 | `browser.close` | – | – |
 
-Every node has a `context` (default `default`). Each `context` has its own cookies and tabs, and its steps work on its **current tab**; **nodes on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so scenarios never declare locks). Contexts opened by a run are closed when it ends.
+Every node has a `context` (default `default`). Each `context` has its own cookies and tabs, and its steps work on its **current tab**; **nodes on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so flows never declare locks). Contexts opened by a run are closed when it ends.
 
 ### Tabs and popups
 
@@ -100,7 +100,7 @@ Pages that Edge shows in IE mode run on the old Internet Explorer engine, which 
 
 ### Downloads and uploads
 
-`browser.download` clicks the link or button and saves the file it downloads. Paths are relative to the scenario folder, so `"path": "input/orders.csv"` puts it where `file.readCsv` / `excel.readRows` read it next. With `folder` instead of `path`, the file keeps the name the site gives it (`fileName` in the output). `browser.upload` attaches files to a form; it works on the file input itself and on a button that opens the file picker (the picker never shows). It only fills the form: click the send button next.
+`browser.download` clicks the link or button and saves the file it downloads. Paths are relative to the flow folder, so `"path": "input/orders.csv"` puts it where `file.readCsv` / `excel.readRows` read it next. With `folder` instead of `path`, the file keeps the name the site gives it (`fileName` in the output). `browser.upload` attaches files to a form; it works on the file input itself and on a button that opens the file picker (the picker never shows). It only fills the form: click the send button next.
 
 Both are `dangerous` (a download writes a file, an upload sends one out), so they show under "effects outside" in the review panel.
 
@@ -157,7 +157,7 @@ By meaning; CSS is the last resort.
 // common: exact (exact match), nth (0-based index when several match), frame (the iframe it is in)
 ```
 
-In Studio, a browser node's target has **Pick on screen** and **Highlight** while the scenario runs (or is paused at a node): Studio steps aside and the person clicks the element in the run's browser (Esc to cancel, the page never gets the click). Before a run there is no browser to pick in, so the buttons are off. Frames cannot be picked into yet.
+In Studio, a browser node's target has **Pick on screen** and **Highlight** while the flow runs (or is paused at a node): Studio steps aside and the person clicks the element in the run's browser (Esc to cancel, the page never gets the click). Before a run there is no browser to pick in, so the buttons are off. Frames cannot be picked into yet.
 
 Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the node's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
 
@@ -183,15 +183,15 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 | `ADAPTER_UNAVAILABLE` | Node.js or the adapter was not found | no |
 | `ADAPTER_CRASHED` | The adapter died. It restarts on the next request | yes |
 
-## Building scenarios from AI (MCP)
+## Building flows from AI (MCP)
 
 The MCP server has three tools for this (class `run`):
 
 - `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is. `image: true` also hands the screenshot to the AI, for pages whose tree does not tell elements apart (icons without names)
-- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario. Before a browser node runs, its target is outlined in the browser for a moment (「ここを押します」), so the person watching sees what the AI is about to touch
+- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the flow. Before a browser node runs, its target is outlined in the browser for a moment (「ここを押します」), so the person watching sees what the AI is about to touch
 - `ask_user_to_pick`: when the AI cannot tell which element is meant (two 「編集」 buttons, an icon without a name), it asks the person instead of guessing. The browser window comes to the front with the AI's `message` in a banner, the `candidates` it is torn between are outlined with numbers, and the person's click is caught before the page sees it (nothing is pressed). The element comes back as a `target` (with `nth` and the text of its table row `row` when it repeats). Studio shows 「AI がブラウザの画面で指してほしいと言っています」 at the same time and can decline it; 「わからない」 or Esc in the browser declines too (`status: "cancelled"`). It needs a visible browser
 
-With these the AI checks the site while it builds the nodes, then confirms an AI-free run with `validate_scenario` → `run_scenario`.
+With these the AI checks the site while it builds the nodes, then confirms an AI-free run with `validate_flow` → `run_flow`.
 
 ## How it works
 

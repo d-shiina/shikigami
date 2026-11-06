@@ -180,7 +180,7 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
             let text = encoding::decode(&bytes, "auto", &shown)?;
             let invalid = |why: String| {
                 StepError::permanent("CONFIG_INVALID", format!("{shown}: {why}")).with_details(json!({
-                    "hint": "A settings file is a JSON object, or a shikigami.config file made in Studio (config/ in the scenario's folder → New settings file).",
+                    "hint": "A settings file is a JSON object, or a shikigami.config file made in Studio (config/ in the flow's folder → New settings file).",
                 }))
             };
             let json: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))
@@ -352,8 +352,8 @@ fn def(
 
 #[allow(clippy::too_many_lines)]
 fn step_defs() -> Vec<(StepTypeDef, Kind)> {
-    let path = json!({ "type": "string", "minLength": 1, "description": "シナリオのフォルダーからの相対パス（例: input/in.csv、output/result.csv）、または絶対パス（C:\\work\\in.csv）" });
-    let folder = json!({ "type": "string", "minLength": 1, "description": "フォルダー：シナリオのフォルダーからの相対パス（例: input）、または絶対パス" });
+    let path = json!({ "type": "string", "minLength": 1, "description": "フローのフォルダーからの相対パス（例: input/in.csv、output/result.csv）、または絶対パス（C:\\work\\in.csv）" });
+    let folder = json!({ "type": "string", "minLength": 1, "description": "フォルダー：フローのフォルダーからの相対パス（例: input）、または絶対パス" });
     let read_encoding = json!({ "enum": encoding::READ_ENCODINGS, "description": "auto (default): BOM, then UTF-8, else Shift_JIS" });
     let write_encoding = json!({ "enum": encoding::WRITE_ENCODINGS, "description": "utf-8 (default). For files opened in Excel use utf-8-bom or shift_jis" });
     let flag = json!({ "type": "boolean" });
@@ -364,7 +364,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             def(
                 types::CONFIG_READ,
                 "設定ファイルを読む",
-                "Reads a settings file (usually config/settings.json in the scenario's folder, made as a form in Studio) into an object of its values, e.g. { 締め日: 25, 送り先: \"...\" }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.",
+                "Reads a settings file (usually config/settings.json in the flow's folder, made as a form in Studio) into an object of its values, e.g. { 締め日: 25, 送り先: \"...\" }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.",
                 object_schema(json!({ "path": path }), &["path"]),
                 RiskLevel::Safe,
                 vec![ResourceDef::file("path")],

@@ -4,7 +4,7 @@
 // a run that ended in failure instead of letting it end quietly.
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { scenarioBusy, useAgent } from "../agent";
+import { flowBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
 import { explainError } from "../lib/errorText";
@@ -90,7 +90,7 @@ function Screenshot({ src, title }: { src: string; title: string }) {
 
 export function RunPausePanel() {
   const run = useStudio((s) => s.run);
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const called = useStudio((s) => s.called);
   const leaveCalls = useStudio((s) => s.leaveCalls);
   const enterCall = useStudio((s) => s.enterCall);
@@ -103,21 +103,21 @@ export function RunPausePanel() {
   const reviewing = useStudio((s) => s.reviewing);
   const pending = usePendingReview();
   const agentAvailable = useAgent((s) => s.info?.available === true);
-  const agentBusy = useAgent((s) => scenarioBusy(s, scenario?.id));
+  const agentBusy = useAgent((s) => flowBusy(s, flow?.id));
   const agentName = useAgent((s) => s.info?.name ?? "AI");
   const askAgent = useAgent((s) => s.send);
   const [asking, setAsking] = useState(false);
   const [told, setTold] = useState<string | null>(null);
 
-  if (!run || !scenario || (run.scenarioId && run.scenarioId !== scenario.id)) return null;
+  if (!run || !flow || (run.flowId && run.flowId !== flow.id)) return null;
   const pause = run.status === "paused" ? run.pause : null;
   const failure = !isActive(run) ? run.failure : null;
   if (!pause && !failure) return null;
 
   const stepId = pause?.stepId ?? failure?.stepId ?? null;
-  // Paused inside a call: the step and its fix belong to the called scenario.
+  // Paused inside a call: the step and its fix belong to the called flow.
   const inCall = pause?.callPath ?? [];
-  const owner = inCall.length > 0 ? (diveChain(scenario, called, inCall).at(-1)?.scenario ?? scenario) : scenario;
+  const owner = inCall.length > 0 ? (diveChain(flow, called, inCall).at(-1)?.flow ?? flow) : flow;
   const step = stepId ? findStep(owner.steps ?? [], stepId) : null;
   const show = () => {
     if (!stepId) return;
@@ -132,14 +132,14 @@ export function RunPausePanel() {
   const explained = error ? explainError(error, step) : null;
   const onError = pause ? pause.reason === "error" : true;
   // An AI's fix waits in the review queue: look at it before running it.
-  const unreviewed = pause && scenario.revision !== pause.revision ? pending.length : 0;
-  const changed = pause !== null && scenario.revision !== pause.revision;
+  const unreviewed = pause && flow.revision !== pause.revision ? pending.length : 0;
+  const changed = pause !== null && flow.revision !== pause.revision;
 
   const askAi = async () => {
     if (!pause) return;
     setAsking(true);
     try {
-      const text = fixRequest({ scenario: owner, runId: run.runId, pause, evidence: run.evidence, defs: stepTypes });
+      const text = fixRequest({ flow: owner, runId: run.runId, pause, evidence: run.evidence, defs: stepTypes });
       if (agentAvailable) {
         // Straight to the AI pane; its edits come back through the review queue.
         const sent = await askAgent(text, { id: owner.id, name: owner.name, stepId: pause.stepId }, `${owner.name} ・ ${t.pause.fixContext}`);

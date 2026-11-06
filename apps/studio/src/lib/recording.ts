@@ -142,10 +142,10 @@ export function recordingOps(steps: readonly Step[], parts: Readonly<Record<stri
 }
 
 /** What the AI is asked when the person wants the recording tidied up. */
-export function tidyRequest(recording: Recording, scenarioName: string, path: string | null, where: string): string {
+export function tidyRequest(recording: Recording, flowName: string, path: string | null, where: string): string {
   const lines = recording.actions.map((a, i) => `${i + 1}. ${JSON.stringify(a)}`);
   return [
-    t.recording.askLead(scenarioName),
+    t.recording.askLead(flowName),
     where,
     path ? t.recording.askFile(path) : "",
     t.recording.askRules,

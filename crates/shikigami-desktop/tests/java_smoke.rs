@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use serde_json::{Value, json};
-use shikigami_core::{Scenario, Step, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, VarDirection, VarType, VariableDef};
 use shikigami_desktop::{DesktopAdapter, types};
 use shikigami_runtime::{Adapter, RunOptions, RunStatus, Runtime};
 
@@ -104,7 +104,7 @@ async fn swing_through_the_access_bridge() {
 
     let adapter = DesktopAdapter::new();
     let runtime = Runtime::builder().adapter(&adapter).build();
-    let mut s = Scenario::new("java");
+    let mut s = Flow::new("java");
     for name in ["pid", "after", "mail", "rows", "cleared"] {
         s.variables.push(VariableDef {
             direction: VarDirection::Output,

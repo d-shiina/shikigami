@@ -1,4 +1,4 @@
-//! Structured errors for Scenario Core.
+//! Structured errors for Flow Core.
 //!
 //! Every error carries a stable, machine-readable `code` (SCREAMING_SNAKE_CASE)
 //! that MCP tools, Tauri commands and the CLI expose unchanged. Messages are
@@ -7,21 +7,21 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::ids::{ObservationId, ScenarioId, StepId};
+use crate::ids::{FlowId, ObservationId, StepId};
 use crate::validate::ValidationReport;
 
 pub type CoreResult<T> = Result<T, CoreError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
-    #[error("scenario not found: {0}")]
-    ScenarioNotFound(ScenarioId),
+    #[error("flow not found: {0}")]
+    FlowNotFound(FlowId),
 
-    #[error("scenario already exists: {0}")]
-    ScenarioAlreadyExists(ScenarioId),
+    #[error("flow already exists: {0}")]
+    FlowAlreadyExists(FlowId),
 
-    #[error("invalid scenario id: {0:?}")]
-    InvalidScenarioId(String),
+    #[error("invalid flow id: {0:?}")]
+    InvalidFlowId(String),
 
     #[error("step not found: {0}")]
     StepNotFound(StepId),
@@ -32,25 +32,19 @@ pub enum CoreError {
     #[error("revision conflict: expected {expected}, actual {actual}")]
     RevisionConflict { expected: u64, actual: u64 },
 
-    #[error("version {number} of scenario {scenario_id} not found")]
-    VersionNotFound {
-        scenario_id: ScenarioId,
-        number: u32,
-    },
+    #[error("version {number} of flow {flow_id} not found")]
+    VersionNotFound { flow_id: FlowId, number: u32 },
 
     #[error(
-        "scenario {scenario_id} ({name}) already exists in this workspace; choose \"update\" or \"copy\" (onConflict)"
+        "flow {flow_id} ({name}) already exists in this workspace; choose \"update\" or \"copy\" (onConflict)"
     )]
-    ImportConflict {
-        scenario_id: ScenarioId,
-        name: String,
-    },
+    ImportConflict { flow_id: FlowId, name: String },
 
-    #[error("scenario {scenario_id} is called by {} other scenario(s)", .callers.len())]
-    ScenarioInUse {
-        scenario_id: ScenarioId,
-        /// `(id, name)` of each scenario that calls it.
-        callers: Vec<(ScenarioId, String)>,
+    #[error("flow {flow_id} is called by {} other flow(s)", .callers.len())]
+    FlowInUse {
+        flow_id: FlowId,
+        /// `(id, name)` of each flow that calls it.
+        callers: Vec<(FlowId, String)>,
     },
 
     #[error("observation not found: {0}")]
@@ -59,10 +53,10 @@ pub enum CoreError {
     #[error("invalid project file path {path:?}: {reason}")]
     InvalidProjectPath { path: String, reason: String },
 
-    #[error("no file {path:?} in the scenario's folder")]
+    #[error("no file {path:?} in the flow's folder")]
     ProjectFileNotFound { path: String },
 
-    #[error("{path:?} already exists in the scenario's folder")]
+    #[error("{path:?} already exists in the flow's folder")]
     ProjectFileExists { path: String },
 
     #[error("invalid edit: {0}")]
@@ -83,10 +77,10 @@ pub enum CoreError {
     #[error("unsupported schema version {found} (supported up to {supported})")]
     UnsupportedSchemaVersion { found: u32, supported: u32 },
 
-    #[error("scenario is invalid ({} error(s))", .0.error_count())]
+    #[error("flow is invalid ({} error(s))", .0.error_count())]
     ValidationFailed(ValidationReport),
 
-    #[error("failed to parse scenario JSON: {0}")]
+    #[error("failed to parse flow JSON: {0}")]
     Parse(#[from] serde_json::Error),
 
     #[error("storage error: {0}")]
@@ -97,15 +91,15 @@ impl CoreError {
     /// Stable error code shared by every interface.
     pub fn code(&self) -> &'static str {
         match self {
-            Self::ScenarioNotFound(_) => "SCENARIO_NOT_FOUND",
-            Self::ScenarioAlreadyExists(_) => "SCENARIO_ALREADY_EXISTS",
-            Self::InvalidScenarioId(_) => "INVALID_SCENARIO_ID",
+            Self::FlowNotFound(_) => "FLOW_NOT_FOUND",
+            Self::FlowAlreadyExists(_) => "FLOW_ALREADY_EXISTS",
+            Self::InvalidFlowId(_) => "INVALID_FLOW_ID",
             Self::StepNotFound(_) => "STEP_NOT_FOUND",
             Self::DuplicateStepId(_) => "DUPLICATE_STEP_ID",
             Self::RevisionConflict { .. } => "REVISION_CONFLICT",
             Self::VersionNotFound { .. } => "VERSION_NOT_FOUND",
             Self::ImportConflict { .. } => "IMPORT_CONFLICT",
-            Self::ScenarioInUse { .. } => "SCENARIO_IN_USE",
+            Self::FlowInUse { .. } => "FLOW_IN_USE",
             Self::ObservationNotFound(_) => "OBSERVATION_NOT_FOUND",
             Self::InvalidProjectPath { .. } => "INVALID_PROJECT_PATH",
             Self::ProjectFileNotFound { .. } => "PROJECT_FILE_NOT_FOUND",
@@ -135,25 +129,21 @@ impl CoreError {
             Self::StepNotFound(id) | Self::DuplicateStepId(id) => {
                 Some(serde_json::json!({ "step_id": id }))
             }
-            Self::VersionNotFound {
-                scenario_id,
-                number,
-            } => Some(serde_json::json!({ "scenario_id": scenario_id, "number": number })),
-            Self::ImportConflict { scenario_id, name } => Some(serde_json::json!({
-                "scenario_id": scenario_id,
+            Self::VersionNotFound { flow_id, number } => {
+                Some(serde_json::json!({ "flow_id": flow_id, "number": number }))
+            }
+            Self::ImportConflict { flow_id, name } => Some(serde_json::json!({
+                "flow_id": flow_id,
                 "name": name,
-                "hint": "\"update\" applies the imported content to the existing scenario as one undoable edit and adds its versions; \"copy\" imports it as a new scenario with a new ID",
+                "hint": "\"update\" applies the imported content to the existing flow as one undoable edit and adds its versions; \"copy\" imports it as a new flow with a new ID",
             })),
-            Self::ScenarioInUse {
-                scenario_id,
-                callers,
-            } => Some(serde_json::json!({
-                "scenario_id": scenario_id,
+            Self::FlowInUse { flow_id, callers } => Some(serde_json::json!({
+                "flow_id": flow_id,
                 "callers": callers
                     .iter()
                     .map(|(id, name)| serde_json::json!({ "id": id, "name": name }))
                     .collect::<Vec<_>>(),
-                "hint": "Remove or change the scenario.call steps in these scenarios first.",
+                "hint": "Remove or change the flow.call steps in these flows first.",
             })),
             Self::ObservationNotFound(id) => Some(serde_json::json!({
                 "observation_id": id,
@@ -164,18 +154,18 @@ impl CoreError {
             } => Some(serde_json::json!({ "hint": hint })),
             Self::InvalidProjectPath { path, .. } => Some(serde_json::json!({
                 "path": path,
-                "hint": "Paths are relative to the scenario's folder and use its folders: input/, config/, templates/, output/, work/ (e.g. input/orders.xlsx).",
+                "hint": "Paths are relative to the flow's folder and use its folders: input/, config/, templates/, output/, work/ (e.g. input/orders.xlsx).",
             })),
             Self::ProjectFileNotFound { path } => Some(serde_json::json!({
                 "path": path,
-                "hint": "list_project_files shows the files the scenario's folder holds.",
+                "hint": "list_project_files shows the files the flow's folder holds.",
             })),
             Self::ProjectFileExists { path } => Some(serde_json::json!({
                 "path": path,
                 "hint": "Pass overwrite: true to replace it, or choose another name.",
             })),
-            Self::ScenarioNotFound(id) | Self::ScenarioAlreadyExists(id) => {
-                Some(serde_json::json!({ "scenario_id": id }))
+            Self::FlowNotFound(id) | Self::FlowAlreadyExists(id) => {
+                Some(serde_json::json!({ "flow_id": id }))
             }
             _ => None,
         }
