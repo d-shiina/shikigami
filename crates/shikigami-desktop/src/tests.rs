@@ -831,6 +831,30 @@ fn grids_are_read_from_their_element_tree() {
     ];
     let grid = grid_from_nodes(&winforms, 100);
     assert_eq!(grid.headers, ["番号", "金額"]);
+    // A WinForms DataGridView as UI Automation shows it: rows as custom
+    // elements, a row header first, the cells as rows.
+    let datagridview = vec![
+        cell(0, "table", "DataGridView", None),
+        cell(1, "custom", "Top Row", None),
+        cell(2, "header", "Top Left Header Cell", None),
+        cell(2, "header", "番号", None),
+        cell(2, "header", "金額", None),
+        cell(1, "custom", "Row 0", None),
+        cell(2, "header", "Row 0", None),
+        cell(2, "row", "番号 Row 0", Some("A-1")),
+        cell(2, "row", "金額 Row 0", Some("1,200")),
+        cell(1, "custom", "Row 1", None),
+        cell(2, "header", "Row 1", None),
+        cell(2, "row", "番号 Row 1", Some("(null)")),
+        cell(2, "row", "金額 Row 1", Some("(null)")),
+        cell(1, "scrollbar", "", None),
+    ];
+    let real = grid_from_nodes(&datagridview, 100);
+    assert_eq!(real.headers, ["番号", "金額"]);
+    assert_eq!(
+        real.records(),
+        vec![json!({ "番号": "A-1", "金額": "1,200" })]
+    );
     assert_eq!(
         grid.records(),
         vec![json!({ "番号": "A-1", "金額": "1,200" })]
