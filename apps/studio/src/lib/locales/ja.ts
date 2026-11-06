@@ -98,6 +98,7 @@ export const ja = {
   clearLog: "クリア",
   /** Takes the last run's colours off the chart. */
   clearTrail: "図の色を消す",
+  clearBreakpoints: (n: number) => `ブレークポイントをすべて外す（${n}）`,
   stepName: "表示名",
   stepType: "種類",
   params: "パラメーター",
@@ -544,8 +545,8 @@ export const ja = {
   flow: {
     aiAdded: "AIが追加",
     aiChanged: "AIが変更",
-    breakpointOff: "ブレークポイントを外す (F9)",
-    breakpointOn: "ブレークポイントを置く (F9)",
+    breakpointOff: "ブレークポイント：Studio で実行すると、このノードの前で一時停止します。クリックで外す (F9)",
+    breakpointOn: "ブレークポイントを置く：Studio で実行すると、このノードの前で一時停止します (F9)",
     changeBy: (who: string) => `${who}の変更`,
     valuesIn: "このノードが受け取った値",
     valuesOut: "このノードが書き込んだ値",
