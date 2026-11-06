@@ -1,5 +1,7 @@
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
+import { authorIssues } from "../lib/todos";
+import { useTodos } from "../lib/useTodos";
 import { RecordButton } from "./RecordButton";
 
 function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
@@ -84,8 +86,10 @@ export function FlowTitle() {
   const setBottom = useStudio((s) => s.setBottom);
   const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
   const published = useStudio((s) => s.published);
+  const todos = useTodos().length;
   if (!flow) return null;
-  const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
+  // A part to pick is counted as a to-do, not as an error.
+  const errors = authorIssues(validation).length;
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span className="min-w-[5em] truncate text-[13px] font-bold" title={flow.name}>
@@ -122,12 +126,21 @@ export function FlowTitle() {
         type="button"
         onClick={() => setBottom("issues")}
         className={`flex h-6 shrink-0 items-center gap-1 rounded-[3px] px-1.5 text-[12px] font-medium ${
-          errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : "text-moegi-500 hover:bg-slate-100"
+          errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : todos ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "text-moegi-500 hover:bg-slate-100"
         }`}
         title={t.toolbar.issuesTitle}
       >
-        {errors ? <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span> : <CheckIcon />}
-        <span className="@max-[920px]/title:hidden">{errors ? t.toolbar.errors(errors) : t.toolbar.valid}</span>
+        {errors ? (
+          <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span>
+        ) : todos ? (
+          <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-amber-500 text-[9px] font-bold text-white">{todos}</span>
+        ) : (
+          <CheckIcon />
+        )}
+        <span className="@max-[920px]/title:hidden">
+          {errors ? t.toolbar.errors(errors) : todos ? t.todos.chip(todos) : t.toolbar.valid}
+          {errors > 0 && todos > 0 && <span className="text-amber-700"> · {t.todos.chip(todos)}</span>}
+        </span>
       </button>
     </div>
   );
@@ -208,7 +221,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
             type="button"
             onClick={() => startRun()}
             disabled={errors > 0}
-            title={errors > 0 ? t.toolbar.fixErrors : `${t.run} (F5)`}
+            title={errors > 0 ? (authorIssues(validation).length === 0 ? t.todos.runBlocked : t.toolbar.fixErrors) : `${t.run} (F5)`}
             className="group flex h-8 items-center gap-2 rounded-[4px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-paper shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
           >
             <span className="text-[#5fd08a] group-disabled:text-paper dark:text-moegi-100">

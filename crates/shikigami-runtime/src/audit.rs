@@ -90,6 +90,7 @@ fn actor_kind(kind: ActorKind) -> &'static str {
     match kind {
         ActorKind::Studio => "studio",
         ActorKind::Mcp => "mcp",
+        ActorKind::Chat => "chat",
         ActorKind::Cli => "cli",
         ActorKind::System => "system",
     }

@@ -72,6 +72,18 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Write the guide for an AI that has no MCP (Microsoft Copilot, a chat
+    /// window): short instructions for an agent's instruction box and a
+    /// reference of every step type and function, to attach as knowledge.
+    /// The AI answers with JSON that Studio takes in (AI の答えを貼り付け).
+    AiGuide {
+        /// Folder to write the files to.
+        #[arg(long, default_value = ".")]
+        dir: PathBuf,
+        /// Leave the plugins installed on this PC out.
+        #[arg(long)]
+        builtin: bool,
+    },
     /// Node plugins installed on this PC (step types from other programs).
     #[command(subcommand)]
     Plugin(PluginCmd),
@@ -481,6 +493,19 @@ fn real_main() -> Result<ExitCode> {
                 for def in runtime.registry().iter() {
                     println!("{:<20} {}", def.step_type, def.label);
                 }
+            }
+        }
+        Command::AiGuide { dir, builtin } => {
+            let files = if *builtin {
+                contract::ai_guide()
+            } else {
+                shikigami_core::chat::guide(runtime.registry())
+            };
+            std::fs::create_dir_all(dir)?;
+            for file in files {
+                let path = dir.join(&file.name);
+                std::fs::write(&path, &file.text)?;
+                println!("wrote {}", path.display());
             }
         }
         Command::Plugin(PluginCmd::List) => {

@@ -256,6 +256,11 @@ function PartsShelf() {
             className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-[12px] ${active ? "bg-brand-50 text-ink" : "text-slate-700 hover:bg-slate-100"}`}
           >
             <span className="min-w-0 flex-1 truncate">{part.label || name}</span>
+            {!part.target && (
+              <span className="shrink-0 rounded-[3px] bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={t.todos.notPicked}>
+                {t.todos.badge}
+              </span>
+            )}
             <span className={`shrink-0 text-[10.5px] ${used === 0 ? "text-shu-500" : "text-slate-400"}`}>{t.parts.uses(used)}</span>
           </button>
         );

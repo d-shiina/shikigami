@@ -2,7 +2,7 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@shikigami/schema";
-import { BookOpen, Copy, ExternalLink, FolderOpen, Search, Trash2, Upload, Workflow } from "lucide-react";
+import { BookOpen, ClipboardPaste, Copy, ExternalLink, FolderOpen, Search, Trash2, Upload, Workflow } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { relativeTime } from "../lib/changes";
@@ -250,6 +250,7 @@ function Row({ summary, query }: { summary: FlowSummary; query: string }) {
 
 export function FlowsPage() {
   const summaries = useStudio((s) => s.summaries);
+  const setPasteOpen = useStudio((s) => s.setPasteOpen);
   const create = useStudio((s) => s.create);
   const importFile = useStudio((s) => s.importFile);
   const setPlace = useStudio((s) => s.setPlace);
@@ -328,6 +329,15 @@ export function FlowsPage() {
           >
             <Upload size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.importFlow}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPasteOpen("new")}
+            title={t.paste.lead}
+            className="flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
+          >
+            <ClipboardPaste size={14} strokeWidth={1.75} aria-hidden="true" />
+            {t.paste.title}
           </button>
           <button type="button" onClick={() => setCreating(true)} className="flex h-8 items-center gap-1 rounded-[4px] bg-ink px-3 text-[13px] font-semibold text-paper hover:bg-brand-700">
             ＋ {t.newFlow}

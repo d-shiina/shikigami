@@ -6,6 +6,7 @@
 
 pub mod approval;
 pub mod call;
+pub mod chat;
 pub mod error;
 pub mod expr;
 pub mod ids;
