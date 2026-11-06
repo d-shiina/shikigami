@@ -18,8 +18,12 @@ use shikigami_core::RunId;
 use crate::event::{RunEventEnvelope, RunReport};
 
 pub struct RunRecorder {
+    workspace: PathBuf,
+    run_id: RunId,
     dir: PathBuf,
     events: BufWriter<File>,
+    /// `policy.json` whose `records` settings apply when the run ends.
+    retention: Option<PathBuf>,
 }
 
 impl RunRecorder {
@@ -31,9 +35,19 @@ impl RunRecorder {
             .append(true)
             .open(dir.join("events.jsonl"))?;
         Ok(Self {
+            workspace: workspace.to_path_buf(),
+            run_id: run_id.clone(),
             dir,
             events: BufWriter::new(file),
+            retention: None,
         })
+    }
+
+    /// When the run ends, delete the records that the `records` settings of
+    /// the `policy.json` at `policy_path` no longer keep (never this one).
+    pub fn prune_on_finish(mut self, policy_path: &Path) -> Self {
+        self.retention = Some(policy_path.to_path_buf());
+        self
     }
 
     pub fn write_event(&mut self, event: &RunEventEnvelope) -> std::io::Result<()> {
@@ -45,7 +59,11 @@ impl RunRecorder {
     pub fn finish(mut self, report: &RunReport) -> std::io::Result<()> {
         self.events.flush()?;
         let bytes = serde_json::to_vec_pretty(report)?;
-        fs::write(self.dir.join("report.json"), bytes)
+        fs::write(self.dir.join("report.json"), bytes)?;
+        if let Some(policy) = &self.retention {
+            prune_by_policy(&self.workspace, policy, std::slice::from_ref(&self.run_id));
+        }
+        Ok(())
     }
 }
 
@@ -230,5 +248,28 @@ mod prune_tests {
         assert_eq!(prune(tmp.path(), &by_count, &[]), 1);
         let left = list_runs(tmp.path()).unwrap();
         assert_eq!(left, vec![c, b, old_running]);
+    }
+
+    #[test]
+    fn a_finishing_run_prunes_others_but_not_itself() {
+        let tmp = tempfile::tempdir().unwrap();
+        let policy = tmp.path().join("policy.json");
+        fs::write(&policy, r#"{ "records": { "keepRuns": 1 } }"#).unwrap();
+        let older = record(tmp.path(), &id_at(1, 1), true);
+        let mine = RunId::new(id_at(2, 2));
+        let newer = record(tmp.path(), &id_at(3, 3), true);
+        let recorder = RunRecorder::create(tmp.path(), &mine)
+            .unwrap()
+            .prune_on_finish(&policy);
+        let report: RunReport = serde_json::from_value(serde_json::json!({
+            "runId": mine.as_str(), "scenarioId": "scn_a", "scenarioName": "A",
+            "revision": 1, "status": "succeeded", "startedAt": "2026-11-06T00:00:00Z",
+            "finishedAt": "2026-11-06T00:00:01Z", "outputs": {}
+        }))
+        .unwrap();
+        recorder.finish(&report).unwrap();
+        let left = list_runs(tmp.path()).unwrap();
+        assert_eq!(left, vec![newer, mine]);
+        assert!(!left.contains(&older));
     }
 }

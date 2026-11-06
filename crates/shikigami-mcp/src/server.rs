@@ -1950,12 +1950,9 @@ impl ShikigamiMcp {
         let id = RunId::generate();
         let project_dir = self.svc().project_dir(&scenario.id).ok();
         let root = self.svc().store().local_root();
-        let recorder = RunRecorder::create(root, &id).map_err(io_err)?;
-        record::prune_by_policy(
-            root,
-            &Policy::path(self.svc().store().root()),
-            std::slice::from_ref(&id),
-        );
+        let recorder = RunRecorder::create(root, &id)
+            .map_err(io_err)?
+            .prune_on_finish(&Policy::path(self.svc().store().root()));
         let mut runs = self
             .inner
             .runs

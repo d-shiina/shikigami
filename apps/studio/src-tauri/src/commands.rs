@@ -622,12 +622,8 @@ pub async fn run_scenario(
         })?;
     let run_id = handle.run_id.clone();
     let mut recorder = RunRecorder::create(state.service.store().local_root(), &run_id)
-        .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
-    shikigami_runtime::record::prune_by_policy(
-        state.service.store().local_root(),
-        &shikigami_core::Policy::path(state.service.store().root()),
-        std::slice::from_ref(&run_id),
-    );
+        .map_err(|e| err("STORAGE_ERROR", e.to_string()))?
+        .prune_on_finish(&shikigami_core::Policy::path(state.service.store().root()));
 
     if let Ok(mut runs) = state.runs.lock() {
         runs.insert(

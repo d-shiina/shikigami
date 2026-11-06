@@ -510,6 +510,7 @@ fn real_main() -> Result<ExitCode> {
             let status = rt.block_on(run(
                 &runtime,
                 svc.store().local_root(),
+                &Policy::path(svc.store().root()),
                 scenario,
                 RunOptions {
                     inputs,
@@ -523,11 +524,6 @@ fn real_main() -> Result<ExitCode> {
                 *json,
                 *vars,
             ))?;
-            shikigami_runtime::record::prune_by_policy(
-                svc.store().local_root(),
-                &Policy::path(svc.store().root()),
-                &[],
-            );
             return Ok(match status {
                 RunStatus::Succeeded => ExitCode::SUCCESS,
                 RunStatus::Cancelled => ExitCode::from(130),
@@ -1105,6 +1101,7 @@ fn parse_inputs(raw: &[String]) -> Result<Map<String, Value>> {
 async fn run(
     runtime: &Runtime,
     workspace: &Path,
+    policy: &Path,
     scenario: Scenario,
     options: RunOptions,
     json: bool,
@@ -1127,7 +1124,7 @@ async fn run(
         }
     });
 
-    let mut recorder = RunRecorder::create(workspace, &handle.run_id)?;
+    let mut recorder = RunRecorder::create(workspace, &handle.run_id)?.prune_on_finish(policy);
     let report = handle
         .wait_with(|e| {
             if let Err(err) = recorder.write_event(e) {
