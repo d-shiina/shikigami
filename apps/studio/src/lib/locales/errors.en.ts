@@ -59,6 +59,12 @@ export const errorsEn: Record<string, ErrorText> = {
     todo: (c) => (c.list("options").length > 0 ? `The options are ${c.list("options").slice(0, 8).join(", ")}` : "Check the options"),
   },
   BROWSER_NOT_OPEN: { what: "The browser is not open", todo: "Put an Open browser node before this one" },
+  TAB_NOT_FOUND: {
+    what: (c) => `The tab ${c.q(c.p("title") || c.p("url"))} to move to was not found`,
+    todo: "Check that the click before opens a new tab, and that the title or address matches",
+  },
+  LAST_TAB: { what: "This is the only tab, so it cannot be closed", todo: "Use Close browser to close the whole browser" },
+  DIALOG_NOT_SHOWN: { what: "No dialog (OK / Cancel) appeared", todo: "If this node shows no dialog, clear its dialog setting" },
   NAVIGATION_FAILED: { what: (c) => `Could not open the page ${c.q(c.p("url"))}`, todo: "Check the address and the network" },
   BROWSER_LAUNCH_FAILED: { what: "Could not start the browser", todo: "Check that Microsoft Edge or Google Chrome is installed" },
   BROWSER_ERROR: { what: "The browser action failed", todo: "Run again. If it keeps happening, read the original message" },

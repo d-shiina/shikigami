@@ -5,6 +5,11 @@
 export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "browser.open": { summary: "Web ページを開く。ログインは保存して次から使い回す", words: "URL サイト ページ アクセス chrome edge 起動" },
   "browser.click": { summary: "ページのボタンやリンクをクリック", words: "押す ボタン リンク 選ぶ" },
+  "browser.hover": { summary: "部品にマウスを乗せる（乗せると開くメニューなど）", words: "ホバー マウスオーバー 乗せる メニュー ツールチップ" },
+  "browser.scroll": { summary: "ページや一覧をスクロールする（下まで・部品が見えるまで）", words: "スクロール 下 上 続きを読み込む 無限" },
+  "browser.getAttribute": { summary: "部品の属性（リンク先の URL・画像のアドレスなど）を読む", words: "属性 href リンク先 URL src 取得" },
+  "browser.switchTab": { summary: "別のタブ・ポップアップのウィンドウに移る", words: "タブ ウィンドウ ポップアップ 別窓 切替 新しいタブ" },
+  "browser.closeTab": { summary: "今のタブを閉じて、前のタブに戻る", words: "タブ ウィンドウ ポップアップ 閉じる 戻る" },
   "browser.fill": { summary: "ページの入力欄に文字を入れる", words: "入力 書く テキスト フォーム ログイン" },
   "browser.select": { summary: "ページのプルダウンから選ぶ", words: "選択 ドロップダウン セレクト" },
   "browser.press": { summary: "ページでキーを押す（Enter・Tab など）", words: "キーボード エンター 送信" },
