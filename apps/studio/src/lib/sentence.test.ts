@@ -35,6 +35,10 @@ describe("sentence", () => {
     expect(targetText({ window: win, ocr: { text: "検索" } })).toBe("「Citrix」の文字「検索」");
     expect(targetText({ window: win, region: { x: 1, y: 2, width: 30, height: 40 } })).toBe("「Citrix」の範囲 (1, 2, 30×40)");
   });
+
+  it("names the image a desktop OCR step reads from a file", () => {
+    expect(plain(sentence({ type: "desktop.readText", params: { file: "{{ scan }}" } }, undefined))).toContain("scan の画像の文字を OCR で読む");
+  });
 });
 
 describe("readable", () => {
@@ -42,5 +46,15 @@ describe("readable", () => {
     expect(readable("len(invoices)")).toBe("invoicesの件数");
     expect(readable("invoice.amount >= threshold && invoice.status != 'paid'")).toBe("invoice.amount ≥ threshold かつ invoice.status ≠ 'paid'");
     expect(readable("!isEmpty(flagged)")).toBe("flaggedが空でない");
+  });
+});
+
+describe("referencedVariables", () => {
+  it("counts only the {{ }} holes inside a target, not words of its literal text", async () => {
+    const { referencedVariables } = await import("./nodeRows");
+    const known = new Set(["billing", "user"]);
+    expect(referencedVariables({ window: { process: "billing.exe" } }, known)).toEqual([]);
+    expect(referencedVariables({ name: "{{ user }}" }, known)).toEqual(["user"]);
+    expect(referencedVariables("billing.total > 1", known)).toEqual(["billing"]);
   });
 });
