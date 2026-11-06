@@ -7,6 +7,7 @@ import {
   ArrowUp,
   CircleDot,
   Copy,
+  Eraser,
   Eye,
   EyeOff,
   FoldVertical,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
+import { isActive, trailOf } from "../store";
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 
@@ -104,6 +106,9 @@ export function usePaneMenu() {
         { label: t.menu.fitView, icon: Scan, run: options.fit },
       ];
     }
+    // A run that has ended leaves its way on the chart until it is cleared.
+    const trail = trailOf(s);
+    const ended = trail !== null && !isActive(trail);
     return [
       { label: t.addStep, icon: Plus, shortcut: t.shortcut, run: () => store.getState().setPaletteOpen(true) },
       "-",
@@ -111,6 +116,7 @@ export function usePaneMenu() {
       { label: t.redo, icon: Redo2, shortcut: "Ctrl+Y", disabled: !s.canRedo, run: () => void store.getState().redo() },
       "-",
       { label: t.menu.fitView, icon: Scan, run: options.fit },
+      ended && { label: t.clearTrail, icon: Eraser, run: () => store.getState().hideTrail() },
       {
         label: s.outlineOpen ? t.menu.outlineClose : t.menu.outlineOpen,
         icon: TableOfContents,

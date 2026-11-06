@@ -35,6 +35,7 @@ const SYSTEM_PROMPT: &str = "\
 You are an AI called from inside Shikigami Studio (RPA for Windows). You are talking with the person using Studio.
 - Read, edit and test-run scenarios only with the shikigami MCP tools. Files and commands are not available.
 - When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the scenario now does differently, then why. Put anything only the person can decide (your assumptions about their business) in `checks`, one question each. Your edits are already in the scenario; they queue up in Studio's review, where a person checks what they do.
+- The person watches the flow chart while you work, so build a new scenario where they can see it grow: when the scenario open in Studio has no steps, build in it (update_scenario, add_step) instead of creating another; otherwise create_scenario with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_scenario with a handful of addStep ops per call), not all in one call.
 - When asked to fix something that was sent back, read the feedback in get_scenario (details in get_review), fix it as noted, and briefly report what you fixed.
 - Never ask for or accept passwords or authentication codes. Refer to logins by secret name; if a secret is missing, ask the person to register it under Secrets in Studio.
 - Reply briefly, in the language the person writes in (Japanese or English): what you did, and what the person should do next.";
@@ -131,6 +132,9 @@ pub struct ScenarioRef {
     name: String,
     /// The step selected on the flow chart.
     step_id: Option<String>,
+    /// The scenario has no steps yet (e.g. just made with 新規作成).
+    #[serde(default)]
+    empty: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -146,6 +150,11 @@ pub enum AgentEvent {
     },
     Text {
         text: String,
+    },
+    /// The agent has begun writing a Shikigami tool call (its input is still
+    /// being written, which takes a while for a large edit).
+    Preparing {
+        name: String,
     },
     /// A Shikigami tool call; `detail` is the edit's summary when it has one.
     Tool {
@@ -648,6 +657,8 @@ fn claude_args(mcp_config: &Path, system: &Path, session: Option<&str>) -> Vec<S
         "--output-format",
         "stream-json",
         "--verbose",
+        // Says when a tool call begins, long before its input is written.
+        "--include-partial-messages",
         // Only Shikigami: not the person's other MCP servers, nor files or shell.
         "--strict-mcp-config",
         "--mcp-config",
@@ -673,8 +684,9 @@ fn with_context(message: &str, scenario: Option<&ScenarioRef>) -> String {
                 .as_deref()
                 .map(|id| format!(", selected step stepId={id}"))
                 .unwrap_or_default();
+            let empty = if s.empty { ", no steps yet" } else { "" };
             format!(
-                "(Open in Studio: scenario \"{}\" id={}{step})\n\n{message}",
+                "(Open in Studio: scenario \"{}\" id={}{empty}{step})\n\n{message}",
                 s.name, s.id
             )
         }
@@ -735,6 +747,16 @@ impl ClaudeStream {
                     _ => None,
                 })
                 .collect(),
+            // Of the partial messages, only the start of a Shikigami tool call.
+            Some("stream_event") => v
+                .get("event")
+                .filter(|e| e.get("type").and_then(Value::as_str) == Some("content_block_start"))
+                .and_then(|e| e.get("content_block"))
+                .filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_use"))
+                .and_then(|b| str_of(b, "name"))
+                .and_then(|name| name.strip_prefix(TOOL_PREFIX).map(str::to_owned))
+                .map(|name| vec![AgentEvent::Preparing { name }])
+                .unwrap_or_default(),
             Some("user") => blocks(&v)
                 .filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_result"))
                 .filter_map(|b| {
@@ -1022,6 +1044,28 @@ mod tests {
         assert!(parse_claude_line("not json").is_empty());
         assert!(parse_claude_line(r#"{"type":"stream_event","event":{}}"#).is_empty());
         assert!(parse_claude_line(r#"{"type":"rate_limit_event"}"#).is_empty());
+        // Partial text and the input as it is written are left to the whole message.
+        assert!(parse_claude_line(
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{"}}}"#
+        )
+        .is_empty());
+        // Another server's tool is not ours to show.
+        assert!(parse_claude_line(
+            r#"{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"tool_use","name":"Bash"}}}"#
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn says_when_a_tool_call_begins() {
+        assert_eq!(
+            parse_claude_line(
+                r#"{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"mcp__shikigami__create_scenario","input":{}}}}"#
+            ),
+            vec![AgentEvent::Preparing {
+                name: "create_scenario".into()
+            }]
+        );
     }
 
     #[test]
@@ -1085,6 +1129,7 @@ mod tests {
             id: "scn_1".into(),
             name: "受注".into(),
             step_id: None,
+            empty: false,
         };
         assert!(
             with_context("直して", Some(&s))
@@ -1097,6 +1142,15 @@ mod tests {
         assert!(with_context("直して", Some(&s)).starts_with(
             "(Open in Studio: scenario \"受注\" id=scn_1, selected step stepId=stp_9)"
         ));
+        let s = ScenarioRef {
+            step_id: None,
+            empty: true,
+            ..s
+        };
+        assert!(
+            with_context("作って", Some(&s))
+                .starts_with("(Open in Studio: scenario \"受注\" id=scn_1, no steps yet)")
+        );
         assert_eq!(with_context("直して", None), "直して");
     }
 

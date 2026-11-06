@@ -96,6 +96,8 @@ export const en: Dict = {
   noIssues: "No issues",
   log: "Run log",
   clearLog: "Clear",
+  /** Takes the last run's colours off the chart. */
+  clearTrail: "Clear chart colours",
   stepName: "Display name",
   stepType: "Type",
   params: "Parameters",
@@ -113,6 +115,7 @@ export const en: Dict = {
   revision: "Revision",
   reloadedByConflict: "Another client (such as the AI) changed this scenario; loaded the latest version.",
   externalChange: "Applied a change made outside Studio (MCP / CLI).",
+  openedAiScenario: (name: string) => `Opened “${name}”, which the AI made`,
   runStarted: "Run started",
   status: {
     pending: "Pending",
@@ -356,6 +359,7 @@ export const en: Dict = {
     working: "Working",
     starting: "Got it. Starting",
     thinking: "Thinking",
+    preparing: (tool: string) => `Writing: ${tool}`,
     elapsed: (s: number) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`),
     failed: "Failed",
     toolFailed: "Failed: ",
@@ -390,6 +394,8 @@ export const en: Dict = {
     localRecords: "History and runs on this PC",
     aiEditedTitle: "When the AI (MCP) last edited",
     aiEdited: (who: string, when: string) => `${who} edited ${when}`,
+    aiWorking: (who: string, what: string | null) => (what ? `${who} is working · ${what}` : `${who} is working`),
+    aiWorkingTitle: "What the AI you asked in the AI pane is doing now",
     reviewTitle: "AI changes waiting for review",
     secretAskTitle: "The AI is asking for login details",
     goToRunning: "Go to the running node",

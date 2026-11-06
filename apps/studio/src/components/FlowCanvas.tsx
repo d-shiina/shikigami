@@ -49,7 +49,8 @@ import {
 } from "../lib/nodeRows";
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence } from "../lib/sentence";
-import { callKey, diveChain, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
+import { callKey, diveChain, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
+import { type LineTrail, trailLines } from "../lib/trail";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
@@ -311,6 +312,17 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
 }
 
 const edgeTypes = { link: LinkEdge, block: BlockEdge };
+
+const TRAIL_STROKE: Record<LineTrail, string> = {
+  done: "var(--color-moegi-500)",
+  failed: "var(--color-shu-500)",
+  now: "var(--color-accent-500)",
+};
+/** The same colours as plain values, for the arrow heads (see index.css). */
+const TRAIL_MARKER: Record<"light" | "dark", Record<LineTrail, string>> = {
+  light: { done: "#2f8a4c", failed: "#e8501f", now: "#f5872a" },
+  dark: { done: "#5cc27e", failed: "#f06a3c", now: "#f79a48" },
+};
 
 type RunValues = { changes: VariableChange[]; starts: StepStart[] };
 const NO_RUN: RunValues = { changes: [], starts: [] };
@@ -899,7 +911,8 @@ export function FlowCanvas() {
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
   const validation = useStudio((s) => s.validation);
-  const run = useStudio((s) => s.run);
+  // The open scenario's last run, until it is edited or run again.
+  const run = useStudio(trailOf);
   const breakpoints = useStudio((s) => (scenario ? s.breakpoints[scenario.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
@@ -1063,22 +1076,33 @@ export function FlowCanvas() {
       zIndex: 0,
     }));
 
-  const edges: Edge[] = layout.edges.map((e) => ({
-    ...e,
-    sourceHandle: "flow",
-    targetHandle: "flow",
-    type: "block",
-    data: {
-      detourX: e.detourX,
-      insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
-      hovered: hoveredEdge === e.id,
-      hover: setHoveredEdge,
-    } satisfies BlockEdgeData,
-    animated: e.loop,
-    style: { stroke: "var(--flow-edge)", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
-    // A plain colour: the marker id is built from it, so no var().
-    markerEnd: { type: MarkerType.ArrowClosed, color: theme === "dark" ? "#8193a8" : "#5b6b80" },
-  }));
+  // The lines the run took stay coloured after it ends, as the way it went.
+  const taken = trailLines(layout.edges, states);
+  const edges: Edge[] = layout.edges.map((e) => {
+    const trail = taken.get(e.id);
+    return {
+      ...e,
+      sourceHandle: "flow",
+      targetHandle: "flow",
+      type: "block",
+      data: {
+        detourX: e.detourX,
+        insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
+        hovered: hoveredEdge === e.id,
+        hover: setHoveredEdge,
+      } satisfies BlockEdgeData,
+      animated: e.loop || trail === "now",
+      style: {
+        stroke: trail ? TRAIL_STROKE[trail] : "var(--flow-edge)",
+        strokeWidth: trail ? 3 : 2,
+        ...(e.loop || trail === "now" ? { strokeDasharray: "5 4" } : {}),
+      },
+      // A plain colour: the marker id is built from it, so no var().
+      markerEnd: { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#8193a8" : "#5b6b80") },
+      // A taken line over the others where they share a stretch (a join, a loop's side).
+      zIndex: trail ? 1 : 0,
+    };
+  });
   edges.push(...linkEdges);
 
   if (!scenario || !root) {

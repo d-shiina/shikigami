@@ -145,6 +145,10 @@ export type RunState = {
   inner: Record<string, Record<string, StepRunState>>;
   /** The step each call path started last (a control step stays running while its blocks run). */
   innerLatest: Record<string, string>;
+  /** The scenario revision it runs (a resume can move it to a newer one). */
+  revision: number | null;
+  /** The person cleared the marks it left on the chart. */
+  trailHidden: boolean;
 };
 
 /** The `scenario.call` steps a run event happened inside (outermost first). */
@@ -324,6 +328,8 @@ export type StudioState = {
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
   dismissFailure(): void;
+  /** Takes the last run's marks off the chart (its log stays). */
+  hideTrail(): void;
   clearLog(): void;
   dismiss(): void;
   loadHistory(): Promise<void>;
@@ -526,7 +532,23 @@ const newRun = (runId: string, scenarioId: string | null = null): RunState => ({
   starts: [],
   inner: {},
   innerLatest: {},
+  revision: null,
+  trailHidden: false,
 });
+
+/**
+ * The run whose marks the chart shows: the open scenario's latest run, while
+ * it runs and afterwards, until the scenario is edited, another run starts or
+ * the person clears them. Marks of an older revision would point at steps that
+ * have changed since.
+ */
+export function trailOf(s: Pick<StudioState, "run" | "scenario">): RunState | null {
+  const run = s.run;
+  if (!run || !s.scenario || run.scenarioId !== s.scenario.id) return null;
+  if (isActive(run)) return run;
+  if (run.trailHidden) return null;
+  return run.revision === s.scenario.revision ? run : null;
+}
 const OUTLINE_KEY = "shikigami.studio.outline";
 
 function loadFlag(key: string, fallback: boolean): boolean {
@@ -1255,6 +1277,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               secretFix = null;
               run.status = "running";
               run.scenarioId = env.scenarioId;
+              run.revision = env.revision;
               push("info", `▶ ${env.scenarioName} (rev ${env.revision})`);
               break;
             case "stepStarted":
@@ -1310,6 +1333,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
                 if (states[pause.stepId] === "paused") delete states[pause.stepId];
                 run.inner = { ...run.inner, [key]: states };
               } else if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
+              if (env.revision != null && pause?.callPath.length === 0) run.revision = env.revision;
               push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`);
               break;
             }
@@ -1323,6 +1347,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           }
           return { run, human, secretFix, reveal, ...moved };
         });
+      },
+
+      hideTrail() {
+        set((s) => (s.run ? { run: { ...s.run, trailHidden: true } } : s));
       },
 
       clearLog() {

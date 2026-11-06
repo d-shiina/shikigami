@@ -4,6 +4,7 @@
 // its badge on the control that answers it (確認待ち, シークレット), not here.
 import type { HistoryEntry, Step } from "@shikigami/schema";
 import { type ReactNode, useMemo, useState } from "react";
+import { activity, useAgentMaybe } from "../agent";
 import { useStudio } from "../context";
 import { actorLabel, relativeTime } from "../lib/changes";
 import { outline } from "../lib/outline";
@@ -55,8 +56,28 @@ export function WorkspaceSection() {
   );
 }
 
-/** The latest edit an AI made through MCP, in any scenario loaded so far. */
+/**
+ * While the AI asked in the AI pane works: what it is doing now, so it shows
+ * from every place, not only in the pane. Otherwise the latest edit an AI
+ * made through MCP, in any scenario loaded so far.
+ */
 function AiActivity() {
+  const working = useAgentMaybe((s) => activity(s) !== null, false);
+  const tool = useAgentMaybe((s) => activity(s)?.tool ?? null, null);
+  const name = useAgentMaybe((s) => s.info?.name ?? "AI", "AI");
+  if (working) {
+    const what = tool ? ((t.agent.tools as Record<string, string>)[tool] ?? tool) : null;
+    return (
+      <span className={ITEM} title={t.bar.aiWorkingTitle}>
+        <span className="bg-brand-500 h-2 w-2 animate-pulse rounded-full" />
+        {t.bar.aiWorking(name, what)}
+      </span>
+    );
+  }
+  return <LastAiEdit />;
+}
+
+function LastAiEdit() {
   const histories = useStudio((s) => s.histories);
   const latest = useMemo(() => {
     let found: HistoryEntry | null = null;
