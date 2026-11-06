@@ -94,6 +94,7 @@
 - **相手**：UiPath は SAP・Java・Citrix（Remote Runtime）それぞれに専用の経路がある。WinActor は国内の業務アプリでの実績が長い
 - **影響**：安定性はカタログでは比べられず、実績と事例で比べられる。未検証のままでは評価の土俵に乗らない
 - **方向**：代表的な業務アプリ（会計・販売管理・SAP GUI・Java 製の社内システム・Citrix）での検証の一覧を作り、結果を docs に「動作確認済み」として残す。SAP / Java の経路は [desktop.md](../desktop.md) の計画どおり
+- **対応（2026-11-06）**：SAP GUI Scripting と Java Access Bridge の経路を実装し、同じ `desktop.*` のノードがそれを通して動くようにした。`sap.runTransaction` を追加。Java は CI の Swing の画面で確認。実機での確認手順は [real-app-checks.md](real-app-checks.md)（SAP・業務アプリ・Citrix は未確認のまま）
 
 ### 6. インストーラーが未署名、企業での配布・更新の統制がない
 
@@ -145,6 +146,7 @@
 - **相手**：3 製品とも標準（UiPath・PAD は表のデータ抽出、WinActor はリスト・表の取得）
 - **影響**：販売管理・会計ソフトの一覧画面から表を読む、は RPA の典型。1 セルずつ読むのは遅く、AI が組んでも長いシナリオになる
 - **方向**：`desktop.getTable`（`browser.getTable` と同じ形の配列で返す）、`desktop.scroll`、`desktop.drag` を組込で
+- **対応（2026-11-06）**：`desktop.scroll`・`desktop.mouseScroll`・`desktop.drag`・`desktop.hover`・`desktop.selectMenu`・`desktop.getTable` を追加（PR #82 ほか）。メニュー・スクロール・表は CI の WinForms の画面で確認。マウスを使う操作の実機確認は [real-app-checks.md](real-app-checks.md)
 
 ### 13. 画面の部品を名前を付けて共有する場所がない（重なり：部品選択）
 
