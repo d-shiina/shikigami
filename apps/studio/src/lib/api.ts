@@ -203,7 +203,9 @@ export interface UpdateProgress {
 export const updates = {
   appInfo: () => call<AppInfo>("app_info"),
   check: () => call<UpdateInfo | null>("check_update"),
-  /** Never resolves on success: the installer restarts Studio. */
+  /** Downloads the found update in the background; resolves with its version once ready. */
+  download: () => call<string>("download_update"),
+  /** Never resolves on success: the installer restarts Studio as the new version. */
   install: () => call<void>("install_update"),
   onProgress: (handler: (p: UpdateProgress) => void): Promise<UnlistenFn> =>
     listen<UpdateProgress>("update-progress", (e) => handler(e.payload)),
