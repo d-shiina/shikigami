@@ -1,4 +1,4 @@
-import type { Scenario } from "@shikigami/schema";
+import type { Flow } from "@shikigami/schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "../lib/i18n";
 import { collect, fieldsOf, formatValue, initialValues, topOf } from "./form";
@@ -6,9 +6,9 @@ import { progress } from "./progress";
 
 afterEach(() => setLocale("ja", false));
 
-const scenario = (over: Partial<Scenario>): Scenario => ({ id: "scn_a", name: "A", revision: 1, steps: [], variables: [], ...over }) as Scenario;
+const makeFlow = (over: Partial<Flow>): Flow => ({ id: "scn_a", name: "A", revision: 1, steps: [], variables: [], ...over }) as Flow;
 
-const invoices = scenario({
+const invoices = makeFlow({
   variables: [
     { name: "month", type: "string", direction: "input", description: "対象の月\n例：2026-10" },
     { name: "threshold", type: "number", direction: "input", default: 100000, description: "高額のしきい値（円）" },
@@ -49,7 +49,7 @@ describe("the run window's form", () => {
   });
 
   it("keeps defaults that one item per line would change", () => {
-    const fields = fieldsOf(scenario({ variables: [{ name: "ids", type: "array", direction: "input", default: [1, 2, 3] }] }));
+    const fields = fieldsOf(makeFlow({ variables: [{ name: "ids", type: "array", direction: "input", default: [1, 2, 3] }] }));
     expect(fields[0]?.initial).toBe("[\n  1,\n  2,\n  3\n]");
     expect(collect(fields, initialValues(fields)).inputs).toEqual({ ids: [1, 2, 3] });
   });
@@ -64,23 +64,23 @@ describe("the run window's form", () => {
 });
 
 describe("the run window's progress", () => {
-  const flow = scenario({
+  const sample = makeFlow({
     steps: [
       { id: "read", type: "excel.readRows" },
       { id: "loop", type: "control.forEach", blocks: { body: [{ id: "make", type: "word.fillTemplate" }] } },
       { id: "off", type: "log.message", disabled: true },
-      { id: "call", type: "scenario.call" },
+      { id: "call", type: "flow.call" },
     ],
   });
   const base = { runId: "run_1", at: "2026-11-06T00:00:00Z" };
 
   it("knows which top-level step a nested one is in", () => {
-    expect(topOf(flow).get("make")).toBe("loop");
+    expect(topOf(sample).get("make")).toBe("loop");
   });
 
   it("ticks off the top-level steps as the run passes them", () => {
-    const p = progress(flow, [
-      { ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 },
+    const p = progress(sample, [
+      { ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 },
       { ...base, seq: 1, type: "stepStarted", stepId: "read", stepType: "excel.readRows", attempt: 1 },
       { ...base, seq: 2, type: "stepFinished", stepId: "read", stepType: "excel.readRows", outcome: "succeeded", durationMs: 5 },
       { ...base, seq: 3, type: "stepStarted", stepId: "loop", stepType: "control.forEach", attempt: 1 },
@@ -95,10 +95,10 @@ describe("the run window's progress", () => {
     expect(p.finished).toBeNull();
   });
 
-  it("moves the call step for what happens inside the called scenario, and marks where it failed", () => {
+  it("moves the call step for what happens inside the called flow, and marks where it failed", () => {
     const error = { code: "FILE_NOT_FOUND", message: "x" };
-    const p = progress(flow, [
-      { ...base, seq: 0, type: "stepStarted", stepId: "call", stepType: "scenario.call", attempt: 1 },
+    const p = progress(sample, [
+      { ...base, seq: 0, type: "stepStarted", stepId: "call", stepType: "flow.call", attempt: 1 },
       { ...base, seq: 1, callPath: ["call"], type: "stepStarted", stepId: "inner", stepType: "file.read", attempt: 1 },
       { ...base, seq: 2, type: "runFinished", status: "failed", error, durationMs: 1200 },
     ] as never);

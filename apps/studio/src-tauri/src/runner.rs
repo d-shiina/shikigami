@@ -1,13 +1,13 @@
 //! The run window ("Shikigami 実行", competitive-gaps.md #17): a small
-//! window for the people who use scenarios rather than build them. It lists
-//! published scenarios only, asks for their inputs with a form made from the
+//! window for the people who use flows rather than build them. It lists
+//! published flows only, asks for their inputs with a form made from the
 //! input variables, and runs the published version. A person starts the run
 //! and watches it, so the unattended policy does not apply (as in Studio),
 //! but it never runs working content nobody published.
 
 use serde::Serialize;
 use serde_json::{Map, Value};
-use shikigami_core::{ErrorPayload, RunId, Scenario, ScenarioId};
+use shikigami_core::{ErrorPayload, Flow, FlowId, RunId};
 use shikigami_runtime::record::{list_runs, read_report};
 use shikigami_runtime::{RunOptions, RunOrigin, RunStatus, RunTrigger};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -21,7 +21,7 @@ pub(crate) const RUNNER_WINDOW: &str = "runner";
 /// Run events of the run window: apart from Studio's `run-event`, so the
 /// editor does not take them for its own run.
 const RUNNER_EVENT: &str = "runner-event";
-/// How many recorded runs to look through for each scenario's last run.
+/// How many recorded runs to look through for each flow's last run.
 const RECENT_RUNS: usize = 300;
 
 type CmdResult<T> = Result<T, ErrorPayload>;
@@ -34,12 +34,12 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
     }
 }
 
-/// A published scenario as the run window lists it.
+/// A published flow as the run window lists it.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunnerItem {
     /// The published version: what a run executes.
-    scenario: Scenario,
+    flow: Flow,
     version: u32,
     #[serde(with = "time::serde::rfc3339")]
     published_at: OffsetDateTime,
@@ -55,11 +55,11 @@ pub struct LastRun {
     finished_at: OffsetDateTime,
 }
 
-/// The published scenarios, by name, with the last time each ran.
+/// The published flows, by name, with the last time each ran.
 #[tauri::command]
 pub fn runner_list(state: State<'_, AppState>) -> CmdResult<Vec<RunnerItem>> {
     let svc = &state.service;
-    let mut last: std::collections::HashMap<ScenarioId, LastRun> = Default::default();
+    let mut last: std::collections::HashMap<FlowId, LastRun> = Default::default();
     let root = svc.store().local_root();
     for run_id in list_runs(root)
         .unwrap_or_default()
@@ -69,8 +69,8 @@ pub fn runner_list(state: State<'_, AppState>) -> CmdResult<Vec<RunnerItem>> {
         let Ok(Some(report)) = read_report(root, &run_id) else {
             continue;
         };
-        // Newest first, so the first report of a scenario is its last run.
-        last.entry(report.scenario_id.clone()).or_insert(LastRun {
+        // Newest first, so the first report of a flow is its last run.
+        last.entry(report.flow_id.clone()).or_insert(LastRun {
             run_id,
             status: report.status,
             finished_at: report.finished_at,
@@ -86,12 +86,12 @@ pub fn runner_list(state: State<'_, AppState>) -> CmdResult<Vec<RunnerItem>> {
         };
         items.push(RunnerItem {
             last_run: last.get(&summary.id).cloned(),
-            scenario: version.scenario,
+            flow: version.flow,
             version: published.version,
             published_at: published.published_at,
         });
     }
-    items.sort_by(|a, b| a.scenario.name.cmp(&b.scenario.name));
+    items.sort_by(|a, b| a.flow.name.cmp(&b.flow.name));
     Ok(items)
 }
 
@@ -101,14 +101,14 @@ pub fn runner_list(state: State<'_, AppState>) -> CmdResult<Vec<RunnerItem>> {
 pub fn runner_run(
     app: AppHandle,
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     inputs: Option<Map<String, Value>>,
 ) -> CmdResult<RunId> {
     let run = state.service.published_run(&id)?;
     let inputs = inputs.unwrap_or_default();
-    // Only the scenario's inputs: the form never sets anything else.
+    // Only the flow's inputs: the form never sets anything else.
     if let Some(name) = inputs.keys().find(|name| {
-        !run.scenario
+        !run.flow
             .variables
             .iter()
             .any(|v| &v.name == *name && v.direction.is_input())
@@ -119,13 +119,13 @@ pub fn runner_run(
     let handle = state
         .runtime
         .start(
-            run.scenario,
+            run.flow,
             RunOptions {
                 project_dir,
                 full_run: true,
                 inputs,
                 version: Some(run.version),
-                subscenarios: run.subscenarios,
+                subflows: run.subflows,
                 origin: RunOrigin::new(RunTrigger::Studio).requested_by("runner"),
                 ..RunOptions::default()
             },
@@ -167,7 +167,7 @@ pub(crate) fn show_runner(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// `--runner` on the command line: start with the run window only (a
-/// shortcut for the people who only run scenarios).
+/// shortcut for the people who only run flows).
 pub(crate) fn wants_runner_only() -> bool {
     std::env::args().any(|a| a == "--runner")
 }

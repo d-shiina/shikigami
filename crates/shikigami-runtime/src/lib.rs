@@ -1,6 +1,6 @@
 //! Shikigami RPA Runtime.
 //!
-//! Executes scenarios without any AI and without the GUI. Studio, the MCP
+//! Executes flows without any AI and without the GUI. Studio, the MCP
 //! server and the CLI embed the same [`Runtime`]; automation adapters plug in
 //! by registering a step type definition together with an [`ActionHandler`].
 
@@ -28,9 +28,7 @@ use serde_json::{Map, Value};
 use shikigami_core::policy::{Policy, TargetDef};
 use shikigami_core::registry::builtin as builtin_types;
 use shikigami_core::secret::SecretProvider;
-use shikigami_core::{
-    OnError, RunId, Scenario, ScenarioId, StepRegistry, StepTypeDef, Subscenario, Validator,
-};
+use shikigami_core::{Flow, FlowId, OnError, RunId, StepRegistry, StepTypeDef, Subflow, Validator};
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -40,7 +38,7 @@ pub use adapter::Adapter;
 pub use debug::{DebugCommand, DebugControl, DebugOptions, PauseReason, ResumeAction};
 pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunOrigin, RunReport, RunSnapshot, RunStatus,
-    RunTrigger, StepOutcome, SubscenarioRef,
+    RunTrigger, StepOutcome, SubflowRef,
 };
 pub use exec::DesktopProbe;
 pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
@@ -60,21 +58,21 @@ pub struct RunOptions {
     /// session: pass the same `run_id` each time.
     pub keep_adapter_state: bool,
     /// Named version whose content is being run, recorded in the report
-    /// (see `ScenarioService::matching_version`).
+    /// (see `FlowService::matching_version`).
     pub version: Option<u32>,
     /// Make this an interactive run that can pause (Studio). Unattended
     /// runs leave it unset and fail as usual. See [`debug`].
     pub debug: Option<DebugOptions>,
-    /// The scenarios its `scenario.call` steps may run (see
-    /// `ScenarioService::subscenarios`). The run uses them as given, so
+    /// The flows its `flow.call` steps may run (see
+    /// `FlowService::subflows`). The run uses them as given, so
     /// edits made while it runs do not affect it.
-    pub subscenarios: Vec<Subscenario>,
-    /// The scenario's folder (`ScenarioService::project_dir`): relative paths
+    pub subflows: Vec<Subflow>,
+    /// The flow's folder (`FlowService::project_dir`): relative paths
     /// in path params (`StepTypeDef::path_params`) are resolved from it.
     /// Without it they are left as written.
     pub project_dir: Option<PathBuf>,
-    /// A run of the whole scenario, as opposed to a single step an AI tries:
-    /// it starts with each scenario's `work/` folder emptied (unless its
+    /// A run of the whole flow, as opposed to a single step an AI tries:
+    /// it starts with each flow's `work/` folder emptied (unless its
     /// settings say `keepWork`) and writes a readable log to `logs/`.
     pub full_run: bool,
     /// Who asked for the run, from where (recorded; `machine` is filled in).
@@ -138,39 +136,39 @@ impl Runtime {
     }
 
     /// Step types this runtime can execute. Use the same registry for the
-    /// `ScenarioService` so validation and execution agree.
+    /// `FlowService` so validation and execution agree.
     pub fn registry(&self) -> &StepRegistry {
         &self.registry
     }
 
     /// Validates and starts a run on the current Tokio runtime.
-    pub fn start(&self, scenario: Scenario, options: RunOptions) -> Result<RunHandle, RunError> {
-        let library: HashMap<ScenarioId, Arc<Scenario>> = options
-            .subscenarios
+    pub fn start(&self, flow: Flow, options: RunOptions) -> Result<RunHandle, RunError> {
+        let library: HashMap<FlowId, Arc<Flow>> = options
+            .subflows
             .iter()
             .map(|s| {
-                let mut called = s.scenario.clone();
+                let mut called = s.flow.clone();
                 called.inline_parts();
-                (s.scenario.id.clone(), Arc::new(called))
+                (s.flow.id.clone(), Arc::new(called))
             })
             .collect();
-        let project_dirs: HashMap<ScenarioId, PathBuf> = options
-            .subscenarios
+        let project_dirs: HashMap<FlowId, PathBuf> = options
+            .subflows
             .iter()
-            .filter_map(|s| Some((s.scenario.id.clone(), s.project_dir.clone()?)))
+            .filter_map(|s| Some((s.flow.id.clone(), s.project_dir.clone()?)))
             .collect();
         let report = self
             .validator
-            .validate_with_calls(&scenario, &|id| library.get(id).map(|s| (**s).clone()));
+            .validate_with_calls(&flow, &|id| library.get(id).map(|s| (**s).clone()));
         if !report.valid {
             return Err(RunError {
                 details: serde_json::to_value(&report).ok(),
-                ..RunError::new("VALIDATION_FAILED", "the scenario has validation errors")
+                ..RunError::new("VALIDATION_FAILED", "the flow has validation errors")
             });
         }
         // Nodes that name a part run with its target.
-        let mut scenario = scenario;
-        scenario.inline_parts();
+        let mut flow = flow;
+        flow.inline_parts();
 
         let policy = match &self.policy_path {
             Some(path) => Policy::load(path).map_err(|e| RunError {
@@ -184,7 +182,7 @@ impl Runtime {
         let (tx, rx) = mpsc::unbounded_channel();
         let snapshot = Arc::new(Mutex::new(RunSnapshot {
             run_id: run_id.clone(),
-            scenario_id: scenario.id.clone(),
+            flow_id: flow.id.clone(),
             status: RunStatus::Pending,
             current_step: None,
             steps_executed: 0,
@@ -192,39 +190,38 @@ impl Runtime {
         let log = match (&options.project_dir, options.full_run) {
             (Some(dir), true) => runlog::RunLog::create(
                 dir,
-                std::iter::once(&scenario).chain(library.values().map(|s| &**s)),
+                std::iter::once(&flow).chain(library.values().map(|s| &**s)),
                 &self.registry,
             ),
             _ => None,
         };
         let emitter = Emitter::new(run_id.clone(), tx, snapshot.clone(), log);
         // Folders whose `work/` the run starts empty.
-        let fresh_work: Vec<PathBuf> = if options.full_run {
-            options
-                .project_dir
-                .iter()
-                .filter(|_| !scenario.settings.keep_work)
-                .cloned()
-                .chain(options.subscenarios.iter().filter_map(|s| {
-                    s.project_dir
-                        .clone()
-                        .filter(|_| !s.scenario.settings.keep_work)
-                }))
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let fresh_work: Vec<PathBuf> =
+            if options.full_run {
+                options
+                    .project_dir
+                    .iter()
+                    .filter(|_| !flow.settings.keep_work)
+                    .cloned()
+                    .chain(options.subflows.iter().filter_map(|s| {
+                        s.project_dir.clone().filter(|_| !s.flow.settings.keep_work)
+                    }))
+                    .collect()
+            } else {
+                Vec::new()
+            };
         let cancel = CancellationToken::new();
         let debugger = options.debug.map(|debug| {
             Arc::new(debug::Debugger::new(
                 debug,
-                scenario.clone(),
+                flow.clone(),
                 self.validator.clone(),
             ))
         });
 
         let mut executor = Executor::new_from(
-            &scenario,
+            &flow,
             Executor {
                 run_id: run_id.clone(),
                 handlers: self.handlers.clone(),
@@ -235,7 +232,7 @@ impl Runtime {
                 default_timeouts: self.default_timeouts.clone(),
                 secrets: self.secrets.clone(),
                 vars: Map::new(),
-                secret_vars: scenario
+                secret_vars: flow
                     .variables
                     .iter()
                     .filter(|v| v.secret)
@@ -257,13 +254,13 @@ impl Runtime {
             },
         );
         let inputs = options.inputs;
-        let subscenarios: Vec<SubscenarioRef> = options
-            .subscenarios
+        let subflows: Vec<SubflowRef> = options
+            .subflows
             .iter()
-            .map(|s| SubscenarioRef {
-                scenario_id: s.scenario.id.clone(),
-                scenario_name: s.scenario.name.clone(),
-                revision: s.scenario.revision,
+            .map(|s| SubflowRef {
+                flow_id: s.flow.id.clone(),
+                flow_name: s.flow.name.clone(),
+                revision: s.flow.revision,
                 version: s.version,
             })
             .collect();
@@ -285,9 +282,9 @@ impl Runtime {
             let clock = Instant::now();
             emitter.update_snapshot(|s| s.status = RunStatus::Running);
             emitter.emit(RunEvent::RunStarted {
-                scenario_id: scenario.id.clone(),
-                scenario_name: scenario.name.clone(),
-                revision: scenario.revision,
+                flow_id: flow.id.clone(),
+                flow_name: flow.name.clone(),
+                revision: flow.revision,
                 origin: origin.clone(),
             });
 
@@ -315,15 +312,15 @@ impl Runtime {
 
             // After `runStarted`, so the inputs' `variableChanged` events
             // come first in the run.
-            let init = init_variables(&scenario, &inputs, &mut executor);
+            let init = init_variables(&flow, &inputs, &mut executor);
             let result = match init {
-                Ok(()) => executor.top_block(&scenario.steps).await,
+                Ok(()) => executor.top_block(&flow.steps).await,
                 Err(e) => Err(exec::Interrupt::Failed(e)),
             };
             let (status, error) = exec::final_status(&result);
             let error = error.map(|e| emitter.mask_error(e));
 
-            let outputs: Map<String, Value> = scenario
+            let outputs: Map<String, Value> = flow
                 .variables
                 .iter()
                 .filter(|v| v.direction.is_output())
@@ -362,16 +359,16 @@ impl Runtime {
 
             RunReport {
                 run_id: task_run_id,
-                scenario_id: scenario.id,
-                scenario_name: scenario.name,
-                revision: scenario.revision,
+                flow_id: flow.id,
+                flow_name: flow.name,
+                revision: flow.revision,
                 version,
                 status,
                 started_at,
                 finished_at: OffsetDateTime::now_utc(),
                 error,
                 outputs,
-                subscenarios,
+                subflows,
                 origin,
             }
         });
@@ -514,12 +511,12 @@ impl Default for RuntimeBuilder {
 }
 
 pub(crate) fn init_variables(
-    scenario: &Scenario,
+    flow: &Flow,
     inputs: &Map<String, Value>,
     executor: &mut Executor,
 ) -> Result<(), RunError> {
     for name in inputs.keys() {
-        if !scenario
+        if !flow
             .variables
             .iter()
             .any(|v| &v.name == name && v.direction.is_input())
@@ -530,8 +527,8 @@ pub(crate) fn init_variables(
             ));
         }
     }
-    let mut values = Vec::with_capacity(scenario.variables.len());
-    for var in &scenario.variables {
+    let mut values = Vec::with_capacity(flow.variables.len());
+    for var in &flow.variables {
         let value = match inputs.get(&var.name) {
             Some(value) if var.direction.is_input() => {
                 if !var.var_type.accepts(value) {
@@ -571,7 +568,7 @@ pub(crate) fn init_variables(
     Ok(())
 }
 
-/// Handle to a running scenario.
+/// Handle to a running flow.
 pub struct RunHandle {
     pub run_id: RunId,
     cancel: CancellationToken,
@@ -588,7 +585,7 @@ impl RunHandle {
         self.cancel.cancel();
     }
 
-    /// A token that cancels this run when triggered (for stop buttons, MCP `stop_scenario`).
+    /// A token that cancels this run when triggered (for stop buttons, MCP `stop_flow`).
     pub fn cancel_token(&self) -> CancellationToken {
         self.cancel.clone()
     }
@@ -662,8 +659,8 @@ pub fn run_api_schema() -> Value {
 }
 
 /// The project folders whose `work/` a run in this process is using: a run
-/// that starts while another uses the same folder (the same scenario twice,
-/// or a sub-scenario two callers share) leaves `work/` alone.
+/// that starts while another uses the same folder (the same flow twice,
+/// or a sub-flow two callers share) leaves `work/` alone.
 static WORK_IN_USE: std::sync::Mutex<Vec<(std::path::PathBuf, usize)>> =
     std::sync::Mutex::new(Vec::new());
 

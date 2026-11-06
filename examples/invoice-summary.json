@@ -1,5 +1,5 @@
 {
-  "$schema": "../schemas/scenario.schema.json",
+  "$schema": "../schemas/flow.schema.json",
   "schemaVersion": 1,
   "id": "scn_example_invoice_summary",
   "name": "請求書の集計（サンプル）",

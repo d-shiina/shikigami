@@ -30,7 +30,7 @@ const CheckIcon = () => (
 
 export type View = "story" | "flow" | "variables";
 
-/** Flow chart, procedure or variables: three ways to read the same scenario. */
+/** Flow chart, procedure or variables: three ways to read the same flow. */
 function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => void }) {
   const options: [View, string][] = [
     ["flow", t.viewFlow],
@@ -74,31 +74,31 @@ export function OutlineButton() {
 }
 
 /**
- * The open scenario in the title bar, after the workspace it is stored in:
+ * The open flow in the title bar, after the workspace it is stored in:
  * its name, its revision (opens History) and whether it is sound (opens
- * Issues). The window holds one scenario, so the window's bar names it.
+ * Issues). The window holds one flow, so the window's bar names it.
  */
-export function ScenarioTitle() {
-  const scenario = useStudio((s) => s.scenario);
+export function FlowTitle() {
+  const flow = useStudio((s) => s.flow);
   const validation = useStudio((s) => s.validation);
   const setBottom = useStudio((s) => s.setBottom);
   const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
   const published = useStudio((s) => s.published);
-  if (!scenario) return null;
+  if (!flow) return null;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="min-w-[5em] truncate text-[13px] font-bold" title={scenario.name}>
-        {scenario.name}
+      <span className="min-w-[5em] truncate text-[13px] font-bold" title={flow.name}>
+        {flow.name}
       </span>
-      {/* The revision opens how the scenario got here: its record and versions. */}
+      {/* The revision opens how the flow got here: its record and versions. */}
       <button
         type="button"
         onClick={() => setHistoryOpen(true)}
         title={t.shell.historyTitle}
         className="flex h-6 shrink-0 items-center gap-1 rounded-[3px] bg-slate-100 px-1.5 text-[11px] text-slate-500 hover:bg-slate-200 hover:text-ink"
       >
-        <span className="@max-[920px]/title:hidden">{t.revision}</span> {scenario.revision}
+        <span className="@max-[920px]/title:hidden">{t.revision}</span> {flow.revision}
         <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
           <path d="m1.5 3 2.5 2.5L6.5 3" fill="none" stroke="currentColor" strokeWidth="1.3" />
         </svg>
@@ -134,11 +134,11 @@ export function ScenarioTitle() {
 }
 
 /**
- * What to do with the open scenario, at the right of the title bar: how to
+ * What to do with the open flow, at the right of the title bar: how to
  * show it, then running it, the one filled button, at the very end.
  */
-export function ScenarioActions({ view, onView }: { view: View; onView: (view: View) => void }) {
-  const scenario = useStudio((s) => s.scenario);
+export function FlowActions({ view, onView }: { view: View; onView: (view: View) => void }) {
+  const flow = useStudio((s) => s.flow);
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
   const startRun = useStudio((s) => s.startRun);
@@ -147,7 +147,7 @@ export function ScenarioActions({ view, onView }: { view: View; onView: (view: V
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const debug = useStudio((s) => s.debug);
 
-  if (!scenario) return null;
+  if (!flow) return null;
   const errors = validation?.issues.filter((i) => i.severity === "error").length ?? 0;
   const running = run?.status === "running" || run?.status === "paused";
   const paused = run?.status === "paused";
@@ -229,7 +229,7 @@ export function ScenarioActions({ view, onView }: { view: View; onView: (view: V
  * What acts on one step sits on that step (StepTools on the chart).
  */
 export function CanvasDock() {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const canUndo = useStudio((s) => s.canUndo);
   const canRedo = useStudio((s) => s.canRedo);
   const undo = useStudio((s) => s.undo);
@@ -237,8 +237,8 @@ export function CanvasDock() {
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   const inside = useStudio((s) => s.dive.length > 0);
 
-  // Inside a call the chart shows another scenario: editing tools would act on the open one.
-  if (!scenario || inside) return null;
+  // Inside a call the chart shows another flow: editing tools would act on the open one.
+  if (!flow || inside) return null;
 
   return (
     <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-[4px] whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-raised backdrop-blur">

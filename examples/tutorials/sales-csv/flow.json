@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../schemas/scenario.schema.json",
+  "$schema": "../../../schemas/flow.schema.json",
   "schemaVersion": 1,
   "id": "scn_tutorial_sales_csv",
   "name": "支店の売上 CSV を 1 つの Excel にまとめる",

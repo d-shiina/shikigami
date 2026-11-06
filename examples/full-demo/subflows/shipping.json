@@ -1,9 +1,9 @@
 {
-  "$schema": "../../../schemas/scenario.schema.json",
+  "$schema": "../../../schemas/flow.schema.json",
   "schemaVersion": 1,
   "id": "scn_demo_shipping",
-  "name": "受注システムで未処理の注文を出荷する（サブシナリオ）",
-  "description": "デモ受注システムにログインし、未処理の注文を出荷する。ログインはシークレット「デモ受注システム」を使い（未登録なら browser.waitForHuman で人に頼む）、session で2回目以降は省略。full-demo から scenario.call で呼ばれる。",
+  "name": "受注システムで未処理の注文を出荷する（サブフロー）",
+  "description": "デモ受注システムにログインし、未処理の注文を出荷する。ログインはシークレット「デモ受注システム」を使い（未登録なら browser.waitForHuman で人に頼む）、session で2回目以降は省略。full-demo から flow.call で呼ばれる。",
   "revision": 1,
   "variables": [
     {

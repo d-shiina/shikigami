@@ -1,6 +1,6 @@
 //! A small, side-effect-free expression language for conditions and templates.
 //!
-//! Scenarios must never execute arbitrary code (scenarios can be written by AI
+//! Flows must never execute arbitrary code (flows can be written by AI
 //! from untrusted page content), so instead of embedding a scripting engine we
 //! evaluate a tiny, total language over JSON values:
 //!

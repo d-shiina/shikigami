@@ -1,5 +1,5 @@
 // The settings place: everything about this PC's Studio that is not part of a
-// scenario. One section per subject; a new setting goes into the section it
+// flow. One section per subject; a new setting goes into the section it
 // is about, or becomes a new section here, never a button elsewhere.
 import type { ReactNode } from "react";
 import { useAgent } from "../agent";

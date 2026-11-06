@@ -1,8 +1,8 @@
-//! The readable log of a run, written into the scenario's folder:
+//! The readable log of a run, written into the flow's folder:
 //!
 //! ```text
-//! <scenario folder>/logs/20261029-140512_succeeded.log
-//! <scenario folder>/logs/20261029-141003_failed.log
+//! <flow folder>/logs/20261029-140512_succeeded.log
+//! <flow folder>/logs/20261029-141003_failed.log
 //! ```
 //!
 //! One file per run, named by when it started (local time) and how it
@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use shikigami_core::project::{LOGS_FOLDER, LOGS_KEPT};
-use shikigami_core::{Scenario, StepId, StepRegistry, expr};
+use shikigami_core::{Flow, StepId, StepRegistry, expr};
 use time::{OffsetDateTime, UtcOffset};
 
 use crate::event::{RunEvent, RunEventEnvelope, RunStatus};
@@ -38,7 +38,7 @@ impl RunLog {
     /// folder cannot be written: a run never fails for its log.
     pub(crate) fn create<'a>(
         project_dir: &Path,
-        scenarios: impl IntoIterator<Item = &'a Scenario>,
+        flows: impl IntoIterator<Item = &'a Flow>,
         registry: &StepRegistry,
     ) -> Option<Self> {
         let dir = project_dir.join(LOGS_FOLDER);
@@ -87,8 +87,8 @@ impl RunLog {
             }
         };
         let mut names = HashMap::new();
-        for scenario in scenarios {
-            for step in scenario.walk() {
+        for flow in flows {
+            for step in flow.walk() {
                 let name = if step.name.trim().is_empty() {
                     registry
                         .get(&step.step_type)
@@ -136,10 +136,10 @@ impl RunLog {
     fn describe(&self, event: &RunEvent) -> Option<String> {
         Some(match event {
             RunEvent::RunStarted {
-                scenario_name,
+                flow_name,
                 revision,
                 ..
-            } => format!("START {scenario_name} (revision {revision})"),
+            } => format!("START {flow_name} (revision {revision})"),
             RunEvent::StepStarted {
                 step_id,
                 step_type,

@@ -1,7 +1,7 @@
-// Turns a scenario Target into a Playwright locator.
+// Turns a flow Target into a Playwright locator.
 //
 // Targets describe elements by meaning (role and accessible name, label,
-// text) rather than by CSS, so scenarios survive layout changes and read
+// text) rather than by CSS, so flows survive layout changes and read
 // well in Studio. `css` is the last resort.
 
 import type { FrameLocator, Locator, Page } from "playwright-core";

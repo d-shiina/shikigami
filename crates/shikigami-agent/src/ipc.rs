@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! {"op":"status"}                                   → {"ok":true,"status":{…}}
-//! {"op":"run","request":{"scenarioId":"scn_…"}}     → {"ok":true,"runId":"run_…"}
+//! {"op":"run","request":{"flowId":"scn_…"}}     → {"ok":true,"runId":"run_…"}
 //! {"op":"cancel","runId":"run_…"}                   → {"ok":true,"cancelled":true}
 //! {"op":"stop"}                                     → {"ok":true}
 //! ```

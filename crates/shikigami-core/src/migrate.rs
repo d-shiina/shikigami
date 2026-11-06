@@ -1,11 +1,11 @@
-//! Scenario format versioning.
+//! Flow format versioning.
 //!
 //! Documents are read as raw JSON first, upgraded one version at a time to
 //! [`SCHEMA_VERSION`], and only then deserialized. Newer documents than this
 //! build understands are rejected instead of being silently truncated.
 //!
-//! Every place that reads a scenario (files, named versions, bundles, the
-//! scenarios a bundle carries) goes through [`from_value`], so a migration
+//! Every place that reads a flow (files, named versions, bundles, the
+//! flows a bundle carries) goes through [`from_value`], so a migration
 //! written here applies everywhere. The rules for when to bump the version
 //! are in docs/compatibility.md.
 //!
@@ -18,7 +18,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
 
 use crate::error::{CoreError, CoreResult};
-use crate::model::{SCHEMA_VERSION, Scenario};
+use crate::model::{Flow, SCHEMA_VERSION};
 
 /// One upgrade step: turns a document of version `from` into `from + 1`.
 struct Migration {
@@ -41,20 +41,24 @@ const MIGRATIONS: &[Migration] = &[
         from: 3,
         apply: v3_to_v4,
     },
+    Migration {
+        from: 4,
+        apply: v4_to_v5,
+    },
 ];
 
-/// Parses scenario JSON text, applying migrations when needed.
-pub fn parse_scenario(text: &str) -> CoreResult<Scenario> {
+/// Parses flow JSON text, applying migrations when needed.
+pub fn parse_flow(text: &str) -> CoreResult<Flow> {
     let value: Value = serde_json::from_str(text)?;
     from_value(value)
 }
 
-pub fn from_value(mut value: Value) -> CoreResult<Scenario> {
+pub fn from_value(mut value: Value) -> CoreResult<Flow> {
     upgrade(&mut value)?;
     Ok(serde_json::from_value(value)?)
 }
 
-/// Brings a scenario document up to [`SCHEMA_VERSION`] in place.
+/// Brings a flow document up to [`SCHEMA_VERSION`] in place.
 pub fn upgrade(value: &mut Value) -> CoreResult<()> {
     let found = check_supported(value)?;
     for migration in MIGRATIONS.iter().filter(|m| m.from >= found) {
@@ -82,26 +86,23 @@ pub fn check_supported(value: &Value) -> CoreResult<u32> {
     Ok(found)
 }
 
-/// For `#[serde(deserialize_with)]` on fields that hold a whole scenario
+/// For `#[serde(deserialize_with)]` on fields that hold a whole flow
 /// (named versions, bundles), so they are migrated like files.
-pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Scenario, D::Error> {
+pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Flow, D::Error> {
     let value = Value::deserialize(deserializer)?;
     from_value(value).map_err(serde::de::Error::custom)
 }
 
-/// Like [`deserialize`], for a list of scenarios.
-pub fn deserialize_vec<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<Scenario>, D::Error> {
+/// Like [`deserialize`], for a list of flows.
+pub fn deserialize_vec<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Flow>, D::Error> {
     Vec::<Value>::deserialize(deserializer)?
         .into_iter()
         .map(|value| from_value(value).map_err(serde::de::Error::custom))
         .collect()
 }
 
-/// Calls `f` with every step object of a not-yet-deserialized scenario,
+/// Calls `f` with every step object of a not-yet-deserialized flow,
 /// nested ones included. Migrations of step params use it.
-#[allow(dead_code)]
 pub(crate) fn for_each_step(value: &mut Value, f: &mut dyn FnMut(&mut Map<String, Value>)) {
     fn visit(steps: &mut Value, f: &mut dyn FnMut(&mut Map<String, Value>)) {
         let Some(steps) = steps.as_array_mut() else {
@@ -124,13 +125,13 @@ pub(crate) fn for_each_step(value: &mut Value, f: &mut dyn FnMut(&mut Map<String
     }
 }
 
-/// 1 → 2: adds `requires` (plugins a scenario needs). Nothing to rewrite;
+/// 1 → 2: adds `requires` (plugins a flow needs). Nothing to rewrite;
 /// the bump makes older builds say "update Shikigami" instead of failing
 /// on an unknown field.
 fn v1_to_v2(_value: &mut Value) {}
 
 /// 2 → 3: adds `settings.keepWork`. Relative paths in path params now
-/// resolve from the scenario's folder; before they depended on the folder
+/// resolve from the flow's folder; before they depended on the folder
 /// the process started in (and validation warned against them), so there
 /// is nothing to rewrite.
 fn v2_to_v3(_value: &mut Value) {}
@@ -138,6 +139,22 @@ fn v2_to_v3(_value: &mut Value) {}
 /// 3 → 4: adds `parts` (named screen parts that a node's target can name
 /// with `{ "part": … }`). Nothing to rewrite.
 fn v3_to_v4(_value: &mut Value) {}
+
+/// 4 → 5: scenarios were renamed to flows. The call step
+/// `scenario.call { scenario }` becomes `flow.call { flow }`.
+fn v4_to_v5(value: &mut Value) {
+    for_each_step(value, &mut |step| {
+        if step.get("type").and_then(Value::as_str) != Some("scenario.call") {
+            return;
+        }
+        step.insert("type".into(), Value::from("flow.call"));
+        if let Some(params) = step.get_mut("params").and_then(Value::as_object_mut)
+            && let Some(target) = params.remove("scenario")
+        {
+            params.entry("flow").or_insert(target);
+        }
+    });
+}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -147,20 +164,20 @@ mod tests {
 
     #[test]
     fn rejects_future_versions() {
-        let err = parse_scenario(r#"{"schemaVersion": 99, "id": "scn_x", "name": "x"}"#)
-            .expect_err("future");
+        let err =
+            parse_flow(r#"{"schemaVersion": 99, "id": "scn_x", "name": "x"}"#).expect_err("future");
         assert_eq!(err.code(), "UNSUPPORTED_SCHEMA_VERSION");
     }
 
     #[test]
     fn defaults_missing_version() {
-        let s = parse_scenario(r#"{"id": "scn_x", "name": "x"}"#).expect("parse");
+        let s = parse_flow(r#"{"id": "scn_x", "name": "x"}"#).expect("parse");
         assert_eq!(s.schema_version, SCHEMA_VERSION);
     }
 
     #[test]
     fn reads_version_1_files() {
-        let s = parse_scenario(
+        let s = parse_flow(
             r#"{"schemaVersion": 1, "id": "scn_x", "name": "x",
                 "steps": [{"id": "a", "type": "log.message", "params": {"message": "hi"}}]}"#,
         )
@@ -168,6 +185,22 @@ mod tests {
         assert_eq!(s.schema_version, SCHEMA_VERSION);
         assert!(s.requires.is_empty());
         assert_eq!(s.steps.len(), 1);
+    }
+
+    #[test]
+    fn renames_scenario_calls_to_flow_calls() {
+        let s = parse_flow(
+            r#"{"schemaVersion": 3, "id": "scn_x", "name": "x",
+                "steps": [{"id": "a", "type": "control.if", "params": {"condition": "true"},
+                  "blocks": {"then": [{"id": "b", "type": "scenario.call",
+                    "params": {"scenario": "scn_child", "inputs": {"n": "1"}}}]}}]}"#,
+        )
+        .expect("parse");
+        let inner = &s.steps[0].blocks["then"][0];
+        assert_eq!(inner.step_type, "flow.call");
+        assert_eq!(inner.params.get("flow"), Some(&json!("scn_child")));
+        assert!(!inner.params.contains_key("scenario"));
+        assert_eq!(inner.params.get("inputs"), Some(&json!({"n": "1"})));
     }
 
     #[test]

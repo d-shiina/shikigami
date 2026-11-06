@@ -20,7 +20,7 @@ The order system opens at `http://127.0.0.1:8787/`. Sign in with user `demo`, pa
 
 ## 2. Register the sign-in as a secret
 
-The password never goes into the scenario or to the AI. Under "Secrets" in the sidebar, press "New" and register:
+The password never goes into the flow or to the AI. Under "Secrets" in the sidebar, press "New" and register:
 
 | Field | Value |
 |---|---|
@@ -28,7 +28,7 @@ The password never goes into the scenario or to the AI. Under "Secrets" in the s
 | Username / password | demo / shikigami |
 | Sites and apps allowed | http://127.0.0.1:8787 |
 
-The scenario and the AI only know the name. The values are typed only into fields of the allowed site ([secrets](../secrets.md)).
+The flow and the AI only know the name. The values are typed only into fields of the allowed site ([secrets](../secrets.md)).
 
 ## 3. Ask the AI
 

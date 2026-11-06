@@ -1,7 +1,7 @@
-// The run window's form, made from a scenario's input variables, so the
+// The run window's form, made from a flow's input variables, so the
 // author (person or AI) writes nothing for it: the label is the variable's
 // description, the type picks the field, the default fills it in.
-import type { Scenario, Step, VariableDef } from "@shikigami/schema";
+import type { Flow, Step, VariableDef } from "@shikigami/schema";
 import { t } from "../lib/i18n";
 
 export type FieldKind = "text" | "password" | "number" | "checkbox" | "lines" | "json";
@@ -52,8 +52,8 @@ export function labelOf(v: VariableDef): string {
   return (v.description ?? "").split("\n")[0]?.trim() || v.name;
 }
 
-export function fieldsOf(scenario: Scenario): Field[] {
-  return (scenario.variables ?? []).filter(isInput).map((v) => {
+export function fieldsOf(flow: Flow): Field[] {
+  return (flow.variables ?? []).filter(isInput).map((v) => {
     const kind = kindOf(v);
     return { name: v.name, label: labelOf(v), kind, required: v.default === undefined, initial: shown(kind, v.default) };
   });
@@ -65,7 +65,7 @@ export const initialValues = (fields: Field[]): Values => Object.fromEntries(fie
 
 /**
  * The inputs for the run, or what is wrong with each field. An empty field
- * with a default is left out, so the scenario's default applies.
+ * with a default is left out, so the flow's default applies.
  */
 export function collect(fields: Field[], values: Values): { inputs: Record<string, unknown>; errors: Record<string, string> } {
   const inputs: Record<string, unknown> = {};
@@ -119,11 +119,11 @@ export function collect(fields: Field[], values: Values): { inputs: Record<strin
   return { inputs, errors };
 }
 
-/** The scenario's top-level steps a run goes through (disabled ones are skipped). */
-export const topSteps = (scenario: Scenario): Step[] => (scenario.steps ?? []).filter((s) => !s.disabled);
+/** The flow's top-level steps a run goes through (disabled ones are skipped). */
+export const topSteps = (flow: Flow): Step[] => (flow.steps ?? []).filter((s) => !s.disabled);
 
 /** Which top-level step each step is inside (itself for a top-level one). */
-export function topOf(scenario: Scenario): Map<string, string> {
+export function topOf(flow: Flow): Map<string, string> {
   const map = new Map<string, string>();
   const walk = (steps: Step[], top: string) => {
     for (const s of steps) {
@@ -131,7 +131,7 @@ export function topOf(scenario: Scenario): Map<string, string> {
       for (const children of Object.values(s.blocks ?? {})) walk(children, top);
     }
   };
-  for (const s of scenario.steps ?? []) if (s.id) walk([s], s.id);
+  for (const s of flow.steps ?? []) if (s.id) walk([s], s.id);
   return map;
 }
 

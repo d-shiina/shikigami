@@ -1,4 +1,4 @@
-// A file of the scenario's folder, opened in a sheet over the right of the
+// A file of the flow's folder, opened in a sheet over the right of the
 // chart. A settings file (format shikigami.config) is a form: one card per
 // setting with its type, value, description and the nodes that use it, so
 // people change values without touching JSON or the flow. Other text files
@@ -111,11 +111,11 @@ function ListInput({ values, onChange }: { values: string[]; onChange: (value: u
 
 function ConfigForm({ path, config }: { path: string; config: ConfigFile }) {
   const editConfig = useProject((s) => s.editConfig);
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const types = useStudio((s) => s.stepTypes);
   const select = useStudio((s) => s.select);
   const items = config.items ?? [];
-  const users = itemUsers(scenario, path, items);
+  const users = itemUsers(flow, path, items);
   const update = (i: number, patch: Partial<ConfigItem>) =>
     editConfig({ ...config, items: items.map((item, j) => (j === i ? { ...item, ...patch } : item)) });
   const names = items.map((i) => i.name);

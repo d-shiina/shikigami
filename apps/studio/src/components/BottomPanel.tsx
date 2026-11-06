@@ -14,7 +14,7 @@ const LEVEL_STYLE = {
 
 /**
  * The panel under the chart: what a run did (log) and what is wrong with the
- * scenario (issues). Both are lists over time or over the whole scenario, read
+ * flow (issues). Both are lists over time or over the whole flow, read
  * side by side with the chart, so they sit below it rather than beside it.
  */
 const HEIGHT_KEY = "shikigami.studio.bottom";

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "stepTypes": [
     {
       "type": "browser.attach",
@@ -8604,6 +8604,45 @@
       "deprecated": null
     },
     {
+      "type": "flow.call",
+      "params": {
+        "type": "object",
+        "properties": {
+          "flow": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "inputs": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          },
+          "outputs": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          }
+        },
+        "required": [
+          "flow"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
       "type": "flow.delay",
       "params": {
         "type": "object",
@@ -9551,45 +9590,6 @@
       },
       "blocks": [],
       "hasOutput": true,
-      "risk": "interactive",
-      "expressionParams": [],
-      "bindsVariables": [],
-      "secretParams": [],
-      "deprecated": null
-    },
-    {
-      "type": "scenario.call",
-      "params": {
-        "type": "object",
-        "properties": {
-          "scenario": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{1,128}$"
-          },
-          "inputs": {
-            "type": "object",
-            "propertyNames": {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-            }
-          },
-          "outputs": {
-            "type": "object",
-            "propertyNames": {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-            },
-            "additionalProperties": {
-              "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-            }
-          }
-        },
-        "required": [
-          "scenario"
-        ],
-        "additionalProperties": false
-      },
-      "blocks": [],
-      "hasOutput": false,
       "risk": "interactive",
       "expressionParams": [],
       "bindsVariables": [],

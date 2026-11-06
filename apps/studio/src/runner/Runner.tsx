@@ -1,6 +1,6 @@
-// The run window (competitive-gaps.md #17): pick a published scenario, fill
+// The run window (competitive-gaps.md #17): pick a published flow, fill
 // in the form made from its inputs, run it, and see what came out. Nothing
-// here edits a scenario; that stays in Studio.
+// here edits a flow; that stays in Studio.
 import type { ProjectFile, RunEventEnvelope, RunReport, StepTypeDef } from "@shikigami/schema";
 import { Check, Circle, FileText, FolderOpen, Loader2, Play, Search, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -45,9 +45,9 @@ function LastRun({ item }: { item: RunnerItem }) {
 function List({ items, selected, onSelect, locked }: { items: RunnerItem[]; selected: string | null; onSelect: (id: string) => void; locked: boolean }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
-  const rows = items.filter((i) => !q || `${i.scenario.name} ${i.scenario.description ?? ""}`.toLowerCase().includes(q));
+  const rows = items.filter((i) => !q || `${i.flow.name} ${i.flow.description ?? ""}`.toLowerCase().includes(q));
   return (
-    <nav aria-label={t.scenarios} className="flex w-[240px] shrink-0 flex-col border-r border-slate-200 bg-sheet">
+    <nav aria-label={t.flows} className="flex w-[240px] shrink-0 flex-col border-r border-slate-200 bg-sheet">
       <div className="m-2.5 flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-200 px-2 focus-within:border-brand-500">
         <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
         <input
@@ -61,17 +61,17 @@ function List({ items, selected, onSelect, locked }: { items: RunnerItem[]; sele
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {rows.length === 0 && q && <li className="px-3 py-2 text-[12px] text-slate-500">{t.runner.notFound}</li>}
         {rows.map((item) => {
-          const on = item.scenario.id === selected;
+          const on = item.flow.id === selected;
           return (
-            <li key={item.scenario.id}>
+            <li key={item.flow.id}>
               <button
                 type="button"
                 disabled={locked}
-                onClick={() => onSelect(item.scenario.id)}
+                onClick={() => onSelect(item.flow.id)}
                 aria-current={on}
                 className={`block w-full border-l-[3px] px-3 py-2 text-left disabled:opacity-50 ${on ? "border-brand-500 bg-brand-50" : "border-transparent hover:bg-slate-50"}`}
               >
-                <div className="text-[13px] leading-snug font-semibold">{item.scenario.name}</div>
+                <div className="text-[13px] leading-snug font-semibold">{item.flow.name}</div>
                 <div className="mt-0.5 text-[11.5px] text-slate-500">
                   <LastRun item={item} />
                 </div>
@@ -160,7 +160,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
     backend.list().then(
       (list) => {
         setItems(list);
-        setSelected((s) => (s && list.some((i) => i.scenario.id === s) ? s : (list[0]?.scenario.id ?? null)));
+        setSelected((s) => (s && list.some((i) => i.flow.id === s) ? s : (list[0]?.flow.id ?? null)));
       },
       (e) => setProblem(message(e)),
     );
@@ -177,18 +177,18 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
     // Once, on opening.
   }, []);
 
-  const item = items?.find((i) => i.scenario.id === selected) ?? null;
-  // Per scenario and version: the list is read again after each run, and
+  const item = items?.find((i) => i.flow.id === selected) ?? null;
+  // Per flow and version: the list is read again after each run, and
   // that must not wipe what the person typed (「もう一度」 runs with it).
-  const formKey = item ? `${item.scenario.id}@${item.version}` : "";
-  const fields = useMemo(() => (item ? fieldsOf(item.scenario) : []), [formKey]);
+  const formKey = item ? `${item.flow.id}@${item.version}` : "";
+  const fields = useMemo(() => (item ? fieldsOf(item.flow) : []), [formKey]);
   useEffect(() => {
     setValues(initialValues(fields));
     setErrors({});
   }, [fields]);
 
   const mine = run?.runId ? events.filter((e) => e.runId === run.runId) : [];
-  const state = item && run ? progress(item.scenario, mine) : null;
+  const state = item && run ? progress(item.flow, mine) : null;
   const finished = state?.finished ?? null;
   const now = useTick(!!run && !finished);
 
@@ -198,7 +198,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   useEffect(() => {
     if (!ended || !run?.runId || !item) return;
     const runId = run.runId;
-    const id = item.scenario.id;
+    const id = item.flow.id;
     let tries = 0;
     const fetchReport = () =>
       backend.report(runId).then(
@@ -227,7 +227,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
     setFiles([]);
     setRun({ runId: null, startedAt: Date.now() });
     try {
-      const runId = await backend.run(item.scenario.id, inputs);
+      const runId = await backend.run(item.flow.id, inputs);
       setRun({ runId, startedAt: Date.now() });
     } catch (e) {
       setRun(null);
@@ -266,8 +266,8 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
           {item && (
             <main className="flex min-w-0 flex-1 flex-col">
               <div className="px-5 pt-4 pb-2">
-                <h1 className="text-[16px] font-bold">{item.scenario.name}</h1>
-                {!run && item.scenario.description && <p className="mt-1 text-[12.5px] leading-relaxed whitespace-pre-line text-slate-600">{item.scenario.description}</p>}
+                <h1 className="text-[16px] font-bold">{item.flow.name}</h1>
+                {!run && item.flow.description && <p className="mt-1 text-[12.5px] leading-relaxed whitespace-pre-line text-slate-600">{item.flow.description}</p>}
                 <div className="mt-1.5 text-[11.5px] text-slate-500">
                   {run ? (finished ? t.runner.duration(seconds) : t.runner.elapsed(t.runner.duration(seconds))) : t.runner.version(item.version)}
                 </div>
@@ -317,8 +317,8 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                     error={finished.error}
                     report={report}
                     files={files}
-                    onOpen={(path) => void backend.open(item.scenario.id, path).catch((e) => setProblem(message(e)))}
-                    failedStep={finished.error?.stepId ? findStep(item.scenario.steps ?? [], finished.error.stepId) : null}
+                    onOpen={(path) => void backend.open(item.flow.id, path).catch((e) => setProblem(message(e)))}
+                    failedStep={finished.error?.stepId ? findStep(item.flow.steps ?? [], finished.error.stepId) : null}
                   />
                 </div>
               )}
@@ -382,7 +382,7 @@ function Result({
   failedStep: ReturnType<typeof findStep>;
 }) {
   const good = status === "succeeded";
-  const outputs = (item.scenario.variables ?? []).filter(isOutput);
+  const outputs = (item.flow.variables ?? []).filter(isOutput);
   const explained = error ? explainError(error, failedStep) : null;
   return (
     <div className={`rounded-[4px] border-l-4 bg-sheet px-4 py-3 shadow-sheet ${good ? "border-moegi-500" : status === "failed" ? "border-shu-500" : "border-slate-400"}`}>

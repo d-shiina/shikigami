@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 use shikigami_core::resource::resource_keys;
-use shikigami_core::{Scenario, Step, Validator, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, Validator, VarDirection, VarType, VariableDef};
 use shikigami_runtime::{RunOptions, RunReport, RunStatus, Runtime};
 
 use super::*;
@@ -23,7 +23,7 @@ fn saving(mut step: Step, name: &str) -> Step {
 }
 
 async fn run(steps: Vec<Step>) -> RunReport {
-    let mut s = Scenario::new("excel");
+    let mut s = Flow::new("excel");
     for name in ["out", "rows", "cell"] {
         s.variables.push(VariableDef {
             direction: VarDirection::Output,
@@ -58,7 +58,7 @@ fn examples_validate_and_every_step_locks_its_workbook() {
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
-            let mut s = Scenario::new("example");
+            let mut s = Flow::new("example");
             s.variables = [
                 "orders",
                 "order",

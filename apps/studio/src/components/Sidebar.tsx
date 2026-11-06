@@ -1,6 +1,6 @@
 // The one column on the left, as in Linear and Notion: the workspace at the
-// top (where the work is stored), then the places: the scenario library with
-// the open scenario under it, what waits for review, logins, and settings at
+// top (where the work is stored), then the places: the flow library with
+// the open flow under it, what waits for review, logins, and settings at
 // the foot, apart from the work. Lists live in their places, not here. A new
 // kind of work (run history, schedules) is a new row here. Above the places,
 // the AI: its chat opens right beside this column, as Notion AI and Linear's
@@ -61,7 +61,7 @@ function AgentItem() {
   return <Item icon={MessageSquareText} label={name} on={open} onClick={() => setOpen(!open)} busy={busy} dot={news} title={`${name}（Ctrl+J）`} />;
 }
 
-/** The folder the scenarios live in; the full path and the change are in Settings. */
+/** The folder the flows live in; the full path and the change are in Settings. */
 function Workspace() {
   const workspace = useStudio((s) => s.workspace);
   const setPlace = useStudio((s) => s.setPlace);
@@ -83,15 +83,15 @@ function Workspace() {
 export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () => void }) {
   const place = useStudio((s) => s.place);
   const setPlace = useStudio((s) => s.setPlace);
-  const scenario = useStudio((s) => s.scenario);
-  // Sent-back scenarios wait on the AI, not on the person.
+  const flow = useStudio((s) => s.flow);
+  // Sent-back flows wait on the AI, not on the person.
   const inbox = useInbox().filter((i) => !i.waiting);
   const open = useStudio((s) => s.open);
-  // Land on something to review rather than a scenario with nothing new.
+  // Land on something to review rather than a flow with nothing new.
   const enterReview = () => {
     setPlace("review");
     const first = inbox[0];
-    if (first && !inbox.some((i) => i.scenarioId === scenario?.id)) void open(first.scenarioId);
+    if (first && !inbox.some((i) => i.flowId === flow?.id)) void open(first.flowId);
   };
   const asks = useStudio((s) => s.secretRequests.length);
   const update = useUpdate();
@@ -115,9 +115,9 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
         <AgentItem />
       </div>
       <nav className="flex-1 space-y-px border-t border-slate-200 px-2 pt-2">
-        <Item icon={LayoutList} label={t.scenarios} on={place === "library"} onClick={go("library")} />
-        {/* The open scenario, under the library it came from: the way back to the editor. */}
-        {scenario && <Item icon={Workflow} label={scenario.name} on={place === "scenarios"} onClick={go("scenarios")} indent />}
+        <Item icon={LayoutList} label={t.flows} on={place === "library"} onClick={go("library")} />
+        {/* The open flow, under the library it came from: the way back to the editor. */}
+        {flow && <Item icon={Workflow} label={flow.name} on={place === "flows"} onClick={go("flows")} indent />}
         <Item icon={Inbox} label={t.awaitingReview} on={place === "review"} onClick={enterReview} count={inbox.length} title={t.bar.reviewTitle} />
         <Item
           icon={KeyRound}

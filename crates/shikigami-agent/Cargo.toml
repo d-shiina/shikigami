@@ -1,6 +1,6 @@
 [package]
 name = "shikigami-agent"
-description = "Shikigami agent: one process per PC that runs scenarios unattended (schedules, file triggers, later a management server)"
+description = "Shikigami agent: one process per PC that runs flows unattended (schedules, file triggers, later a management server)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

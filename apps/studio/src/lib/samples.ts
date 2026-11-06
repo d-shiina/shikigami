@@ -1,5 +1,5 @@
-// The tutorials (docs/tutorials/) and the sample scenarios that come with
-// them, so they can be opened from the scenario list (competitive-gaps.md #18).
+// The tutorials (docs/tutorials/) and the sample flows that come with
+// them, so they can be opened from the flow list (competitive-gaps.md #18).
 // The bundles are the ones CI keeps current (examples/build-tutorials.mjs).
 import { locale } from "./i18n";
 

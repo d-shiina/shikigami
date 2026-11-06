@@ -1,5 +1,5 @@
 //! A grid read from an app, as the list of objects every table in a
-//! scenario is (`browser.getTable`, `excel.readRows`, `file.readCsv`).
+//! flow is (`browser.getTable`, `excel.readRows`, `file.readCsv`).
 
 use serde_json::{Map, Value, json};
 use shikigami_runtime::StepError;

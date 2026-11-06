@@ -1,4 +1,4 @@
-# AI が組みやすいシナリオ仕様（設計メモ）
+# AI が組みやすいフロー仕様（設計メモ）
 
 方針：「AI が組むので、AI が間違えにくい仕様にする」。人間は Studio で読んで直し、実行は AI なしで行う。
 
@@ -35,7 +35,7 @@
 - `StepTypeDef` に非公開（スキーマに出ない）の `resources` を持たせる：固定（`desktop.input`）または param 由来（`file` / `window` / `browserContext`）。
 - `ActionHandler::exclusive_resources()` は廃止し、宣言場所を `StepTypeDef` に一本化。
 - Runtime はテンプレート展開後の params からキーを作り、既存のロック（ソート・重複除去済み）で取得。
-- `file:` キーの正規化（Windows）：絶対パス化（存在不要）→ `\\?\` 除去 → 区切りを `\` に → `.`/`..` を畳み込み → 小文字化 → 末尾 `\` 除去。相対パスはシナリオのフォルダーから解決し、外（`..`）を指すと検証で `PATH_OUTSIDE_PROJECT` warning。
+- `file:` キーの正規化（Windows）：絶対パス化（存在不要）→ `\\?\` 除去 → 区切りを `\` に → `.`/`..` を畳み込み → 小文字化 → 末尾 `\` 除去。相対パスはフローのフォルダーから解決し、外（`..`）を指すと検証で `PATH_OUTSIDE_PROJECT` warning。
 - 同じキー文字列を Phase 4 のプロセス間排他（名前付きミューテックス）でもそのまま使う。
 
 ## C. `wait.until`
@@ -52,7 +52,7 @@
 3. **[高] `list_step_types` に `expressionParams` / `bindsVariables` を含める**。
 4. **[高] スキルの誤り修正**：`direction` は `input / output / inOut / local`、関数一覧に `round` はない。
 5. **[中] `variable.set` の value/expression 両方・両方なしに専用ヒント**。
-6. **[中] 未宣言の入力名は `run_scenario` でエラー**（現状を確認のうえ）。
+6. **[中] 未宣言の入力名は `run_flow` でエラー**（現状を確認のうえ）。
 7. **[低] MCP の説明文に式とテンプレートの書き分けを一文追加**。
 
 ## 実装順

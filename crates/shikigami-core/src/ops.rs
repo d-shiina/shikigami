@@ -1,4 +1,4 @@
-//! Edit operations: the only way scenarios change.
+//! Edit operations: the only way flows change.
 //!
 //! Studio, MCP tools and the CLI all express changes as [`EditOp`]s. Applying
 //! an op returns its exact inverse, which powers undo/redo and makes every
@@ -12,9 +12,7 @@ use serde_json::{Map, Value};
 
 use crate::error::{CoreError, CoreResult};
 use crate::ids::StepId;
-use crate::model::{
-    Metadata, OnError, Part, RetryPolicy, Scenario, ScenarioSettings, Step, VariableDef,
-};
+use crate::model::{Flow, FlowSettings, Metadata, OnError, Part, RetryPolicy, Step, VariableDef};
 
 /// Where a step lives (or should be inserted).
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -103,16 +101,16 @@ pub struct StepPatch {
     pub meta: Option<Map<String, Value>>,
 }
 
-/// Partial update of scenario-level fields.
+/// Partial update of flow-level fields.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ScenarioPatch {
+pub struct FlowPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub settings: Option<ScenarioSettings>,
+    pub settings: Option<FlowSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
     /// Replaces `requires` (plugin version ranges). Core still adds plugins
@@ -142,8 +140,9 @@ pub enum EditOp {
         step_id: StepId,
         position: Position,
     },
-    UpdateScenario {
-        patch: ScenarioPatch,
+    #[serde(alias = "updateScenario")]
+    UpdateFlow {
+        patch: FlowPatch,
     },
     /// Adds or replaces (by name) a variable declaration.
     SetVariable {
@@ -178,7 +177,7 @@ impl EditOp {
             Self::UpdateStep { step_id, .. } => format!("update step {step_id}"),
             Self::RemoveStep { step_id } => format!("remove step {step_id}"),
             Self::MoveStep { step_id, .. } => format!("move step {step_id}"),
-            Self::UpdateScenario { .. } => "update scenario".into(),
+            Self::UpdateFlow { .. } => "update flow".into(),
             Self::SetVariable { variable, .. } => format!("set variable {}", variable.name),
             Self::RemoveVariable { name } => format!("remove variable {name}"),
             Self::SetPart { name, .. } => format!("set part {name}"),
@@ -196,14 +195,14 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
-/// Applies `op` to `scenario` in place and returns the inverse op.
-/// On error the scenario may be partially modified; callers apply batches to
+/// Applies `op` to `flow` in place and returns the inverse op.
+/// On error the flow may be partially modified; callers apply batches to
 /// a clone (see [`apply_all`]).
-pub fn apply(scenario: &mut Scenario, op: EditOp) -> CoreResult<EditOp> {
-    let inverse = apply_inner(scenario, op)?;
+pub fn apply(flow: &mut Flow, op: EditOp) -> CoreResult<EditOp> {
+    let inverse = apply_inner(flow, op)?;
     // Empty blocks carry no meaning; dropping them keeps documents canonical
     // so that an op followed by its inverse restores an identical document.
-    scenario.steps.iter_mut().for_each(prune_empty_blocks);
+    flow.steps.iter_mut().for_each(prune_empty_blocks);
     Ok(inverse)
 }
 
@@ -214,26 +213,26 @@ fn prune_empty_blocks(step: &mut Step) {
     }
 }
 
-fn apply_inner(scenario: &mut Scenario, op: EditOp) -> CoreResult<EditOp> {
+fn apply_inner(flow: &mut Flow, op: EditOp) -> CoreResult<EditOp> {
     match op {
         EditOp::AddStep { mut step, position } => {
             assign_missing_ids(&mut step);
             for s in step.walk() {
-                if scenario.find_step(&s.id).is_some() {
+                if flow.find_step(&s.id).is_some() {
                     return Err(CoreError::DuplicateStepId(s.id.clone()));
                 }
             }
             let id = step.id.clone();
-            insert(scenario, step, &position)?;
+            insert(flow, step, &position)?;
             Ok(EditOp::RemoveStep { step_id: id })
         }
         EditOp::RemoveStep { step_id } => {
-            let (step, position) = take(scenario, &step_id)?;
+            let (step, position) = take(flow, &step_id)?;
             Ok(EditOp::AddStep { step, position })
         }
         EditOp::MoveStep { step_id, position } => {
             if let Some(parent) = &position.parent_id {
-                let moving = scenario
+                let moving = flow
                     .find_step(&step_id)
                     .ok_or_else(|| CoreError::StepNotFound(step_id.clone()))?;
                 if moving.walk().any(|s| &s.id == parent) {
@@ -242,15 +241,15 @@ fn apply_inner(scenario: &mut Scenario, op: EditOp) -> CoreResult<EditOp> {
                     ));
                 }
             }
-            let (step, original) = take(scenario, &step_id)?;
-            insert(scenario, step, &position)?;
+            let (step, original) = take(flow, &step_id)?;
+            insert(flow, step, &position)?;
             Ok(EditOp::MoveStep {
                 step_id,
                 position: original,
             })
         }
         EditOp::UpdateStep { step_id, patch } => {
-            let step = find_step_mut(&mut scenario.steps, &step_id)
+            let step = find_step_mut(&mut flow.steps, &step_id)
                 .ok_or_else(|| CoreError::StepNotFound(step_id.clone()))?;
             let inverse = patch_step(step, patch)?;
             Ok(EditOp::UpdateStep {
@@ -258,38 +257,31 @@ fn apply_inner(scenario: &mut Scenario, op: EditOp) -> CoreResult<EditOp> {
                 patch: inverse,
             })
         }
-        EditOp::UpdateScenario { patch } => {
-            let mut inverse = ScenarioPatch::default();
+        EditOp::UpdateFlow { patch } => {
+            let mut inverse = FlowPatch::default();
             if let Some(name) = patch.name {
                 if name.trim().is_empty() {
-                    return Err(CoreError::InvalidEdit(
-                        "scenario name must not be empty".into(),
-                    ));
+                    return Err(CoreError::InvalidEdit("flow name must not be empty".into()));
                 }
-                inverse.name = Some(std::mem::replace(&mut scenario.name, name));
+                inverse.name = Some(std::mem::replace(&mut flow.name, name));
             }
             if let Some(description) = patch.description {
-                inverse.description =
-                    Some(std::mem::replace(&mut scenario.description, description));
+                inverse.description = Some(std::mem::replace(&mut flow.description, description));
             }
             if let Some(settings) = patch.settings {
-                inverse.settings = Some(std::mem::replace(&mut scenario.settings, settings));
+                inverse.settings = Some(std::mem::replace(&mut flow.settings, settings));
             }
             if let Some(tags) = patch.tags {
-                inverse.tags = Some(std::mem::replace(&mut scenario.metadata.tags, tags));
+                inverse.tags = Some(std::mem::replace(&mut flow.metadata.tags, tags));
             }
             if let Some(requires) = patch.requires {
-                inverse.requires = Some(std::mem::replace(&mut scenario.requires, requires));
+                inverse.requires = Some(std::mem::replace(&mut flow.requires, requires));
             }
-            Ok(EditOp::UpdateScenario { patch: inverse })
+            Ok(EditOp::UpdateFlow { patch: inverse })
         }
         EditOp::SetVariable { variable, index } => {
-            if let Some(pos) = scenario
-                .variables
-                .iter()
-                .position(|v| v.name == variable.name)
-            {
-                let old = std::mem::replace(&mut scenario.variables[pos], variable);
+            if let Some(pos) = flow.variables.iter().position(|v| v.name == variable.name) {
+                let old = std::mem::replace(&mut flow.variables[pos], variable);
                 Ok(EditOp::SetVariable {
                     variable: old,
                     index: None,
@@ -297,21 +289,21 @@ fn apply_inner(scenario: &mut Scenario, op: EditOp) -> CoreResult<EditOp> {
             } else {
                 let name = variable.name.clone();
                 let at = index
-                    .unwrap_or(scenario.variables.len())
-                    .min(scenario.variables.len());
-                scenario.variables.insert(at, variable);
+                    .unwrap_or(flow.variables.len())
+                    .min(flow.variables.len());
+                flow.variables.insert(at, variable);
                 Ok(EditOp::RemoveVariable { name })
             }
         }
         EditOp::RemoveVariable { name } => {
-            let pos = scenario
+            let pos = flow
                 .variables
                 .iter()
                 .position(|v| v.name == name)
                 .ok_or_else(|| {
                     CoreError::InvalidEdit(format!("variable '{name}' does not exist"))
                 })?;
-            let variable = scenario.variables.remove(pos);
+            let variable = flow.variables.remove(pos);
             Ok(EditOp::SetVariable {
                 variable,
                 index: Some(pos),
@@ -323,13 +315,13 @@ fn apply_inner(scenario: &mut Scenario, op: EditOp) -> CoreResult<EditOp> {
                     "part name '{name}' must be letters, digits and _ (not starting with a digit), like a variable"
                 )));
             }
-            Ok(match scenario.parts.insert(name.clone(), part) {
+            Ok(match flow.parts.insert(name.clone(), part) {
                 Some(old) => EditOp::SetPart { name, part: old },
                 None => EditOp::RemovePart { name },
             })
         }
         EditOp::RemovePart { name } => {
-            let part = scenario
+            let part = flow
                 .parts
                 .remove(&name)
                 .ok_or_else(|| CoreError::InvalidEdit(format!("part '{name}' does not exist")))?;
@@ -337,16 +329,16 @@ fn apply_inner(scenario: &mut Scenario, op: EditOp) -> CoreResult<EditOp> {
         }
         EditOp::ReplaceSteps { mut steps } => {
             steps.iter_mut().for_each(assign_missing_ids);
-            let old = std::mem::replace(&mut scenario.steps, steps);
+            let old = std::mem::replace(&mut flow.steps, steps);
             Ok(EditOp::ReplaceSteps { steps: old })
         }
     }
 }
 
-/// Applies a batch atomically. Returns the modified scenario and the inverse
+/// Applies a batch atomically. Returns the modified flow and the inverse
 /// ops in the order they must be applied to undo the batch.
-pub fn apply_all(scenario: &Scenario, ops: Vec<EditOp>) -> CoreResult<(Scenario, Vec<EditOp>)> {
-    let mut working = scenario.clone();
+pub fn apply_all(flow: &Flow, ops: Vec<EditOp>) -> CoreResult<(Flow, Vec<EditOp>)> {
+    let mut working = flow.clone();
     let mut inverses = Vec::with_capacity(ops.len());
     for op in ops {
         inverses.push(apply(&mut working, op)?);
@@ -381,16 +373,13 @@ fn find_step_mut<'a>(steps: &'a mut [Step], id: &StepId) -> Option<&'a mut Step>
 
 /// Resolves a position to the target list, validating the block name against
 /// existing blocks or the caller-supplied name.
-fn target_list<'a>(
-    scenario: &'a mut Scenario,
-    position: &Position,
-) -> CoreResult<&'a mut Vec<Step>> {
+fn target_list<'a>(flow: &'a mut Flow, position: &Position) -> CoreResult<&'a mut Vec<Step>> {
     match &position.parent_id {
         None => {
             if position.block.is_some() {
                 return Err(CoreError::InvalidEdit("block requires parentId".into()));
             }
-            Ok(&mut scenario.steps)
+            Ok(&mut flow.steps)
         }
         Some(parent_id) => {
             let block = position
@@ -400,15 +389,15 @@ fn target_list<'a>(
             if block.is_empty() {
                 return Err(CoreError::InvalidEdit("block must not be empty".into()));
             }
-            let parent = find_step_mut(&mut scenario.steps, parent_id)
+            let parent = find_step_mut(&mut flow.steps, parent_id)
                 .ok_or_else(|| CoreError::StepNotFound(parent_id.clone()))?;
             Ok(parent.blocks.entry(block.to_owned()).or_default())
         }
     }
 }
 
-fn insert(scenario: &mut Scenario, step: Step, position: &Position) -> CoreResult<()> {
-    let list = target_list(scenario, position)?;
+fn insert(flow: &mut Flow, step: Step, position: &Position) -> CoreResult<()> {
+    let list = target_list(flow, position)?;
     let index = position.index.unwrap_or(list.len());
     if index > list.len() {
         return Err(CoreError::InvalidEdit(format!(
@@ -421,7 +410,7 @@ fn insert(scenario: &mut Scenario, step: Step, position: &Position) -> CoreResul
 }
 
 /// Removes a step and returns it together with its exact original position.
-fn take(scenario: &mut Scenario, id: &StepId) -> CoreResult<(Step, Position)> {
+fn take(flow: &mut Flow, id: &StepId) -> CoreResult<(Step, Position)> {
     /// (removed step, parent id and block if nested, index in its list)
     type Taken = (Step, Option<(StepId, String)>, usize);
     fn take_from(steps: &mut Vec<Step>, id: &StepId) -> Option<Taken> {
@@ -440,7 +429,7 @@ fn take(scenario: &mut Scenario, id: &StepId) -> CoreResult<(Step, Position)> {
         None
     }
     let (step, parent, index) =
-        take_from(&mut scenario.steps, id).ok_or_else(|| CoreError::StepNotFound(id.clone()))?;
+        take_from(&mut flow.steps, id).ok_or_else(|| CoreError::StepNotFound(id.clone()))?;
     let position = match parent {
         None => Position::root(Some(index)),
         Some((parent_id, block)) => Position::in_block(parent_id, block, Some(index)),
@@ -525,8 +514,17 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn sample() -> Scenario {
-        let mut s = Scenario::new("t");
+    #[test]
+    fn reads_update_scenario_ops_from_old_history() {
+        let op: EditOp =
+            serde_json::from_value(json!({ "op": "updateScenario", "patch": { "name": "x" } }))
+                .expect("old op name");
+        assert!(matches!(op, EditOp::UpdateFlow { .. }));
+        assert_eq!(serde_json::to_value(&op).unwrap()["op"], "updateFlow");
+    }
+
+    fn sample() -> Flow {
+        let mut s = Flow::new("t");
         s.steps = vec![
             Step::new("log.message")
                 .with_id("a")
@@ -540,12 +538,12 @@ mod tests {
         s
     }
 
-    fn ids(s: &Scenario) -> Vec<String> {
+    fn ids(s: &Flow) -> Vec<String> {
         s.walk().map(|x| x.id.to_string()).collect()
     }
 
     /// Applies ops, then their inverses, and checks we are back to the start.
-    fn assert_round_trip(ops: Vec<EditOp>) -> Scenario {
+    fn assert_round_trip(ops: Vec<EditOp>) -> Flow {
         let original = sample();
         let (edited, inverses) = apply_all(&original, ops).expect("apply");
         let (restored, _) = apply_all(&edited, inverses).expect("undo");
@@ -706,7 +704,7 @@ mod tests {
     }
 
     #[test]
-    fn variables_and_scenario_fields_invert() {
+    fn variables_and_flow_fields_invert() {
         let mut v = VariableDef::new("x", crate::model::VarType::Number);
         v.default = Some(json!(1));
         assert_round_trip(vec![
@@ -721,8 +719,8 @@ mod tests {
                 },
                 index: None,
             },
-            EditOp::UpdateScenario {
-                patch: ScenarioPatch {
+            EditOp::UpdateFlow {
+                patch: FlowPatch {
                     name: Some("新しい名前".into()),
                     tags: Some(vec!["x".into()]),
                     ..Default::default()

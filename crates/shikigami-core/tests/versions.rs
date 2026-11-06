@@ -2,14 +2,14 @@
 
 use serde_json::json;
 use shikigami_core::{
-    Actor, ActorKind, DiffKind, EditOp, FileStore, ImportConflict, ImportMode, NewScenario,
-    NewVersion, Position, ScenarioService, Step, StepPatch, StepRegistry, VarType, VariableDef,
+    Actor, ActorKind, DiffKind, EditOp, FileStore, FlowService, ImportConflict, ImportMode,
+    NewFlow, NewVersion, Position, Step, StepPatch, StepRegistry, VarType, VariableDef,
     WorkspaceManifest,
 };
 
-fn service_at(root: &std::path::Path) -> ScenarioService {
+fn service_at(root: &std::path::Path) -> FlowService {
     let store = FileStore::open_with_local(root, root, false).expect("store");
-    ScenarioService::new(store, StepRegistry::with_builtins())
+    FlowService::new(store, StepRegistry::with_builtins())
 }
 
 fn actor() -> Actor {
@@ -29,9 +29,9 @@ fn version(name: &str) -> NewVersion {
     }
 }
 
-fn scenario_with_steps(svc: &ScenarioService) -> shikigami_core::Scenario {
+fn flow_with_steps(svc: &FlowService) -> shikigami_core::Flow {
     svc.create(
-        NewScenario {
+        NewFlow {
             name: "請求書処理".into(),
             steps: vec![log("stp_a", "a"), log("stp_b", "b"), log("stp_c", "c")],
             ..Default::default()
@@ -39,14 +39,14 @@ fn scenario_with_steps(svc: &ScenarioService) -> shikigami_core::Scenario {
         actor(),
     )
     .expect("create")
-    .scenario
+    .flow
 }
 
 #[test]
 fn versions_are_numbered_and_listed_newest_first() {
     let dir = tempfile::tempdir().unwrap();
     let svc = service_at(dir.path());
-    let s = scenario_with_steps(&svc);
+    let s = flow_with_steps(&svc);
     let v1 = svc
         .create_version(&s.id, version("v1"), None, actor())
         .unwrap();
@@ -69,7 +69,7 @@ fn versions_are_numbered_and_listed_newest_first() {
         list.iter().map(|v| v.number).collect::<Vec<_>>(),
         vec![2, 1]
     );
-    assert_eq!(svc.get_version(&s.id, 1).unwrap().scenario.steps.len(), 3);
+    assert_eq!(svc.get_version(&s.id, 1).unwrap().flow.steps.len(), 3);
     assert_eq!(
         svc.get_version(&s.id, 9).unwrap_err().code(),
         "VERSION_NOT_FOUND"
@@ -80,7 +80,7 @@ fn versions_are_numbered_and_listed_newest_first() {
 fn diff_reports_added_removed_changed_and_moved_steps() {
     let dir = tempfile::tempdir().unwrap();
     let svc = service_at(dir.path());
-    let s = scenario_with_steps(&svc);
+    let s = flow_with_steps(&svc);
     svc.create_version(&s.id, version("v1"), None, actor())
         .unwrap();
     svc.edit(
@@ -162,7 +162,7 @@ fn diff_reports_added_removed_changed_and_moved_steps() {
 fn restore_is_one_undoable_edit_and_idempotent() {
     let dir = tempfile::tempdir().unwrap();
     let svc = service_at(dir.path());
-    let s = scenario_with_steps(&svc);
+    let s = flow_with_steps(&svc);
     svc.create_version(&s.id, version("v1"), None, actor())
         .unwrap();
     let edited = svc
@@ -181,22 +181,22 @@ fn restore_is_one_undoable_edit_and_idempotent() {
             actor(),
         )
         .unwrap()
-        .scenario;
+        .flow;
 
     let restored = svc
         .restore_version(&s.id, 1, Some(edited.revision), actor())
         .unwrap();
-    assert_eq!(restored.scenario.revision, edited.revision + 1);
-    assert_eq!(restored.scenario.steps, s.steps);
-    assert!(restored.scenario.variables.is_empty());
-    assert_eq!(svc.matching_version(&restored.scenario).unwrap(), Some(1));
+    assert_eq!(restored.flow.revision, edited.revision + 1);
+    assert_eq!(restored.flow.steps, s.steps);
+    assert!(restored.flow.variables.is_empty());
+    assert_eq!(svc.matching_version(&restored.flow).unwrap(), Some(1));
 
     // Restoring again changes nothing.
     let again = svc.restore_version(&s.id, 1, None, actor()).unwrap();
-    assert_eq!(again.scenario.revision, restored.scenario.revision);
+    assert_eq!(again.flow.revision, restored.flow.revision);
 
     // One undo brings the edited content back.
-    let undone = svc.undo(&s.id, None, actor()).unwrap().scenario;
+    let undone = svc.undo(&s.id, None, actor()).unwrap().flow;
     assert_eq!(undone.steps, edited.steps);
     assert_eq!(undone.variables, edited.variables);
     let history = svc.history(&s.id, 5).unwrap();
@@ -209,7 +209,7 @@ fn bundle_round_trip_between_workspaces() {
     let b_dir = tempfile::tempdir().unwrap();
     let a = service_at(a_dir.path());
     let b = service_at(b_dir.path());
-    let s = scenario_with_steps(&a);
+    let s = flow_with_steps(&a);
     let mut secret = VariableDef::new("password", VarType::String);
     secret.secret = true;
     secret.default = Some(json!("hunter2"));
@@ -237,7 +237,7 @@ fn bundle_round_trip_between_workspaces() {
     let first = b.import_bundle(value.clone(), None, actor()).unwrap();
     assert_eq!(first.mode, ImportMode::Created);
     assert_eq!(
-        first.outcome.scenario.id, s.id,
+        first.outcome.flow.id, s.id,
         "IDs are kept across workspaces"
     );
     assert_eq!(first.versions_added, 1);
@@ -252,10 +252,7 @@ fn bundle_round_trip_between_workspaces() {
         .unwrap();
     assert_eq!(same.mode, ImportMode::Updated);
     assert_eq!(same.versions_added, 0);
-    assert_eq!(
-        same.outcome.scenario.revision,
-        first.outcome.scenario.revision
-    );
+    assert_eq!(same.outcome.flow.revision, first.outcome.flow.revision);
 
     // A newer export from A updates B and brings the new version along.
     a.edit(
@@ -274,7 +271,7 @@ fn bundle_round_trip_between_workspaces() {
         .import_bundle(newer.clone(), Some(ImportConflict::Update), actor())
         .unwrap();
     assert_eq!(updated.versions_added, 1);
-    assert_eq!(updated.outcome.scenario.steps.len(), 2);
+    assert_eq!(updated.outcome.flow.steps.len(), 2);
     assert!(updated.outcome.can_undo);
     assert_eq!(b.list_versions(&s.id).unwrap()[0].name, "v2");
 
@@ -282,12 +279,12 @@ fn bundle_round_trip_between_workspaces() {
         .import_bundle(newer, Some(ImportConflict::Copy), actor())
         .unwrap();
     assert_eq!(copy.mode, ImportMode::Copied);
-    assert_ne!(copy.outcome.scenario.id, s.id);
-    assert_eq!(b.list_versions(&copy.outcome.scenario.id).unwrap().len(), 2);
+    assert_ne!(copy.outcome.flow.id, s.id);
+    assert_eq!(b.list_versions(&copy.outcome.flow.id).unwrap().len(), 2);
 }
 
 #[test]
-fn bare_scenario_documents_import_too() {
+fn bare_flow_documents_import_too() {
     let dir = tempfile::tempdir().unwrap();
     let svc = service_at(dir.path());
     let doc = json!({
@@ -298,7 +295,7 @@ fn bare_scenario_documents_import_too() {
     });
     let out = svc.import_bundle(doc, None, actor()).unwrap();
     assert_eq!(out.mode, ImportMode::Created);
-    assert_eq!(out.outcome.scenario.id.as_str(), "scn_handwritten");
+    assert_eq!(out.outcome.flow.id.as_str(), "scn_handwritten");
     assert_eq!(out.versions_added, 0);
 }
 
@@ -309,8 +306,8 @@ fn shared_workspace_keeps_per_pc_data_outside() {
     FileStore::init(shared.path(), &WorkspaceManifest { shared: true }).unwrap();
     let store = FileStore::open_with_local(shared.path(), local.path(), true).unwrap();
     assert!(store.is_shared());
-    let svc = ScenarioService::new(store, StepRegistry::with_builtins());
-    let s = scenario_with_steps(&svc);
+    let svc = FlowService::new(store, StepRegistry::with_builtins());
+    let s = flow_with_steps(&svc);
     svc.create_version(&s.id, version("v1"), None, actor())
         .unwrap();
     svc.edit(
@@ -326,9 +323,9 @@ fn shared_workspace_keeps_per_pc_data_outside() {
     assert!(
         shared
             .path()
-            .join("scenarios")
+            .join("flows")
             .join(s.id.as_str())
-            .join("scenario.json")
+            .join("flow.json")
             .is_file()
     );
     assert!(

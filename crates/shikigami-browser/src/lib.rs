@@ -516,10 +516,10 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             step_type: DOWNLOAD,
             method: "download",
             label: "ダウンロード",
-            description: "Clicks `target` (the link or button that downloads a file, e.g. CSV出力) and saves the file: to `path`, or into `folder` under the name the site gives it (one of the two). Paths are relative to the scenario folder, e.g. \"input/受注.csv\" to read it next with file.readCsv or excel.readRows; an existing file is replaced. Output: { path, fileName } (fileName: the site's name). Fails with DOWNLOAD_NOT_STARTED when the click starts no download.",
+            description: "Clicks `target` (the link or button that downloads a file, e.g. CSV出力) and saves the file: to `path`, or into `folder` under the name the site gives it (one of the two). Paths are relative to the flow folder, e.g. \"input/受注.csv\" to read it next with file.readCsv or excel.readRows; an existing file is replaced. Output: { path, fileName } (fileName: the site's name). Fails with DOWNLOAD_NOT_STARTED when the click starts no download.",
             params: json!({
                 "target": target,
-                "path": { "type": "string", "minLength": 1, "description": "保存するファイル（シナリオのフォルダーからの相対パス可）" },
+                "path": { "type": "string", "minLength": 1, "description": "保存するファイル（フローのフォルダーからの相対パス可）" },
                 "folder": { "type": "string", "minLength": 1, "description": "保存するフォルダー。名前はサイトが付けたもの" }
             }),
             required: &["target"],
@@ -534,7 +534,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             step_type: UPLOAD,
             method: "upload",
             label: "ファイルを添付",
-            description: "Attaches the file `path` (or a list of files) to the file input `target`, or to the button that opens the file picker (the picker is answered without a window). Paths are relative to the scenario folder. It only fills the form: click the send button next. Fails with FILE_NOT_FOUND when a file is missing.",
+            description: "Attaches the file `path` (or a list of files) to the file input `target`, or to the button that opens the file picker (the picker is answered without a window). Paths are relative to the flow folder. It only fills the form: click the send button next. Fails with FILE_NOT_FOUND when a file is missing.",
             params: json!({
                 "target": target,
                 "path": { "oneOf": [

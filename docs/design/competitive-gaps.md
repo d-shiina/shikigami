@@ -4,7 +4,7 @@
 
 前提にする方針（変えない）：
 
-- 差別化の軸は「AI が作り、AI なしで動く」。AI がシナリオを組み、実行は決まった JSON を Runtime が動かす
+- 差別化の軸は「AI が作り、AI なしで動く」。AI がフローを組み、実行は決まった JSON を Runtime が動かす
 - Windows 特化（mac / Linux はやらない）、OSS（Apache-2.0）で当面無償
 - 組込以外のノードはプラグイン（別プロセス・JSON-RPC、[plugins.md](plugins.md)）
 - 値の加工は式の関数、外に触れる操作だけノード（[uipath-coverage.md](uipath-coverage.md)）
@@ -47,8 +47,8 @@
 | 17 | P1 | 人が起動するための軽い実行画面と、複数項目の入力フォームがない | UiPath・PAD・WinActor | #77（一部） |
 | 18 | P1 | 業務の人向けの学習資料（操作マニュアル・チュートリアル・業務別サンプル）がない | 3 製品すべて | – |
 | 19 | P2 | 帳票の項目を読む OCR（AI-OCR・請求書など）、PDF の結合・分割・表の読み取り | UiPath・WinActor（連携製品） | – |
-| 20 | P2 | シナリオのテスト（テストケース・モック・自動回帰） | UiPath | – |
-| 21 | P2 | 複数人での開発（同じシナリオの同時編集・マージ・編集中の印） | UiPath | – |
+| 20 | P2 | フローのテスト（テストケース・モック・自動回帰） | UiPath | – |
+| 21 | P2 | 複数人での開発（同じフローの同時編集・マージ・編集中の印） | UiPath | – |
 | 22 | P2 | プラグインの配布（インストール・カタログ・署名）と部品の数 | UiPath・WinActor | – |
 | 23 | P2 | SaaS へのつなぎ（kintone・Salesforce・Box・Slack など）が `http.request` 頼み | UiPath・PAD | – |
 | 24 | P2 | 汎用機の端末エミュレーター、FTP / SFTP、XML | UiPath・PAD | – |
@@ -125,12 +125,12 @@
 
 - **今**：通知の置き場所は Studio の中だけ（[ui-principles.md](ui-principles.md)「通知」）。無人実行が失敗しても誰にも届かない
 - **相手**：UiPath（Orchestrator のアラート・メール）、PAD（クラウドフローで Teams・メール）
-- **方向**：シナリオに書かせる（`mail.*` や `http.request` を `catch` で呼ぶ）のではなく、実行の受け持ち（#77 の agent）の設定にする。AI が毎回書くものを増やさない
+- **方向**：フローに書かせる（`mail.*` や `http.request` を `catch` で呼ぶ）のではなく、実行の受け持ち（#77 の agent）の設定にする。AI が毎回書くものを増やさない
 
 ### 10. 操作の記録（レコーダー）がない
 
 - **今**：記録機能はない（`grep` で該当なし。`RunRecorder` は実行記録で別物）。作るのは AI か、Studio のパレットから 1 つずつ（PR #70）
-- **相手**：WinActor は「記録」で操作をそのままシナリオにするのが入口。PAD・UiPath にもレコーダーがある
+- **相手**：WinActor は「記録」で操作をそのままフローにするのが入口。PAD・UiPath にもレコーダーがある
 - **影響**：方針上 AI が代わりをするが、**生成 AI の利用を禁じている職場**では入口がない。WinActor から来る人は「まず記録」を期待する
 - **方向**：記録した操作を AI がまとめ直す「記録 → AI が整える」にすれば方針と両立する。最低限は部品選択（#3）とパレットで手で組めること。どこまでやるかは決めが要る
 
@@ -146,7 +146,7 @@
 
 - **今**（[desktop.md](../desktop.md)）：スクロール・ドラッグ・ホバー・マウス移動のノードはない。「Reading a whole grid at once and walking through menus are not implemented」。デスクトップの表を一度に読めない
 - **相手**：3 製品とも標準（UiPath・PAD は表のデータ抽出、WinActor はリスト・表の取得）
-- **影響**：販売管理・会計ソフトの一覧画面から表を読む、は RPA の典型。1 セルずつ読むのは遅く、AI が組んでも長いシナリオになる
+- **影響**：販売管理・会計ソフトの一覧画面から表を読む、は RPA の典型。1 セルずつ読むのは遅く、AI が組んでも長いフローになる
 - **方向**：`desktop.getTable`（`browser.getTable` と同じ形の配列で返す）、`desktop.scroll`、`desktop.drag` を組込で
 - **対応（2026-11-06）**：`desktop.scroll`・`desktop.mouseScroll`・`desktop.drag`・`desktop.hover`・`desktop.selectMenu`・`desktop.getTable` を追加（PR #82 ほか）。メニュー・スクロール・表は CI の WinForms の画面で確認。マウスを使う操作の実機確認は [real-app-checks.md](real-app-checks.md)
 
@@ -183,7 +183,7 @@
 - **今**：起動は Studio か CLI。人への入力は `dialog.input`（1 行）、`dialog.message`、`dialog.selectFile` だけ（[system.md](../system.md)）
 - **相手**：UiPath Assistant、PAD のコンソール、WinActor の簡易実行の画面。複数項目のフォーム（UiPath のフォーム、PAD のカスタムフォーム）
 - **影響**：現場の人に「公開版を押して動かすだけ」の画面を渡せない。Studio は作る人の道具で、使う人には重い
-- **方向**：公開版だけが並ぶ小さな実行画面（タスクトレイ）。入力はシナリオの入力変数から自動でフォームを作れば、AI は何も書かなくてよい
+- **方向**：公開版だけが並ぶ小さな実行画面（タスクトレイ）。入力はフローの入力変数から自動でフォームを作れば、AI は何も書かなくてよい
 - **対応**：別ウィンドウ「Shikigami 実行」（[docs/ja/runner.md](../ja/runner.md)）：公開版の一覧、入力変数から作るフォーム、実行中の進み、出力とできたファイル、日本語のエラー。Studio のサイドバーか `--runner` で開く。残り：タスクトレイ、ファイル選択・月・選択肢の入力欄
 
 ### 18. 業務の人向けの学習資料がない
@@ -192,7 +192,7 @@
 - **相手**：UiPath Academy、Microsoft Learn（PAD）、WinActor のマニュアル・研修・利用者コミュニティ
 - **影響**：OSS で販売網がない分、資料が営業の代わり。ないと試されない
 - **方向**：「AI に頼んで請求書の集計を作る」のような業務別の通し例を数本、画面付きで。Studio の中から開ける形が望ましい
-- **対応**：[docs/ja/tutorials/](../ja/tutorials/README.md) に 3 本（売上 CSV の集約、請求書の作成、Web の受注システム）。見本は `examples/tutorials/`、完成形はバンドルで「ファイルから読み込む」で開け、CI で毎回実行する。Studio のシナリオの画面の下に「見本」：手順のページを開く・完成形をそのまま開く
+- **対応**：[docs/ja/tutorials/](../ja/tutorials/README.md) に 3 本（売上 CSV の集約、請求書の作成、Web の受注システム）。見本は `examples/tutorials/`、完成形はバンドルで「ファイルから読み込む」で開け、CI で毎回実行する。Studio のフローの画面の下に「見本」：手順のページを開く・完成形をそのまま開く
 
 ## P2：特定の場面で効く
 
@@ -202,7 +202,7 @@
 - **相手**：UiPath Document Understanding。WinActor は AI-OCR 製品との連携が定番
 - **方向**：項目の取り出しは「AI なしで動く」と相性が悪い（毎回 AI に読ませると AI ありになる）。位置で読む定型帳票なら OCR＋式で書ける。非定型はプラグイン（外部の AI-OCR）にする
 
-### 20. シナリオのテスト
+### 20. フローのテスト
 
 - **今**：試しの実行と確認待ちの「試しの結果」はある（[review-evidence.md](review-evidence.md)）。入力と期待する出力を保存して繰り返し流すテストケース・外部をモックにする仕組みはない
 - **相手**：UiPath Test Suite
@@ -210,7 +210,7 @@
 
 ### 21. 複数人での開発
 
-- **今**：同時編集はリビジョン競合で止めて読み直し。3-way マージはしない（[sharing-versioning.md](sharing-versioning.md)「やらないこと」）。Undo はシナリオに 1 本で人ごとではない（[architecture.md](../architecture.md) §13）
+- **今**：同時編集はリビジョン競合で止めて読み直し。3-way マージはしない（[sharing-versioning.md](sharing-versioning.md)「やらないこと」）。Undo はフローに 1 本で人ごとではない（[architecture.md](../architecture.md) §13）
 - **相手**：UiPath（Git 連携・Studio のチーム機能）
 - **方向**：Git に頼らない方針は維持。「誰が編集中か」の印と、版どうしの差分（確認待ちの比較を版に使う）から
 
@@ -257,9 +257,9 @@
 
 ## 逆に勝っている点（比較表で並べるときのために）
 
-- AI がシナリオを組む入口が MCP（他社の MCP は既存のロボットを呼ぶ側が中心）
+- AI がフローを組む入口が MCP（他社の MCP は既存のロボットを呼ぶ側が中心）
 - 無人実行は人が承認して公開した版だけ、AI の操作は `policy.json` で絞る（[policy.md](../policy.md)）
-- シナリオは JSON で人も AI も同じものを見る。差分を確認して公開（[review-evidence.md](review-evidence.md)）
+- フローは JSON で人も AI も同じものを見る。差分を確認して公開（[review-evidence.md](review-evidence.md)）
 - 同時に動かす数に料金がない、ブラウザは `context` ごとに並列（[architecture.md](../architecture.md) §10.5）
 - 和暦・全角半角・Shift_JIS が式と `file.*` にある（[uipath-coverage.md](uipath-coverage.md)）
 - エラーで止まったところから直して続けられる（[debug-runs.md](debug-runs.md)）

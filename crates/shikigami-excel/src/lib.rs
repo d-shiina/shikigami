@@ -360,7 +360,7 @@ fn schema(properties: Value, required: &[&str]) -> Value {
 
 fn props(extra: Value) -> Value {
     let mut properties = json!({
-        "path": { "type": "string", "minLength": 1, "description": "ブック（.xlsx / .xlsm）：シナリオのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\\work\\受注.xlsx）" },
+        "path": { "type": "string", "minLength": 1, "description": "ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\\work\\受注.xlsx）" },
         "sheet": { "type": "string", "minLength": 1, "description": "シート名（完全一致）。省略すると先頭のシート" }
     });
     if let (Value::Object(map), Value::Object(extra)) = (&mut properties, extra) {
@@ -655,7 +655,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             label: "PDF で保存",
             description: "Saves the workbook `path` (or only `sheet`) as the PDF `to`, laid out as Excel prints it (print area, page setup). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Uses the workbook open in Excel on this PC when it is open (what is on the screen), otherwise opens the file read-only in a separate, hidden Excel. Needs Windows with desktop Excel. Output: { path }.",
             params: props(json!({
-                "to": { "type": "string", "minLength": 1, "description": "保存する PDF：シナリオのフォルダーからの相対パス（例 output/請求書.pdf）か絶対パス" },
+                "to": { "type": "string", "minLength": 1, "description": "保存する PDF：フローのフォルダーからの相対パス（例 output/請求書.pdf）か絶対パス" },
                 "overwrite": { "type": "boolean", "description": "同じ名前のファイルがあれば上書きする（既定 false）" }
             })),
             required: &["path", "to"],

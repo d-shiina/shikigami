@@ -166,7 +166,7 @@ fn read_rows(cursor: &mut impl Cursor, max_rows: usize) -> Result<Value, StepErr
     Ok(Value::Array(rows))
 }
 
-/// A column's text as the JSON value a scenario expects for its type.
+/// A column's text as the JSON value a flow expects for its type.
 pub fn convert(text: &str, data_type: &DataType) -> Value {
     let number = |text: &str| -> Value {
         let trimmed = text.trim();
@@ -215,7 +215,7 @@ pub fn convert(text: &str, data_type: &DataType) -> Value {
 }
 
 /// `2026-11-06 09:30:00.000` → `2026-11-06T09:30:00`, as dates are written
-/// elsewhere in scenarios; fractions of a second are kept when not zero.
+/// elsewhere in flows; fractions of a second are kept when not zero.
 fn timestamp(text: &str) -> String {
     let text = text.trim();
     let text = match text.split_once('.') {

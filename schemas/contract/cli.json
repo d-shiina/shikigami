@@ -12,7 +12,7 @@
   ],
   "subcommands": [
     {
-      "name": "scenario",
+      "name": "flow",
       "subcommands": [
         {
           "name": "list"
@@ -862,7 +862,7 @@
           "name": "add",
           "args": [
             {
-              "id": "scenario",
+              "id": "flow",
               "required": true,
               "takesValue": true,
               "repeatable": false,

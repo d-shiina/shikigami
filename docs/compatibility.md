@@ -2,15 +2,15 @@
 
 English | [日本語](ja/compatibility.md)
 
-The promises Shikigami makes to the outside, and the rules for changing them. Scenarios are used for a long time, and AI clients and scripts are built on the MCP tools and the CLI. Breaking what is listed here makes scenarios silently stop working on users' machines.
+The promises Shikigami makes to the outside, and the rules for changing them. Flows are used for a long time, and AI clients and scripts are built on the MCP tools and the CLI. Breaking what is listed here makes flows silently stop working on users' machines.
 
 ## 1. Scope
 
 | Promise | Where it is defined | Main users |
 |---|---|---|
-| The scenario file format (`schemaVersion`) | `crates/shikigami-core/src/model.rs` → `schemas/scenario.schema.json` | Saved scenarios, shared workspaces |
+| The flow file format (`schemaVersion`) | `crates/shikigami-core/src/model.rs` → `schemas/flow.schema.json` | Saved flows, shared workspaces |
 | Named versions and bundles (`*.shikigami.json`, `formatVersion`) | `version.rs` → `schemas/api.schema.json` | Handing over to other PCs and workspaces |
-| Built-in node types (type names, params, blocks, whether `saveAs` applies, `risk`) | Each adapter → `schemas/contract/step-types.json` | Scenarios, what the AI has learned to write |
+| Built-in node types (type names, params, blocks, whether `saveAs` applies, `risk`) | Each adapter → `schemas/contract/step-types.json` | Flows, what the AI has learned to write |
 | MCP tools (names, arguments, results, permission classes, annotations) | `crates/shikigami-mcp` → `schemas/contract/mcp-tools.json` | AI clients, skills |
 | Error codes (`code` and `retryable`) | `CoreError::code`, each node's errors | AI fixes, `onError` and retry decisions |
 | The CLI (commands, arguments, exit codes, `--json` output) | `crates/shikigami-cli` → `schemas/contract/cli.json`, `schemas/run-api.schema.json` | Task Scheduler, batch jobs, CI |
@@ -35,18 +35,18 @@ Not promises: Studio's screens, the internal Rust API (the crates are not publis
 
 Even during 0.x, breaking changes are made in one of two ways.
 
-1. **The scenario format and built-in node params**: raise `schemaVersion` and write a migration (§3). Old files take the new shape automatically when loaded
+1. **The flow format and built-in node params**: raise `schemaVersion` and write a migration (§3). Old files take the new shape automatically when loaded
 2. **MCP and the CLI**: add the new name while keeping the old one, and deprecate the old one (§5). Both work at least until the next minor version
 
 Either way it goes under "Breaking changes" in [CHANGELOG.md](../CHANGELOG.md). From 1.0 on, breaking changes happen only in major versions.
 
-## 3. The scenario file format
+## 3. The flow file format
 
-- `schemaVersion` is the version of the file's shape. **It goes up by 1 every time the shape changes.** Scenarios reject unknown fields (to catch typos), so it goes up even when only an optional field is added. An older Shikigami then stops with a clear "saved by a newer version, please update" (`UNSUPPORTED_SCHEMA_VERSION`)
+- `schemaVersion` is the version of the file's shape. **It goes up by 1 every time the shape changes.** Flows reject unknown fields (to catch typos), so it goes up even when only an optional field is added. An older Shikigami then stops with a clear "saved by a newer version, please update" (`UNSUPPORTED_SCHEMA_VERSION`)
 - When it goes up, add a "previous version → current version" function to `MIGRATIONS` in `crates/shikigami-core/src/migrate.rs`. Loading converts from old versions one node at a time, so each function only needs to know the version just before it. A gap makes the tests fail
-- Breaking changes to built-in node params are migrated here too (rewriting every node with `for_each_step`). Built-in nodes ship with Shikigami itself, so nodes carry no versions of their own. Having scenarios write versions would add to what AI has to write and where it can go wrong ([design/ai-authoring.md](design/ai-authoring.md), Japanese)
-- Files, named versions, scenarios inside bundles and subscenarios all go through the same migration (`migrate::from_value` / `migrate::deserialize`)
-- A migrated scenario is written in the new version the next time it is saved. Reading alone never rewrites the file
+- Breaking changes to built-in node params are migrated here too (rewriting every node with `for_each_step`). Built-in nodes ship with Shikigami itself, so nodes carry no versions of their own. Having flows write versions would add to what AI has to write and where it can go wrong ([design/ai-authoring.md](design/ai-authoring.md), Japanese)
+- Files, named versions, flows inside bundles and subflows all go through the same migration (`migrate::from_value` / `migrate::deserialize`)
+- A migrated flow is written in the new version the next time it is saved. Reading alone never rewrites the file
 - Future versions are not loaded (silently dropping fields would lose them on save)
 - Unknown keys inside `metadata` are kept (for notes from Studio and outside tools)
 
@@ -54,23 +54,23 @@ Tests: add a test to `migrate.rs` for every migration, showing a file of the pre
 
 ### Bundles
 
-Bundles carry `formatVersion`, and the scenarios inside follow the same `schemaVersion` rules as above. Raise `BUNDLE_FORMAT_VERSION` when the outer shape of a bundle changes.
+Bundles carry `formatVersion`, and the flows inside follow the same `schemaVersion` rules as above. Raise `BUNDLE_FORMAT_VERSION` when the outer shape of a bundle changes.
 
 ## 4. Plugins and `requires`
 
-A scenario keeps the plugins it uses and their version ranges in `requires`.
+A flow keeps the plugins it uses and their version ranges in `requires`.
 
 ```json
 "requires": { "plugin:kintone": "^0.3.1" }
 ```
 
 - **Core manages it automatically.** Adding a plugin node adds `^<version>` for the version installed at the time, and it is removed when no longer used. Neither people nor AI need to write it
-- Only to widen or narrow a range, rewrite it with `patch.requires` in `update_scenario` (kept while in use)
+- Only to widen or narrow a range, rewrite it with `patch.requires` in `update_flow` (kept while in use)
 - Ranges are semver (`^0.3.1`, `>=1.2, <3`…). A plugin's `version` must be semver
-- **On a PC without the plugin**: the scenario loads and its nodes stay as they are. Validation gives `PLUGIN_NOT_INSTALLED` (which version of which plugin is needed and where to install it) and it stops before running
+- **On a PC without the plugin**: the flow loads and its nodes stay as they are. Validation gives `PLUGIN_NOT_INSTALLED` (which version of which plugin is needed and where to install it) and it stops before running
 - **On a PC with a version outside the range**: it stops before running with `PLUGIN_VERSION_MISMATCH`
 
-For plugin authors: raise the major version when params change incompatibly (the minor version during 0.x). Old scenarios stop with `PLUGIN_VERSION_MISMATCH`, so nothing breaks silently. If the old way can still be accepted, keeping the version compatible and adding new params is best.
+For plugin authors: raise the major version when params change incompatibly (the minor version during 0.x). Old flows stop with `PLUGIN_VERSION_MISMATCH`, so nothing breaks silently. If the old way can still be accepted, keeping the version compatible and adding new params is best.
 
 ## 5. Deprecation
 

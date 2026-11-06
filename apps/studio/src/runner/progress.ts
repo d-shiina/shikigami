@@ -1,22 +1,22 @@
-// What the run window shows while a run goes: the scenario's top-level
+// What the run window shows while a run goes: the flow's top-level
 // steps, ticked off as the run passes them, and the step it is on now.
-import type { RunError, RunEventEnvelope, RunStatus, Scenario, Step } from "@shikigami/schema";
+import type { RunError, RunEventEnvelope, RunStatus, Flow, Step } from "@shikigami/schema";
 import { topOf, topSteps } from "./form";
 
 export type TopState = "waiting" | "running" | "done" | "failed";
 
 export interface Progress {
   tops: { step: Step; state: TopState }[];
-  /** The step the run is on (any depth in the started scenario). */
+  /** The step the run is on (any depth in the started flow). */
   now: Step | null;
   /** When the run started (the first event). */
   startedAt: string | null;
   finished: { status: RunStatus; error: RunError | null; durationMs: number } | null;
 }
 
-export function progress(scenario: Scenario, events: RunEventEnvelope[]): Progress {
-  const tops = topSteps(scenario);
-  const top = topOf(scenario);
+export function progress(flow: Flow, events: RunEventEnvelope[]): Progress {
+  const tops = topSteps(flow);
+  const top = topOf(flow);
   const states = new Map<string, TopState>();
   const byId = new Map<string, Step>();
   const index = (steps: Step[]) => {
@@ -25,12 +25,12 @@ export function progress(scenario: Scenario, events: RunEventEnvelope[]): Progre
       for (const children of Object.values(s.blocks ?? {})) index(children);
     }
   };
-  index(scenario.steps ?? []);
+  index(flow.steps ?? []);
   let now: Step | null = null;
   let finished: Progress["finished"] = null;
   const ordered = [...events].sort((a, b) => a.seq - b.seq);
   for (const e of ordered) {
-    // Inside a called scenario, the call step of this one is what moves.
+    // Inside a called flow, the call step of this one is what moves.
     const own = (e.callPath ?? [])[0] ?? ("stepId" in e ? e.stepId : undefined);
     const topId = own ? top.get(own) : undefined;
     if (e.type === "stepStarted") {

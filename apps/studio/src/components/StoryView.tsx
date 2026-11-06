@@ -41,14 +41,14 @@ export function Sentence({ parts }: { parts: Part[] }) {
 }
 
 function ReviewTag({ entry, added, stepId }: { entry: HistoryEntry; added: boolean; stepId: string }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const history = useStudio((s) => s.history);
   const approve = useStudio((s) => s.approve);
   const revert = useStudio((s) => s.revert);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const blocker = revertBlocker(entry, history);
-  const lines = describe(entry, scenario, defs);
+  const lines = describe(entry, flow, defs);
   const scope = entryScope(lines);
   const diffs = added
     ? []
@@ -129,7 +129,7 @@ type Ctx = {
 
 function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
   const selection = useStudio((s) => s.selection);
-  const owner = useStudio((s) => s.scenario?.id ?? "");
+  const owner = useStudio((s) => s.flow?.id ?? "");
   const stepMenu = useStepMenu();
   const select = useStudio((s) => s.select);
   const runState = useStudio((s) => (step.id ? trailOf(s)?.steps[step.id] : undefined));
@@ -228,9 +228,9 @@ function brief(value: unknown): string {
   return text.length > 24 ? `${text.slice(0, 24)}…` : text;
 }
 
-/** The scenario read top to bottom as a procedure, AI edits marked in place. */
+/** The flow read top to bottom as a procedure, AI edits marked in place. */
 export function StoryView() {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const select = useStudio((s) => s.select);
   const pending = usePendingReview();
@@ -267,11 +267,11 @@ export function StoryView() {
         for (const name of names) walk(step.blocks?.[name] ?? []);
       }
     };
-    walk(scenario?.steps ?? []);
+    walk(flow?.steps ?? []);
     return map;
-  }, [scenario, defs]);
+  }, [flow, defs]);
 
-  if (!scenario) {
+  if (!flow) {
     return (
       <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
         <img src="/mark.png" alt="" className="h-16 w-16 opacity-30 grayscale" />
@@ -281,7 +281,7 @@ export function StoryView() {
   }
 
   const ctx: Ctx = { defs, marks, numbers };
-  const variables = (scenario.variables ?? []).filter((v) => v.direction && v.direction !== "local");
+  const variables = (flow.variables ?? []).filter((v) => v.direction && v.direction !== "local");
 
   return (
     <div className="canvas-bg h-full overflow-y-auto px-6 pt-14 pb-24" onClick={() => select(null)} onKeyDown={() => {}}>
@@ -290,8 +290,8 @@ export function StoryView() {
         onClick={(e) => e.stopPropagation()}
         onKeyDown={() => {}}
       >
-        <h1 className="text-2xl font-semibold">{scenario.name}</h1>
-        {scenario.description && <p className="mt-1 text-sm text-slate-500">{scenario.description}</p>}
+        <h1 className="text-2xl font-semibold">{flow.name}</h1>
+        {flow.description && <p className="mt-1 text-sm text-slate-500">{flow.description}</p>}
         {variables.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             {variables.map((v) => (
@@ -306,7 +306,7 @@ export function StoryView() {
           </div>
         )}
         <div className="mt-5">
-          <StepList steps={scenario.steps ?? []} ctx={ctx} parentId={null} block={null} />
+          <StepList steps={flow.steps ?? []} ctx={ctx} parentId={null} block={null} />
         </div>
       </article>
     </div>

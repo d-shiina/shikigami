@@ -501,7 +501,7 @@ pub const FUNCTION_DOCS: &[FunctionDoc] = &[
         "env",
         "other",
         "env(name)",
-        "An environment variable of the PC running the scenario, or null.",
+        "An environment variable of the PC running the flow, or null.",
         "pathJoin(env('USERPROFILE'), 'Desktop')",
     ),
 ];

@@ -14,7 +14,7 @@ export const KEYWORD: Record<string, string> = {
   "control.break": "break",
   "control.continue": "continue",
   "control.fail": "throw",
-  "scenario.call": "call",
+  "flow.call": "call",
 };
 
 const MAX = 36;
