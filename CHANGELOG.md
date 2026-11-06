@@ -9,6 +9,7 @@
 ### 追加
 
 - デスクトップのノード `desktop.selectMenu`（メニューバー・右クリックメニューの項目を上から名前でたどって選ぶ。アクセスキー `(F)`・`...`・ショートカットは省いてよい）、`desktop.scroll`（マウスを使わずに一覧や枠をスクロール、部品が見えるまで動かす。`atEnd` で最後まで来たかがわかる）、`desktop.mouseScroll`（マウスのホイール）、`desktop.drag`（マウスでドラッグ。別のウィンドウへも）、`desktop.hover`（マウスを重ねる）。マウスのノードは `target.ocr` / `target.image` / `target.point` も使えます（docs/desktop.md）
+- PDF の結合・分割：`pdf.merge`（いくつかの PDF を 1 つに）、`pdf.extractPages`（`"1-3,5"`・`"2-"` で選んだページを新しい PDF に）、`pdf.split`（数ページずつのファイルに分けてパスの一覧を返す）。Acrobat は不要。新しいファイルには選んだページと、そのページが描くものだけを入れ、しおり・フォーム・ほかのページへのリンクは引き継ぎません（docs/pdf.md）
 
 ## [0.1.1] - 2026-11-06
 

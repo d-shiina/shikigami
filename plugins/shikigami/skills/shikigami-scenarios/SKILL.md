@@ -70,7 +70,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 - `file.*`：`readText` / `writeText`、`readCsv` / `writeCsv`、`list` / `exists`、`copy` / `move` / `delete` / `createFolder`、`zip` / `unzip`（docs/files.md）。
 - シナリオで使うファイルはシナリオのフォルダー（`input/`・`config/`・`templates/`・`output/`・`work/`・`logs/`）に置き、相対パス（`input/受注一覧.xlsx`）で書く。置くのは `write_project_file`、一覧は `list_project_files`。変えたくなる値は `config/` の設定ファイルにして `config.read` で読む。シナリオの外のファイルは絶対パス。組み立ては `pathJoin(folder, name)`・`fileName(path)`。`copy` / `move` の `to` は新しいパスそのもの（フォルダーを渡さない）。
 - CSV は見出しをキーにしたレコードの配列になり、セルは文字列（金額は `num()`）。加工は `filter` / `map` で行い、`writeCsv` の `rows` に `"{{ 変数 }}"` で渡す。Excel で開く CSV は `encoding: "utf-8-bom"` か `"shift_jis"`。
-- PDF の文字は `pdf.readText`（出力 `{ text, pages }`）で読み、値は `regexFind(res.text, '請求金額\\s*([\\d,]+)', 1)` のように式で取り出す（JSON の中では `\\` を `\\\\` と書く）。スキャンした PDF は文字が空になる。パスワードは `password` にシークレットで渡す（docs/pdf.md）。
+- PDF の文字は `pdf.readText`（出力 `{ text, pages }`）で読み、値は `regexFind(res.text, '請求金額\\s*([\\d,]+)', 1)` のように式で取り出す（JSON の中では `\\` を `\\\\` と書く）。スキャンした PDF は文字が空になる。パスワードは `password` にシークレットで渡す。結合は `pdf.merge`、ページの抜き出しは `pdf.extractPages`（`pages: "1-3,5"`）、分割は `pdf.split`（出力はパスの配列）（docs/pdf.md）。
 - ファイルの到着を待つときは `wait.until` の `check` に `file.list`（`saveAs`）を入れ、`condition` で `len(files) > 0`。
 
 ## Web API・プログラム・人とのやりとり
