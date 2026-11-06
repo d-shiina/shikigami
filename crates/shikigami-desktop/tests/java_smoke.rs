@@ -22,10 +22,11 @@ public class ShikigamiJavaTest {
             JFrame f = new JFrame("Shikigami Java Test");
             JTextField name = new JTextField(12);
             name.getAccessibleContext().setAccessibleName("氏名");
-            JLabel out = new JLabel("-");
-            out.getAccessibleContext().setAccessibleName("結果");
+            // A plain label's accessible name is its text (Swing gives
+            // text access to HTML labels only).
+            JLabel out = new JLabel("結果:-");
             JButton ok = new JButton("登録");
-            ok.addActionListener(e -> out.setText("登録:" + name.getText()));
+            ok.addActionListener(e -> out.setText("結果:登録:" + name.getText()));
             JCheckBox mail = new JCheckBox("メール送信");
             JTable table = new JTable(
                 new Object[][] { { "A-1", "1,200" }, { "A-2", "300" } },
@@ -33,7 +34,7 @@ public class ShikigamiJavaTest {
             JMenuBar bar = new JMenuBar();
             JMenu file = new JMenu("ファイル");
             JMenuItem clear = new JMenuItem("消去");
-            clear.addActionListener(e -> out.setText("消去しました"));
+            clear.addActionListener(e -> out.setText("結果:消去しました"));
             file.add(clear);
             bar.add(file);
             f.setJMenuBar(bar);
@@ -177,12 +178,12 @@ async fn swing_through_the_access_bridge() {
             .status();
     }
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
-    assert_eq!(report.outputs["after"], json!("登録:山田"));
+    assert_eq!(report.outputs["after"], json!("結果:登録:山田"));
     assert_eq!(report.outputs["mail"], json!(true));
     assert_eq!(
         report.outputs["rows"],
         json!([{ "番号": "A-1", "金額": "1,200" }, { "番号": "A-2", "金額": "300" }])
     );
-    assert_eq!(report.outputs["cleared"], json!("消去しました"));
+    assert_eq!(report.outputs["cleared"], json!("結果:消去しました"));
     assert_eq!(tree.unwrap()["app"], json!("java"));
 }
