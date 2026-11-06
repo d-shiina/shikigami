@@ -188,7 +188,7 @@ export function diveChain(root: Flow | null, called: Record<string, Flow>, path:
  * Breakpoints a run of the open flow stops at: its own, and those of every
  * flow it calls as `<flowId>/<stepId>` (copies of a flow share step IDs).
  */
-function runBreakpoints(s: Pick<StudioState, "flow" | "called" | "breakpoints">): string[] {
+export function runBreakpoints(s: Pick<StudioState, "flow" | "called" | "breakpoints">): string[] {
   if (!s.flow) return [];
   const called = Object.keys(s.called).flatMap((id) => (s.breakpoints[id] ?? []).map((step) => `${id}/${step}`));
   return [...(s.breakpoints[s.flow.id] ?? []), ...called];
@@ -332,6 +332,8 @@ export type StudioState = {
   debug(command: DebugCommand): Promise<boolean>;
   /** `flowId`: the flow the step is in, when it is a called one shown on the chart. */
   toggleBreakpoint(stepId: string, flowId?: string): void;
+  /** Removes every breakpoint of the open flow and of the flows it calls. */
+  clearBreakpoints(): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -1232,6 +1234,20 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const run = get().run;
         if (run && isActive(run) && run.flowId === get().flow?.id) {
           void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: runBreakpoints(get()) }).catch(() => {});
+        }
+      },
+
+      clearBreakpoints() {
+        const flow = get().flow;
+        if (!flow) return;
+        const breakpoints = { ...get().breakpoints };
+        delete breakpoints[flow.id];
+        for (const id of Object.keys(get().called)) delete breakpoints[id];
+        saveBreakpoints(breakpoints);
+        set({ breakpoints });
+        const run = get().run;
+        if (run && isActive(run) && run.flowId === flow.id) {
+          void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: [] }).catch(() => {});
         }
       },
 

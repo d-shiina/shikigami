@@ -2,10 +2,8 @@ import type { ByRisk, Decision, Policy, RiskLevel } from "@shikigami/schema";
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
+import { SettingsGroup, SettingsRow, settingsInput, settingsPrimary, settingsSelect } from "./settingsLayout";
 
-const inputClass =
-  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 font-mono text-xs focus:border-ink focus:outline-none";
-const selectClass = "rounded border border-slate-300 bg-sheet px-1 py-0.5 text-xs focus:border-ink focus:outline-none";
 const RISKS: RiskLevel[] = ["safe", "interactive", "dangerous"];
 const DECISIONS: Decision[] = ["allow", "ask", "deny"];
 
@@ -17,9 +15,24 @@ export function lines(text: string): string[] {
     .filter(Boolean);
 }
 
-function DecisionSelect({ value, onChange, label }: { value: Decision; onChange: (d: Decision) => void; label: string }) {
+function DecisionSelect({
+  value,
+  onChange,
+  label,
+  className = "",
+}: {
+  value: Decision;
+  onChange: (d: Decision) => void;
+  label: string;
+  className?: string;
+}) {
   return (
-    <select aria-label={label} className={selectClass} value={value} onChange={(e) => onChange(e.target.value as Decision)}>
+    <select
+      aria-label={label}
+      className={`${settingsSelect} ${className}`}
+      value={value}
+      onChange={(e) => onChange(e.target.value as Decision)}
+    >
       {DECISIONS.map((d) => (
         <option key={d} value={d}>
           {t.policyDecision[d]}
@@ -29,20 +42,27 @@ function DecisionSelect({ value, onChange, label }: { value: Decision; onChange:
   );
 }
 
+/** The AI operations by how far they reach: one column per risk, the same in every row. */
+const RISK_GRID = "grid grid-cols-3 gap-2";
+
 function RiskRow({ label, value, onChange }: { label: string; value: ByRisk; onChange: (v: ByRisk) => void }) {
   return (
-    <tr>
-      <th className="py-1 pr-3 text-left text-xs font-medium text-slate-600">{label}</th>
-      {RISKS.map((risk) => (
-        <td key={risk} className="py-1 pr-2">
-          <DecisionSelect
-            label={`${label}：${t.approvalRisk[risk]}`}
-            value={value[risk] ?? "allow"}
-            onChange={(d) => onChange({ ...value, [risk]: d })}
-          />
-        </td>
-      ))}
-    </tr>
+    <SettingsRow label={label}>
+      <div className={RISK_GRID}>
+        {RISKS.map((risk) => (
+          <div key={risk} className="min-w-0">
+            {/* The column headings are hidden when the rows stack, so name each risk here. */}
+            <span className="mb-0.5 block truncate text-xs text-slate-500 @min-[640px]:hidden">{t.approvalRisk[risk]}</span>
+            <DecisionSelect
+              className="w-full"
+              label={`${label}：${t.approvalRisk[risk]}`}
+              value={value[risk] ?? "allow"}
+              onChange={(d) => onChange({ ...value, [risk]: d })}
+            />
+          </div>
+        ))}
+      </div>
+    </SettingsRow>
   );
 }
 
@@ -96,64 +116,75 @@ export function PolicySection() {
   };
 
   return (
-    <form aria-label={t.policy} onSubmit={submit} className="space-y-4">
-      <p className="text-xs text-slate-600">{t.policyIntro}</p>
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600">{t.policySites}</span>
-        <textarea rows={3} className={inputClass} value={sites} onChange={(e) => setSites(e.target.value)} />
-        <span className="block text-[11px] text-slate-400">{t.policySitesHint}</span>
-      </label>
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600">{t.policyApps}</span>
-        <textarea rows={3} className={inputClass} value={apps} onChange={(e) => setApps(e.target.value)} />
-        <span className="block text-[11px] text-slate-400">{t.policyAppsHint}</span>
-      </label>
+    <form aria-label={t.policy} onSubmit={submit} className="space-y-5">
+      <p className="px-1 text-xs leading-relaxed text-slate-600">{t.policyIntro}</p>
+      <SettingsGroup>
+        <SettingsRow
+          align="start"
+          label={t.policySites}
+          htmlFor="policy-sites"
+          hint={
+            <>
+              {t.policyOnePerLine}
+              <br />
+              {t.policySitesHint}
+            </>
+          }
+        >
+          <textarea id="policy-sites" rows={3} className={`${settingsInput} font-mono text-[12px]`} value={sites} onChange={(e) => setSites(e.target.value)} />
+        </SettingsRow>
+        <SettingsRow
+          align="start"
+          label={t.policyApps}
+          htmlFor="policy-apps"
+          hint={
+            <>
+              {t.policyOnePerLine}
+              <br />
+              {t.policyAppsHint}
+            </>
+          }
+        >
+          <textarea id="policy-apps" rows={3} className={`${settingsInput} font-mono text-[12px]`} value={apps} onChange={(e) => setApps(e.target.value)} />
+        </SettingsRow>
+      </SettingsGroup>
 
-      <section>
-        <h3 className="mb-1 text-xs font-bold text-slate-600">{t.policyAi}</h3>
-        <table>
-          <thead>
-            <tr>
-              <th />
-              {RISKS.map((r) => (
-                <th key={r} className="pr-2 text-left text-[11px] font-normal text-slate-500">
-                  {t.approvalRisk[r]}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <RiskRow
-              label={t.policyAiRun}
-              value={ai.runFlow ?? { safe: "allow", interactive: "allow", dangerous: "ask" }}
-              onChange={(runFlow) => setDraft({ ...draft, ai: { ...ai, runFlow } })}
-            />
-            <RiskRow
-              label={t.policyAiTest}
-              value={ai.testStep ?? { safe: "allow", interactive: "allow", dangerous: "ask" }}
-              onChange={(testStep) => setDraft({ ...draft, ai: { ...ai, testStep } })}
-            />
-            <tr>
-              <th className="py-1 pr-3 text-left text-xs font-medium text-slate-600">{t.policyAiDelete}</th>
-              <td className="py-1">
-                <DecisionSelect
-                  label={t.policyAiDelete}
-                  value={ai.deleteFlow ?? "ask"}
-                  onChange={(deleteFlow) => setDraft({ ...draft, ai: { ...ai, deleteFlow } })}
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+      <SettingsGroup title={t.policyAi}>
+        <div className="hidden gap-x-6 bg-slate-50 px-4 py-1.5 @min-[640px]:grid @min-[640px]:grid-cols-[minmax(180px,2fr)_minmax(0,3fr)]">
+          <span />
+          <div className={RISK_GRID}>
+            {RISKS.map((r) => (
+              <span key={r} className="truncate text-xs text-slate-500">
+                {t.approvalRisk[r]}
+              </span>
+            ))}
+          </div>
+        </div>
+        <RiskRow
+          label={t.policyAiRun}
+          value={ai.runFlow ?? { safe: "allow", interactive: "allow", dangerous: "ask" }}
+          onChange={(runFlow) => setDraft({ ...draft, ai: { ...ai, runFlow } })}
+        />
+        <RiskRow
+          label={t.policyAiTest}
+          value={ai.testStep ?? { safe: "allow", interactive: "allow", dangerous: "ask" }}
+          onChange={(testStep) => setDraft({ ...draft, ai: { ...ai, testStep } })}
+        />
+        <SettingsRow label={t.policyAiDelete}>
+          <DecisionSelect
+            label={t.policyAiDelete}
+            value={ai.deleteFlow ?? "ask"}
+            onChange={(deleteFlow) => setDraft({ ...draft, ai: { ...ai, deleteFlow } })}
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
       {flow && own && (
-        <section className="space-y-1.5">
-          <h3 className="text-xs font-bold text-slate-600">{t.policyFlow(flow.name)}</h3>
-          <label className="flex items-center gap-2 text-xs">
-            <span className="text-slate-600">{t.policyFlowAi}</span>
+        <SettingsGroup title={t.policyFlow(flow.name)} description={t.policyFlowHint}>
+          <SettingsRow label={t.policyFlowAi} htmlFor="policy-flow-ai">
             <select
-              className={selectClass}
+              id="policy-flow-ai"
+              className={settingsSelect}
               value={own.aiRun ?? ""}
               onChange={(e) => setOwn({ aiRun: (e.target.value || null) as Decision | null })}
             >
@@ -164,20 +195,23 @@ export function PolicySection() {
                 </option>
               ))}
             </select>
-          </label>
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={own.unattended ?? true}
-              onChange={(e) => setOwn({ unattended: e.target.checked })}
-            />
-            {t.policyUnattended}
-          </label>
-        </section>
+          </SettingsRow>
+          <SettingsRow label={t.policyUnattended} hint={t.policyUnattendedHint}>
+            <label className="flex items-center gap-2 text-slate-700">
+              <input
+                type="checkbox"
+                checked={own.unattended ?? true}
+                onChange={(e) => setOwn({ unattended: e.target.checked })}
+              />
+              {t.policyAllow}
+            </label>
+          </SettingsRow>
+        </SettingsGroup>
       )}
 
-      <div className="flex justify-end">
-        <button type="submit" className="rounded-[4px] bg-ink px-3 py-1 text-sm font-medium text-sheet hover:bg-brand-700">
+      {/* Kept in sight while the person scrolls the policy, since it saves all of it at once. */}
+      <div className="sticky bottom-0 -mx-1 flex justify-end bg-paper px-1 py-2">
+        <button type="submit" className={settingsPrimary}>
           {t.policySave}
         </button>
       </div>
