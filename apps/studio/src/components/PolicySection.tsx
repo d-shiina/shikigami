@@ -50,13 +50,16 @@ function RiskRow({ label, value, onChange }: { label: string; value: ByRisk; onC
     <SettingsRow label={label}>
       <div className={RISK_GRID}>
         {RISKS.map((risk) => (
-          <DecisionSelect
-            key={risk}
-            className="w-full"
-            label={`${label}：${t.approvalRisk[risk]}`}
-            value={value[risk] ?? "allow"}
-            onChange={(d) => onChange({ ...value, [risk]: d })}
-          />
+          <div key={risk} className="min-w-0">
+            {/* The column headings are hidden when the rows stack, so name each risk here. */}
+            <span className="mb-0.5 block truncate text-xs text-slate-500 @min-[640px]:hidden">{t.approvalRisk[risk]}</span>
+            <DecisionSelect
+              className="w-full"
+              label={`${label}：${t.approvalRisk[risk]}`}
+              value={value[risk] ?? "allow"}
+              onChange={(d) => onChange({ ...value, [risk]: d })}
+            />
+          </div>
         ))}
       </div>
     </SettingsRow>
