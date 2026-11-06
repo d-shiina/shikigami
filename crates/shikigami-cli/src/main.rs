@@ -3,6 +3,7 @@
 //! Uses exactly the same Flow Core and Runtime as Studio and the MCP
 //! server; it is the reference for running flows without GUI or AI.
 
+mod agent_cmd;
 mod contract;
 
 use std::io::IsTerminal;
@@ -88,6 +89,14 @@ enum Command {
     /// Requests from AI clients waiting for a person's approval.
     #[command(subcommand)]
     Approval(ApprovalCmd),
+    /// The agent: runs flows unattended on this PC (schedules, file
+    /// triggers) so Task Scheduler is not needed.
+    #[command(subcommand)]
+    Agent(agent_cmd::AgentCmd),
+    /// When the agent starts flows by itself: daily, monthly, every few
+    /// minutes, once, or when a file appears.
+    #[command(subcommand)]
+    Schedule(agent_cmd::ScheduleCmd),
     /// Serve MCP over stdio for AI clients (Claude Code, Codex, Cursor, ...).
     Mcp {
         /// Tool classes to expose, comma separated: read, write, run.
@@ -353,6 +362,12 @@ fn real_main() -> Result<ExitCode> {
     };
 
     match &cli.command {
+        Command::Agent(cmd) => {
+            return agent_cmd::agent_cmd(open_service()?, &runtime, &workspace(), cmd);
+        }
+        Command::Schedule(cmd) => {
+            return agent_cmd::schedule_cmd(&open_service()?, cmd, parse_inputs);
+        }
         Command::Flow(cmd) => {
             let svc = open_service()?;
             flow_cmd(&svc, cmd)?;

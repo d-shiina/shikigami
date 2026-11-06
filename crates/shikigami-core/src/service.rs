@@ -943,6 +943,32 @@ impl FlowService {
     /// the published versions of every flow it calls. Fails with
     /// `NOT_PUBLISHED` / `SUBFLOW_NOT_PUBLISHED` rather than falling
     /// back to working content nobody approved.
+    /// What an unattended run of `id` (`shikigami run`, a schedule, a
+    /// management server) executes: the published versions, once the
+    /// workspace policy allows the flow and everything it calls to run
+    /// unattended (`UNATTENDED_NOT_ALLOWED` otherwise).
+    pub fn unattended_run(&self, id: &FlowId) -> CoreResult<PublishedRun> {
+        let policy = crate::Policy::load(&crate::Policy::path(self.store.root()))?;
+        let refuse = |id: &FlowId| -> CoreResult<()> {
+            if policy.allows_unattended(id.as_str()) {
+                return Ok(());
+            }
+            Err(CoreError::Rejected {
+                code: "UNATTENDED_NOT_ALLOWED",
+                message: format!("the workspace policy keeps {id} from running unattended"),
+                hint: Some(
+                    "Run it from Studio, or change \"unattended\" for it in policy.json.".into(),
+                ),
+            })
+        };
+        refuse(id)?;
+        let run = self.published_run(id)?;
+        for sub in &run.subflows {
+            refuse(&sub.flow.id)?;
+        }
+        Ok(run)
+    }
+
     pub fn published_run(&self, id: &FlowId) -> CoreResult<PublishedRun> {
         let Some(version) = self.published_version(id)? else {
             if !self.store.exists(id) {

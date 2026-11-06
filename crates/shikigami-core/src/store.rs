@@ -820,7 +820,7 @@ fn sanitize_file_name(name: &str) -> String {
         .collect()
 }
 
-pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> CoreResult<()> {
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> CoreResult<()> {
     let dir = path
         .parent()
         .ok_or_else(|| CoreError::InvalidEdit(format!("invalid path {}", path.display())))?;
