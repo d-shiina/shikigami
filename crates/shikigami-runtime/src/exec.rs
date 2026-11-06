@@ -1122,12 +1122,27 @@ impl Executor {
             if !self.case_matches(case, &value)? {
                 continue;
             }
-            return loop {
-                match self.block(std::slice::from_ref(case)).await? {
-                    Proceed::Retry => {}
-                    other => break Ok(other),
+            // An interactive run keeps the case in its block stack, as
+            // `sub_block` does, so a revision swapped in while paused in
+            // the case finds the run where it is.
+            let frame = self.debug.clone().filter(|_| self.in_call.is_none());
+            if let Some(debug) = &frame {
+                debug.push_frame(BlockKey::Child {
+                    parent: step.id.clone(),
+                    name: "cases".to_owned(),
+                });
+                debug.set_current(Some(case.id.clone()));
+            }
+            let result = loop {
+                match self.block(std::slice::from_ref(case)).await {
+                    Ok(Proceed::Retry) => {}
+                    other => break other,
                 }
             };
+            if let Some(debug) = &frame {
+                debug.pop_frame();
+            }
+            return result;
         }
         self.sub_block(step, "default").await
     }

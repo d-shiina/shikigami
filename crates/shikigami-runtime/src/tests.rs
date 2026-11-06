@@ -1680,6 +1680,48 @@ async fn swaps_that_lose_the_paused_position_are_refused() {
 }
 
 #[tokio::test]
+async fn a_fix_inside_a_switch_case_is_taken_while_paused() {
+    // s1 switch { cases: [s2 case { s3 fail }] }, s4
+    let switch = |message: &str| {
+        flow(vec![
+            Step::new("control.switch")
+                .with_param("value", "'A'")
+                .with_block(
+                    "cases",
+                    vec![
+                        Step::new("control.case")
+                            .with_param("values", json!(["A"]))
+                            .with_block("body", vec![fail(message)]),
+                    ],
+                ),
+            log("after"),
+        ])
+    };
+    let s = switch("boom");
+    let mut fixed = s.clone();
+    fixed.revision += 1;
+    fixed.steps[0].blocks.get_mut("cases").expect("cases")[0]
+        .blocks
+        .get_mut("body")
+        .expect("body")[0] = log("fixed").with_id("s3");
+    let mut handle = Runtime::new().start(s, debug_options(&[])).expect("start");
+    let control = handle.debug_control().expect("control");
+    let mut events = Vec::new();
+    while let Some(event) = handle.next_event().await {
+        if matches!(event.event, RunEvent::Paused { .. }) {
+            assert!(control.update_flow(fixed.clone()).expect("taken"));
+            control.send(DebugCommand::Retry).expect("retry");
+        }
+        events.push(event);
+    }
+    assert_eq!(
+        handle.wait().await.expect("wait").status,
+        RunStatus::Succeeded
+    );
+    assert_eq!(logs(&events), ["fixed", "after"]);
+}
+
+#[tokio::test]
 async fn resuming_commands_need_a_pause_and_cancel_ends_a_paused_run() {
     let s = flow(vec![log("a")]);
     let mut options = debug_options(&[]);

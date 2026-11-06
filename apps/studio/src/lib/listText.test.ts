@@ -13,7 +13,7 @@ describe("case values as a line of text", () => {
   });
 
   it("writes back what it reads", () => {
-    for (const values of [["A", "B"], [1, 2], ["10", "a, b", " x", ""], [true, null], ["{{ code }}"]]) {
+    for (const values of [["A", "B"], [1, 2], ["10", "a, b", " x", ""], [true, null], ["{{ code }}"], [0.0000001, 1e21, "1e3"]]) {
       expect(textToList(listToText(values))).toEqual(values);
     }
     expect(listToText(["A", 1, "1"])).toBe('A, 1, "1"');

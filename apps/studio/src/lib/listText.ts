@@ -15,7 +15,7 @@ function fromWord(word: string): Scalar {
   if (word === "true") return true;
   if (word === "false") return false;
   if (word === "null") return null;
-  if (/^-?\d+(\.\d+)?$/.test(word)) return Number(word);
+  if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(word)) return Number(word);
   return word;
 }
 
