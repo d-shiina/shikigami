@@ -505,7 +505,15 @@ function PartInspector({ name }: { name: string }) {
       <Section title={t.parts.target}>
         <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
           {uses.length > 1 && <span>{t.parts.shared(uses.length)}</span>}
-          {pointer && <PointTools adapter={pointer} schema={schema} value={part.target} onChange={(target) => target && set({ target: target as Part["target"] })} />}
+          {pointer && (
+            <PointTools
+              adapter={pointer}
+              schema={schema}
+              value={part.target}
+              context={partContext(uses)}
+              onChange={(target) => target && set({ target: target as Part["target"] })}
+            />
+          )}
         </div>
         <ObjectFields schema={schema} value={part.target as Record<string, unknown>} onChange={(target) => target && set({ target: target as Part["target"] })} />
       </Section>
@@ -539,6 +547,10 @@ function PartInspector({ name }: { name: string }) {
     </div>
   );
 }
+
+/** The browser context the nodes using a part run in (the first one that names one). */
+const partContext = (uses: readonly Step[]) =>
+  uses.map((u) => u.params?.context).find((c): c is string => typeof c === "string" && c !== "");
 
 /** The adapters whose targets can be picked on screen from Studio. */
 const POINTERS = new Set(["desktop", "browser"]);
