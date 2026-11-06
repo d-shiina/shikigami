@@ -12,6 +12,7 @@ use serde_json::{Map, Value};
 use shikigami_core::{ErrorPayload, FlowId, FlowService, Policy, RunId};
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{RunOptions, RunOrigin, RunReport, RunTrigger, Runtime};
+use shikigami_secrets::KeyStore;
 use tokio_util::sync::CancellationToken;
 
 use crate::schedule::{Schedule, ScheduleState, Schedules, When, name_matches};
@@ -68,6 +69,22 @@ pub struct AgentStatus {
     /// Why schedules are not being read (a broken `schedules.json`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problem: Option<String>,
+    /// The management server link, when `policy.json` turns it on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<RemoteStatus>,
+}
+
+/// The agent's link to a management server.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manager: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker_id: Option<String>,
+    /// Why it is not taking jobs (not enrolled, server unreachable…).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
 }
 
 /// Called with every report of a run the agent started (notifications).
@@ -99,6 +116,8 @@ pub struct Agent {
     hooks: Mutex<Vec<FinishedHook>>,
     state: Mutex<Loop>,
     stop: CancellationToken,
+    keys: Mutex<Arc<dyn KeyStore>>,
+    remote_problem: Mutex<Option<String>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -119,13 +138,15 @@ impl Agent {
     /// (`with_secrets`, `with_policy`) and the PC-wide locks.
     pub fn new(svc: Arc<FlowService>, runtime: Runtime) -> Arc<Self> {
         Arc::new(Self {
-            svc,
             runtime,
             started_at: now_text(),
             active: Mutex::new(HashMap::new()),
             hooks: Mutex::new(Vec::new()),
             state: Mutex::new(Loop::default()),
             stop: CancellationToken::new(),
+            keys: Mutex::new(crate::remote::default_key_store(svc.store().local_root())),
+            remote_problem: Mutex::new(None),
+            svc,
         })
     }
 
@@ -135,6 +156,25 @@ impl Agent {
 
     pub fn local_root(&self) -> &Path {
         self.svc.store().local_root()
+    }
+
+    /// Where the worker key for the management server is kept (Windows
+    /// Credential Manager unless set, for tests).
+    pub fn set_key_store(&self, keys: Arc<dyn KeyStore>) {
+        *lock(&self.keys) = keys;
+    }
+
+    pub fn key_store(&self) -> Arc<dyn KeyStore> {
+        lock(&self.keys).clone()
+    }
+
+    pub(crate) fn set_remote_problem(&self, problem: Option<String>) {
+        *lock(&self.remote_problem) = problem;
+    }
+
+    /// Whether the screen can be used now; `None` when not known.
+    pub fn desktop_available(&self) -> Option<bool> {
+        self.runtime.desktop_available()
     }
 
     pub fn on_finished(&self, hook: FinishedHook) {
@@ -272,7 +312,21 @@ impl Agent {
                 })
                 .collect(),
             problem: state.problem.clone(),
+            remote: self.remote_status(),
         }
+    }
+
+    fn remote_status(&self) -> Option<RemoteStatus> {
+        let policy = Policy::load(&Policy::path(self.svc.store().root())).ok()?;
+        if !policy.remote.enabled {
+            return None;
+        }
+        let enrollment = crate::remote::Enrollment::load(self.local_root());
+        Some(RemoteStatus {
+            manager: policy.remote.manager.clone(),
+            worker_id: enrollment.map(|e| e.worker_id),
+            problem: lock(&self.remote_problem).clone(),
+        })
     }
 
     /// Ends [`Agent::serve`] (runs in progress are cancelled).
@@ -288,6 +342,7 @@ impl Agent {
     pub async fn serve(self: Arc<Self>) -> std::io::Result<()> {
         let listener = crate::ipc::Listener::bind(self.local_root())?;
         let ipc = tokio::spawn(crate::ipc::serve(listener, Arc::clone(&self)));
+        let remote = tokio::spawn(crate::remote::run(Arc::clone(&self)));
         let mut tick = tokio::time::interval(Duration::from_secs(1));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut n: u64 = 0;
@@ -307,13 +362,15 @@ impl Agent {
         for cancel in running {
             cancel.cancel();
         }
-        // Give `finally` blocks and records a moment.
+        // Give `finally` blocks and records a moment (and the server its
+        // report).
         for _ in 0..100 {
             if lock(&self.active).is_empty() {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
+        let _ = tokio::time::timeout(Duration::from_secs(5), remote).await;
         Ok(())
     }
 

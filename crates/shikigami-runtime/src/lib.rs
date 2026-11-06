@@ -120,6 +120,15 @@ impl Runtime {
         self
     }
 
+    /// Whether the screen can be used now (signed in, not locked): `None`
+    /// when this runtime has no way to tell (no desktop adapter).
+    pub fn desktop_available(&self) -> Option<bool> {
+        self.resources
+            .desktop_probe
+            .as_ref()
+            .map(|probe| probe().is_none())
+    }
+
     /// Where steps look up registered secrets (`{ "secret": .., "field": .. }`
     /// params) and saved browser logins: the workspace vault.
     pub fn with_secrets(mut self, secrets: Arc<dyn SecretProvider>) -> Self {
