@@ -155,6 +155,7 @@ const BY_TYPE: Record<string, LucideIcon> = {
 };
 
 const BY_GROUP: Record<string, LucideIcon> = {
+  subflow: Workflow,
   browser: Globe,
   excel: FileSpreadsheet,
   word: FileText,

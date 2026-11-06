@@ -563,7 +563,8 @@ fn run_id(raw: &str) -> Result<RunId, ErrorPayload> {
 impl ShikigamiMcp {
     // -- read ---------------------------------------------------------------
 
-    /// List all scenarios in the workspace (ID, name, revision, step count).
+    /// List all scenarios in the workspace (ID, name, revision, step count, and
+    /// the `inputs` / `outputs` a `scenario.call` to it can pass and receive).
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
     async fn list_scenarios(&self, peer: Peer<RoleServer>) -> Result<CallToolResult, ErrorData> {
         let outcome = self
