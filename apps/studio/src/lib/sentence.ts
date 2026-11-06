@@ -4,7 +4,8 @@
 // its label. Word order differs between the languages, so each has its own
 // builders rather than dictionary entries.
 import type { Step, StepTypeDef } from "@shikigami/schema";
-import { locale, stepLabel } from "./i18n";
+import { locale, stepLabel, t } from "./i18n";
+import { choiceLabel, columnOf, type Match, recognize, slotsOf, splitParts, textOf, valueKind, wordsOf } from "./transforms";
 
 /** Plain words, or a value shown as a code chip (expressions, variables). */
 export type Part = { text: string } | { code: string };
@@ -234,9 +235,55 @@ export function calledName(id: unknown): string | null {
 
 type Builder = (p: Record<string, unknown>, step: Step) => Part[];
 
+/** A value slot as it reads: text in brackets, today as a word, a variable as a chip. */
+function valuePart(source: string): Part {
+  const text = textOf(source);
+  if (text !== null) return w(locale === "ja" ? `「${text}」` : `“${text}”`);
+  const kind = valueKind(source);
+  if (kind === "today" || kind === "now") return w(t.transforms.kinds[kind]);
+  if (kind === "number") return w(source);
+  return code(source);
+}
+
+/** What a recognised expression is, in words: "rows の「金額」の合計". */
+export function transformPhrase(match: Match): Part[] {
+  const kinds = new Map(slotsOf(match.def).map((s) => [s.name, s.kind]));
+  const out: Part[] = [];
+  for (const piece of wordsOf(match.def).phrase.split(/(\{\w+\})/)) {
+    const slot = /^\{(\w+)\}$/.exec(piece)?.[1];
+    if (!slot) {
+      if (piece) out.push(w(piece));
+      continue;
+    }
+    const value = match.slots[slot] ?? "";
+    const kind = kinds.get(slot);
+    if (kind === "choice") out.push(w(choiceLabel(slot, value)));
+    else if (kind === "col") out.push(w(columnOf(value)));
+    else if (kind === "num") out.push(w(value));
+    else if (kind === "parts") splitParts(value).forEach((p, i) => out.push(...(i > 0 ? [w(" + ")] : []), valuePart(p)));
+    else out.push(valuePart(value));
+  }
+  return out;
+}
+
+/** A node's kind as its header shows it: a recognised "変数に代入" by its form ("表の列を集計"). */
+export function typeTitle(step: Step, def: StepTypeDef | undefined): string {
+  const match = step.type === "variable.set" && step.params?.value === undefined ? recognize(step.params?.expression) : null;
+  return match ? wordsOf(match.def).label : stepLabel(step.type, def?.label);
+}
+
+/** "total に rows の「金額」の合計 を入れる" when the expression has a form, else the expression. */
+function setValue(p: Record<string, unknown>): Part[] {
+  const match = p.value === undefined ? recognize(p.expression) : null;
+  return match ? transformPhrase(match) : [code(p.expression ?? p.value)];
+}
+
 const BUILDERS: Record<string, Builder> = {
   "log.message": (p) => [w("「"), ...template(p.message), w(`」と${p.level === "warn" ? "警告を" : p.level === "error" ? "エラーを" : "ログに"}書く`)],
-  "variable.set": (p) => [code(p.name), w(" に "), code(p.expression ?? p.value), w(" を入れる")],
+  "variable.set": (p) => {
+    const value = setValue(p);
+    return [code(p.name), w(" に "), ...value, w(value.at(-1) && "text" in value.at(-1)! ? "を入れる" : " を入れる")];
+  },
   "control.if": (p) => [w("もし "), code(p.condition), w(" なら")],
   "control.switch": (p) => [code(p.value), w(" の値で分ける")],
   "control.case": (p) => caseParts(p),
@@ -303,7 +350,7 @@ const BUILDERS: Record<string, Builder> = {
 
 const BUILDERS_EN: Record<string, Builder> = {
   "log.message": (p) => [w(p.level === "warn" ? "Warn " : p.level === "error" ? "Log error " : "Log "), w("\""), ...template(p.message), w("\"")],
-  "variable.set": (p) => [w("Set "), code(p.name), w(" to "), code(p.expression ?? p.value)],
+  "variable.set": (p) => [w("Set "), code(p.name), w(" to "), ...setValue(p)],
   "control.if": (p) => [w("If "), code(p.condition)],
   "control.switch": (p) => [w("Switch on "), code(p.value)],
   "control.case": (p) => caseParts(p),

@@ -1,7 +1,9 @@
 // The Japanese dictionary. Internal identifiers stay English; only display
 // strings live here. en.ts must have the same shape (checked by `Dict`).
 import { errorsJa } from "./errors.ja";
+import { functionHelpJa } from "./functionHelp.ja";
 import { stepHelpJa } from "./stepHelp.ja";
+import { transformsJa } from "./transforms.ja";
 
 export const ja = {
   appName: "Shikigami Studio",
@@ -435,35 +437,6 @@ export const ja = {
     themeDark: "ダーク",
     language: "表示言語",
   },
-  presets: {
-    "+": { label: "文字をつなぐ", description: "変数どうし、変数と固定の文字をつなぐ（例：姓 + 名、'ID-' + 番号）" },
-    "trim": { label: "前後の空白を除く", description: "前後の空白（全角も）を取り除く" },
-    "replace": { label: "文字を置き換える", description: "決まった文字をすべて置き換える" },
-    "slice": { label: "一部を取り出す", description: "何文字目から何文字目までを取り出す（負数は末尾から）" },
-    "padStart": { label: "ゼロで埋める", description: "桁数をそろえる（7 → 007）" },
-    "toHalfWidth": { label: "半角にする", description: "全角の英数字・カタカナを半角に" },
-    "toFullWidth": { label: "全角にする", description: "半角の英数字・カタカナを全角に" },
-    "split": { label: "区切って分ける", description: "区切り文字で分けてリストに" },
-    "lines": { label: "行に分ける", description: "改行ごとに分けてリストに" },
-    "regexFind": { label: "パターンで取り出す", description: "正規表現で一致した部分を取り出す" },
-    "regexReplace": { label: "パターンで置き換える", description: "正規表現で一致した部分を置き換える（例：数字以外を消す）" },
-    "num": { label: "数値にする", description: "「1,234」や全角数字の文字を数値に" },
-    "round": { label: "四捨五入する", description: "小数点以下の桁数を指定して四捨五入" },
-    "formatNumber": { label: "3桁区切りにする", description: "1234567 → 1,234,567" },
-    "today": { label: "今日の日付", description: "今日の日付を書式付きの文字に" },
-    "formatDate": { label: "日付を書式にする", description: "和暦や曜日も（例：令和8年10月28日(水)）", expression: "formatDate(date, 'gge年M月d日(ddd)')" },
-    "parseDate": { label: "文字を日付にする", description: "「2026/10/28」「令和8年10月28日」などを日付に" },
-    "dateAdd": { label: "日付を足し引きする", description: "日・月・年を足す（負数で引く）" },
-    "dateDiff": { label: "日付の差", description: "2 つの日付が何日（何か月）離れているか" },
-    "endOfMonth": { label: "月末日", description: "その月の最終日" },
-    "filter": { label: "表を絞り込む", description: "条件に合う行だけにする", expression: "filter(rows, r => num(r.金額) >= 10000)" },
-    "map": { label: "列を取り出す", description: "各行から 1 列（や新しい形）を作る", expression: "map(rows, r => r.氏名)" },
-    "find": { label: "1 行を探す", description: "条件に合う最初の行", expression: "find(rows, r => r.コード == code)" },
-    "sortBy": { label: "並べ替える", description: "列の値で昇順に（降順は reverse で包む）", expression: "sortBy(rows, r => num(r.金額))" },
-    "sum": { label: "合計する", description: "列の値を合計", expression: "sum(map(rows, r => num(r.金額)))" },
-    "len": { label: "件数を数える", description: "リストの件数・文字数" },
-    "join": { label: "まとめてつなぐ", description: "リストを区切り文字でつないで 1 つの文字に" },
-  } as Record<string, { label: string; description: string; expression?: string }>,
   loading: "読み込み中…",
   categories: {
     control: "制御",
@@ -1333,6 +1306,20 @@ export const ja = {
     },
   },
   runErrors: errorsJa,
+  exprField: {
+    items: (n: number) => `${n} 件`,
+    result: "結果",
+    fromRun: "前回の実行の値で計算",
+    fromPartialRun: "前回の実行の値の一部で計算（大きい値は先頭だけ記録されます）",
+    needsRun: "実行すると、前回の実行の値で結果を表示します",
+    variables: "変数",
+    columns: (table: string) => `${table} の列`,
+    functions: "関数",
+    unknownVariable: (name: string) => `変数「${name}」はこのフローにありません`,
+    hint: "変数は色付きで表示されます。Ctrl+Space で候補を表示",
+  },
+  transforms: transformsJa,
+  functionHelp: functionHelpJa,
   stepHelp: stepHelpJa as Record<string, { summary: string; words: string }>,
   blockNames: {} as Record<string, string>,
 };

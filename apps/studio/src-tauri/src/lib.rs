@@ -170,6 +170,7 @@ pub fn run() {
             commands::undo_state,
             commands::validate_flow,
             commands::list_step_types,
+            commands::eval_expression,
             commands::flow_history,
             commands::review_timeline,
             commands::submit_review,

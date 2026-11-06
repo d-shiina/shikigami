@@ -29,7 +29,7 @@ import { type FrameKind, layoutFlow, NODE_W, READ_ROOM, type SlotNodeData, SLOT_
 import { nodeIcon } from "../lib/nodeIcons";
 import { PERSON_CODES, todosByStep } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
-import { stepLabel, t } from "../lib/i18n";
+import { t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
 import type { HistoryEntry, Flow, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
@@ -51,7 +51,7 @@ import {
   TYPE_COLOR,
 } from "../lib/nodeRows";
 import { type OutlineItem, outline } from "../lib/outline";
-import { plain, sentence } from "../lib/sentence";
+import { plain, sentence, typeTitle } from "../lib/sentence";
 import { callKey, diveChain, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { CATEGORY_COLOR } from "./CommandPalette";
@@ -696,7 +696,7 @@ function StepNode({ data }: StepNodeProps) {
         {/* With a keyword the type is clear enough: make room for the name. */}
         {!(KEYWORD[data.step.type] && data.step.name) && (
           <span className="truncate text-[12px] font-bold" style={{ color }}>
-            {stepLabel(data.step.type, data.def?.label)}
+            {typeTitle(data.step, data.def)}
           </span>
         )}
         {data.step.name && <span className="truncate text-[12px] text-slate-500">{data.step.name}</span>}

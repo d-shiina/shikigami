@@ -1,7 +1,9 @@
 // The English dictionary. Same shape as ja.ts; keep labels short nouns.
 import type { Dict } from "./ja";
 import { errorsEn } from "./errors.en";
+import { functionHelpEn } from "./functionHelp.en";
 import { stepHelpEn } from "./stepHelp.en";
+import { transformsEn } from "./transforms.en";
 
 export const en: Dict = {
   appName: "Shikigami Studio",
@@ -435,35 +437,6 @@ export const en: Dict = {
     themeLight: "Light",
     themeDark: "Dark",
     language: "Language",
-  },
-  presets: {
-    "+": { label: "Join text", description: "Join variables and fixed text (e.g. first + ' ' + last, 'ID-' + no)", expression: "firstName + ' ' + lastName" },
-    trim: { label: "Trim spaces", description: "Remove leading and trailing spaces (full-width too)" },
-    replace: { label: "Replace text", description: "Replace every occurrence of a string" },
-    slice: { label: "Take part", description: "Characters from one position to another (negative counts from the end)" },
-    padStart: { label: "Pad with zeros", description: "Fixed number of digits (7 → 007)" },
-    toHalfWidth: { label: "To half-width", description: "Full-width letters, digits and katakana to half-width" },
-    toFullWidth: { label: "To full-width", description: "Half-width letters, digits and katakana to full-width" },
-    split: { label: "Split", description: "Split at a separator into a list" },
-    lines: { label: "Split lines", description: "Split at line breaks into a list" },
-    regexFind: { label: "Find pattern", description: "Take the part a regular expression matches" },
-    regexReplace: { label: "Replace pattern", description: "Replace what a regular expression matches (e.g. drop non-digits)" },
-    num: { label: "To number", description: "Text such as \"1,234\" or full-width digits to a number" },
-    round: { label: "Round", description: "Round to a number of decimal places" },
-    formatNumber: { label: "Thousands separators", description: "1234567 → 1,234,567" },
-    today: { label: "Today", description: "Today's date as formatted text", expression: "formatDate(today(), 'yyyy-MM-dd')" },
-    formatDate: { label: "Format date", description: "Weekdays and Japanese eras too", expression: "formatDate(date, 'yyyy-MM-dd (ddd)')" },
-    parseDate: { label: "Text to date", description: "\"2026/10/28\", \"令和8年10月28日\" and similar to a date" },
-    dateAdd: { label: "Add to date", description: "Add days, months or years (negative to subtract)" },
-    dateDiff: { label: "Date difference", description: "How many days (or months) apart two dates are" },
-    endOfMonth: { label: "End of month", description: "The last day of the month" },
-    filter: { label: "Filter rows", description: "Keep the rows that match a condition", expression: "filter(rows, r => num(r.Amount) >= 10000)" },
-    map: { label: "Pick column", description: "Make one column (or a new shape) from each row", expression: "map(rows, r => r.Name)" },
-    find: { label: "Find row", description: "The first row that matches", expression: "find(rows, r => r.Code == code)" },
-    sortBy: { label: "Sort", description: "Ascending by a column (wrap in reverse for descending)", expression: "sortBy(rows, r => num(r.Amount))" },
-    sum: { label: "Sum", description: "Add up a column", expression: "sum(map(rows, r => num(r.Amount)))" },
-    len: { label: "Count", description: "Number of items or characters" },
-    join: { label: "Join list", description: "Join a list into one text with a separator", expression: "join(names, ', ')" },
   },
   loading: "Loading…",
   categories: {
@@ -1333,6 +1306,20 @@ export const en: Dict = {
     },
   },
   runErrors: errorsEn,
+  exprField: {
+    items: (n: number) => `${n} items`,
+    result: "Result",
+    fromRun: "with the values of the last run",
+    fromPartialRun: "with part of the last run's values (large values are recorded only in part)",
+    needsRun: "Run the flow to see the result with its values",
+    variables: "Variables",
+    columns: (table: string) => `Columns of ${table}`,
+    functions: "Functions",
+    unknownVariable: (name: string) => `The flow has no variable “${name}”`,
+    hint: "Variables are shown in colour. Ctrl+Space shows suggestions",
+  },
+  transforms: transformsEn,
+  functionHelp: functionHelpEn,
   stepHelp: stepHelpEn,
   stepTypes: {
     "browser.attach": "Use open browser",
