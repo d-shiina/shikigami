@@ -1,7 +1,7 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
-import { AgentContext, createAgentStore, useAgent } from "./agent";
+import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
 import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { BottomPanel } from "./components/BottomPanel";
@@ -32,6 +32,7 @@ import { agent, api, events } from "./lib/api";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
 import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
+import { lastAdded, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
 
@@ -450,8 +451,33 @@ export function App() {
 
   useEffect(() => {
     void store.getState().init();
+    // While the AI asked in the pane works, Studio follows it: a scenario it
+    // has just made opens, and the chart pans to the nodes it adds. Only
+    // changes from outside count, so the person's own edits never move the view.
+    const followChange = async (id: string) => {
+      const before = store.getState();
+      const known = before.summaries.some((s) => s.id === id);
+      const shown = before.scenario?.id === id ? stepIds(before.scenario.steps ?? []) : null;
+      await store.getState().onExternalChange(id);
+      const now = store.getState();
+      const working = activity(agentStore.getState());
+      if (!working) return;
+      // The pane and the status bar already say the AI is at work; a notice per edit is noise.
+      if (now.notice === t.externalChange) store.setState({ notice: null });
+      let opened = false;
+      if (shouldFollow(id, known, working, now)) {
+        await now.open(id);
+        opened = store.getState().scenario?.id === id;
+        const name = store.getState().scenario?.name;
+        if (opened && name) store.setState({ notice: t.openedAiScenario(name) });
+      }
+      const after = store.getState();
+      if (after.scenario?.id !== id || (!opened && shown === null)) return;
+      const stepId = lastAdded(opened ? null : shown, after.scenario.steps ?? []);
+      if (stepId) store.setState({ reveal: { stepId, seq: (after.reveal?.seq ?? 0) + 1 } });
+    };
     const unlisten = [
-      events.onScenarioChanged((id) => void store.getState().onExternalChange(id)),
+      events.onScenarioChanged((id) => void followChange(id)),
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
       events.onRunEvidence((e) => store.getState().onRunEvidence(e)),
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),

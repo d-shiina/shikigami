@@ -222,12 +222,15 @@ export type AgentInfo = {
 export type AgentRequest = {
   message: string;
   sessionId?: string | null;
-  scenario?: { id: string; name: string; stepId?: string | null } | null;
+  /** `empty`: it has no steps yet, so the AI builds in it instead of making another. */
+  scenario?: { id: string; name: string; stepId?: string | null; empty?: boolean } | null;
 };
 
 export type AgentEvent = { turnId: string } & (
   | { kind: "session"; sessionId: string }
   | { kind: "text"; text: string }
+  /** The agent began writing this tool call; `tool` follows once it is written. */
+  | { kind: "preparing"; name: string }
   | { kind: "tool"; name: string; detail: string | null }
   | { kind: "toolFailed"; message: string }
   | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null; needsLogin: boolean }
