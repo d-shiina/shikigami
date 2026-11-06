@@ -4679,6 +4679,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shikigami-adapters",
+ "shikigami-agent",
  "shikigami-core",
  "shikigami-runtime",
  "shikigami-secrets",
