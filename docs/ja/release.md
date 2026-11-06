@@ -50,7 +50,13 @@ GitHub CLI（`gh`）にログイン済みなら自動で登録します。`gh` �
    git push origin v0.2.0
    ```
 
-3. `Release` ワークフロー（`.github/workflows/release.yml`）が Windows でビルドし、Release を公開します。タグと `Cargo.toml` のバージョンが違うと止まります
+   ターミナルを使わずに出すなら、GitHub の **Actions → Release → Run workflow**（ブランチは `main`）を押します。今の `main` に `Cargo.toml` のバージョンのタグを付けて公開します。そのタグがすでに別のコミットにあれば止まります
+3. `Release` ワークフロー（`.github/workflows/release.yml`）が Windows でビルドし、Release を公開します。タグと `Cargo.toml` のバージョンが違うとき、署名鍵が登録されていないとき（上の「最初の準備」）は止まります
+   - リリースノートは `CHANGELOG.md` のうち、見出しにそのバージョンがある節（例：`## [0.2.0] - 2026-11-06`）です。なければ `CHANGELOG.md` へのリンクになります
+   - ハイフン付きのバージョン（`0.2.0-beta.1`）はプレリリースになり、インストール済みの Studio は更新しません
+   - インストーラーは実行結果のページにも `installers-<バージョン>` として 14 日間残ります
+
+リリースのビルドを変える Pull Request（ワークフロー・`apps/studio/scripts/`・Tauri の設定）では、同じビルドを試しに走らせます。何も公開せず、インストーラーを実行結果のページに残すので、タグを付ける前に手で入れて確かめられます。署名鍵がなければ使い捨ての鍵で署名します。
 
 公開した時点で、インストール済みの Studio は次の起動時に更新を見つけます。
 

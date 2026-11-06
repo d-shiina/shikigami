@@ -50,7 +50,13 @@ If the GitHub CLI (`gh`) is signed in, this happens automatically. Without `gh`,
    git push origin v0.2.0
    ```
 
-3. The `Release` workflow (`.github/workflows/release.yml`) builds on Windows and publishes the release. It stops if the tag and the `Cargo.toml` version differ
+   Or, without a terminal: on GitHub, open **Actions → Release → Run workflow** (branch `main`). It tags the current `main` with the `Cargo.toml` version and releases it; it stops if that tag is already on another commit
+3. The `Release` workflow (`.github/workflows/release.yml`) builds on Windows and publishes the release. It stops if the tag and the `Cargo.toml` version differ, or if the signing key is not registered (one-time setup above)
+   - Release notes are the `CHANGELOG.md` section whose heading has the version (for example `## [0.2.0] - 2026-11-06`); without one they link to `CHANGELOG.md`
+   - A version with a hyphen (`0.2.0-beta.1`) becomes a pre-release, which installed Studios do not update to
+   - The installers are also kept on the run page as the `installers-<version>` artifact for 14 days
+
+A pull request that changes the release build (the workflow, `apps/studio/scripts/`, the Tauri configuration) runs the same build as a trial: it publishes nothing and leaves the installers on the run page, so they can be installed by hand before tagging. Without the signing key it signs with a throwaway key.
 
 Once published, installed copies of Studio find the update the next time they start.
 
