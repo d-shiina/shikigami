@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 shikigami-core.workspace = true
 shikigami-runtime.workspace = true
+shikigami-com.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

@@ -121,10 +121,31 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 | アプリ | いまの見え方 | 予定 |
 |---|---|---|
 | Win32 / WinForms / WPF / UWP、Office の画面 | UI Automation で部品が見える | – |
-| SAP GUI for Windows | UI Automation では一部しか見えないことが多い（`inspect_ui` に注記） | SAP GUI Scripting を別の掴み方として追加。ノードは同じ `desktop.*`、SAP 固有の操作（トランザクションコードなど）だけ専用の型を足す。SAP サーバー側の `sapgui/user_scripting` と SAP GUI のオプションでスクリプトを有効にする必要がある |
-| Java（Swing など） | 枠しか見えないことが多い（注記） | Java Access Bridge（`jabswitch -enable` で有効化） |
+| SAP GUI for Windows | SAP GUI Scripting が有効なら、それを通して見える（下の「SAP GUI」）。無効なら UI Automation で一部だけ（`inspect_ui` に注記） | – |
+| Java（Swing・AWT など） | Java Access Bridge が有効なら、それを通して見える（下の「Java アプリ」）。無効なら枠だけ（注記） | – |
 | Citrix / リモートデスクトップの中 | 部品は見えない。画像（`image`）と文字（`ocr`）で場所を指す | – |
 | Excel のデータ | – | xlsx を直接読み書きする `excel.*`（[adapters.md](adapters.md)） |
+
+## SAP GUI
+
+対象のウィンドウが SAP GUI for Windows で、SAP GUI Scripting が有効なら、同じ `desktop.*` のノードが UI Automation の代わりにスクリプトの仕組みを通して動きます（UI Automation では SAP の項目や表の多くが見えないため）。
+
+- **スクリプトを有効にする**（SAP の管理者が一度、各 PC でも一度）：SAP サーバーでトランザクション RZ11 から `sapgui/user_scripting` を `TRUE` に。SAP GUI の［オプション］>［アクセシビリティとスクリプト］>［スクリプト］で「スクリプトを有効にする」をオンにし、「スクリプトが接続したときに通知」などの 2 つはオフに（オンのままだと操作のたびに確認が出ます）
+- `inspect_ui` は SAP の部品を id（`wnd[0]/usr/txtRSYST-BNAME`）とほかのアプリと同じ役割（`textbox`・`button`・`checkbox`・`combobox`・`tab`・`table`、ALV グリッドは `grid` など）で一覧にします。`element.id` にそのまま写します。SAP GUI で記録したスクリプトの id（`/app/con[0]/ses[0]/wnd[0]/…`）や、対象ウィンドウの中の id（`usr/…`）でも動きます
+- 各ノードの動き：`desktop.click` はボタンを押す・チェックの切り替え・ラジオボタン・タブ・メニューの選択（ラベルや入力欄では F2 ＝ダブルクリックと同じ）。`desktop.setValue` / `desktop.getValue` は入力欄の書き込みと読み取り。`desktop.select` はコンボボックスの項目を表示名かキーで選ぶ。`desktop.press` は SAP のファンクションキー（Enter、Shift / Ctrl 付きの F1〜F12、Ctrl+S、Esc、PageUp / PageDown）を実際のキーボードを使わずに送る。`desktop.selectMenu` はメニューバーをたどる。`desktop.getTable` はテーブルコントロールと ALV グリッドをスクロールしながら全部読む。`desktop.type`・`desktop.mouseClick` などマウスのノードは、その部品にフォーカスを移すか、画面上の位置を使う
+- `sap.runTransaction` はトランザクションを開始し（`code`：`VA03`）、そのあとのステータスバー `{ type, text }`（`S` 成功、`W` 警告、`E` エラーなど）を返すので、`control.if` で確かめられます
+- スクリプトが無効なときに SAP の部品 id を書いた対象は `SAP_SCRIPTING_OFF`（有効にする手順つき）で止まります。ウィンドウそのもの・OCR・画像は UI Automation で動きます
+- **実際の SAP ではまだ確認していません**：SAP のスクリプト API の資料をもとに書いています。CI には SAP GUI がありません
+
+## Java アプリ
+
+Java のアプリ（Swing・AWT と、それで作られた多くの社内システム）は、UI Automation には枠しか見えません。Java Access Bridge が有効なら、同じ `desktop.*` のノードがその仕組みを通して動きます。
+
+- **Java Access Bridge を有効にする**（PC・ユーザーごとに一度）：アプリが使う Java の `bin` フォルダーで `jabswitch -enable` を実行し、アプリを起動し直します。Shikigami は `WindowsAccessBridge-64.dll` を Windows、アプリの `java.exe` のフォルダー、`JAVA_HOME\bin` の順に探します
+- `inspect_ui` は Java の部品をほかのアプリと同じ役割（`textbox`・`button`・`checkbox`・`combobox`・`table`・`menuitem` など）で一覧にします。Java の部品には id がないので、`role` ＋ `name`（同じ名前が並ぶときは `nth`）で指定します
+- 各ノードの動き：`desktop.click` は部品の動作（押す・切り替え・選ぶ）を実行。`desktop.setValue` / `desktop.getValue` は入力欄の書き込みと読み取り（パスワード欄は書き込みだけ）。`desktop.select` は一覧やコンボボックスの項目を選ぶ。`desktop.selectMenu` はメニューバーをたどる。`desktop.getTable` は `JTable` を列見出しつきで全部読む。`desktop.type`・`desktop.press`・マウスのノードは、その部品にフォーカスを移すか、画面上の位置を使う
+- 無効なときに部品を指定した対象は `JAVA_BRIDGE_OFF`（有効にする手順つき）で止まります。ウィンドウそのもの・OCR・画像は UI Automation で動きます
+- CI では小さな Swing の画面で確認しています。実際の業務用 Java アプリ（Oracle Forms、Java Web Start など）ではまだ確認していません
 
 ## しくみ
 
@@ -152,6 +173,10 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 | `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | 複数見つかった（候補の位置つき）。`nth` か `region` で決める |
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | 画像ファイルがない／一色だけの画像（どこにでも当たる） |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` なのに PaddleOCR が入っていない／Windows OCR にその言語がない |
+| `SAP_SCRIPTING_OFF` | SAP の部品 id を書いたが、SAP GUI Scripting がそのウィンドウに届かない。有効にする（「SAP GUI」） |
+| `JAVA_BRIDGE_OFF` | Java のウィンドウだが、Java Access Bridge が無効か見つからない。有効にする（「Java アプリ」） |
+| `JAVA_NOT_READY` | Java アプリがまだ起動中。ノードの待ち時間のあいだ再試行する |
+| `NOT_SAP_WINDOW` | SAP GUI でないウィンドウに `sap.runTransaction` |
 | `TABLE_TOO_LARGE` | 10000 行を超えた。`maxRows` を書くか、アプリで絞り込んでから読む |
 | `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | その名前のメニュー項目が出ていない（出ている項目つき）／複数ある。上のメニューから順に書く |
 | `PLATFORM_UNSUPPORTED` | Windows 以外で実行した |
@@ -159,7 +184,7 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 ## 確認済みの事項と制約
 
 - **確認済み**：ノード定義・検証・自動待ち・ロック・シークレットの照合を、偽のバックエンドで自動テスト（Linux / Windows の CI）。Windows の CI で PowerShell が出す WinForms の画面を使い、メニューバーからの選択、文字の入力と読み取り、最後までのスクロール、DataGridView と一覧の `desktop.getTable` を UI Automation で行うテスト（メモ帳のテストは、CI のランナーのように古い Edit のないメモ帳では飛ばされます）。画像検索と、日本語の業務画面の絵（12px の文字）を PaddleOCR で読むテスト（Linux / Windows の CI）。Windows の CI でメモ帳の絵を撮って OCR し、切り出した画像をもう一度見つけるテスト
-- **未確認**：実際の業務アプリ・SAP GUI・Java アプリ・Citrix での動作、マウス・キーボード操作（CI では画面操作をテストしていない）、高 DPI・複数モニター
+- **未確認**：実際の業務アプリ・SAP GUI・業務用 Java アプリ・Citrix での動作、マウス・キーボード操作（CI では画面操作をテストしていない）、高 DPI・複数モニター
 - 画像検索はフル HD のウィンドウで 1 回 0.2〜0.5 秒、PaddleOCR は小さい画面で 0.3 秒ほど（CPU 4 コア）です。大きなウィンドウ全体の OCR は 1 秒を超えることがあるので、`region` で絞ると速くなります
 - Studio・CLI・MCP サーバーなど **別プロセス間** のマウス・キーボードの排他は未実装です（同じプロセス内のみ）
 - 回転・拡大縮小した画像は探せません

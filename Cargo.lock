@@ -4427,6 +4427,7 @@ dependencies = [
  "png",
  "serde",
  "serde_json",
+ "shikigami-com",
  "shikigami-core",
  "shikigami-runtime",
  "tempfile",
