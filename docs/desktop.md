@@ -114,10 +114,21 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 | App | Visible today | Planned |
 |---|---|---|
 | Win32 / WinForms / WPF / UWP, Office windows | Elements are visible through UI Automation | – |
-| SAP GUI for Windows | UI Automation often shows only part of it (`inspect_ui` notes this) | SAP GUI Scripting as another way in. Nodes stay `desktop.*`; only SAP-specific actions (transaction codes…) get their own types. Scripting must be enabled with `sapgui/user_scripting` on the SAP server and in the SAP GUI options |
+| SAP GUI for Windows | Through SAP GUI Scripting when it is enabled (see "SAP GUI" below); otherwise only part of it through UI Automation (`inspect_ui` notes this) | – |
 | Java (Swing…) | Often only the frame (noted) | Java Access Bridge (enable with `jabswitch -enable`) |
 | Inside Citrix / Remote Desktop | No elements visible; places are found by picture (`image`) and text (`ocr`) | – |
 | Excel data | – | `excel.*`, reading and writing xlsx directly ([adapters.md](adapters.md)) |
+
+## SAP GUI
+
+When the target window belongs to SAP GUI for Windows and SAP GUI Scripting is enabled, the same `desktop.*` nodes act through scripting instead of UI Automation, which misses many SAP fields and tables.
+
+- **Enable scripting** (once, by the SAP administrator and on each PC): on the SAP server, transaction RZ11 sets `sapgui/user_scripting` to `TRUE`; in SAP GUI, Options > Accessibility & Scripting > Scripting: "Enable scripting" on, and the two "Notify when a script…" boxes off (otherwise SAP GUI asks at every step)
+- `inspect_ui` lists SAP components with their ids (`wnd[0]/usr/txtRSYST-BNAME`) and the same roles as other apps (`textbox`, `button`, `checkbox`, `combobox`, `tab`, `table`, `grid` for ALV grids…). Copy them as `element.id`. Ids from a recorded SAP GUI script (`/app/con[0]/ses[0]/wnd[0]/…`) and ids inside the target window (`usr/…`) work too
+- What each node does there: `desktop.click` presses buttons, toggles checkboxes, selects radio buttons, tabs and menus (on labels and fields: F2, as a double click); `desktop.setValue` / `desktop.getValue` set and read fields; `desktop.select` picks a combo box entry by its text or key; `desktop.press` sends SAP's function keys (Enter, F1–F12 with Shift / Ctrl, Ctrl+S, Esc, PageUp / PageDown) without the real keyboard; `desktop.selectMenu` walks the menu bar; `desktop.getTable` reads table controls and ALV grids whole, scrolling through them; `desktop.type`, `desktop.mouseClick` and the other mouse nodes focus the component or use its place on the screen
+- `sap.runTransaction` starts a transaction (`code`: `VA03`) and returns the status bar `{ type, text }` (`S` success, `W` warning, `E` error…), so a scenario can check it with `control.if`
+- When scripting is off, targets with a SAP component id stop with `SAP_SCRIPTING_OFF` (with the steps to enable it); the window itself, OCR and images still work through UI Automation
+- **Not yet verified on a real SAP system**: this was written against SAP's scripting API documentation; CI has no SAP GUI
 
 ## How it works
 
@@ -145,6 +156,8 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 | `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | Found several times (with the places). Choose with `nth` or `region` |
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | No such image file / an image of one flat colour (it would match anywhere) |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` but PaddleOCR is not installed / Windows OCR lacks that language |
+| `SAP_SCRIPTING_OFF` | A SAP component id, but SAP GUI Scripting cannot reach the window. Enable it (see "SAP GUI") |
+| `NOT_SAP_WINDOW` | `sap.runTransaction` on a window that is not SAP GUI |
 | `TABLE_TOO_LARGE` | More than 10000 rows. Set `maxRows`, or narrow the list in the app first |
 | `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | No shown menu item has that name (with the items shown) / several do. Write the names from the first menu down |
 | `PLATFORM_UNSUPPORTED` | Run on something other than Windows |
