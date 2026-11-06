@@ -465,6 +465,9 @@ export class Adapter {
     if (!path === !folder) throw new AdapterError("INVALID_PARAMS", "give either `path` (the file to save) or `folder` (keep the site's file name)");
     const { page, locator } = this.target(params);
     const timeout = this.limit(params);
+    // One deadline for the click, the transfer and the save, so a slow
+    // download never writes the file after the Runtime gave up on the step.
+    const deadline = Date.now() + timeout;
     const started = page.waitForEvent("download", { timeout });
     started.catch(() => {});
     await locator.click({ timeout });
@@ -485,7 +488,23 @@ export class Adapter {
     const fileName = download.suggestedFilename();
     const target = path ?? join(folder!, basename(fileName) || "download");
     mkdirSync(dirname(target), { recursive: true });
-    const failed = await download.failure();
+    let timer: NodeJS.Timeout | undefined;
+    const expired = new Promise<"expired">((resolve) => {
+      timer = setTimeout(() => resolve("expired"), Math.max(deadline - Date.now(), 1));
+    });
+    let failed: string | null | "expired";
+    try {
+      failed = await Promise.race([download.failure(), expired]);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (failed === "expired") {
+      await download.cancel().catch(() => {});
+      throw new AdapterError("DOWNLOAD_FAILED", `the download did not finish within ${Math.round(timeout / 1000)} s`, {
+        retryable: true,
+        details: { fileName, hint: "Raise the step's timeoutMs for large files." },
+      });
+    }
     if (failed) {
       throw new AdapterError("DOWNLOAD_FAILED", `the download failed: ${failed}`, { retryable: true, details: { fileName } });
     }

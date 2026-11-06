@@ -20,7 +20,7 @@ const PAGES: Record<string, string> = {
     <button onclick="setTimeout(() => alert('登録しました（受付番号 42）'), 200)">登録</button>
     <p id="r"></p>
     <div id="menu" onmouseenter="document.getElementById('sub').hidden = false">メニュー<div id="sub" hidden><a href="/detail">月次レポート</a></div></div>
-    <a id="dl" href="/files/report.csv">CSV</a>
+    <a id="dl" href="/files/report.csv">CSV</a> <a id="slow" href="/files/slow.csv">遅い CSV</a>
     <iframe name="main" title="本文" src="/frame"></iframe>
     <div id="list" style="height:60px;overflow:auto" onscroll="document.getElementById('ly').textContent = this.scrollTop > 0 ? '下' : '上'"><div style="height:400px">上</div><div id="end">下の端</div></div>
     <p id="ly">上</p><p id="y" style="position:fixed;top:0">上</p>
@@ -44,6 +44,11 @@ const run = { runId: "run_pages" };
 beforeAll(async () => {
   server = createServer((req, res) => {
     const pathname = new URL(req.url ?? "/", "http://x").pathname;
+    if (pathname === "/files/slow.csv") {
+      // Starts at once, never finishes.
+      res.writeHead(200, { "content-type": "text/csv", "content-disposition": 'attachment; filename="slow.csv"' });
+      return void res.write("a,b\n");
+    }
     if (pathname === "/files/report.csv") {
       res.writeHead(200, { "content-type": "text/csv", "content-disposition": 'attachment; filename="report_20261106.csv"' });
       return void res.end("注文番号,金額\nA-1001,12000\n");
@@ -209,6 +214,10 @@ describe("downloads and uploads", () => {
     const none = await failure(adapter.call("download", { ...run, target: { role: "button", name: "削除" }, path: join(dir, "x"), timeoutMs: 400 }));
     expect(none.code).toBe("DOWNLOAD_NOT_STARTED");
     expect((await failure(adapter.call("download", { ...run, target: { css: "#dl" } }))).code).toBe("INVALID_PARAMS");
+    const started = Date.now();
+    const slow = await failure(adapter.call("download", { ...run, target: { css: "#slow" }, path: join(dir, "slow.csv"), timeoutMs: 800 }));
+    expect(slow.code).toBe("DOWNLOAD_FAILED");
+    expect(Date.now() - started).toBeLessThan(1500);
   });
 
   it("uploads through a file input or a button that opens the picker", async () => {
