@@ -451,8 +451,15 @@ export class Adapter {
 
   private async click(params: Params): Promise<string | null> {
     const session = this.session(params);
-    const { locator } = this.target(params);
-    return await this.withDialog(session, params, () => locator.click({ timeout: this.limit(params) }));
+    const { page, locator } = this.target(params);
+    return await this.withDialog(session, params, () =>
+      locator.click({ timeout: this.limit(params) }).catch((error: unknown) => {
+        // A "閉じる" button of a popup closes its own tab while the click is
+        // still being confirmed: the click did its work.
+        if (page.isClosed()) return;
+        throw error;
+      }),
+    );
   }
 
   /**
