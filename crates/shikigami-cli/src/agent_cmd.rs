@@ -165,12 +165,19 @@ pub fn agent_cmd(
                 .with_policy(Policy::path(svc.store().root()));
             let policy_path = Policy::path(svc.store().root());
             let agent = Agent::new(Arc::new(svc), runtime);
+            // Notifications still being sent when the agent stops (a run
+            // cancelled by the stop, for one) are waited for below.
+            let sending = Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new()));
+            let sends = Arc::clone(&sending);
             agent.on_finished(Arc::new(move |report| {
                 let report = report.clone();
                 let policy_path = policy_path.clone();
-                tokio::spawn(async move {
-                    shikigami_agent::notify::notify(&policy_path, &report).await;
-                });
+                if let Ok(mut set) = sends.lock() {
+                    while set.try_join_next().is_some() {}
+                    set.spawn(async move {
+                        shikigami_agent::notify::notify(&policy_path, &report).await;
+                    });
+                }
             }));
             let rt = rt()?;
             rt.block_on(async {
@@ -185,6 +192,13 @@ pub fn agent_cmd(
                 eprintln!("Shikigami agent for {} (Ctrl+C stops)", workspace.display());
                 let served = Arc::clone(&agent).serve().await;
                 stop.cancel();
+                let mut pending = match sending.lock() {
+                    Ok(mut set) => std::mem::take(&mut *set),
+                    Err(_) => tokio::task::JoinSet::new(),
+                };
+                let drained = async { while pending.join_next().await.is_some() {} };
+                // Each webhook gives up after 15 seconds.
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(20), drained).await;
                 served
             })
             .map_err(|e| {

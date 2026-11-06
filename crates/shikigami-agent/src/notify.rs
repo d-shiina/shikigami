@@ -187,7 +187,9 @@ pub async fn notify(policy_path: &Path, report: &RunReport) {
             Ok(r) => {
                 tracing::warn!(status = %r.status(), "the notification webhook refused the message")
             }
-            Err(e) => tracing::warn!(error = %e, "could not send a notification"),
+            // The URL is the webhook's password (Slack paths, Teams query
+            // strings): keep it out of the log.
+            Err(e) => tracing::warn!(error = %e.without_url(), "could not send a notification"),
         }
     }
 }
