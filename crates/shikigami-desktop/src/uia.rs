@@ -37,8 +37,9 @@ use windows::Win32::UI::HiDpi::{
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT,
     KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSE_EVENT_FLAGS,
-    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
-    MOUSEEVENTF_RIGHTUP, MOUSEINPUT, SendInput, VIRTUAL_KEY,
+    MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE,
+    MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
+    VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     BM_CLICK, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, PostMessageW, SW_RESTORE,
@@ -46,11 +47,14 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
-use crate::backend::{Backend, Capture, MouseButton, OcrEngine, OcrOptions, Op, Text};
+use crate::backend::{
+    Backend, Capture, Direction, MouseButton, OcrEngine, OcrOptions, Op, ScrollUnit, Text,
+};
 use crate::bitmap::{Bitmap, Rect};
 use crate::capture;
 use crate::engine::Engine;
 use crate::keys::{Chord, Key};
+use crate::menu;
 use crate::roles;
 use crate::target::{
     ElementQuery, NodeInfo, Target, WindowInfo, WindowQuery, app_allowed, pick_element,
@@ -335,6 +339,20 @@ impl Uia {
             Op::Type { target, text } => self.type_text(&target, &text),
             Op::Press { target, chord } => self.press(&target, &chord),
             Op::CloseWindow { target } => self.close_window(&target),
+            Op::Scroll {
+                target,
+                direction,
+                amount,
+                unit,
+            } => self.scroll(&target, direction, amount, unit),
+            Op::Wheel {
+                target,
+                direction,
+                notches,
+            } => self.wheel(&target, direction, notches),
+            Op::Drag { from, to } => self.drag(&from, &to),
+            Op::Hover { target } => self.hover(&target),
+            Op::Menu { target, path } => self.menu(&target, &path),
         }
     }
 
@@ -708,6 +726,222 @@ impl Uia {
         Ok(Value::Null)
     }
 
+    // -- scrolling and menus --------------------------------------------------------
+
+    fn scroll(
+        &self,
+        target: &Target,
+        direction: Option<Direction>,
+        amount: u32,
+        unit: ScrollUnit,
+    ) -> Result<Value, StepError> {
+        let found = self.resolve(target)?;
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            let Some(direction) = direction else {
+                if !found.is_element {
+                    return Err(StepError::invalid_params(
+                        "without direction, target.element names what to bring into view; add direction (up, down, top, bottom, ...) to scroll the window",
+                    ));
+                }
+                let p = pattern::<IUIAutomationScrollItemPattern>(
+                    &found.el,
+                    UIA_ScrollItemPatternId,
+                )
+                .map_err(|_| {
+                    StepError::permanent(
+                        "NOT_SUPPORTED",
+                        format!("the {} cannot be scrolled into view", found.node.role),
+                    )
+                    .with_details(json!({
+                        "hint": "Scroll its list or pane instead: target that and add direction (e.g. down), or use desktop.mouseScroll."
+                    }))
+                })?;
+                p.ScrollIntoView().map_err(action_error)?;
+                return Ok(match self.scroller(&found.el) {
+                    Some(s) => scroll_state(&s, None),
+                    None => {
+                        json!({ "verticalPercent": null, "horizontalPercent": null, "atEnd": false })
+                    }
+                });
+            };
+            let scroller = self.scroller(&found.el).ok_or_else(|| {
+                StepError::permanent(
+                    "NOT_SUPPORTED",
+                    format!("the {} has nothing to scroll", found.node.role),
+                )
+                .with_details(json!({
+                    "hint": "Target the list, table or pane that scrolls (inspect_ui), or use desktop.mouseScroll or desktop.press with PageDown."
+                }))
+            })?;
+            match direction {
+                Direction::Top | Direction::Bottom => {
+                    if scroller
+                        .CurrentVerticallyScrollable()
+                        .is_ok_and(|b| b.as_bool())
+                    {
+                        let to = if direction == Direction::Top {
+                            0.0
+                        } else {
+                            100.0
+                        };
+                        scroller
+                            .SetScrollPercent(UIA_ScrollPatternNoScroll, to)
+                            .map_err(action_error)?;
+                    }
+                }
+                _ => {
+                    let (forward, backward) = match unit {
+                        ScrollUnit::Page => {
+                            (ScrollAmount_LargeIncrement, ScrollAmount_LargeDecrement)
+                        }
+                        ScrollUnit::Line => {
+                            (ScrollAmount_SmallIncrement, ScrollAmount_SmallDecrement)
+                        }
+                    };
+                    for _ in 0..amount {
+                        if scroll_state(&scroller, Some(direction))["atEnd"] == json!(true) {
+                            break;
+                        }
+                        let (h, v) = match direction {
+                            Direction::Down => (ScrollAmount_NoAmount, forward),
+                            Direction::Up => (ScrollAmount_NoAmount, backward),
+                            Direction::Right => (forward, ScrollAmount_NoAmount),
+                            _ => (backward, ScrollAmount_NoAmount),
+                        };
+                        scroller.Scroll(h, v).map_err(action_error)?;
+                    }
+                }
+            }
+            Ok(scroll_state(&scroller, Some(direction)))
+        }
+    }
+
+    /// The scroll pattern of `el` or of the nearest element around it that
+    /// can scroll.
+    fn scroller(&self, el: &IUIAutomationElement) -> Option<IUIAutomationScrollPattern> {
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            let walker = self.automation.ControlViewWalker().ok()?;
+            let mut current = el.clone();
+            for _ in 0..32 {
+                if let Ok(p) = pattern::<IUIAutomationScrollPattern>(&current, UIA_ScrollPatternId)
+                    && (p.CurrentVerticallyScrollable().is_ok_and(|b| b.as_bool())
+                        || p.CurrentHorizontallyScrollable().is_ok_and(|b| b.as_bool()))
+                {
+                    return Some(p);
+                }
+                current = walker.GetParentElement(&current).ok()?;
+            }
+            None
+        }
+    }
+
+    fn menu(&self, target: &Target, path: &[String]) -> Result<Value, StepError> {
+        let found = self.resolve_enabled(target)?;
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            if found.is_element {
+                let opened = found
+                    .el
+                    .cast::<IUIAutomationElement3>()
+                    .and_then(|el| el.ShowContextMenu());
+                if opened.is_err() {
+                    return Err(StepError::permanent(
+                        "NOT_SUPPORTED",
+                        format!("the {} does not open its context menu without the mouse", found.node.role),
+                    )
+                    .with_details(json!({
+                        "hint": "Open it with desktop.mouseClick (button: right) on the same target, then desktop.selectMenu with only target.window and the same path."
+                    })));
+                }
+            }
+            let mut parent: Option<IUIAutomationElement> = None;
+            for (i, name) in path.iter().enumerate() {
+                let (item, info) = self.wait_menu_item(&found, name, parent.as_ref())?;
+                let last = i + 1 == path.len();
+                activate_menu_item(&item, &info, last)?;
+                parent = Some(item);
+            }
+        }
+        Ok(Value::Null)
+    }
+
+    /// The shown menu item `name`, waiting a little for its menu to open.
+    fn wait_menu_item(
+        &self,
+        found: &Found,
+        name: &str,
+        parent: Option<&IUIAutomationElement>,
+    ) -> Result<(IUIAutomationElement, NodeInfo), StepError> {
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let mut items = self.menu_items(found, parent)?;
+            let infos: Vec<menu::Item> = items.iter().map(|(_, _, item)| item.clone()).collect();
+            match menu::pick(name, &infos) {
+                Ok(i) if !items[i].2.enabled => {
+                    return Err(StepError::permanent(
+                        "ELEMENT_DISABLED",
+                        format!("the menu item '{}' is greyed out", items[i].2.name),
+                    )
+                    .with_details(json!({ "hint": "The app does not allow it on this screen now; check the state before this step." })));
+                }
+                Ok(i) => {
+                    let (el, node, _) = items.swap_remove(i);
+                    return Ok((el, node));
+                }
+                Err(e) if e.code == "MENU_ITEM_NOT_FOUND" && std::time::Instant::now() < until => {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// The menu items shown now: in menus that popped up (other top-level
+    /// windows of the app, and under the item just opened) and in the
+    /// window itself (its menu bar), without duplicates.
+    fn menu_items(
+        &self,
+        found: &Found,
+        parent: Option<&IUIAutomationElement>,
+    ) -> Result<Vec<(IUIAutomationElement, NodeInfo, menu::Item)>, StepError> {
+        let mut roots: Vec<(IUIAutomationElement, bool)> = self
+            .windows()?
+            .into_iter()
+            .filter(|(_, w, _)| w.pid == found.window.pid && w.handle != found.window.handle)
+            .map(|(el, _, _)| (el, true))
+            .collect();
+        if let Some(parent) = parent {
+            roots.push((parent.clone(), true));
+        }
+        roots.push((found.window_el.clone(), false));
+        let mut out: Vec<(IUIAutomationElement, NodeInfo, menu::Item)> = Vec::new();
+        for (root, popup) in roots {
+            for (el, node) in self.tree(&root, FIND_LIMIT)? {
+                if node.role != "menuitem" || node.offscreen || node.name.trim().is_empty() {
+                    continue;
+                }
+                // SAFETY: UIA calls on the UIA thread.
+                let seen = out.iter().any(|(other, _, _)| unsafe {
+                    self.automation
+                        .CompareElements(other, &el)
+                        .is_ok_and(|same| same.as_bool())
+                });
+                if seen {
+                    continue;
+                }
+                let item = menu::Item {
+                    name: node.name.clone(),
+                    popup,
+                    enabled: node.enabled,
+                };
+                out.push((el, node, item));
+            }
+        }
+        Ok(out)
+    }
+
     // -- pictures -------------------------------------------------------------------
 
     /// A picture of the target's window, from the top-left of its UI
@@ -835,9 +1069,29 @@ impl Uia {
     ) -> Result<Value, StepError> {
         let found = self.resolve_enabled(target)?;
         self.bring_to_front(&found, false)?;
-        // SAFETY: Win32 / UIA calls on the UIA thread.
+        let at = self.mouse_point(&found, target)?;
+        // SAFETY: Win32 calls on the UIA thread.
         unsafe {
-            let at = match target.point {
+            SetCursorPos(at.x, at.y).or_fail()?;
+            let (down, up) = match button {
+                MouseButton::Left => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
+                MouseButton::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
+            };
+            let mut inputs = vec![mouse(down), mouse(up)];
+            if double {
+                inputs.extend([mouse(down), mouse(up)]);
+            }
+            send(&inputs)?;
+        }
+        Ok(Value::Null)
+    }
+
+    /// Where on the screen the mouse goes for `target`: its `point` from
+    /// the window's top-left, or the element's clickable point (centre).
+    fn mouse_point(&self, found: &Found, target: &Target) -> Result<POINT, StepError> {
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            Ok(match target.point {
                 Some(p) => {
                     let rect = found.window_el.CurrentBoundingRectangle().or_fail()?;
                     POINT {
@@ -852,18 +1106,70 @@ impl Uia {
                         _ => center(found.el.CurrentBoundingRectangle().or_fail()?)?,
                     }
                 }
-            };
-            SetCursorPos(at.x, at.y).or_fail()?;
-            let (down, up) = match button {
-                MouseButton::Left => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
-                MouseButton::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
-            };
-            let mut inputs = vec![mouse(down), mouse(up)];
-            if double {
-                inputs.extend([mouse(down), mouse(up)]);
-            }
-            send(&inputs)?;
+            })
         }
+    }
+
+    fn hover(&self, target: &Target) -> Result<Value, StepError> {
+        let found = self.resolve(target)?;
+        self.bring_to_front(&found, false)?;
+        let at = self.mouse_point(&found, target)?;
+        move_to(at)?;
+        Ok(Value::Null)
+    }
+
+    fn wheel(
+        &self,
+        target: &Target,
+        direction: Direction,
+        notches: u32,
+    ) -> Result<Value, StepError> {
+        let found = self.resolve(target)?;
+        self.bring_to_front(&found, false)?;
+        move_to(self.mouse_point(&found, target)?)?;
+        // One notch is WHEEL_DELTA (120); positive is up / right.
+        let (flag, delta) = match direction {
+            Direction::Up | Direction::Top => (MOUSEEVENTF_WHEEL, 120),
+            Direction::Down | Direction::Bottom => (MOUSEEVENTF_WHEEL, -120),
+            Direction::Left => (MOUSEEVENTF_HWHEEL, -120),
+            Direction::Right => (MOUSEEVENTF_HWHEEL, 120),
+        };
+        for _ in 0..notches {
+            let mut input = mouse(flag);
+            input.Anonymous.mi.mouseData = delta as _;
+            send(&[input])?;
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        Ok(Value::Null)
+    }
+
+    /// Presses the left button on `from`, moves in small steps (so the app
+    /// sees a drag, not a jump) and lets go on `to`. The button is always
+    /// released, even when a step in between fails.
+    fn drag(&self, from: &Target, to: &Target) -> Result<Value, StepError> {
+        let source = self.resolve_enabled(from)?;
+        let goal = self.resolve(to)?;
+        self.bring_to_front(&source, false)?;
+        let a = self.mouse_point(&source, from)?;
+        let b = self.mouse_point(&goal, to)?;
+        move_to(a)?;
+        send(&[mouse(MOUSEEVENTF_LEFTDOWN)])?;
+        let pause = |ms| std::thread::sleep(std::time::Duration::from_millis(ms));
+        let moved = (|| {
+            pause(120);
+            const STEPS: i32 = 24;
+            for i in 1..=STEPS {
+                move_to(POINT {
+                    x: a.x + (b.x - a.x) * i / STEPS,
+                    y: a.y + (b.y - a.y) * i / STEPS,
+                })?;
+                pause(15);
+            }
+            pause(150);
+            Ok(())
+        })();
+        let released = send(&[mouse(MOUSEEVENTF_LEFTUP)]);
+        moved.and(released)?;
         Ok(Value::Null)
     }
 
@@ -913,6 +1219,90 @@ impl Uia {
         send(&inputs)?;
         Ok(Value::Null)
     }
+}
+
+/// Opens a menu item that leads to a submenu, or carries out the last one.
+fn activate_menu_item(
+    item: &IUIAutomationElement,
+    node: &NodeInfo,
+    last: bool,
+) -> Result<(), StepError> {
+    // SAFETY: UIA calls on the UIA thread.
+    unsafe {
+        if !last
+            && let Ok(p) =
+                pattern::<IUIAutomationExpandCollapsePattern>(item, UIA_ExpandCollapsePatternId)
+        {
+            return p.Expand().map_err(action_error);
+        }
+        let acted = if let Ok(p) = pattern::<IUIAutomationInvokePattern>(item, UIA_InvokePatternId)
+        {
+            p.Invoke()
+        } else if let Ok(p) = pattern::<IUIAutomationTogglePattern>(item, UIA_TogglePatternId) {
+            p.Toggle()
+        } else if let Ok(p) =
+            pattern::<IUIAutomationExpandCollapsePattern>(item, UIA_ExpandCollapsePatternId)
+        {
+            p.Expand()
+        } else if let Ok(p) =
+            pattern::<IUIAutomationLegacyIAccessiblePattern>(item, UIA_LegacyIAccessiblePatternId)
+        {
+            p.DoDefaultAction()
+        } else {
+            return Err(StepError::permanent(
+                "NOT_CLICKABLE",
+                format!("the menu item '{}' cannot be chosen without the mouse", node.name),
+            )
+            .with_details(json!({ "hint": "Open the menu and click the item with desktop.mouseClick (target its role menuitem and name)." })));
+        };
+        acted.map_err(action_error)
+    }
+}
+
+/// Where a scrollable area stands: percents (null when it cannot scroll
+/// that way) and whether it can go no further in `direction`.
+fn scroll_state(p: &IUIAutomationScrollPattern, direction: Option<Direction>) -> Value {
+    // SAFETY: UIA calls on the UIA thread.
+    let (v, h) = unsafe {
+        let read = |scrollable: windows::core::Result<windows::core::BOOL>,
+                    percent: windows::core::Result<f64>| {
+            match (scrollable, percent) {
+                (Ok(s), Ok(p)) if s.as_bool() && p >= 0.0 => Some(p),
+                _ => None,
+            }
+        };
+        (
+            read(
+                p.CurrentVerticallyScrollable(),
+                p.CurrentVerticalScrollPercent(),
+            ),
+            read(
+                p.CurrentHorizontallyScrollable(),
+                p.CurrentHorizontalScrollPercent(),
+            ),
+        )
+    };
+    let at_end = match direction {
+        None => false,
+        Some(d) => {
+            let percent = if d.is_vertical() { v } else { h };
+            let forward = matches!(d, Direction::Down | Direction::Bottom | Direction::Right);
+            match percent {
+                None => true,
+                Some(p) if forward => p >= 99.9,
+                Some(p) => p <= 0.1,
+            }
+        }
+    };
+    let round = |p: Option<f64>| p.map(|p| (p * 10.0).round() / 10.0);
+    json!({ "verticalPercent": round(v), "horizontalPercent": round(h), "atEnd": at_end })
+}
+
+/// Moves the cursor and tells the app under it that the mouse moved.
+fn move_to(at: POINT) -> Result<(), StepError> {
+    // SAFETY: plain Win32 calls.
+    unsafe { SetCursorPos(at.x, at.y) }.or_fail()?;
+    send(&[mouse(MOUSEEVENTF_MOVE)])
 }
 
 /// A pattern of `el`, or an error when it does not support it.

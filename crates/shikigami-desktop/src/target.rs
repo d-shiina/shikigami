@@ -179,10 +179,12 @@ impl Target {
             )))
         };
         if self.point.is_some() && allow != Allow::Mouse {
-            return refuse("point", "desktop.mouseClick");
+            return refuse(
+                "point",
+                "the mouse steps (desktop.mouseClick, desktop.mouseScroll, desktop.drag, desktop.hover)",
+            );
         }
-        let visual_steps =
-            "desktop.mouseClick, desktop.type, desktop.waitFor and desktop.isVisible";
+        let visual_steps = "the mouse steps, desktop.type, desktop.waitFor and desktop.isVisible";
         if self.image.is_some() && !matches!(allow, Allow::Mouse | Allow::Visual) {
             return refuse("image", visual_steps);
         }

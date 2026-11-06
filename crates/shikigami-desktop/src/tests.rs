@@ -93,7 +93,7 @@ fn examples_validate_and_targets_are_checked() {
     let runtime = runtime(Scripted::new(vec![]));
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 13);
+    assert_eq!(defs.len(), 18);
     for def in &defs {
         assert!(def.step_type.starts_with("desktop."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
@@ -101,10 +101,17 @@ fn examples_validate_and_targets_are_checked() {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
             let mut s = Scenario::new("example");
-            s.variables = ["customerCode", "orderNo", "outDir", "total", "confirmShown"]
-                .iter()
-                .map(|n| VariableDef::new(*n, VarType::Any))
-                .collect();
+            s.variables = [
+                "customerCode",
+                "orderNo",
+                "outDir",
+                "total",
+                "confirmShown",
+                "scrolled",
+            ]
+            .iter()
+            .map(|n| VariableDef::new(*n, VarType::Any))
+            .collect();
             s.steps = vec![step];
             let report = validator.validate(&s);
             assert_eq!(
@@ -145,9 +152,25 @@ fn only_mouse_and_keyboard_steps_take_the_input_lock() {
     };
     assert_eq!(keys(types::CLICK), ["window:billing"]);
     assert_eq!(keys(types::SET_VALUE), ["window:billing"]);
-    for t in [types::MOUSE_CLICK, types::TYPE, types::PRESS] {
+    assert_eq!(keys(types::SCROLL), ["window:billing"]);
+    assert_eq!(keys(types::SELECT_MENU), ["window:billing"]);
+    for t in [
+        types::MOUSE_CLICK,
+        types::TYPE,
+        types::PRESS,
+        types::MOUSE_SCROLL,
+        types::HOVER,
+    ] {
         assert_eq!(keys(t), ["desktop.input", "window:billing"], "{t}");
     }
+    let drag = defs.iter().find(|d| d.step_type == types::DRAG).unwrap();
+    assert_eq!(
+        resource_keys(
+            &drag.resources,
+            &json!({ "target": save_button(), "to": { "window": { "process": "explorer.exe" } } })
+        ),
+        ["desktop.input", "window:billing", "window:explorer"]
+    );
     assert!(keys(types::LAUNCH).is_empty());
 }
 
@@ -524,4 +547,132 @@ fn every_role_maps_both_ways() {
         assert_eq!(roles::of_control_type(id), name);
     }
     assert_eq!(roles::of_control_type(1), "custom");
+}
+
+#[tokio::test]
+async fn scrolling_dragging_and_menus_reach_the_backend() {
+    let backend = Scripted::new(vec![
+        Ok(json!({ "verticalPercent": 100.0, "horizontalPercent": null, "atEnd": true })),
+        Ok(Value::Null),
+        Ok(Value::Null),
+        Ok(Value::Null),
+    ]);
+    let list = json!({ "window": { "process": "billing.exe" }, "element": { "id": "lst" } });
+    let report = run(
+        &runtime(backend.clone()),
+        vec![
+            step(
+                types::SCROLL,
+                json!({ "target": list, "direction": "down", "amount": 2, "unit": "line" }),
+            )
+            .saving("out"),
+            step(
+                types::DRAG,
+                json!({ "target": list, "to": { "window": { "title": "Explorer" }, "point": { "x": 5, "y": 6 } } }),
+            ),
+            step(
+                types::SELECT_MENU,
+                json!({ "target": { "window": { "process": "notepad.exe" } }, "path": ["ファイル", "名前を付けて保存"] }),
+            ),
+            step(types::MOUSE_SCROLL, json!({ "target": list, "direction": "up" })),
+        ],
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["atEnd"], json!(true));
+    let calls = backend.calls();
+    assert!(matches!(
+        &calls[0],
+        Op::Scroll {
+            direction: Some(backend::Direction::Down),
+            amount: 2,
+            unit: backend::ScrollUnit::Line,
+            ..
+        }
+    ));
+    let Op::Drag { to, .. } = &calls[1] else {
+        panic!("{calls:?}")
+    };
+    assert_eq!(to.point.unwrap().x, 5);
+    let Op::Menu { path, .. } = &calls[2] else {
+        panic!("{calls:?}")
+    };
+    assert_eq!(path, &["ファイル", "名前を付けて保存"]);
+    assert!(matches!(
+        &calls[3],
+        Op::Wheel {
+            direction: backend::Direction::Up,
+            notches: 3,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn bad_scroll_and_menu_params_fail_before_the_backend() {
+    let backend = Scripted::new(vec![]);
+    let list = json!({ "window": { "process": "billing.exe" }, "element": { "id": "lst" } });
+    for bad in [
+        step(
+            types::MOUSE_SCROLL,
+            json!({ "target": list, "direction": "top" }),
+        ),
+        step(
+            types::SCROLL,
+            json!({ "target": list, "direction": "down", "amount": 0 }),
+        ),
+        step(types::SELECT_MENU, json!({ "target": list, "path": [] })),
+    ] {
+        let mut s = Scenario::new("bad");
+        s.steps = vec![bad];
+        for step in &mut s.steps {
+            shikigami_core::ops::assign_missing_ids(step);
+        }
+        // Refused when the run starts (schema) or by the step itself.
+        if let Ok(handle) = runtime(backend.clone()).start(s, RunOptions::default()) {
+            assert_eq!(handle.wait().await.unwrap().status, RunStatus::Failed);
+        }
+    }
+    assert!(backend.calls().is_empty());
+}
+
+#[test]
+fn menu_items_match_as_people_read_them() {
+    use crate::menu::{Item, normalize, pick};
+    assert_eq!(normalize("ファイル(&F)"), "ファイル");
+    assert_eq!(
+        normalize("名前を付けて保存(&A)...\tCtrl+Shift+S"),
+        "名前を付けて保存"
+    );
+    assert_eq!(normalize("&Save As…"), "save as");
+    assert_eq!(normalize("保存（S）"), "保存");
+    // Brackets that are part of the name stay.
+    assert_eq!(normalize("印刷 (A4)"), "印刷 (a4)");
+    let item = |name: &str, popup: bool| Item {
+        name: name.into(),
+        popup,
+        enabled: true,
+    };
+    let items = [
+        item("ファイル(F)", false),
+        item("編集(E)", false),
+        item("新規(N)\tCtrl+N", true),
+        item("名前を付けて保存(A)...", true),
+        item("保存(S)", true),
+    ];
+    assert_eq!(pick("ファイル", &items).unwrap(), 0);
+    assert_eq!(pick("名前を付けて", &items).unwrap(), 3);
+    assert_eq!(pick("保存", &items).unwrap(), 4);
+    assert_eq!(
+        pick("印刷", &items).unwrap_err().code,
+        "MENU_ITEM_NOT_FOUND"
+    );
+    // An open menu wins over the menu bar.
+    let both = [item("表示", false), item("表示", true)];
+    assert_eq!(pick("表示", &both).unwrap(), 1);
+    let twice = [item("削除する", true), item("すべて削除する", true)];
+    assert_eq!(
+        pick("削除", &twice).unwrap_err().code,
+        "MENU_ITEM_AMBIGUOUS"
+    );
 }

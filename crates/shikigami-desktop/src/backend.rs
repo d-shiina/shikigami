@@ -14,6 +14,46 @@ pub enum MouseButton {
     Right,
 }
 
+/// Which way to scroll (`Top` / `Bottom` go all the way).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+impl Direction {
+    pub fn parse(name: &str) -> Result<Self, StepError> {
+        Ok(match name {
+            "up" => Self::Up,
+            "down" => Self::Down,
+            "left" => Self::Left,
+            "right" => Self::Right,
+            "top" => Self::Top,
+            "bottom" => Self::Bottom,
+            other => {
+                return Err(StepError::invalid_params(format!(
+                    "unknown direction '{other}' (use up, down, left, right, top or bottom)"
+                )));
+            }
+        })
+    }
+
+    pub fn is_vertical(self) -> bool {
+        matches!(self, Self::Up | Self::Down | Self::Top | Self::Bottom)
+    }
+}
+
+/// How far one scroll goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScrollUnit {
+    Line,
+    Page,
+}
+
 /// Text to enter, with the apps a secret may be typed into (`None` for
 /// plain text).
 #[derive(Clone, PartialEq)]
@@ -79,6 +119,37 @@ pub enum Op {
     },
     CloseWindow {
         target: Target,
+    },
+    /// Scrolls without the mouse. `None` brings the target element into
+    /// view; otherwise its scrollable area (or the nearest one around it)
+    /// moves `amount` units. Output `{ verticalPercent, horizontalPercent,
+    /// atEnd }`.
+    Scroll {
+        target: Target,
+        direction: Option<Direction>,
+        amount: u32,
+        unit: ScrollUnit,
+    },
+    /// Turns the real mouse wheel `notches` times over the target.
+    Wheel {
+        target: Target,
+        direction: Direction,
+        notches: u32,
+    },
+    /// Holds the left button down on `from` and lets go on `to`.
+    Drag {
+        from: Target,
+        to: Box<Target>,
+    },
+    /// Moves the real mouse onto the target.
+    Hover {
+        target: Target,
+    },
+    /// Opens the context menu of `target.element` (or uses the open menu /
+    /// the menu bar of `target.window`) and picks `path` item by item.
+    Menu {
+        target: Target,
+        path: Vec<String>,
     },
 }
 

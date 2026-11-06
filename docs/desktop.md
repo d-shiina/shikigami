@@ -36,9 +36,16 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
 | `desktop.press` | `target`, `key` (`Enter` `Control+S` `Alt+F4`…, written as for the browser) | – | **used** |
 | `desktop.readText` | `target` (window, `element` or `region`) or `file` (an image file) | `{ text, lines }` (OCR) | not used |
 | `desktop.screenshot` | `target` (window, `element` or `region`), `path` | the saved path | not used |
+| `desktop.selectMenu` | `target` (window: its menu bar or the open menu; element: its right-click menu), `path` (names from the top, e.g. `["File", "Save As"]`) | – | not used |
+| `desktop.scroll` | `target`; without `direction` the element is brought into view, with `direction` (`up` `down` `left` `right` `top` `bottom`), `amount`, `unit` (`page` / `line`) its list or pane scrolls | `{ verticalPercent, horizontalPercent, atEnd }` | not used |
+| `desktop.mouseScroll` | `target`, `direction` (`up` `down` `left` `right`), `amount` (wheel notches, default 3) | – | **used** |
+| `desktop.drag` | `target` (from), `to` (a target, may be another window) | – | **used** |
+| `desktop.hover` | `target` | – | **used** |
 
 - **No waits to write**: every node keeps looking until the window or element appears (and is enabled). The limit is the node's `timeoutMs` (default 30 s). Use `desktop.waitFor` with `state: "hidden"` only to wait for something to go away
 - **Mouse-free first**: `desktop.click` presses buttons, toggles checkboxes, selects items and expands trees without moving the mouse. It works on windows in the background and alongside other work. Only for apps that do not respond, use `desktop.mouseClick` / `desktop.type`
+- **Menus by their names**: `desktop.selectMenu` matches each name as shown, without access keys (`(F)`, `&`), a trailing `...` or the shortcut, and waits for each submenu to open. When an element's right-click menu does not open without the mouse (`NOT_SUPPORTED`), open it with `desktop.mouseClick` (`button: "right"`) and give `desktop.selectMenu` only the window
+- **Reading a long list page by page**: `desktop.scroll` with `direction: "down"` returns `atEnd`, so a `control.while` loop can read, scroll and stop at the end
 - **One mouse and keyboard**: nodes marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Nodes on the same app (same `process`) also run one at a time. Scenarios never declare locks
 
 ## How the AI inspects screens (MCP)
@@ -83,7 +90,7 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 - `offset`: moves the place from the centre of what was found (e.g. the field to the right of a label)
 - `region`: looks only in part of the window (pixels from its top-left). A visible `element` narrows the search too
 - When several places match, none is picked: `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` (with the places). Choose with `nth` (0-based, top to bottom, then left to right) or `region`
-- Nodes that take them: `desktop.mouseClick`, `desktop.type` (clicks the place, then types), `desktop.waitFor`, `desktop.isVisible`. All wait until the place appears
+- Nodes that take them: `desktop.mouseClick`, `desktop.mouseScroll`, `desktop.drag` (both ends), `desktop.hover`, `desktop.type` (clicks the place, then types), `desktop.waitFor`, `desktop.isVisible`. All wait until the place appears
 - The window draws its own picture, so it can be read even when other windows cover it; only apps that cannot are brought to the front and copied from the screen
 
 ### OCR engines
@@ -136,12 +143,13 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 | `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | Found several times (with the places). Choose with `nth` or `region` |
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | No such image file / an image of one flat colour (it would match anywhere) |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` but PaddleOCR is not installed / Windows OCR lacks that language |
+| `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | No shown menu item has that name (with the items shown) / several do. Write the names from the first menu down |
 | `PLATFORM_UNSUPPORTED` | Run on something other than Windows |
 
 ## Verified and limits
 
-- **Verified**: node definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI starts Notepad and types and reads text through UI Automation. Image search, and PaddleOCR reading a picture of a Japanese business screen (12 px text), are tested on Linux and Windows CI. Windows CI also pictures Notepad, reads it with OCR and finds a cut-out part again
+- **Verified**: node definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI starts Notepad, types and reads text through UI Automation, scrolls its text to the end and back, and opens Help > About from the menu bar. Image search, and PaddleOCR reading a picture of a Japanese business screen (12 px text), are tested on Linux and Windows CI. Windows CI also pictures Notepad, reads it with OCR and finds a cut-out part again
 - **Not yet verified**: real business apps, SAP GUI, Java apps and Citrix; mouse and keyboard actions (CI does not test screen input); high DPI and multiple monitors
 - Image search takes 0.2–0.5 s per look on a Full HD window, PaddleOCR about 0.3 s on a small screen (4 CPU cores). OCR of a whole large window can take over a second: `region` makes it faster
 - Mouse and keyboard exclusion **across processes** (Studio, CLI, MCP server) is not implemented (within one process only)
-- Reading a whole grid at once and walking through menus are not implemented. Rotated or scaled images are not found
+- Reading a whole grid at once is not implemented yet. Rotated or scaled images are not found
