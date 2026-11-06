@@ -308,18 +308,32 @@ fn write_all(sheet: &Object, writes: &[(Cell, Value)], session: &Session) -> Res
     Ok(())
 }
 
-fn save(book: &Object, session: &Session) -> Result<(), StepError> {
-    session.check()?;
+/// Refuses a read-only workbook before anything in it changes: Excel lets
+/// a read-only workbook be edited, it only cannot save it.
+fn writable(book: &Object) -> Result<(), StepError> {
     if book.get("ReadOnly")?.to_bool() {
         return Err(StepError::permanent(
             "WORKBOOK_READ_ONLY",
-            "the workbook is open read-only in Excel, so it cannot be saved",
-        ));
+            "the workbook is open read-only in Excel, so it cannot be changed",
+        )
+        .with_details(json!({ "hint": "Ask the user to open the workbook for editing (or close it) and run again." })));
     }
+    Ok(())
+}
+
+fn save(book: &Object, session: &Session) -> Result<(), StepError> {
+    session.check()?;
+    writable(book)?;
     book.call("Save", vec![]).map(drop)
 }
 
 fn step(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<Value, StepError> {
+    if matches!(
+        kind,
+        Kind::WriteCell | Kind::WriteRange | Kind::AppendRows | Kind::AddSheet
+    ) {
+        writable(book)?;
+    }
     let sheet_name = crate::optional_string(params, "sheet")?;
     let sheet_name = sheet_name.as_deref();
     match kind {
@@ -422,6 +436,9 @@ const XL_YES: i32 = 1;
 const XL_TYPE_PDF: i32 = 0;
 
 fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<Value, StepError> {
+    if matches!(kind, Kind::Recalculate | Kind::Sort) {
+        writable(book)?;
+    }
     match kind {
         Kind::Recalculate => {
             session.check()?;
