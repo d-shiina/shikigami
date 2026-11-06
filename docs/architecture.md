@@ -105,7 +105,7 @@ shikigami/
 │  ├─ shikigami-com/      Office COM calls (shared by Excel macros and Outlook)
 │  ├─ shikigami-files/    file.* (text, CSV, copy/move/delete, zip)
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
-│  ├─ shikigami-pdf/      pdf.readText (reads the text of PDFs)
+│  ├─ shikigami-pdf/      pdf.readText, pdf.merge / extractPages / split
 │  └─ shikigami-plugins/  node plugins (declared in a manifest, run in a separate process)
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React (src/ is the frontend, src-tauri/ the Rust side)
