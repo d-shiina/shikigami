@@ -2,7 +2,7 @@
 
 [English](../release.md) | 日本語
 
-インストール版の Studio は、起動時に新しいバージョンがないか確認し、右下のバージョン表示から「更新して再起動」で更新できます。仕組みは Tauri 公式の updater です。
+インストール版の Studio は VS Code と同じように更新されます。起動時（または設定の「もう一度確認」）に新しいバージョンを確認し、裏でダウンロードしておき、インストーラーの画面を出さずに入れます。入るのは、設定の「再起動して更新」を押したとき（数秒で新しい版の Studio が開き直す）か、Studio を閉じたとき（次に開くと新しい版）です。更新が待っている間は右下のバージョン表示が青くなります。仕組みは Tauri 公式の updater（`installMode: quiet`）です。
 
 - 配布先：このリポジトリの GitHub Releases（`latest.json` とインストーラー）
 - 確認先：`https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
