@@ -4,7 +4,7 @@
 // a run that ended in failure instead of letting it end quietly.
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { useAgent } from "../agent";
+import { scenarioBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
 import { explainError } from "../lib/errorText";
@@ -103,7 +103,7 @@ export function RunPausePanel() {
   const reviewing = useStudio((s) => s.reviewing);
   const pending = usePendingReview();
   const agentAvailable = useAgent((s) => s.info?.available === true);
-  const agentBusy = useAgent((s) => s.turnId !== null || s.sending);
+  const agentBusy = useAgent((s) => scenarioBusy(s, scenario?.id));
   const agentName = useAgent((s) => s.info?.name ?? "AI");
   const askAgent = useAgent((s) => s.send);
   const [asking, setAsking] = useState(false);
