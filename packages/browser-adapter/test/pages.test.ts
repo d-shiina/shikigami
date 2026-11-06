@@ -116,9 +116,22 @@ describe("JS dialogs", () => {
     expect(String(err.details?.hint)).toContain('dialog: "accept"');
   });
 
+  it("masks secrets quoted in a dialog", async () => {
+    const r = { runId: "run_dialog_secret" };
+    const html = `<label>パスワード <input type="password" id="p"></label><button onclick="alert('入力：' + document.getElementById('p').value)">確認</button>`;
+    await adapter.call("open", { ...r, url: `data:text/html;charset=utf-8,${encodeURIComponent(html)}` });
+    const site = "null";
+    await adapter.call("fill", { ...r, target: { label: "パスワード" }, value: "s3cret", secret: { name: "x", sites: [site], sensitive: true } });
+    expect(await adapter.call("click", { ...r, target: { role: "button", name: "確認" }, dialog: "accept" })).toBe("入力：***");
+    await adapter.call("closeRun", r);
+  });
+
   it("fails when the expected dialog never shows", async () => {
+    const started = Date.now();
     const err = await failure(adapter.call("click", { ...run, target: { css: "#r" }, dialog: "accept", timeoutMs: 300 }));
     expect(err.code).toBe("DIALOG_NOT_SHOWN");
+    // The click and the wait share the step's limit.
+    expect(Date.now() - started).toBeLessThan(600);
   });
 });
 

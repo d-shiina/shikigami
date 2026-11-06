@@ -253,7 +253,8 @@ export class Adapter {
   /** Every tab of a context answers its JS dialogs as the running step says. */
   private watchTab(session: Session, page: Page): void {
     page.on("dialog", (dialog: Dialog) => {
-      const seen = { type: dialog.type(), message: dialog.message() };
+      // Secrets typed earlier may be quoted in the message (outputs and logs reach AI clients).
+      const seen = { type: dialog.type(), message: this.mask(session, dialog.message()) };
       const plan = session.dialogPlan;
       if (plan) {
         session.answered.push(seen);
@@ -292,6 +293,9 @@ export class Adapter {
       await action();
       return null;
     }
+    // One time budget for the action and the wait for its dialog, so the
+    // step never outlives the Runtime's limit with an answer still armed.
+    const deadline = Date.now() + this.limit(params);
     session.answered = [];
     session.dialogPlan = plan;
     const shown = new Promise<void>((resolve) => (session.onDialog = resolve));
@@ -309,7 +313,7 @@ export class Adapter {
                   },
                 }),
               ),
-            this.limit(params),
+            Math.max(deadline - Date.now(), 1),
           );
         });
         try {
