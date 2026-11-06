@@ -229,11 +229,18 @@ fn close_one(dir: &Path, id: &RunId) -> std::io::Result<()> {
                 .unwrap_or(0),
         },
     };
-    let mut file = OpenOptions::new()
-        .append(true)
-        .open(dir.join("events.jsonl"))?;
-    serde_json::to_writer(&mut file, &finished)?;
-    file.write_all(b"\n")?;
+    // Written again in full rather than appended: the crash may have cut
+    // the last line off (no newline, half an event), which would make the
+    // file unreadable.
+    let mut lines = Vec::new();
+    for event in events.iter().chain(std::iter::once(&finished)) {
+        serde_json::to_writer(&mut lines, event)?;
+        lines.push(b'\n');
+    }
+    let path = dir.join("events.jsonl");
+    let tmp = dir.join("events.jsonl.tmp");
+    fs::write(&tmp, &lines)?;
+    fs::rename(&tmp, &path)?;
     let report = RunReport {
         run_id: id.clone(),
         scenario_id,
@@ -340,6 +347,30 @@ mod interrupted_tests {
                 origin: crate::RunOrigin::new(crate::RunTrigger::Cli),
             },
         }
+    }
+
+    #[test]
+    fn a_line_cut_off_by_the_crash_does_not_spoil_the_record() {
+        let tmp = tempfile::tempdir().unwrap();
+        let gone = RunId::generate();
+        let mut recorder = RunRecorder::create(tmp.path(), &gone).unwrap();
+        recorder.write_event(&started(&gone)).unwrap();
+        drop(recorder);
+        let file = tmp
+            .path()
+            .join("runs")
+            .join(gone.as_str())
+            .join("events.jsonl");
+        let mut whole = fs::read(&file).unwrap();
+        // The process died half way through writing the next event.
+        whole.extend_from_slice(b"{\"runId\":\"run_");
+        fs::write(&file, whole).unwrap();
+
+        let going = RunId::generate();
+        let _live = RunRecorder::create(tmp.path(), &going).unwrap();
+        let events = read_events(tmp.path(), &gone).unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[1].event, RunEvent::RunFinished { .. }));
     }
 
     #[test]

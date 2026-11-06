@@ -1973,3 +1973,31 @@ async fn finally_still_runs_when_a_run_is_cancelled() {
     assert!(logs.contains(&"closed".to_string()));
     assert!(!logs.contains(&"never".to_string()));
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_nested_finally_does_not_extend_the_cleanup_deadline() {
+    let inner = Step::new("control.try")
+        .with_block("try", vec![delay(600_000)])
+        .with_block("finally", vec![delay(600_000), log("inner done")]);
+    let s = scenario(vec![
+        Step::new("control.try")
+            .with_block("try", vec![delay(600_000)])
+            .with_block("finally", vec![inner]),
+    ]);
+    let mut handle = Runtime::new()
+        .start(s, RunOptions::default())
+        .expect("start");
+    while let Some(e) = handle.next_event().await {
+        if matches!(e.event, RunEvent::StepStarted { .. }) {
+            break;
+        }
+    }
+    let started = tokio::time::Instant::now();
+    handle.cancel();
+    let mut events = Vec::new();
+    let report = handle.wait_with(|e| events.push(e.clone())).await.unwrap();
+    assert_eq!(report.status, RunStatus::Cancelled);
+    // One grace period for all the cleanup, not one per nested `try`.
+    assert!(started.elapsed() <= crate::exec::FINALLY_GRACE + Duration::from_secs(2));
+    assert!(!logs(&events).contains(&"inner done".to_string()));
+}
