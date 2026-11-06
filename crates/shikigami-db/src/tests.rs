@@ -348,3 +348,38 @@ fn a_change_given_up_on_is_never_made() {
         json!([{ "n": 0 }])
     );
 }
+
+#[test]
+fn a_query_never_keeps_a_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(connection) = sqlite(dir.path()) else {
+        return;
+    };
+    let later = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let wanted = tokio_util::sync::CancellationToken::new();
+    let request = |kind, sql: &str| Request {
+        kind,
+        connection: connection.clone(),
+        sql: sql.into(),
+        params: Vec::new(),
+        max_rows: 10,
+        timeout_secs: 5,
+        deadline: later,
+    };
+    crate::odbc::run(
+        &request(Kind::Execute, "CREATE TABLE t (n INTEGER)"),
+        &wanted,
+    )
+    .unwrap();
+    // Whatever gets past the SQL check (a function with side effects on
+    // another database) runs in a transaction that is rolled back.
+    crate::odbc::run(&request(Kind::Query, "INSERT INTO t VALUES (1)"), &wanted).unwrap();
+    assert_eq!(
+        crate::odbc::run(
+            &request(Kind::Query, "SELECT COUNT(*) AS n FROM t"),
+            &wanted
+        )
+        .unwrap(),
+        json!([{ "n": 0 }])
+    );
+}

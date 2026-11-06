@@ -138,6 +138,47 @@ fn dictionary(doc: &Document, object: &Object) -> Option<Dictionary> {
     }
 }
 
+/// `used` plus what forms without resources of their own draw: such a
+/// form uses the resources of whatever draws it (older PDFs write it so).
+fn with_borrowing_forms(
+    doc: &Document,
+    resources: &Dictionary,
+    mut used: HashSet<Vec<u8>>,
+) -> Option<HashSet<Vec<u8>>> {
+    let Some(xobjects) = resources
+        .get(b"XObject")
+        .ok()
+        .and_then(|x| dictionary(doc, x))
+    else {
+        return Some(used);
+    };
+    let mut todo: Vec<Vec<u8>> = used.iter().cloned().collect();
+    while let Some(name) = todo.pop() {
+        let Some(stream) = xobjects
+            .get(&name)
+            .ok()
+            .and_then(|o| o.as_reference().ok())
+            .and_then(|id| doc.get_object(id).and_then(Object::as_stream).ok())
+        else {
+            continue;
+        };
+        let is_form = matches!(stream.dict.get(b"Subtype"), Ok(Object::Name(n)) if n == b"Form");
+        if !is_form || stream.dict.has(b"Resources") {
+            continue;
+        }
+        let content = stream
+            .decompressed_content()
+            .unwrap_or_else(|_| stream.content.clone());
+        // A form whose drawing cannot be read: nothing is cut.
+        for drawn in drawn_names(&content)? {
+            if used.insert(drawn.clone()) {
+                todo.push(drawn);
+            }
+        }
+    }
+    Some(used)
+}
+
 /// `resources` with only the XObjects named in `used`; the Form XObjects
 /// kept are returned so their own resources can be cut down too.
 fn scoped(
@@ -188,6 +229,9 @@ fn scope_page_resources(doc: &mut Document, page: ObjectId, forms_done: &mut Has
     else {
         return;
     };
+    let Some(used) = with_borrowing_forms(doc, &resources, used) else {
+        return;
+    };
     let (resources, mut forms) = scoped(doc, resources, &used);
     if let Ok(dict) = doc.get_dictionary_mut(page) {
         dict.set("Resources", Object::Dictionary(resources));
@@ -211,6 +255,9 @@ fn scope_page_resources(doc: &mut Document, page: ObjectId, forms_done: &mut Has
             .ok()
             .and_then(|r| dictionary(doc, r))
         else {
+            continue;
+        };
+        let Some(used) = with_borrowing_forms(doc, &resources, used) else {
             continue;
         };
         let (resources, more) = scoped(doc, resources, &used);

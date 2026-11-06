@@ -26,7 +26,8 @@ fn given_up(request: &Request, cancel: &CancellationToken) -> Option<StepError> 
     }
 }
 
-/// Runs the SQL. A change (`db.execute`) runs in a transaction that is
+/// Runs the SQL. A query never keeps a change (see below). A change
+/// (`db.execute`) runs in a transaction that is
 /// committed only while the step is still wanted: when it was stopped or
 /// its time ran out meanwhile, the change is rolled back, so a retry or
 /// the next step never meets half of an attempt that was given up on.
@@ -47,13 +48,19 @@ pub fn run(request: &Request, cancel: &CancellationToken) -> Result<Value, StepE
             },
         )
         .map_err(|e| failure(&e, "connecting"))?;
-    if request.kind == Kind::Execute {
-        connection
-            .set_autocommit(false)
-            .map_err(|e| failure(&e, "starting a transaction"))?;
-    }
+    // Both kinds run in a transaction. A query's is always rolled back, so
+    // even a SELECT that changes something (a function with side effects,
+    // such as PostgreSQL's lo_unlink) leaves the database as it was.
+    connection
+        .set_autocommit(false)
+        .map_err(|e| failure(&e, "starting a transaction"))?;
     let result = execute(&connection, request, cancel);
-    if request.kind == Kind::Execute {
+    if request.kind == Kind::Query {
+        let ended = connection.rollback();
+        if result.is_ok() {
+            ended.map_err(|e| failure(&e, "ending the read"))?;
+        }
+    } else {
         let outcome = match (&result, given_up(request, cancel)) {
             (Ok(_), None) => connection.commit().map_err(|e| failure(&e, "committing")),
             (Ok(_), Some(e)) => {

@@ -503,8 +503,9 @@ fn page_step_examples_validate() {
 }
 
 /// Two scanned pages sharing one `/Resources` whose `/XObject` holds both
-/// pages' images, page 1 drawing its image through a form, as scanners and
-/// some PDF tools write it.
+/// pages' images, as scanners and some PDF tools write it. Page 1 draws its
+/// image through a form with its own resources, page 2 through a form that
+/// uses the page's.
 fn shared_scans() -> Vec<u8> {
     let mut doc = pdf_extract::Document::with_version("1.5");
     let image = |marker: &str| {
@@ -526,14 +527,21 @@ fn shared_scans() -> Vec<u8> {
         },
         b"q /Im1 Do Q".to_vec(),
     ));
+    // A form without resources of its own: it draws with the page's.
+    let borrowing = doc.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Form", "BBox" => vec![0.into(), 0.into(), 1.into(), 1.into()],
+        },
+        b"q /Im2 Do Q".to_vec(),
+    ));
     let resources = doc.add_object(dictionary! {
-        "XObject" => dictionary! { "Fm1" => form, "Im1" => im1, "Im2" => im2 },
+        "XObject" => dictionary! { "Fm1" => form, "Fm2" => borrowing, "Im1" => im1, "Im2" => im2 },
     });
     let pages_id = doc.new_object_id();
     let mut kids = Vec::new();
     for content in [
         "q 100 0 0 100 0 0 cm /Fm1 Do Q",
-        "q 100 0 0 100 0 0 cm /Im2 Do Q",
+        "q 100 0 0 100 0 0 cm /Fm2 Do Q",
     ] {
         let content = doc.add_object(Stream::new(Dictionary::new(), content.as_bytes().to_vec()));
         kids.push(Object::Reference(doc.add_object(dictionary! {
