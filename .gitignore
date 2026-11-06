@@ -11,3 +11,9 @@ apps/studio/src-tauri/bundled/
 
 # Generated when running a bundle example from source
 examples/*.files/
+examples/tutorials/*.files/
+
+# Made by running the tutorial examples
+examples/tutorials/*/output/
+examples/tutorials/*/logs/
+examples/tutorials/*/work/

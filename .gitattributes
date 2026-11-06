@@ -2,3 +2,5 @@
 *.png binary
 *.ico binary
 *.icns binary
+# Sample data kept byte for byte (CSV from Excel has CRLF); the tutorial bundles carry these bytes
+examples/tutorials/** -text
