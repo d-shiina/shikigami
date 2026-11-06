@@ -1,6 +1,6 @@
-//! Shikigami Scenario Core.
+//! Shikigami Flow Core.
 //!
-//! The one place where scenario documents are defined, validated, edited,
+//! The one place where flow documents are defined, validated, edited,
 //! versioned and stored. Studio, the MCP server, the CLI and the Runtime all
 //! depend on this crate and never re-implement its logic.
 
@@ -26,14 +26,14 @@ pub mod validate;
 pub mod version;
 
 pub use approval::{AiAction, ApprovalRequest, ApprovalStatus, ApprovalStore, NewApproval, Redeem};
-pub use call::Subscenario;
+pub use call::Subflow;
 pub use error::{CoreError, CoreResult, ErrorPayload};
-pub use ids::{ApprovalId, ObservationId, RunId, ScenarioId, StepId};
+pub use ids::{ApprovalId, FlowId, ObservationId, RunId, StepId};
 pub use model::{
-    Metadata, OnError, RetryPolicy, SCHEMA_VERSION, Scenario, ScenarioSettings, ScenarioSummary,
-    Step, VarDirection, VarType, VariableDef,
+    Flow, FlowSettings, FlowSummary, Metadata, OnError, RetryPolicy, SCHEMA_VERSION, Step,
+    VarDirection, VarType, VariableDef,
 };
-pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
+pub use ops::{EditOp, FlowPatch, Position, StepPatch};
 pub use policy::{Decision, Policy, TargetDef, TargetKind};
 pub use project::{BundledFile, ConfigFile, ConfigItem, ConfigType, ProjectFile, ProjectFiles};
 pub use registry::{Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef};
@@ -42,8 +42,8 @@ pub use review::{
     ObservationContent, ObservationSource, ReviewTimeline, ReviewVerdict, StepNote, TestRun,
 };
 pub use service::{
-    ChangeEvent, ChangeNote, EditOutcome, ExtractOutcome, ImportOutcome, ImportedSubscenario,
-    NewScenario, PublishedRun, ScenarioService,
+    ChangeEvent, ChangeNote, EditOutcome, ExtractOutcome, FlowService, ImportOutcome,
+    ImportedSubflow, NewFlow, PublishedRun,
 };
 pub use store::{
     Actor, ActorKind, ChangeKind, FileStore, HistoryEntry, UserConfig, WorkspaceInfo,
@@ -51,6 +51,6 @@ pub use store::{
 };
 pub use validate::{Severity, ValidationIssue, ValidationReport, Validator};
 pub use version::{
-    DiffKind, ImportConflict, ImportMode, NewVersion, PublishInput, PublishRecord, PublishedState,
-    ScenarioBundle, ScenarioDiff, ScenarioVersion, SubscenarioImport, VersionSummary,
+    DiffKind, FlowBundle, FlowDiff, FlowVersion, ImportConflict, ImportMode, NewVersion,
+    PublishInput, PublishRecord, PublishedState, SubflowImport, VersionSummary,
 };

@@ -10,21 +10,21 @@ use serde_json::Value;
 
 use crate::approval::ApprovalRequest;
 use crate::error::ErrorPayload;
-use crate::model::Scenario;
-use crate::model::ScenarioSummary;
+use crate::model::Flow;
+use crate::model::FlowSummary;
 use crate::ops::EditOp;
 use crate::policy::Policy;
 use crate::project::{ConfigFile, ProjectFile, ProjectFiles};
 use crate::registry::StepTypeDef;
 use crate::review::{Evidence, NewReview, ObservationContent, ReviewTimeline};
 use crate::service::{
-    ChangeEvent, ChangeNote, EditOutcome, ExtractOutcome, ImportOutcome, NewScenario,
+    ChangeEvent, ChangeNote, EditOutcome, ExtractOutcome, ImportOutcome, NewFlow,
 };
 use crate::store::{HistoryEntry, WorkspaceInfo};
 use crate::validate::ValidationReport;
 use crate::version::{
-    ImportConflict, NewVersion, PublishInput, PublishRecord, PublishedState, ScenarioBundle,
-    ScenarioDiff, ScenarioVersion, VersionSummary,
+    FlowBundle, FlowDiff, FlowVersion, ImportConflict, NewVersion, PublishInput, PublishRecord,
+    PublishedState, VersionSummary,
 };
 
 const SCHEMA_BASE: &str = "https://shikigami.dev/schemas";
@@ -32,7 +32,7 @@ const SCHEMA_BASE: &str = "https://shikigami.dev/schemas";
 /// Every exported schema as `(file name, schema)`.
 pub fn all() -> Vec<(&'static str, Value)> {
     vec![
-        ("scenario.schema.json", schema::<Scenario>("scenario")),
+        ("flow.schema.json", schema::<Flow>("flow")),
         ("edit-op.schema.json", schema::<EditOp>("edit-op")),
         ("api.schema.json", api_schema()),
     ]
@@ -71,9 +71,9 @@ fn schema<T: JsonSchema>(name: &str) -> Value {
 #[allow(dead_code)]
 #[schemars(rename = "ShikigamiApi")]
 struct Api {
-    scenario: Scenario,
-    scenario_summary: ScenarioSummary,
-    new_scenario: NewScenario,
+    flow: Flow,
+    flow_summary: FlowSummary,
+    new_flow: NewFlow,
     edit_op: EditOp,
     edit_outcome: EditOutcome,
     validation_report: ValidationReport,
@@ -82,10 +82,10 @@ struct Api {
     change_event: ChangeEvent,
     error_payload: ErrorPayload,
     new_version: NewVersion,
-    scenario_version: ScenarioVersion,
+    flow_version: FlowVersion,
     version_summary: VersionSummary,
-    scenario_diff: ScenarioDiff,
-    scenario_bundle: ScenarioBundle,
+    flow_diff: FlowDiff,
+    flow_bundle: FlowBundle,
     import_outcome: ImportOutcome,
     extract_outcome: ExtractOutcome,
     import_conflict: ImportConflict,
@@ -116,8 +116,8 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn scenario_schema_accepts_examples() {
-        let schema = schema::<Scenario>("scenario");
+    fn flow_schema_accepts_examples() {
+        let schema = schema::<Flow>("flow");
         let validator = jsonschema::validator_for(&schema).expect("compile");
         let examples = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples");
         let mut checked = 0;
@@ -128,22 +128,20 @@ mod tests {
             }
             let doc: Value =
                 serde_json::from_slice(&std::fs::read(&path).expect("read")).expect("json");
-            // A bundle (`*.shikigami.json`) is not a scenario; validate the
-            // scenarios it carries instead of the bundle wrapper.
-            let scenarios: Vec<&Value> = if crate::version::is_bundle(&doc) {
-                let mut v = vec![doc.get("scenario").expect("bundle has a scenario")];
-                if let Some(Value::Array(subs)) = doc.get("subscenarios") {
+            // A bundle (`*.shikigami.json`) is not a flow; validate the
+            // flows it carries instead of the bundle wrapper.
+            let flows: Vec<&Value> = if crate::version::is_bundle(&doc) {
+                let mut v = vec![doc.get("flow").expect("bundle has a flow")];
+                if let Some(Value::Array(subs)) = doc.get("subflows") {
                     v.extend(subs.iter());
                 }
                 v
             } else {
                 vec![&doc]
             };
-            for scenario in scenarios {
-                let errors: Vec<String> = validator
-                    .iter_errors(scenario)
-                    .map(|e| e.to_string())
-                    .collect();
+            for flow in flows {
+                let errors: Vec<String> =
+                    validator.iter_errors(flow).map(|e| e.to_string()).collect();
                 assert!(errors.is_empty(), "{}: {errors:?}", path.display());
                 checked += 1;
             }

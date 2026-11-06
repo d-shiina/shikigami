@@ -25,10 +25,10 @@ import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
-import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
+import { CHIP_ROOM, layoutFlow, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { stepLabel, t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
-import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
+import type { HistoryEntry, Flow, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
 import { useTheme } from "../lib/theme";
@@ -61,16 +61,16 @@ import { valuesSeenBy } from "../lib/runValues";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
-/** What a `scenario.call` node shows about the scenario it runs. */
+/** What a `flow.call` node shows about the flow it runs. */
 type CallView = {
   /** The call step itself. */
   stepId: string;
-  /** `callKey` of the call step's path from the open scenario. */
+  /** `callKey` of the call step's path from the open flow. */
   key: string;
-  /** Id of the called scenario (empty when not chosen yet). */
+  /** Id of the called flow (empty when not chosen yet). */
   target: string;
-  /** The called scenario, when it exists in this workspace. */
-  callee?: Scenario;
+  /** The called flow, when it exists in this workspace. */
+  callee?: Flow;
   unfolded: boolean;
   /** Its steps in reading order, when unfolded (cut to MAX_INNER_LINES). */
   lines: OutlineItem[];
@@ -130,11 +130,11 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   const history = useStudio((s) => s.history);
   const approve = useStudio((s) => s.approve);
   const revert = useStudio((s) => s.revert);
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const blocker = revertBlocker(entry, history);
-  const scope = entryScope(describe(entry, scenario, defs));
+  const scope = entryScope(describe(entry, flow, defs));
   return (
     <div title={scope.title} className="flex items-center gap-1.5 rounded-[3px] border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-raised">
       <ActorMark entry={entry} size={18} />
@@ -497,7 +497,7 @@ const ROLE_VAR: Record<string, string> = {
 };
 
 /**
- * A path param naming a file of the scenario's folder: tinted in its shelf's
+ * A path param naming a file of the flow's folder: tinted in its shelf's
  * colour, marked when Excel has it open (a write would fail), and opened in
  * its sheet or app on double-click.
  */
@@ -532,7 +532,7 @@ const INNER_MARK: Record<StepRunState, { text: string; className: string }> = {
 };
 
 /**
- * Under a call's head: which scenario it runs, and the buttons to unfold its
+ * Under a call's head: which flow it runs, and the buttons to unfold its
  * steps here or open it.
  */
 function CallBar({ call }: { call: CallView }) {
@@ -727,7 +727,7 @@ function StepNode({ data }: StepNodeProps) {
 }
 
 function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
-  // An empty block, an empty scenario, or the faint "+" under the last node: each adds a node there.
+  // An empty block, an empty flow, or the faint "+" under the last node: each adds a node there.
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
@@ -752,19 +752,19 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
  * then whichever change the reviewer picks.
  */
 function FocusOn({ id }: { id: string | undefined }) {
-  const flow = useReactFlow();
+  const rf = useReactFlow();
   useEffect(() => {
     if (!id) return;
     // After the canvas has measured its nodes and placed its starting view.
-    const timer = setTimeout(() => void flow.fitView({ nodes: [{ id }], padding: 1.2, maxZoom: 1, minZoom: MIN_READABLE_ZOOM, duration: 300 }), 200);
+    const timer = setTimeout(() => void rf.fitView({ nodes: [{ id }], padding: 1.2, maxZoom: 1, minZoom: MIN_READABLE_ZOOM, duration: 300 }), 200);
     return () => clearTimeout(timer);
-  }, [flow, id]);
+  }, [rf, id]);
   return null;
 }
 
 /** Pans just enough to bring a step into view (centring it), keeping a readable zoom. */
 function useBringIntoView() {
-  const flow = useReactFlow();
+  const rf = useReactFlow();
   const width = useStore((s) => s.width);
   const height = useStore((s) => s.height);
   // The outline covers the left edge of the chart while it is open.
@@ -773,12 +773,12 @@ function useBringIntoView() {
   const covered = outlineW + useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
   return useCallback(
     (id: string) => {
-      const node = flow.getInternalNode(id);
+      const node = rf.getInternalNode(id);
       if (!node) return;
       const { x, y } = node.internals.positionAbsolute;
       const w = node.measured.width ?? NODE_W;
       const h = node.measured.height ?? 80;
-      const view = flow.getViewport();
+      const view = rf.getViewport();
       const margin = 48;
       const left = x * view.zoom + view.x;
       const top = y * view.zoom + view.y;
@@ -787,9 +787,9 @@ function useBringIntoView() {
       if (inside && view.zoom >= MIN_READABLE_ZOOM) return;
       const zoom = Math.max(view.zoom, MIN_READABLE_ZOOM);
       // Centre in the part of the canvas the outline leaves free.
-      void flow.setCenter(x + w / 2 - covered / 2 / zoom, y + h / 2, { zoom, duration: 250 });
+      void rf.setCenter(x + w / 2 - covered / 2 / zoom, y + h / 2, { zoom, duration: 250 });
     },
-    [flow, width, height, covered],
+    [rf, width, height, covered],
   );
 }
 
@@ -838,14 +838,14 @@ function Follow() {
 }
 
 /**
- * Where the chart is when it has entered calls: the open scenario, then each
+ * Where the chart is when it has entered calls: the open flow, then each
  * called one, to click back up to; and a way to open the shown one for editing.
  */
-function DiveBar({ root, chain }: { root: Scenario; chain: DiveLevel[] }) {
+function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
   const leave = useStudio((s) => s.leaveCalls);
   const open = useStudio((s) => s.open);
-  const shown = chain.at(-1)!.scenario;
-  const levels = [root, ...chain.map((level) => level.scenario)];
+  const shown = chain.at(-1)!.flow;
+  const levels = [root, ...chain.map((level) => level.flow)];
   return (
     // As wide as its words: a centred panel would otherwise only get half the canvas.
     <div className="flex w-max max-w-[min(760px,calc(100cqw-32px))] items-center gap-1 rounded-[4px] border border-slate-200 bg-sheet py-1 pr-1 pl-1 text-[12px] shadow-raised">
@@ -898,22 +898,22 @@ const NO_BREAKPOINTS: string[] = [];
 const NO_STATES: Record<string, StepRunState> = {};
 
 export function FlowCanvas() {
-  const root = useStudio((s) => s.scenario);
+  const root = useStudio((s) => s.flow);
   const called = useStudio((s) => s.called);
   const dive = useStudio((s) => s.dive);
   const enterCall = useStudio((s) => s.enterCall);
   const projectW = useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
-  // Entered calls show their scenario here, read-only; edits stay with the open one.
+  // Entered calls show their flow here, read-only; edits stay with the open one.
   const chain = useMemo(() => diveChain(root, called, dive), [root, called, dive]);
   const path = useMemo(() => chain.map((level) => level.stepId), [chain]);
   const inside = chain.length > 0;
-  const scenario = inside ? chain.at(-1)!.scenario : root;
+  const flow = inside ? chain.at(-1)!.flow : root;
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
   const validation = useStudio((s) => s.validation);
-  // The open scenario's last run, until it is edited or run again.
+  // The open flow's last run, until it is edited or run again.
   const run = useStudio(trailOf);
-  const breakpoints = useStudio((s) => (scenario ? s.breakpoints[scenario.id] : undefined)) ?? NO_BREAKPOINTS;
+  const breakpoints = useStudio((s) => (flow ? s.breakpoints[flow.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   const stepMenu = useStepMenu();
@@ -924,7 +924,7 @@ export function FlowCanvas() {
   const theme = useTheme().mode;
   const pending = usePendingReview();
   const reviewing = useStudio((s) => s.reviewing);
-  const feedback = useStudio((s) => (s.scenario ? s.timelines[s.scenario.id]?.openFeedback : undefined));
+  const feedback = useStudio((s) => (s.flow ? s.timelines[s.flow.id]?.openFeedback : undefined));
   // What the person last asked the AI to fix, pinned to the steps it names.
   const notes = useMemo(
     () => new Map(feedback?.kind === "review" ? (feedback.steps ?? []).map((n) => [n.stepId, n.note] as const) : []),
@@ -947,10 +947,10 @@ export function FlowCanvas() {
   // What each call node shows, and the room its unfolded steps take.
   const calls = useMemo(() => {
     const map = new Map<string, Omit<CallView, "states">>();
-    const walk = (list: NonNullable<Scenario["steps"]>) => {
+    const walk = (list: NonNullable<Flow["steps"]>) => {
       for (const step of list) {
         if (step.type === CALL && step.id) {
-          const target = typeof step.params?.scenario === "string" ? step.params.scenario : "";
+          const target = typeof step.params?.flow === "string" ? step.params.flow : "";
           const callee = called[target];
           const key = callKey([...path, step.id]);
           const open = Boolean(unfolded[key] && callee);
@@ -968,9 +968,9 @@ export function FlowCanvas() {
         for (const children of Object.values(step.blocks ?? {})) walk(children);
       }
     };
-    walk(scenario?.steps ?? []);
+    walk(flow?.steps ?? []);
     return map;
-  }, [scenario, called, unfolded, defs, path]);
+  }, [flow, called, unfolded, defs, path]);
   const extra = useMemo(
     () =>
       new Map(
@@ -980,7 +980,7 @@ export function FlowCanvas() {
       ),
     [calls],
   );
-  const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs, extra), [scenario, defs, extra]);
+  const layout = useMemo(() => layoutFlow(flow?.steps ?? [], defs, extra), [flow, defs, extra]);
   // A node added on a line goes just before the step the line leads to. Not
   // where that would start another branch running at the same time.
   const insertBefore = useMemo(() => {
@@ -1002,7 +1002,7 @@ export function FlowCanvas() {
     else hideTimer.current = setTimeout(() => setHoveredEdgeNow(null), 250);
   }, []);
   useEffect(() => () => clearTimeout(hideTimer.current), []);
-  const vars = useMemo(() => knownVariables(scenario?.variables, scenario?.steps ?? []), [scenario]);
+  const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
 
   const issueCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1024,7 +1024,7 @@ export function FlowCanvas() {
           runState: states[id],
           readOnly: inside,
           breakpoint: breakpoints.includes(id),
-          owner: scenario?.id ?? "",
+          owner: flow?.id ?? "",
           pausedHere: run?.pause?.stepId === id && callKey(run.pause.callPath) === callKey(path),
           issueCount: issueCounts.get(id) ?? 0,
           selected: !inside && selection?.kind === "step" && selection.stepId === id,
@@ -1033,7 +1033,7 @@ export function FlowCanvas() {
           diff: !inside && reviewing ? diffs.get(id) : undefined,
           note: !inside && reviewing ? notes.get(id) : undefined,
           vars,
-          // Values are recorded for the open scenario's variables only.
+          // Values are recorded for the open flow's variables only.
           run: run && !inside ? { changes: run.changes, starts: run.starts } : NO_RUN,
           defs,
           call: calls.has(id) ? { ...calls.get(id)!, states: run?.inner[calls.get(id)!.key] ?? NO_STATES } : undefined,
@@ -1057,8 +1057,8 @@ export function FlowCanvas() {
 
   const selectedId = selection?.kind === "step" ? selection.stepId : null;
   const links = useMemo(
-    () => dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys())),
-    [scenario, defs, vars],
+    () => dataLinks(flow?.steps ?? [], flow?.variables, defs, new Set(vars.keys())),
+    [flow, defs, vars],
   );
   const linkEdges: Edge[] = links
     .filter((l) => l.from !== INPUT_NODE && l.to !== OUTPUT_NODE)
@@ -1105,7 +1105,7 @@ export function FlowCanvas() {
   });
   edges.push(...linkEdges);
 
-  if (!scenario || !root) {
+  if (!flow || !root) {
     return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
         <img src="/mark.png" alt="" className="h-16 w-16 opacity-30 grayscale" />
         {t.noSelection}
@@ -1126,7 +1126,7 @@ export function FlowCanvas() {
       onInit={(flow) => {
         flowRef.current = flow;
         // Fit the chart, but never shrink it below reading size: a long
-        // scenario starts at its top and scrolls instead.
+        // flow starts at its top and scrolls instead.
         const box = wrapper.current;
         if (!box) return;
         const pad = 64;
@@ -1162,7 +1162,7 @@ export function FlowCanvas() {
           const id = data.step.id ?? node.id;
           const call = calls.get(id);
           return stepMenu(data.step, {
-            owner: scenario.id,
+            owner: flow.id,
             readOnly: inside,
             call: call && { key: call.key, canEnter: Boolean(call.callee), unfolded: call.unfolded },
           });

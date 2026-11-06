@@ -1,6 +1,6 @@
 [package]
 name = "shikigami-core"
-description = "Shikigami Scenario Core: scenario model, validation, editing, history and storage shared by Studio, MCP server and Runtime"
+description = "Shikigami Flow Core: flow model, validation, editing, history and storage shared by Studio, MCP server and Runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

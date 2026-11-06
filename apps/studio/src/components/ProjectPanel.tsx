@@ -1,10 +1,10 @@
-// The scenario's folder, floating over the left of the chart: its files on
+// The flow's folder, floating over the left of the chart: its files on
 // shelves by what they are for (input, settings, templates, output), each in
 // one of the logo's colours, with which nodes use them and whether Excel has
 // them open. Work and logs sit at the foot. Files dropped from Explorer land
 // on the shelf under the pointer, or are sorted by name when dropped
 // anywhere else on the editor.
-import type { ProjectFile, Scenario, Step, StepTypeDef } from "@shikigami/schema";
+import type { ProjectFile, Flow, Step, StepTypeDef } from "@shikigami/schema";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   Copy,
@@ -52,10 +52,10 @@ export function stepName(step: Step, types: StepTypeDef[]): string {
   return step.name || stepLabel(step.type, types.find((d) => d.type === step.type)?.label);
 }
 
-function meta(file: ProjectFile, scenario: Scenario | null, types: StepTypeDef[], role: Role): { text: string; dim: boolean } {
+function meta(file: ProjectFile, flow: Flow | null, types: StepTypeDef[], role: Role): { text: string; dim: boolean } {
   if (file.inUse) return { text: t.project.inUse, dim: false };
   if (role === "output") return { text: file.modified ? new Date(file.modified).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { dateStyle: "medium", timeStyle: "short" }) : "", dim: false };
-  const users = usersOf(scenario, file.path);
+  const users = usersOf(flow, file.path);
   if (users.length === 0) return { text: t.project.unused, dim: true };
   if (users.length === 1) return { text: t.project.usedBy(stepName(users[0]!, types)), dim: false };
   return { text: t.project.usedByMany(users.length), dim: false };
@@ -63,13 +63,13 @@ function meta(file: ProjectFile, scenario: Scenario | null, types: StepTypeDef[]
 
 function FileRow({ file, role }: { file: ProjectFile; role: Role }) {
   const fileMenu = useFileMenu();
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const types = useStudio((s) => s.stepTypes);
   const openFile = useProject((s) => s.openFile);
   const open = useProject((s) => s.sheet?.path === file.path);
   const Icon = iconFor(file.path, role);
   const color = ROLE_COLOR[role];
-  const { text, dim } = meta(file, scenario, types, role);
+  const { text, dim } = meta(file, flow, types, role);
   // Inside the shelf: input/2026/a.xlsx shows as 2026/a.xlsx.
   const shown = file.path.split("/").slice(1).join("/");
   return (
@@ -172,11 +172,11 @@ function readAll(list: FileList): Promise<{ name: string; data: string }[]> {
 /** Where a drop from Explorer goes: the shelf under the pointer, or sorted by name. */
 function useFileDrop(onOver: (shelf: Role | "panel" | null) => void) {
   const copyIn = useProject((s) => s.copyIn);
-  const hasScenario = useProject((s) => s.scenarioId !== null);
+  const hasFlow = useProject((s) => s.flowId !== null);
   const latest = useRef(onOver);
   latest.current = onOver;
   useEffect(() => {
-    if (!hasScenario) return;
+    if (!hasFlow) return;
     const shelfAt = (x: number, y: number): Role | "panel" | null => {
       const el = document.elementFromPoint(x / devicePixelRatio, y / devicePixelRatio);
       const shelf = el?.closest("[data-shelf]")?.getAttribute("data-shelf");
@@ -194,7 +194,7 @@ function useFileDrop(onOver: (shelf: Role | "panel" | null) => void) {
         else if (payload.type === "drop") {
           const shelf = shelfAt(payload.position.x, payload.position.y);
           latest.current(null);
-          // Bundles and scenario files are imported from the library, not added here.
+          // Bundles and flow files are imported from the library, not added here.
           void copyIn(payload.paths, shelf === "panel" ? null : shelf);
         }
       })
@@ -209,7 +209,7 @@ function useFileDrop(onOver: (shelf: Role | "panel" | null) => void) {
       gone = true;
       off?.();
     };
-  }, [hasScenario, copyIn]);
+  }, [hasFlow, copyIn]);
 }
 
 export function ProjectButton() {
@@ -232,7 +232,7 @@ export function ProjectButton() {
 export function ProjectPanel() {
   const files = useProject((s) => s.files);
   const p = useProject((s) => s);
-  const keepWork = useStudio((s) => s.scenario?.settings?.keepWork ?? false);
+  const keepWork = useStudio((s) => s.flow?.settings?.keepWork ?? false);
   const fileMenu = useFileMenu();
   const [over, setOver] = useState<Role | "panel" | null>(null);
   const picker = useRef<HTMLInputElement>(null);

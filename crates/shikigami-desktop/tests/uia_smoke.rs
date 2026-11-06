@@ -7,7 +7,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use serde_json::{Value, json};
-use shikigami_core::{Scenario, Step, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, VarDirection, VarType, VariableDef};
 use shikigami_desktop::{DesktopAdapter, types};
 use shikigami_runtime::{Adapter, RunOptions, RunStatus, Runtime};
 
@@ -31,7 +31,7 @@ async fn notepad_round_trip() {
     assert!(windows["windows"].is_array(), "{windows}");
 
     let runtime = Runtime::builder().adapter(&adapter).build();
-    let mut s = Scenario::new("notepad");
+    let mut s = Flow::new("notepad");
     for name in ["pid", "text"] {
         s.variables.push(VariableDef {
             direction: VarDirection::Output,

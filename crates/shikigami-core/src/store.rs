@@ -5,16 +5,16 @@
 //! ```text
 //! <root>/                                 shared part (may live on a file server)
 //!   workspace.json                         optional manifest (`"shared": true`)
-//!   scenarios/<scenario-id>/               one folder per scenario (its project)
-//!     scenario.json                        the canonical scenario document
-//!     input/ config/ templates/ output/ work/   files the scenario works with
-//!   versions/<scenario-id>/<number>.json   named versions (snapshots)
-//!   trash/<scenario-id>.<unix-ts>/         deleted scenarios with their files
+//!   flows/<flow-id>/               one folder per flow (its project)
+//!     flow.json                        the canonical flow document
+//!     input/ config/ templates/ output/ work/   files the flow works with
+//!   versions/<flow-id>/<number>.json   named versions (snapshots)
+//!   trash/<flow-id>.<unix-ts>/         deleted flows with their files
 //!   .lock                                  advisory lock for read-modify-write
 //! <local root>/                            per-PC part
-//!   history/<scenario-id>/journal.jsonl    append-only change journal (audit)
-//!   history/<scenario-id>/undo.json        undo/redo stacks
-//!   history/<scenario-id>/evidence.jsonl   review evidence (test runs, observations, reviews)
+//!   history/<flow-id>/journal.jsonl    append-only change journal (audit)
+//!   history/<flow-id>/undo.json        undo/redo stacks
+//!   history/<flow-id>/evidence.jsonl   review evidence (test runs, observations, reviews)
 //!   observations/<observation-id>/…        screens an AI looked at (tree, screenshot)
 //!   runs/<run-id>/…                        run records (see shikigami-runtime)
 //! ```
@@ -29,8 +29,8 @@
 //! document, checks the revision, and replaces the file atomically
 //! (write temp file + rename), so readers never observe partial writes.
 //!
-//! Workspaces written before scenario folders kept each document as
-//! `scenarios/<scenario-id>.json`. Opening a workspace moves those into
+//! Workspaces written before flow folders kept each document as
+//! `flows/<flow-id>.json`. Opening a workspace moves those into
 //! folders; reading still accepts them, for files an older build writes.
 
 use std::fs::{self, File, OpenOptions};
@@ -45,12 +45,12 @@ use serde_json::Value;
 use time::OffsetDateTime;
 
 use crate::error::{CoreError, CoreResult};
-use crate::ids::{ObservationId, ScenarioId, StepId};
+use crate::ids::{FlowId, ObservationId, StepId};
 use crate::migrate;
-use crate::model::Scenario;
+use crate::model::Flow;
 use crate::ops::EditOp;
 use crate::review::{Evidence, Observation};
-use crate::version::{PublishRecord, ScenarioVersion};
+use crate::version::{FlowVersion, PublishRecord};
 
 /// Who made a change. Recorded in history and the audit journal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -99,7 +99,7 @@ pub enum ChangeKind {
 #[serde(rename_all = "camelCase")]
 pub struct HistoryEntry {
     pub kind: ChangeKind,
-    /// Revision of the scenario after this change.
+    /// Revision of the flow after this change.
     pub revision: u64,
     pub actor: Actor,
     #[serde(with = "time::serde::rfc3339")]
@@ -126,7 +126,7 @@ pub struct HistoryEntry {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct UndoState {
-    /// Scenario revision these stacks belong to. A mismatch means the file
+    /// Flow revision these stacks belong to. A mismatch means the file
     /// was changed outside Shikigami and the stacks must be discarded.
     #[serde(default)]
     pub head_revision: u64,
@@ -134,7 +134,7 @@ pub(crate) struct UndoState {
     pub redo: Vec<HistoryEntry>,
 }
 
-/// Maximum undo depth kept per scenario.
+/// Maximum undo depth kept per flow.
 pub(crate) const UNDO_LIMIT: usize = 200;
 
 #[derive(Debug, Clone)]
@@ -241,7 +241,8 @@ impl FileStore {
     ) -> CoreResult<Self> {
         let root = root.into();
         let local = local.into();
-        for dir in ["scenarios", "versions", "trash"] {
+        migrate_scenario_layout(&root);
+        for dir in ["flows", "versions", "trash"] {
             fs::create_dir_all(root.join(dir))?;
         }
         fs::create_dir_all(local.join("history"))?;
@@ -254,15 +255,15 @@ impl FileStore {
         Ok(store)
     }
 
-    /// Moves `scenarios/<id>.json` (the layout before scenario folders) to
-    /// `scenarios/<id>/scenario.json`. A file that cannot be moved stays
+    /// Moves `flows/<id>.json` (the layout before flow folders) to
+    /// `flows/<id>/flow.json`. A file that cannot be moved stays
     /// where it is and is still read from there.
     fn migrate_flat_files(&self) {
-        let Ok(entries) = fs::read_dir(self.scenarios_dir()) else {
+        let Ok(entries) = fs::read_dir(self.flows_dir()) else {
             return;
         };
-        let flat: Vec<ScenarioId> = entries
-            .filter_map(|e| flat_scenario_id(&e.ok()?.path()))
+        let flat: Vec<FlowId> = entries
+            .filter_map(|e| flat_flow_id(&e.ok()?.path()))
             .collect();
         if flat.is_empty() {
             return;
@@ -272,7 +273,7 @@ impl FileStore {
         };
         for id in flat {
             let from = self.flat_path(&id);
-            let to = self.scenario_path(&id);
+            let to = self.flow_path(&id);
             let moved = if to.is_file() {
                 // Both exist: an older build wrote the flat file after the
                 // move. Keep the newer one.
@@ -288,7 +289,7 @@ impl FileStore {
             match moved {
                 Ok(()) => self.ensure_project_folders(&id),
                 Err(e) => {
-                    tracing::warn!(path = %from.display(), error = %e, "could not move scenario into its folder");
+                    tracing::warn!(path = %from.display(), error = %e, "could not move flow into its folder");
                 }
             }
         }
@@ -339,8 +340,8 @@ impl FileStore {
         }
     }
 
-    pub fn scenarios_dir(&self) -> PathBuf {
-        self.root.join("scenarios")
+    pub fn flows_dir(&self) -> PathBuf {
+        self.root.join("flows")
     }
 
     pub(crate) fn lock(&self) -> CoreResult<WorkspaceLock> {
@@ -353,39 +354,39 @@ impl FileStore {
         Ok(WorkspaceLock { file })
     }
 
-    fn checked(&self, id: &ScenarioId) -> CoreResult<()> {
+    fn checked(&self, id: &FlowId) -> CoreResult<()> {
         if id.is_well_formed() {
             Ok(())
         } else {
-            Err(CoreError::InvalidScenarioId(id.to_string()))
+            Err(CoreError::InvalidFlowId(id.to_string()))
         }
     }
 
-    /// `scenarios/<id>/scenario.json`.
-    pub fn scenario_path(&self, id: &ScenarioId) -> PathBuf {
-        self.project_dir(id).join(crate::project::SCENARIO_FILE)
+    /// `flows/<id>/flow.json`.
+    pub fn flow_path(&self, id: &FlowId) -> PathBuf {
+        self.project_dir(id).join(crate::project::FLOW_FILE)
     }
 
-    /// The scenario's own folder: its document and the files it works with.
+    /// The flow's own folder: its document and the files it works with.
     /// Relative paths in its steps are resolved from here.
-    pub fn project_dir(&self, id: &ScenarioId) -> PathBuf {
-        self.scenarios_dir().join(id.as_str())
+    pub fn project_dir(&self, id: &FlowId) -> PathBuf {
+        self.flows_dir().join(id.as_str())
     }
 
-    /// `scenarios/<id>.json`, the layout before scenario folders.
-    fn flat_path(&self, id: &ScenarioId) -> PathBuf {
-        self.scenarios_dir().join(format!("{id}.json"))
+    /// `flows/<id>.json`, the layout before flow folders.
+    fn flat_path(&self, id: &FlowId) -> PathBuf {
+        self.flows_dir().join(format!("{id}.json"))
     }
 
     /// Where the document is now: its folder, or the old flat file.
-    fn existing_path(&self, id: &ScenarioId) -> Option<PathBuf> {
-        [self.scenario_path(id), self.flat_path(id)]
+    fn existing_path(&self, id: &FlowId) -> Option<PathBuf> {
+        [self.flow_path(id), self.flat_path(id)]
             .into_iter()
             .find(|p| p.is_file())
     }
 
     /// Creates the standard folders (`input/`, `config/`, …) that are missing.
-    pub(crate) fn ensure_project_folders(&self, id: &ScenarioId) {
+    pub(crate) fn ensure_project_folders(&self, id: &FlowId) {
         let dir = self.project_dir(id);
         for folder in crate::project::FOLDERS {
             if let Err(e) = fs::create_dir_all(dir.join(folder.name)) {
@@ -394,51 +395,47 @@ impl FileStore {
         }
     }
 
-    fn history_dir(&self, id: &ScenarioId) -> PathBuf {
+    fn history_dir(&self, id: &FlowId) -> PathBuf {
         self.local.join("history").join(id.as_str())
     }
 
-    pub fn exists(&self, id: &ScenarioId) -> bool {
+    pub fn exists(&self, id: &FlowId) -> bool {
         id.is_well_formed() && self.existing_path(id).is_some()
     }
 
-    pub fn load(&self, id: &ScenarioId) -> CoreResult<Scenario> {
+    pub fn load(&self, id: &FlowId) -> CoreResult<Flow> {
         self.checked(id)?;
-        let path = self
-            .existing_path(id)
-            .unwrap_or_else(|| self.scenario_path(id));
+        let path = self.existing_path(id).unwrap_or_else(|| self.flow_path(id));
         let text = match fs::read_to_string(&path) {
             Ok(text) => text,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(CoreError::ScenarioNotFound(id.clone()));
+                return Err(CoreError::FlowNotFound(id.clone()));
             }
             Err(e) => return Err(e.into()),
         };
-        let scenario = migrate::parse_scenario(&text)?;
-        if &scenario.id != id {
+        let flow = migrate::parse_flow(&text)?;
+        if &flow.id != id {
             return Err(CoreError::InvalidEdit(format!(
-                "file {} contains scenario id {}",
+                "file {} contains flow id {}",
                 path.display(),
-                scenario.id
+                flow.id
             )));
         }
-        Ok(scenario)
+        Ok(flow)
     }
 
-    /// Loads every scenario; unreadable files are skipped and logged.
-    pub fn load_all(&self) -> CoreResult<Vec<Scenario>> {
+    /// Loads every flow; unreadable files are skipped and logged.
+    pub fn load_all(&self) -> CoreResult<Vec<Flow>> {
         let mut ids = std::collections::BTreeSet::new();
-        for entry in fs::read_dir(self.scenarios_dir())? {
+        for entry in fs::read_dir(self.flows_dir())? {
             let path = entry?.path();
             let id = if path.is_dir() {
-                if !path.join(crate::project::SCENARIO_FILE).is_file() {
+                if !path.join(crate::project::FLOW_FILE).is_file() {
                     continue;
                 }
-                path.file_name()
-                    .and_then(|s| s.to_str())
-                    .map(ScenarioId::new)
+                path.file_name().and_then(|s| s.to_str()).map(FlowId::new)
             } else {
-                flat_scenario_id(&path)
+                flat_flow_id(&path)
             };
             ids.extend(id);
         }
@@ -448,7 +445,7 @@ impl FileStore {
             match self.load(&id) {
                 Ok(s) => out.push(s),
                 Err(e) => {
-                    tracing::warn!(path = %path.display(), error = %e, "skipping unreadable scenario")
+                    tracing::warn!(path = %path.display(), error = %e, "skipping unreadable flow")
                 }
             }
         }
@@ -456,13 +453,13 @@ impl FileStore {
         Ok(out)
     }
 
-    pub(crate) fn save(&self, scenario: &Scenario) -> CoreResult<()> {
-        let id = &scenario.id;
+    pub(crate) fn save(&self, flow: &Flow) -> CoreResult<()> {
+        let id = &flow.id;
         self.checked(id)?;
-        let mut json = serde_json::to_vec_pretty(scenario)?;
+        let mut json = serde_json::to_vec_pretty(flow)?;
         json.push(b'\n');
         fs::create_dir_all(self.project_dir(id))?;
-        write_atomic(&self.scenario_path(id), &json)?;
+        write_atomic(&self.flow_path(id), &json)?;
         self.ensure_project_folders(id);
         // Written by an older build after the folder existed: the folder
         // copy is now the current one.
@@ -473,11 +470,11 @@ impl FileStore {
         }
     }
 
-    /// Moves the scenario's folder (document and files) to the trash.
-    pub(crate) fn trash(&self, id: &ScenarioId) -> CoreResult<PathBuf> {
+    /// Moves the flow's folder (document and files) to the trash.
+    pub(crate) fn trash(&self, id: &FlowId) -> CoreResult<PathBuf> {
         self.checked(id)?;
         if !self.exists(id) {
-            return Err(CoreError::ScenarioNotFound(id.clone()));
+            return Err(CoreError::FlowNotFound(id.clone()));
         }
         let ts = OffsetDateTime::now_utc().unix_timestamp();
         let to = self.root.join("trash").join(format!("{id}.{ts}"));
@@ -489,12 +486,12 @@ impl FileStore {
         }
         let flat = self.flat_path(id);
         if flat.is_file() {
-            fs::rename(&flat, to.join(crate::project::SCENARIO_FILE))?;
+            fs::rename(&flat, to.join(crate::project::FLOW_FILE))?;
         }
         Ok(to)
     }
 
-    pub(crate) fn append_journal(&self, id: &ScenarioId, entry: &HistoryEntry) -> CoreResult<()> {
+    pub(crate) fn append_journal(&self, id: &FlowId, entry: &HistoryEntry) -> CoreResult<()> {
         let dir = self.history_dir(id);
         fs::create_dir_all(&dir)?;
         let mut line = serde_json::to_vec(entry)?;
@@ -508,7 +505,7 @@ impl FileStore {
     }
 
     /// Reads the most recent `limit` journal entries (oldest first).
-    pub fn read_journal(&self, id: &ScenarioId, limit: usize) -> CoreResult<Vec<HistoryEntry>> {
+    pub fn read_journal(&self, id: &FlowId, limit: usize) -> CoreResult<Vec<HistoryEntry>> {
         self.checked(id)?;
         let path = self.history_dir(id).join("journal.jsonl");
         let file = match File::open(&path) {
@@ -531,7 +528,7 @@ impl FileStore {
         Ok(entries.split_off(skip))
     }
 
-    pub(crate) fn append_evidence(&self, id: &ScenarioId, evidence: &Evidence) -> CoreResult<()> {
+    pub(crate) fn append_evidence(&self, id: &FlowId, evidence: &Evidence) -> CoreResult<()> {
         self.checked(id)?;
         let dir = self.history_dir(id);
         fs::create_dir_all(&dir)?;
@@ -545,8 +542,8 @@ impl FileStore {
         Ok(())
     }
 
-    /// Every evidence record of a scenario, oldest first.
-    pub fn read_evidence(&self, id: &ScenarioId) -> CoreResult<Vec<Evidence>> {
+    /// Every evidence record of a flow, oldest first.
+    pub fn read_evidence(&self, id: &FlowId) -> CoreResult<Vec<Evidence>> {
         self.checked(id)?;
         let file = match File::open(self.history_dir(id).join("evidence.jsonl")) {
             Ok(f) => f,
@@ -642,13 +639,13 @@ impl FileStore {
         Ok(removed)
     }
 
-    fn versions_dir(&self, id: &ScenarioId) -> PathBuf {
+    fn versions_dir(&self, id: &FlowId) -> PathBuf {
         self.root.join("versions").join(id.as_str())
     }
 
-    /// Every stored version of a scenario, oldest first. Unreadable files are
+    /// Every stored version of a flow, oldest first. Unreadable files are
     /// skipped and logged.
-    pub fn load_versions(&self, id: &ScenarioId) -> CoreResult<Vec<ScenarioVersion>> {
+    pub fn load_versions(&self, id: &FlowId) -> CoreResult<Vec<FlowVersion>> {
         self.checked(id)?;
         let dir = self.versions_dir(id);
         let entries = match fs::read_dir(&dir) {
@@ -664,7 +661,7 @@ impl FileStore {
             }
             let parsed = fs::read(&path)
                 .map_err(CoreError::from)
-                .and_then(|bytes| Ok(serde_json::from_slice::<ScenarioVersion>(&bytes)?));
+                .and_then(|bytes| Ok(serde_json::from_slice::<FlowVersion>(&bytes)?));
             match parsed {
                 Ok(v) => out.push(v),
                 Err(e) => {
@@ -676,13 +673,13 @@ impl FileStore {
         Ok(out)
     }
 
-    pub fn load_version(&self, id: &ScenarioId, number: u32) -> CoreResult<ScenarioVersion> {
+    pub fn load_version(&self, id: &FlowId, number: u32) -> CoreResult<FlowVersion> {
         self.checked(id)?;
         let path = self.versions_dir(id).join(format!("{number}.json"));
         match fs::read(&path) {
             Ok(bytes) => Ok(serde_json::from_slice(&bytes)?),
             Err(e) if e.kind() == ErrorKind::NotFound => Err(CoreError::VersionNotFound {
-                scenario_id: id.clone(),
+                flow_id: id.clone(),
                 number,
             }),
             Err(e) => Err(e.into()),
@@ -692,8 +689,8 @@ impl FileStore {
     /// Writes a new version file. Never overwrites: versions are immutable.
     /// The file is written under a temporary name and published complete, so
     /// a crash never leaves a truncated snapshot at a version's number.
-    pub(crate) fn save_version(&self, version: &ScenarioVersion) -> CoreResult<()> {
-        let id = &version.scenario.id;
+    pub(crate) fn save_version(&self, version: &FlowVersion) -> CoreResult<()> {
+        let id = &version.flow.id;
         self.checked(id)?;
         let dir = self.versions_dir(id);
         fs::create_dir_all(&dir)?;
@@ -707,9 +704,9 @@ impl FileStore {
         Ok(())
     }
 
-    /// Every publish record of a scenario, oldest first (unreadable lines
+    /// Every publish record of a flow, oldest first (unreadable lines
     /// are skipped and logged).
-    pub fn read_publish_log(&self, id: &ScenarioId) -> CoreResult<Vec<PublishRecord>> {
+    pub fn read_publish_log(&self, id: &FlowId) -> CoreResult<Vec<PublishRecord>> {
         self.checked(id)?;
         let file = match File::open(self.versions_dir(id).join(PUBLISH_LOG)) {
             Ok(f) => f,
@@ -730,7 +727,7 @@ impl FileStore {
         Ok(out)
     }
 
-    pub(crate) fn append_publish(&self, id: &ScenarioId, record: &PublishRecord) -> CoreResult<()> {
+    pub(crate) fn append_publish(&self, id: &FlowId, record: &PublishRecord) -> CoreResult<()> {
         self.checked(id)?;
         let dir = self.versions_dir(id);
         fs::create_dir_all(&dir)?;
@@ -745,7 +742,7 @@ impl FileStore {
         Ok(())
     }
 
-    pub(crate) fn load_undo(&self, id: &ScenarioId) -> CoreResult<UndoState> {
+    pub(crate) fn load_undo(&self, id: &FlowId) -> CoreResult<UndoState> {
         let path = self.history_dir(id).join("undo.json");
         match fs::read(&path) {
             Ok(bytes) => Ok(serde_json::from_slice(&bytes).unwrap_or_else(|e| {
@@ -757,13 +754,13 @@ impl FileStore {
         }
     }
 
-    pub(crate) fn save_undo(&self, id: &ScenarioId, state: &UndoState) -> CoreResult<()> {
+    pub(crate) fn save_undo(&self, id: &FlowId, state: &UndoState) -> CoreResult<()> {
         let dir = self.history_dir(id);
         fs::create_dir_all(&dir)?;
         write_atomic(&dir.join("undo.json"), &serde_json::to_vec(state)?)
     }
 
-    pub(crate) fn remove_undo(&self, id: &ScenarioId) -> CoreResult<()> {
+    pub(crate) fn remove_undo(&self, id: &FlowId) -> CoreResult<()> {
         match fs::remove_file(self.history_dir(id).join("undo.json")) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -776,12 +773,12 @@ const MANIFEST_FILE: &str = "workspace.json";
 /// Next to the version files (`.jsonl`, so version listing skips it).
 const PUBLISH_LOG: &str = "publish.jsonl";
 
-/// The ID of `scenarios/<id>.json` (the layout before scenario folders).
-fn flat_scenario_id(path: &Path) -> Option<ScenarioId> {
+/// The ID of `flows/<id>.json` (the layout before flow folders).
+fn flat_flow_id(path: &Path) -> Option<FlowId> {
     if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("json") {
         return None;
     }
-    let id = ScenarioId::new(path.file_stem()?.to_str()?);
+    let id = FlowId::new(path.file_stem()?.to_str()?);
     id.is_well_formed().then_some(id)
 }
 
@@ -849,4 +846,40 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> CoreResult<()> {
 /// Reads a JSON value from disk (used by import paths).
 pub fn read_json(path: &Path) -> CoreResult<Value> {
     Ok(serde_json::from_slice(&fs::read(path)?)?)
+}
+/// Flows were called scenarios up to 0.1.1: `scenarios/<id>/scenario.json`
+/// becomes `flows/<id>/flow.json` (deleted ones in `trash/` too). Runs
+/// before the folders are created, so an untouched old workspace is moved
+/// as a whole. Whatever cannot be moved is left alone and logged.
+fn migrate_scenario_layout(root: &Path) {
+    let old = root.join("scenarios");
+    let new = root.join("flows");
+    if old.is_dir() {
+        let new_is_empty = fs::read_dir(&new).map_or(true, |mut d| d.next().is_none());
+        if new_is_empty {
+            let moved = fs::remove_dir(&new)
+                .or_else(|e| if new.exists() { Err(e) } else { Ok(()) })
+                .and_then(|()| fs::rename(&old, &new));
+            if let Err(e) = moved {
+                tracing::warn!(path = %old.display(), error = %e, "could not rename scenarios/ to flows/");
+            }
+        } else {
+            tracing::warn!(path = %old.display(), "both scenarios/ and flows/ exist; scenarios/ is not read");
+        }
+    }
+    for parent in [new, root.join("trash")] {
+        let Ok(entries) = fs::read_dir(&parent) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let from = entry.path().join("scenario.json");
+            let to = entry.path().join(crate::project::FLOW_FILE);
+            if from.is_file()
+                && !to.exists()
+                && let Err(e) = fs::rename(&from, &to)
+            {
+                tracing::warn!(path = %from.display(), error = %e, "could not rename scenario.json to flow.json");
+            }
+        }
+    }
 }

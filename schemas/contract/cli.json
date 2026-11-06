@@ -12,7 +12,7 @@
   ],
   "subcommands": [
     {
-      "name": "scenario",
+      "name": "flow",
       "subcommands": [
         {
           "name": "list"

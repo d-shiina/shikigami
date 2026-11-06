@@ -23,7 +23,7 @@ const defs = new Map(
 );
 
 describe("effects", () => {
-  it("lists what the scenario touches outside, dangerous and new first", () => {
+  it("lists what the flow touches outside, dangerous and new first", () => {
     const steps: Step[] = [
       { id: "a", type: "browser.open", params: { url: "https://orders.example.com" } },
       { id: "b", type: "browser.click", params: { target: "ログイン" } },

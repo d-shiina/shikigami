@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use serde_json::{Value, json};
 use shikigami_core::resource::resource_keys;
 use shikigami_core::secret::{ResolvedSecret, SecretError, SecretProvider, SecretRef};
-use shikigami_core::{Scenario, Step, Validator, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, Validator, VarDirection, VarType, VariableDef};
 use shikigami_runtime::{RunOptions, RunReport, RunStatus, Runtime};
 
 use super::*;
@@ -52,7 +52,7 @@ fn runtime(backend: Arc<Scripted>) -> Runtime {
 }
 
 async fn run(runtime: &Runtime, steps: Vec<Step>) -> RunReport {
-    let mut s = Scenario::new("desktop");
+    let mut s = Flow::new("desktop");
     s.variables.push(VariableDef {
         direction: VarDirection::Output,
         ..VariableDef::new("out", VarType::Any)
@@ -100,7 +100,7 @@ fn examples_validate_and_targets_are_checked() {
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
-            let mut s = Scenario::new("example");
+            let mut s = Flow::new("example");
             s.variables = ["customerCode", "orderNo", "outDir", "total", "confirmShown"]
                 .iter()
                 .map(|n| VariableDef::new(*n, VarType::Any))
@@ -117,7 +117,7 @@ fn examples_validate_and_targets_are_checked() {
         }
     }
     let invalid = |target: Value| {
-        let mut s = Scenario::new("bad");
+        let mut s = Flow::new("bad");
         s.steps = vec![step(types::CLICK, json!({ "target": target })).with_id("c")];
         !validator.validate(&s).valid
     };

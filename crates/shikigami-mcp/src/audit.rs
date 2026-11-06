@@ -1,6 +1,6 @@
 //! Append-only audit log of MCP tool calls: `<workspace>/audit/mcp.jsonl`.
 //!
-//! Scenario changes are additionally journaled by Core; this log also covers
+//! Flow changes are additionally journaled by Core; this log also covers
 //! reads, runs and denied calls so a user can see what an AI client did.
 
 use std::fs::{self, OpenOptions};
@@ -24,7 +24,7 @@ pub(crate) struct AuditRecord<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub scenario_id: Option<&'a str>,
+    pub flow_id: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub revision: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]

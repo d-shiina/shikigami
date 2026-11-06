@@ -53,7 +53,7 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 
 ### Locking and saving
 
-- Every node uses `path` as a resource, so nodes on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Scenarios never declare locks
+- Every node uses `path` as a resource, so nodes on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Flows never declare locks
 - Each writing node saves before it finishes. It writes to a temporary file in the same folder and then replaces the original, so a failure never corrupts it. There are no "open / save / close workbook" nodes (so no way of linking distant nodes by name is needed)
 - While the workbook is open in Excel (a `~$name` file exists), writes fail with `FILE_IN_USE` (retryable). Reading still works
 

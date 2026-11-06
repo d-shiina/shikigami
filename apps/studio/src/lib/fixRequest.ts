@@ -1,7 +1,7 @@
 // What Studio tells the AI when a run paused on an error: enough to fix the
 // step without seeing the screen (the AI's MCP server runs in another
 // process, so the paused browser is not open there).
-import type { Scenario, StepTypeDef } from "@shikigami/schema";
+import type { Flow, StepTypeDef } from "@shikigami/schema";
 import type { RunEvidence } from "./api";
 import type { Pause } from "../store";
 import { findStep } from "../store";
@@ -18,19 +18,19 @@ function cut(text: string, max: number): string {
 
 /** The request text, in Studio's language. */
 export function fixRequest(input: {
-  scenario: Pick<Scenario, "id" | "name" | "steps">;
+  flow: Pick<Flow, "id" | "name" | "steps">;
   runId: string;
   pause: Pause;
   evidence: RunEvidence | null;
   defs: StepTypeDef[];
 }): string {
-  const { scenario, runId, pause, evidence } = input;
-  const step = findStep(scenario.steps ?? [], pause.stepId);
+  const { flow, runId, pause, evidence } = input;
+  const step = findStep(flow.steps ?? [], pause.stepId);
   const def = input.defs.find((d) => d.type === pause.stepType);
   const kind = stepLabel(pause.stepType, def?.label);
   const f = t.fix;
   const label = step?.name ? f.named(kind, step.name) : kind;
-  const lines = [f.intro(scenario.name, scenario.id ?? "", label, pause.stepId, pause.stepType), "", `${f.error}: ${pause.error?.code ?? "?"}: ${pause.error?.message ?? ""}`];
+  const lines = [f.intro(flow.name, flow.id ?? "", label, pause.stepId, pause.stepType), "", `${f.error}: ${pause.error?.code ?? "?"}: ${pause.error?.message ?? ""}`];
   if (pause.error?.details != null) lines.push(`${f.details}: ${cut(JSON.stringify(pause.error.details), 1500)}`);
   if (step) lines.push("", `${f.failedStep}:`, "```json", JSON.stringify(step.params ?? {}, null, 2), "```");
   const vars = Object.entries(pause.variables);

@@ -1,4 +1,4 @@
-// What a scenario does outside itself (sites it opens, files it reads, writes
+// What a flow does outside itself (sites it opens, files it reads, writes
 // or deletes, mail, commands, other apps), read from the step types' risk
 // levels and path params, and which of those a review group adds, changes or
 // removes. Display only: nothing here decides whether a step may run.
@@ -13,7 +13,7 @@ export type Effect = {
   stepId: string;
   /** The step type's label, e.g. "ファイルを削除". */
   action: string;
-  /** The file, folder, URL or command it acts on, as written in the scenario. */
+  /** The file, folder, URL or command it acts on, as written in the flow. */
   target: string;
   risk: StepTypeDef["risk"];
   /** Only reads (risk "safe"). */
@@ -22,7 +22,7 @@ export type Effect = {
 };
 
 /** Steps that only move around inside a window or ask the person: not effects outside. */
-const INSIDE = /^(browser\.(?!open$)|desktop\.(?!launch$)|dialog\.|clipboard\.|control\.|variable\.|log\.|flow\.|wait\.|scenario\.call$|config\.read$)/;
+const INSIDE = /^(browser\.(?!open$)|desktop\.(?!launch$)|dialog\.|clipboard\.|control\.|variable\.|log\.|flow\.|wait\.|flow\.call$|config\.read$)/;
 
 const TARGET_PARAMS = ["url", "command", "program", "path", "to"];
 
@@ -53,7 +53,7 @@ export function effectOf(step: Step, def: StepTypeDef | undefined, status: Effec
 }
 
 /**
- * The scenario's effects, with the group's changes marked. Dangerous ones
+ * The flow's effects, with the group's changes marked. Dangerous ones
  * come first, then new, changed and removed ones, then the rest; an effect
  * that several steps have in common is listed once.
  */

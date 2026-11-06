@@ -97,7 +97,7 @@ export function CommandPalette() {
   const open = useStudio((s) => s.paletteOpen);
   const setOpen = useStudio((s) => s.setPaletteOpen);
   const stepTypes = useStudio((s) => s.stepTypes);
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const selection = useStudio((s) => s.selection);
   const at = useStudio((s) => s.paletteAt);
   const anchor = useStudio((s) => s.paletteAnchor);
@@ -173,7 +173,7 @@ export function CommandPalette() {
 
   const where = (() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d]));
-    const spot = insertPlace(scenario?.steps ?? [], selection, at);
+    const spot = insertPlace(flow?.steps ?? [], selection, at);
     const name = (step: { name?: string | null; type: string }) => step.name || stepLabel(step.type, defs.get(step.type)?.label);
     if (spot.before) return t.palette.before(name(spot.before));
     if (spot.after) return t.palette.after(name(spot.after));

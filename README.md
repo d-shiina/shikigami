@@ -6,24 +6,24 @@
 
 English | [日本語](README.ja.md)
 
-MCP-native desktop RPA where AI and humans build, edit, and run the same automation scenarios.
+MCP-native desktop RPA where AI and humans build, edit, and run the same automation flows.
 
-Shikigami is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same scenarios**. AI builds them; finished scenarios run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
+Shikigami is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same flows**. AI builds them; finished flows run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
 
 ![Shikigami Studio (Phase 1)](docs/assets/studio-phase1.png)
 
 ## Status
 
-**Phase 1 (foundation) and Phase 2 (MCP server) are done.** Scenario Core, Runtime, CLI, Studio (Tauri 2 + React) and the MCP server work. Browser automation (Phase 3) works too ([docs/browser.md](docs/browser.md); try `pnpm demo:browser`). Windows desktop apps (Phase 4) are automated through UI Automation ([docs/desktop.md](docs/desktop.md)). Excel workbooks are read and written directly, without Excel ([docs/office.md](docs/office.md)). Details: [architecture §13](docs/architecture.md#13-implementation-status-and-limits).
+**Phase 1 (foundation) and Phase 2 (MCP server) are done.** Flow Core, Runtime, CLI, Studio (Tauri 2 + React) and the MCP server work. Browser automation (Phase 3) works too ([docs/browser.md](docs/browser.md); try `pnpm demo:browser`). Windows desktop apps (Phase 4) are automated through UI Automation ([docs/desktop.md](docs/desktop.md)). Excel workbooks are read and written directly, without Excel ([docs/office.md](docs/office.md)). Details: [architecture §13](docs/architecture.md#13-implementation-status-and-limits).
 
 Studio's UI is available in English and Japanese (JA / EN switch in the status bar; it follows the OS language until you choose).
 
 | Document | Contents |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | System layout, scenario format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
+| [docs/architecture.md](docs/architecture.md) | System layout, flow format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
 | [docs/policy.md](docs/policy.md) | Unattended runs use only an approved, published version; allowed sites and apps; approving AI operations (`policy.json`) |
-| [docs/expressions.md](docs/expressions.md) | Functions available in scenario expressions |
+| [docs/expressions.md](docs/expressions.md) | Functions available in flow expressions |
 | [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md) | Built-in nodes: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF |
 | [docs/secrets.md](docs/secrets.md) | Logins: secrets the AI refers to by name only |
 | [docs/oauth.md](docs/oauth.md) | Web APIs that need an OAuth sign-in (Box and others), with any fixed redirect URL |
@@ -31,7 +31,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/release.md](docs/release.md) | Installer, updates and release signing |
 | [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add nodes for in-house systems without rebuilding Shikigami (manifest + separate process) |
 | [docs/design/ui-principles.md](docs/design/ui-principles.md) (Japanese) | Studio's layout rules: where each button goes and how it looks, and why |
-| [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the scenario format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |
+| [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the flow format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |
 | [docs/research.md](docs/research.md) (Japanese) | Versions, licenses and Windows support of the libraries used |
 
 The design notes under `docs/design/` and `docs/research.md` are in Japanese. Japanese versions of the guides above are in [docs/ja/](docs/ja/).
@@ -39,7 +39,7 @@ The design notes under `docs/design/` and `docs/research.md` are in Japanese. Ja
 ## Layout
 
 ```text
-crates/shikigami-core      Scenario Core (the only source of truth for scenario data)
+crates/shikigami-core      Flow Core (the only source of truth for flow data)
 crates/shikigami-runtime   RPA Runtime (runs without AI or GUI)
 crates/shikigami-cli       CLI (the `shikigami` command; `shikigami mcp` is the MCP server)
 crates/shikigami-mcp       MCP server (rmcp)
@@ -47,7 +47,7 @@ apps/studio                Shikigami Studio (Tauri 2 + React + React Flow)
 packages/schema            TypeScript types generated from Rust
 plugins/shikigami          Claude Code plugin (MCP settings + skill)
 schemas/                   Generated JSON Schema
-examples/                  Sample scenarios
+examples/                  Sample flows
 ```
 
 ## Development
@@ -84,7 +84,7 @@ cargo run -p shikigami-cli -- run examples/invoice-summary.json
 cargo run -p shikigami-cli -- run examples/invoice-summary.json -i threshold=10000
 
 # Full-feature demo on screen: browser, dialogs, Excel, Word, Notepad + OCR,
-# Outlook and more in one scenario (see examples/full-demo/README.md)
+# Outlook and more in one flow (see examples/full-demo/README.md)
 pnpm demo:full
 
 # Start Studio
@@ -94,16 +94,16 @@ pnpm studio:dev
 pnpm schema:generate
 ```
 
-The workspace (where scenarios, history and run records are stored) defaults to `%APPDATA%\Shikigami\workspace`. Change it with the `SHIKIGAMI_HOME` environment variable or the CLI's `--workspace`.
+The workspace (where flows, history and run records are stored) defaults to `%APPDATA%\Shikigami\workspace`. Change it with the `SHIKIGAMI_HOME` environment variable or the CLI's `--workspace`.
 
 ### CLI examples
 
 ```sh
-shikigami scenario import examples/invoice-summary.json
-shikigami scenario list
+shikigami flow import examples/invoice-summary.json
+shikigami flow list
 echo '[{"op":"addStep","step":{"type":"log.message","params":{"message":"hello"}}}]' \
-  | shikigami scenario edit scn_example_invoice_summary -
-shikigami scenario undo scn_example_invoice_summary
+  | shikigami flow edit scn_example_invoice_summary -
+shikigami flow undo scn_example_invoice_summary
 shikigami run scn_example_invoice_summary --draft --json   # try the work in progress
 shikigami version publish scn_example_invoice_summary       # a person reviews and publishes
 shikigami run scn_example_invoice_summary --json           # unattended runs use only the published version

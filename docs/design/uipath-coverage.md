@@ -40,7 +40,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 | Element Exists 待ち / Check App State | `wait.until`、`browser.waitFor`、`desktop.waitFor` | ✅ |
 | Log Message / Write Line | `log.message` | ✅ |
 | Sequence / Flowchart | `control.group`（フロー図は Studio の表示） | ✅ |
-| Invoke Workflow File | サブシナリオ（別スレッドで実装中） | 🔜 |
+| Invoke Workflow File | サブフロー（別スレッドで実装中） | 🔜 |
 | Comment | ノードの `name`・メモ | ✅ |
 | Get Credential / Get Asset | シークレット（`{ "secret": … }`） | ✅ |
 | Invoke Code / Invoke VBA / Invoke PowerShell | 任意コードは実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro`（Office スレッド） | ✅ / 🔜 |

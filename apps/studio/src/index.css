@@ -53,7 +53,7 @@
 
   /*
    * The four strokes of the swirl, each given a role: what a file in the
-   * scenario's folder is for. Shelves, file cards and file params use them.
+   * flow's folder is for. Shelves, file cards and file params use them.
    */
   --color-role-input: #12a7b4;
   --color-role-config: #0a6fa8;

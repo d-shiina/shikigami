@@ -2,7 +2,7 @@
 
 [English](../browser.md) | 日本語
 
-Shikigami のシナリオから Web ページを操作します。Rust の Runtime が Node.js + Playwright のブラウザアダプター（`packages/browser-adapter`）を子プロセスとして起動し、改行区切りの JSON-RPC 2.0（stdio）で指示します。シナリオの実行に AI は関わりません。
+Shikigami のフローから Web ページを操作します。Rust の Runtime が Node.js + Playwright のブラウザアダプター（`packages/browser-adapter`）を子プロセスとして起動し、改行区切りの JSON-RPC 2.0（stdio）で指示します。フローの実行に AI は関わりません。
 
 ## 必要なもの
 
@@ -25,14 +25,14 @@ Shikigami のシナリオから Web ページを操作します。Rust の Runti
 pnpm demo:browser
 ```
 
-デモ用の業務サイト「サンプル商事 受注管理システム」（`examples/web`）を `http://127.0.0.1:8787/` で起動し、`examples/browser-demo.json` を CLI で実行します。デモ用アカウントは最初にシークレット「デモ受注システム」として登録するので、シナリオにパスワードは書かれていません（Studio の「🔑 シークレット」にも出ます）。
+デモ用の業務サイト「サンプル商事 受注管理システム」（`examples/web`）を `http://127.0.0.1:8787/` で起動し、`examples/browser-demo.json` を CLI で実行します。デモ用アカウントは最初にシークレット「デモ受注システム」として登録するので、フローにパスワードは書かれていません（Studio の「🔑 シークレット」にも出ます）。
 
 1. 受注係と在庫係が **同時に** 作業する：受注係がログインして受注一覧を読み、在庫係は別のウィンドウで在庫一覧を読む（`control.parallel` と別々の `context`）
 2. 未処理の注文ごとに「出荷する」を押し、処理完了の表示を待つ（`control.forEach` + `control.if`）
 3. 出荷した注文番号・合計金額・在庫切れの商品を出力する
 4. ログイン状態を `session` で保存するので、**2 回目の実行ではログイン画面を飛ばす**
 
-CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\shikigami.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Studio からも同じシナリオを読み込んで実行できます。
+CLI は `target/demo` にビルドするので、MCP サーバーなどで `target\debug\shikigami.exe` を使用中でも上書きで失敗しません（初回はビルドに少し時間がかかります）。サイトだけ起動するときは `pnpm demo:site`。Studio からも同じフローを読み込んで実行できます。
 
 ## ノード
 
@@ -51,7 +51,7 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 | `browser.waitForHuman` | `message`, `until`（人の操作が終わると出る要素） | – |
 | `browser.close` | – | – |
 
-すべてのノードに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、**同じ `context` のノードは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、シナリオにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
+すべてのノードに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、**同じ `context` のノードは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、フローにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
 
 ログイン・パスワード・MFA の扱いは [secrets.md](secrets.md) を見てください。ブラウザで OAuth のサインインをする Web API（`oauth.signIn`）は [oauth.md](oauth.md) です。
 
@@ -82,14 +82,14 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 | `ADAPTER_UNAVAILABLE` | Node.js かアダプターが見つからない | しない |
 | `ADAPTER_CRASHED` | アダプターが異常終了。次の要求で自動的に再起動 | する |
 
-## AI からシナリオを作る（MCP）
+## AI からフローを作る（MCP）
 
 MCP サーバーに 2 つのツールがあります（権限区分は `run`）。
 
 - `inspect_page`：ページを開いて（または開いているページの）アクセシビリティツリーを返す。`- button "ログイン"` と出ていれば `{ "role": "button", "name": "ログイン" }` がそのまま `target` になる
-- `test_step`：ノードを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのノードでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。シナリオは変更しない
+- `test_step`：ノードを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのノードでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。フローは変更しない
 
-AI はこれでサイトを確かめながらノードを組み、`validate_scenario` → `run_scenario` で AI なしの実行を確認します。
+AI はこれでサイトを確かめながらノードを組み、`validate_flow` → `run_flow` で AI なしの実行を確認します。
 
 ## 仕組み
 

@@ -1,5 +1,5 @@
 use serde_json::{Value, json};
-use shikigami_core::{Scenario, Step, Validator, VarType, VariableDef};
+use shikigami_core::{Flow, Step, Validator, VarType, VariableDef};
 use shikigami_runtime::Runtime;
 
 use super::*;
@@ -18,7 +18,7 @@ fn examples_validate() {
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
-            let mut s = Scenario::new("example");
+            let mut s = Flow::new("example");
             s.variables = ["order", "invoice", "mails", "mail", "files"]
                 .iter()
                 .map(|n| VariableDef::new(*n, VarType::Any))
@@ -111,7 +111,7 @@ fn list_filters_and_attachment_names() {
 #[cfg(not(windows))]
 #[tokio::test]
 async fn mail_needs_windows() {
-    let mut s = Scenario::new("mail");
+    let mut s = Flow::new("mail");
     s.steps = vec![Step::new(types::LIST)];
     shikigami_core::ops::assign_missing_ids(&mut s.steps[0]);
     let report = runtime()

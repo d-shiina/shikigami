@@ -33,10 +33,10 @@ const TOOL_ERROR_LEN: usize = 300;
 
 const SYSTEM_PROMPT: &str = "\
 You are an AI called from inside Shikigami Studio (RPA for Windows). You are talking with the person using Studio.
-- Read, edit and test-run scenarios only with the shikigami MCP tools. Files and commands are not available.
-- When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the scenario now does differently, then why. Put anything only the person can decide (your assumptions about their business) in `checks`, one question each. Your edits are already in the scenario; they queue up in Studio's review, where a person checks what they do.
-- The person watches the flow chart while you work, so build a new scenario where they can see it grow: when the scenario open in Studio has no steps, build in it (update_scenario, add_step) instead of creating another; otherwise create_scenario with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_scenario with a handful of addStep ops per call), not all in one call.
-- When asked to fix something that was sent back, read the feedback in get_scenario (details in get_review), fix it as noted, and briefly report what you fixed.
+- Read, edit and test-run flows only with the shikigami MCP tools. Files and commands are not available.
+- When you edit, write `summary` in the person's language and plain words, no step types or expressions: the first line says what the flow now does differently, then why. Put anything only the person can decide (your assumptions about their business) in `checks`, one question each. Your edits are already in the flow; they queue up in Studio's review, where a person checks what they do.
+- The person watches the flow chart while you work, so build a new flow where they can see it grow: when the flow open in Studio has no steps, build in it (update_flow, add_step) instead of creating another; otherwise create_flow with just its name and variables (no steps). Then add the steps in flow order, a few at a time (one update_flow with a handful of addStep ops per call), not all in one call.
+- When asked to fix something that was sent back, read the feedback in get_flow (details in get_review), fix it as noted, and briefly report what you fixed.
 - Never ask for or accept passwords or authentication codes. Refer to logins by secret name; if a secret is missing, ask the person to register it under Secrets in Studio.
 - Reply briefly, in the language the person writes in (Japanese or English): what you did, and what the person should do next.";
 
@@ -121,18 +121,19 @@ pub struct AgentRequest {
     message: String,
     /// The conversation to continue, from an earlier `session` event.
     session_id: Option<String>,
-    /// The scenario open in Studio, so "this step" has a meaning.
-    scenario: Option<ScenarioRef>,
+    /// The flow open in Studio, so "this step" has a meaning.
+    #[serde(alias = "scenario")]
+    flow: Option<FlowRef>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ScenarioRef {
+pub struct FlowRef {
     id: String,
     name: String,
     /// The step selected on the flow chart.
     step_id: Option<String>,
-    /// The scenario has no steps yet (e.g. just made with 新規作成).
+    /// The flow has no steps yet (e.g. just made with 新規作成).
     #[serde(default)]
     empty: bool,
 }
@@ -164,10 +165,10 @@ pub enum AgentEvent {
     ToolFailed {
         message: String,
     },
-    /// The agent created a scenario, so a conversation that began without
+    /// The agent created a flow, so a conversation that began without
     /// one now belongs to it.
     Created {
-        scenario_id: String,
+        flow_id: String,
         name: String,
     },
     Done {
@@ -341,7 +342,7 @@ pub async fn agent_send(
     );
     let cancel = CancellationToken::new();
     lock(&turns.running).insert(turn_id.clone(), cancel.clone());
-    let prompt = with_context(message, input.scenario.as_ref());
+    let prompt = with_context(message, input.flow.as_ref());
     let kind = config.kind;
     let id = turn_id.clone();
     tauri::async_runtime::spawn(async move {
@@ -676,8 +677,8 @@ fn claude_args(mcp_config: &Path, system: &Path, session: Option<&str>) -> Vec<S
     args
 }
 
-fn with_context(message: &str, scenario: Option<&ScenarioRef>) -> String {
-    match scenario {
+fn with_context(message: &str, flow: Option<&FlowRef>) -> String {
+    match flow {
         Some(s) => {
             let step = s
                 .step_id
@@ -686,7 +687,7 @@ fn with_context(message: &str, scenario: Option<&ScenarioRef>) -> String {
                 .unwrap_or_default();
             let empty = if s.empty { ", no steps yet" } else { "" };
             format!(
-                "(Open in Studio: scenario \"{}\" id={}{empty}{step})\n\n{message}",
+                "(Open in Studio: flow \"{}\" id={}{empty}{step})\n\n{message}",
                 s.name, s.id
             )
         }
@@ -766,14 +767,14 @@ impl ClaudeStream {
                             message: truncate(&result_text(b.get("content")), TOOL_ERROR_LEN),
                         });
                     }
-                    if tool.as_deref() != Some("create_scenario") {
+                    if tool.as_deref() != Some("create_flow") {
                         return None;
                     }
                     let out = serde_json::from_str::<Value>(&result_text(b.get("content"))).ok()?;
-                    let scenario = out.get("scenario")?;
+                    let flow = out.get("flow")?;
                     Some(AgentEvent::Created {
-                        scenario_id: str_of(scenario, "id")?,
-                        name: str_of(scenario, "name").unwrap_or_default(),
+                        flow_id: str_of(flow, "id")?,
+                        name: str_of(flow, "name").unwrap_or_default(),
                     })
                 })
                 .collect(),
@@ -979,7 +980,7 @@ mod tests {
         let assistant = r#"{"type":"assistant","message":{"content":[
             {"type":"text","text":"直します"},
             {"type":"tool_use","name":"mcp__shikigami__update_step","input":{"summary":"待ち時間を延ばした"}},
-            {"type":"tool_use","name":"mcp__shikigami__get_scenario","input":{}}]}}"#
+            {"type":"tool_use","name":"mcp__shikigami__get_flow","input":{}}]}}"#
             .replace('\n', "");
         assert_eq!(
             parse_claude_line(&assistant),
@@ -992,7 +993,7 @@ mod tests {
                     detail: Some("待ち時間を延ばした".into())
                 },
                 AgentEvent::Tool {
-                    name: "get_scenario".into(),
+                    name: "get_flow".into(),
                     detail: None
                 },
             ]
@@ -1023,17 +1024,17 @@ mod tests {
     }
 
     #[test]
-    fn tells_which_scenario_a_conversation_created() {
+    fn tells_which_flow_a_conversation_created() {
         let mut stream = ClaudeStream::default();
-        stream.line(r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tu_1","name":"mcp__shikigami__create_scenario","input":{"name":"請求書"}},{"type":"tool_use","id":"tu_2","name":"mcp__shikigami__get_scenario","input":{}}]}}"#);
+        stream.line(r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tu_1","name":"mcp__shikigami__create_flow","input":{"name":"請求書"}},{"type":"tool_use","id":"tu_2","name":"mcp__shikigami__get_flow","input":{}}]}}"#);
         let result = json!({ "type": "user", "message": { "content": [
-            { "type": "tool_result", "tool_use_id": "tu_2", "content": [{ "type": "text", "text": json!({ "scenario": { "id": "scn_other", "name": "参考" } }).to_string() }] },
-            { "type": "tool_result", "tool_use_id": "tu_1", "content": [{ "type": "text", "text": json!({ "scenario": { "id": "scn_new", "name": "請求書", "revision": 1 } }).to_string() }] },
+            { "type": "tool_result", "tool_use_id": "tu_2", "content": [{ "type": "text", "text": json!({ "flow": { "id": "scn_other", "name": "参考" } }).to_string() }] },
+            { "type": "tool_result", "tool_use_id": "tu_1", "content": [{ "type": "text", "text": json!({ "flow": { "id": "scn_new", "name": "請求書", "revision": 1 } }).to_string() }] },
         ]}});
         assert_eq!(
             stream.line(&result.to_string()),
             vec![AgentEvent::Created {
-                scenario_id: "scn_new".into(),
+                flow_id: "scn_new".into(),
                 name: "請求書".into()
             }]
         );
@@ -1060,10 +1061,10 @@ mod tests {
     fn says_when_a_tool_call_begins() {
         assert_eq!(
             parse_claude_line(
-                r#"{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"mcp__shikigami__create_scenario","input":{}}}}"#
+                r#"{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"mcp__shikigami__create_flow","input":{}}}}"#
             ),
             vec![AgentEvent::Preparing {
-                name: "create_scenario".into()
+                name: "create_flow".into()
             }]
         );
     }
@@ -1124,8 +1125,8 @@ mod tests {
     }
 
     #[test]
-    fn names_the_open_scenario() {
-        let s = ScenarioRef {
+    fn names_the_open_flow() {
+        let s = FlowRef {
             id: "scn_1".into(),
             name: "受注".into(),
             step_id: None,
@@ -1133,23 +1134,25 @@ mod tests {
         };
         assert!(
             with_context("直して", Some(&s))
-                .starts_with("(Open in Studio: scenario \"受注\" id=scn_1)")
+                .starts_with("(Open in Studio: flow \"受注\" id=scn_1)")
         );
-        let s = ScenarioRef {
+        let s = FlowRef {
             step_id: Some("stp_9".into()),
             ..s
         };
-        assert!(with_context("直して", Some(&s)).starts_with(
-            "(Open in Studio: scenario \"受注\" id=scn_1, selected step stepId=stp_9)"
-        ));
-        let s = ScenarioRef {
+        assert!(
+            with_context("直して", Some(&s)).starts_with(
+                "(Open in Studio: flow \"受注\" id=scn_1, selected step stepId=stp_9)"
+            )
+        );
+        let s = FlowRef {
             step_id: None,
             empty: true,
             ..s
         };
         assert!(
             with_context("作って", Some(&s))
-                .starts_with("(Open in Studio: scenario \"受注\" id=scn_1, no steps yet)")
+                .starts_with("(Open in Studio: flow \"受注\" id=scn_1, no steps yet)")
         );
         assert_eq!(with_context("直して", None), "直して");
     }

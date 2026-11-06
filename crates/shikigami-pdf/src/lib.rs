@@ -129,7 +129,7 @@ fn read_text_def() -> StepTypeDef {
         params_schema: json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string", "minLength": 1, "description": "PDF：シナリオのフォルダーからの相対パス（例 input/請求書.pdf）か絶対パス" },
+                "path": { "type": "string", "minLength": 1, "description": "PDF：フローのフォルダーからの相対パス（例 input/請求書.pdf）か絶対パス" },
                 "password": text_or_secret_schema("開くためのパスワード。登録済みのシークレット { \"secret\": \"名前\", \"field\": \"password\" } を使う"),
             },
             "required": ["path"],

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Scenario",
-  "description": "A scenario: the unit that AI clients, Studio and the Runtime share.",
+  "title": "Flow",
+  "description": "A flow: the unit that AI clients, Studio and the Runtime share.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -12,13 +12,13 @@
       ]
     },
     "schemaVersion": {
-      "description": "Version of the scenario file format.",
+      "description": "Version of the flow file format.",
       "type": "integer",
       "format": "uint32",
       "minimum": 0
     },
     "id": {
-      "$ref": "#/$defs/ScenarioId"
+      "$ref": "#/$defs/FlowId"
     },
     "name": {
       "type": "string"
@@ -56,8 +56,8 @@
       "default": []
     },
     "settings": {
-      "description": "Scenario-wide defaults for error handling, timeouts and retries.",
-      "$ref": "#/$defs/ScenarioSettings"
+      "description": "Flow-wide defaults for error handling, timeouts and retries.",
+      "$ref": "#/$defs/FlowSettings"
     },
     "metadata": {
       "$ref": "#/$defs/Metadata",
@@ -71,8 +71,8 @@
     "name"
   ],
   "$defs": {
-    "ScenarioId": {
-      "description": "Identifier of a scenario. Also used as its file name in the store.",
+    "FlowId": {
+      "description": "Identifier of a flow. Also used as its file name in the store.",
       "type": "string"
     },
     "VariableDef": {
@@ -175,7 +175,7 @@
           }
         },
         "disabled": {
-          "description": "Disabled steps are skipped by the Runtime but kept in the scenario.",
+          "description": "Disabled steps are skipped by the Runtime but kept in the flow.",
           "type": "boolean"
         },
         "timeoutMs": {
@@ -227,7 +227,7 @@
       ]
     },
     "StepId": {
-      "description": "Identifier of a step. Unique within a scenario and stable across edits.",
+      "description": "Identifier of a step. Unique within a flow and stable across edits.",
       "type": "string"
     },
     "RetryPolicy": {
@@ -272,7 +272,7 @@
         }
       ]
     },
-    "ScenarioSettings": {
+    "FlowSettings": {
       "type": "object",
       "properties": {
         "defaultTimeoutMs": {
@@ -305,7 +305,7 @@
           ]
         },
         "keepWork": {
-          "description": "Leave the files in the scenario's `work/` folder when a run starts.\nBy default a run starts with `work/` emptied.",
+          "description": "Leave the files in the flow's `work/` folder when a run starts.\nBy default a run starts with `work/` emptied.",
           "type": "boolean"
         }
       },
@@ -336,5 +336,5 @@
       "additionalProperties": true
     }
   },
-  "$id": "https://shikigami.dev/schemas/scenario.schema.json"
+  "$id": "https://shikigami.dev/schemas/flow.schema.json"
 }

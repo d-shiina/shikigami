@@ -2,7 +2,7 @@
 
 English | [日本語](ja/browser.md)
 
-Shikigami scenarios drive web pages. The Rust Runtime starts the Node.js + Playwright browser adapter (`packages/browser-adapter`) as a child process and talks to it with newline-delimited JSON-RPC 2.0 over stdio. No AI is involved in running a scenario.
+Shikigami flows drive web pages. The Rust Runtime starts the Node.js + Playwright browser adapter (`packages/browser-adapter`) as a child process and talks to it with newline-delimited JSON-RPC 2.0 over stdio. No AI is involved in running a flow.
 
 ## Requirements
 
@@ -25,14 +25,14 @@ Shikigami scenarios drive web pages. The Rust Runtime starts the Node.js + Playw
 pnpm demo:browser
 ```
 
-This starts a demo business site, an order management system for a sample trading company (`examples/web`), at `http://127.0.0.1:8787/` and runs `examples/browser-demo.json` with the CLI. The demo account is first registered as a secret, so the scenario contains no password (it also shows under 🔑 Secrets in Studio).
+This starts a demo business site, an order management system for a sample trading company (`examples/web`), at `http://127.0.0.1:8787/` and runs `examples/browser-demo.json` with the CLI. The demo account is first registered as a secret, so the flow contains no password (it also shows under 🔑 Secrets in Studio).
 
 1. An order clerk and a stock clerk work **at the same time**: the order clerk logs in and reads the order list while the stock clerk reads the stock list in another window (`control.parallel` with separate `context`s)
 2. For each open order, press "Ship" and wait for the confirmation (`control.forEach` + `control.if`)
 3. Output the shipped order numbers, the total amount and the out-of-stock items
 4. The login is kept with `session`, so **the second run skips the login page**
 
-The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Studio can load and run the same scenario.
+The CLI builds into `target/demo`, so it does not fail to overwrite `target\debug\shikigami.exe` while an MCP server uses it (the first build takes a little while). `pnpm demo:site` starts only the site. Studio can load and run the same flow.
 
 ## Nodes
 
@@ -51,7 +51,7 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 | `browser.waitForHuman` | `message`, `until` (an element that appears when the person is done) | – |
 | `browser.close` | – | – |
 
-Every node has a `context` (default `default`). Each `context` has its own cookies and tabs; **nodes on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so scenarios never declare locks). Contexts opened by a run are closed when it ends.
+Every node has a `context` (default `default`). Each `context` has its own cookies and tabs; **nodes on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so flows never declare locks). Contexts opened by a run are closed when it ends.
 
 For logins, passwords and MFA, see [secrets.md](secrets.md). For web APIs that need an OAuth sign-in in the browser (`oauth.signIn`), see [oauth.md](oauth.md).
 
@@ -82,14 +82,14 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 | `ADAPTER_UNAVAILABLE` | Node.js or the adapter was not found | no |
 | `ADAPTER_CRASHED` | The adapter died. It restarts on the next request | yes |
 
-## Building scenarios from AI (MCP)
+## Building flows from AI (MCP)
 
 The MCP server has two tools for this (class `run`):
 
 - `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is
-- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario
+- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the flow
 
-With these the AI checks the site while it builds the nodes, then confirms an AI-free run with `validate_scenario` → `run_scenario`.
+With these the AI checks the site while it builds the nodes, then confirms an AI-free run with `validate_flow` → `run_flow`.
 
 ## How it works
 

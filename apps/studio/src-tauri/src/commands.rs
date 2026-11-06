@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use shikigami_core::{
     Actor, ActorKind, ApprovalId, ApprovalRequest, ChangeNote, EditOp, EditOutcome, ErrorPayload,
-    Evidence, ExtractOutcome, FileStore, HistoryEntry, ImportConflict, ImportOutcome, NewReview,
-    NewScenario, NewVersion, ObservationContent, ObservationId, Policy, ProjectFile, ProjectFiles,
-    PublishInput, PublishedState, ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId,
-    ScenarioSummary, StepId, StepTypeDef, UserConfig, ValidationReport, VersionSummary,
-    WorkspaceInfo, WorkspaceManifest,
+    Evidence, ExtractOutcome, FileStore, Flow, FlowDiff, FlowId, FlowSummary, HistoryEntry,
+    ImportConflict, ImportOutcome, NewFlow, NewReview, NewVersion, ObservationContent,
+    ObservationId, Policy, ProjectFile, ProjectFiles, PublishInput, PublishedState, ReviewTimeline,
+    RunId, StepId, StepTypeDef, UserConfig, ValidationReport, VersionSummary, WorkspaceInfo,
+    WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunSnapshot};
@@ -62,14 +62,14 @@ pub fn set_workspace(app: AppHandle, path: String, shared: bool) -> CmdResult<()
 }
 
 #[tauri::command]
-pub fn list_versions(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<Vec<VersionSummary>> {
+pub fn list_versions(state: State<'_, AppState>, id: FlowId) -> CmdResult<Vec<VersionSummary>> {
     Ok(state.service.list_versions(&id)?)
 }
 
 #[tauri::command]
 pub fn create_version(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     expected_revision: Option<u64>,
     input: NewVersion,
 ) -> CmdResult<VersionSummary> {
@@ -82,15 +82,15 @@ pub fn create_version(
 #[tauri::command]
 pub fn published_state(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
 ) -> CmdResult<Option<PublishedState>> {
     Ok(state.service.published(&id)?)
 }
 
 #[tauri::command]
-pub fn publish_scenario(
+pub fn publish_flow(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     input: PublishInput,
 ) -> CmdResult<PublishedState> {
     Ok(state.service.publish(&id, input, studio())?)
@@ -100,7 +100,7 @@ pub fn publish_scenario(
 #[tauri::command]
 pub fn approve_and_publish(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     revision: u64,
     reason: Option<String>,
     input: Option<PublishInput>,
@@ -115,7 +115,7 @@ pub fn approve_and_publish(
 }
 
 #[tauri::command]
-pub fn unpublish_scenario(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<()> {
+pub fn unpublish_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<()> {
     Ok(state.service.unpublish(&id, String::new(), studio())?)
 }
 
@@ -152,17 +152,17 @@ pub fn decide_approval(
 #[tauri::command]
 pub fn diff_versions(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     from: Option<u32>,
     to: Option<u32>,
-) -> CmdResult<ScenarioDiff> {
+) -> CmdResult<FlowDiff> {
     Ok(state.service.diff_versions(&id, from, to)?)
 }
 
 #[tauri::command]
 pub fn restore_version(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     number: u32,
     expected_revision: Option<u64>,
 ) -> CmdResult<EditOutcome> {
@@ -173,13 +173,13 @@ pub fn restore_version(
 
 /// Writes a bundle into the Downloads folder and returns its path.
 #[tauri::command]
-pub fn export_scenario(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<String> {
+pub fn export_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<String> {
     let bundle = state.service.export(&id, true)?;
     let dir = dirs::download_dir()
         .or_else(dirs::home_dir)
         .ok_or_else(|| err("STORAGE_ERROR", "保存先フォルダが見つかりません"))?;
     let stem: String = bundle
-        .scenario
+        .flow
         .name
         .chars()
         .map(|c| {
@@ -191,7 +191,7 @@ pub fn export_scenario(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<
         })
         .collect();
     let stem = if stem.trim().is_empty() {
-        "scenario".to_owned()
+        "flow".to_owned()
     } else {
         stem
     };
@@ -207,9 +207,9 @@ pub fn export_scenario(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<
     Ok(path.display().to_string())
 }
 
-/// Imports the text of a bundle or scenario file chosen in the UI.
+/// Imports the text of a bundle or flow file chosen in the UI.
 #[tauri::command]
-pub fn import_scenario(
+pub fn import_flow(
     state: State<'_, AppState>,
     contents: String,
     on_conflict: Option<ImportConflict>,
@@ -219,19 +219,19 @@ pub fn import_scenario(
     Ok(state.service.import_bundle(value, on_conflict, studio())?)
 }
 
-// -- the scenario's folder ----------------------------------------------------
+// -- the flow's folder ----------------------------------------------------
 
 #[tauri::command]
-pub fn project_files(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<ProjectFiles> {
+pub fn project_files(state: State<'_, AppState>, id: FlowId) -> CmdResult<ProjectFiles> {
     Ok(state.service.project_files(&id)?)
 }
 
-/// A text file of the scenario's folder (settings, CSV, notes) for the
+/// A text file of the flow's folder (settings, CSV, notes) for the
 /// editor. Files that are not UTF-8 text are opened with their app instead.
 #[tauri::command]
 pub fn read_project_text(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     path: String,
 ) -> CmdResult<String> {
     let bytes = state.service.read_project_file(&id, &path)?;
@@ -254,7 +254,7 @@ pub fn read_project_text(
 #[tauri::command]
 pub fn write_project_text(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     path: String,
     text: String,
     overwrite: bool,
@@ -268,7 +268,7 @@ pub fn write_project_text(
 #[tauri::command]
 pub fn upload_project_file(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     path: String,
     data: String,
     overwrite: bool,
@@ -287,7 +287,7 @@ pub fn upload_project_file(
 #[tauri::command]
 pub fn copy_into_project(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     folder: String,
     paths: Vec<String>,
     overwrite: bool,
@@ -315,7 +315,7 @@ pub fn copy_into_project(
 #[tauri::command]
 pub fn create_project_folder(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     path: String,
 ) -> CmdResult<()> {
     Ok(state.service.create_project_folder(&id, &path)?)
@@ -324,7 +324,7 @@ pub fn create_project_folder(
 #[tauri::command]
 pub fn rename_project_file(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     from: String,
     to: String,
 ) -> CmdResult<ProjectFile> {
@@ -333,11 +333,7 @@ pub fn rename_project_file(
 
 /// To the workspace trash; a standard folder (work/…) is emptied.
 #[tauri::command]
-pub fn delete_project_file(
-    state: State<'_, AppState>,
-    id: ScenarioId,
-    path: String,
-) -> CmdResult<()> {
+pub fn delete_project_file(state: State<'_, AppState>, id: FlowId, path: String) -> CmdResult<()> {
     Ok(state.service.delete_project_file(&id, &path)?)
 }
 
@@ -346,7 +342,7 @@ pub fn delete_project_file(
 #[tauri::command]
 pub fn open_project_file(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     path: String,
     reveal: bool,
 ) -> CmdResult<()> {
@@ -388,48 +384,48 @@ pub fn open_project_file(
 }
 
 #[tauri::command]
-pub fn list_scenarios(state: State<'_, AppState>) -> CmdResult<Vec<ScenarioSummary>> {
+pub fn list_flows(state: State<'_, AppState>) -> CmdResult<Vec<FlowSummary>> {
     Ok(state.service.list()?)
 }
 
 #[tauri::command]
-pub fn get_scenario(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<Scenario> {
+pub fn get_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<Flow> {
     Ok(state.service.get(&id)?)
 }
 
 #[tauri::command]
-pub fn create_scenario(state: State<'_, AppState>, input: NewScenario) -> CmdResult<EditOutcome> {
+pub fn create_flow(state: State<'_, AppState>, input: NewFlow) -> CmdResult<EditOutcome> {
     Ok(state.service.create(input, studio())?)
 }
 
 #[tauri::command]
-pub fn duplicate_scenario(
+pub fn duplicate_flow(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     name: Option<String>,
 ) -> CmdResult<EditOutcome> {
     Ok(state.service.duplicate(&id, name, studio())?)
 }
 
 #[tauri::command]
-pub fn delete_scenario(
+pub fn delete_flow(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     expected_revision: Option<u64>,
 ) -> CmdResult<()> {
     Ok(state.service.delete(&id, expected_revision, studio())?)
 }
 
-/// Moves neighbouring steps into a new scenario called from where they were.
+/// Moves neighbouring steps into a new flow called from where they were.
 #[tauri::command]
-pub fn extract_subscenario(
+pub fn extract_subflow(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     expected_revision: Option<u64>,
     step_ids: Vec<StepId>,
     name: String,
 ) -> CmdResult<ExtractOutcome> {
-    Ok(state.service.extract_subscenario(
+    Ok(state.service.extract_subflow(
         &id,
         expected_revision,
         &step_ids,
@@ -440,9 +436,9 @@ pub fn extract_subscenario(
 }
 
 #[tauri::command]
-pub fn edit_scenario(
+pub fn edit_flow(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     expected_revision: Option<u64>,
     ops: Vec<EditOp>,
 ) -> CmdResult<EditOutcome> {
@@ -452,7 +448,7 @@ pub fn edit_scenario(
 #[tauri::command]
 pub fn undo(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     expected_revision: Option<u64>,
 ) -> CmdResult<EditOutcome> {
     Ok(state.service.undo(&id, expected_revision, studio())?)
@@ -461,7 +457,7 @@ pub fn undo(
 #[tauri::command]
 pub fn redo(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     expected_revision: Option<u64>,
 ) -> CmdResult<EditOutcome> {
     Ok(state.service.redo(&id, expected_revision, studio())?)
@@ -475,16 +471,13 @@ pub struct UndoState {
 }
 
 #[tauri::command]
-pub fn undo_state(state: State<'_, AppState>, id: ScenarioId) -> CmdResult<UndoState> {
+pub fn undo_state(state: State<'_, AppState>, id: FlowId) -> CmdResult<UndoState> {
     let (can_undo, can_redo) = state.service.undo_state(&id)?;
     Ok(UndoState { can_undo, can_redo })
 }
 
 #[tauri::command]
-pub fn validate_scenario(
-    state: State<'_, AppState>,
-    id: ScenarioId,
-) -> CmdResult<ValidationReport> {
+pub fn validate_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<ValidationReport> {
     Ok(state.service.validate_stored(&id)?)
 }
 
@@ -494,9 +487,9 @@ pub fn list_step_types(state: State<'_, AppState>) -> Vec<StepTypeDef> {
 }
 
 #[tauri::command]
-pub fn scenario_history(
+pub fn flow_history(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     limit: Option<usize>,
 ) -> CmdResult<Vec<HistoryEntry>> {
     Ok(state.service.history(&id, limit.unwrap_or(100))?)
@@ -507,18 +500,18 @@ pub fn scenario_history(
 #[tauri::command]
 pub fn review_timeline(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     since: Option<u64>,
 ) -> CmdResult<ReviewTimeline> {
     Ok(state.service.review_timeline(&id, since)?)
 }
 
 /// Approves the current revision or sends it back with a reason the AI
-/// reads over MCP (get_scenario `feedback`, get_review).
+/// reads over MCP (get_flow `feedback`, get_review).
 #[tauri::command]
 pub fn submit_review(
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     input: NewReview,
 ) -> CmdResult<Evidence> {
     Ok(state.service.submit_review(&id, input, studio())?)
@@ -576,27 +569,27 @@ pub struct DebugSettings {
     step: bool,
 }
 
-/// Starts a run of the stored scenario. Events are emitted as `run-event`
+/// Starts a run of the stored flow. Events are emitted as `run-event`
 /// and recorded under `<workspace>/runs/<run-id>/`. Studio runs are
 /// interactive: they pause on unhandled errors and at `debug.breakpoints`
 /// (see `debug_run`).
 #[tauri::command]
-pub async fn run_scenario(
+pub async fn run_flow(
     app: AppHandle,
     state: State<'_, AppState>,
-    id: ScenarioId,
+    id: FlowId,
     inputs: Option<Map<String, Value>>,
     debug: Option<DebugSettings>,
 ) -> CmdResult<RunId> {
     let debug = debug.unwrap_or_default();
-    let scenario = state.service.get_runnable(&id)?;
-    let version = state.service.matching_version(&scenario).ok().flatten();
-    let subscenarios = state.service.subscenarios(&scenario)?;
+    let flow = state.service.get_runnable(&id)?;
+    let version = state.service.matching_version(&flow).ok().flatten();
+    let subflows = state.service.subflows(&flow)?;
     let project_dir = Some(state.service.project_dir(&id)?);
     let handle = state
         .runtime
         .start(
-            scenario,
+            flow,
             RunOptions {
                 project_dir,
                 full_run: true,
@@ -608,7 +601,7 @@ pub async fn run_scenario(
                     breakpoints: debug.breakpoints,
                     pause_at_start: debug.step,
                 }),
-                subscenarios,
+                subflows,
                 ..RunOptions::default()
             },
         )
@@ -627,7 +620,7 @@ pub async fn run_scenario(
             ActiveRun {
                 cancel: handle.cancel_token(),
                 snapshot: handle.snapshot_cell(),
-                scenario_id: id.clone(),
+                flow_id: id.clone(),
                 debug: handle.debug_control(),
             },
         );

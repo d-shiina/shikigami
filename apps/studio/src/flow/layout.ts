@@ -1,6 +1,6 @@
 // Derives a flowchart from the step tree. This is a pure *view* of the
-// scenario: positions are computed, never stored, so AI edits and GUI edits
-// always render identically and no layout data leaks into scenario files.
+// flow: positions are computed, never stored, so AI edits and GUI edits
+// always render identically and no layout data leaks into flow files.
 //
 // Steps run top to bottom; a step's blocks sit side by side below it, and
 // loops draw a back-edge from the end of their body.
@@ -44,7 +44,7 @@ export type SlotNodeData = {
   parentId: string | null;
   block: string | null;
   label: string;
-  /** The faint "+" under the scenario's last node, to keep adding at the end. */
+  /** The faint "+" under the flow's last node, to keep adding at the end. */
   end?: boolean;
 };
 
@@ -230,7 +230,7 @@ class Builder {
   }
 }
 
-export function layoutScenario(steps: Step[], defs: Defs, extra: Extra = NO_EXTRA): Layout {
+export function layoutFlow(steps: Step[], defs: Defs, extra: Extra = NO_EXTRA): Layout {
   const builder = new Builder(defs, extra);
   const size = measureList(steps, defs, extra);
   builder.list(steps, 0, 0, size.w, null, null, "");

@@ -1,14 +1,14 @@
 // Turns Core's journal entries into readable lines for the timeline
 // and the review cards. Display only: before/after values come straight from
 // the ops and inverse ops Core recorded, nothing is recomputed here.
-import type { EditOp, HistoryEntry, Scenario, StepPatch, StepTypeDef } from "@shikigami/schema";
+import type { EditOp, HistoryEntry, Flow, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { findStep } from "../store";
 import { stepLabel, t } from "./i18n";
 
 export type FieldDiff = { field: string; before: unknown; after: unknown };
 
 export type ChangeLine = {
-  verb: "add" | "update" | "remove" | "move" | "scenario" | "variable" | "replace";
+  verb: "add" | "update" | "remove" | "move" | "flow" | "variable" | "replace";
   stepId?: string;
   subject: string;
   diffs: FieldDiff[];
@@ -46,8 +46,8 @@ function patchDiffs(patch: StepPatch, inverse: StepPatch | undefined): FieldDiff
 }
 
 /** Name to show for a step: its display name, else its type label. */
-function stepName(id: string, scenario: Scenario | null, defs: ReadonlyMap<string, StepTypeDef>, fallback?: EditOp) {
-  const step = scenario ? findStep(scenario.steps ?? [], id) : null;
+function stepName(id: string, flow: Flow | null, defs: ReadonlyMap<string, StepTypeDef>, fallback?: EditOp) {
+  const step = flow ? findStep(flow.steps ?? [], id) : null;
   if (step) return step.name || stepLabel(step.type, defs.get(step.type)?.label);
   if (fallback?.op === "addStep") return fallback.step.name || stepLabel(fallback.step.type, defs.get(fallback.step.type)?.label);
   return id;
@@ -55,7 +55,7 @@ function stepName(id: string, scenario: Scenario | null, defs: ReadonlyMap<strin
 
 export function describe(
   entry: HistoryEntry,
-  scenario: Scenario | null,
+  flow: Flow | null,
   defs: ReadonlyMap<string, StepTypeDef>,
 ): ChangeLine[] {
   const inverse = entry.inverse ?? [];
@@ -75,20 +75,20 @@ export function describe(
         return {
           verb: "update",
           stepId: op.stepId,
-          subject: stepName(op.stepId, scenario, defs),
+          subject: stepName(op.stepId, flow, defs),
           diffs: patchDiffs(op.patch, inv?.op === "updateStep" ? inv.patch : undefined),
         };
       }
       case "removeStep": {
         const restored = paired ?? inverse.find((i) => i.op === "addStep" && i.step.id === op.stepId);
-        return { verb: "remove", subject: stepName(op.stepId, scenario, defs, restored), diffs: [] };
+        return { verb: "remove", subject: stepName(op.stepId, flow, defs, restored), diffs: [] };
       }
       case "moveStep":
-        return { verb: "move", stepId: op.stepId, subject: stepName(op.stepId, scenario, defs), diffs: [] };
-      case "updateScenario":
+        return { verb: "move", stepId: op.stepId, subject: stepName(op.stepId, flow, defs), diffs: [] };
+      case "updateFlow":
         return {
-          verb: "scenario",
-          subject: op.patch.name ?? scenario?.name ?? "",
+          verb: "flow",
+          subject: op.patch.name ?? flow?.name ?? "",
           diffs: Object.entries(op.patch).map(([field, after]) => ({ field, before: undefined, after })),
         };
       case "setVariable":

@@ -21,7 +21,7 @@ use serde_json::Value;
 use time::{Duration, OffsetDateTime};
 
 use crate::error::{CoreError, CoreResult};
-use crate::ids::{ApprovalId, ScenarioId};
+use crate::ids::{ApprovalId, FlowId};
 use crate::registry::RiskLevel;
 use crate::store::{Actor, ActorKind, write_atomic};
 
@@ -36,17 +36,19 @@ const MAX_REASON_CHARS: usize = 500;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AiAction {
-    RunScenario,
+    #[serde(alias = "runScenario")]
+    RunFlow,
     TestStep,
-    DeleteScenario,
+    #[serde(alias = "deleteScenario")]
+    DeleteFlow,
 }
 
 impl AiAction {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::RunScenario => "runScenario",
+            Self::RunFlow => "runFlow",
             Self::TestStep => "testStep",
-            Self::DeleteScenario => "deleteScenario",
+            Self::DeleteFlow => "deleteFlow",
         }
     }
 }
@@ -66,8 +68,8 @@ pub enum ApprovalStatus {
 pub struct NewApproval {
     pub action: AiAction,
     pub requested_by: Actor,
-    pub scenario_id: Option<ScenarioId>,
-    pub scenario_name: Option<String>,
+    pub flow_id: Option<FlowId>,
+    pub flow_name: Option<String>,
     pub risk: RiskLevel,
     /// The step types that make it risky, e.g. `["file.delete"]`.
     pub step_types: Vec<String>,
@@ -90,9 +92,11 @@ pub struct ApprovalRequest {
     pub requested_at: OffsetDateTime,
     pub requested_by: Actor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scenario_id: Option<ScenarioId>,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: Option<FlowId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scenario_name: Option<String>,
+    #[serde(alias = "scenarioName")]
+    pub flow_name: Option<String>,
     pub risk: RiskLevel,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub step_types: Vec<String>,
@@ -194,8 +198,8 @@ impl ApprovalStore {
             status: ApprovalStatus::Pending,
             requested_at: now,
             requested_by: input.requested_by,
-            scenario_id: input.scenario_id,
-            scenario_name: input.scenario_name,
+            flow_id: input.flow_id,
+            flow_name: input.flow_name,
             risk: input.risk,
             step_types: input.step_types,
             subject: input.subject,
@@ -355,8 +359,8 @@ mod tests {
         NewApproval {
             action: AiAction::TestStep,
             requested_by: Actor::named(ActorKind::Mcp, "claude-code"),
-            scenario_id: None,
-            scenario_name: None,
+            flow_id: None,
+            flow_name: None,
             risk: RiskLevel::Dangerous,
             step_types: vec!["file.delete".into()],
             subject,

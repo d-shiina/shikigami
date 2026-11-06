@@ -20,7 +20,7 @@ import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
 import { SecretsPage } from "./components/SecretsPage";
 import { SettingsPage } from "./components/SettingsPage";
-import { ScenariosPage } from "./components/ScenariosPage";
+import { FlowsPage } from "./components/FlowsPage";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { StoryView } from "./components/StoryView";
@@ -133,10 +133,10 @@ function useWidth(): [number, (el: HTMLElement | null) => void] {
 }
 
 /**
- * The editor: the open scenario's chart (or procedure), what the run did and
- * what is wrong underneath, and the inspector on the right. The scenario's
+ * The editor: the open flow's chart (or procedure), what the run did and
+ * what is wrong underneath, and the inspector on the right. The flow's
  * name and its actions are in the title bar. The sidebar and the review desk
- * both open scenarios into it.
+ * both open flows into it.
  */
 function Editor({
   view,
@@ -153,7 +153,7 @@ function Editor({
   rightWidth: number;
   grip: Grip;
 }) {
-  const hasScenario = useStudio((s) => s.scenario !== null);
+  const hasFlow = useStudio((s) => s.flow !== null);
   const outlineOpen = useStudio((s) => s.outlineOpen);
   const projectOpen = useProject((s) => s.panelOpen);
   const outlineLeft = projectOpen ? 12 + 264 + 12 : 12;
@@ -169,15 +169,15 @@ function Editor({
           ) : (
             <ReactFlowProvider>
               <FlowCanvas />
-              {/* The scenario's files float over the left of the chart; the outline sits beside them. */}
-              {hasScenario && projectOpen && (
+              {/* The flow's files float over the left of the chart; the outline sits beside them. */}
+              {hasFlow && projectOpen && (
                 <div className="absolute top-3 bottom-3 left-3 z-10">
                   <ProjectPanel />
                 </div>
               )}
-              {hasScenario && <OutlinePanel left={outlineLeft} />}
+              {hasFlow && <OutlinePanel left={outlineLeft} />}
               {/* The outline unfolds from this corner, so its button sits there. */}
-              {hasScenario && !outlineOpen && (
+              {hasFlow && !outlineOpen && (
                 <div className="absolute top-3 z-10 flex gap-2" style={{ left: outlineLeft }}>
                   {!projectOpen && <ProjectButton />}
                   <OutlineButton />
@@ -209,10 +209,10 @@ function Editor({
 /**
  * Something that gives way when the window is narrow, laid over the chart for
  * a moment instead, as narrow windows do in Linear and Notion. Opening a
- * scenario, moving to another place, or clicking outside closes it.
+ * flow, moving to another place, or clicking outside closes it.
  */
 function Peek({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
-  const key = useStudio((s) => `${s.place}:${s.scenario?.id}`);
+  const key = useStudio((s) => `${s.place}:${s.flow?.id}`);
   const [opened] = useState(key);
   useEffect(() => {
     if (key !== opened) onClose();
@@ -228,7 +228,7 @@ function Peek({ onClose, children }: { onClose: () => void; children: React.Reac
 /** The review inbox: open with room, else a strip whose » lays it over the chart. */
 function InboxSlot({ room, width, grip }: { room: boolean; width: number; grip: Grip }) {
   const [peek, setPeek] = useState(false);
-  // Fixed widths: a long scenario name must not widen the list into the chart.
+  // Fixed widths: a long flow name must not widen the list into the chart.
   if (room)
     return (
       <div className="relative h-full" style={{ width }}>
@@ -252,13 +252,13 @@ function InboxSlot({ room, width, grip }: { room: boolean; width: number; grip: 
 
 type PlaceProps = { view: View; onView: (view: View) => void; fit: Fit; sizes: Sizes; grip: Grip };
 
-function ScenariosPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
+function FlowsPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
   return <Editor view={view} onView={onView} right={fit.right ? <Inspector /> : null} rightWidth={sizes.right} grip={grip} />;
 }
 
 /** The review desk: what waits, the chart with the AI's changes marked, and the verdict on the right. */
 function ReviewPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
-  const hasScenario = useStudio((s) => s.scenario !== null);
+  const hasFlow = useStudio((s) => s.flow !== null);
   return (
     <Editor
       view={view}
@@ -267,7 +267,7 @@ function ReviewPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
       rightWidth={sizes.right}
       grip={grip}
       right={
-        !fit.right || !hasScenario ? null : (
+        !fit.right || !hasFlow ? null : (
           <aside className="flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
             <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 text-[12px] font-semibold">{t.reviewTab}</div>
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -287,16 +287,16 @@ function Shell() {
   const [peek, setPeek] = useState(false);
   const agentOpen = useAgent((s) => s.open);
   const focusAgent = useAgent((s) => s.focus);
-  const openId = useStudio((s) => s.scenario?.id ?? null);
-  const openName = useStudio((s) => s.scenario?.name ?? "");
-  // The AI pane follows the scenario open in the editor; other conversations keep running.
+  const openId = useStudio((s) => s.flow?.id ?? null);
+  const openName = useStudio((s) => s.flow?.name ?? "");
+  // The AI pane follows the flow open in the editor; other conversations keep running.
   useEffect(() => {
     focusAgent(openId ? { id: openId, name: openName } : null);
   }, [focusAgent, openId, openName]);
   const [width, measure] = useWidth();
-  const hasScenario = useStudio((s) => s.scenario !== null);
-  const editing = place === "scenarios" || place === "review";
-  const shown = { agent: agentOpen, right: editing && hasScenario, inbox: place === "review" };
+  const hasFlow = useStudio((s) => s.flow !== null);
+  const editing = place === "flows" || place === "review";
+  const shown = { agent: agentOpen, right: editing && hasFlow, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);
   // Whether the sidebar would fit if it were shown, whatever the person chose.
@@ -359,12 +359,12 @@ function Shell() {
               {fit.agent > 0 && grip("agent")}
             </div>
             {/* With nothing open, the editor has nothing to show: the library does. */}
-            {(place === "library" || (place === "scenarios" && !hasScenario)) && (
+            {(place === "library" || (place === "flows" && !hasFlow)) && (
               <div className="min-w-0 flex-1">
-                <ScenariosPage />
+                <FlowsPage />
               </div>
             )}
-            {place === "scenarios" && hasScenario && <ScenariosPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+            {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
             {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
             {place === "secrets" && (
               <div className="min-w-0 flex-1">
@@ -396,7 +396,7 @@ function Shell() {
  * Esc — clear the selection, o — the outline.
  */
 function navigate(e: KeyboardEvent, state: StudioState) {
-  if (!state.scenario || state.paletteOpen) return;
+  if (!state.flow || state.paletteOpen) return;
   // Buttons and links keep Tab for moving focus; the canvas and the page do not need it.
   const target = e.target as HTMLElement | null;
   const onControl = target?.closest("button, a, [role=tab]") && !target.closest(".react-flow");
@@ -431,7 +431,7 @@ function navigate(e: KeyboardEvent, state: StudioState) {
 function debugKey(e: KeyboardEvent, state: StudioState) {
   const run = state.run;
   const paused = run?.status === "paused";
-  const runnable = state.scenario && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error");
+  const runnable = state.flow && !isActive(run) && !state.validation?.issues.some((i) => i.severity === "error");
   if (e.key === "F9") {
     if (state.selection?.kind === "step") state.toggleBreakpoint(state.selection.stepId);
   } else if (e.key === "F5") {
@@ -450,7 +450,7 @@ function debugKey(e: KeyboardEvent, state: StudioState) {
 }
 
 export function App() {
-  // A language switch redraws the whole shell; the stores (and the open scenario) stay.
+  // A language switch redraws the whole shell; the stores (and the open flow) stay.
   const { locale } = useLocale();
   const store = useMemo(() => createStudioStore(api), []);
   const agentStore = useMemo(() => createAgentStore(agent), []);
@@ -458,13 +458,13 @@ export function App() {
 
   useEffect(() => {
     void store.getState().init();
-    // While the AI asked in the pane works, Studio follows it: a scenario it
+    // While the AI asked in the pane works, Studio follows it: a flow it
     // has just made opens, and the chart pans to the nodes it adds. Only
     // changes from outside count, so the person's own edits never move the view.
     const followChange = async (id: string) => {
       const before = store.getState();
       const known = before.summaries.some((s) => s.id === id);
-      const shown = before.scenario?.id === id ? stepIds(before.scenario.steps ?? []) : null;
+      const shown = before.flow?.id === id ? stepIds(before.flow.steps ?? []) : null;
       await store.getState().onExternalChange(id);
       const now = store.getState();
       const working = activity(agentStore.getState());
@@ -474,17 +474,17 @@ export function App() {
       let opened = false;
       if (shouldFollow(id, known, working, now)) {
         await now.open(id);
-        opened = store.getState().scenario?.id === id;
-        const name = store.getState().scenario?.name;
-        if (opened && name) store.setState({ notice: t.openedAiScenario(name) });
+        opened = store.getState().flow?.id === id;
+        const name = store.getState().flow?.name;
+        if (opened && name) store.setState({ notice: t.openedAiFlow(name) });
       }
       const after = store.getState();
-      if (after.scenario?.id !== id || (!opened && shown === null)) return;
-      const stepId = lastAdded(opened ? null : shown, after.scenario.steps ?? []);
+      if (after.flow?.id !== id || (!opened && shown === null)) return;
+      const stepId = lastAdded(opened ? null : shown, after.flow.steps ?? []);
       if (stepId) store.setState({ reveal: { stepId, seq: (after.reveal?.seq ?? 0) + 1 } });
     };
     const unlisten = [
-      events.onScenarioChanged((id) => void followChange(id)),
+      events.onFlowChanged((id) => void followChange(id)),
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
       events.onRunEvidence((e) => store.getState().onRunEvidence(e)),
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
@@ -493,10 +493,10 @@ export function App() {
       agent.onLogin((e) => agentStore.getState().onLoginEvent(e)),
     ];
     void agentStore.getState().init();
-    // The files follow the open scenario, and the watcher's word that its folder changed.
-    void projectStore.getState().load(store.getState().scenario?.id ?? null);
+    // The files follow the open flow, and the watcher's word that its folder changed.
+    void projectStore.getState().load(store.getState().flow?.id ?? null);
     const stopProject = store.subscribe((s, prev) => {
-      if (s.scenario?.id !== prev.scenario?.id) void projectStore.getState().load(s.scenario?.id ?? null);
+      if (s.flow?.id !== prev.flow?.id) void projectStore.getState().load(s.flow?.id ?? null);
     });
     unlisten.push(projectApi.onChanged((id) => void projectStore.getState().onChanged(id)));
     // Requests come from another process (the MCP server): re-read on refocus too.
@@ -534,7 +534,7 @@ export function App() {
       }
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        if (store.getState().scenario) store.getState().setPaletteOpen(!store.getState().paletteOpen);
+        if (store.getState().flow) store.getState().setPaletteOpen(!store.getState().paletteOpen);
         return;
       }
       if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {

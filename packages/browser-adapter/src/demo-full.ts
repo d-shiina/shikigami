@@ -6,7 +6,7 @@
 // Unlike `pnpm demo:browser` (which runs only the browser flow), this runs the
 // whole full-feature bundle on screen: a start dialog, config, CSV, Excel
 // (write/read, multi-sheet), loops/conditions/try, a Word invoice per
-// customer, a ZIP, the browser shipping sub-scenario, Notepad driven and read
+// customer, a ZIP, the browser shipping sub-flow, Notepad driven and read
 // back with OCR, an Excel macro, an Outlook draft, OAuth, the output folder in
 // Explorer and a result dialog. Each of those is wrapped in a try, so an app
 // that is missing is skipped. Set 実環境を使う = false in config/設定.json for
@@ -14,7 +14,7 @@
 //
 // The browser window is visible and slowed down (set SHIKIGAMI_BROWSER_SLOWMO=0
 // for full speed). The demo account is registered as the secret 「デモ受注システム」
-// first, so the scenario never contains the password; the login is kept between
+// first, so the flow never contains the password; the login is kept between
 // runs. The CLI is built into target/demo so a shikigami.exe already running
 // from target/debug (e.g. the MCP server) does not block the build on Windows.
 

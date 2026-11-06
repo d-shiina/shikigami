@@ -323,7 +323,7 @@ fn schema(properties: Value, required: &[&str]) -> Value {
 
 fn props(extra: Value) -> Value {
     let mut properties = json!({
-        "path": { "type": "string", "minLength": 1, "description": "ブック（.xlsx / .xlsm）：シナリオのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\\work\\受注.xlsx）" },
+        "path": { "type": "string", "minLength": 1, "description": "ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\\work\\受注.xlsx）" },
         "sheet": { "type": "string", "minLength": 1, "description": "シート名（完全一致）。省略すると先頭のシート" }
     });
     if let (Value::Object(map), Value::Object(extra)) = (&mut properties, extra) {

@@ -2,13 +2,13 @@
 
 English | [日本語](ja/architecture.md)
 
-> MCP-native desktop RPA. AI and people create, edit, run and maintain **the same scenarios**.
+> MCP-native desktop RPA. AI and people create, edit, run and maintain **the same flows**.
 >
 > This document is the reference design. For what is implemented, see [§13](#13-implementation-status-and-limits). Library research: [research.md](research.md) (Japanese).
 
 ## 0. Design principles
 
-1. **Scenario Core is the only data layer for scenarios.** The GUI, MCP, CLI and Runtime read and write scenarios only through Core's API (`ScenarioService`). Scenario logic is never implemented twice.
+1. **Flow Core is the only data layer for flows.** The GUI, MCP, CLI and Runtime read and write flows only through Core's API (`FlowService`). Flow logic is never implemented twice.
 2. **Every change is an EditOp.** Changes are sequences of `EditOp`s that have inverses. Undo/Redo, conflict detection, history and showing AI fixes as diffs are all built on this.
 3. **Running needs neither AI nor GUI.** The Runtime is a headless library used by the CLI, Studio and the MCP server alike.
 4. **Local first.** Data lives in a local workspace (files), with no dependence on a cloud.
@@ -31,14 +31,14 @@ flowchart LR
     CLI["shikigami CLI"]
 
     subgraph libs[Shared libraries (Rust)]
-      CORE["shikigami-core<br/>Scenario Core"]
+      CORE["shikigami-core<br/>Flow Core"]
       RT["shikigami-runtime<br/>RPA Runtime"]
       WIN["shikigami-adapter-windows<br/>(UIA, dedicated MTA thread)"]
       BRC["shikigami-adapter-browser<br/>(client of a Node child process)"]
     end
 
     NODE["browser-adapter<br/>(Node.js + Playwright)"]
-    WS[("Workspace<br/>scenarios/*.json<br/>history/ runs/<br/>shikigami.db")]
+    WS[("Workspace<br/>flows/*.json<br/>history/ runs/<br/>shikigami.db")]
   end
 
   CC & CX & CU -- MCP stdio --> MCP
@@ -63,27 +63,27 @@ flowchart LR
 
 Studio and the MCP server are **separate processes sharing the same workspace**. They stay in sync with §7's "optimistic concurrency with the files as the source of truth, plus change notifications".
 
-### Flow: AI building a scenario (the flow of §6)
+### Flow: AI building a flow (the flow of §6)
 
 ```mermaid
 sequenceDiagram
   participant AI as AI client
   participant M as shikigami mcp
-  participant C as Scenario Core
+  participant C as Flow Core
   participant A as Adapter
   participant S as Studio
   AI->>M: inspect_ui / capture_screen
   M->>A: Get UI elements (Role/AutomationId…)
   AI->>M: click_element / type_text (try)
   M->>A: Operate for real and return the result
-  AI->>M: create_scenario / add_step (record verified operations)
+  AI->>M: create_flow / add_step (record verified operations)
   M->>C: Apply EditOps (revision+1, history saved)
   C-->>S: File change notification → reload
-  AI->>M: validate_scenario → run_scenario
+  AI->>M: validate_flow → run_flow
   Note over M: The Runtime runs it again without AI
 ```
 
-**AI operations (exploring) and saving the scenario are separate tools.** UI tools such as `click_element` never change the scenario. To keep a node, the AI calls `add_step` explicitly.
+**AI operations (exploring) and saving the flow are separate tools.** UI tools such as `click_element` never change the flow. To keep a node, the AI calls `add_step` explicitly.
 
 ## 2. Monorepo layout
 
@@ -93,7 +93,7 @@ shikigami/
 ├─ package.json               pnpm workspace (scripts only)
 ├─ pnpm-workspace.yaml
 ├─ crates/
-│  ├─ shikigami-core/         Scenario Core (model, expressions, validation, EditOp, history, storage, schema output)
+│  ├─ shikigami-core/         Flow Core (model, expressions, validation, EditOp, history, storage, schema output)
 │  ├─ shikigami-runtime/      RPA Runtime (interpreter, handler interface, run records)
 │  ├─ shikigami-cli/          CLI (the `shikigami` binary)
 │  ├─ shikigami-mcp/          MCP server (rmcp, started with `shikigami mcp`)
@@ -114,7 +114,7 @@ shikigami/
 │  └─ browser-adapter/        [Phase 3] Node.js + Playwright
 ├─ plugins/shikigami/        Claude Code plugin (MCP settings + skill)
 ├─ schemas/                   Generated JSON Schema (committed; CI detects drift)
-├─ examples/                  Sample scenarios (also used in tests)
+├─ examples/                  Sample flows (also used in tests)
 └─ docs/                      Design, research, assets
 ```
 
@@ -124,9 +124,9 @@ shikigami/
 
 | Crate | Depends on | Main public API |
 |---|---|---|
-| `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Scenario`, `Step`, `EditOp`, `ScenarioService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
+| `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Flow`, `Step`, `EditOp`, `FlowService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
 | `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
-| `shikigami-cli` | core, runtime, mcp, clap | `shikigami scenario/run/validate/step-types/schema/mcp` |
+| `shikigami-cli` | core, runtime, mcp, clap | `shikigami flow/run/validate/step-types/schema/mcp` |
 | `shikigami-studio` | core, runtime, tauri, notify | Tauri commands (§7.1) |
 | `shikigami-mcp` | core, runtime, rmcp | `ShikigamiMcp` (MCP tools, §6), `serve_stdio` |
 | `shikigami-adapter-*` (P3/P4) | runtime | Pairs of `StepTypeDef` + `ActionHandler` |
@@ -135,9 +135,9 @@ Dependencies go one way: **core ← runtime ← adapters ← (studio | mcp | cli
 
 Code quality rules: `unsafe_code = "forbid"` (locally allowed only in the Windows adapter), `clippy::unwrap_used/expect_used/panic = warn` (`-D warnings` in CI).
 
-## 4. Scenario schema
+## 4. Flow schema
 
-The canonical format is JSON (`schemas/scenario.schema.json`). Example: [examples/invoice-summary.json](../examples/invoice-summary.json).
+The canonical format is JSON (`schemas/flow.schema.json`). Example: [examples/invoice-summary.json](../examples/invoice-summary.json).
 
 ```jsonc
 {
@@ -167,10 +167,10 @@ The canonical format is JSON (`schemas/scenario.schema.json`). Example: [example
 
 ### Key points
 
-- **Nodes are `steps` in the file.** Studio and these docs call each item of a scenario a node; the scenario file and the MCP tools keep the name `step` (`steps`, `stepId`, `add_step`, `StepRegistry`).
+- **Nodes are `steps` in the file.** Studio and these docs call each item of a flow a node; the flow file and the MCP tools keep the name `step` (`steps`, `stepId`, `add_step`, `StepRegistry`).
 - **Every node has the same shape** (`id` / `type` / `params` / `blocks` / common options). Control flow is a tree, with named child lists in `blocks`.
 - **Nodes are always referenced by stable ID.** Positions (indexes) are never used as references, so adding, removing or moving nodes does not break other references. IDs are `stp_` + UUIDv7.
-- **`params` are validated with a JSON Schema per type** (held by `StepRegistry`). New node types can be added without changing the scenario schema itself.
+- **`params` are validated with a JSON Schema per type** (held by `StepRegistry`). New node types can be added without changing the flow schema itself.
 - **Expression language** (§11 decision 5): conditions are expressions (`count > 3 && status == 'OK'`), string params are `{{ expression }}` templates. No arbitrary code can run.
 - **Common node options**: `disabled`, `timeoutMs`, `retry`, `onError` (`fail`/`continue`), `saveAs` (output into a variable), `meta` (for Studio display and the AI's evidence; the Runtime ignores it).
 - **Backward compatibility**: on load, `schemaVersion` drives step-by-step migration (`migrate.rs`). Future versions are rejected with `UNSUPPORTED_SCHEMA_VERSION` rather than silently truncated. Unknown keys in `metadata` are kept. When the version goes up, plugin `requires`, deprecation, and MCP / CLI compatibility: [compatibility.md](compatibility.md).
@@ -191,7 +191,7 @@ The canonical format is JSON (`schemas/scenario.schema.json`). Example: [example
 | `control.fail` | Fails with `message`, `code` |
 | `variable.set` | Assigns `value` (templates allowed) or `expression` to `name` |
 | `log.message` | Writes to the run log |
-| `scenario.call` | Calls another scenario as one node, with `scenario` (ID), `inputs`, `outputs` ([design](design/subscenarios.md), Japanese) |
+| `flow.call` | Calls another flow as one node, with `flow` (ID), `inputs`, `outputs` ([design](design/subflows.md), Japanese) |
 | `flow.delay` | Waits for a fixed time (use `wait.until` to wait for something to finish) |
 
 ## 5. Adapter interface
@@ -211,7 +211,7 @@ Runtime::builder()
     .build();
 ```
 
-- Handlers **never touch scenario variables directly**. Input is the expanded `params`; output is the return value (into a variable with `saveAs`). Adapters do not depend on scenario state, so they are easy to unit test.
+- Handlers **never touch flow variables directly**. Input is the expanded `params`; output is the return value (into a variable with `saveAs`). Adapters do not depend on flow state, so they are easy to unit test.
 - Timeouts, retries, cancellation and `onError` are handled uniformly by the Runtime. Handlers watch `cancel` to stop long work.
 - `StepError::retryable=false` (e.g. invalid params) is not retried.
 - Evidence on failure (UI element snapshot, screenshot path, expected and actual state) goes in `StepError.details`, so the AI can get it from run records and MCP (§8 / §6).
@@ -235,7 +235,7 @@ Semantic information first; coordinates as a fallback.
 
 - Uses IUIAutomation directly through the `windows` crate. The `uiautomation` crate has a single maintainer, so it is a reference only, not a dependency.
 - `CoInitializeEx(COINIT_MULTITHREADED)` on a **dedicated worker thread** (with no window). Every UIA call goes through a request queue to this thread (Microsoft's recommendation).
-- Elements are held only within a request; raw pointers never leave the thread. Scenarios store only Targets (semantic information), resolved again on every run.
+- Elements are held only within a request; raw pointers never leave the thread. Flows store only Targets (semantic information), resolved again on every run.
 - `IUIAutomation2` connection and transaction timeouts protect against hung apps. Privilege differences (an elevated app cannot be operated from a non-elevated process) give the dedicated error `ELEVATION_REQUIRED`.
 - **Implemented** ([desktop.md](desktop.md)): crate `shikigami-desktop`, 11 `desktop.*` node types, MCP's `inspect_ui`. Nodes are one set regardless of the app's technology (Win32 / WPF / SAP GUI / Java); how to grab elements is chosen from the window automatically (currently UI Automation only; SAP GUI and Java windows are detected and noted).
 
@@ -248,18 +248,18 @@ Semantic information first; coordinates as a fallback.
 
 ## 6. MCP tool interface (Phase 2)
 
-> **Status**: the scenario, node and run tools (except the UI tools and `debug_scenario` / `test_step`) are implemented. `get_history`, `list_runs` and `undo` / `redo` were added, and run logs are `get_run_logs(runId, afterSeq?)`. Usage and per-client settings: [mcp.md](mcp.md). The UI tools are Phase 3 / 4.
+> **Status**: the flow, node and run tools (except the UI tools and `debug_flow` / `test_step`) are implemented. `get_history`, `list_runs` and `undo` / `redo` were added, and run logs are `get_run_logs(runId, afterSeq?)`. Usage and per-client settings: [mcp.md](mcp.md). The UI tools are Phase 3 / 4.
 
 Every tool is a thin layer that only calls Core / Runtime / adapters. Input schemas are generated from Rust types; output is structured JSON (`structuredContent`). Errors are §9's `ErrorPayload` as is.
 
 | Class | Tool | Main input → output | Permission class |
 |---|---|---|---|
-| Scenarios | `list_scenarios` | → `ScenarioSummary[]` | read |
-|  | `get_scenario` | `id` → `Scenario` | read |
-|  | `create_scenario` | `NewScenario` → `EditOutcome` | write |
-|  | `update_scenario` | `id, expectedRevision?, patch \| ops[]` → `EditOutcome` | write |
-|  | `delete_scenario` | `id, expectedRevision` → ok (to the trash) | write, **needs approval** |
-|  | `validate_scenario` | `id \| scenario` → `ValidationReport` | read |
+| Flows | `list_flows` | → `FlowSummary[]` | read |
+|  | `get_flow` | `id` → `Flow` | read |
+|  | `create_flow` | `NewFlow` → `EditOutcome` | write |
+|  | `update_flow` | `id, expectedRevision?, patch \| ops[]` → `EditOutcome` | write |
+|  | `delete_flow` | `id, expectedRevision` → ok (to the trash) | write, **needs approval** |
+|  | `validate_flow` | `id \| flow` → `ValidationReport` | read |
 | Nodes | `add_step` / `update_step` / `remove_step` / `move_step` | each `EditOp` + `expectedRevision?` → `EditOutcome` | write |
 |  | `list_step_types` | → `StepTypeDef[]` | read |
 |  | `get_step_schema` | `type` → params JSON Schema | read |
@@ -268,15 +268,15 @@ Every tool is a thin layer that only calls Core / Runtime / adapters. Input sche
 |  | `click_element` / `type_text` / `select_element` | Target, value → result + state after | ui.act |
 |  | `wait_for_element` | Target, state, timeout → result | ui.read |
 |  | `launch_application` / `navigate_browser` | path, URL → result | ui.act, allowlist |
-| Runs | `run_scenario` | `id, inputs` → `runId` | run |
-|  | `stop_scenario` | `runId` → ok | run |
+| Runs | `run_flow` | `id, inputs` → `runId` | run |
+|  | `stop_flow` | `runId` → ok | run |
 |  | `get_run_status` | `runId` → `RunSnapshot \| RunReport` | read |
 |  | `get_run_logs` | `runId, afterSeq?, variable?` → `RunEventEnvelope[]` | read |
-|  | `debug_scenario` | `id, breakpoints[]` → `runId` (step through) | run |
-|  | `test_step` | `Step` (single), variables → result (does not change the scenario) | ui.act |
+|  | `debug_flow` | `id, breakpoints[]` → `runId` (step through) | run |
+|  | `test_step` | `Step` (single), variables → result (does not change the flow) | ui.act |
 
 - **Write tools accept `expectedRevision`.** Without it the edit applies to the latest revision (convenient for AI); with it, a conflict gives `REVISION_CONFLICT`.
-- **`update_scenario` also accepts an ops array** (several changes applied atomically as one revision).
+- **`update_flow` also accepts an ops array** (several changes applied atomically as one revision).
 - Repair proposals (Phase 6) go `propose_fix` (saves an ops array as a proposal) → user approval → `apply_proposal`. They are never applied directly (§8).
 - The bundled **Claude Code plugin** (MCP settings + skill `SKILL.md`) teaches the AI the practice "look at the UI → use semantic Targets → validate → confirm with a run without AI".
 
@@ -288,20 +288,20 @@ The frontend calls Rust commands with `invoke` from `@tauri-apps/api`. Command n
 
 | Command | Core / Runtime API |
 |---|---|
-| `list_scenarios`, `get_scenario`, `create_scenario`, `duplicate_scenario`, `delete_scenario` | `ScenarioService::{list,get,create,duplicate,delete}` |
-| `edit_scenario(id, expectedRevision, ops)` | `ScenarioService::edit` |
-| `undo`, `redo`, `undo_state` | `ScenarioService::{undo,redo,undo_state}` |
-| `validate_scenario`, `list_step_types`, `scenario_history` | The API of the same name |
-| `run_scenario`, `stop_run`, `run_status` | `Runtime::start`, `RunHandle::cancel`, `RunSnapshot` |
+| `list_flows`, `get_flow`, `create_flow`, `duplicate_flow`, `delete_flow` | `FlowService::{list,get,create,duplicate,delete}` |
+| `edit_flow(id, expectedRevision, ops)` | `FlowService::edit` |
+| `undo`, `redo`, `undo_state` | `FlowService::{undo,redo,undo_state}` |
+| `validate_flow`, `list_step_types`, `flow_history` | The API of the same name |
+| `run_flow`, `stop_run`, `run_status` | `Runtime::start`, `RunHandle::cancel`, `RunSnapshot` |
 
-Events: `scenario-changed { scenarioId }` (file watching, including changes by other processes), `run-event` (`RunEventEnvelope`).
+Events: `flow-changed { flowId }` (file watching, including changes by other processes), `run-event` (`RunEventEnvelope`).
 
-### 7.2 Scenario sync between processes (Studio ⇔ MCP ⇔ CLI)
+### 7.2 Flow sync between processes (Studio ⇔ MCP ⇔ CLI)
 
 - The workspace files are the source of truth. Every change goes "exclusive lock (`.lock`) → reload → check `revision` → apply → write a temporary file and rename". Readers never see half-written files.
-- Change notifications use OS file watching (`notify`). Studio reloads from Core on a notification and, if the scenario is open, swaps it in and says it picked up an outside change.
+- Change notifications use OS file watching (`notify`). Studio reloads from Core on a notification and, if the flow is open, swaps it in and says it picked up an outside change.
 - Studio's edits always carry `expectedRevision`. If the AI changed it first, `REVISION_CONFLICT` → reload automatically and tell the user (never overwrite).
-- The Undo/Redo stack is saved per scenario in the workspace (`history/<id>/undo.json`), so **AI changes can be undone from Studio**. The stack records the `revision` it belongs to and is discarded if an outside change such as `git checkout` makes it inconsistent.
+- The Undo/Redo stack is saved per flow in the workspace (`history/<id>/undo.json`), so **AI changes can be undone from Studio**. The stack records the `revision` it belongs to and is discarded if an outside change such as `git checkout` makes it inconsistent.
 
 ### 7.3 Runtime ⇔ browser adapter (Phase 3)
 
@@ -317,7 +317,7 @@ Events: `scenario-changed { scenarioId }` (file watching, including changes by o
 
 ## 8. Database
 
-**Scenarios are JSON files; operational data goes in SQLite** (§11 decision 3). In Phase 1 run records are files (JSONL) too. SQLite comes in Phase 2 to speed up search and listing and for the audit log, as an index over the files, which stay the source of truth.
+**Flows are JSON files; operational data goes in SQLite** (§11 decision 3). In Phase 1 run records are files (JSONL) too. SQLite comes in Phase 2 to speed up search and listing and for the audit log, as an index over the files, which stay the source of truth.
 
 Workspace layout:
 
@@ -326,14 +326,14 @@ In a shared workspace, `history/` and `runs/` are kept on each PC ([design/shari
 ```text
 <workspace>/            default: SHIKIGAMI_HOME > workspace in config.json > %APPDATA%\Shikigami\workspace
   workspace.json        optional. {"shared": true} makes it a shared workspace
-  scenarios/<id>.json   scenarios (source of truth)
+  flows/<id>.json   flows (source of truth)
   versions/<id>/<n>.json  named versions (immutable snapshots)
   history/<id>/journal.jsonl  change journal (append-only, audit)
   history/<id>/undo.json      Undo/Redo stack
   runs/<run-id>/events.jsonl  run events (secrets masked)
   runs/<run-id>/report.json   run result
   runs/<run-id>/artifacts/    screenshots etc. (Phase 3 on)
-  trash/                      deleted scenarios
+  trash/                      deleted flows
   shikigami.db                SQLite (Phase 2 on)
 ```
 
@@ -354,11 +354,11 @@ SQLite schema (planned for Phase 2):
 
 ```sql
 CREATE TABLE runs (
-  run_id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, scenario_revision INTEGER NOT NULL,
+  run_id TEXT PRIMARY KEY, flow_id TEXT NOT NULL, flow_revision INTEGER NOT NULL,
   status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
   error_code TEXT, error_step_id TEXT, trigger TEXT NOT NULL  -- studio | mcp | cli | schedule
 );
-CREATE INDEX runs_by_scenario ON runs(scenario_id, started_at DESC);
+CREATE INDEX runs_by_flow ON runs(flow_id, started_at DESC);
 
 CREATE TABLE run_failures (               -- for AI error analysis (§8 requirement)
   run_id TEXT PRIMARY KEY REFERENCES runs(run_id),
@@ -372,7 +372,7 @@ CREATE TABLE audit_log (                  -- audit (MCP tool calls, approvals, r
 );
 
 CREATE TABLE proposals (                  -- AI repair proposals (applied after approval)
-  id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, base_revision INTEGER NOT NULL,
+  id TEXT PRIMARY KEY, flow_id TEXT NOT NULL, base_revision INTEGER NOT NULL,
   ops TEXT NOT NULL, rationale TEXT, status TEXT NOT NULL,  -- pending | applied | rejected
   created_at TEXT NOT NULL, decided_at TEXT
 );
@@ -387,14 +387,14 @@ CREATE TABLE proposals (                  -- AI repair proposals (applied after 
 
 | Layer | Type | Typical codes |
 |---|---|---|
-| Core | `CoreError` | `SCENARIO_NOT_FOUND`, `REVISION_CONFLICT`, `VALIDATION_FAILED`, `STEP_NOT_FOUND`, `DUPLICATE_STEP_ID`, `INVALID_EDIT`, `UNSUPPORTED_SCHEMA_VERSION`, `STORAGE_ERROR` |
+| Core | `CoreError` | `FLOW_NOT_FOUND`, `REVISION_CONFLICT`, `VALIDATION_FAILED`, `STEP_NOT_FOUND`, `DUPLICATE_STEP_ID`, `INVALID_EDIT`, `UNSUPPORTED_SCHEMA_VERSION`, `STORAGE_ERROR` |
 | Validation | `ValidationIssue` (error / warning, with JSON Pointer) | `UNKNOWN_STEP_TYPE`, `INVALID_PARAMS`, `EXPR_SYNTAX`, `UNKNOWN_BLOCK`, `NOT_IN_LOOP`, `UNDEFINED_VARIABLE` (warning) |
 | Expressions | `ExprError` | `EXPR_SYNTAX`, `EXPR_UNDEFINED_VARIABLE`, `EXPR_UNKNOWN_FUNCTION`, `EXPR_TYPE` |
 | Runtime | `RunError { code, message, stepId, stepType, details }` | `STEP_TIMEOUT`, `RUN_CANCELLED`, `LOOP_LIMIT_EXCEEDED`, `MISSING_INPUT`, `INVALID_INPUT`, `UNSUPPORTED_STEP_TYPE` |
 | Adapter | `StepError { code, message, details, retryable }` | `ELEMENT_NOT_FOUND`, `ELEMENT_NOT_INTERACTABLE`, `NAVIGATION_FAILED`, `ADAPTER_CRASHED`, `ELEVATION_REQUIRED`, `APP_NOT_ALLOWED` |
 
 - **Validation reports everything.** It does not stop at the first error, so Studio and the AI can fix it all at once.
-- **Drafts are allowed**: incomplete scenarios mid-edit (an `if` without a condition, etc.) can be saved. **Structural breakage** such as duplicate or invalid IDs is rejected. Runs do not start while there are validation errors.
+- **Drafts are allowed**: incomplete flows mid-edit (an `if` without a condition, etc.) can be saved. **Structural breakage** such as duplicate or invalid IDs is rejected. Runs do not start while there are validation errors.
 - On failure, the failing node ID, type, code, message and details are always kept in `RunReport` and the events. `control.try`'s `errorVar` and `onError: continue`'s `lastError` get the same structure.
 - Inside Rust, no `unwrap` / `panic`; errors propagate as `Result` (clippy warns, CI rejects).
 
@@ -402,19 +402,19 @@ CREATE TABLE proposals (                  -- AI repair proposals (applied after 
 
 | Threat / requirement | Measure | When |
 |---|---|---|
-| Arbitrary code execution | Scenarios have no general script execution. The expression language allows only side-effect-free functions (`len`, `contains`…). Nesting depth limits prevent DoS too | **P1 done** |
-| Path traversal | Scenario/run IDs accept only `[A-Za-z0-9_-]{1,128}`, checked before use as file names | **P1 done** |
+| Arbitrary code execution | Flows have no general script execution. The expression language allows only side-effect-free functions (`len`, `contains`…). Nesting depth limits prevent DoS too | **P1 done** |
+| Path traversal | Flow/run IDs accept only `[A-Za-z0-9_-]{1,128}`, checked before use as file names | **P1 done** |
 | Secrets in logs | Values of `secret` variables and secrets are masked as `***` in logs, errors, events and output records. Password fields are blacked out in screenshots and removed from page information returned to AI | **Done** |
-| Irreversible mistakes | Deleting a scenario moves it to the trash. Every change is journaled and can be undone | **P1 done** |
+| Irreversible mistakes | Deleting a flow moves it to the trash. Every change is journaled and can be undone | **P1 done** |
 | Studio permissions | Tauri capabilities are `core:default` only. No file or shell plugins. CSP set | **P1 done** |
 | MCP access control | stdio by default (only the AI client that started it can connect). HTTP is localhost + token + Origin check | P2 |
-| Tool permissions | `--allow read,write,run` limits the tools a server offers. On top of that, `ai` in the workspace's `policy.json` sets the AI's `run_scenario` / `test_step` (by the risk of the nodes) and `delete_scenario` to allow / ask / deny. Ask files a request in Studio, and only the exact content a person approved runs, once ([policy.md](policy.md)) | **Done** |
+| Tool permissions | `--allow read,write,run` limits the tools a server offers. On top of that, `ai` in the workspace's `policy.json` sets the AI's `run_flow` / `test_step` (by the risk of the nodes) and `delete_flow` to allow / ask / deny. Ask files a request in Studio, and only the exact content a person approved runs, once ([policy.md](policy.md)) | **Done** |
 | Allowlist of targets | `sites` (`browser.open`, `oauth.signIn`, `http.request`, `inspect_page`) and `apps` (`desktop.launch`, `process.run`) in `policy.json`. Node types declare the params that name a target in `targets`, and the Runtime checks their values after templates are rendered, in every run | **Done** |
 | File operation limits | File nodes only under directories allowed in workspace settings | P3 |
-| Credentials | People register them by name in Studio / the CLI. Values are encrypted with AES-256-GCM in the workspace; the key is one entry per workspace in Windows Credential Manager. Scenarios and AI get only the name. Input to unregistered sites is refused. Sign-in states (sessions) are encrypted with the same key ([secrets.md](secrets.md)) | **Done** |
-| Prompt injection | Results such as `inspect_ui` and page text are returned as structured data clearly labeled "untrusted data", and SKILL / tool descriptions say not to treat them as instructions. UI tools do not change scenarios; saving is a separate operation. Dangerous operations need human approval | P2 |
-| Audit | Every MCP tool call, approval and run in `audit_log` (scenario changes are journaled since P1) | P2 |
-| Run permissions | Unattended runs (`shikigami run <id>`) execute only the version a person approved and published. Per scenario, "may run from AI" (`scenarios.<id>.aiRun`) and "may run unattended" (`unattended`) | **Done** |
+| Credentials | People register them by name in Studio / the CLI. Values are encrypted with AES-256-GCM in the workspace; the key is one entry per workspace in Windows Credential Manager. Flows and AI get only the name. Input to unregistered sites is refused. Sign-in states (sessions) are encrypted with the same key ([secrets.md](secrets.md)) | **Done** |
+| Prompt injection | Results such as `inspect_ui` and page text are returned as structured data clearly labeled "untrusted data", and SKILL / tool descriptions say not to treat them as instructions. UI tools do not change flows; saving is a separate operation. Dangerous operations need human approval | P2 |
+| Audit | Every MCP tool call, approval and run in `audit_log` (flow changes are journaled since P1) | P2 |
+| Run permissions | Unattended runs (`shikigami run <id>`) execute only the version a person approved and published. Per flow, "may run from AI" (`flows.<id>.aiRun`) and "may run unattended" (`unattended`) | **Done** |
 | Allowed folders for file operations | Limit where `file.*` nodes may work to allowed folders | Not yet |
 
 ## 10.5 Parallel execution
@@ -423,10 +423,10 @@ Running several things at once is meant to be a feature of the product. There ar
 
 | Level | Contents | Status |
 |---|---|---|
-| Between scenarios | Several scenarios (including several runs of the same one) at once. Each run is an independent async task with its own variables, cancellation and records | **Implemented** (call the Runtime / MCP `run_scenario` several times) |
-| Within a scenario | `control.parallel` (runs each node of `branches` at once and waits for all; if one fails the rest are cancelled; `maxConcurrency` limits how many). Wrap multi-step branches in `control.group` | **Implemented** |
-| Within a scenario (loops) | `control.forEach`'s `concurrency` ("100 items, 5 at a time"). Each iteration works on a copy of the variables; only the `collect` value comes out (in `saveAs`, as a list in the order of `items`). Aggregate after the loop, e.g. `sum(results)`. The first failure cancels the rest, with the item number in the error's `details.index` | **Implemented** |
-| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing scenarios never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths resolve from the scenario's folder, and paths leaving it give the `PATH_OUTSIDE_PROJECT` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented (within one process)**. Exclusion between processes (Studio, CLI, MCP server) comes in Phase 4 with Windows named mutexes |
+| Between flows | Several flows (including several runs of the same one) at once. Each run is an independent async task with its own variables, cancellation and records | **Implemented** (call the Runtime / MCP `run_flow` several times) |
+| Within a flow | `control.parallel` (runs each node of `branches` at once and waits for all; if one fails the rest are cancelled; `maxConcurrency` limits how many). Wrap multi-step branches in `control.group` | **Implemented** |
+| Within a flow (loops) | `control.forEach`'s `concurrency` ("100 items, 5 at a time"). Each iteration works on a copy of the variables; only the `collect` value comes out (in `saveAs`, as a list in the order of `items`). Aggregate after the loop, e.g. `sum(results)`. The first failure cancels the rest, with the item number in the error's `details.index` | **Implemented** |
+| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing flows never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths resolve from the flow's folder, and paths leaving it give the `PATH_OUTSIDE_PROJECT` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented (within one process)**. Exclusion between processes (Studio, CLI, MCP server) comes in Phase 4 with Windows named mutexes |
 
 - **Desktop operations are physically one set**: Windows has only one mouse/keyboard input (SendInput) and one foreground window, so nodes using them take the `desktop.input` right before running (time spent waiting for it does not count toward the timeout). Many UI Automation pattern operations (Invoke / Value / SelectionItem…) need no focus, so each type declares whether it can run in parallel without the right (implemented: `desktop.click` / `setValue` etc. do not take it; `desktop.mouseClick` / `type` / `press` do; all go one at a time to the same app, `window:<process>`).
 - **Browsers suit parallel work**: Playwright browser contexts are independent, and many can run at once headless (Phase 3).
@@ -437,23 +437,23 @@ Running several things at once is meant to be a feature of the product. There ar
 
 ## 11. Key design decisions (reasons, alternatives, trade-offs)
 
-### Decision 1: scenarios are a node tree (block structure)
+### Decision 1: flows are a node tree (block structure)
 
 - **Reason**: easy for AI to read and write (JSON nesting is the processing structure), easy to validate (is a break inside a loop?). References are by ID, so edits do not break them. Flowcharts are drawn from the tree with automatic layout.
 - **Alternative**: a graph of nodes and edges (BPMN-like). Any branching and joining can be written.
-- **Trade-off**: arbitrary goto-like jumps cannot be expressed. Control is limited to structured forms (if / loop / try / break / continue), which keeps scenarios maintainable. If a graph is ever needed, a tree converts to a graph.
+- **Trade-off**: arbitrary goto-like jumps cannot be expressed. Control is limited to structured forms (if / loop / try / break / continue), which keeps flows maintainable. If a graph is ever needed, a tree converts to a graph.
 
 ### Decision 2: Studio and MCP sync by optimistic concurrency with the files as the source of truth
 
 - **Reason**: the MCP server is a separate process started over stdio by the AI client, and must work without a GUI. Without a shared daemon, a lock + revision check + atomic writes + file watching are enough for two-way editing. It also works well with diffs in git.
 - **Alternative A**: embed the MCP server in Studio → a GUI becomes required, against the requirements.
 - **Alternative B**: a resident daemon (local RPC) as the source of truth, with Studio/MCP as its clients → stronger consistency, but more process management, start order and authentication.
-- **Trade-off**: file watching has latency (hundreds of ms), and listing many scenarios scans files. Concurrent edits are not "last write wins" but "detect the conflict → reload", which is safe. All access is confined to `ScenarioService` so that a move to B for multiple users or remote management stays possible.
+- **Trade-off**: file watching has latency (hundreds of ms), and listing many flows scans files. Concurrent edits are not "last write wins" but "detect the conflict → reload", which is safe. All access is confined to `FlowService` so that a move to B for multiple users or remote management stays possible.
 
-### Decision 3: scenarios as JSON files, operational data in SQLite
+### Decision 3: flows as JSON files, operational data in SQLite
 
-- **Reason**: scenarios should be readable text that people, AI and git handle directly. Run history and audit logs grow and need searching, which suits a DB.
-- **Alternative**: everything in SQLite. Transactions get simpler, but reviewing scenario diffs, sharing and backup get harder.
+- **Reason**: flows should be readable text that people, AI and git handle directly. Run history and audit logs grow and need searching, which suits a DB.
+- **Alternative**: everything in SQLite. Transactions get simpler, but reviewing flow diffs, sharing and backup get harder.
 - **Trade-off**: two kinds of persistence. Phase 1 starts with files only; SQLite comes when needed (Phase 2).
 
 ### Decision 4: every edit is an EditOp with an inverse
@@ -476,7 +476,7 @@ Running several things at once is meant to be a feature of the product. There ar
 
 ### Decision 7: the Runtime is an interpreter that walks the tree directly
 
-- **Reason**: node IDs in run events match the scenario being edited one to one, which keeps highlighting and debugging in Studio and AI error analysis simple.
+- **Reason**: node IDs in run events match the flow being edited one to one, which keeps highlighting and debugging in Studio and AI error analysis simple.
 - **Alternative**: compile to bytecode / a state machine. Better for pausing and resuming (persistence).
 - **Trade-off**: long runs cannot currently resume midway (after a crash). If needed, it can be extended by recording the run position (a stack of node IDs).
 
@@ -494,15 +494,15 @@ Running several things at once is meant to be a feature of the product. There ar
 
 ## 12. MVP acceptance criteria
 
-The first product milestone: **create a web scenario from an MCP client in natural language, check and edit it in the GUI, then run the same work again with the Runtime and no AI.**
+The first product milestone: **create a web flow from an MCP client in natural language, check and edit it in the GUI, then run the same work again with the Runtime and no AI.**
 
 | # | Criterion | How it is checked |
 |---|---|---|
 | A1 | Claude Code / Codex connect to `shikigami mcp` over stdio and get the tool list | Manual E2E (settings for each client in the docs) |
 | A2 | The AI gets elements with `navigate_browser` → `inspect_ui` and can `click_element` / `type_text` with Role/Label Targets | Automated E2E (a local test web app) + manual |
-| A3 | The AI saves a scenario with `create_scenario` / `add_step` and `validate_scenario` returns 0 errors | Automated E2E |
+| A3 | The AI saves a flow with `create_flow` / `add_step` and `validate_flow` returns 0 errors | Automated E2E |
 | A4 | With Studio running, AI changes show up on screen within 1 second | Automated (file watching test) + manual |
-| A5 | Studio can edit, add, delete and move nodes, with Undo/Redo, and MCP's `get_scenario` returns the result immediately | Automated (Core tests) + manual |
+| A5 | Studio can edit, add, delete and move nodes, with Undo/Redo, and MCP's `get_flow` returns the result immediately | Automated (Core tests) + manual |
 | A6 | Nothing is lost when Studio and the AI edit at the same time (conflicts are detected and reloaded) | Automated (Core tests) |
 | A7 | `shikigami run <id>` (no AI, no GUI) does the same web work successfully, exit code 0 | Automated E2E |
 | A8 | On failure, the failing node ID, error code, screenshot and UI information are saved and available from MCP's `get_run_logs` | Automated E2E |
@@ -514,14 +514,14 @@ The first product milestone: **create a web scenario from an MCP client in natur
 ### Implemented (with tests)
 
 - Rust workspace, pnpm workspace, CI (fmt, clippy, test on Linux / Windows; TS typecheck, tests, generated-file drift)
-- Scenario Core: model, JSON Schema output, validation (reports everything, JSON Pointer), expression language, EditOp (inverses for every kind), Undo/Redo (persistent, shared between processes), change journal, file store (lock, atomic writes, revision conflict detection), schema version migration framework
+- Flow Core: model, JSON Schema output, validation (reports everything, JSON Pointer), expression language, EditOp (inverses for every kind), Undo/Redo (persistent, shared between processes), change journal, file store (lock, atomic writes, revision conflict detection), schema version migration framework
 - Runtime: every kind of control flow, variables and inputs/outputs, template expansion, timeouts, retries (exponential backoff), cancellation, `onError`, secret masking, run events and records (JSONL), live state (snapshots)
-- CLI: `scenario list/show/create/import/edit/undo/redo/delete/history`, `run` (inputs, JSON output, Ctrl+C cancels), `validate`, `step-types`, `schema export`
-- Studio (Tauri 2 + React): scenario list, create, duplicate, delete; flowchart (automatic layout from the tree); add, delete and move nodes; property forms generated from schemas; variable editing; validation results; Undo/Redo (Ctrl+Z / Ctrl+Y); run, stop, run log and node state highlighting; **live updates from outside changes (MCP / CLI)**; automatic reload on conflict; Japanese / English UI
-- MCP server (Phase 2): `shikigami mcp` (stdio), 20 tools for scenarios, nodes, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
+- CLI: `flow list/show/create/import/edit/undo/redo/delete/history`, `run` (inputs, JSON output, Ctrl+C cancels), `validate`, `step-types`, `schema export`
+- Studio (Tauri 2 + React): flow list, create, duplicate, delete; flowchart (automatic layout from the tree); add, delete and move nodes; property forms generated from schemas; variable editing; validation results; Undo/Redo (Ctrl+Z / Ctrl+Y); run, stop, run log and node state highlighting; **live updates from outside changes (MCP / CLI)**; automatic reload on conflict; Japanese / English UI
+- MCP server (Phase 2): `shikigami mcp` (stdio), 20 tools for flows, nodes, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
 - Desktop apps (Phase 4): 11 `desktop.*` types (dedicated UI Automation MTA thread, automatic waiting, separating mouse-free operations from those taking `desktop.input`, per-app exclusion, secrets typed only into apps registered with `app:`) and MCP's `inspect_ui` ([desktop.md](desktop.md))
 - Excel (8 `excel.*` types): reads and writes xlsx / xlsm directly without Excel (read a table row by row, append rows, read and write cells / ranges, list / add sheets). Automatic exclusion by workbook path, saving through a temporary file, `FILE_IN_USE` when writing a workbook open in Excel ([office.md](office.md))
-- Claude Code plugin: `plugins/shikigami` (MCP settings + skill `shikigami-scenarios`) and the marketplace definition. Passes `claude plugin validate`
+- Claude Code plugin: `plugins/shikigami` (MCP settings + skill `shikigami-flows`) and the marketplace definition. Passes `claude plugin validate`
 
 ### Not implemented (later phases)
 
@@ -531,8 +531,8 @@ The first product milestone: **create a web scenario from an MCP client in natur
 
 ### Known limits
 
-- Undo/Redo is **one stack per scenario shared by all clients** (AI changes can be undone from Studio, but it is not per user).
-- Variable scope is flat (loop variables are one per scenario too), like most RPA products.
+- Undo/Redo is **one stack per flow shared by all clients** (AI changes can be undone from Studio, but it is not per user).
+- Variable scope is flat (loop variables are one per flow too), like most RPA products.
 - `control.try`'s `finally` does not run on cancellation.
 - Runs cannot resume midway (after a process restart).
 - Studio's flowchart is an automatic display layout; node positions are not saved.

@@ -2,7 +2,7 @@
 
 English | [日本語](ja/desktop.md)
 
-Scenarios drive Windows apps (business systems, Notepad, the Excel window, SAP GUI…). Nodes are not split by app technology (Win32 / WinForms / WPF / UWP / SAP / Java): there is **only one set, `desktop.*`**. Shikigami looks at the target window and decides which technology to look inside it with. No AI is involved in running a scenario.
+Flows drive Windows apps (business systems, Notepad, the Excel window, SAP GUI…). Nodes are not split by app technology (Win32 / WinForms / WPF / UWP / SAP / Java): there is **only one set, `desktop.*`**. Shikigami looks at the target window and decides which technology to look inside it with. No AI is involved in running a flow.
 
 ## Writing a target
 
@@ -39,7 +39,7 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
 
 - **No waits to write**: every node keeps looking until the window or element appears (and is enabled). The limit is the node's `timeoutMs` (default 30 s). Use `desktop.waitFor` with `state: "hidden"` only to wait for something to go away
 - **Mouse-free first**: `desktop.click` presses buttons, toggles checkboxes, selects items and expands trees without moving the mouse. It works on windows in the background and alongside other work. Only for apps that do not respond, use `desktop.mouseClick` / `desktop.type`
-- **One mouse and keyboard**: nodes marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Nodes on the same app (same `process`) also run one at a time. Scenarios never declare locks
+- **One mouse and keyboard**: nodes marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Nodes on the same app (same `process`) also run one at a time. Flows never declare locks
 
 ## How the AI inspects screens (MCP)
 
@@ -55,12 +55,12 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
     - button "Save" id=btnSave
 ```
 
-- `test_step`: runs a single node on the spot and returns its output and the windows after it, so the AI can walk through the screens before writing the scenario
+- `test_step`: runs a single node on the spot and returns its output and the windows after it, so the AI can walk through the screens before writing the flow
 - The contents of password fields appear neither in the list nor in `desktop.getValue`
 
 ## Logins (secrets)
 
-Register passwords under 🔑 Secrets in Studio and write only the name in the scenario ([secrets.md](secrets.md)). To type into a desktop app, add **`app:<executable>`** (e.g. `app:billing.exe`) to the secret's allowed sites and apps. Apps that are not listed never receive it.
+Register passwords under 🔑 Secrets in Studio and write only the name in the flow ([secrets.md](secrets.md)). To type into a desktop app, add **`app:<executable>`** (e.g. `app:billing.exe`) to the secret's allowed sites and apps. Apps that are not listed never receive it.
 
 ```json
 { "type": "desktop.setValue",

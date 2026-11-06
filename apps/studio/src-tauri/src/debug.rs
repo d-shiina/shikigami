@@ -4,8 +4,8 @@
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use shikigami_core::{
-    Actor, ActorKind, ErrorPayload, NewObservation, ObservationContent, ObservationSource, RunId,
-    ScenarioId, StepId,
+    Actor, ActorKind, ErrorPayload, FlowId, NewObservation, ObservationContent, ObservationSource,
+    RunId, StepId,
 };
 use shikigami_runtime::{DebugCommand, RunError};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -46,7 +46,7 @@ pub fn debug_run(
     run_id: RunId,
     command: DebugCommand,
 ) -> CmdResult<DebugOutcome> {
-    let (control, scenario_id) = {
+    let (control, flow_id) = {
         let runs = state.runs.lock().map_err(|_| ErrorPayload {
             code: "INTERNAL".into(),
             message: "run registry poisoned".into(),
@@ -62,7 +62,7 @@ pub fn debug_run(
             message: "this run cannot pause".into(),
             details: None,
         })?;
-        (control, run.scenario_id.clone())
+        (control, run.flow_id.clone())
     };
     let resumes = !matches!(
         command,
@@ -70,9 +70,9 @@ pub fn debug_run(
     );
     let mut updated = false;
     if resumes && control.is_paused() {
-        let scenario = state.service.get(&scenario_id)?;
-        if scenario.revision != control.revision() {
-            updated = control.update_scenario(scenario).map_err(run_err)?;
+        let flow = state.service.get(&flow_id)?;
+        if flow.revision != control.revision() {
+            updated = control.update_flow(flow).map_err(run_err)?;
         }
     }
     control.send(command).map_err(run_err)?;
@@ -106,7 +106,7 @@ struct RunEvidence {
 pub(crate) fn capture_pause(
     app: AppHandle,
     run_id: RunId,
-    scenario_id: ScenarioId,
+    flow_id: FlowId,
     call_path: Vec<StepId>,
     step_id: StepId,
     step_type: String,
@@ -119,19 +119,19 @@ pub(crate) fn capture_pause(
             return;
         };
         let mut params = Map::new();
-        // Paused inside a call: the step is the called scenario's.
-        let mut owner = state.service.get(&scenario_id).ok();
+        // Paused inside a call: the step is the called flow's.
+        let mut owner = state.service.get(&flow_id).ok();
         for call in &call_path {
             let target = owner
                 .as_ref()
                 .and_then(|s| s.find_step(call))
-                .and_then(|step| step.params.get("scenario"))
+                .and_then(|step| step.params.get("flow"))
                 .and_then(Value::as_str)
-                .map(ScenarioId::new);
+                .map(FlowId::new);
             owner = target.and_then(|id| state.service.get(&id).ok());
         }
-        if let Some(scenario) = owner
-            && let Some(step) = scenario.find_step(&step_id)
+        if let Some(flow) = owner
+            && let Some(step) = flow.find_step(&step_id)
         {
             for key in ["context", "window"] {
                 if let Some(value) = step.params.get(key) {

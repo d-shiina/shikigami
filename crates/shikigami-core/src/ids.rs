@@ -1,9 +1,9 @@
-//! Stable identifiers for scenarios, steps and runs.
+//! Stable identifiers for flows, steps and runs.
 //!
 //! IDs are prefixed UUIDv7 strings (`scn_…`, `stp_…`, `run_…`, `obs_…`). The prefix makes
 //! them self-describing for AI clients and logs; UUIDv7 keeps them sortable by
 //! creation time. Parsing is lenient (any non-empty string without whitespace or
-//! path separators is accepted) so hand-written or imported scenarios still load.
+//! path separators is accepted) so hand-written or imported flows still load.
 
 use std::fmt;
 
@@ -65,17 +65,17 @@ macro_rules! define_id {
 }
 
 define_id!(
-    /// Identifier of a scenario. Also used as its file name in the store.
-    ScenarioId,
+    /// Identifier of a flow. Also used as its file name in the store.
+    FlowId,
     "scn"
 );
 define_id!(
-    /// Identifier of a step. Unique within a scenario and stable across edits.
+    /// Identifier of a step. Unique within a flow and stable across edits.
     StepId,
     "stp"
 );
 define_id!(
-    /// Identifier of a single scenario execution.
+    /// Identifier of a single flow execution.
     RunId,
     "run"
 );
@@ -115,9 +115,9 @@ mod tests {
 
     #[test]
     fn path_like_ids_are_rejected() {
-        assert!(!ScenarioId::new("../etc/passwd").is_well_formed());
-        assert!(!ScenarioId::new("").is_well_formed());
-        assert!(!ScenarioId::new("a b").is_well_formed());
-        assert!(ScenarioId::new("scn_login-flow").is_well_formed());
+        assert!(!FlowId::new("../etc/passwd").is_well_formed());
+        assert!(!FlowId::new("").is_well_formed());
+        assert!(!FlowId::new("a b").is_well_formed());
+        assert!(FlowId::new("scn_login-flow").is_well_formed());
     }
 }

@@ -85,10 +85,10 @@
       "properties": {
         "op": {
           "type": "string",
-          "const": "updateScenario"
+          "const": "updateFlow"
         },
         "patch": {
-          "$ref": "#/$defs/ScenarioPatch"
+          "$ref": "#/$defs/FlowPatch"
         }
       },
       "required": [
@@ -195,7 +195,7 @@
           }
         },
         "disabled": {
-          "description": "Disabled steps are skipped by the Runtime but kept in the scenario.",
+          "description": "Disabled steps are skipped by the Runtime but kept in the flow.",
           "type": "boolean"
         },
         "timeoutMs": {
@@ -247,7 +247,7 @@
       ]
     },
     "StepId": {
-      "description": "Identifier of a step. Unique within a scenario and stable across edits.",
+      "description": "Identifier of a step. Unique within a flow and stable across edits.",
       "type": "string"
     },
     "RetryPolicy": {
@@ -408,8 +408,8 @@
       },
       "additionalProperties": false
     },
-    "ScenarioPatch": {
-      "description": "Partial update of scenario-level fields.",
+    "FlowPatch": {
+      "description": "Partial update of flow-level fields.",
       "type": "object",
       "properties": {
         "name": {
@@ -427,7 +427,7 @@
         "settings": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ScenarioSettings"
+              "$ref": "#/$defs/FlowSettings"
             },
             {
               "type": "null"
@@ -456,7 +456,7 @@
       },
       "additionalProperties": false
     },
-    "ScenarioSettings": {
+    "FlowSettings": {
       "type": "object",
       "properties": {
         "defaultTimeoutMs": {
@@ -489,7 +489,7 @@
           ]
         },
         "keepWork": {
-          "description": "Leave the files in the scenario's `work/` folder when a run starts.\nBy default a run starts with `work/` emptied.",
+          "description": "Leave the files in the flow's `work/` folder when a run starts.\nBy default a run starts with `work/` emptied.",
           "type": "boolean"
         }
       },

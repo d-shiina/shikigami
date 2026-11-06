@@ -4,7 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "description": "TypeScript types generated from the Rust Scenario Core (single source of truth)",
+  "description": "TypeScript types generated from the Rust Flow Core (single source of truth)",
   "exports": {
     ".": "./src/index.ts"
   },

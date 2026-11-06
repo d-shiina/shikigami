@@ -6,6 +6,17 @@
 
 ## 未リリース
 
+### 変更（呼び名：シナリオ → フロー）
+
+- 「シナリオ」を「フロー / Flow」に改名しました（サブシナリオは「サブフロー / Subflow」）。Studio・ドキュメント・MCP・CLI・保存形式のすべてが対象です。製品名 Shikigami は変わりません
+- 保存先：`scenarios/<id>/scenario.json` は `flows/<id>/flow.json` になりました。古いワークスペースは開いたときに自動で移します（ごみ箱の中も）
+- フロー形式 `schemaVersion` 4：呼び出しノード `scenario.call { scenario }` は `flow.call { flow }` になりました。古いファイル・版・バンドルは読み込み時に自動で書き換えます
+- バンドルの `format` は `shikigami.flowBundle`、中身は `flow` / `subflows` です。0.1.1 までの `shikigami.scenarioBundle` も読めます
+- MCP ツール：`list_flows` / `get_flow` / `validate_flow` / `export_flow` / `create_flow` / `update_flow` / `delete_flow` / `import_flow` / `extract_subflow` / `run_flow` / `stop_flow`、引数は `flowId`。旧名（`create_scenario` など）と `scenarioId` も当面は受け付けます（一覧には出しません）
+- CLI：`shikigami flow …`（`shikigami scenario …` も当面は動きます）
+- policy.json：`flows`、`ai.runFlow` / `ai.deleteFlow`（旧名 `scenarios` / `runScenario` / `deleteScenario` も読めます）
+- **互換性のない変更**：出力側の名前は新しい名前だけになります。エラーコード `SCENARIO_*` は `FLOW_*`（`SUBSCENARIO_NOT_PUBLISHED` は `SUBFLOW_NOT_PUBLISHED`）、`run --json` と MCP の結果の `scenarioId` / `scenarioName` / `scenario` は `flowId` / `flowName` / `flow` です
+
 ## [0.1.1] - 2026-11-06
 
 ### 追加

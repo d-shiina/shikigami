@@ -1,5 +1,5 @@
-//! Watches the workspace's scenario directory and tells the frontend when a
-//! scenario file changes, whoever changed it (Studio itself, an MCP client,
+//! Watches the workspace's flow directory and tells the frontend when a
+//! flow file changes, whoever changed it (Studio itself, an MCP client,
 //! the CLI, or a `git pull`). The frontend then re-fetches through Core, so
 //! the file system is the single source of truth across processes.
 
@@ -12,38 +12,38 @@ use notify::{EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-pub(crate) const SCENARIO_CHANGED: &str = "scenario-changed";
-/// A file in a scenario's folder (input/, config/, logs/, …) was added,
-/// changed or removed. Carries the scenario's ID; the frontend re-lists.
+pub(crate) const FLOW_CHANGED: &str = "flow-changed";
+/// A file in a flow's folder (input/, config/, logs/, …) was added,
+/// changed or removed. Carries the flow's ID; the frontend re-lists.
 pub(crate) const PROJECT_FILES_CHANGED: &str = "project-files-changed";
 
-/// Bursts of file events (temp file + rename) are coalesced per scenario.
+/// Bursts of file events (temp file + rename) are coalesced per flow.
 const DEBOUNCE: Duration = Duration::from_millis(120);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ScenarioChanged {
-    scenario_id: String,
+struct FlowChanged {
+    flow_id: String,
 }
 
 pub(crate) fn spawn(app: AppHandle, dir: PathBuf) {
     let spawned = std::thread::Builder::new()
-        .name("scenario-watcher".into())
+        .name("flow-watcher".into())
         .spawn(move || {
             if let Err(e) = watch(&app, &dir) {
-                tracing::error!(error = %e, dir = %dir.display(), "scenario watcher stopped");
+                tracing::error!(error = %e, dir = %dir.display(), "flow watcher stopped");
             }
         });
     if let Err(e) = spawned {
-        tracing::error!(error = %e, "failed to start scenario watcher");
+        tracing::error!(error = %e, "failed to start flow watcher");
     }
 }
 
-/// What changed under `scenarios/`: a scenario document, or a file in a
-/// scenario's folder.
+/// What changed under `flows/`: a flow document, or a file in a
+/// flow's folder.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Change {
-    Scenario(String),
+    Flow(String),
     Files(String),
 }
 
@@ -53,12 +53,12 @@ fn change(root: &Path, path: &Path) -> Option<Change> {
     let first = parts.next()??;
     let rest: Vec<&str> = parts.collect::<Option<_>>()?;
     match rest.as_slice() {
-        // `scenarios/<id>.json`, the layout before scenario folders.
+        // `flows/<id>.json`, the layout before flow folders.
         [] => {
             let id = first.strip_suffix(".json")?;
-            Some(Change::Scenario(id.to_owned()))
+            Some(Change::Flow(id.to_owned()))
         }
-        ["scenario.json"] => Some(Change::Scenario(first.to_owned())),
+        ["flow.json"] => Some(Change::Flow(first.to_owned())),
         // Temporary files of atomic writes and Office lock files.
         [.., name] if name.starts_with('.') || name.starts_with("~$") => None,
         _ => Some(Change::Files(first.to_owned())),
@@ -95,12 +95,12 @@ fn watch(app: &AppHandle, dir: &Path) -> notify::Result<()> {
             .collect();
         for change in ready {
             pending.remove(&change);
-            let (event, scenario_id) = match change {
-                Change::Scenario(id) => (SCENARIO_CHANGED, id),
+            let (event, flow_id) = match change {
+                Change::Flow(id) => (FLOW_CHANGED, id),
                 Change::Files(id) => (PROJECT_FILES_CHANGED, id),
             };
-            if let Err(e) = app.emit(event, ScenarioChanged { scenario_id }) {
-                tracing::warn!(error = %e, "failed to emit scenario change");
+            if let Err(e) = app.emit(event, FlowChanged { flow_id }) {
+                tracing::warn!(error = %e, "failed to emit flow change");
             }
         }
     }
@@ -218,13 +218,10 @@ mod tests {
 
     #[test]
     fn changes_are_told_apart() {
-        let root = Path::new("/w/scenarios");
+        let root = Path::new("/w/flows");
         let at = |p: &str| change(root, &root.join(p));
-        assert_eq!(at("scn_1.json"), Some(Change::Scenario("scn_1".into())));
-        assert_eq!(
-            at("scn_1/scenario.json"),
-            Some(Change::Scenario("scn_1".into()))
-        );
+        assert_eq!(at("scn_1.json"), Some(Change::Flow("scn_1".into())));
+        assert_eq!(at("scn_1/flow.json"), Some(Change::Flow("scn_1".into())));
         assert_eq!(
             at("scn_1/input/a.xlsx"),
             Some(Change::Files("scn_1".into()))

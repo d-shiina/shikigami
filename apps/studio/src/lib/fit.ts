@@ -64,7 +64,7 @@ export type Fit = {
 type Shown = {
   /** The AI pane is open. */
   agent: boolean;
-  /** There is something to inspect (a scenario is open). Without it the column is not drawn. */
+  /** There is something to inspect (a flow is open). Without it the column is not drawn. */
   right: boolean;
   /** The place has a list of its own between the sidebar and the chart (review). */
   inbox: boolean;

@@ -4,7 +4,7 @@ import { fixRequest } from "./fixRequest";
 describe("fix request", () => {
   it("gives the AI the error, the step, the variables and the screen", () => {
     const text = fixRequest({
-      scenario: {
+      flow: {
         id: "scn_a",
         name: "受注取込",
         steps: [{ id: "s2", type: "browser.click", name: "ログイン", params: { target: { role: "button", name: "ログイン" } } }],

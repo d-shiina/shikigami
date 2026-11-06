@@ -25,7 +25,7 @@ export type PaletteItem = {
 
 /**
  * The groups, in the order the palette lists them, under three headings:
- * what the scenario works on first (that is what people look for when
+ * what the flow works on first (that is what people look for when
  * building an automation), then the flow's own nodes, then data handling.
  */
 export const SECTIONS: { id: string; groups: string[] }[] = [

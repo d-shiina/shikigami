@@ -2,7 +2,7 @@
 
 [English](../expressions.md) | 日本語
 
-シナリオの式（`expressionParams` の値、`{{ }}` の中）で使える関数の一覧です。AI クライアントには MCP の `list_step_types` が同じ一覧（`functions`：シグネチャ・説明・例）を返します。元データは `crates/shikigami-core/src/expr/functions.rs` の `FUNCTION_DOCS` で、この表と食い違わないようテストで確認しています。
+フローの式（`expressionParams` の値、`{{ }}` の中）で使える関数の一覧です。AI クライアントには MCP の `list_step_types` が同じ一覧（`functions`：シグネチャ・説明・例）を返します。元データは `crates/shikigami-core/src/expr/functions.rs` の `FUNCTION_DOCS` で、この表と食い違わないようテストで確認しています。
 
 関数は外部に影響しません（ファイル・画面・ネットワークには触れない）。`now()` / `today()` / `env()` だけは時計と環境変数を読みます。
 

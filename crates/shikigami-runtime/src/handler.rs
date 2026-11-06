@@ -1,9 +1,9 @@
 //! Action handler interface implemented by automation adapters.
 //!
 //! Handlers receive fully rendered params (templates already evaluated) and
-//! return an output value. They cannot read or write scenario variables
+//! return an output value. They cannot read or write flow variables
 //! directly; data flows in through params and out through `saveAs`. This keeps
-//! adapters stateless with respect to scenarios and easy to test in isolation.
+//! adapters stateless with respect to flows and easy to test in isolation.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -150,7 +150,7 @@ impl ActionInput {
     pub fn secret_provider(&self) -> Result<&Arc<dyn SecretProvider>, StepError> {
         self.secrets.as_ref().ok_or_else(|| {
             StepError::permanent("SECRETS_UNAVAILABLE", "this runtime has no secret store")
-                .with_details(json!({ "hint": "Run the scenario from Studio, the CLI or the MCP server of a workspace." }))
+                .with_details(json!({ "hint": "Run the flow from Studio, the CLI or the MCP server of a workspace." }))
         })
     }
 

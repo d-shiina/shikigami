@@ -1,11 +1,11 @@
-//! Named versions, diffs and scenario bundles.
+//! Named versions, diffs and flow bundles.
 //!
-//! A version is an immutable snapshot of a scenario with a name and a note
+//! A version is an immutable snapshot of a flow with a name and a note
 //! ("v1 本番リリース"). Versions live in the shared part of the workspace, so
 //! everyone who opens the workspace sees them. Restoring a version is an
 //! ordinary edit (undoable); diffs compare steps by their stable IDs.
 //!
-//! A bundle (`*.shikigami.json`) carries one scenario and its versions to
+//! A bundle (`*.shikigami.json`) carries one flow and its versions to
 //! another workspace without Git or any server.
 
 use std::collections::{BTreeMap, HashMap};
@@ -16,23 +16,26 @@ use serde_json::{Map, Value};
 use time::OffsetDateTime;
 
 use crate::ids::StepId;
-use crate::model::{Scenario, Step, VariableDef};
-use crate::ops::{EditOp, ScenarioPatch};
+use crate::model::{Flow, Step, VariableDef};
+use crate::ops::{EditOp, FlowPatch};
 use crate::store::Actor;
 
-/// Format marker of scenario bundles.
-pub const BUNDLE_FORMAT: &str = "shikigami.scenarioBundle";
+/// Format marker of flow bundles.
+pub const BUNDLE_FORMAT: &str = "shikigami.flowBundle";
+/// What bundles were called before flows were renamed from scenarios
+/// (up to 0.1.1). Still read.
+pub const LEGACY_BUNDLE_FORMAT: &str = "shikigami.scenarioBundle";
 pub const BUNDLE_FORMAT_VERSION: u32 = 2;
 
 /// Bundles without files are still written as version 1, so builds from
-/// before scenario folders can read them.
+/// before flow folders can read them.
 pub const BUNDLE_FORMAT_VERSION_WITHOUT_FILES: u32 = 1;
 
-/// One named snapshot of a scenario.
+/// One named snapshot of a flow.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ScenarioVersion {
-    /// Per-scenario sequence number (1, 2, …). This is how versions are referenced.
+pub struct FlowVersion {
+    /// Per-flow sequence number (1, 2, …). This is how versions are referenced.
     pub number: u32,
     /// Globally unique ID; keeps versions apart when bundles are imported.
     pub uid: String,
@@ -43,13 +46,14 @@ pub struct ScenarioVersion {
     #[schemars(with = "String")]
     pub created_at: OffsetDateTime,
     pub created_by: Actor,
-    /// Scenario revision the snapshot was taken from.
+    /// Flow revision the snapshot was taken from.
     pub revision: u64,
     #[serde(deserialize_with = "crate::migrate::deserialize")]
-    pub scenario: Scenario,
+    #[serde(alias = "scenario")]
+    pub flow: Flow,
 }
 
-impl ScenarioVersion {
+impl FlowVersion {
     pub fn summary(&self) -> VersionSummary {
         VersionSummary {
             number: self.number,
@@ -58,12 +62,12 @@ impl ScenarioVersion {
             created_at: self.created_at,
             created_by: self.created_by.clone(),
             revision: self.revision,
-            step_count: self.scenario.walk().count(),
+            step_count: self.flow.walk().count(),
         }
     }
 }
 
-/// Listing entry for versions (no scenario body).
+/// Listing entry for versions (no flow body).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionSummary {
@@ -90,8 +94,8 @@ pub struct NewVersion {
     pub note: String,
 }
 
-/// One line of `versions/<scenario-id>/publish.jsonl`: which version runs
-/// unattended from now on (`None`: none, the scenario was withdrawn). The
+/// One line of `versions/<flow-id>/publish.jsonl`: which version runs
+/// unattended from now on (`None`: none, the flow was withdrawn). The
 /// last line is in force; earlier lines are the record of who published
 /// what, kept in the shared part of the workspace.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -109,7 +113,7 @@ pub struct PublishRecord {
     pub note: String,
 }
 
-/// The published version of a scenario (what `shikigami run <id>` and
+/// The published version of a flow (what `shikigami run <id>` and
 /// other unattended runs execute).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -148,49 +152,51 @@ pub struct PublishInput {
     pub expected_revision: Option<u64>,
 }
 
-/// File format for moving a scenario (and its versions) between workspaces.
+/// File format for moving a flow (and its versions) between workspaces.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ScenarioBundle {
-    /// Always `shikigami.scenarioBundle`.
+pub struct FlowBundle {
+    /// Always `shikigami.flowBundle`.
     pub format: String,
     pub format_version: u32,
     #[serde(with = "time::serde::rfc3339")]
     #[schemars(with = "String")]
     pub exported_at: OffsetDateTime,
     #[serde(deserialize_with = "crate::migrate::deserialize")]
-    pub scenario: Scenario,
+    #[serde(alias = "scenario")]
+    pub flow: Flow,
     #[serde(default)]
-    pub versions: Vec<ScenarioVersion>,
-    /// Every scenario `scenario` calls (directly or through others), without
+    pub versions: Vec<FlowVersion>,
+    /// Every flow `flow` calls (directly or through others), without
     /// versions, so the bundle runs on its own.
     #[serde(
         default,
         skip_serializing_if = "Vec::is_empty",
         deserialize_with = "crate::migrate::deserialize_vec"
     )]
-    pub subscenarios: Vec<Scenario>,
-    /// Files of the scenarios' folders (`input/`, `config/`, `templates/`
+    #[serde(alias = "subscenarios")]
+    pub subflows: Vec<Flow>,
+    /// Files of the flows' folders (`input/`, `config/`, `templates/`
     /// and the author's own; not `output/`, `work/` or `logs/`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<crate::project::BundledFile>,
 }
 
-/// What to do when an imported scenario's ID already exists.
+/// What to do when an imported flow's ID already exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ImportConflict {
-    /// Apply the imported content to the existing scenario (one undoable
+    /// Apply the imported content to the existing flow (one undoable
     /// edit) and add the bundle's versions that are not there yet.
     Update,
-    /// Import as a new scenario with a new ID.
+    /// Import as a new flow with a new ID.
     Copy,
 }
 
-/// What importing a bundle did with one of its sub-scenarios.
+/// What importing a bundle did with one of its sub-flows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub enum SubscenarioImport {
+pub enum SubflowImport {
     /// It was not in the workspace and was added with the same ID.
     Created,
     /// It existed and was updated (`onConflict: "update"`).
@@ -286,19 +292,20 @@ pub struct StepChange {
 /// Differences from `from` to `to`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ScenarioDiff {
+pub struct FlowDiff {
     pub from: DiffSide,
     pub to: DiffSide,
     /// True when the contents are the same (names, variables, steps, settings).
     pub identical: bool,
-    /// Scenario-level fields: name, description, tags, settings.
-    pub scenario: Vec<FieldChange>,
+    /// Flow-level fields: name, description, tags, settings.
+    #[serde(alias = "scenario")]
+    pub flow: Vec<FieldChange>,
     pub variables: Vec<VariableChange>,
     pub steps: Vec<StepChange>,
 }
 
-/// Compares the parts of two scenarios that versions track.
-pub fn same_content(a: &Scenario, b: &Scenario) -> bool {
+/// Compares the parts of two flows that versions track.
+pub fn same_content(a: &Flow, b: &Flow) -> bool {
     a.name == b.name
         && a.description == b.description
         && a.metadata.tags == b.metadata.tags
@@ -310,9 +317,9 @@ pub fn same_content(a: &Scenario, b: &Scenario) -> bool {
 
 /// Edit ops that turn `current` into `target`'s content. Empty when the
 /// contents already match.
-pub fn ops_to_match(current: &Scenario, target: &Scenario) -> Vec<EditOp> {
+pub fn ops_to_match(current: &Flow, target: &Flow) -> Vec<EditOp> {
     let mut ops = Vec::new();
-    let mut patch = ScenarioPatch::default();
+    let mut patch = FlowPatch::default();
     if current.name != target.name {
         patch.name = Some(target.name.clone());
     }
@@ -328,8 +335,8 @@ pub fn ops_to_match(current: &Scenario, target: &Scenario) -> Vec<EditOp> {
     if current.requires != target.requires {
         patch.requires = Some(target.requires.clone());
     }
-    if patch != ScenarioPatch::default() {
-        ops.push(EditOp::UpdateScenario { patch });
+    if patch != FlowPatch::default() {
+        ops.push(EditOp::UpdateFlow { patch });
     }
     if current.variables != target.variables {
         ops.extend(current.variables.iter().map(|v| EditOp::RemoveVariable {
@@ -355,29 +362,29 @@ pub fn ops_to_match(current: &Scenario, target: &Scenario) -> Vec<EditOp> {
 }
 
 /// Removes values that must not leave this PC: defaults of secret variables.
-pub fn strip_secrets(scenario: &mut Scenario) {
-    for var in scenario.variables.iter_mut().filter(|v| v.secret) {
+pub fn strip_secrets(flow: &mut Flow) {
+    for var in flow.variables.iter_mut().filter(|v| v.secret) {
         var.default = None;
     }
 }
 
 // -- diff ----------------------------------------------------------------
 
-pub fn diff(from: (&Scenario, DiffSide), to: (&Scenario, DiffSide)) -> ScenarioDiff {
+pub fn diff(from: (&Flow, DiffSide), to: (&Flow, DiffSide)) -> FlowDiff {
     let (a, from_side) = from;
     let (b, to_side) = to;
-    let mut scenario = Vec::new();
-    push_field(&mut scenario, "name", &a.name, &b.name);
-    push_field(&mut scenario, "description", &a.description, &b.description);
-    push_field(&mut scenario, "tags", &a.metadata.tags, &b.metadata.tags);
-    push_field(&mut scenario, "settings", &a.settings, &b.settings);
+    let mut flow = Vec::new();
+    push_field(&mut flow, "name", &a.name, &b.name);
+    push_field(&mut flow, "description", &a.description, &b.description);
+    push_field(&mut flow, "tags", &a.metadata.tags, &b.metadata.tags);
+    push_field(&mut flow, "settings", &a.settings, &b.settings);
     let variables = diff_variables(&a.variables, &b.variables);
     let steps = diff_steps(a, b);
-    ScenarioDiff {
-        identical: scenario.is_empty() && variables.is_empty() && steps.is_empty(),
+    FlowDiff {
+        identical: flow.is_empty() && variables.is_empty() && steps.is_empty(),
         from: from_side,
         to: to_side,
-        scenario,
+        flow,
         variables,
         steps,
     }
@@ -451,7 +458,7 @@ struct Placed<'a> {
 type Container = (Option<StepId>, Option<String>);
 
 fn index_steps(
-    scenario: &Scenario,
+    flow: &Flow,
 ) -> (
     HashMap<StepId, Placed<'_>>,
     BTreeMap<Container, Vec<StepId>>,
@@ -490,11 +497,11 @@ fn index_steps(
             }
         }
     }
-    visit(&scenario.steps, (None, None), &mut placed, &mut containers);
+    visit(&flow.steps, (None, None), &mut placed, &mut containers);
     (placed, containers)
 }
 
-fn diff_steps(a: &Scenario, b: &Scenario) -> Vec<StepChange> {
+fn diff_steps(a: &Flow, b: &Flow) -> Vec<StepChange> {
     let (old, old_containers) = index_steps(a);
     let (new, new_containers) = index_steps(b);
     let mut out = Vec::new();
@@ -632,13 +639,16 @@ fn lcs<'a>(a: &[&'a StepId], b: &[&'a StepId]) -> Vec<&'a StepId> {
     out
 }
 
-/// Bundle detection: true when `value` looks like a bundle (vs. a bare scenario).
+/// Bundle detection: true when `value` looks like a bundle (vs. a bare flow).
 pub fn is_bundle(value: &Value) -> bool {
-    value.get("format").and_then(Value::as_str) == Some(BUNDLE_FORMAT)
+    matches!(
+        value.get("format").and_then(Value::as_str),
+        Some(BUNDLE_FORMAT | LEGACY_BUNDLE_FORMAT)
+    )
 }
 
 /// Builds the label shown for a diff side.
-pub fn side(version: Option<&ScenarioVersion>, current: &Scenario) -> DiffSide {
+pub fn side(version: Option<&FlowVersion>, current: &Flow) -> DiffSide {
     match version {
         Some(v) => DiffSide {
             version: Some(v.number),

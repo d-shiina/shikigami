@@ -2,15 +2,15 @@
 
 [English](../compatibility.md) | 日本語
 
-Shikigami の外に出ていく「約束」と、それをどう変えてよいかの決まりです。シナリオは長く使われ、AI クライアントやスクリプトは MCP のツールと CLI を前提に組まれます。ここに書いたものを壊すと、利用者の手元で黙ってシナリオが動かなくなります。
+Shikigami の外に出ていく「約束」と、それをどう変えてよいかの決まりです。フローは長く使われ、AI クライアントやスクリプトは MCP のツールと CLI を前提に組まれます。ここに書いたものを壊すと、利用者の手元で黙ってフローが動かなくなります。
 
 ## 1. 対象
 
 | 約束 | どこに定義があるか | 主な利用者 |
 |---|---|---|
-| シナリオのファイル形式（`schemaVersion`） | `crates/shikigami-core/src/model.rs` → `schemas/scenario.schema.json` | 保存済みのシナリオ、共有ワークスペース |
+| フローのファイル形式（`schemaVersion`） | `crates/shikigami-core/src/model.rs` → `schemas/flow.schema.json` | 保存済みのフロー、共有ワークスペース |
 | 名前付きの版・バンドル（`*.shikigami.json`、`formatVersion`） | `version.rs` → `schemas/api.schema.json` | 他の PC・ワークスペースへの受け渡し |
-| 組込のノード型（型名・params・ブロック・`saveAs` の有無・`risk`） | 各アダプター → `schemas/contract/step-types.json` | シナリオ、AI が覚えた書き方 |
+| 組込のノード型（型名・params・ブロック・`saveAs` の有無・`risk`） | 各アダプター → `schemas/contract/step-types.json` | フロー、AI が覚えた書き方 |
 | MCP のツール（名前・引数・戻り値・許可クラス・注釈） | `crates/shikigami-mcp` → `schemas/contract/mcp-tools.json` | AI クライアント、スキル |
 | エラーコード（`code` と `retryable`） | `CoreError::code`、各ノードのエラー | AI の修正、`onError`・リトライの判断 |
 | CLI（コマンド・引数・終了コード・`--json` の出力） | `crates/shikigami-cli` → `schemas/contract/cli.json`、`schemas/run-api.schema.json` | タスクスケジューラー、バッチ、CI |
@@ -35,18 +35,18 @@ Shikigami の外に出ていく「約束」と、それをどう変えてよい�
 
 0.x の間も、破壊的変更は次のどちらかで行います。
 
-1. **シナリオ形式・組込ノードの params**：`schemaVersion` を上げて移行を書く（§3）。古いファイルは読み込み時に自動で新しい形になる
+1. **フロー形式・組込ノードの params**：`schemaVersion` を上げて移行を書く（§3）。古いファイルは読み込み時に自動で新しい形になる
 2. **MCP・CLI**：古い名前を残したまま新しい名前を足し、古い方を非推奨にする（§5）。少なくとも次のマイナー版までは両方動かす
 
 どちらも [CHANGELOG.md](../../CHANGELOG.md) の「破壊的変更」に書きます。1.0 以降は破壊的変更をメジャー版でだけ行います。
 
-## 3. シナリオのファイル形式
+## 3. フローのファイル形式
 
-- `schemaVersion` はファイルの形の版です。**形が変わるたびに 1 上げます**。シナリオは知らない項目を拒否する（書き間違いに気づくため）ので、省略できる項目を足すだけでも上げます。古い Shikigami は「新しい版で保存されたので更新してください」（`UNSUPPORTED_SCHEMA_VERSION`）と分かりやすく止まります
+- `schemaVersion` はファイルの形の版です。**形が変わるたびに 1 上げます**。フローは知らない項目を拒否する（書き間違いに気づくため）ので、省略できる項目を足すだけでも上げます。古い Shikigami は「新しい版で保存されたので更新してください」（`UNSUPPORTED_SCHEMA_VERSION`）と分かりやすく止まります
 - 上げたら `crates/shikigami-core/src/migrate.rs` の `MIGRATIONS` に「1 つ前の版 → 今の版」の関数を足します。読み込みは古い版から 1 段ずつ順に変換するので、各関数は直前の版だけを知っていればよい。途切れていればテストが落ちます
-- 組込ノードの params の破壊的変更も、ここで移行します（`for_each_step` で全ノードを書き換える）。組込ノードは本体と一緒に配布されるので、ノードごとの版は持たせません。シナリオに版を書かせると、AI が書く量と間違える場所が増えるためです（[design/ai-authoring.md](../design/ai-authoring.md)）
-- ファイル・名前付きの版・バンドルの中のシナリオ・サブシナリオは、すべて同じ移行を通ります（`migrate::from_value` / `migrate::deserialize`）
-- 移行したシナリオは、次に保存したときに新しい版で書かれます。読むだけではファイルを書き換えません
+- 組込ノードの params の破壊的変更も、ここで移行します（`for_each_step` で全ノードを書き換える）。組込ノードは本体と一緒に配布されるので、ノードごとの版は持たせません。フローに版を書かせると、AI が書く量と間違える場所が増えるためです（[design/ai-authoring.md](../design/ai-authoring.md)）
+- ファイル・名前付きの版・バンドルの中のフロー・サブフローは、すべて同じ移行を通ります（`migrate::from_value` / `migrate::deserialize`）
+- 移行したフローは、次に保存したときに新しい版で書かれます。読むだけではファイルを書き換えません
 - 未来の版は読み込みません（黙って項目を落とすと、保存したときに消えるため）
 - `metadata` の中の知らないキーは保持します（Studio や外部ツールのメモ用）
 
@@ -54,23 +54,23 @@ Shikigami の外に出ていく「約束」と、それをどう変えてよい�
 
 ### バンドル
 
-バンドルは `formatVersion` を持ち、中のシナリオは上と同じ `schemaVersion` の規則に従います。バンドルの外側の形を変えるときは `BUNDLE_FORMAT_VERSION` を上げます。
+バンドルは `formatVersion` を持ち、中のフローは上と同じ `schemaVersion` の規則に従います。バンドルの外側の形を変えるときは `BUNDLE_FORMAT_VERSION` を上げます。
 
 ## 4. プラグインと `requires`
 
-シナリオは、使っているプラグインとその版の範囲を `requires` に持ちます。
+フローは、使っているプラグインとその版の範囲を `requires` に持ちます。
 
 ```json
 "requires": { "plugin:kintone": "^0.3.1" }
 ```
 
 - **Core が自動で管理します**。プラグインのノードを足すとそのとき入っている版で `^<版>` が入り、使わなくなると消えます。人や AI が書く必要はありません
-- 範囲を広げたい・狭めたいときだけ `update_scenario` の `patch.requires` で書き換えます（使っている間は保たれます）
+- 範囲を広げたい・狭めたいときだけ `update_flow` の `patch.requires` で書き換えます（使っている間は保たれます）
 - 範囲は semver（`^0.3.1`、`>=1.2, <3` など）。プラグインの `version` は semver で書く必要があります
-- **入っていない PC**：シナリオは読み込めて、ノードもそのまま残ります。検証で `PLUGIN_NOT_INSTALLED`（どのプラグインのどの版が要るか、どこに入れるか）になり、実行前に止まります
+- **入っていない PC**：フローは読み込めて、ノードもそのまま残ります。検証で `PLUGIN_NOT_INSTALLED`（どのプラグインのどの版が要るか、どこに入れるか）になり、実行前に止まります
 - **範囲外の版が入っている PC**：`PLUGIN_VERSION_MISMATCH` で実行前に止まります
 
-プラグインの作者へ：params を互換でない形に変えるときはメジャー版を上げてください（0.x ならマイナー版）。古いシナリオが `PLUGIN_VERSION_MISMATCH` で止まるので、黙って壊れることはありません。続けて古い書き方も受け付けられるなら、版は互換のまま新しい params を足すのが一番です。
+プラグインの作者へ：params を互換でない形に変えるときはメジャー版を上げてください（0.x ならマイナー版）。古いフローが `PLUGIN_VERSION_MISMATCH` で止まるので、黙って壊れることはありません。続けて古い書き方も受け付けられるなら、版は互換のまま新しい params を足すのが一番です。
 
 ## 5. 非推奨（deprecation）
 

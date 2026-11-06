@@ -20,7 +20,7 @@ export type Row =
       label: string;
       value: string;
       refs: string[];
-      /** A file of the scenario's folder (`input/orders.xlsx`) in a path param: shown in its shelf's colour. */
+      /** A file of the flow's folder (`input/orders.xlsx`) in a path param: shown in its shelf's colour. */
       file?: { path: string; role: "input" | "config" | "templates" | "output" | "work" | "logs" };
     }
   | { kind: "more"; count: number }
@@ -72,9 +72,9 @@ function paramKeys(step: Step, def: StepTypeDef | undefined): string[] {
   return keys;
 }
 
-export const CALL = "scenario.call";
+export const CALL = "flow.call";
 
-/** A call's `inputs` / `outputs` map, keyed by the called scenario's variables. */
+/** A call's `inputs` / `outputs` map, keyed by the called flow's variables. */
 export function callMap(step: Step, key: "inputs" | "outputs"): Record<string, unknown> {
   const value = (step.params ?? {})[key];
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -103,7 +103,7 @@ const OUTPUT_KEYS: Record<string, string[]> = {
   "control.forEach": ["itemVar", "indexVar"],
 };
 
-/** A call shows one row per input it passes, labelled with the called scenario's variable. */
+/** A call shows one row per input it passes, labelled with the called flow's variable. */
 function callRows(step: Step, known: ReadonlySet<string>): Row[] {
   const inputs = Object.entries(callMap(step, "inputs"));
   const rows: Row[] = inputs.slice(0, MAX_PARAM_ROWS).map(([name, value]) => ({
@@ -120,7 +120,7 @@ function callRows(step: Step, known: ReadonlySet<string>): Row[] {
 
 const FOLDERS = new Set(["input", "config", "templates", "output", "work", "logs"]);
 
-/** The scenario-folder file a path param names, when it names one. */
+/** The flow-folder file a path param names, when it names one. */
 function projectFile(key: string, value: unknown, def: StepTypeDef | undefined): Extract<Row, { kind: "param" }>["file"] {
   if (typeof value !== "string" || !def?.pathParams?.includes(key)) return undefined;
   const path = value.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -158,7 +158,7 @@ export const innerHeight = (lines: number) => (lines > 0 ? lines * INNER_LINE_H 
 export const nodeHeight = (step: Step, def: StepTypeDef | undefined, extra = 0) =>
   NODE_HEAD_H + (step.type === CALL ? CALL_BAR_H : 0) + nodeRows(step, def).length * ROW_H + NODE_PAD_B + extra;
 
-/** Every variable name a scenario can mention: declared ones and loop elements. */
+/** Every variable name a flow can mention: declared ones and loop elements. */
 export function knownVariables(variables: VariableDef[] | undefined, steps: Step[]): Map<string, VariableDef["type"]> {
   const map = new Map<string, VariableDef["type"]>();
   for (const v of variables ?? []) map.set(v.name, v.type ?? "any");

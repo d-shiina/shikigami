@@ -1,6 +1,6 @@
 [package]
 name = "shikigami-cli"
-description = "Shikigami command line: manage and run scenarios headlessly"
+description = "Shikigami command line: manage and run flows headlessly"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -40,7 +40,7 @@
           "type": "string"
         },
         "callPath": {
-          "description": "The `scenario.call` steps (outermost first) the event happened\ninside; empty for the scenario that was started. Step IDs in the\nevent belong to the innermost called scenario.",
+          "description": "The `flow.call` steps (outermost first) the event happened\ninside; empty for the flow that was started. Step IDs in the\nevent belong to the innermost called flow.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/StepId"
@@ -60,10 +60,10 @@
               "type": "string",
               "const": "runStarted"
             },
-            "scenarioId": {
-              "$ref": "#/$defs/ScenarioId"
+            "flowId": {
+              "$ref": "#/$defs/FlowId"
             },
-            "scenarioName": {
+            "flowName": {
               "type": "string"
             },
             "revision": {
@@ -74,8 +74,8 @@
           },
           "required": [
             "type",
-            "scenarioId",
-            "scenarioName",
+            "flowId",
+            "flowName",
             "revision"
           ]
         },
@@ -246,7 +246,7 @@
           ]
         },
         {
-          "description": "An interactive run stopped before `stepId` (breakpoint, step\ncommand, pause request) or after it failed (`reason: \"error\"`, with\n`error`). Nothing runs until it is resumed.\n\n`variables` holds every variable's value at that point, masked and\ncut like `variableChanged` values. `revision` is the scenario\nrevision the run is executing.",
+          "description": "An interactive run stopped before `stepId` (breakpoint, step\ncommand, pause request) or after it failed (`reason: \"error\"`, with\n`error`). Nothing runs until it is resumed.\n\n`variables` holds every variable's value at that point, masked and\ncut like `variableChanged` values. `revision` is the flow\nrevision the run is executing.",
           "type": "object",
           "properties": {
             "type": {
@@ -292,7 +292,7 @@
           ]
         },
         {
-          "description": "The run goes on after `paused`. `revision` is set when a newer\nrevision of the scenario was swapped in while it was paused.",
+          "description": "The run goes on after `paused`. `revision` is set when a newer\nrevision of the flow was swapped in while it was paused.",
           "type": "object",
           "properties": {
             "type": {
@@ -351,15 +351,15 @@
       ]
     },
     "RunId": {
-      "description": "Identifier of a single scenario execution.",
+      "description": "Identifier of a single flow execution.",
       "type": "string"
     },
     "StepId": {
-      "description": "Identifier of a step. Unique within a scenario and stable across edits.",
+      "description": "Identifier of a step. Unique within a flow and stable across edits.",
       "type": "string"
     },
-    "ScenarioId": {
-      "description": "Identifier of a scenario. Also used as its file name in the store.",
+    "FlowId": {
+      "description": "Identifier of a flow. Also used as its file name in the store.",
       "type": "string"
     },
     "StepOutcome": {
@@ -479,10 +479,10 @@
         "runId": {
           "$ref": "#/$defs/RunId"
         },
-        "scenarioId": {
-          "$ref": "#/$defs/ScenarioId"
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
         },
-        "scenarioName": {
+        "flowName": {
           "type": "string"
         },
         "revision": {
@@ -523,18 +523,18 @@
           "type": "object",
           "additionalProperties": true
         },
-        "subscenarios": {
-          "description": "The scenarios `scenario.call` steps could run, as they were when the\nrun started.",
+        "subflows": {
+          "description": "The flows `flow.call` steps could run, as they were when the\nrun started.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/SubscenarioRef"
+            "$ref": "#/$defs/SubflowRef"
           }
         }
       },
       "required": [
         "runId",
-        "scenarioId",
-        "scenarioName",
+        "flowId",
+        "flowName",
         "revision",
         "status",
         "startedAt",
@@ -542,14 +542,14 @@
         "outputs"
       ]
     },
-    "SubscenarioRef": {
-      "description": "A called scenario's content as used by a run.",
+    "SubflowRef": {
+      "description": "A called flow's content as used by a run.",
       "type": "object",
       "properties": {
-        "scenarioId": {
-          "$ref": "#/$defs/ScenarioId"
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
         },
-        "scenarioName": {
+        "flowName": {
           "type": "string"
         },
         "revision": {
@@ -568,8 +568,8 @@
         }
       },
       "required": [
-        "scenarioId",
-        "scenarioName",
+        "flowId",
+        "flowName",
         "revision"
       ]
     },
@@ -580,8 +580,8 @@
         "runId": {
           "$ref": "#/$defs/RunId"
         },
-        "scenarioId": {
-          "$ref": "#/$defs/ScenarioId"
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
         },
         "status": {
           "$ref": "#/$defs/RunStatus"
@@ -604,7 +604,7 @@
       },
       "required": [
         "runId",
-        "scenarioId",
+        "flowId",
         "status",
         "stepsExecuted"
       ]

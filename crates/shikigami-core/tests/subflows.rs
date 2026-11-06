@@ -2,13 +2,13 @@
 
 use serde_json::json;
 use shikigami_core::{
-    Actor, ActorKind, ChangeNote, FileStore, ImportConflict, NewScenario, ScenarioService, Step,
-    StepId, StepRegistry, SubscenarioImport, VarDirection, VarType, VariableDef,
+    Actor, ActorKind, ChangeNote, FileStore, FlowService, ImportConflict, NewFlow, Step, StepId,
+    StepRegistry, SubflowImport, VarDirection, VarType, VariableDef,
 };
 
-fn service_at(root: &std::path::Path) -> ScenarioService {
+fn service_at(root: &std::path::Path) -> FlowService {
     let store = FileStore::open_with_local(root, root, false).expect("store");
-    ScenarioService::new(store, StepRegistry::with_builtins())
+    FlowService::new(store, StepRegistry::with_builtins())
 }
 
 fn actor() -> Actor {
@@ -30,13 +30,13 @@ fn var(name: &str, ty: VarType, direction: VarDirection) -> VariableDef {
 }
 
 fn create(
-    svc: &ScenarioService,
+    svc: &FlowService,
     name: &str,
     variables: Vec<VariableDef>,
     steps: Vec<Step>,
-) -> shikigami_core::Scenario {
+) -> shikigami_core::Flow {
     svc.create(
-        NewScenario {
+        NewFlow {
             name: name.into(),
             variables,
             steps,
@@ -45,17 +45,17 @@ fn create(
         actor(),
     )
     .expect("create")
-    .scenario
+    .flow
 }
 
-fn call(target: &shikigami_core::ScenarioId) -> Step {
-    Step::new("scenario.call")
-        .with_param("scenario", target.as_str())
+fn call(target: &shikigami_core::FlowId) -> Step {
+    Step::new("flow.call")
+        .with_param("flow", target.as_str())
         .with_param("inputs", json!({ "amount": 10 }))
         .with_param("outputs", json!({ "taxed": "total" }))
 }
 
-fn tax(svc: &ScenarioService) -> shikigami_core::Scenario {
+fn tax(svc: &FlowService) -> shikigami_core::Flow {
     create(
         svc,
         "税込み",
@@ -68,7 +68,7 @@ fn tax(svc: &ScenarioService) -> shikigami_core::Scenario {
 }
 
 #[test]
-fn a_called_scenario_cannot_be_deleted_and_is_listed_as_a_subscenario() {
+fn a_called_flow_cannot_be_deleted_and_is_listed_as_a_subflow() {
     let dir = tempfile::tempdir().unwrap();
     let svc = service_at(dir.path());
     let callee = tax(&svc);
@@ -76,12 +76,12 @@ fn a_called_scenario_cannot_be_deleted_and_is_listed_as_a_subscenario() {
     assert!(svc.validate(&main).valid, "{:?}", svc.validate(&main));
 
     let err = svc.delete(&callee.id, None, actor()).unwrap_err();
-    assert_eq!(err.code(), "SCENARIO_IN_USE");
+    assert_eq!(err.code(), "FLOW_IN_USE");
     assert_eq!(err.details().unwrap()["callers"][0]["id"], json!(main.id));
 
-    let subs = svc.subscenarios(&main).unwrap();
+    let subs = svc.subflows(&main).unwrap();
     assert_eq!(subs.len(), 1);
-    assert_eq!(subs[0].scenario.id, callee.id);
+    assert_eq!(subs[0].flow.id, callee.id);
     assert_eq!(svc.callers(&callee.id).unwrap()[0].id, main.id);
 
     // Without the caller it can go.
@@ -90,13 +90,13 @@ fn a_called_scenario_cannot_be_deleted_and_is_listed_as_a_subscenario() {
 }
 
 #[test]
-fn bundles_carry_their_subscenarios() {
+fn bundles_carry_their_subflows() {
     let from = tempfile::tempdir().unwrap();
     let svc = service_at(from.path());
     let callee = tax(&svc);
     let main = create(&svc, "本体", vec![], vec![call(&callee.id)]);
     let bundle = serde_json::to_value(svc.export(&main.id, false).unwrap()).unwrap();
-    assert_eq!(bundle["subscenarios"][0]["id"], json!(callee.id));
+    assert_eq!(bundle["subflows"][0]["id"], json!(callee.id));
 
     let to = tempfile::tempdir().unwrap();
     let other = service_at(to.path());
@@ -106,21 +106,21 @@ fn bundles_carry_their_subscenarios() {
         "{:?}",
         outcome.outcome.validation
     );
-    assert_eq!(outcome.subscenarios[0].mode, SubscenarioImport::Created);
+    assert_eq!(outcome.subflows[0].mode, SubflowImport::Created);
 
-    // Importing again: the sub-scenario is kept unless asked to update.
+    // Importing again: the sub-flow is kept unless asked to update.
     let again = other
         .import_bundle(bundle.clone(), Some(ImportConflict::Copy), actor())
         .unwrap();
-    assert_eq!(again.subscenarios[0].mode, SubscenarioImport::Kept);
+    assert_eq!(again.subflows[0].mode, SubflowImport::Kept);
     let update = other
         .import_bundle(bundle, Some(ImportConflict::Update), actor())
         .unwrap();
-    assert_eq!(update.subscenarios[0].mode, SubscenarioImport::Updated);
+    assert_eq!(update.subflows[0].mode, SubflowImport::Updated);
 }
 
 #[test]
-fn extracting_steps_creates_a_scenario_and_one_undoable_edit() {
+fn extracting_steps_creates_a_flow_and_one_undoable_edit() {
     let dir = tempfile::tempdir().unwrap();
     let svc = service_at(dir.path());
     let main = create(
@@ -134,7 +134,7 @@ fn extracting_steps_creates_a_scenario_and_one_undoable_edit() {
         ],
     );
     let outcome = svc
-        .extract_subscenario(
+        .extract_subflow(
             &main.id,
             Some(main.revision),
             &[StepId::new("stp_b")],
@@ -143,18 +143,18 @@ fn extracting_steps_creates_a_scenario_and_one_undoable_edit() {
             ChangeNote::default(),
         )
         .unwrap();
-    let caller = &outcome.caller.scenario;
+    let caller = &outcome.caller.flow;
     assert!(
         outcome.caller.validation.valid,
         "{:?}",
         outcome.caller.validation
     );
     assert_eq!(caller.steps.len(), 3);
-    assert_eq!(caller.steps[1].step_type, "scenario.call");
+    assert_eq!(caller.steps[1].step_type, "flow.call");
     assert_eq!(caller.steps[1].id, outcome.call_step_id);
     assert_eq!(
-        caller.steps[1].params["scenario"],
-        json!(outcome.subscenario.scenario.id)
+        caller.steps[1].params["flow"],
+        json!(outcome.subflow.flow.id)
     );
     assert_eq!(
         caller.steps[1].params["inputs"],
@@ -168,15 +168,15 @@ fn extracting_steps_creates_a_scenario_and_one_undoable_edit() {
     // always has a value to pass. `taxed` only comes out of the call.
     assert!(caller.variable("price").is_some());
     assert!(caller.variable("taxed").is_none());
-    assert_eq!(outcome.subscenario.scenario.steps[0].id.as_str(), "stp_b");
+    assert_eq!(outcome.subflow.flow.steps[0].id.as_str(), "stp_b");
 
     // One undo puts the steps back.
     let undone = svc.undo(&main.id, None, actor()).unwrap();
-    assert_eq!(undone.scenario.steps[1].id.as_str(), "stp_b");
-    assert!(undone.scenario.variable("price").is_none());
+    assert_eq!(undone.flow.steps[1].id.as_str(), "stp_b");
+    assert!(undone.flow.variable("price").is_none());
 
     let err = svc
-        .extract_subscenario(
+        .extract_subflow(
             &main.id,
             Some(main.revision),
             &[StepId::new("stp_a")],
@@ -189,30 +189,30 @@ fn extracting_steps_creates_a_scenario_and_one_undoable_edit() {
 }
 
 #[test]
-fn a_bundles_own_subscenarios_lead_to_the_workspace_ones_they_call() {
+fn a_bundles_own_subflows_lead_to_the_workspace_ones_they_call() {
     let dir = tempfile::tempdir().unwrap();
     let svc = service_at(dir.path());
     let tax = tax(&svc);
     // `wrap` is only in the bundle; it calls `tax` from the workspace.
-    let mut wrap = shikigami_core::Scenario::new("包む");
+    let mut wrap = shikigami_core::Flow::new("包む");
     wrap.id = "scn_wrap".into();
     wrap.steps = vec![call(&tax.id).with_id("w1")];
     wrap.variables = vec![var("total", VarType::Number, VarDirection::Output)];
-    let mut main = shikigami_core::Scenario::new("本体");
+    let mut main = shikigami_core::Flow::new("本体");
     main.steps = vec![
-        Step::new("scenario.call")
+        Step::new("flow.call")
             .with_id("m1")
-            .with_param("scenario", "scn_wrap"),
+            .with_param("flow", "scn_wrap"),
     ];
     assert!(
         svc.validate_bundled(&main, std::slice::from_ref(&wrap))
             .valid
     );
     let ids: Vec<String> = svc
-        .subscenarios_bundled(&main, &[wrap])
+        .subflows_bundled(&main, &[wrap])
         .unwrap()
         .into_iter()
-        .map(|s| s.scenario.id.as_str().to_owned())
+        .map(|s| s.flow.id.as_str().to_owned())
         .collect();
     assert!(ids.contains(&"scn_wrap".to_owned()), "{ids:?}");
     assert!(ids.contains(&tax.id.as_str().to_owned()), "{ids:?}");

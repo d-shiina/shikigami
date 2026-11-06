@@ -1,4 +1,4 @@
-//! Adapters: what it takes to let scenarios operate one more application.
+//! Adapters: what it takes to let flows operate one more application.
 //!
 //! An adapter bundles the step types for one target (`browser.*`,
 //! `excel.*`, ...) with their handlers and any per-run cleanup. Step types

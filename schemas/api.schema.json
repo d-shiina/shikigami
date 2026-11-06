@@ -4,14 +4,14 @@
   "description": "Bundle of the IPC/API payload types used by Studio and MCP tools.",
   "type": "object",
   "properties": {
-    "scenario": {
-      "$ref": "#/$defs/Scenario"
+    "flow": {
+      "$ref": "#/$defs/Flow"
     },
-    "scenario_summary": {
-      "$ref": "#/$defs/ScenarioSummary"
+    "flow_summary": {
+      "$ref": "#/$defs/FlowSummary"
     },
-    "new_scenario": {
-      "$ref": "#/$defs/NewScenario"
+    "new_flow": {
+      "$ref": "#/$defs/NewFlow"
     },
     "edit_op": {
       "$ref": "#/$defs/EditOp"
@@ -37,17 +37,17 @@
     "new_version": {
       "$ref": "#/$defs/NewVersion"
     },
-    "scenario_version": {
-      "$ref": "#/$defs/ScenarioVersion"
+    "flow_version": {
+      "$ref": "#/$defs/FlowVersion"
     },
     "version_summary": {
       "$ref": "#/$defs/VersionSummary"
     },
-    "scenario_diff": {
-      "$ref": "#/$defs/ScenarioDiff"
+    "flow_diff": {
+      "$ref": "#/$defs/FlowDiff"
     },
-    "scenario_bundle": {
-      "$ref": "#/$defs/ScenarioBundle"
+    "flow_bundle": {
+      "$ref": "#/$defs/FlowBundle"
     },
     "import_outcome": {
       "$ref": "#/$defs/ImportOutcome"
@@ -102,9 +102,9 @@
     }
   },
   "required": [
-    "scenario",
-    "scenario_summary",
-    "new_scenario",
+    "flow",
+    "flow_summary",
+    "new_flow",
     "edit_op",
     "edit_outcome",
     "validation_report",
@@ -113,10 +113,10 @@
     "change_event",
     "error_payload",
     "new_version",
-    "scenario_version",
+    "flow_version",
     "version_summary",
-    "scenario_diff",
-    "scenario_bundle",
+    "flow_diff",
+    "flow_bundle",
     "import_outcome",
     "extract_outcome",
     "import_conflict",
@@ -136,9 +136,9 @@
     "config_file"
   ],
   "$defs": {
-    "Scenario": {
-      "title": "Scenario",
-      "description": "A scenario: the unit that AI clients, Studio and the Runtime share.",
+    "Flow": {
+      "title": "Flow",
+      "description": "A flow: the unit that AI clients, Studio and the Runtime share.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -149,13 +149,13 @@
           ]
         },
         "schemaVersion": {
-          "description": "Version of the scenario file format.",
+          "description": "Version of the flow file format.",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
         },
         "id": {
-          "$ref": "#/$defs/ScenarioId"
+          "$ref": "#/$defs/FlowId"
         },
         "name": {
           "type": "string"
@@ -193,8 +193,8 @@
           "default": []
         },
         "settings": {
-          "description": "Scenario-wide defaults for error handling, timeouts and retries.",
-          "$ref": "#/$defs/ScenarioSettings"
+          "description": "Flow-wide defaults for error handling, timeouts and retries.",
+          "$ref": "#/$defs/FlowSettings"
         },
         "metadata": {
           "$ref": "#/$defs/Metadata",
@@ -208,8 +208,8 @@
         "name"
       ]
     },
-    "ScenarioId": {
-      "description": "Identifier of a scenario. Also used as its file name in the store.",
+    "FlowId": {
+      "description": "Identifier of a flow. Also used as its file name in the store.",
       "type": "string"
     },
     "VariableDef": {
@@ -312,7 +312,7 @@
           }
         },
         "disabled": {
-          "description": "Disabled steps are skipped by the Runtime but kept in the scenario.",
+          "description": "Disabled steps are skipped by the Runtime but kept in the flow.",
           "type": "boolean"
         },
         "timeoutMs": {
@@ -364,7 +364,7 @@
       ]
     },
     "StepId": {
-      "description": "Identifier of a step. Unique within a scenario and stable across edits.",
+      "description": "Identifier of a step. Unique within a flow and stable across edits.",
       "type": "string"
     },
     "RetryPolicy": {
@@ -409,7 +409,7 @@
         }
       ]
     },
-    "ScenarioSettings": {
+    "FlowSettings": {
       "type": "object",
       "properties": {
         "defaultTimeoutMs": {
@@ -442,7 +442,7 @@
           ]
         },
         "keepWork": {
-          "description": "Leave the files in the scenario's `work/` folder when a run starts.\nBy default a run starts with `work/` emptied.",
+          "description": "Leave the files in the flow's `work/` folder when a run starts.\nBy default a run starts with `work/` emptied.",
           "type": "boolean"
         }
       },
@@ -472,12 +472,12 @@
       },
       "additionalProperties": true
     },
-    "ScenarioSummary": {
-      "description": "Listing entry returned by `list_scenarios`.",
+    "FlowSummary": {
+      "description": "Listing entry returned by `list_flows`.",
       "type": "object",
       "properties": {
         "id": {
-          "$ref": "#/$defs/ScenarioId"
+          "$ref": "#/$defs/FlowId"
         },
         "name": {
           "type": "string"
@@ -518,8 +518,8 @@
         "tags"
       ]
     },
-    "NewScenario": {
-      "description": "Input for creating a scenario.",
+    "NewFlow": {
+      "description": "Input for creating a flow.",
       "type": "object",
       "properties": {
         "name": {
@@ -640,10 +640,10 @@
           "properties": {
             "op": {
               "type": "string",
-              "const": "updateScenario"
+              "const": "updateFlow"
             },
             "patch": {
-              "$ref": "#/$defs/ScenarioPatch"
+              "$ref": "#/$defs/FlowPatch"
             }
           },
           "required": [
@@ -831,8 +831,8 @@
       },
       "additionalProperties": false
     },
-    "ScenarioPatch": {
-      "description": "Partial update of scenario-level fields.",
+    "FlowPatch": {
+      "description": "Partial update of flow-level fields.",
       "type": "object",
       "properties": {
         "name": {
@@ -850,7 +850,7 @@
         "settings": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ScenarioSettings"
+              "$ref": "#/$defs/FlowSettings"
             },
             {
               "type": "null"
@@ -883,11 +883,11 @@
       "description": "Result of a committed change.",
       "type": "object",
       "properties": {
-        "scenario": {
-          "$ref": "#/$defs/Scenario"
+        "flow": {
+          "$ref": "#/$defs/Flow"
         },
         "validation": {
-          "description": "Full validation of the new revision. Drafts may contain errors;\nthey must be fixed before the scenario can run.",
+          "description": "Full validation of the new revision. Drafts may contain errors;\nthey must be fixed before the flow can run.",
           "$ref": "#/$defs/ValidationReport"
         },
         "canUndo": {
@@ -898,7 +898,7 @@
         }
       },
       "required": [
-        "scenario",
+        "flow",
         "validation",
         "canUndo",
         "canRedo"
@@ -936,7 +936,7 @@
           "type": "string"
         },
         "path": {
-          "description": "JSON Pointer into the scenario document.",
+          "description": "JSON Pointer into the flow document.",
           "type": "string"
         },
         "stepId": {
@@ -1041,14 +1041,14 @@
           }
         },
         "pathParams": {
-          "description": "Params that name a file or folder (a string, or a list of strings).\nA relative path there is resolved from the scenario's folder\n(`input/orders.xlsx`). File resources are included automatically.",
+          "description": "Params that name a file or folder (a string, or a list of strings).\nA relative path there is resolved from the flow's folder\n(`input/orders.xlsx`). File resources are included automatically.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "defaultTimeoutMs": {
-          "description": "Timeout when the step sets none (takes precedence over the\nscenario's default), for steps that wait on people (manual login).",
+          "description": "Timeout when the step sets none (takes precedence over the\nflow's default), for steps that wait on people (manual login).",
           "type": [
             "integer",
             "null"
@@ -1229,7 +1229,7 @@
           "$ref": "#/$defs/ChangeKind"
         },
         "revision": {
-          "description": "Revision of the scenario after this change.",
+          "description": "Revision of the flow after this change.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -1329,8 +1329,8 @@
       "description": "Notification sent to in-process listeners after every committed change.",
       "type": "object",
       "properties": {
-        "scenarioId": {
-          "$ref": "#/$defs/ScenarioId"
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
         },
         "kind": {
           "$ref": "#/$defs/ChangeKind"
@@ -1345,7 +1345,7 @@
         }
       },
       "required": [
-        "scenarioId",
+        "flowId",
         "kind",
         "revision",
         "actor"
@@ -1386,12 +1386,12 @@
         "name"
       ]
     },
-    "ScenarioVersion": {
-      "description": "One named snapshot of a scenario.",
+    "FlowVersion": {
+      "description": "One named snapshot of a flow.",
       "type": "object",
       "properties": {
         "number": {
-          "description": "Per-scenario sequence number (1, 2, …). This is how versions are referenced.",
+          "description": "Per-flow sequence number (1, 2, …). This is how versions are referenced.",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
@@ -1413,13 +1413,13 @@
           "$ref": "#/$defs/Actor"
         },
         "revision": {
-          "description": "Scenario revision the snapshot was taken from.",
+          "description": "Flow revision the snapshot was taken from.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
         },
-        "scenario": {
-          "$ref": "#/$defs/Scenario"
+        "flow": {
+          "$ref": "#/$defs/Flow"
         }
       },
       "required": [
@@ -1429,11 +1429,11 @@
         "createdAt",
         "createdBy",
         "revision",
-        "scenario"
+        "flow"
       ]
     },
     "VersionSummary": {
-      "description": "Listing entry for versions (no scenario body).",
+      "description": "Listing entry for versions (no flow body).",
       "type": "object",
       "properties": {
         "number": {
@@ -1473,7 +1473,7 @@
         "stepCount"
       ]
     },
-    "ScenarioDiff": {
+    "FlowDiff": {
       "description": "Differences from `from` to `to`.",
       "type": "object",
       "properties": {
@@ -1487,8 +1487,8 @@
           "description": "True when the contents are the same (names, variables, steps, settings).",
           "type": "boolean"
         },
-        "scenario": {
-          "description": "Scenario-level fields: name, description, tags, settings.",
+        "flow": {
+          "description": "Flow-level fields: name, description, tags, settings.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/FieldChange"
@@ -1511,7 +1511,7 @@
         "from",
         "to",
         "identical",
-        "scenario",
+        "flow",
         "variables",
         "steps"
       ]
@@ -1678,12 +1678,12 @@
         "index"
       ]
     },
-    "ScenarioBundle": {
-      "description": "File format for moving a scenario (and its versions) between workspaces.",
+    "FlowBundle": {
+      "description": "File format for moving a flow (and its versions) between workspaces.",
       "type": "object",
       "properties": {
         "format": {
-          "description": "Always `shikigami.scenarioBundle`.",
+          "description": "Always `shikigami.flowBundle`.",
           "type": "string"
         },
         "formatVersion": {
@@ -1694,25 +1694,25 @@
         "exportedAt": {
           "type": "string"
         },
-        "scenario": {
-          "$ref": "#/$defs/Scenario"
+        "flow": {
+          "$ref": "#/$defs/Flow"
         },
         "versions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ScenarioVersion"
+            "$ref": "#/$defs/FlowVersion"
           },
           "default": []
         },
-        "subscenarios": {
-          "description": "Every scenario `scenario` calls (directly or through others), without\nversions, so the bundle runs on its own.",
+        "subflows": {
+          "description": "Every flow `flow` calls (directly or through others), without\nversions, so the bundle runs on its own.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/Scenario"
+            "$ref": "#/$defs/Flow"
           }
         },
         "files": {
-          "description": "Files of the scenarios' folders (`input/`, `config/`, `templates/`\nand the author's own; not `output/`, `work/` or `logs/`).",
+          "description": "Files of the flows' folders (`input/`, `config/`, `templates/`\nand the author's own; not `output/`, `work/` or `logs/`).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/BundledFile"
@@ -1723,16 +1723,16 @@
         "format",
         "formatVersion",
         "exportedAt",
-        "scenario"
+        "flow"
       ]
     },
     "BundledFile": {
       "description": "A file carried in a bundle.",
       "type": "object",
       "properties": {
-        "scenarioId": {
-          "description": "The scenario (the bundle's own or one of its sub-scenarios) whose\nfolder it belongs to.",
-          "$ref": "#/$defs/ScenarioId"
+        "flowId": {
+          "description": "The flow (the bundle's own or one of its sub-flows) whose\nfolder it belongs to.",
+          "$ref": "#/$defs/FlowId"
         },
         "path": {
           "description": "Relative to that folder, `/`-separated.",
@@ -1744,13 +1744,13 @@
         }
       },
       "required": [
-        "scenarioId",
+        "flowId",
         "path",
         "data"
       ]
     },
     "ImportOutcome": {
-      "description": "Result of importing a bundle or scenario file.",
+      "description": "Result of importing a bundle or flow file.",
       "type": "object",
       "properties": {
         "mode": {
@@ -1762,18 +1762,18 @@
           "format": "uint",
           "minimum": 0
         },
-        "subscenarios": {
-          "description": "The bundle's sub-scenarios and what happened to each.",
+        "subflows": {
+          "description": "The bundle's sub-flows and what happened to each.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ImportedSubscenario"
+            "$ref": "#/$defs/ImportedSubflow"
           }
         },
-        "scenario": {
-          "$ref": "#/$defs/Scenario"
+        "flow": {
+          "$ref": "#/$defs/Flow"
         },
         "validation": {
-          "description": "Full validation of the new revision. Drafts may contain errors;\nthey must be fixed before the scenario can run.",
+          "description": "Full validation of the new revision. Drafts may contain errors;\nthey must be fixed before the flow can run.",
           "$ref": "#/$defs/ValidationReport"
         },
         "canUndo": {
@@ -1786,7 +1786,7 @@
       "required": [
         "mode",
         "versionsAdded",
-        "scenario",
+        "flow",
         "validation",
         "canUndo",
         "canRedo"
@@ -1800,18 +1800,18 @@
         "copied"
       ]
     },
-    "ImportedSubscenario": {
-      "description": "One sub-scenario of an imported bundle.",
+    "ImportedSubflow": {
+      "description": "One sub-flow of an imported bundle.",
       "type": "object",
       "properties": {
         "id": {
-          "$ref": "#/$defs/ScenarioId"
+          "$ref": "#/$defs/FlowId"
         },
         "name": {
           "type": "string"
         },
         "mode": {
-          "$ref": "#/$defs/SubscenarioImport"
+          "$ref": "#/$defs/SubflowImport"
         }
       },
       "required": [
@@ -1820,8 +1820,8 @@
         "mode"
       ]
     },
-    "SubscenarioImport": {
-      "description": "What importing a bundle did with one of its sub-scenarios.",
+    "SubflowImport": {
+      "description": "What importing a bundle did with one of its sub-flows.",
       "oneOf": [
         {
           "description": "It was not in the workspace and was added with the same ID.",
@@ -1841,38 +1841,38 @@
       ]
     },
     "ExtractOutcome": {
-      "description": "Result of moving steps into a new sub-scenario.",
+      "description": "Result of moving steps into a new sub-flow.",
       "type": "object",
       "properties": {
-        "subscenario": {
-          "description": "The new scenario holding the steps.",
+        "subflow": {
+          "description": "The new flow holding the steps.",
           "$ref": "#/$defs/EditOutcome"
         },
         "caller": {
-          "description": "The calling scenario, with the steps replaced by one `scenario.call`.",
+          "description": "The calling flow, with the steps replaced by one `flow.call`.",
           "$ref": "#/$defs/EditOutcome"
         },
         "callStepId": {
-          "description": "ID of the new `scenario.call` step.",
+          "description": "ID of the new `flow.call` step.",
           "$ref": "#/$defs/StepId"
         }
       },
       "required": [
-        "subscenario",
+        "subflow",
         "caller",
         "callStepId"
       ]
     },
     "ImportConflict": {
-      "description": "What to do when an imported scenario's ID already exists.",
+      "description": "What to do when an imported flow's ID already exists.",
       "oneOf": [
         {
-          "description": "Apply the imported content to the existing scenario (one undoable\nedit) and add the bundle's versions that are not there yet.",
+          "description": "Apply the imported content to the existing flow (one undoable\nedit) and add the bundle's versions that are not there yet.",
           "type": "string",
           "const": "update"
         },
         {
-          "description": "Import as a new scenario with a new ID.",
+          "description": "Import as a new flow with a new ID.",
           "type": "string",
           "const": "copy"
         }
@@ -1934,11 +1934,11 @@
       "description": "What to review: the changes since the last approval and their evidence.",
       "type": "object",
       "properties": {
-        "scenarioId": {
-          "$ref": "#/$defs/ScenarioId"
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
         },
         "revision": {
-          "description": "Current revision of the scenario.",
+          "description": "Current revision of the flow.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -1960,7 +1960,7 @@
           ]
         },
         "openFeedback": {
-          "description": "The latest review when it sent the scenario back and nobody approved\nit since: what the AI still has to address.",
+          "description": "The latest review when it sent the flow back and nobody approved\nit since: what the AI still has to address.",
           "anyOf": [
             {
               "$ref": "#/$defs/Evidence"
@@ -1986,7 +1986,7 @@
         }
       },
       "required": [
-        "scenarioId",
+        "flowId",
         "revision",
         "sinceRevision",
         "changes",
@@ -1994,7 +1994,7 @@
       ]
     },
     "Evidence": {
-      "description": "One line of `history/<scenario-id>/evidence.jsonl`.",
+      "description": "One line of `history/<flow-id>/evidence.jsonl`.",
       "type": "object",
       "properties": {
         "revision": {
@@ -2142,7 +2142,7 @@
       ]
     },
     "RunId": {
-      "description": "Identifier of a single scenario execution.",
+      "description": "Identifier of a single flow execution.",
       "type": "string"
     },
     "ObservationSource": {
@@ -2355,8 +2355,8 @@
     "ObservationLink": {
       "type": "object",
       "properties": {
-        "scenarioId": {
-          "$ref": "#/$defs/ScenarioId"
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
         },
         "revision": {
           "type": "integer",
@@ -2365,12 +2365,12 @@
         }
       },
       "required": [
-        "scenarioId",
+        "flowId",
         "revision"
       ]
     },
     "PublishedState": {
-      "description": "The published version of a scenario (what `shikigami run <id>` and\nother unattended runs execute).",
+      "description": "The published version of a flow (what `shikigami run <id>` and\nother unattended runs execute).",
       "type": "object",
       "properties": {
         "version": {
@@ -2446,7 +2446,7 @@
       }
     },
     "PublishRecord": {
-      "description": "One line of `versions/<scenario-id>/publish.jsonl`: which version runs\nunattended from now on (`None`: none, the scenario was withdrawn). The\nlast line is in force; earlier lines are the record of who published\nwhat, kept in the shared part of the workspace.",
+      "description": "One line of `versions/<flow-id>/publish.jsonl`: which version runs\nunattended from now on (`None`: none, the flow was withdrawn). The\nlast line is in force; earlier lines are the record of who published\nwhat, kept in the shared part of the workspace.",
       "type": "object",
       "properties": {
         "version": {
@@ -2506,7 +2506,7 @@
         "ai": {
           "$ref": "#/$defs/AiPolicy",
           "default": {
-            "runScenario": {
+            "runFlow": {
               "safe": "allow",
               "interactive": "allow",
               "dangerous": "ask"
@@ -2516,14 +2516,14 @@
               "interactive": "allow",
               "dangerous": "ask"
             },
-            "deleteScenario": "ask"
+            "deleteFlow": "ask"
           }
         },
-        "scenarios": {
-          "description": "Per-scenario settings, keyed by scenario ID.",
+        "flows": {
+          "description": "Per-flow settings, keyed by flow ID.",
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/ScenarioPolicy"
+            "$ref": "#/$defs/FlowPolicy"
           }
         }
       },
@@ -2533,8 +2533,8 @@
       "description": "What an AI client (MCP) may do. Studio and the CLI are people and are not\nasked.",
       "type": "object",
       "properties": {
-        "runScenario": {
-          "description": "`run_scenario`, by the riskiest step the run may execute (including\nthe scenarios it calls).",
+        "runFlow": {
+          "description": "`run_flow`, by the riskiest step the run may execute (including\nthe flows it calls).",
           "$ref": "#/$defs/ByRisk",
           "default": {
             "safe": "allow",
@@ -2543,7 +2543,7 @@
           }
         },
         "testStep": {
-          "description": "`test_step`, by the step's risk (a `scenario.call` counts as the\nriskiest step of the scenarios it calls).",
+          "description": "`test_step`, by the step's risk (a `flow.call` counts as the\nriskiest step of the flows it calls).",
           "$ref": "#/$defs/ByRisk",
           "default": {
             "safe": "allow",
@@ -2551,8 +2551,8 @@
             "dangerous": "ask"
           }
         },
-        "deleteScenario": {
-          "description": "`delete_scenario` (moves to the trash).",
+        "deleteFlow": {
+          "description": "`delete_flow` (moves to the trash).",
           "$ref": "#/$defs/Decision",
           "default": "ask"
         }
@@ -2595,12 +2595,12 @@
         }
       ]
     },
-    "ScenarioPolicy": {
-      "description": "Settings for one scenario.",
+    "FlowPolicy": {
+      "description": "Settings for one flow.",
       "type": "object",
       "properties": {
         "aiRun": {
-          "description": "Whether an AI may run or test this scenario. Overrides `ai.runScenario`\n(and `ai.testStep` for calls of it) when it is stricter.",
+          "description": "Whether an AI may run or test this flow. Overrides `ai.runFlow`\n(and `ai.testStep` for calls of it) when it is stricter.",
           "anyOf": [
             {
               "$ref": "#/$defs/Decision"
@@ -2639,17 +2639,17 @@
         "requestedBy": {
           "$ref": "#/$defs/Actor"
         },
-        "scenarioId": {
+        "flowId": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ScenarioId"
+              "$ref": "#/$defs/FlowId"
             },
             {
               "type": "null"
             }
           ]
         },
-        "scenarioName": {
+        "flowName": {
           "type": [
             "string",
             "null"
@@ -2706,9 +2706,9 @@
       "description": "AI actions the policy can hold for approval.",
       "type": "string",
       "enum": [
-        "runScenario",
+        "runFlow",
         "testStep",
-        "deleteScenario"
+        "deleteFlow"
       ]
     },
     "ApprovalStatus": {
@@ -2729,11 +2729,11 @@
       ]
     },
     "ProjectFiles": {
-      "description": "What a scenario's project folder holds.",
+      "description": "What a flow's project folder holds.",
       "type": "object",
       "properties": {
-        "scenarioId": {
-          "$ref": "#/$defs/ScenarioId"
+        "flowId": {
+          "$ref": "#/$defs/FlowId"
         },
         "dir": {
           "description": "Absolute path of the folder.",
@@ -2747,7 +2747,7 @@
           }
         },
         "files": {
-          "description": "Every file except `scenario.json`, sorted by path.",
+          "description": "Every file except `flow.json`, sorted by path.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/ProjectFile"
@@ -2755,7 +2755,7 @@
         }
       },
       "required": [
-        "scenarioId",
+        "flowId",
         "dir",
         "folders",
         "files"
@@ -2791,7 +2791,7 @@
       ]
     },
     "ConfigFile": {
-      "description": "A settings file (`config/*.json`) kept out of the scenario: values a\nperson changes without touching the flow (a cut-off day, a recipient, a\nfolder). Studio edits it as a form; `config.read` turns it into\n`{ \"締め日\": 25, … }`.",
+      "description": "A settings file (`config/*.json`) kept out of the flow: values a\nperson changes without touching the flow (a cut-off day, a recipient, a\nfolder). Studio edits it as a form; `config.read` turns it into\n`{ \"締め日\": 25, … }`.",
       "type": "object",
       "properties": {
         "format": {

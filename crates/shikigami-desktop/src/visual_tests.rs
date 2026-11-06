@@ -4,7 +4,7 @@
 use std::sync::Mutex;
 
 use serde_json::{Value, json};
-use shikigami_core::{Scenario, Step, Validator, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, Validator, VarDirection, VarType, VariableDef};
 use shikigami_runtime::{RunOptions, RunReport, RunStatus, Runtime};
 
 use super::*;
@@ -295,7 +295,7 @@ async fn run_on(screen: Arc<Screen>, steps: Vec<Step>) -> RunReport {
     let runtime = Runtime::builder()
         .adapter(&DesktopAdapter::with_backend(screen))
         .build();
-    let mut s = Scenario::new("visual");
+    let mut s = Flow::new("visual");
     s.variables.push(VariableDef {
         direction: VarDirection::Output,
         ..VariableDef::new("out", VarType::Any)
@@ -627,7 +627,7 @@ async fn visual_targets_only_where_they_make_sense() {
         .build();
     let validator = Validator::new(runtime.registry().clone());
     let valid = |step_type: &str, params: Value| {
-        let mut s = Scenario::new("check");
+        let mut s = Flow::new("check");
         s.steps = vec![step(step_type, params).with_id("s")];
         validator.validate(&s).valid
     };

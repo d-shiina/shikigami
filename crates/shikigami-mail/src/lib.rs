@@ -362,7 +362,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             schema(
                 json!({
                     "id": { "type": "string", "minLength": 1, "description": "mail.list の id" },
-                    "folder": { "type": "string", "minLength": 1, "description": "保存先フォルダー：シナリオのフォルダーからの相対パス（例 input/添付）か絶対パス" },
+                    "folder": { "type": "string", "minLength": 1, "description": "保存先フォルダー：フローのフォルダーからの相対パス（例 input/添付）か絶対パス" },
                     "nameContains": { "type": "string", "minLength": 1, "description": "ファイル名に含む文字（例 .pdf）" }
                 }),
                 &["id", "folder"],

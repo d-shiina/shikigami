@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { layoutScenario, NODE_W } from "./layout";
+import { layoutFlow, NODE_W } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -26,24 +26,24 @@ const defs = new Map(
 
 const log = (id: string): Step => ({ id, type: "log.message" });
 
-describe("layoutScenario", () => {
+describe("layoutFlow", () => {
   it("makes room below an unfolded call", () => {
     const steps = [log("a"), log("b")];
-    const folded = layoutScenario(steps, defs);
-    const open = layoutScenario(steps, defs, new Map([["a", 120]]));
+    const folded = layoutFlow(steps, defs);
+    const open = layoutFlow(steps, defs, new Map([["a", 120]]));
     const y = (l: typeof open, id: string) => l.nodes.find((n) => n.id === id)!.position.y;
     expect(y(open, "b") - y(folded, "b")).toBe(120);
     expect(open.height - folded.height).toBe(120);
   });
 
-  it("renders an empty scenario as a single slot", () => {
-    const layout = layoutScenario([], defs);
+  it("renders an empty flow as a single slot", () => {
+    const layout = layoutFlow([], defs);
     expect(layout.nodes).toHaveLength(1);
     expect(layout.nodes[0]?.type).toBe("slot");
   });
 
   it("chains sequential steps top to bottom", () => {
-    const layout = layoutScenario([log("a"), log("b"), log("c")], defs);
+    const layout = layoutFlow([log("a"), log("b"), log("c")], defs);
     const ys = layout.nodes.map((n) => n.position.y);
     expect(ys).toEqual([...ys].sort((p, q) => p - q));
     expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual(["a>b", "b>c"]);
@@ -54,7 +54,7 @@ describe("layoutScenario", () => {
       { id: "if", type: "control.if", blocks: { then: [log("t1"), log("t2")] } },
       log("after"),
     ];
-    const layout = layoutScenario(steps, defs);
+    const layout = layoutFlow(steps, defs);
     const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
     const elseSlot = layout.nodes.find((n) => n.type === "slot");
     expect(elseSlot?.id).toBe("slot:if:else");
@@ -71,7 +71,7 @@ describe("layoutScenario", () => {
       { id: "loop", type: "control.repeat", blocks: { body: [log("x")] } },
       log("after"),
     ];
-    const layout = layoutScenario(steps, defs);
+    const layout = layoutFlow(steps, defs);
     expect(layout.edges.find((e) => e.source === "x" && e.target === "loop")?.loop).toBe(true);
     expect(layout.edges.some((e) => e.source === "loop" && e.target === "after")).toBe(true);
   });
@@ -81,7 +81,7 @@ describe("layoutScenario", () => {
       { id: "par", type: "control.parallel", blocks: { branches: [log("a"), log("b"), log("c")] } },
       log("after"),
     ];
-    const layout = layoutScenario(steps, defs);
+    const layout = layoutFlow(steps, defs);
     const byId = Object.fromEntries(layout.nodes.map((n) => [n.id, n]));
     expect(byId.a!.position.y).toBe(byId.b!.position.y);
     expect(byId.a!.position.x).toBeLessThan(byId.b!.position.x);
@@ -98,7 +98,7 @@ describe("layoutScenario", () => {
       { id: "if", type: "control.if", blocks: { then: [log("t")], else: [log("e")] } },
       log("after"),
     ];
-    const layout = layoutScenario(steps, defs);
+    const layout = layoutFlow(steps, defs);
     const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
     expect(pos.a!.x).toBe(pos.if!.x);
     expect(pos.a!.x).toBe(pos.after!.x);

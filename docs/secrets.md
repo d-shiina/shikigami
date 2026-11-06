@@ -5,7 +5,7 @@ English | [日本語](ja/secrets.md)
 How IDs and passwords for business sites and apps are handled. Three principles:
 
 1. **People register the values**, under a name, in Studio's 🔑 Secrets (or with the CLI), e.g. "Order system".
-2. **Scenarios and the AI only get the name.** A scenario says only `{ "secret": "Order system", "field": "password" }`. The value is handed only to the running node and never appears in scenario files, MCP results, logs or screenshots.
+2. **Flows and the AI only get the name.** A flow says only `{ "secret": "Order system", "field": "password" }`. The value is handed only to the running node and never appears in flow files, MCP results, logs or screenshots.
 3. **Values are typed only into registered sites.** Each secret has its allowed sites; every other page is refused (against look-alike sites, and against an AI misled by instructions planted in a page). The check is made against the page the input field is on, so it also refuses a site that changed while waiting, and input fields in another site's iframe.
 
 ## Registering
@@ -16,7 +16,7 @@ How IDs and passwords for business sites and apps are handled. Three principles:
 
 | Field | Contents |
 |---|---|
-| Name | The name scenarios and the AI use. 1–64 characters |
+| Name | The name flows and the AI use. 1–64 characters |
 | Username / Password | The login values. When editing, an empty password keeps the previous one |
 | Sites and apps allowed | One per line. `https://example.com/login` is treated as `https://example.com` (the origin). Desktop apps as `app:billing.exe` (the executable name; [desktop.md](desktop.md)) |
 | MFA setup key | Optional. The key next to the authenticator QR code (base32) or an `otpauth://` string. One-time codes are filled in automatically |
@@ -46,7 +46,7 @@ From scripts, use `--password-stdin` (the first line of standard input).
 - Updates are serialized with `secrets/.lock`, so Studio, the CLI and the MCP server never overwrite each other's changes to the same workspace.
 - Off Windows (development, CI) the key is kept in `secrets/<id>.key` (readable by the owner only). That is no protection, so it is not for production.
 
-## Using them in scenarios
+## Using them in flows
 
 ```jsonc
 { "type": "browser.open", "params": { "url": "https://orders.example.com/", "session": "Order system" } },
@@ -60,7 +60,7 @@ From scripts, use `--password-stdin` (the first line of standard input).
 
 - `field` is `username` / `password` / `totp` (the current one-time code). For web APIs with an OAuth sign-in, `http.request` also takes `accessToken` ([oauth.md](oauth.md)).
 - Secrets may appear only as the value of input nodes (`browser.fill`'s `value`). In logs, messages, URLs and the like they give the validation error `SECRET_NOT_ALLOWED`.
-- A default value on a `secret: true` variable would stay in the scenario as plain text, so it gives the validation error `SECRET_DEFAULT`.
+- A default value on a `secret: true` variable would stay in the flow as plain text, so it gives the validation error `SECRET_DEFAULT`.
 - In Studio's properties, switch an input's value between "Text / 🔑 Secret" and pick the name and field.
 
 ### Keeping the sign-in (sessions)
@@ -71,7 +71,7 @@ With `session: "<name>"` on `browser.open`, that context starts with the saved c
 
 - **One-time codes (TOTP)**: register the MFA setup key and `field: "totp"` types the current code each time.
 - **Phone approval, SMS, CAPTCHA…**: `browser.waitForHuman` waits for the person. Studio shows "Waiting for you" and the browser comes to the front. It continues once the `until` element (e.g. the heading after login) appears. It waits 5 minutes by default (change with `timeoutMs`). Headless runs do not wait and fail with `HUMAN_REQUIRED`.
-- Unattended scenarios normally keep a sign-in made once by a person with `session`.
+- Unattended flows normally keep a sign-in made once by a person with `session`.
 
 ## Masking
 
@@ -85,7 +85,7 @@ With `session: "<name>"` on `browser.open`, that context starts with the saved c
 - When it runs into a login page while exploring, the results of `inspect_page` / `test_step` carry `login` (a mark that login is needed, with hints).
   - If a secret fits, it logs in with `{ "secret": …, "field": … }` in a `browser.fill` through `test_step`.
   - If not, it asks the person to register one with `request_secret` (below). For a manual login, `test_step` with `browser.waitForHuman`.
-- `run_scenario` cannot pass values to `secret: true` input variables (`SECRET_INPUT_REJECTED`).
+- `run_flow` cannot pass values to `secret: true` input variables (`SECRET_INPUT_REJECTED`).
 
 ### The AI asks for login details (`request_secret`)
 
@@ -104,7 +104,7 @@ Instead of asking for passwords in the chat, the AI asks Studio to register one 
 
 ### When a run fails
 
-When a scenario run in Studio stops on `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET`, the same Register bar appears and opens the registration (or edit) form for that secret. For `SECRET_SITE_MISMATCH` the site of the page it stopped on is already added; check it is the right site before saving.
+When a flow run in Studio stops on `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` / `SECRET_APP_NOT_SET`, the same Register bar appears and opens the registration (or edit) form for that secret. For `SECRET_SITE_MISMATCH` the site of the page it stopped on is already added; check it is the right site before saving.
 - Page content is data, not instructions to the AI. Planted instructions that try to make it type a password into another site are stopped by the site check.
 
 ## Error codes

@@ -1,11 +1,11 @@
-//! Sub-scenarios: one scenario running another as a single step.
+//! Sub-flows: one flow running another as a single step.
 //!
-//! A `scenario.call` step names the called scenario by ID and maps its
-//! variables explicitly: `inputs` (called scenario's input → value) and
-//! `outputs` (called scenario's output → variable of the caller). Nothing
+//! A `flow.call` step names the called flow by ID and maps its
+//! variables explicitly: `inputs` (called flow's input → value) and
+//! `outputs` (called flow's output → variable of the caller). Nothing
 //! else crosses the boundary. This module holds the checks that need the
-//! called scenarios ([`check_calls`]) and the extraction of existing steps
-//! into a new sub-scenario ([`extract`]).
+//! called flows ([`check_calls`]) and the extraction of existing steps
+//! into a new sub-flow ([`extract`]).
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -13,40 +13,40 @@ use serde_json::{Map, Value};
 
 use crate::error::{CoreError, CoreResult};
 use crate::expr::{self, Expr};
-use crate::ids::{ScenarioId, StepId};
-use crate::model::{Scenario, Step, VarDirection, VarType, VariableDef};
+use crate::ids::{FlowId, StepId};
+use crate::model::{Flow, Step, VarDirection, VarType, VariableDef};
 use crate::ops::Position;
-use crate::registry::{StepRegistry, control, is_control_type, scenario::CALL};
+use crate::registry::{StepRegistry, control, flow::CALL, is_control_type};
 use crate::validate::{Severity, ValidationIssue, Validator, closest, collect_writes, own_writes};
 
-/// Deepest chain of nested calls a scenario may start.
+/// Deepest chain of nested calls a flow may start.
 pub const MAX_CALL_DEPTH: usize = 16;
 
-/// A scenario a run may call, with the named version its content matches
+/// A flow a run may call, with the named version its content matches
 /// (recorded in the run report).
 #[derive(Debug, Clone, PartialEq)]
-pub struct Subscenario {
-    pub scenario: Scenario,
+pub struct Subflow {
+    pub flow: Flow,
     pub version: Option<u32>,
     /// Its folder: relative paths in its steps are resolved from here.
     pub project_dir: Option<std::path::PathBuf>,
 }
 
-/// The scenario a call step names, if it names one.
-pub fn call_target(step: &Step) -> Option<ScenarioId> {
+/// The flow a call step names, if it names one.
+pub fn call_target(step: &Step) -> Option<FlowId> {
     if step.step_type != CALL {
         return None;
     }
     step.params
-        .get("scenario")
+        .get("flow")
         .and_then(Value::as_str)
         .filter(|id| !id.is_empty())
-        .map(ScenarioId::new)
+        .map(FlowId::new)
 }
 
-/// Every scenario this one calls directly.
-pub fn called_ids(scenario: &Scenario) -> BTreeSet<ScenarioId> {
-    scenario.walk().filter_map(call_target).collect()
+/// Every flow this one calls directly.
+pub fn called_ids(flow: &Flow) -> BTreeSet<FlowId> {
+    flow.walk().filter_map(call_target).collect()
 }
 
 /// Steps with their JSON Pointer, in document order.
@@ -60,14 +60,14 @@ fn steps_with_paths<'a>(steps: &'a [Step], prefix: &str, out: &mut Vec<(&'a Step
     }
 }
 
-/// Issues of the `scenario.call` steps in `scenario` that need the called
-/// scenarios. `lookup` loads a scenario by ID (`None` when it does not exist).
+/// Issues of the `flow.call` steps in `flow` that need the called
+/// flows. `lookup` loads a flow by ID (`None` when it does not exist).
 pub fn check_calls(
     validator: &Validator,
-    scenario: &Scenario,
-    lookup: &dyn Fn(&ScenarioId) -> Option<Scenario>,
+    flow: &Flow,
+    lookup: &dyn Fn(&FlowId) -> Option<Flow>,
 ) -> Vec<ValidationIssue> {
-    if !scenario.walk().any(|s| s.step_type == CALL) {
+    if !flow.walk().any(|s| s.step_type == CALL) {
         return Vec::new();
     }
     let mut checker = Checker {
@@ -76,15 +76,15 @@ pub fn check_calls(
         loaded: HashMap::new(),
         error_counts: HashMap::new(),
     };
-    let mut stack = vec![scenario.id.clone()];
-    checker.issues(scenario, &mut stack)
+    let mut stack = vec![flow.id.clone()];
+    checker.issues(flow, &mut stack)
 }
 
 struct Checker<'a> {
     validator: &'a Validator,
-    lookup: &'a dyn Fn(&ScenarioId) -> Option<Scenario>,
-    loaded: HashMap<ScenarioId, Option<Scenario>>,
-    error_counts: HashMap<ScenarioId, usize>,
+    lookup: &'a dyn Fn(&FlowId) -> Option<Flow>,
+    loaded: HashMap<FlowId, Option<Flow>>,
+    error_counts: HashMap<FlowId, usize>,
 }
 
 fn issue(
@@ -105,7 +105,7 @@ fn issue(
 }
 
 impl Checker<'_> {
-    fn load(&mut self, id: &ScenarioId) -> Option<Scenario> {
+    fn load(&mut self, id: &FlowId) -> Option<Flow> {
         if let Some(found) = self.loaded.get(id) {
             return found.clone();
         }
@@ -115,17 +115,17 @@ impl Checker<'_> {
     }
 
     /// Whether `from` calls (directly or through others) any of `targets`.
-    fn reaches(&mut self, from: &ScenarioId, targets: &[ScenarioId]) -> bool {
+    fn reaches(&mut self, from: &FlowId, targets: &[FlowId]) -> bool {
         let mut seen = HashSet::new();
         let mut queue = vec![from.clone()];
         while let Some(id) = queue.pop() {
             if !seen.insert(id.clone()) {
                 continue;
             }
-            let Some(scenario) = self.load(&id) else {
+            let Some(flow) = self.load(&id) else {
                 continue;
             };
-            for next in called_ids(&scenario) {
+            for next in called_ids(&flow) {
                 if targets.contains(&next) {
                     return true;
                 }
@@ -137,7 +137,7 @@ impl Checker<'_> {
 
     /// Errors that would stop `callee` from running when called from the
     /// end of `stack`.
-    fn error_count(&mut self, callee: &Scenario, stack: &mut Vec<ScenarioId>) -> usize {
+    fn error_count(&mut self, callee: &Flow, stack: &mut Vec<FlowId>) -> usize {
         if let Some(count) = self.error_counts.get(&callee.id) {
             return *count;
         }
@@ -153,32 +153,32 @@ impl Checker<'_> {
         own + nested
     }
 
-    fn issues(&mut self, scenario: &Scenario, stack: &mut Vec<ScenarioId>) -> Vec<ValidationIssue> {
+    fn issues(&mut self, flow: &Flow, stack: &mut Vec<FlowId>) -> Vec<ValidationIssue> {
         let mut all = Vec::new();
-        steps_with_paths(&scenario.steps, "/steps", &mut all);
+        steps_with_paths(&flow.steps, "/steps", &mut all);
         let mut out = Vec::new();
         for (step, path) in all {
             let Some(target) = call_target(step) else {
                 continue;
             };
-            let scenario_path = format!("{path}/params/scenario");
+            let flow_path = format!("{path}/params/flow");
             if stack.contains(&target) || self.reaches(&target, stack) {
                 out.push(issue(
                     "CALL_CYCLE",
-                    format!("calling '{target}' leads back to a scenario that is already running"),
-                    scenario_path,
+                    format!("calling '{target}' leads back to a flow that is already running"),
+                    flow_path,
                     step,
-                    "A scenario cannot call itself, directly or through others. Move the shared steps into another scenario and call that one from both.",
+                    "A flow cannot call itself, directly or through others. Move the shared steps into another flow and call that one from both.",
                 ));
                 continue;
             }
             let Some(callee) = self.load(&target) else {
                 out.push(issue(
                     "CALL_TARGET_NOT_FOUND",
-                    format!("no scenario with id '{target}'"),
-                    scenario_path,
+                    format!("no flow with id '{target}'"),
+                    flow_path,
                     step,
-                    "Use the `id` of an existing scenario from list_scenarios. A deleted scenario can be restored from the workspace trash.",
+                    "Use the `id` of an existing flow from list_flows. A deleted flow can be restored from the workspace trash.",
                 ));
                 continue;
             };
@@ -186,9 +186,9 @@ impl Checker<'_> {
                 out.push(issue(
                     "CALL_TOO_DEEP",
                     format!("calls are nested more than {MAX_CALL_DEPTH} deep"),
-                    scenario_path,
+                    flow_path,
                     step,
-                    "Flatten the chain: call the deepest scenarios directly from fewer levels.",
+                    "Flatten the chain: call the deepest flows directly from fewer levels.",
                 ));
                 continue;
             }
@@ -197,13 +197,13 @@ impl Checker<'_> {
                 out.push(issue(
                     "CALL_TARGET_INVALID",
                     format!(
-                        "the called scenario '{}' has {errors} validation error(s)",
+                        "the called flow '{}' has {errors} validation error(s)",
                         callee.name
                     ),
-                    scenario_path,
+                    flow_path,
                     step,
                     format!(
-                        "Fix the called scenario first: validate_scenario(\"{}\").",
+                        "Fix the called flow first: validate_flow(\"{}\").",
                         callee.id
                     ),
                 ));
@@ -214,7 +214,7 @@ impl Checker<'_> {
         out
     }
 
-    fn inputs(&self, step: &Step, path: &str, callee: &Scenario, out: &mut Vec<ValidationIssue>) {
+    fn inputs(&self, step: &Step, path: &str, callee: &Flow, out: &mut Vec<ValidationIssue>) {
         let declared: Vec<&VariableDef> = callee
             .variables
             .iter()
@@ -247,7 +247,7 @@ impl Checker<'_> {
                     format!("secret input '{key}' is written as plain text"),
                     pointer,
                     step,
-                    "Pass a secret variable of this scenario instead, e.g. \"{{ password }}\".",
+                    "Pass a secret variable of this flow instead, e.g. \"{{ password }}\".",
                 ));
             } else if !is_template && !var.var_type.accepts(value) {
                 out.push(issue(
@@ -278,7 +278,7 @@ impl Checker<'_> {
         }
     }
 
-    fn outputs(&self, step: &Step, path: &str, callee: &Scenario, out: &mut Vec<ValidationIssue>) {
+    fn outputs(&self, step: &Step, path: &str, callee: &Flow, out: &mut Vec<ValidationIssue>) {
         let declared: Vec<&VariableDef> = callee
             .variables
             .iter()
@@ -345,18 +345,18 @@ fn describe(vars: &[&VariableDef], inputs: bool) -> String {
 // ---------------------------------------------------------------------------
 // Extraction
 
-/// Steps turned into a new scenario and the call that replaces them.
+/// Steps turned into a new flow and the call that replaces them.
 #[derive(Debug, Clone)]
 pub struct Extraction {
-    /// The new scenario (fresh ID, not stored yet).
-    pub subscenario: Scenario,
-    /// Where the call goes in the calling scenario (where the first
+    /// The new flow (fresh ID, not stored yet).
+    pub subflow: Flow,
+    /// Where the call goes in the calling flow (where the first
     /// extracted step was).
     pub position: Position,
-    /// The extracted steps, to remove from the calling scenario.
+    /// The extracted steps, to remove from the calling flow.
     pub removed: Vec<StepId>,
     pub call: Step,
-    /// Local variables to declare in the calling scenario (inputs it only
+    /// Local variables to declare in the calling flow (inputs it only
     /// assigned so far), so they always have a value to pass.
     pub declare: Vec<VariableDef>,
 }
@@ -435,16 +435,16 @@ fn locate<'a>(
 }
 
 /// Plans moving `step_ids` (next to each other in one block) into a new
-/// scenario named `name`, called from where they were.
+/// flow named `name`, called from where they were.
 ///
 /// The call reads and writes the same variables the steps did, so the
-/// calling scenario behaves as before: inputs are the variables the steps
+/// calling flow behaves as before: inputs are the variables the steps
 /// read that the caller has (declared, or set earlier); outputs are the
 /// variables they write that the caller has or reads elsewhere. An output
 /// the caller already has is an input too (`inOut`), so a write that does
 /// not happen leaves the caller's value as it was.
 pub fn extract(
-    caller: &Scenario,
+    caller: &Flow,
     step_ids: &[StepId],
     name: &str,
     registry: &StepRegistry,
@@ -588,21 +588,21 @@ pub fn extract(
             .iter()
             .map(|s| s.name.trim())
             .find(|n| !n.is_empty())
-            .unwrap_or("サブシナリオ")
+            .unwrap_or("サブフロー")
             .to_owned()
     } else {
         name.trim().to_owned()
     };
-    let mut subscenario = Scenario::new(name.clone());
-    subscenario.description = format!("「{}」から切り出した処理", caller.name);
-    subscenario.variables = variables;
-    subscenario.steps = steps;
+    let mut subflow = Flow::new(name.clone());
+    subflow.description = format!("「{}」から切り出した処理", caller.name);
+    subflow.variables = variables;
+    subflow.steps = steps;
     // Same defaults, so the steps time out, retry and fail as before.
-    subscenario.settings = caller.settings.clone();
+    subflow.settings = caller.settings.clone();
 
     let mut call = Step::new(CALL)
         .with_name(name)
-        .with_param("scenario", subscenario.id.as_str());
+        .with_param("flow", subflow.id.as_str());
     if !inputs.is_empty() {
         let map: Map<String, Value> = inputs
             .iter()
@@ -623,7 +623,7 @@ pub fn extract(
         Some((id, block)) => Position::in_block(id.clone(), block, Some(start)),
     };
     Ok(Extraction {
-        subscenario,
+        subflow,
         position,
         removed,
         call,
@@ -645,8 +645,8 @@ mod tests {
         }
     }
 
-    fn scenario(id: &str, variables: Vec<VariableDef>, steps: Vec<Step>) -> Scenario {
-        let mut s = Scenario::new(id);
+    fn flow(id: &str, variables: Vec<VariableDef>, steps: Vec<Step>) -> Flow {
+        let mut s = Flow::new(id);
         s.id = id.into();
         s.variables = variables;
         s.steps = steps;
@@ -666,7 +666,7 @@ mod tests {
 
     fn call(target: &str, inputs: Value, outputs: Value) -> Step {
         Step::new(CALL)
-            .with_param("scenario", target)
+            .with_param("flow", target)
             .with_param("inputs", inputs)
             .with_param("outputs", outputs)
     }
@@ -677,8 +677,8 @@ mod tests {
             .with_param("expression", expression)
     }
 
-    fn tax() -> Scenario {
-        scenario(
+    fn tax() -> Flow {
+        flow(
             "tax",
             vec![
                 var("amount", VarType::Number, VarDirection::Input),
@@ -696,8 +696,8 @@ mod tests {
         )
     }
 
-    fn codes(validator: &Validator, s: &Scenario, others: &[Scenario]) -> Vec<String> {
-        let lookup = |id: &ScenarioId| others.iter().find(|o| &o.id == id).cloned();
+    fn codes(validator: &Validator, s: &Flow, others: &[Flow]) -> Vec<String> {
+        let lookup = |id: &FlowId| others.iter().find(|o| &o.id == id).cloned();
         validator
             .validate_with_calls(s, &lookup)
             .issues
@@ -707,9 +707,9 @@ mod tests {
     }
 
     #[test]
-    fn calls_are_checked_against_the_called_scenario() {
+    fn calls_are_checked_against_the_called_flow() {
         let validator = Validator::new(StepRegistry::with_builtins());
-        let main = scenario(
+        let main = flow(
             "main",
             vec![VariableDef::new("pinVar", VarType::String)],
             vec![
@@ -742,7 +742,7 @@ mod tests {
             "{found:?}"
         );
 
-        let missing = scenario("m", vec![], vec![call("tax", json!({}), json!({}))]);
+        let missing = flow("m", vec![], vec![call("tax", json!({}), json!({}))]);
         let found = codes(&validator, &missing, &[tax()]);
         assert_eq!(
             found.iter().filter(|c| *c == "CALL_MISSING_INPUT").count(),
@@ -763,17 +763,17 @@ mod tests {
     #[test]
     fn cycles_and_broken_targets_are_errors() {
         let validator = Validator::new(StepRegistry::with_builtins());
-        let a = scenario("a", vec![], vec![call("b", json!({}), json!({}))]);
-        let b = scenario("b", vec![], vec![call("a", json!({}), json!({}))]);
+        let a = flow("a", vec![], vec![call("b", json!({}), json!({}))]);
+        let b = flow("b", vec![], vec![call("a", json!({}), json!({}))]);
         assert!(codes(&validator, &a, &[a.clone(), b.clone()]).contains(&"CALL_CYCLE".into()));
-        let selfish = scenario("s", vec![], vec![call("s", json!({}), json!({}))]);
+        let selfish = flow("s", vec![], vec![call("s", json!({}), json!({}))]);
         assert!(
             codes(&validator, &selfish, std::slice::from_ref(&selfish))
                 .contains(&"CALL_CYCLE".into())
         );
 
-        let broken = scenario("x", vec![], vec![Step::new("control.nope")]);
-        let main = scenario("main", vec![], vec![call("x", json!({}), json!({}))]);
+        let broken = flow("x", vec![], vec![Step::new("control.nope")]);
+        let main = flow("main", vec![], vec![call("x", json!({}), json!({}))]);
         assert!(codes(&validator, &main, &[broken]).contains(&"CALL_TARGET_INVALID".into()));
     }
 
@@ -794,7 +794,7 @@ mod tests {
                 set("total", "2"),
             ],
         );
-        let main = scenario(
+        let main = flow(
             "main",
             vec![],
             vec![
@@ -818,7 +818,7 @@ mod tests {
         let registry = StepRegistry::with_builtins();
         let mut tolerant = set("note", "'ok'");
         tolerant.on_error = Some(OnError::Continue);
-        let caller = scenario(
+        let caller = flow(
             "main",
             vec![
                 VariableDef {
@@ -845,7 +845,7 @@ mod tests {
         let plan = extract(&caller, &ids, "合計する", &registry).unwrap();
 
         let dirs: Vec<(String, VarDirection)> = plan
-            .subscenario
+            .subflow
             .variables
             .iter()
             .map(|v| (v.name.clone(), v.direction))
@@ -872,14 +872,14 @@ mod tests {
         assert_eq!(plan.position, Position::root(Some(2)));
         assert_eq!(plan.removed, ids);
         // `item` and `double` stay inside.
-        assert!(plan.subscenario.variable("item").is_none());
-        assert!(plan.subscenario.variable("double").is_none());
+        assert!(plan.subflow.variable("item").is_none());
+        assert!(plan.subflow.variable("double").is_none());
     }
 
     #[test]
     fn a_loop_variable_read_after_the_loop_comes_back_out() {
         let registry = StepRegistry::with_builtins();
-        let caller = scenario(
+        let caller = flow(
             "main",
             vec![var("items", VarType::Array, VarDirection::Input)],
             vec![
@@ -893,14 +893,14 @@ mod tests {
         let plan = extract(&caller, &[caller.steps[0].id.clone()], "x", &registry).unwrap();
         assert_eq!(plan.call.params["outputs"]["item"], json!("item"));
         assert!(plan.call.params.get("inputs").unwrap()["item"].is_null());
-        let report = Validator::new(StepRegistry::with_builtins()).validate(&plan.subscenario);
+        let report = Validator::new(StepRegistry::with_builtins()).validate(&plan.subflow);
         assert!(report.valid, "{report:?}");
     }
 
     #[test]
     fn extraction_needs_neighbouring_steps_in_one_block() {
         let registry = StepRegistry::with_builtins();
-        let caller = scenario(
+        let caller = flow(
             "main",
             vec![],
             vec![

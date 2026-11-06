@@ -1,8 +1,8 @@
-import type { Scenario } from "@shikigami/schema";
+import type { Flow } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
 import { formatConfig, itemUsers, latestLog, logStatus, parseConfig, roleOf, shelfFor, usersOf } from "./project";
 
-const scenario = {
+const flow = {
   id: "s",
   name: "s",
   revision: 1,
@@ -17,7 +17,7 @@ const scenario = {
       blocks: { body: [{ id: "d", type: "control.if", params: { condition: "item.amount >= settings.threshold" } }] },
     },
   ],
-} as unknown as Scenario;
+} as unknown as Flow;
 
 describe("project files", () => {
   it("sorts dropped files onto shelves by name", () => {
@@ -41,9 +41,9 @@ describe("project files", () => {
   });
 
   it("finds the steps that use a file and each setting", () => {
-    expect(usersOf(scenario, "input/orders.xlsx").map((s) => s.id)).toEqual(["b"]);
-    expect(usersOf(scenario, "input\\orders.xlsx").map((s) => s.id)).toEqual(["b"]);
-    const users = itemUsers(scenario, "config/settings.json", [
+    expect(usersOf(flow, "input/orders.xlsx").map((s) => s.id)).toEqual(["b"]);
+    expect(usersOf(flow, "input\\orders.xlsx").map((s) => s.id)).toEqual(["b"]);
+    const users = itemUsers(flow, "config/settings.json", [
       { name: "threshold", type: "number" },
       { name: "sendTo", type: "text" },
     ]);
@@ -62,7 +62,7 @@ describe("the open sheet", () => {
   it("keeps unsaved edits when another file is opened and the person cancels", async () => {
     const { createProjectStore } = await import("./project");
     const api = {
-      list: async () => ({ scenarioId: "s", dir: "", folders: [], files: [] }),
+      list: async () => ({ flowId: "s", dir: "", folders: [], files: [] }),
       readText: async (_: string, path: string) => `text of ${path}`,
     } as unknown as Parameters<typeof createProjectStore>[0];
     const store = createProjectStore(api, { added: () => "", discard: () => "discard?" });

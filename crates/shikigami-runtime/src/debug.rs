@@ -2,13 +2,13 @@
 //!
 //! A run started with [`DebugOptions`] stops where a person can look at it
 //! instead of ending quietly: before a step with a breakpoint, after a step
-//! command, and when a step fails with an error nothing in the scenario
+//! command, and when a step fails with an error nothing in the flow
 //! handles (no `try` / `catch` around it, no `onError: continue`). While it
 //! is paused nothing runs, no timeout counts and adapter state (the open
 //! browser, ...) stays as it is.
 //!
-//! The scenario may change while a run is paused, e.g. an AI fixed the step
-//! that failed. [`DebugControl::update_scenario`] swaps in the new revision
+//! The flow may change while a run is paused, e.g. an AI fixed the step
+//! that failed. [`DebugControl::update_flow`] swaps in the new revision
 //! when it fits the paused position: every block the run is inside of still
 //! exists under the same steps, and the step each block last finished is
 //! still there. From then on the run reads step definitions from the new
@@ -23,7 +23,7 @@
 //! `control.parallel` / `control.forEach` step, and a retry runs that step
 //! again as a whole.
 //!
-//! Called scenarios (`scenario.call`) pause like the caller: breakpoints on
+//! Called flows (`flow.call`) pause like the caller: breakpoints on
 //! their steps, step into a call to stop at its first step, step out of it,
 //! and errors inside that the call step does not handle. Their steps come
 //! from the run's snapshot, so an edit swapped in while paused inside a call
@@ -37,7 +37,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use shikigami_core::{Scenario, ScenarioId, Step, StepId, Validator};
+use shikigami_core::{Flow, FlowId, Step, StepId, Validator};
 use tokio::sync::Notify;
 
 use crate::event::{RunError, RunStatus};
@@ -45,10 +45,10 @@ use crate::event::{RunError, RunStatus};
 /// How an interactive run pauses. See the module docs.
 #[derive(Debug, Clone, Default)]
 pub struct DebugOptions {
-    /// Pause when a step fails with an error the scenario does not handle.
+    /// Pause when a step fails with an error the flow does not handle.
     pub pause_on_error: bool,
-    /// Pause before these steps. A step of a called scenario is written
-    /// `<scenarioId>/<stepId>`, since copies of a scenario share step IDs.
+    /// Pause before these steps. A step of a called flow is written
+    /// `<flowId>/<stepId>`, since copies of a flow share step IDs.
     pub breakpoints: Vec<StepId>,
     /// Pause before the first step (start in single-step mode).
     pub pause_at_start: bool,
@@ -128,7 +128,7 @@ pub(crate) struct Frame {
     pub current: Option<StepId>,
 }
 
-/// A step list: the scenario's top level or a control step's block.
+/// A step list: the flow's top level or a control step's block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum BlockKey {
     Top,
@@ -136,11 +136,11 @@ pub(crate) enum BlockKey {
         parent: StepId,
         name: String,
     },
-    /// A block of the called scenario `scenario` (run from the run's
+    /// A block of the called flow `flow` (run from the run's
     /// snapshot, not the live revision): it counts towards the depth for
     /// stepping and says whose breakpoints apply.
     Called {
-        scenario: ScenarioId,
+        flow: FlowId,
     },
 }
 
@@ -160,7 +160,7 @@ struct State {
     paused: Option<PauseReason>,
     resume: Option<DebugCommand>,
     frames: Vec<Frame>,
-    scenario: Arc<Scenario>,
+    flow: Arc<Flow>,
     /// A newer revision was swapped in and the executor has not caught up
     /// with its variables and settings yet.
     updated: bool,
@@ -183,11 +183,7 @@ pub(crate) struct Debugger {
 }
 
 impl Debugger {
-    pub(crate) fn new(
-        options: DebugOptions,
-        scenario: Scenario,
-        validator: Arc<Validator>,
-    ) -> Self {
+    pub(crate) fn new(options: DebugOptions, flow: Flow, validator: Arc<Validator>) -> Self {
         Self {
             pause_on_error: options.pause_on_error,
             state: Mutex::new(State {
@@ -201,7 +197,7 @@ impl Debugger {
                 paused: None,
                 resume: None,
                 frames: Vec::new(),
-                scenario: Arc::new(scenario),
+                flow: Arc::new(flow),
                 updated: false,
                 skip_once: None,
                 paused_ms: 0,
@@ -223,8 +219,8 @@ impl Debugger {
         self.pause_on_error
     }
 
-    pub(crate) fn scenario(&self) -> Arc<Scenario> {
-        self.state().scenario.clone()
+    pub(crate) fn flow(&self) -> Arc<Flow> {
+        self.state().flow.clone()
     }
 
     pub(crate) fn push_frame(&self, key: BlockKey) {
@@ -263,8 +259,8 @@ impl Debugger {
     /// The next step of `key` after `prev`, as the current revision defines
     /// it. `None` at the end of the block, or when the block is gone.
     pub(crate) fn next_step(&self, key: &BlockKey, prev: Option<&StepId>) -> Option<Step> {
-        let scenario = self.scenario();
-        let steps = block_of(&scenario, key)?;
+        let flow = self.flow();
+        let steps = block_of(&flow, key)?;
         let index = match prev {
             None => 0,
             Some(prev) => steps.iter().position(|s| &s.id == prev)? + 1,
@@ -345,8 +341,8 @@ impl Debugger {
 
     /// Whether `step` is in block `key` of the current revision.
     pub(crate) fn in_block(&self, key: &BlockKey, step: &StepId) -> bool {
-        let scenario = self.scenario();
-        block_of(&scenario, key).is_some_and(|steps| steps.iter().any(|s| &s.id == step))
+        let flow = self.flow();
+        block_of(&flow, key).is_some_and(|steps| steps.iter().any(|s| &s.id == step))
     }
 
     /// Runs `step` without pausing before it when it comes next.
@@ -389,56 +385,56 @@ impl Debugger {
         Ok(())
     }
 
-    fn update_scenario(&self, scenario: Scenario) -> Result<bool, RunError> {
+    fn update_flow(&self, flow: Flow) -> Result<bool, RunError> {
         let mut state = self.state();
         if state.paused.is_none() {
             return Err(RunError::new(
                 "RUN_NOT_PAUSED",
-                "the scenario can only be swapped while the run is paused",
+                "the flow can only be swapped while the run is paused",
             ));
         }
-        if scenario.id != state.scenario.id {
+        if flow.id != state.flow.id {
             return Err(RunError::new(
-                "SCENARIO_MISMATCH",
-                "the run belongs to another scenario",
+                "FLOW_MISMATCH",
+                "the run belongs to another flow",
             ));
         }
-        if scenario.revision == state.scenario.revision && scenario == *state.scenario {
+        if flow.revision == state.flow.revision && flow == *state.flow {
             return Ok(false);
         }
-        let report = self.validator.validate(&scenario);
+        let report = self.validator.validate(&flow);
         if !report.valid {
             return Err(RunError {
                 details: serde_json::to_value(&report).ok(),
-                ..RunError::new("VALIDATION_FAILED", "the scenario has validation errors")
+                ..RunError::new("VALIDATION_FAILED", "the flow has validation errors")
             });
         }
-        check_position(&state.scenario, &scenario, &state.frames)?;
-        state.scenario = Arc::new(scenario);
+        check_position(&state.flow, &flow, &state.frames)?;
+        state.flow = Arc::new(flow);
         state.updated = true;
         Ok(true)
     }
 }
 
 /// How a breakpoint on `step` is written where the run is: the bare ID in
-/// the run's own scenario, `<scenarioId>/<stepId>` inside a called one.
+/// the run's own flow, `<flowId>/<stepId>` inside a called one.
 fn breakpoint_key(frames: &[Frame], step: &StepId) -> StepId {
     let called = frames.iter().rev().find_map(|f| match &f.key {
-        BlockKey::Called { scenario } => Some(scenario),
+        BlockKey::Called { flow } => Some(flow),
         _ => None,
     });
     match called {
-        Some(scenario) => StepId::new(format!("{scenario}/{step}")),
+        Some(flow) => StepId::new(format!("{flow}/{step}")),
         None => step.clone(),
     }
 }
 
-/// The steps of a block in `scenario`.
-pub(crate) fn block_of<'a>(scenario: &'a Scenario, key: &BlockKey) -> Option<&'a [Step]> {
+/// The steps of a block in `flow`.
+pub(crate) fn block_of<'a>(flow: &'a Flow, key: &BlockKey) -> Option<&'a [Step]> {
     match key {
-        BlockKey::Top => Some(&scenario.steps),
+        BlockKey::Top => Some(&flow.steps),
         BlockKey::Child { parent, name } => {
-            let parent = scenario.find_step(parent)?;
+            let parent = flow.find_step(parent)?;
             Some(parent.block(name))
         }
         BlockKey::Called { .. } => None,
@@ -448,13 +444,13 @@ pub(crate) fn block_of<'a>(scenario: &'a Scenario, key: &BlockKey) -> Option<&'a
 /// Checks that the paused position exists in `new`: each block the run is
 /// inside of hangs off the same (type of) step in the enclosing block, and
 /// each block's last finished step is still in it.
-fn check_position(old: &Scenario, new: &Scenario, frames: &[Frame]) -> Result<(), RunError> {
+fn check_position(old: &Flow, new: &Flow, frames: &[Frame]) -> Result<(), RunError> {
     let mismatch = |message: String| RunError {
-        details: Some(serde_json::json!({ "hint": "Run the scenario again from the start." })),
+        details: Some(serde_json::json!({ "hint": "Run the flow again from the start." })),
         ..RunError::new("RESUME_INCOMPATIBLE", message)
     };
     for (index, frame) in frames.iter().enumerate() {
-        // Inside a call: the called scenario is not the one being swapped.
+        // Inside a call: the called flow is not the one being swapped.
         if matches!(frame.key, BlockKey::Called { .. }) {
             break;
         }
@@ -519,17 +515,17 @@ impl DebugControl {
         self.inner.command(command)
     }
 
-    /// Swaps in a newer revision of the scenario while the run is paused
+    /// Swaps in a newer revision of the flow while the run is paused
     /// (see the module docs). Returns whether it differed from the one in
     /// use. Fails with `RESUME_INCOMPATIBLE` when the paused position is no
     /// longer in it, or `VALIDATION_FAILED`.
-    pub fn update_scenario(&self, scenario: Scenario) -> Result<bool, RunError> {
-        self.inner.update_scenario(scenario)
+    pub fn update_flow(&self, flow: Flow) -> Result<bool, RunError> {
+        self.inner.update_flow(flow)
     }
 
     /// The revision the run is executing.
     pub fn revision(&self) -> u64 {
-        self.inner.scenario().revision
+        self.inner.flow().revision
     }
 
     pub fn is_paused(&self) -> bool {
