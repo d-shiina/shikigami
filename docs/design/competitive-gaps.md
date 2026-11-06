@@ -87,6 +87,7 @@
 - **相手**：WinActor・UiPath・PAD はブラウザ拡張や IE 用の仕組みで、人が開いたブラウザ・IE モードのページも操作できる
 - **影響**：日本の社内システムには IE モードでしか動かないものがまだ多い。拡張機能や証明書・SSO で「人のブラウザでしか入れない」社内サイトもある。対象に届かなければ他の強みは効かない
 - **方向**：IE モードはデスクトップ側（UI Automation）で扱えるかをまず確かめる（IE モードのタブは UIA で部品が見えることが多い）。人のブラウザへの接続は `--remote-debugging-port` で起動したブラウザに CDP でつなぐ案と、拡張機能を作る案を比べる
+- **対応**：人が開いたブラウザは `browser.attach`（`--remote-debugging-port` と専用の `--user-data-dir` で起動した Edge / Chrome に 127.0.0.1 でつなぐ、終わっても閉じない、PR #88）。拡張機能の案はとらない。IE モードは Windows CI の実験（`crates/shikigami-desktop/tests/ie_mode.rs`、続きは PR #98）で UI Automation から部品が見えるかを確かめ中。残り：IE モードの結果を [browser.md](../browser.md) に書く、どちらも実機の Edge での確認
 
 ### 5. 実際の業務アプリで未検証、SAP / Java の経路が未実装
 
@@ -138,6 +139,7 @@
 - **相手**：3 製品とも標準
 - **影響**：業務サイトの多くで「CSV をダウンロードする」「ファイルを添付する」「別ウィンドウで開く」が出てくる。ここで止まる
 - **方向**：組込ノードとして足す（外に触れる操作なので方針どおりノード）。ダウンロードは `file.*` と同じくプロジェクトフォルダー基準の保存先にする
+- **対応**：`browser.switchTab` / `browser.closeTab`、出す操作のノードの `dialog`（alert / confirm / prompt）、`target.frame`（iframe）、`browser.hover` / `browser.scroll` / `browser.getAttribute`（PR #83）、`browser.download` / `browser.upload`（保存先・添付するファイルはプロジェクトフォルダー基準、PR #88）。残り：ページ送りしながらの表の取得、実機の Edge での確認
 
 ### 12. デスクトップ操作の欠け
 
