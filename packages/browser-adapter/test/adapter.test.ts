@@ -289,6 +289,32 @@ describe("pointing at the page", () => {
     expect(await asked).toMatchObject({ status: "cancelled" });
   });
 
+  it("leaves nothing behind after a timeout", async () => {
+    await failure(person.call("pick", { ...r, timeoutMs: 300 }));
+    // The next click reaches the page again.
+    await person.call("fill", { ...r, target: { label: "顧客名で絞り込み" }, value: "青葉" });
+    await person.call("fill", { ...r, target: { label: "顧客名で絞り込み" }, value: "" });
+    const picked = await pointAt({ role: "button", name: "A-1001 を出荷" });
+    expect(picked.status).toBe("picked");
+  });
+
+  it("does not let a click inside a frame through", async () => {
+    const f = { runId: "run_pick_frame" };
+    const frame = `<button onclick="parent.document.title='pressed'">中のボタン</button>`;
+    await person.call("open", { ...f, url: `data:text/html;charset=utf-8,${encodeURIComponent(`<title>frames</title><button>外のボタン</button><iframe srcdoc="${frame.replace(/"/g, "&quot;")}"></iframe>`)}` });
+    const asked = person.call("pick", { ...f, timeoutMs: 5000 });
+    for (let i = 0; i < 50; i++) {
+      if (await person.call("isVisible", { ...f, target: { text: "クリックして教えてください" }, waitMs: 100 })) break;
+    }
+    expect(await person.call("isVisible", { ...f, target: { text: "枠の中は選べません" }, waitMs: 500 })).toBe(true);
+    // The shield covers the frame: a real click there lands on it, not on the button inside.
+    await person.call("click", { ...f, target: { text: "枠の中は選べません" } });
+    await person.call("click", { ...f, target: { role: "button", name: "外のボタン" } });
+    expect(await asked).toMatchObject({ status: "picked", target: { role: "button", name: "外のボタン" } });
+    expect(((await person.call("snapshot", f)) as { title: string }).title).toBe("frames");
+    await person.call("closeRun", f);
+  });
+
   it("needs a visible browser", async () => {
     const unseen = { runId: "run_pick_headless" };
     await adapter.call("open", { ...unseen, url: base });

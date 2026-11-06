@@ -241,8 +241,8 @@ interface OverlayArgs {
 
 function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Promise<"picked" | "cancelled"> {
   const words = lang !== "en"
-    ? { title: "Shikigami：クリックして教えてください", unsure: "わからない", hint: "Esc でやめる" }
-    : { title: "Shikigami: click to show it", unsure: "Not sure", hint: "Esc to cancel" };
+    ? { title: "Shikigami：クリックして教えてください", unsure: "わからない", hint: "Esc でやめる", frame: "枠の中は選べません" }
+    : { title: "Shikigami: click to show it", unsure: "Not sure", hint: "Esc to cancel", frame: "Not inside this frame" };
   const host = document.createElement("div");
   host.id = hostId;
   host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none";
@@ -257,6 +257,9 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
     .bar small{color:#4a5670;font-size:12px;white-space:nowrap}
     .bar button{font-size:13px;padding:6px 12px;border-radius:6px;border:1px solid #9aa6bd;background:#f4f6fa;color:#1e2a4a;cursor:pointer;white-space:nowrap}
     .box{position:fixed;border:2px solid #2b7bd6;background:rgba(43,123,214,.12);border-radius:4px;pointer-events:none;display:none}
+    .shield{position:fixed;pointer-events:auto;cursor:not-allowed;background:repeating-linear-gradient(45deg,rgba(74,86,112,.10) 0 8px,rgba(74,86,112,.18) 8px 16px);
+      border:1px dashed #4a5670;display:flex;align-items:flex-start;justify-content:flex-end}
+    .shield em{margin:4px;padding:2px 8px;border-radius:4px;background:#4a5670;color:#fff;font:600 12px/18px "Yu Gothic UI","Meiryo UI","Noto Sans JP",sans-serif;font-style:normal}
     .cand{position:fixed;border:2px dashed #e8862a;border-radius:4px;pointer-events:none}
     .cand i{position:absolute;top:-11px;left:-11px;width:22px;height:22px;border-radius:11px;background:#e8862a;color:#fff;
       font:700 12px/22px sans-serif;text-align:center;font-style:normal}
@@ -301,9 +304,40 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
     d.style.width = `${r.width + 6}px`;
     d.style.height = `${r.height + 6}px`;
   };
+  // Frames get their own events, which these listeners never see: cover them
+  // so a click there cannot reach the control inside.
+  const shields = new Map<Element, HTMLElement>();
+  const shieldFrames = () => {
+    const frames = new Set(Array.from(document.querySelectorAll("iframe, frame, embed, object")));
+    for (const [el, d] of shields) {
+      if (!frames.has(el) || !el.isConnected) {
+        d.remove();
+        shields.delete(el);
+      }
+    }
+    for (const el of frames) {
+      let d = shields.get(el);
+      if (!d) {
+        d = document.createElement("div");
+        d.className = "shield";
+        const note = document.createElement("em");
+        note.textContent = words.frame;
+        d.appendChild(note);
+        root.insertBefore(d, bar);
+        shields.set(el, d);
+      }
+      const r = el.getBoundingClientRect();
+      d.style.left = `${r.left}px`;
+      d.style.top = `${r.top}px`;
+      d.style.width = `${r.width}px`;
+      d.style.height = `${r.height}px`;
+    }
+  };
+  shieldFrames();
   let current: Element | null = null;
   let raf = 0;
   const tick = () => {
+    shieldFrames();
     for (const c of cands) place(c.d, c.el);
     if (current) place(box, current);
     raf = requestAnimationFrame(tick);
@@ -329,6 +363,7 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
     };
     const done = (outcome: "picked" | "cancelled") => {
       cancelAnimationFrame(raf);
+      delete (host as HostWithStop).__shikigamiStop;
       for (const t of ["pointerdown", "mousedown", "pointerup", "mouseup", "dblclick", "auxclick", "contextmenu"]) {
         window.removeEventListener(t, swallow, true);
       }
@@ -340,7 +375,9 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
     const click = (e: MouseEvent) => {
       if (onBar(e)) return;
       swallow(e);
-      const el = under(e.clientX, e.clientY) ?? (e.target as Element);
+      // Over a covered frame (or nothing): keep waiting.
+      const el = under(e.clientX, e.clientY);
+      if (!el) return;
       el.setAttribute(picked, "");
       box.style.display = "block";
       place(box, el);
@@ -359,11 +396,18 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
     window.addEventListener("mousemove", move, true);
     window.addEventListener("keydown", key, true);
     unsure.addEventListener("click", () => done("cancelled"));
+    // A timeout or a new pick ends this one from outside (removeOverlay).
+    (host as HostWithStop).__shikigamiStop = () => done("cancelled");
   });
 }
 
+type HostWithStop = HTMLElement & { __shikigamiStop?: () => void };
+
 function removeOverlay({ hostId, attrs }: { hostId: string; attrs: string[] }): void {
-  document.getElementById(hostId)?.remove();
+  const host = document.getElementById(hostId) as (HTMLElement & { __shikigamiStop?: () => void }) | null;
+  // Stop a waiting picker first: its listeners live on window, not in the host.
+  host?.__shikigamiStop?.();
+  host?.remove();
   for (const a of attrs) for (const el of Array.from(document.querySelectorAll(`[${a}]`))) el.removeAttribute(a);
 }
 
