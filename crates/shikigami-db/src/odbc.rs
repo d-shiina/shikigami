@@ -115,9 +115,11 @@ fn parameter(value: &Value) -> Box<dyn InputParameter> {
     match value {
         Value::Null => Box::new(VarWCharBox::null()),
         Value::Bool(b) => Box::new(odbc_api::Bit::from_bool(*b)),
-        Value::Number(n) => match (n.as_i64(), n.as_f64()) {
-            (Some(i), _) => Box::new(i.into_parameter()),
-            (None, Some(f)) => Box::new(f.into_parameter()),
+        Value::Number(n) => match (n.as_i64(), n.is_u64(), n.as_f64()) {
+            (Some(i), _, _) => Box::new(i.into_parameter()),
+            // Above i64::MAX (BIGINT UNSIGNED): exact, as decimal text.
+            (None, true, _) => Box::new(VarWCharBox::from_str_slice(&n.to_string())),
+            (None, false, Some(f)) => Box::new(f.into_parameter()),
             _ => Box::new(VarWCharBox::from_str_slice(&n.to_string())),
         },
         Value::String(s) => Box::new(VarWCharBox::from_str_slice(s)),

@@ -406,3 +406,25 @@ fn a_query_never_keeps_a_change() {
         json!([{ "n": 0 }])
     );
 }
+
+#[test]
+fn large_unsigned_numbers_are_bound_exactly() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(connection) = sqlite(dir.path()) else {
+        return;
+    };
+    let wanted = tokio_util::sync::CancellationToken::new();
+    let request = Request {
+        kind: Kind::Query,
+        connection,
+        sql: "SELECT CAST(? AS TEXT) AS n".into(),
+        params: vec![json!(9_223_372_036_854_775_809_u64)],
+        max_rows: 10,
+        timeout_secs: 5,
+        deadline: std::time::Instant::now() + std::time::Duration::from_secs(60),
+    };
+    assert_eq!(
+        crate::odbc::run(&request, &wanted).unwrap(),
+        json!([{ "n": "9223372036854775809" }])
+    );
+}
