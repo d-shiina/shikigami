@@ -587,6 +587,24 @@ fn table_range(table: &Object) -> Result<Range, StepError> {
     })
 }
 
+/// The rows of `range` left showing, whatever columns are hidden: the
+/// distinct rows of its visible cells, area by area.
+fn visible_rows(range: &Object) -> Result<usize, StepError> {
+    let Ok(cells) = range.object("SpecialCells", vec![Var::i32(XL_CELL_TYPE_VISIBLE)]) else {
+        // Nothing visible at all.
+        return Ok(0);
+    };
+    let areas = cells.get("Areas")?.object("Areas")?;
+    let mut rows = std::collections::BTreeSet::new();
+    for n in 1..=areas.get("Count")?.to_i64()? {
+        let area = areas.object("Item", vec![Var::i32(n as i32)])?;
+        let first = area.get("Row")?.to_i64()?;
+        let count = area.get("Rows")?.object("Rows")?.get("Count")?.to_i64()?;
+        rows.extend(first..first + count);
+    }
+    Ok(rows.len())
+}
+
 /// Deletes a sheet the step added, without Excel asking about it.
 fn discard_sheet(book: &Object, added: &Object) {
     let app = book
@@ -725,12 +743,7 @@ fn filter(params: &Value, book: &Object, session: &Session) -> Result<Value, Ste
             )?;
         }
     }
-    let visible = target
-        .object("Columns", vec![Var::i32(1)])?
-        .object("SpecialCells", vec![Var::i32(XL_CELL_TYPE_VISIBLE)])
-        .and_then(|v| v.get("Count"))
-        .and_then(|v| v.to_i64())
-        .map_or(0, |n| n - 1);
+    let visible = visible_rows(&target)? as i64 - 1;
     // A table's totals row is in its range but is not a record.
     let totals = table
         .as_ref()
