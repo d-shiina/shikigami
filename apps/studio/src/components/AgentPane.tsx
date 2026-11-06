@@ -30,7 +30,7 @@ export function AgentPane({ width }: { width: number }) {
   if (!open) return null;
   const stepId = selection?.kind === "step" ? selection.stepId : null;
   const submit = async () => {
-    const ref = scenario ? { id: scenario.id, name: scenario.name, stepId } : null;
+    const ref = scenario ? { id: scenario.id, name: scenario.name, stepId, empty: (scenario.steps ?? []).length === 0 } : null;
     const context = scenario ? `${scenario.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
     // Cleared as it is sent, like any chat; back again if it was not taken.
     const text = draft;
@@ -137,7 +137,7 @@ function Item({ item }: { item: ChatItem }) {
       {item.parts.map((part, i) => (
         <Part key={i} part={part} />
       ))}
-      {item.status === "running" && <Progress starting={item.turnId === ""} quiet={item.parts.length === 0} />}
+      {item.status === "running" && <Progress starting={item.turnId === ""} quiet={item.parts.length === 0} preparing={item.preparing} />}
       {/* An expired login is explained by the sign-in box below instead. */}
       {item.status === "failed" && !item.needsLogin && (
         <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-2.5 py-1.5 text-[12px] whitespace-pre-wrap text-shu-600">
@@ -151,9 +151,9 @@ function Item({ item }: { item: ChatItem }) {
 /**
  * What a running reply is doing, with the seconds since it began so a long
  * wait still visibly moves: starting the agent, thinking before it has said
- * or done anything, then working.
+ * or done anything, writing a tool call (a large edit takes a while), then working.
  */
-function Progress({ starting, quiet }: { starting: boolean; quiet: boolean }) {
+function Progress({ starting, quiet, preparing }: { starting: boolean; quiet: boolean; preparing: string | null }) {
   const [began] = useState(() => Date.now());
   const [now, setNow] = useState(began);
   useEffect(() => {
@@ -161,7 +161,13 @@ function Progress({ starting, quiet }: { starting: boolean; quiet: boolean }) {
     return () => clearInterval(timer);
   }, []);
   const seconds = Math.floor((now - began) / 1000);
-  const label = starting ? t.agent.starting : quiet ? t.agent.thinking : t.agent.working;
+  const label = starting
+    ? t.agent.starting
+    : preparing
+      ? t.agent.preparing(toolLabel(preparing))
+      : quiet
+        ? t.agent.thinking
+        : t.agent.working;
   return (
     <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />

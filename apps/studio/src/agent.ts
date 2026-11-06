@@ -28,6 +28,8 @@ export type ChatItem =
       turnId: string;
       parts: AgentPart[];
       status: "running" | "done" | "failed";
+      /** The tool call being written now, before it shows as a part. */
+      preparing: string | null;
       message: string | null;
       /** Failed because the agent is signed out or its login expired. */
       needsLogin: boolean;
@@ -110,7 +112,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       set({
         open: true,
         sending: true,
-        items: [...get().items, { role: "ai", id, turnId: "", parts: [], status: "running", message: null, needsLogin: false }],
+        items: [...get().items, { role: "ai", id, turnId: "", parts: [], status: "running", preparing: null, message: null, needsLogin: false }],
       });
       try {
         const turnId = await api.send({ message: text, sessionId: get().info?.remembers ? get().sessionId : null, scenario });
@@ -232,12 +234,16 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
             saveSession(event.sessionId);
             set({ sessionId: event.sessionId });
             return;
+          case "preparing":
+            updateTurn(event.turnId, (i) => ({ ...i, preparing: event.name }));
+            return;
           case "text":
             updateTurn(event.turnId, (i) => ({ ...i, parts: [...i.parts, { kind: "text", text: event.text }] }));
             return;
           case "tool":
             updateTurn(event.turnId, (i) => ({
               ...i,
+              preparing: null,
               parts: [...i.parts, { kind: "tool", name: event.name, detail: event.detail }],
             }));
             return;
@@ -253,6 +259,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
               // Claude Code also says the error as the reply; show it once.
               parts: event.ok ? i.parts : i.parts.filter((p) => !(p.kind === "text" && p.text.trim() === event.message?.trim())),
               status: event.ok ? "done" : "failed",
+              preparing: null,
               message: event.message,
               needsLogin: !event.ok && event.needsLogin,
             }));
@@ -264,6 +271,38 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
   });
 }
 
+/**
+ * What the AI is doing right now, for the places that report it outside the
+ * pane (the status bar, the flow chart following its edits): null when idle.
+ */
+export type AgentActivity = {
+  /** The scenario open when the person asked, if any. */
+  scenarioId: string | null;
+  /** The tool it is writing or last called, e.g. "add_step"; null while it thinks. */
+  tool: string | null;
+};
+
+export function activity(state: AgentState): AgentActivity | null {
+  if (state.turnId === null && !state.sending) return null;
+  const items = state.items;
+  const reply = items.at(-1);
+  let person: Extract<ChatItem, { role: "person" }> | undefined;
+  for (let i = items.length - 1; i >= 0 && !person; i--) {
+    const item = items[i];
+    if (item?.role === "person") person = item;
+  }
+  let tool: string | null = null;
+  if (reply?.role === "ai") {
+    if (reply.preparing) tool = reply.preparing;
+    else
+      for (let i = reply.parts.length - 1; i >= 0 && !tool; i--) {
+        const part = reply.parts[i];
+        if (part?.kind === "tool") tool = part.name;
+      }
+  }
+  return { scenarioId: person?.scenario?.id ?? null, tool };
+}
+
 export const AgentContext = createContext<StoreApi<AgentState> | null>(null);
 
 export function useAgent<T>(selector: (state: AgentState) => T): T {
@@ -271,6 +310,14 @@ export function useAgent<T>(selector: (state: AgentState) => T): T {
   if (!store) throw new Error("AgentContext is missing");
   return useStore(store, selector);
 }
+
+/** For parts also drawn without the AI pane around them (tests, the review desk's pieces). */
+export function useAgentMaybe<T>(selector: (state: AgentState) => T, fallback: T): T {
+  const store = useContext(AgentContext);
+  return useStore(store ?? EMPTY, store ? selector : () => fallback);
+}
+
+const EMPTY = createStore<AgentState>()(() => ({}) as AgentState);
 
 /** The store itself, for handlers that read the state when they run (menus). */
 export function useAgentApi(): StoreApi<AgentState> {
