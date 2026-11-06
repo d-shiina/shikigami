@@ -61,7 +61,7 @@ export type PaletteAnchor = { left: number; top: number; right: number; bottom: 
  * The places in the sidebar; each fills the window right of it. "library" is
  * the page of all flows, "flows" the editor of the open one.
  */
-export type Place = "library" | "flows" | "review" | "secrets" | "settings";
+export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "settings";
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues";

@@ -8,6 +8,7 @@ mod agent;
 mod commands;
 mod debug;
 mod picker;
+mod schedules;
 mod updater;
 mod watcher;
 
@@ -108,6 +109,12 @@ pub fn run() {
             commands::get_policy,
             commands::save_policy,
             commands::list_approvals,
+            schedules::list_schedules,
+            schedules::save_schedule,
+            schedules::delete_schedule,
+            schedules::agent_status,
+            schedules::start_agent,
+            schedules::stop_agent,
             commands::decide_approval,
             commands::list_pick_requests,
             commands::cancel_pick_request,
