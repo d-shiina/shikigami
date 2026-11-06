@@ -5,7 +5,7 @@ import { actorLabel, describe, formatValue, relativeTime } from "../lib/changes"
 import { stepLabel, t } from "../lib/i18n";
 import { blockLabel } from "../lib/keywords";
 import { type Part, plain, sentence } from "../lib/sentence";
-import { revertBlocker, type StepRunState, touchedSteps } from "../store";
+import { revertBlocker, type StepRunState, touchedSteps, trailOf } from "../store";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 import { StepTools } from "./StepTools";
 import { menuFor } from "../lib/contextMenu";
@@ -132,7 +132,7 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
   const owner = useStudio((s) => s.scenario?.id ?? "");
   const stepMenu = useStepMenu();
   const select = useStudio((s) => s.select);
-  const runState = useStudio((s) => (step.id ? s.run?.steps[step.id] : undefined));
+  const runState = useStudio((s) => (step.id ? trailOf(s)?.steps[step.id] : undefined));
   const issues = useStudio((s) => s.validation?.issues.filter((i) => i.stepId === step.id && i.severity === "error").length ?? 0);
   const id = step.id ?? "";
   const number = ctx.numbers.get(id);

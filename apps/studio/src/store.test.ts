@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
 import { draftFor } from "./components/SecretsPage";
-import { calledIds, createStudioStore, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps } from "./store";
+import { calledIds, createStudioStore, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps, trailOf } from "./store";
 
 const scenario = (revision: number, steps: Scenario["steps"] = []): Scenario => ({
   schemaVersion: 1,
@@ -274,6 +274,33 @@ describe("studio store", () => {
     expect(run.status).toBe("succeeded");
     expect(run.steps.s1).toBe("succeeded");
     expect(run.logs.map((l) => l.message)).toContain("hello");
+  });
+
+  it("keeps the run's way on the chart after it ends, until the scenario is edited", () => {
+    const store = createStudioStore(fakeApi());
+    store.setState({ scenario: scenario(1, [{ id: "s1", type: "log.message" }]) });
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    const events: RunEventEnvelope[] = [
+      { ...base, seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 },
+      { ...base, seq: 1, type: "stepStarted", stepId: "s1", stepType: "log.message", attempt: 1 },
+      { ...base, seq: 2, type: "stepFinished", stepId: "s1", stepType: "log.message", outcome: "succeeded", durationMs: 1 },
+      { ...base, seq: 3, type: "runFinished", status: "succeeded", durationMs: 2 },
+    ];
+    for (const e of events) store.getState().onRunEvent(e);
+    expect(trailOf(store.getState())?.steps.s1).toBe("succeeded");
+    // Another scenario open: its chart is not the run's.
+    store.setState({ scenario: { ...scenario(1), id: "scn_b" } });
+    expect(trailOf(store.getState())).toBeNull();
+    // Edited since: the marks would point at steps that changed.
+    store.setState({ scenario: scenario(2, [{ id: "s1", type: "log.message" }]) });
+    expect(trailOf(store.getState())).toBeNull();
+    // Cleared by the person.
+    store.setState({ scenario: scenario(1, [{ id: "s1", type: "log.message" }]) });
+    store.getState().hideTrail();
+    expect(trailOf(store.getState())).toBeNull();
+    // A new run starts afresh.
+    store.getState().onRunEvent({ ...base, runId: "run_2", seq: 0, type: "runStarted", scenarioId: "scn_a", scenarioName: "A", revision: 1 });
+    expect(trailOf(store.getState())?.runId).toBe("run_2");
   });
 
   it("pauses on an error, keeps the evidence and resumes", async () => {

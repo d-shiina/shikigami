@@ -95,6 +95,8 @@ export const ja = {
   noIssues: "問題はありません",
   log: "実行ログ",
   clearLog: "クリア",
+  /** Takes the last run's colours off the chart. */
+  clearTrail: "図の色を消す",
   stepName: "表示名",
   stepType: "種類",
   params: "パラメーター",
