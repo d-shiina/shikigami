@@ -3,10 +3,10 @@
 // edits lands in 確認待ち like any other AI edit.
 import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, scenarioBusy, useAgent } from "../agent";
+import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, scenarioBusy, useAgent, useAgentApi } from "../agent";
 import { agent } from "../lib/api";
 import { useStudio } from "../context";
-import { t, useKeptState } from "../lib/i18n";
+import { t } from "../lib/i18n";
 
 const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[name] ?? name;
 const chatTitle = (c: Chat) => c.title || t.agent.untitled;
@@ -24,9 +24,11 @@ export function AgentPane({ width }: { width: number }) {
   const openScenario = useStudio((s) => s.open);
   const selection = useStudio((s) => s.selection);
   // One draft per conversation, so switching does not carry text to another scenario.
-  const [drafts, setDrafts] = useKeptState<Record<string, string>>("agent.drafts", {});
-  const draft = drafts[chat.id] ?? "";
-  const setDraftOf = (id: string, change: (now: string) => string) => setDrafts((all) => ({ ...all, [id]: change(all[id] ?? "") }));
+  const setDraft = useAgent((s) => s.setDraft);
+  const getChats = useAgentApi().getState;
+  const draft = chat.draft;
+  const setDraftOf = (id: string, change: (now: string) => string) =>
+    setDraft(id, change(getChats().chats.find((c) => c.id === id)?.draft ?? ""));
   const end = useRef<HTMLDivElement>(null);
   const { items } = chat;
   const busy = isBusy(chat);
@@ -175,7 +177,7 @@ function ChatSwitcher({ chat }: { chat: Chat }) {
   const news = others.filter((c) => c.unread).length;
   // The empty conversation the editor's scenario starts with is not worth a row.
   const listed = [...chats]
-    .filter((c) => c.id === chat.id || c.items.length > 0 || c.sessionId || isBusy(c))
+    .filter((c) => c.id === chat.id || c.items.length > 0 || c.sessionId || isBusy(c) || c.draft.trim())
     .sort((a, b) => Number(isBusy(b)) - Number(isBusy(a)) || b.updatedAt - a.updatedAt);
   useEffect(() => {
     if (!open) return;

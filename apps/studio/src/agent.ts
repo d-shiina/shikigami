@@ -59,6 +59,8 @@ export type Chat = {
    * stopped, and this message goes out as soon as it has.
    */
   interrupting: Extract<ChatItem, { role: "person" }> | null;
+  /** What the person is writing here and has not sent. */
+  draft: string;
   updatedAt: number;
 };
 
@@ -84,6 +86,7 @@ export type AgentState = {
   select(chatId: string): void;
   /** A new conversation about `scenario` (null: one that creates a scenario). */
   newChat(scenario: ScenarioLabel | null): void;
+  setDraft(chatId: string, draft: string): void;
   /** Forgets a conversation that is not running. */
   remove(chatId: string): void;
   /**
@@ -182,12 +185,13 @@ function blank(scenario: ScenarioLabel | null): Chat {
     sending: false,
     unread: false,
     interrupting: null,
+    draft: "",
     updatedAt: Date.now(),
   };
 }
 
 /** Nothing said and nothing to continue: no need to keep it in the list. */
-const empty = (c: Chat) => c.items.length === 0 && !c.sessionId && !isBusy(c);
+const empty = (c: Chat) => c.items.length === 0 && !c.sessionId && !isBusy(c) && !c.draft.trim();
 
 export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
   return createStore<AgentState>()((set, get) => {
@@ -249,7 +253,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       update(chatId, (c) => ({ ...c, interrupting: null }));
       return dispatch(chatId, waiting.prompt ?? waiting.text, waiting.scenario);
     };
-    const restored: Chat[] = load().map((c) => ({ ...c, items: [], turnId: null, sending: false, unread: false, interrupting: null }));
+    const restored: Chat[] = load().map((c) => ({ ...c, items: [], turnId: null, sending: false, unread: false, interrupting: null, draft: "" }));
     const first = blank(null);
     return {
       info: null,
@@ -286,6 +290,10 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         }
         const fresh = blank(scenario);
         show(fresh.id, [fresh, ...get().chats]);
+      },
+
+      setDraft(chatId, draft) {
+        update(chatId, (c) => ({ ...c, draft }));
       },
 
       select(chatId) {
@@ -350,7 +358,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
 
       async retry(chatId = get().current) {
         const target = chat(chatId);
-        if (!target || isBusy(target)) return false;
+        if (!target || isBusy(target) || scenarioBusy(get(), target.scenarioId, chatId)) return false;
         const items = target.items;
         let index = items.length - 1;
         while (index >= 0 && items[index]?.role !== "person") index--;
@@ -403,8 +411,9 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
           return;
         }
         set({ login: { phase: "idle" } });
-        // Signed in: carry on with what the expired login interrupted, in every conversation.
-        for (const c of get().chats) {
+        // Signed in: carry on with what the expired login interrupted, in every
+        // conversation, but one per scenario (retry refuses a second one).
+        for (const c of [...get().chats].sort((a, b) => b.updatedAt - a.updatedAt)) {
           const last = c.items.at(-1);
           if (last?.role === "ai" && last.needsLogin) void get().retry(c.id);
         }

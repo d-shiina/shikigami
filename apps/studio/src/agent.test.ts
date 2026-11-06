@@ -267,4 +267,33 @@ describe("agent store", () => {
     expect(items[2]).toMatchObject({ text: "やっぱりExcelで" });
     expect(now(store.getState())).toMatchObject({ interrupting: null, turnId: "turn_2" });
   });
+  it("keeps a conversation with an unsent draft when another scenario is opened", () => {
+    const store = createAgentStore(fakeAgent());
+    store.getState().focus({ id: "scn_a", name: "A" });
+    const a = store.getState().current;
+    store.getState().setDraft(a, "書きかけ");
+    store.getState().focus({ id: "scn_b", name: "B" });
+    store.getState().focus({ id: "scn_a", name: "A" });
+    expect(store.getState().current).toBe(a);
+    expect(now(store.getState()).draft).toBe("書きかけ");
+  });
+
+  it("retries only one conversation per scenario after signing in", async () => {
+    let turn = 0;
+    const api = fakeAgent({ send: vi.fn(async () => `turn_${++turn}`) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    const a = { id: "scn_a", name: "A" };
+    const expired = { kind: "done" as const, ok: false, message: "Not logged in", costUsd: null, needsLogin: true };
+    await store.getState().send("一つ目", a);
+    store.getState().onEvent({ turnId: "turn_1", ...expired });
+    store.getState().newChat(a);
+    await store.getState().sendIn(store.getState().current, "二つ目", a);
+    store.getState().onEvent({ turnId: "turn_2", ...expired });
+    await store.getState().startLogin();
+    store.getState().onLoginEvent({ kind: "done", ok: true, message: null });
+    await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(3));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(api.send).toHaveBeenCalledTimes(3);
+  });
 });
