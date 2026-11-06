@@ -1,6 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAgentStore } from "./agent";
+import { type AgentState, createAgentStore, currentChat } from "./agent";
 import type { AgentApi, AgentInfo } from "./lib/api";
+
+function fakeStorage() {
+  const data = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (k: string) => data.get(k) ?? null,
+    setItem: (k: string, v: string) => void data.set(k, v),
+    removeItem: (k: string) => void data.delete(k),
+  });
+  return data;
+}
+
+const now = (s: AgentState) => currentChat(s);
 
 const ready: AgentInfo = { available: true, name: "Claude Code", command: "claude", problem: null, remembers: true };
 
@@ -29,7 +41,7 @@ describe("agent store", () => {
       scenario: { id: "scn_a", name: "A", stepId: "stp_1" },
     });
     expect(store.getState().open).toBe(true);
-    expect(store.getState().turnId).toBe("turn_1");
+    expect(now(store.getState()).turnId).toBe("turn_1");
 
     const s = store.getState();
     s.onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess" });
@@ -37,7 +49,7 @@ describe("agent store", () => {
     s.onEvent({ turnId: "turn_1", kind: "text", text: "延ばしました" });
     s.onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: 0.01, needsLogin: false });
 
-    const ai = store.getState().items[1];
+    const ai = now(store.getState()).items[1];
     expect(ai).toMatchObject({
       role: "ai",
       status: "done",
@@ -46,10 +58,10 @@ describe("agent store", () => {
         { kind: "text", text: "延ばしました" },
       ],
     });
-    expect(store.getState().turnId).toBeNull();
+    expect(now(store.getState()).turnId).toBeNull();
 
-    await store.getState().send("ありがとう");
-    expect(api.send).toHaveBeenLastCalledWith({ message: "ありがとう", sessionId: "sess", scenario: null });
+    await store.getState().send("ありがとう", { id: "scn_a", name: "A" });
+    expect(api.send).toHaveBeenLastCalledWith({ message: "ありがとう", sessionId: "sess", scenario: { id: "scn_a", name: "A" } });
   });
 
   it("keeps events that arrive before the turn is known", async () => {
@@ -61,7 +73,7 @@ describe("agent store", () => {
     store.getState().onEvent({ turnId: "turn_9", kind: "text", text: "早い返事" });
     release("turn_9");
     await sent;
-    expect(store.getState().items[1]).toMatchObject({ parts: [{ kind: "text", text: "早い返事" }] });
+    expect(now(store.getState()).items[1]).toMatchObject({ parts: [{ kind: "text", text: "早い返事" }] });
   });
 
   it("refuses a second message while the first is still being sent", async () => {
@@ -71,15 +83,14 @@ describe("agent store", () => {
     await store.getState().init();
     const first = store.getState().send("一つ目");
     expect(await store.getState().send("二つ目")).toBe(false);
-    store.getState().reset();
     // The message and its reply, which shows while the agent starts.
-    expect(store.getState().items).toHaveLength(2);
-    expect(store.getState().items[1]).toMatchObject({ role: "ai", status: "running", turnId: "" });
+    expect(now(store.getState()).items).toHaveLength(2);
+    expect(now(store.getState()).items[1]).toMatchObject({ role: "ai", status: "running", turnId: "" });
     release("turn_1");
     await first;
     expect(api.send).toHaveBeenCalledOnce();
-    expect(store.getState().turnId).toBe("turn_1");
-    expect(store.getState().sending).toBe(false);
+    expect(now(store.getState()).turnId).toBe("turn_1");
+    expect(now(store.getState()).sending).toBe(false);
   });
 
   it("refuses a second message while one runs and reports a refused send", async () => {
@@ -94,8 +105,8 @@ describe("agent store", () => {
       fakeAgent({ send: vi.fn(async () => Promise.reject(new Error("登録済みのパスワードが含まれています"))) }),
     );
     expect(await refusing.getState().send("pass1234")).toBe(false);
-    expect(refusing.getState().items[1]).toMatchObject({ status: "failed", message: "登録済みのパスワードが含まれています" });
-    expect(refusing.getState().turnId).toBeNull();
+    expect(now(refusing.getState()).items[1]).toMatchObject({ status: "failed", message: "登録済みのパスワードが含まれています" });
+    expect(now(refusing.getState()).turnId).toBeNull();
   });
 
   it("starts over without the old conversation", async () => {
@@ -104,10 +115,15 @@ describe("agent store", () => {
     await store.getState().send("一つ目");
     store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess" });
     store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: "止めました", costUsd: null, needsLogin: false });
-    expect(store.getState().items[1]).toMatchObject({ status: "failed", message: "止めました" });
-    store.getState().reset();
-    expect(store.getState().items).toEqual([]);
-    expect(store.getState().sessionId).toBeNull();
+    expect(now(store.getState()).items[1]).toMatchObject({ status: "failed", message: "止めました" });
+    const old = store.getState().current;
+    store.getState().newChat(null);
+    expect(store.getState().current).not.toBe(old);
+    expect(now(store.getState()).items).toEqual([]);
+    expect(now(store.getState()).sessionId).toBeNull();
+    // The old one stays in the list and can be continued.
+    store.getState().select(old);
+    expect(now(store.getState()).sessionId).toBe("sess");
   });
 
   it("shows an error once and signs in from the pane, then sends the message again", async () => {
@@ -119,7 +135,7 @@ describe("agent store", () => {
     const expired = "Failed to authenticate: OAuth session expired and could not be refreshed";
     store.getState().onEvent({ turnId: "turn_1", kind: "text", text: expired });
     store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: expired, costUsd: null, needsLogin: true });
-    expect(store.getState().items[1]).toMatchObject({ status: "failed", needsLogin: true, parts: [] });
+    expect(now(store.getState()).items[1]).toMatchObject({ status: "failed", needsLogin: true, parts: [] });
 
     await store.getState().startLogin();
     expect(api.login).toHaveBeenCalledOnce();
@@ -132,7 +148,7 @@ describe("agent store", () => {
     await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
     expect(api.send).toHaveBeenLastCalledWith({ message: "ニュースをまとめて", sessionId: null, scenario: { id: "scn_a", name: "A" } });
     // The message is shown once; the failed reply gives way to the new one.
-    const items = store.getState().items;
+    const items = now(store.getState()).items;
     expect(items.filter((i) => i.role === "person")).toHaveLength(1);
     expect(items).toHaveLength(2);
     expect(items[1]).toMatchObject({ role: "ai", turnId: "turn_2", status: "running" });
@@ -145,5 +161,81 @@ describe("agent store", () => {
     await store.getState().startLogin();
     store.getState().onLoginEvent({ kind: "done", ok: false, message: "timed out" });
     expect(store.getState().login).toEqual({ phase: "failed", message: "timed out" });
+  });
+  it("keeps one conversation per scenario and runs them at once", async () => {
+    let turn = 0;
+    const api = fakeAgent({ send: vi.fn(async () => `turn_${++turn}`) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    store.getState().focus({ id: "scn_a", name: "A" });
+    await store.getState().send("Aを直して", { id: "scn_a", name: "A" });
+    const a = store.getState().current;
+    store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess_a" });
+
+    // The editor opens B while A is still working.
+    store.getState().focus({ id: "scn_b", name: "B" });
+    expect(now(store.getState())).toMatchObject({ scenarioId: "scn_b", items: [] });
+    expect(await store.getState().send("Bも直して", { id: "scn_b", name: "B" })).toBe(true);
+    expect(api.send).toHaveBeenLastCalledWith({ message: "Bも直して", sessionId: null, scenario: { id: "scn_b", name: "B" } });
+    const b = store.getState().current;
+    expect(b).not.toBe(a);
+
+    // A finishes out of sight: marked to look at, and B's turn is untouched.
+    store.getState().onEvent({ turnId: "turn_1", kind: "text", text: "Aを直しました" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: null, needsLogin: false });
+    const chatA = store.getState().chats.find((c) => c.id === a)!;
+    expect(chatA).toMatchObject({ turnId: null, unread: true });
+    expect(chatA.items[1]).toMatchObject({ status: "done", parts: [{ kind: "text", text: "Aを直しました" }] });
+    expect(now(store.getState()).turnId).toBe("turn_2");
+
+    // Back on A: its conversation, read now, continues its own session.
+    store.getState().focus({ id: "scn_a", name: "A" });
+    expect(store.getState().current).toBe(a);
+    expect(now(store.getState()).unread).toBe(false);
+    await store.getState().send("ありがとう", { id: "scn_a", name: "A" });
+    expect(api.send).toHaveBeenLastCalledWith({ message: "ありがとう", sessionId: "sess_a", scenario: { id: "scn_a", name: "A" } });
+  });
+
+  it("does not let two conversations work on one scenario at once", async () => {
+    const store = createAgentStore(fakeAgent());
+    await store.getState().init();
+    store.getState().focus({ id: "scn_a", name: "A" });
+    await store.getState().send("一つ目", { id: "scn_a", name: "A" });
+    store.getState().newChat({ id: "scn_a", name: "A" });
+    expect(await store.getState().sendIn(store.getState().current, "二つ目", { id: "scn_a", name: "A" })).toBe(false);
+  });
+
+  it("gives a conversation that created a scenario to that scenario", async () => {
+    const store = createAgentStore(fakeAgent());
+    await store.getState().init();
+    await store.getState().send("請求書のシナリオを作って");
+    const making = store.getState().current;
+    expect(now(store.getState())).toMatchObject({ scenarioId: null, title: "請求書のシナリオを作って" });
+    // Studio opens the new scenario before the agent reports it.
+    store.getState().focus({ id: "scn_new", name: "請求書" });
+    expect(store.getState().current).not.toBe(making);
+    store.getState().onEvent({ turnId: "turn_1", kind: "created", scenarioId: "scn_new", name: "請求書" });
+    expect(store.getState().current).toBe(making);
+    expect(now(store.getState())).toMatchObject({ scenarioId: "scn_new", title: "請求書" });
+    expect(store.getState().chats.filter((c) => c.scenarioId === "scn_new")).toHaveLength(1);
+  });
+
+  it("remembers each conversation across restarts", async () => {
+    fakeStorage();
+    const store = createAgentStore(fakeAgent());
+    await store.getState().init();
+    await store.getState().send("Aを直して", { id: "scn_a", name: "A" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess_a" });
+    const again = createAgentStore(fakeAgent());
+    again.getState().focus({ id: "scn_a", name: "A" });
+    expect(now(again.getState())).toMatchObject({ scenarioId: "scn_a", sessionId: "sess_a", items: [] });
+    vi.unstubAllGlobals();
+  });
+
+  it("carries the one conversation from before over", () => {
+    fakeStorage().set("shikigami.studio.agentSession", "sess_old");
+    const store = createAgentStore(fakeAgent());
+    expect(store.getState().chats.some((c) => c.sessionId === "sess_old" && c.scenarioId === null)).toBe(true);
+    vi.unstubAllGlobals();
   });
 });

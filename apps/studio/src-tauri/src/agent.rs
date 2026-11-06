@@ -155,6 +155,12 @@ pub enum AgentEvent {
     ToolFailed {
         message: String,
     },
+    /// The agent created a scenario, so a conversation that began without
+    /// one now belongs to it.
+    Created {
+        scenario_id: String,
+        name: String,
+    },
     Done {
         ok: bool,
         message: Option<String>,
@@ -285,10 +291,9 @@ pub async fn agent_send(
         "command": cli,
         "args": ["--workspace", workspace, "mcp"],
     }}});
-    std::fs::write(&mcp_config, server.to_string())
-        .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    write_if_changed(&mcp_config, &server.to_string())?;
     let system = dir.join("system-prompt.md");
-    std::fs::write(&system, SYSTEM_PROMPT).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    write_if_changed(&system, SYSTEM_PROMPT)?;
 
     let args = match config.kind {
         AgentKind::ClaudeCode => claude_args(&mcp_config, &system, input.session_id.as_deref()),
@@ -356,6 +361,7 @@ pub async fn agent_send(
         });
         let mut finished = false;
         let mut stopped = false;
+        let mut stream = ClaudeStream::default();
         if let Some(stdout) = child.stdout.take() {
             let mut lines = BufReader::new(stdout).lines();
             loop {
@@ -368,7 +374,7 @@ pub async fn agent_send(
                     line = lines.next_line() => match line {
                         Ok(Some(line)) => {
                             let events = match kind {
-                                AgentKind::ClaudeCode => parse_claude_line(&line),
+                                AgentKind::ClaudeCode => stream.line(&line),
                                 AgentKind::Command => vec![AgentEvent::Text { text: format!("{line}\n") }],
                             };
                             for event in events {
@@ -676,51 +682,89 @@ fn with_context(message: &str, scenario: Option<&ScenarioRef>) -> String {
     }
 }
 
-/// One line of `claude -p --output-format stream-json --verbose`.
+/// Several conversations run at once, each in its own agent process, and
+/// all of them would otherwise rewrite these files on every message. On
+/// Windows a write can fail while another agent is reading the file.
+fn write_if_changed(path: &Path, contents: &str) -> CmdResult<()> {
+    if std::fs::read_to_string(path).is_ok_and(|now| now == contents) {
+        return Ok(());
+    }
+    std::fs::write(path, contents).map_err(|e| err("STORAGE_ERROR", e.to_string()))
+}
+
+/// Reads `claude -p --output-format stream-json --verbose` line by line,
+/// remembering which tool each call was so its result can be told apart.
+#[derive(Default)]
+pub(crate) struct ClaudeStream {
+    tools: HashMap<String, String>,
+}
+
+#[cfg(test)]
 pub(crate) fn parse_claude_line(line: &str) -> Vec<AgentEvent> {
-    let Ok(v) = serde_json::from_str::<Value>(line) else {
-        return Vec::new();
-    };
-    let str_of = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_owned);
-    match v.get("type").and_then(Value::as_str) {
-        Some("system") if str_of(&v, "subtype").as_deref() == Some("init") => {
-            str_of(&v, "session_id")
-                .map(|session_id| vec![AgentEvent::Session { session_id }])
-                .unwrap_or_default()
-        }
-        Some("assistant") => blocks(&v)
-            .filter_map(|b| match b.get("type").and_then(Value::as_str) {
-                Some("text") => str_of(b, "text")
-                    .filter(|t| !t.trim().is_empty())
-                    .map(|text| AgentEvent::Text { text }),
-                Some("tool_use") => {
-                    let name = str_of(b, "name")?;
-                    Some(AgentEvent::Tool {
-                        name: name.strip_prefix(TOOL_PREFIX).unwrap_or(&name).to_owned(),
-                        detail: b.get("input").and_then(|i| str_of(i, "summary")),
+    ClaudeStream::default().line(line)
+}
+
+impl ClaudeStream {
+    pub(crate) fn line(&mut self, line: &str) -> Vec<AgentEvent> {
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            return Vec::new();
+        };
+        let str_of = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_owned);
+        match v.get("type").and_then(Value::as_str) {
+            Some("system") if str_of(&v, "subtype").as_deref() == Some("init") => {
+                str_of(&v, "session_id")
+                    .map(|session_id| vec![AgentEvent::Session { session_id }])
+                    .unwrap_or_default()
+            }
+            Some("assistant") => blocks(&v)
+                .filter_map(|b| match b.get("type").and_then(Value::as_str) {
+                    Some("text") => str_of(b, "text")
+                        .filter(|t| !t.trim().is_empty())
+                        .map(|text| AgentEvent::Text { text }),
+                    Some("tool_use") => {
+                        let name = str_of(b, "name")?;
+                        let name = name.strip_prefix(TOOL_PREFIX).unwrap_or(&name).to_owned();
+                        if let Some(id) = str_of(b, "id") {
+                            self.tools.insert(id, name.clone());
+                        }
+                        Some(AgentEvent::Tool {
+                            name,
+                            detail: b.get("input").and_then(|i| str_of(i, "summary")),
+                        })
+                    }
+                    _ => None,
+                })
+                .collect(),
+            Some("user") => blocks(&v)
+                .filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_result"))
+                .filter_map(|b| {
+                    let tool = str_of(b, "tool_use_id").and_then(|id| self.tools.remove(&id));
+                    if b.get("is_error").and_then(Value::as_bool) == Some(true) {
+                        return Some(AgentEvent::ToolFailed {
+                            message: truncate(&result_text(b.get("content")), TOOL_ERROR_LEN),
+                        });
+                    }
+                    if tool.as_deref() != Some("create_scenario") {
+                        return None;
+                    }
+                    let out = serde_json::from_str::<Value>(&result_text(b.get("content"))).ok()?;
+                    let scenario = out.get("scenario")?;
+                    Some(AgentEvent::Created {
+                        scenario_id: str_of(scenario, "id")?,
+                        name: str_of(scenario, "name").unwrap_or_default(),
                     })
-                }
-                _ => None,
-            })
-            .collect(),
-        Some("user") => blocks(&v)
-            .filter(|b| {
-                b.get("type").and_then(Value::as_str) == Some("tool_result")
-                    && b.get("is_error").and_then(Value::as_bool) == Some(true)
-            })
-            .map(|b| AgentEvent::ToolFailed {
-                message: truncate(&result_text(b.get("content")), TOOL_ERROR_LEN),
-            })
-            .collect(),
-        Some("result") => {
-            let ok = !v.get("is_error").and_then(Value::as_bool).unwrap_or(false);
-            vec![AgentEvent::done(
-                ok,
-                if ok { None } else { str_of(&v, "result") },
-                v.get("total_cost_usd").and_then(Value::as_f64),
-            )]
+                })
+                .collect(),
+            Some("result") => {
+                let ok = !v.get("is_error").and_then(Value::as_bool).unwrap_or(false);
+                vec![AgentEvent::done(
+                    ok,
+                    if ok { None } else { str_of(&v, "result") },
+                    v.get("total_cost_usd").and_then(Value::as_f64),
+                )]
+            }
+            _ => Vec::new(),
         }
-        _ => Vec::new(),
     }
 }
 
@@ -952,6 +996,23 @@ mod tests {
                 message: Some("Not logged in".into()),
                 cost_usd: None,
                 needs_login: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn tells_which_scenario_a_conversation_created() {
+        let mut stream = ClaudeStream::default();
+        stream.line(r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tu_1","name":"mcp__shikigami__create_scenario","input":{"name":"請求書"}},{"type":"tool_use","id":"tu_2","name":"mcp__shikigami__get_scenario","input":{}}]}}"#);
+        let result = json!({ "type": "user", "message": { "content": [
+            { "type": "tool_result", "tool_use_id": "tu_2", "content": [{ "type": "text", "text": json!({ "scenario": { "id": "scn_other", "name": "参考" } }).to_string() }] },
+            { "type": "tool_result", "tool_use_id": "tu_1", "content": [{ "type": "text", "text": json!({ "scenario": { "id": "scn_new", "name": "請求書", "revision": 1 } }).to_string() }] },
+        ]}});
+        assert_eq!(
+            stream.line(&result.to_string()),
+            vec![AgentEvent::Created {
+                scenario_id: "scn_new".into(),
+                name: "請求書".into()
             }]
         );
     }

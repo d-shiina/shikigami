@@ -285,6 +285,13 @@ function Shell() {
   const [sidebar, setSidebar] = useRemembered<"open" | "closed">(SIDEBAR_KEY, "open", (raw) => (raw === "closed" ? "closed" : "open"));
   const [peek, setPeek] = useState(false);
   const agentOpen = useAgent((s) => s.open);
+  const focusAgent = useAgent((s) => s.focus);
+  const openId = useStudio((s) => s.scenario?.id ?? null);
+  const openName = useStudio((s) => s.scenario?.name ?? "");
+  // The AI pane follows the scenario open in the editor; other conversations keep running.
+  useEffect(() => {
+    focusAgent(openId ? { id: openId, name: openName } : null);
+  }, [focusAgent, openId, openName]);
   const [width, measure] = useWidth();
   const hasScenario = useStudio((s) => s.scenario !== null);
   const editing = place === "scenarios" || place === "review";

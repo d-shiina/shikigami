@@ -1,63 +1,73 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code by default) with Shikigami's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
+import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type AgentPart, type ChatItem, useAgent } from "../agent";
+import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, scenarioBusy, useAgent } from "../agent";
 import { agent } from "../lib/api";
 import { useStudio } from "../context";
 import { t, useKeptState } from "../lib/i18n";
 
 const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[name] ?? name;
+const chatTitle = (c: Chat) => c.title || t.agent.untitled;
 
 export function AgentPane({ width }: { width: number }) {
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
   const info = useAgent((s) => s.info);
-  const items = useAgent((s) => s.items);
-  const turnId = useAgent((s) => s.turnId);
-  const sending = useAgent((s) => s.sending);
-  const send = useAgent((s) => s.send);
+  const chat = useAgent(currentChat);
+  const blockedElsewhere = useAgent((s) => !isBusy(currentChat(s)) && scenarioBusy(s, currentChat(s).scenarioId));
+  const sendIn = useAgent((s) => s.sendIn);
   const stop = useAgent((s) => s.stop);
-  const reset = useAgent((s) => s.reset);
+  const newChat = useAgent((s) => s.newChat);
   const scenario = useStudio((s) => s.scenario);
+  const openScenario = useStudio((s) => s.open);
   const selection = useStudio((s) => s.selection);
-  const [draft, setDraft] = useKeptState("agent.draft", "");
+  // One draft per conversation, so switching does not carry text to another scenario.
+  const [drafts, setDrafts] = useKeptState<Record<string, string>>("agent.drafts", {});
+  const draft = drafts[chat.id] ?? "";
+  const setDraftOf = (id: string, change: (now: string) => string) => setDrafts((all) => ({ ...all, [id]: change(all[id] ?? "") }));
   const end = useRef<HTMLDivElement>(null);
+  const { items } = chat;
+  const busy = isBusy(chat);
   useEffect(() => {
     // Newer WebView2 returns a promise here; an effect must not.
     void end.current?.scrollIntoView({ block: "end" });
-  }, [items]);
+  }, [items, chat.id]);
   if (!open) return null;
-  const stepId = selection?.kind === "step" ? selection.stepId : null;
+  // The conversation may be about another scenario than the one in the editor.
+  const here = scenario !== null && chat.scenarioId === scenario.id;
+  const stepId = here && selection?.kind === "step" ? selection.stepId : null;
   const submit = async () => {
-    const ref = scenario ? { id: scenario.id, name: scenario.name, stepId } : null;
-    const context = scenario ? `${scenario.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
+    const ref = chat.scenarioId ? { id: chat.scenarioId, name: here ? scenario.name : chat.title, stepId } : null;
+    const context = chat.scenarioId ? `${ref!.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
     // Cleared as it is sent, like any chat; back again if it was not taken.
     const text = draft;
-    setDraft("");
-    if (!(await send(text, ref, context))) setDraft((now) => now || text);
+    const id = chat.id;
+    setDraftOf(id, () => "");
+    if (!(await sendIn(id, text, ref, context))) setDraftOf(id, (now) => now || text);
   };
   return (
     <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col border-r border-slate-200 bg-sheet">
-      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5">
-        <div className="min-w-0 flex-1 text-[13px] font-bold">{info?.name ?? "AI"}</div>
+      <div className="flex items-center gap-1 border-b border-slate-200 py-2 pr-3 pl-2">
+        <ChatSwitcher chat={chat} />
         <button
           type="button"
-          onClick={reset}
-          disabled={turnId !== null || sending || items.length === 0}
-          className="grid h-6 w-6 place-items-center rounded-[4px] text-[15px] text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
+          onClick={() => newChat(chat.scenarioId ? { id: chat.scenarioId, name: chat.title } : null)}
+          disabled={items.length === 0 && !chat.sessionId}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
           title={t.agent.newChat}
           aria-label={t.agent.newChat}
         >
-          ＋
+          <Plus size={15} />
         </button>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="grid h-6 w-6 place-items-center rounded-[4px] text-slate-400 hover:bg-slate-100 hover:text-ink"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink"
           aria-label={t.close}
         >
-          ✕
+          <X size={15} />
         </button>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
@@ -66,7 +76,10 @@ export function AgentPane({ width }: { width: number }) {
         )}
         {items.length === 0 && info?.available && (
           <div className="grid h-full place-items-center">
-            <img src="/mark.png" alt="" className="h-10 w-10 opacity-15 grayscale" />
+            <div className="flex flex-col items-center gap-2">
+              <img src="/mark.png" alt="" className="h-10 w-10 opacity-15 grayscale" />
+              {chat.sessionId && <div className="text-[11.5px] text-slate-500">{t.agent.continued}</div>}
+            </div>
           </div>
         )}
         {items.map((item) => (
@@ -76,16 +89,27 @@ export function AgentPane({ width }: { width: number }) {
         <div ref={end} />
       </div>
       <div className="border-t border-slate-200 p-3">
-        {scenario && (
-          <div className="mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
+        <div className="mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
+          {chat.scenarioId === null ? (
+            <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.newScenarioChat}</span>
+          ) : here ? (
             <span className="truncate rounded-full bg-slate-100 px-2 py-0.5">{scenario.name}</span>
-            {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
-          </div>
-        )}
+          ) : (
+            <button
+              type="button"
+              onClick={() => void openScenario(chat.scenarioId!)}
+              title={t.agent.openScenario}
+              className="truncate rounded-full bg-slate-100 px-2 py-0.5 hover:bg-slate-200 hover:text-ink"
+            >
+              {chat.title} ↗
+            </button>
+          )}
+          {stepId && <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.selectedStep}</span>}
+        </div>
         <textarea
           data-agent-input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => setDraftOf(chat.id, () => e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
               e.preventDefault();
@@ -94,15 +118,15 @@ export function AgentPane({ width }: { width: number }) {
           }}
           rows={3}
           disabled={!info?.available}
-          placeholder={scenario ? t.agent.placeholderEdit : t.agent.placeholderNew}
+          placeholder={chat.scenarioId ? t.agent.placeholderEdit : t.agent.placeholderNew}
           className="w-full resize-none rounded-[4px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
-          <span className="text-[10.5px] text-slate-400">{t.agent.sendHint}</span>
-          {turnId ? (
+          <span className="min-w-0 truncate text-[10.5px] text-slate-500">{blockedElsewhere ? t.agent.busyElsewhere : t.agent.sendHint}</span>
+          {chat.turnId ? (
             <button
               type="button"
-              onClick={() => void stop()}
+              onClick={() => void stop(chat.id)}
               className="ml-auto h-8 shrink-0 rounded-[4px] border border-slate-300 px-3 text-[12px] text-slate-600 hover:bg-slate-100"
             >
               {t.stop}
@@ -110,7 +134,7 @@ export function AgentPane({ width }: { width: number }) {
           ) : (
             <button
               type="button"
-              disabled={!info?.available || sending || draft.trim() === ""}
+              disabled={!info?.available || busy || blockedElsewhere || draft.trim() === ""}
               onClick={() => void submit()}
               className="ml-auto h-8 shrink-0 rounded-[4px] bg-ink px-4 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400"
             >
@@ -121,6 +145,135 @@ export function AgentPane({ width }: { width: number }) {
       </div>
     </aside>
   );
+}
+
+/** Where a conversation is: working, finished while out of sight, or stopped. */
+function ChatDot({ chat }: { chat: Chat }) {
+  const last = chat.items.at(-1);
+  if (isBusy(chat)) return <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-brand-500" title={t.agent.chatWorking} />;
+  if (chat.unread && last?.role === "ai" && last.status === "failed")
+    return <span className="h-2 w-2 shrink-0 rounded-full bg-shu-500" title={t.agent.chatFailed} />;
+  if (chat.unread) return <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" title={t.agent.chatDone} />;
+  return <span className="h-2 w-2 shrink-0" />;
+}
+
+/**
+ * The pane's title: the conversation shown, and the others the AI is
+ * working on or has finished, so several scenarios can be under way at once.
+ */
+function ChatSwitcher({ chat }: { chat: Chat }) {
+  const chats = useAgent((s) => s.chats);
+  const select = useAgent((s) => s.select);
+  const remove = useAgent((s) => s.remove);
+  const newChat = useAgent((s) => s.newChat);
+  const scenario = useStudio((s) => s.scenario);
+  const [open, setOpen] = useState(false);
+  const others = chats.filter((c) => c.id !== chat.id);
+  const working = others.filter(isBusy).length;
+  const news = others.filter((c) => c.unread).length;
+  // The empty conversation the editor's scenario starts with is not worth a row.
+  const listed = [...chats]
+    .filter((c) => c.id === chat.id || c.items.length > 0 || c.sessionId || isBusy(c))
+    .sort((a, b) => Number(isBusy(b)) - Number(isBusy(a)) || b.updatedAt - a.updatedAt);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open]);
+  const pick = (id: string) => {
+    select(id);
+    setOpen(false);
+  };
+  return (
+    <div className="relative min-w-0 flex-1">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        title={t.agent.chats}
+        className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-[4px] px-2 text-left hover:bg-slate-100"
+      >
+        <span className="min-w-0 truncate text-[13px] font-bold text-ink">{chatTitle(chat)}</span>
+        <ChevronDown size={14} className="shrink-0 text-slate-500" />
+        {(working > 0 || news > 0) && (
+          <span className="ml-auto flex shrink-0 items-center gap-1 text-[10.5px] text-slate-500">
+            <span className={`h-1.5 w-1.5 rounded-full bg-brand-500 ${working > 0 ? "animate-pulse" : ""}`} />
+            {working > 0 ? t.agent.otherWorking(working) : t.agent.otherDone(news)}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-8 left-0 z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-[6px] border border-slate-200 bg-sheet py-1 shadow-lg">
+            <div className="max-h-[50vh] overflow-y-auto">
+              {listed.map((c) => (
+                <div key={c.id} className={`group flex items-center gap-2 px-3 py-1.5 ${c.id === chat.id ? "bg-slate-100" : "hover:bg-slate-50"}`}>
+                  <ChatDot chat={c} />
+                  <button type="button" onClick={() => pick(c.id)} className="min-w-0 flex-1 text-left">
+                    <div className="truncate text-[12.5px] text-ink">{chatTitle(c)}</div>
+                    <div className="truncate text-[10.5px] text-slate-500">
+                      {isBusy(c) ? t.agent.chatWorking : c.scenarioId === null ? t.agent.newScenarioChat : lastWords(c)}
+                    </div>
+                  </button>
+                  {c.id === chat.id && <Check size={14} className="shrink-0 text-brand-600" />}
+                  {!isBusy(c) && c.id !== chat.id && (
+                    <button
+                      type="button"
+                      onClick={() => remove(c.id)}
+                      className="grid h-5 w-5 shrink-0 place-items-center rounded-[4px] text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-slate-200 hover:text-ink focus:opacity-100"
+                      title={t.agent.removeChat}
+                      aria-label={t.agent.removeChat}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="mt-1 border-t border-slate-200 pt-1">
+              {scenario && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    newChat({ id: scenario.id, name: scenario.name });
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-slate-600 hover:bg-slate-50 hover:text-ink"
+                >
+                  <Plus size={14} className="shrink-0" />
+                  <span className="truncate">{t.agent.newChatAbout(scenario.name)}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  newChat(null);
+                  setOpen(false);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-slate-600 hover:bg-slate-50 hover:text-ink"
+              >
+                <Plus size={14} className="shrink-0" />
+                {t.agent.newScenarioChat}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The conversation's last words, to tell conversations about one scenario apart. */
+function lastWords(c: Chat): string {
+  for (let i = c.items.length - 1; i >= 0; i--) {
+    const item = c.items[i]!;
+    if (item.role === "person") return item.text.split("\n")[0] ?? "";
+    const text = [...item.parts].reverse().find((p) => p.kind === "text");
+    if (text?.kind === "text") return text.text.trim().split("\n")[0] ?? "";
+  }
+  return c.sessionId ? t.agent.earlier : "";
 }
 
 function Item({ item }: { item: ChatItem }) {
@@ -194,7 +347,7 @@ function Part({ part }: { part: AgentPart }) {
 function LoginBox({ name }: { name: string }) {
   const login = useAgent((s) => s.login);
   const needed = useAgent((s) => {
-    const last = s.items.at(-1);
+    const last = currentChat(s).items.at(-1);
     return last?.role === "ai" && last.needsLogin;
   });
   const start = useAgent((s) => s.startLogin);

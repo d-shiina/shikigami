@@ -230,6 +230,7 @@ export type AgentEvent = { turnId: string } & (
   | { kind: "text"; text: string }
   | { kind: "tool"; name: string; detail: string | null }
   | { kind: "toolFailed"; message: string }
+  | { kind: "created"; scenarioId: string; name: string }
   | { kind: "done"; ok: boolean; message: string | null; costUsd: number | null; needsLogin: boolean }
 );
 
