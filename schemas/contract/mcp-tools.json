@@ -1810,6 +1810,42 @@
                 "properties": {
                   "op": {
                     "type": "string",
+                    "const": "setPart"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "part": {
+                    "$ref": "#/$defs/Part"
+                  }
+                },
+                "required": [
+                  "op",
+                  "name",
+                  "part"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "const": "removePart"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "op",
+                  "name"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
                     "const": "replaceSteps"
                   },
                   "steps": {
@@ -2191,6 +2227,30 @@
                 "const": "inOut"
               }
             ]
+          },
+          "Part": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "app": {
+                "$ref": "#/$defs/PartApp"
+              },
+              "target": {}
+            },
+            "additionalProperties": false,
+            "required": [
+              "app",
+              "target"
+            ]
+          },
+          "PartApp": {
+            "type": "string",
+            "enum": [
+              "browser",
+              "desktop"
+            ]
           }
         },
         "type": "object",
@@ -2461,6 +2521,12 @@
                   "$ref": "#/$defs/VariableDef"
                 }
               },
+              "parts": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/Part"
+                }
+              },
               "steps": {
                 "type": "array",
                 "items": {
@@ -2544,6 +2610,30 @@
                 "type": "string",
                 "const": "inOut"
               }
+            ]
+          },
+          "Part": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "app": {
+                "$ref": "#/$defs/PartApp"
+              },
+              "target": {}
+            },
+            "additionalProperties": false,
+            "required": [
+              "app",
+              "target"
+            ]
+          },
+          "PartApp": {
+            "type": "string",
+            "enum": [
+              "browser",
+              "desktop"
             ]
           },
           "Step": {

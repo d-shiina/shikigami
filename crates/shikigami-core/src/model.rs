@@ -22,7 +22,7 @@ use crate::ids::{ScenarioId, StepId};
 /// Current scenario schema version. Bump on every change to the file shape
 /// (readers reject unknown fields, so new optional fields count too) and add
 /// a migration in [`crate::migrate`]. See docs/compatibility.md.
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// A scenario: the unit that AI clients, Studio and the Runtime share.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -50,6 +50,11 @@ pub struct Scenario {
     /// Declared variables (inputs, outputs and locals).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variables: Vec<VariableDef>,
+    /// Named screen parts (a button, a field…): a node's `target` can be
+    /// `{ "part": "<name>" }` instead of the whole target, so a part that
+    /// changes is fixed in one place. Keys are like variable names.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub parts: BTreeMap<String, Part>,
     /// Top-level steps, executed in order.
     #[serde(default)]
     pub steps: Vec<Step>,
@@ -73,6 +78,7 @@ impl Scenario {
             requires: BTreeMap::new(),
             revision: 0,
             variables: Vec::new(),
+            parts: BTreeMap::new(),
             steps: Vec::new(),
             settings: ScenarioSettings::default(),
             metadata: Metadata {
@@ -94,6 +100,28 @@ impl Scenario {
             tags: self.metadata.tags.clone(),
             updated_at: self.metadata.updated_at,
         }
+    }
+
+    /// Replaces every `{ "part": "<name>" }` param with that part's target,
+    /// as the Runtime runs it. Unknown names are left as they are
+    /// (validation reports them).
+    pub fn inline_parts(&mut self) {
+        if self.parts.is_empty() {
+            return;
+        }
+        fn visit(steps: &mut [Step], parts: &BTreeMap<String, Part>) {
+            for step in steps {
+                for value in step.params.values_mut() {
+                    if let Some(part) = part_ref(value).and_then(|name| parts.get(name)) {
+                        *value = part.target.clone();
+                    }
+                }
+                for children in step.blocks.values_mut() {
+                    visit(children, parts);
+                }
+            }
+        }
+        visit(&mut self.steps, &self.parts);
     }
 
     /// Depth-first iterator over every step (including nested ones).
@@ -265,6 +293,45 @@ impl ScenarioSettings {
     fn is_default(&self) -> bool {
         self == &Self::default()
     }
+}
+
+/// A named screen part: what a node finds on screen, kept in one place.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Part {
+    /// What people call it (保存ボタン). The key is for nodes and AI.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+    /// The kind of node that can use it.
+    pub app: PartApp,
+    /// The target, exactly as the nodes of `app` take it.
+    pub target: Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum PartApp {
+    Browser,
+    Desktop,
+}
+
+impl PartApp {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Browser => "browser",
+            Self::Desktop => "desktop",
+        }
+    }
+}
+
+/// The part name when `value` is a reference to one (`{ "part": "<name>" }`
+/// and nothing else).
+pub fn part_ref(value: &Value) -> Option<&str> {
+    let obj = value.as_object()?;
+    if obj.len() != 1 {
+        return None;
+    }
+    obj.get("part")?.as_str()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

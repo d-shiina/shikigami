@@ -46,6 +46,8 @@ import { setScenarioNames } from "./lib/sentence";
 export type Selection =
   | { kind: "step"; stepId: string }
   | { kind: "slot"; parentId: string | null; block: string | null }
+  /** A named screen part (`scenario.parts`). */
+  | { kind: "part"; name: string }
   | null;
 
 /** A place between nodes (the "+" on a line of the flow chart): a new node goes at `index` of the block. */

@@ -95,6 +95,7 @@ impl Validator {
             known_vars: known_variables(scenario, &self.registry),
             declared_vars: scenario.variables.iter().map(|v| v.name.clone()).collect(),
             requires: scenario.requires.clone(),
+            parts: scenario.parts.clone(),
         };
         cx.scenario(scenario);
         for issue in &mut cx.issues {
@@ -181,6 +182,7 @@ struct Cx<'a> {
     known_vars: BTreeSet<String>,
     declared_vars: BTreeSet<String>,
     requires: BTreeMap<String, String>,
+    parts: BTreeMap<String, crate::model::Part>,
 }
 
 impl Cx<'_> {
@@ -296,6 +298,27 @@ impl Cx<'_> {
         }
 
         self.requirements();
+
+        for (name, part) in &scenario.parts {
+            let path = format!("/parts/{name}");
+            if !is_identifier(name) {
+                self.error(
+                    "INVALID_PART_NAME",
+                    format!("part name '{name}' is not a valid identifier"),
+                    path.clone(),
+                    None,
+                );
+                self.hint("Use letters, digits and _ like a variable name (saveButton); put the words people use in `label`.".to_owned());
+            }
+            if !part.target.is_object() {
+                self.error(
+                    "INVALID_PART",
+                    format!("part '{name}' needs a target object"),
+                    format!("{path}/target"),
+                    None,
+                );
+            }
+        }
 
         let mut var_names = HashSet::new();
         for (i, var) in scenario.variables.iter().enumerate() {
@@ -706,10 +729,79 @@ impl Cx<'_> {
         }
     }
 
+    /// The step's params with `{ "part": … }` replaced by the part's target
+    /// (as the Runtime runs them), after checking each reference.
+    fn inlined_params(
+        &mut self,
+        step: &Step,
+        path: &str,
+    ) -> (serde_json::Map<String, Value>, bool) {
+        let id = Some(&step.id);
+        let mut params = step.params.clone();
+        let mut broken = false;
+        let app = step.step_type.split('.').next().unwrap_or_default();
+        for (key, value) in &mut params {
+            let param_path = format!("{path}/params/{key}");
+            if let Some(obj) = value.as_object()
+                && obj.contains_key("part")
+                && obj.len() > 1
+            {
+                broken = true;
+                self.error(
+                    "PART_WITH_FIELDS",
+                    format!("'{key}' names a part and also has other fields"),
+                    param_path,
+                    id,
+                );
+                self.hint("Write only { \"part\": \"<name>\" }. For a part that differs a little, add another part to `parts`.".to_owned());
+                continue;
+            }
+            let Some(name) = crate::model::part_ref(value) else {
+                continue;
+            };
+            let Some(part) = self.parts.get(name).cloned() else {
+                broken = true;
+                let known: Vec<String> = self.parts.keys().cloned().collect();
+                self.error(
+                    "UNKNOWN_PART",
+                    format!("part '{name}' is not in the scenario's parts"),
+                    param_path,
+                    id,
+                );
+                self.hint(if known.is_empty() {
+                    "Add it with the setPart edit op first, or write the target itself.".to_owned()
+                } else {
+                    format!("Use one of: {}, or add it with setPart.", known.join(", "))
+                });
+                continue;
+            };
+            if part.app.as_str() != app {
+                broken = true;
+                self.error(
+                    "PART_APP_MISMATCH",
+                    format!(
+                        "part '{name}' is a {} part; {} steps cannot use it",
+                        part.app.as_str(),
+                        step.step_type
+                    ),
+                    param_path,
+                    id,
+                );
+                continue;
+            }
+            *value = part.target;
+        }
+        (params, broken)
+    }
+
     fn params(&mut self, step: &Step, def: &StepTypeDef, path: &str) {
         let id = Some(&step.id);
-        let instance = Value::Object(step.params.clone());
+        let (inlined, broken) = self.inlined_params(step, path);
+        let instance = Value::Object(inlined.clone());
         match self.validator.schemas.get(&def.step_type) {
+            // A broken part reference is the error to fix; the schema would
+            // only repeat it.
+            Some(Ok(_)) if broken => {}
             Some(Ok(schema)) => {
                 let errors: Vec<(String, String)> = schema
                     .iter_errors(&instance)
@@ -739,7 +831,7 @@ impl Cx<'_> {
 
         self.secrets(step, def, path);
 
-        for (key, value) in &step.params {
+        for (key, value) in &inlined {
             let param_path = format!("{path}/params/{key}");
             if def.expression_params.contains(key) {
                 if let Value::String(src) = value {
@@ -1504,5 +1596,71 @@ mod tests {
         assert!(report.valid, "{report:?}");
         assert_eq!(codes(&report), ["DEPRECATED_STEP_TYPE"]);
         assert!(hint_of(&report, "DEPRECATED_STEP_TYPE").starts_with("Use 'log.message' instead."));
+    }
+
+    #[test]
+    fn nodes_can_name_a_part_instead_of_the_target() {
+        use crate::model::{Part, PartApp};
+        let mut registry = StepRegistry::with_builtins();
+        let mut def = registry.get("log.message").unwrap().clone();
+        def.step_type = "desktop.poke".into();
+        def.params_schema = json!({
+            "type": "object",
+            "required": ["target"],
+            "properties": { "target": {
+                "type": "object",
+                "required": ["window"],
+                "properties": { "window": { "type": "object" } },
+                "additionalProperties": false
+            } },
+            "additionalProperties": false
+        });
+        registry.register(def);
+        let poke = |id: &str, target: Value| {
+            Step::new("desktop.poke")
+                .with_id(id)
+                .with_param("target", target)
+        };
+        let mut s = Scenario::new("parts");
+        s.parts.insert(
+            "saveButton".into(),
+            Part {
+                label: "保存ボタン".into(),
+                app: PartApp::Desktop,
+                target: json!({ "window": { "process": "billing.exe" } }),
+            },
+        );
+        s.parts.insert(
+            "searchBox".into(),
+            Part {
+                label: String::new(),
+                app: PartApp::Browser,
+                target: json!({ "label": "検索" }),
+            },
+        );
+        s.steps = vec![poke("a", json!({ "part": "saveButton" }))];
+        let validator = Validator::new(registry);
+        let report = validator.validate(&s);
+        assert_eq!(report.error_count(), 0, "{report:?}");
+
+        s.steps = vec![
+            poke("b", json!({ "part": "nope" })),
+            poke("c", json!({ "part": "searchBox" })),
+            poke("d", json!({ "part": "saveButton", "nth": 1 })),
+        ];
+        let report = validator.validate(&s);
+        assert_eq!(
+            codes(&report),
+            ["UNKNOWN_PART", "PART_APP_MISMATCH", "PART_WITH_FIELDS"]
+        );
+        assert!(hint_of(&report, "UNKNOWN_PART").contains("saveButton"));
+
+        // The Runtime runs the part's target.
+        s.steps = vec![poke("a", json!({ "part": "saveButton" }))];
+        s.inline_parts();
+        assert_eq!(
+            s.steps[0].params["target"],
+            json!({ "window": { "process": "billing.exe" } })
+        );
     }
 }

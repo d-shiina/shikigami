@@ -139,6 +139,43 @@
       ]
     },
     {
+      "description": "Adds or replaces (by name) a named screen part. Nodes use it as\n`\"target\": { \"part\": \"<name>\" }`.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "setPart"
+        },
+        "name": {
+          "type": "string"
+        },
+        "part": {
+          "$ref": "#/$defs/Part"
+        }
+      },
+      "required": [
+        "op",
+        "name",
+        "part"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "removePart"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "op",
+        "name"
+      ]
+    },
+    {
       "description": "Replaces the whole step tree (bulk edits by AI, imports).",
       "type": "object",
       "properties": {
@@ -558,6 +595,35 @@
           "type": "string",
           "const": "inOut"
         }
+      ]
+    },
+    "Part": {
+      "description": "A named screen part: what a node finds on screen, kept in one place.",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "What people call it (保存ボタン). The key is for nodes and AI.",
+          "type": "string"
+        },
+        "app": {
+          "description": "The kind of node that can use it.",
+          "$ref": "#/$defs/PartApp"
+        },
+        "target": {
+          "description": "The target, exactly as the nodes of `app` take it."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "target"
+      ]
+    },
+    "PartApp": {
+      "type": "string",
+      "enum": [
+        "browser",
+        "desktop"
       ]
     }
   },

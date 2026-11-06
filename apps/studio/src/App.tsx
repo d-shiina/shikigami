@@ -1,6 +1,7 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
+import { setPartLookup } from "./lib/sentence";
 import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
 import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
@@ -453,6 +454,8 @@ export function App() {
   // A language switch redraws the whole shell; the stores (and the open scenario) stay.
   const { locale } = useLocale();
   const store = useMemo(() => createStudioStore(api), []);
+  // Sentences name a node's part by its label (`{ part: "btnSave" }` → 部品「保存ボタン」).
+  setPartLookup((name) => store.getState().scenario?.parts?.[name]);
   const agentStore = useMemo(() => createAgentStore(agent), []);
   const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), discard: () => t.project.sheet.discard }), []);
 
