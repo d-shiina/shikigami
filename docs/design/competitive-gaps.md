@@ -166,7 +166,7 @@
 
 ### 15. メールの欠け
 
-- **今**（[office.md](../office.md)）：Outlook（クラシック）の COM のみ。下書き・一覧・添付の保存。送信はない。SMTP・IMAP・Microsoft 365（Graph）・Gmail はない
+- **今**（[office.md](../office.md)）：下書き・一覧・添付の保存は Outlook（クラシック）の COM のみ。送信は `mail.send` で Outlook・Microsoft 365（Graph）・SMTP から済み。残りは Outlook なしで読む（Graph・IMAP）と Gmail
 - **相手**：3 製品とも送信と複数の方式がある
 - **影響**：送信できないので通知・報告の自動化が完結しない。新しい Outlook への移行が進むとクラシックの COM が使えない PC が増える
 - **方向**：`mail.send`（危険度 Dangerous、承認の対象）と Graph の backend を先に。SMTP は社内メールサーバー向け

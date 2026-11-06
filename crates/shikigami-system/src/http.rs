@@ -15,7 +15,7 @@ const ERROR_BODY_CHARS: usize = 2000;
 /// back as the 3xx response). The second is for requests carrying a secret, so
 /// a token in a custom header never reaches another site, and for workspaces
 /// that limit the sites steps may reach.
-pub(crate) fn client(same_origin: bool) -> Result<&'static reqwest::Client, StepError> {
+pub fn client(same_origin: bool) -> Result<&'static reqwest::Client, StepError> {
     static CLIENTS: OnceLock<Result<[reqwest::Client; 2], String>> = OnceLock::new();
     let clients = CLIENTS.get_or_init(|| {
         // reqwest is built without its own crypto provider (the same
@@ -60,11 +60,7 @@ fn origin(url: &reqwest::Url) -> String {
 }
 
 /// A secret is sent only to the origins registered with it.
-pub(crate) fn check_site(
-    name: &str,
-    sites: &[String],
-    url: &reqwest::Url,
-) -> Result<(), StepError> {
+pub fn check_site(name: &str, sites: &[String], url: &reqwest::Url) -> Result<(), StepError> {
     let origin = origin(url);
     if sites.iter().any(|s| s.trim_end_matches('/') == origin) {
         return Ok(());

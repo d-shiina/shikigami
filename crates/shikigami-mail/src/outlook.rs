@@ -24,6 +24,9 @@ pub fn run(
     timeout: Duration,
     cancel: &CancellationToken,
 ) -> Result<Value, StepError> {
+    // A send that runs out of time may still go out when Outlook gets to
+    // it, so it is never retried (it could be sent twice).
+    let sending = matches!(request, Request::Send(_));
     run_on_sta(
         "shikigami-outlook-com",
         timeout,
@@ -39,6 +42,7 @@ pub fn run(
             })?;
             match request {
                 Request::Draft(draft) => create_draft(&app, &draft, session),
+                Request::Send(draft) => send(&app, &draft, session),
                 Request::List(query) => list(&mapi, &query),
                 Request::Save(query) => save_attachments(&mapi, &query, session),
             }
@@ -46,6 +50,8 @@ pub fn run(
         |gave_up| {
             match gave_up.reason {
             GaveUp::Cancelled => StepError::new("CANCELLED", "the step was stopped"),
+            GaveUp::TimedOut if sending => StepError::permanent("MAIL_DELIVERY_UNKNOWN", "Outlook did not answer in time; the message may still be sent")
+                .with_details(json!({ "hint": "Outlook may be showing a dialog (a security prompt that a program is sending mail, or a sign-in). Ask the user to check the Outlook window and the Outbox / Sent Items before running the step again." })),
             GaveUp::TimedOut => StepError::new("OUTLOOK_TIMEOUT", "Outlook did not answer in time")
                 .with_details(json!({ "hint": "Outlook may be showing a dialog (a security prompt that a program is accessing mail, or a sign-in). Ask the user to check the Outlook window, then run again." })),
         }
@@ -54,6 +60,24 @@ pub fn run(
 }
 
 fn create_draft(app: &Object, draft: &Draft, session: &Session) -> Result<Value, StepError> {
+    let item = compose(app, draft, session)?;
+    item.call("Save", vec![])?;
+    Ok(json!({ "id": item.get("EntryID")?.to_text() }))
+}
+
+/// Sends from the account signed in to Outlook; Outlook keeps it in Sent
+/// Items (or the Outbox until it is online).
+fn send(app: &Object, draft: &Draft, session: &Session) -> Result<Value, StepError> {
+    let item = compose(app, draft, session)?;
+    item.call("Send", vec![]).map_err(|e| {
+        StepError::permanent("MAIL_SEND_FAILED", format!("Outlook did not send the message: {}", e.message))
+            .with_details(json!({ "hint": "Outlook may have asked whether a program may send mail; ask the user to allow it, or check the addresses." }))
+    })?;
+    Ok(json!({ "via": "outlook" }))
+}
+
+/// A new message filled in from `draft`, not saved yet.
+fn compose(app: &Object, draft: &Draft, session: &Session) -> Result<Object, StepError> {
     session.check()?;
     let item = app.object("CreateItem", vec![Var::i32(OL_MAIL_ITEM)])?;
     item.put("To", Var::str(&draft.to.join("; ")))?;
@@ -73,8 +97,7 @@ fn create_draft(app: &Object, draft: &Draft, session: &Session) -> Result<Value,
         }
     }
     session.check()?;
-    item.call("Save", vec![])?;
-    Ok(json!({ "id": item.get("EntryID")?.to_text() }))
+    Ok(item)
 }
 
 fn folder(mapi: &Object, path: Option<&str>) -> Result<Object, StepError> {
