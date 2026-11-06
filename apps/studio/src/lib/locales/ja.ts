@@ -1,5 +1,6 @@
 // The Japanese dictionary. Internal identifiers stay English; only display
 // strings live here. en.ts must have the same shape (checked by `Dict`).
+import { errorsJa } from "./errors.ja";
 import { stepHelpJa } from "./stepHelp.ja";
 
 export const ja = {
@@ -797,6 +798,7 @@ export const ja = {
     review: "確認する",
     capturing: "止まったときの画面を取得しています…",
     captureFailed: "画面を取得できませんでした",
+    original: "英語の原文",
     variablesNow: "この時点の変数",
   },
   list: {
@@ -1005,6 +1007,7 @@ export const ja = {
     confirmDelete: "もう一度押すと削除",
   },
   stepTypes: {} as Record<string, string>,
+  runErrors: errorsJa,
   stepHelp: stepHelpJa as Record<string, { summary: string; words: string }>,
   blockNames: {} as Record<string, string>,
 };

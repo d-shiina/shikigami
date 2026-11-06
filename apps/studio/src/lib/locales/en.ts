@@ -1,5 +1,6 @@
 // The English dictionary. Same shape as ja.ts; keep labels short nouns.
 import type { Dict } from "./ja";
+import { errorsEn } from "./errors.en";
 import { stepHelpEn } from "./stepHelp.en";
 
 export const en: Dict = {
@@ -798,6 +799,7 @@ export const en: Dict = {
     review: "Review",
     capturing: "Capturing the screen…",
     captureFailed: "Could not capture the screen",
+    original: "Original message",
     variablesNow: "Variables at this point",
   },
   list: {
@@ -1005,6 +1007,7 @@ export const en: Dict = {
     open: "Open",
     confirmDelete: "Press again to delete",
   },
+  runErrors: errorsEn,
   stepHelp: stepHelpEn,
   stepTypes: {
     "browser.click": "Click",

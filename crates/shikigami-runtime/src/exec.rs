@@ -411,7 +411,16 @@ pub(crate) struct Executor {
 }
 
 fn expr_error(e: expr::ExprError) -> RunError {
-    RunError::new(e.code(), e.to_string())
+    // The name in the details lets clients (Studio) word the error themselves.
+    let details = match &e {
+        expr::ExprError::UndefinedVariable(name) => Some(serde_json::json!({ "variable": name })),
+        expr::ExprError::UnknownFunction(name) => Some(serde_json::json!({ "function": name })),
+        _ => None,
+    };
+    RunError {
+        details,
+        ..RunError::new(e.code(), e.to_string())
+    }
 }
 
 fn param_str<'a>(step: &'a Step, key: &str) -> Result<&'a str, RunError> {
@@ -915,10 +924,13 @@ impl Executor {
                     }
                     iterations += 1;
                     if iterations > max {
-                        return Err(RunError::new(
-                            "LOOP_LIMIT_EXCEEDED",
-                            format!("loop exceeded maxIterations ({max})"),
-                        )
+                        return Err(RunError {
+                            details: Some(serde_json::json!({ "maxIterations": max })),
+                            ..RunError::new(
+                                "LOOP_LIMIT_EXCEEDED",
+                                format!("loop exceeded maxIterations ({max})"),
+                            )
+                        }
                         .into());
                     }
                     if let Flow::Break = self.sub_block(step, "body").await? {
@@ -1331,10 +1343,13 @@ impl Executor {
                 let run = tokio::time::timeout(Duration::from_millis(ms), body);
                 match run.await {
                     Ok(result) => result,
-                    Err(_) => Err(Interrupt::Failed(RunError::new(
-                        "STEP_TIMEOUT",
-                        format!("the called scenario did not finish within {ms} ms"),
-                    ))),
+                    Err(_) => Err(Interrupt::Failed(RunError {
+                        details: Some(serde_json::json!({ "timeoutMs": ms })),
+                        ..RunError::new(
+                            "STEP_TIMEOUT",
+                            format!("the called scenario did not finish within {ms} ms"),
+                        )
+                    })),
                 }
             }
         };
@@ -1525,7 +1540,8 @@ impl Executor {
                 Some(Err(_)) => Err(StepError::new(
                     "STEP_TIMEOUT",
                     format!("step timed out after {timeout_ms} ms"),
-                )),
+                )
+                .with_details(serde_json::json!({ "timeoutMs": timeout_ms }))),
             };
 
             match result {
