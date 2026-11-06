@@ -52,6 +52,8 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "pdf.readText": { summary: "PDF の文字を読む", words: "読む 取得 テキスト" },
   "pdf.merge": { summary: "いくつかの PDF を 1 つにつなぐ", words: "結合 まとめる つなげる 合体" },
   "pdf.extractPages": { summary: "PDF の一部のページだけで新しい PDF を作る", words: "抜き出す 抽出 ページ 切り出し" },
+  "db.query": { summary: "SQL でデータベースから行を読む（SQL Server・Oracle・Access など、ODBC 経由）", words: "データベース sql select 検索 取得 odbc 基幹 テーブル" },
+  "db.execute": { summary: "SQL でデータベースを更新する（追加・更新・削除）", words: "データベース sql insert update delete 書き込み 登録 odbc 基幹" },
   "pdf.split": { summary: "PDF を 1 ページ（または数ページ）ずつのファイルに分ける", words: "分割 分ける ページ ばらす" },
   "config.read": { summary: "シナリオの設定ファイル（config/）を読む", words: "設定 json 読む" },
   "desktop.launch": { summary: "アプリを起動する", words: "開く 起動 exe 実行 ソフト" },

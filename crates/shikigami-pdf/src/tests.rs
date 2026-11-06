@@ -501,3 +501,117 @@ fn page_step_examples_validate() {
         }
     }
 }
+
+/// Two scanned pages sharing one `/Resources` whose `/XObject` holds both
+/// pages' images, as scanners and some PDF tools write it. Page 1 draws its
+/// image through a form with its own resources, page 2 through a form that
+/// uses the page's.
+fn shared_scans() -> Vec<u8> {
+    let mut doc = pdf_extract::Document::with_version("1.5");
+    let image = |marker: &str| {
+        Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Image", "Width" => 1, "Height" => 1,
+                "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8,
+            },
+            marker.as_bytes().to_vec(),
+        )
+    };
+    let im1 = doc.add_object(image("SCAN-OF-CUSTOMER-A"));
+    let im2 = doc.add_object(image("SCAN-OF-CUSTOMER-B"));
+    let both = dictionary! { "Im1" => im1, "Im2" => im2 };
+    let form = doc.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Form", "BBox" => vec![0.into(), 0.into(), 1.into(), 1.into()],
+            "Resources" => dictionary! { "XObject" => both.clone() },
+        },
+        b"q /Im1 Do Q".to_vec(),
+    ));
+    // A form without resources of its own: it draws with the page's.
+    let borrowing = doc.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Form", "BBox" => vec![0.into(), 0.into(), 1.into(), 1.into()],
+        },
+        b"q /Im2 Do Q".to_vec(),
+    ));
+    // A Type 3 font whose glyph draws an image with the page's resources.
+    let im3 = doc.add_object(image("GLYPH-IMAGE"));
+    let glyph = doc.add_object(Stream::new(Dictionary::new(), b"0 0 d0 /Im3 Do".to_vec()));
+    let type3 = doc.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type3",
+        "FontBBox" => vec![0.into(), 0.into(), 1.into(), 1.into()],
+        "FontMatrix" => vec![1.into(), 0.into(), 0.into(), 1.into(), 0.into(), 0.into()],
+        "CharProcs" => dictionary! { "g" => glyph },
+        "Encoding" => dictionary! { "Differences" => vec![65.into(), Object::Name(b"g".to_vec())] },
+        "FirstChar" => 65, "LastChar" => 65, "Widths" => vec![1.into()],
+    });
+    let resources = doc.add_object(dictionary! {
+        "XObject" => dictionary! { "Fm1" => form, "Fm2" => borrowing, "Im1" => im1, "Im2" => im2, "Im3" => im3 },
+        "Font" => dictionary! { "T3" => type3 },
+    });
+    let pages_id = doc.new_object_id();
+    let mut kids = Vec::new();
+    for content in [
+        "q 100 0 0 100 0 0 cm /Fm1 Do Q",
+        "q 100 0 0 100 0 0 cm /Fm2 Do Q",
+    ] {
+        let content = doc.add_object(Stream::new(Dictionary::new(), content.as_bytes().to_vec()));
+        kids.push(Object::Reference(doc.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages_id, "Contents" => content,
+            "Resources" => resources,
+            "MediaBox" => vec![0.into(), 0.into(), 100.into(), 100.into()],
+        })));
+    }
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! { "Type" => "Pages", "Count" => 2, "Kids" => kids }),
+    );
+    let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog);
+    save(doc)
+}
+
+fn contains(haystack: &[u8], needle: &str) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|w| w == needle.as_bytes())
+}
+
+#[tokio::test]
+async fn a_page_never_carries_images_only_other_pages_draw() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("スキャン.pdf");
+    std::fs::write(&path, shared_scans()).unwrap();
+    for (pages, kept, dropped) in [
+        ("1", "SCAN-OF-CUSTOMER-A", "SCAN-OF-CUSTOMER-B"),
+        ("2", "SCAN-OF-CUSTOMER-B", "SCAN-OF-CUSTOMER-A"),
+    ] {
+        let to = dir.path().join(format!("p{pages}.pdf"));
+        let report = run_step(
+            types::EXTRACT_PAGES,
+            json!({ "path": shown(&path), "pages": pages, "to": shown(&to) }),
+        )
+        .await;
+        assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+        let bytes = std::fs::read(&to).unwrap();
+        assert!(contains(&bytes, kept), "page {pages} lost its own image");
+        assert!(
+            contains(&bytes, "GLYPH-IMAGE"),
+            "page {pages} lost its glyph's image"
+        );
+        assert!(
+            !contains(&bytes, dropped),
+            "page {pages} carries another page's image"
+        );
+    }
+    // Both pages together keep both images.
+    let to = dir.path().join("both.pdf");
+    let report = run_step(
+        types::EXTRACT_PAGES,
+        json!({ "path": shown(&path), "pages": "1-2", "to": shown(&to) }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let bytes = std::fs::read(&to).unwrap();
+    assert!(contains(&bytes, "SCAN-OF-CUSTOMER-A") && contains(&bytes, "SCAN-OF-CUSTOMER-B"));
+}
