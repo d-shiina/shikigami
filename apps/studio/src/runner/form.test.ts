@@ -73,7 +73,7 @@ describe("the run window's form", () => {
     const { inputs, errors } = collect(fields, { ...initialValues(fields), threshold: "", names: "" });
     expect(errors).toEqual({ month: "入力してください", password: "入力してください" });
     expect(inputs).toEqual({ mail: false });
-    expect(collect(fields, { ...initialValues(fields), month: "x", password: "x", threshold: "たくさん" }).errors).toEqual({ threshold: "数を入れてください" });
+    expect(collect(fields, { ...initialValues(fields), month: "x", password: "x", threshold: "たくさん" }).errors).toEqual({ threshold: "数値を入力してください" });
   });
 
   it("keeps defaults that one item per line would change", () => {

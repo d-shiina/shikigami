@@ -374,7 +374,7 @@ describe("studio store", () => {
 
     expect(await store.getState().debug({ action: "retry" })).toBe(true);
     expect(debugRun).toHaveBeenCalledWith("run_1", { action: "retry" });
-    expect(store.getState().notice).toContain("リビジョン 2");
+    expect(store.getState().notice).toContain("2 回目の変更");
     store.getState().onRunEvent({ ...base, seq: 4, type: "resumed", action: "retry", revision: 2 });
     run = store.getState().run!;
     expect(run.status).toBe("running");
