@@ -6,6 +6,10 @@
 
 ## 未リリース
 
+### 追加
+
+- 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
+
 ## [0.1.3] - 2026-11-06
 
 ### 変更（呼び名：シナリオ → フロー）

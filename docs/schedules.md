@@ -68,3 +68,23 @@ Times are the PC's local time. The agent reads the file again when it changes. A
 - **Missed times are not made up for.** A time that passes while the agent is off (the PC was off, nobody signed in) is skipped; the schedule fires at its next time.
 - **One at a time.** When a timed schedule comes round while its previous run is still going, that time is skipped. A file trigger starts one run per file.
 - A schedule that cannot start (not published, refused by the policy) counts as a failed run for notifications.
+
+## Notifications
+
+`notify` in `policy.json` tells people how unattended runs ended: runs the agent starts and `shikigami run` (Task Scheduler, batch files). Runs in Studio and the AI's trial runs are watched by a person and are not reported. Flows do not need to send mail in a `catch` for this.
+
+```json
+"notify": [
+  { "webhook": "https://….logic.azure.com/workflows/…", "format": "teams" },
+  { "webhook": "https://hooks.slack.com/services/…", "format": "slack", "on": ["failed", "succeeded"], "flows": ["scn_01a1…"] }
+]
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `webhook` | (required) | Where to post. `https://` (`http://` only for `localhost`). Anyone with the URL can post there: treat it like a password |
+| `on` | `["failed"]` | Which endings: `failed`, `succeeded`, `cancelled` |
+| `format` | `teams` | `teams`: a card for a Teams "Workflows" webhook (or Power Automate's "When a HTTP request is received", which can also send mail). `slack`: `{ "text": … }` for Slack and similar tools. `json`: the run's summary for your own systems |
+| `flows` | all | Only these flow IDs |
+
+The message says which flow, the error (code, message, node), what started it (the schedule's name), the PC, the times, the version and the run ID. Output values are never sent. A schedule that cannot start (not published, refused by the policy) is reported as failed. A notification that cannot be sent is logged and changes nothing about the run.

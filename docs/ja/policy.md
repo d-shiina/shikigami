@@ -78,6 +78,7 @@
 | `remote.manager` | なし | 管理サーバーの URL。`https://`（`http://` は `localhost` だけ） |
 | `remote.flows` | 空（なし） | 管理サーバーが始めてよいフローの ID。`"*"` ですべて。`flows.<id>.unattended: false` のものはここで許しても動かない |
 | `remote.acceptBundles` | false | このワークスペースの公開版だけでなく、管理サーバーがバンドルで送るフローも動かすか |
+| `notify` | 空 | 無人実行（エージェントのスケジュールと `shikigami run`）の終わりを知らせる先：`{ "webhook", "on", "format", "flows" }` の並び。[schedules.md](schedules.md#通知) |
 
 `allow`＝そのまま、`ask`＝人が Studio で承認してから、`deny`＝させない。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
 

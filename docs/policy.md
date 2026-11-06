@@ -78,6 +78,7 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | `remote.manager` | none | The management server's URL. `https://` (`http://` only for `localhost`) |
 | `remote.flows` | empty (none) | Flow IDs the management server may start, or `"*"` for all. `flows.<id>.unattended: false` still refuses one |
 | `remote.acceptBundles` | false | Also run flows the server sends as bundles, not only published versions in this workspace |
+| `notify` | empty | Where unattended runs (the agent's schedules and `shikigami run`) are reported: a list of `{ "webhook", "on", "format", "flows" }`. See [schedules.md](schedules.md#notifications) |
 
 `allow` = go ahead, `ask` = after a person approves in Studio, `deny` = never. The risk is the node type's `risk` (`safe`: variables, logs, control; `interactive`: operating screens; `dangerous`: deleting and moving files, HTTP to the outside, running programs and so on). Unregistered node types count as `dangerous`.
 
