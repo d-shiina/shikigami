@@ -499,9 +499,16 @@ impl SapWindow {
             .max(1) as usize;
         let take = rows.min(max_rows);
         let mut cells = Vec::with_capacity(take);
+        // Start from the first row even when the table is already scrolled.
+        let scrolled = table
+            .object("VerticalScrollbar", vec![])
+            .and_then(|bar| bar.get("Position"))
+            .and_then(|v| v.to_i64())
+            .unwrap_or(0)
+            != 0;
         let mut top = 0;
         while top < take {
-            if top > 0 {
+            if top > 0 || scrolled {
                 // Scrolling rebuilds the screen: find the table again.
                 table
                     .object("VerticalScrollbar", vec![])?

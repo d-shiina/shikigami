@@ -132,7 +132,7 @@ struct Api {
     table_info: unsafe extern "C" fn(i32, Ctx, *mut TableInfo) -> i32,
     table_cell: unsafe extern "C" fn(i32, Ctx, i32, i32, *mut TableCellInfo) -> i32,
     column_header: unsafe extern "C" fn(i32, Ctx, *mut TableInfo) -> i32,
-    add_selection: unsafe extern "C" fn(i32, Ctx, i32) -> i32,
+    add_selection: unsafe extern "C" fn(i32, Ctx, i32),
 }
 
 fn bridge_missing(reason: &str) -> StepError {
@@ -673,7 +673,8 @@ impl AppBridge for JavaWindow {
                 .text
                 .then(|| walk.api.text(walk.vm, f.ctx))
                 .flatten()
-                .filter(|t| !t.trim().is_empty())
+                // An empty field reads as empty; the name only when the
+                // component has no text to read.
                 .unwrap_or_else(|| f.node.name.clone());
             Ok(Value::String(text))
         })
@@ -698,10 +699,9 @@ impl AppBridge for JavaWindow {
                     "hint": "Use one of the options listed."
                 }))
             })?;
-            // SAFETY: selects a child of an object the bridge gave us.
-            if unsafe { (walk.api.add_selection)(walk.vm, f.ctx, index as i32) } == 0 {
-                return Err(StepError::permanent("NOT_SUPPORTED", "Java did not select the option"));
-            }
+            // SAFETY: selects a child of an object the bridge gave us (the
+            // call returns nothing; AccessBridgeCalls.h).
+            unsafe { (walk.api.add_selection)(walk.vm, f.ctx, index as i32) };
             Ok(Value::Null)
         })
     }
