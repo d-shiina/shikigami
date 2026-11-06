@@ -15,6 +15,13 @@ const GAP_Y = 56;
 /** Between the last node and the "+" under it. */
 const END_GAP = 24;
 /**
+ * The small "+" at the end of a block that has nodes (a branch, a loop's
+ * body, …), on the line just under its last node: it adds a node there,
+ * inside the block. The line runs through it on to what comes next.
+ */
+export const TAIL_SIZE = 24;
+const TAIL_GAP = 16;
+/**
  * Room beside a step for its variable chips: the ones it reads sit off its
  * left edge (up to two side by side), the ones it writes off its right (one
  * per row). A chip is at most 80px, after a 16px lead.
@@ -66,6 +73,8 @@ export type SlotNodeData = {
   label: string;
   /** The faint "+" under the flow's last node, to keep adding at the end. */
   end?: boolean;
+  /** The small "+" under a block's last node, to add at the end of the block (see TAIL_SIZE). */
+  tail?: boolean;
 };
 
 export type LayoutNode = {
@@ -124,7 +133,8 @@ function frameKind(type: string): FrameKind {
 /** Blocks whose children run at the same time: each child gets its own lane. */
 const FAN_OUT_BLOCKS: Record<string, string> = { "control.parallel": "branches" };
 
-type Lane = { name: string; label: string; steps: Step[]; start: number };
+/** `tail`: ends in a "+" to add at its end (not a lane of one of a parallel's branches, where that would start another branch). */
+type Lane = { name: string; label: string; steps: Step[]; start: number; tail: boolean };
 
 /** Block lanes of a step: declared blocks in registry order, then unknown ones. */
 function lanes(step: Step, defs: Defs): Lane[] {
@@ -135,14 +145,15 @@ function lanes(step: Step, defs: Defs): Lane[] {
     label: blockLabel(step, b.name, b.label),
     steps: step.blocks?.[b.name] ?? [],
     start: 0,
+    tail: true,
   }));
   for (const [name, steps] of Object.entries(step.blocks ?? {})) {
-    if (!declared.some((b) => b.name === name)) result.push({ name, label: name, steps, start: 0 });
+    if (!declared.some((b) => b.name === name)) result.push({ name, label: name, steps, start: 0, tail: true });
   }
   const fanOut = FAN_OUT_BLOCKS[step.type];
   return result.flatMap((lane) =>
     lane.name === fanOut && lane.steps.length > 0
-      ? lane.steps.map((child, i) => ({ ...lane, steps: [child], start: i }))
+      ? lane.steps.map((child, i) => ({ ...lane, steps: [child], start: i, tail: false }))
       : [lane],
   );
 }
@@ -155,7 +166,7 @@ function nodeSize(step: Step, defs: Defs, extra: Extra): Size {
   return { w: NODE_W, h: nodeHeight(step, defs.get(step.type), extra.get(step.id ?? "") ?? 0) };
 }
 
-function measureList(steps: Step[], defs: Defs, extra: Extra): Size {
+function measureList(steps: Step[], defs: Defs, extra: Extra, tail = false): Size {
   if (steps.length === 0) return SLOT;
   let w = 0;
   let h = 0;
@@ -164,14 +175,15 @@ function measureList(steps: Step[], defs: Defs, extra: Extra): Size {
     w = Math.max(w, m.w);
     h += m.h;
   }
-  return { w, h: h + GAP_Y * (steps.length - 1) };
+  h += GAP_Y * (steps.length - 1);
+  return tail ? { w: Math.max(w, TAIL_SIZE), h: h + TAIL_GAP + TAIL_SIZE } : { w, h };
 }
 
 function measure(step: Step, defs: Defs, extra: Extra): Size {
   const ls = lanes(step, defs);
   const own = nodeSize(step, defs, extra);
   if (ls.length === 0) return own;
-  const ms = ls.map((l) => measureList(l.steps, defs, extra));
+  const ms = ls.map((l) => measureList(l.steps, defs, extra, l.tail));
   const w = ms.reduce((acc, m) => acc + m.w, 0) + GAP_X * (ms.length - 1);
   const h = own.h + GAP_Y + Math.max(...ms.map((m) => m.h)) + FRAME_BOTTOM;
   const room = (LOOP_TYPES.has(step.type) ? LOOP_ROOM : BLOCK_ROOM) * 2;
@@ -206,6 +218,7 @@ class Builder {
     block: string | null,
     slotLabel: string,
     start = 0,
+    tail = false,
   ): { entry: string; exits: string[] } {
     if (steps.length === 0) {
       const id = `slot:${parentId ?? "root"}:${block ?? ""}`;
@@ -231,6 +244,20 @@ class Builder {
       previous = placed.exits;
       cursor += measure(step, this.defs, this.extra).h + GAP_Y;
     });
+    if (tail) {
+      const id = `end:${parentId ?? "root"}:${block ?? ""}`;
+      this.nodes.push({
+        id,
+        type: "slot",
+        position: { x: x + (span - TAIL_SIZE) / 2, y: cursor - GAP_Y + TAIL_GAP },
+        data: { kind: "slot", parentId, block, label: slotLabel, tail: true },
+      });
+      for (const p of previous) {
+        const body = this.bodies.get(p);
+        this.edge(p, id, undefined, undefined, body ? body.left - DETOUR_LEFT : undefined);
+      }
+      previous = [id];
+    }
     return { entry, exits: previous };
   }
 
@@ -255,7 +282,7 @@ class Builder {
     const ls = lanes(step, this.defs);
     if (ls.length === 0) return { entry: id, exits: [id] };
 
-    const sizes = ls.map((l) => measureList(l.steps, this.defs, this.extra));
+    const sizes = ls.map((l) => measureList(l.steps, this.defs, this.extra, l.tail));
     const isLoop = LOOP_TYPES.has(step.type);
     const exits: string[] = [];
     const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (ls.length - 1);
@@ -277,7 +304,7 @@ class Builder {
     this.depth += 1;
     ls.forEach((lane, i) => {
       const size = sizes[i] ?? SLOT;
-      const placed = this.list(lane.steps, y + own.h + GAP_Y, laneX, size.w, id, lane.name, lane.label, lane.start);
+      const placed = this.list(lane.steps, y + own.h + GAP_Y, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
       this.edge(id, placed.entry, lane.label);
       if (isLoop) {
         for (const e of placed.exits) this.edge(e, id, undefined, true, laneX + size.w + DETOUR_RIGHT);

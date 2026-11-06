@@ -534,6 +534,7 @@ export const en: Dict = {
     fixNow: (agent: string) => `Ask ${agent} to fix it now`,
   },
   flow: {
+    addAtBlockEnd: (block: string) => `Add a node at the end of "${block}"`,
     aiAdded: "Added by AI",
     aiChanged: "Changed by AI",
     breakpointOff: "Remove breakpoint (F9)",

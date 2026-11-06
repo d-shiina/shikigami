@@ -533,6 +533,7 @@ export const ja = {
     fixNow: (agent: string) => `${agent} に今すぐ修正を依頼`,
   },
   flow: {
+    addAtBlockEnd: (block: string) => `「${block}」の最後にノードを追加`,
     aiAdded: "AIが追加",
     aiChanged: "AIが変更",
     breakpointOff: "ブレークポイントを外す (F9)",
