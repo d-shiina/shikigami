@@ -6,6 +6,7 @@
 // tabs. Waiting relies on Playwright's auto-waiting, never on fixed sleeps.
 
 import { existsSync, mkdirSync, statSync } from "node:fs";
+import { get as httpGet } from "node:http";
 import { basename, dirname, join } from "node:path";
 
 import { chromium } from "playwright-core";
@@ -101,6 +102,28 @@ const SIGNED_IN_PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-
 interface SavedSession {
   name: string;
   state: unknown;
+}
+
+/** The browser's DevTools WebSocket address from `/json/version` on 127.0.0.1. */
+function debuggerUrl(port: number, timeout: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = httpGet({ host: "127.0.0.1", port, path: "/json/version", timeout }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => (body += chunk));
+      res.on("end", () => {
+        try {
+          const url = (JSON.parse(body) as { webSocketDebuggerUrl?: unknown }).webSocketDebuggerUrl;
+          if (typeof url === "string") resolve(url);
+          else reject(new Error("the answer on that port has no webSocketDebuggerUrl"));
+        } catch {
+          reject(new Error("the answer on that port is not a browser's"));
+        }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error(`no answer within ${timeout} ms`)));
+    req.on("error", reject);
+  });
 }
 
 export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): AdapterOptions {
@@ -393,7 +416,10 @@ export class Adapter {
     if (!session || !session.attached?.isConnected()) {
       let browser: Browser;
       try {
-        browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: this.limit(params) });
+        // Ask the browser for its address directly: a proxy set for the PC
+        // (HTTP_PROXY) must never be asked to reach 127.0.0.1.
+        const endpoint = await debuggerUrl(port, this.limit(params));
+        browser = await chromium.connectOverCDP(endpoint, { timeout: this.limit(params) });
       } catch (error) {
         throw new AdapterError("BROWSER_NOT_RUNNING", `no browser is waiting on port ${port}: ${(error as Error).message.split("\n")[0]}`, {
           retryable: true,
