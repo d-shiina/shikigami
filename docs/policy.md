@@ -72,7 +72,7 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | `ai.deleteFlow` | ask | The AI's `delete_flow` |
 | `flows.<id>.aiRun` | none | Stricter rules for this flow only (and runs and tests that call it). Never looser than the global rule |
 | `flows.<id>.unattended` | true | When false, `shikigami run` does not run it, nor any flow that calls it (`UNATTENDED_NOT_ALLOWED`). Studio still can |
-| `records.keepDays` | none (keep) | Each PC deletes its run records (`runs/<run-id>/`) older than this many days. Applied when a run ends; runs still going are never deleted |
+| `records.keepDays` | none (keep) | Each PC deletes its run records (`runs/<run-id>/`) and MCP calls (`audit/mcp.jsonl`) older than this many days ([audit.md](audit.md)). Applied when a run ends; runs still going are never deleted |
 | `records.keepRuns` | none (keep) | Each PC keeps at most this many run records, the newest |
 | `remote.enabled` | false | Take jobs from a management server ([remote.md](remote.md)). The PC must also be enrolled (`shikigami agent enroll`) |
 | `remote.manager` | none | The management server's URL. `https://` (`http://` only for `localhost`) |

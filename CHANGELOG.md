@@ -11,6 +11,7 @@
 ### 追加
 
 - Studio のフロー図：分岐・繰り返しの枠の最後にも「＋」が出て、その中の最後にノードを足せます
+- 値で分岐（VBA の Select Case）：`control.switch`（`value` / `cases` / `default`）と `control.case`（`values` か `condition`）。上から最初に当たったケースだけを実行し、どれにも当たらなければ `default`。検証コード `NOT_A_CASE` / `CASE_OUTSIDE_SWITCH`。フローの形式は変わりません。Studio ではケースごとの枝と「ケースを追加」を表示
 - ブラウザの「画面から選ぶ」と `ask_user_to_pick` で、iframe の中の部品も指せるようになりました。指した部品は `target.frame` 付きで返ります（フレームの中のフレーム、別のサイトの iframe も）。「光らせる」も iframe の中の部品に効きます。`target.frame` は 4 段まで書けます（これまでは 2 段）
 - Studio に「自動実行」：エージェントの状態（実行中のフロー）と「エージェントを開始」・停止、スケジュールの一覧・追加・編集・有効と無効（次と前回の時刻つき、公開版がないものは警告）。フローのインスペクターに「スケジュール」の節
 - Studio：現場の人が使う実行画面「Shikigami 実行」（別ウィンドウ）。公開されたフローだけが並び、入力変数から作るフォームで入力し、公開版を実行。実行中は一番上の段のノードの進み、終わると出力変数と `output/` に書いたファイル、失敗は日本語のエラー。サイドバーの「実行画面」か、Studio を `--runner` で起動して開く（docs/runner.md）
@@ -18,6 +19,7 @@
 - タスクトレイのアイコン：クリックで実行画面、右クリックで「実行画面を開く」「Studio を開く」「終了」。`--runner` で起動すると実行画面を閉じてもトレイに残り、`--tray` でトレイだけで起動します（docs/runner.md）
 - 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
 - 管理サーバー（プロトコル v1、docs/remote.md）：`shikigami agent enroll <URL> <コード>` で PC を一度だけ使える登録コードで登録（鍵の組は PC で作り、秘密鍵は資格情報マネージャー）。`policy.json` の `remote` で許したフローの公開版だけを、手が空いたエージェントが自分から取りに行き、イベントとレポートを返す。サーバーでの取り消し、断ったジョブ（`REMOTE_NOT_ALLOWED` / `NOT_PUBLISHED` / `VERSION_MISMATCH`）、`shikigami agent unenroll`、`agent status` にサーバーとの接続。参考実装のサーバー `shikigami manager serve`（登録コード・ワーカー・ジョブの管理用 API）
+- 監査の記録 `shikigami audit`：変更・公開・AI（MCP）の操作・実行を、誰がどこからしたかつきで 1 つの一覧に（`--since` / `--until` / `--flow` / `--json`）。`records.keepDays` は MCP の呼び出しの記録も期限で削除します（docs/audit.md）
 
 ### 変更
 

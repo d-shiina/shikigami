@@ -182,6 +182,7 @@ shikigami/
 | type | 内容 |
 |---|---|
 | `control.if` | `condition` / blocks: `then`, `else` |
+| `control.switch` / `control.case` | `value`（式）/ blocks: `cases`（`control.case` だけ）, `default`。上から見て、`values` に等しい値がある・または `condition` が真の最初のケースの `body` を実行し、どれにも当たらなければ `default`（VBA の `Select Case`） |
 | `control.while` | `condition`, `maxIterations`（既定1000）/ `body` |
 | `control.repeat` | `count`, `indexVar` / `body` |
 | `control.forEach` | `items`（式）, `itemVar`, `indexVar`, `collect`（式。各回の値を `saveAs` に配列で返す）, `concurrency`（同時に回す数）/ `body` |

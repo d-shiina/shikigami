@@ -51,6 +51,9 @@ const COMMON = [
   "log.message",
 ];
 
+/** Node types that only exist inside another one. */
+const UNLISTED = new Set(["control.case"]);
+
 /** Office steps are listed by application: people look for "Excel", not "Office". */
 const OFFICE_APPS: Record<string, string> = { excel: "excel", word: "word", mail: "outlook" };
 
@@ -174,7 +177,9 @@ function flowItems(flows: readonly FlowSummary[], openId: string | undefined): P
 
 /** Every line the palette can show. `flows` and `openId` add the reusable flows (not the open one). */
 export function paletteItems(defs: readonly StepTypeDef[], flows: readonly FlowSummary[] = [], openId?: string): PaletteItem[] {
-  return [...defs.map(stepItem), ...flowItems(flows, openId), ...presetItems()];
+  // A case is added from its switch ("ケースを追加"), never on its own.
+  const listed = defs.filter((d) => !UNLISTED.has(d.type));
+  return [...listed.map(stepItem), ...flowItems(flows, openId), ...presetItems()];
 }
 
 const rank = (group: string) => {

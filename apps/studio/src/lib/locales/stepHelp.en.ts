@@ -89,6 +89,8 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "clipboard.set": { summary: "Put text on the clipboard", words: "copy paste" },
   "process.run": { summary: "Run a command or program and get its output", words: "command exe bat powershell shell" },
   "control.if": { summary: "Branch on a condition (then / else)", words: "branch condition when else" },
+  "control.switch": { summary: "Branch several ways on one value (Select Case)", words: "switch case select branch value" },
+  "control.case": { summary: "One branch of a switch (when the value matches)", words: "case when" },
   "control.forEach": { summary: "Repeat the nodes inside for each item of a list", words: "loop each every for" },
   "control.repeat": { summary: "Repeat the nodes inside a set number of times", words: "loop times count" },
   "control.while": { summary: "Repeat the nodes inside while a condition holds", words: "loop condition" },
