@@ -5,11 +5,18 @@ import { Runner } from "./runner/Runner";
 // Bundled so Japanese never falls back to Chinese glyph shapes, offline too.
 import "@fontsource-variable/noto-sans-jp";
 import "./index.css";
-import { initLocale } from "./lib/i18n";
+import { initLocale, onLocaleChange, t } from "./lib/i18n";
 import { initTheme } from "./lib/theme";
+import { setTrayLabels } from "./runner/api";
 
 initTheme();
 initLocale();
+// The tray menu (src-tauri/src/tray.rs) speaks the language the screens do.
+const trayLabels = () => void setTrayLabels(t.tray).catch(() => {});
+if ("__TAURI_INTERNALS__" in globalThis) {
+  trayLabels();
+  onLocaleChange(trayLabels);
+}
 
 const root = document.getElementById("root");
 if (root) {

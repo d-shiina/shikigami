@@ -138,6 +138,35 @@ pub fn runner_run(
     track_run(app, &state, id, handle, RUNNER_EVENT)
 }
 
+/// The file or folder picker of a `format: file` / `folder` input. `start`
+/// is the path in the field, so the dialog opens next to it. `None` when
+/// the person cancels.
+#[tauri::command]
+pub async fn runner_pick(kind: String, start: Option<String>) -> CmdResult<Option<String>> {
+    if kind != "file" && kind != "folder" {
+        return Err(err("INVALID_INPUT", format!("cannot pick a {kind}")));
+    }
+    let folder = start
+        .map(std::path::PathBuf::from)
+        .and_then(|p| {
+            if p.is_dir() {
+                Some(p)
+            } else {
+                p.parent().filter(|d| d.is_dir()).map(Into::into)
+            }
+        })
+        .map(|p| p.to_string_lossy().into_owned());
+    let params = serde_json::json!({ "kind": kind, "folder": folder.unwrap_or_default() });
+    let picked = shikigami_system::select_file(&params)
+        .await
+        .map_err(|e| ErrorPayload {
+            code: e.code,
+            message: e.message,
+            details: e.details,
+        })?;
+    Ok(picked.as_str().map(str::to_owned))
+}
+
 /// Opens the run window, or brings it to the front.
 #[tauri::command]
 pub fn open_runner(app: AppHandle) -> CmdResult<()> {

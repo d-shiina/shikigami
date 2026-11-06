@@ -22,7 +22,7 @@ use crate::ids::{FlowId, StepId};
 /// Current flow schema version. Bump on every change to the file shape
 /// (readers reject unknown fields, so new optional fields count too) and add
 /// a migration in [`crate::migrate`]. See docs/compatibility.md.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 /// A flow: the unit that AI clients, Studio and the Runtime share.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -373,6 +373,14 @@ pub struct VariableDef {
     /// Secret values are masked in logs, events and run records.
     #[serde(default, skip_serializing_if = "is_false")]
     pub secret: bool,
+    /// What a `string` input holds, so the run window can offer the right
+    /// field (a file picker, a calendar). Runs do not check it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<VarFormat>,
+    /// The only values an input takes: the run window shows a list to pick
+    /// from. Each one must match `type`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<Value>,
 }
 
 impl VariableDef {
@@ -384,8 +392,24 @@ impl VariableDef {
             default: None,
             description: String::new(),
             secret: false,
+            format: None,
+            choices: Vec::new(),
         }
     }
+}
+
+/// What a text variable holds ([`VariableDef::format`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum VarFormat {
+    /// The full path of an existing file.
+    File,
+    /// The full path of a folder.
+    Folder,
+    /// A day, `YYYY-MM-DD`.
+    Date,
+    /// A month, `YYYY-MM`.
+    Month,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]

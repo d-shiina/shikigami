@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::expr::{self, Expr};
 use crate::ids::StepId;
-use crate::model::{Flow, SCHEMA_VERSION, Step};
+use crate::model::{Flow, SCHEMA_VERSION, Step, VarFormat, VarType, VariableDef};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
 use crate::requires::{self, PLUGIN_PREFIX};
 use crate::secret::{self, SecretRef};
@@ -205,6 +205,90 @@ impl Cx<'_> {
     }
 
     /// Attaches a context-specific hint to the issue pushed last.
+    /// `format` and `choices`: how the run window asks for the variable.
+    fn check_input_form(&mut self, var: &VariableDef, path: &str) {
+        if let Some(format) = var.format {
+            if !matches!(var.var_type, VarType::String | VarType::Any) {
+                self.error(
+                    "INVALID_VARIABLE_FORMAT",
+                    format!(
+                        "format of '{}' needs type string, not {:?}",
+                        var.name, var.var_type
+                    ),
+                    format!("{path}/format"),
+                    None,
+                );
+            } else if let Some(Value::String(text)) = &var.default
+                && !text.is_empty()
+                && !format_accepts(format, text)
+            {
+                self.error(
+                    "INVALID_VARIABLE_FORMAT",
+                    format!("default of '{}' is not a {}", var.name, format_name(format)),
+                    format!("{path}/default"),
+                    None,
+                );
+            }
+        }
+        if var.choices.is_empty() {
+            return;
+        }
+        let choices = format!("{path}/choices");
+        if !matches!(var.var_type, VarType::String | VarType::Number) {
+            self.error(
+                "INVALID_VARIABLE_CHOICES",
+                format!(
+                    "choices of '{}' need type string or number, not {:?}",
+                    var.name, var.var_type
+                ),
+                choices,
+                None,
+            );
+            return;
+        }
+        if var.secret || var.format.is_some() {
+            self.error(
+                "INVALID_VARIABLE_CHOICES",
+                format!(
+                    "'{}' has choices, so it cannot also be secret or have a format",
+                    var.name
+                ),
+                choices.clone(),
+                None,
+            );
+        }
+        for (i, choice) in var.choices.iter().enumerate() {
+            if !var.var_type.accepts(choice) {
+                self.error(
+                    "INVALID_VARIABLE_CHOICES",
+                    format!(
+                        "choice {choice} of '{}' does not match type {:?}",
+                        var.name, var.var_type
+                    ),
+                    format!("{choices}/{i}"),
+                    None,
+                );
+            } else if var.choices[..i].contains(choice) {
+                self.error(
+                    "INVALID_VARIABLE_CHOICES",
+                    format!("choice {choice} of '{}' is listed twice", var.name),
+                    format!("{choices}/{i}"),
+                    None,
+                );
+            }
+        }
+        if let Some(default) = &var.default
+            && !var.choices.contains(default)
+        {
+            self.error(
+                "INVALID_VARIABLE_CHOICES",
+                format!("default of '{}' is not one of its choices", var.name),
+                format!("{path}/default"),
+                None,
+            );
+        }
+    }
+
     fn hint(&mut self, hint: impl Into<String>) {
         if let Some(issue) = self.issues.last_mut() {
             issue.hint = Some(hint.into());
@@ -364,6 +448,7 @@ impl Cx<'_> {
                     None,
                 );
             }
+            self.check_input_form(var, &path);
         }
 
         if let Some(retry) = &flow.settings.default_retry
@@ -1051,6 +1136,33 @@ fn find_accumulators(steps: &[Step], out: &mut BTreeSet<String>) {
     }
 }
 
+fn format_name(format: VarFormat) -> &'static str {
+    match format {
+        VarFormat::File => "file path",
+        VarFormat::Folder => "folder path",
+        VarFormat::Date => "date (YYYY-MM-DD)",
+        VarFormat::Month => "month (YYYY-MM)",
+    }
+}
+
+/// Whether a default fits `format`. Paths are not checked: the file may
+/// only exist on the PC that runs the flow.
+fn format_accepts(format: VarFormat, text: &str) -> bool {
+    let num =
+        |part: &str, len: usize| part.len() == len && part.bytes().all(|b| b.is_ascii_digit());
+    let month_ok = |m: &str| num(m, 2) && (1..=12).contains(&m.parse::<u8>().unwrap_or(0));
+    match format {
+        VarFormat::File | VarFormat::Folder => true,
+        VarFormat::Month => {
+            matches!(text.split('-').collect::<Vec<_>>()[..], [y, m] if num(y, 4) && month_ok(m))
+        }
+        VarFormat::Date => matches!(
+            text.split('-').collect::<Vec<_>>()[..],
+            [y, m, d] if num(y, 4) && month_ok(m) && num(d, 2) && (1..=31).contains(&d.parse::<u8>().unwrap_or(0))
+        ),
+    }
+}
+
 /// Fix instructions for issues without a more specific hint.
 fn generic_hint(code: &str) -> Option<&'static str> {
     Some(match code {
@@ -1067,6 +1179,12 @@ fn generic_hint(code: &str) -> Option<&'static str> {
         "DUPLICATE_VARIABLE" => "Keep one declaration per variable name.",
         "VARIABLE_TYPE_MISMATCH" => {
             "Make `default` match `type`, or change `type` (any accepts every value)."
+        }
+        "INVALID_VARIABLE_FORMAT" => {
+            "`format` (file, folder, date, month) is for string variables; a date default is YYYY-MM-DD and a month YYYY-MM."
+        }
+        "INVALID_VARIABLE_CHOICES" => {
+            "`choices` lists the values a string or number input takes, each once and of the variable's type; `default` must be one of them."
         }
         "INVALID_RETRY" => "Set retry.maxAttempts to 1 or more (1 means no retry).",
         "EMPTY_NAME" => "Give the flow a short descriptive name.",
@@ -1262,6 +1380,63 @@ mod tests {
                 .iter()
                 .any(|i| i.step_id.as_ref().is_some_and(|id| id.as_str() == "s0"))
         );
+    }
+
+    #[test]
+    fn input_formats_and_choices_are_checked() {
+        let v = Validator::new(typing_registry());
+        let var = |name: &str, ty, f: &dyn Fn(&mut VariableDef)| {
+            let mut var = VariableDef::new(name, ty);
+            f(&mut var);
+            var
+        };
+        let mut s = Flow::new("t");
+        s.variables = vec![
+            // Fine: a file, a month with a default, choices with one picked.
+            var("book", VarType::String, &|v| {
+                v.format = Some(VarFormat::File)
+            }),
+            var("month", VarType::String, &|v| {
+                v.format = Some(VarFormat::Month);
+                v.default = Some(json!("2026-11"));
+            }),
+            var("branch", VarType::String, &|v| {
+                v.choices = vec![json!("東京"), json!("大阪")];
+                v.default = Some(json!("大阪"));
+            }),
+            var("count", VarType::Number, &|v| {
+                v.format = Some(VarFormat::Date)
+            }),
+            var("day", VarType::String, &|v| {
+                v.format = Some(VarFormat::Date);
+                v.default = Some(json!("2026/11/06"));
+            }),
+            var("flag", VarType::Boolean, &|v| v.choices = vec![json!(true)]),
+            var("size", VarType::Number, &|v| {
+                v.choices = vec![json!(1), json!("2"), json!(1)];
+                v.default = Some(json!(3));
+            }),
+        ];
+        let report = v.validate(&s);
+        let found: Vec<_> = report
+            .issues
+            .iter()
+            .map(|i| (i.code.as_str(), i.path.as_str()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("INVALID_VARIABLE_FORMAT", "/variables/3/format"),
+                ("INVALID_VARIABLE_FORMAT", "/variables/4/default"),
+                ("INVALID_VARIABLE_CHOICES", "/variables/5/choices"),
+                ("INVALID_VARIABLE_CHOICES", "/variables/6/choices/1"),
+                ("INVALID_VARIABLE_CHOICES", "/variables/6/choices/2"),
+                ("INVALID_VARIABLE_CHOICES", "/variables/6/default"),
+            ]
+        );
+        assert!(hint_of(&report, "INVALID_VARIABLE_FORMAT").contains("YYYY-MM"));
+        assert!(format_accepts(VarFormat::Date, "2026-02-28"));
+        assert!(!format_accepts(VarFormat::Month, "2026-13"));
     }
 
     #[test]
