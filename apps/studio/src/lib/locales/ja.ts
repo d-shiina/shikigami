@@ -572,7 +572,9 @@ export const ja = {
     pausedHere: "ここで一時停止中",
     note: "指摘",
     /** The tag on the frame around a loop, if, … and its blocks. */
-    frame: { loop: "繰り返し", if: "条件分岐", try: "エラー処理", parallel: "並列実行", group: "グループ" },
+    frame: { loop: "繰り返し", if: "条件分岐", switch: "値で分岐", try: "エラー処理", parallel: "並列実行", group: "グループ" },
+    /** Beside a switch's cases. */
+    addCase: "ケースを追加",
   },
   project: {
     title: "プロジェクト",
@@ -795,6 +797,7 @@ export const ja = {
     unset: "（未設定）",
     numberHint: "数値、または式（例: count * 2）",
     jsonHint: "JSON（文字列は {{ 式 }} テンプレートも可）",
+    listHint: "カンマ区切り（例: A, B, 10）。数字を文字として扱う場合は \"10\" のように囲みます",
     form: "フォーム",
     flowInput: "フロー入力",
     flowOutput: "フロー出力",
@@ -1102,6 +1105,7 @@ export const ja = {
   askCopied: "AI への依頼文をコピーしました。Claude Code などの AI に貼り付けてください。修正内容を確認すると、ここから再開できます。",
   paramLabels: {
     message: "メッセージ",
+    values: "該当する値",
     level: "レベル",
     name: "変数",
     value: "値",

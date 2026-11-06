@@ -92,6 +92,8 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "clipboard.set": { summary: "文字をクリップボードに入れる", words: "コピー 貼り付け" },
   "process.run": { summary: "コマンドやプログラムを動かして、結果を受け取る", words: "コマンド exe bat powershell 実行" },
   "control.if": { summary: "条件で分ける（成り立つとき／そうでないとき）", words: "もし 場合 分岐 判定 条件 else" },
+  "control.switch": { summary: "1 つの値で、いくつもの枝に分ける（Select Case）", words: "場合 分岐 値 区分 ケース 振り分け switch case select" },
+  "control.case": { summary: "値で分岐の 1 つの枝（値が該当するとき）", words: "ケース case 場合" },
   "control.forEach": { summary: "リストの 1 件ずつ、中のノードを繰り返す", words: "ループ 繰り返し 各 全件 for each" },
   "control.repeat": { summary: "決めた回数だけ、中のノードを繰り返す", words: "ループ 繰り返し 回数" },
   "control.while": { summary: "条件が成り立つ間、中のノードを繰り返す", words: "ループ 繰り返し 条件" },

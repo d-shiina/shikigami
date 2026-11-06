@@ -19,6 +19,8 @@ const defs = new Map(
     def("control.if", ["then", "else"]),
     def("control.repeat", ["body"]),
     def("control.parallel", ["branches"]),
+    def("control.switch", ["cases", "default"]),
+    def("control.case", ["body"]),
   ].map(
     (d) => [d.type, d] as const,
   ),
@@ -34,6 +36,36 @@ describe("layoutFlow", () => {
     const y = (l: typeof open, id: string) => l.nodes.find((n) => n.id === id)!.position.y;
     expect(y(open, "b") - y(folded, "b")).toBe(120);
     expect(open.height - folded.height).toBe(120);
+  });
+
+  it("gives each case of a switch its own branch, then one to add a case, then default", () => {
+    const steps: Step[] = [
+      {
+        id: "sw",
+        type: "control.switch",
+        params: { value: "kind" },
+        blocks: {
+          cases: [
+            { id: "c1", type: "control.case", params: { values: ["A"] }, blocks: { body: [log("a")] } },
+            { id: "c2", type: "control.case", params: { values: ["B"] } },
+          ],
+          default: [log("d")],
+        },
+      },
+      log("after"),
+    ];
+    const layout = layoutFlow(steps, defs);
+    const node = (id: string) => layout.nodes.find((n) => n.id === id)!;
+    // Cases side by side under the switch, in order, then "add a case", then default.
+    const xs = ["c1", "slot:c2:body", "slot:sw:cases", "d"].map((id) => node(id).position.x);
+    expect(xs).toEqual([...xs].sort((p, q) => p - q));
+    expect(node("c1").position.y).toBe(node("c2").position.y);
+    expect(node("slot:sw:cases").data).toMatchObject({ kind: "slot", parentId: "sw", block: "cases", addCase: true });
+    // Every branch joins the next step.
+    const into = layout.edges.filter((e) => e.target === "after").map((e) => e.source);
+    expect(into.sort()).toEqual(["end:c1:body", "end:sw:default", "slot:c2:body", "slot:sw:cases"].sort());
+    // One frame, around the switch: a case is a branch of it, not a frame of its own.
+    expect(layout.frames.map((f) => [f.id, f.kind])).toEqual([["sw", "switch"]]);
   });
 
   it("renders an empty flow as a single slot", () => {

@@ -182,6 +182,7 @@ The canonical format is JSON (`schemas/flow.schema.json`). Example: [examples/in
 | type | Contents |
 |---|---|
 | `control.if` | `condition` / blocks: `then`, `else` |
+| `control.switch` / `control.case` | `value` (expression) / blocks: `cases` (only `control.case`), `default`. The first case whose `values` holds an equal value, or whose `condition` is true, runs its `body`; otherwise `default` (like VBA `Select Case`) |
 | `control.while` | `condition`, `maxIterations` (default 1000) / `body` |
 | `control.repeat` | `count`, `indexVar` / `body` |
 | `control.forEach` | `items` (expression), `itemVar`, `indexVar`, `collect` (expression; each iteration's value is returned in `saveAs` as a list), `concurrency` (how many run at once) / `body` |
