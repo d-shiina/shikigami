@@ -187,6 +187,7 @@
 - **相手**：UiPath Academy、Microsoft Learn（PAD）、WinActor のマニュアル・研修・利用者コミュニティ
 - **影響**：OSS で販売網がない分、資料が営業の代わり。ないと試されない
 - **方向**：「AI に頼んで請求書の集計を作る」のような業務別の通し例を数本、画面付きで。Studio の中から開ける形が望ましい
+- **対応**：[docs/ja/tutorials/](../ja/tutorials/README.md) に 3 本（売上 CSV の集約、請求書の作成、Web の受注システム）。見本は `examples/tutorials/`、完成形はバンドルで「ファイルから読み込む」で開け、CI で毎回実行する。残り：Studio の中からチュートリアルと見本を開く入口
 
 ## P2：特定の場面で効く
 

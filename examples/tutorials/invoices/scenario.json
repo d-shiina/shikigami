@@ -1,0 +1,55 @@
+{
+  "$schema": "../../../schemas/scenario.schema.json",
+  "schemaVersion": 1,
+  "id": "scn_tutorial_invoices",
+  "name": "受注一覧から取引先ごとの請求書を作る",
+  "description": "input/受注一覧.xlsx の受注を取引先ごとにまとめ、templates/請求書.docx に差し込んで output/請求書 に Word の請求書を作る。一覧は output/請求一覧.xlsx。チュートリアル（docs/ja/tutorials/invoices.md）の完成形。",
+  "revision": 1,
+  "metadata": { "tags": ["チュートリアル"] },
+  "variables": [
+    { "name": "orderFile", "type": "string", "direction": "input", "default": "input/受注一覧.xlsx", "description": "受注一覧の Excel" },
+    { "name": "month", "type": "string", "direction": "input", "default": "2026年10月", "description": "請求の対象の月（請求書に載る）" },
+    { "name": "invoiceCount", "type": "number", "direction": "output", "default": 0, "description": "作った請求書の数" },
+    { "name": "grandTotal", "type": "number", "direction": "output", "default": 0, "description": "請求額の合計（円）" },
+    { "name": "orders", "type": "array", "default": [] },
+    { "name": "byCustomer", "type": "object", "default": {} },
+    { "name": "summary", "type": "array", "default": [] },
+    { "name": "lines", "type": "array", "default": [] },
+    { "name": "subtotal", "type": "number", "default": 0 }
+  ],
+  "steps": [
+    { "id": "stp_read", "type": "excel.readRows", "name": "受注一覧を読む", "params": { "path": "{{ orderFile }}", "sheet": "受注" }, "saveAs": "orders" },
+    { "id": "stp_group", "type": "variable.set", "name": "取引先ごとにまとめる", "params": { "name": "byCustomer", "expression": "groupBy(orders, o => o['取引先'])" } },
+    { "id": "stp_folder", "type": "file.createFolder", "name": "請求書のフォルダー", "params": { "path": "output/請求書" } },
+    {
+      "id": "stp_each", "type": "control.forEach", "name": "取引先ごとに請求書を作る", "params": { "items": "sort(keys(byCustomer))", "itemVar": "customer" },
+      "blocks": {
+        "body": [
+          { "id": "stp_lines", "type": "variable.set", "name": "この取引先の受注", "params": { "name": "lines", "expression": "byCustomer[customer]" } },
+          { "id": "stp_subtotal", "type": "variable.set", "name": "小計", "params": { "name": "subtotal", "expression": "sum(map(lines, o => num(o['金額'])))" } },
+          {
+            "id": "stp_word", "type": "word.fillTemplate", "name": "請求書を作る",
+            "params": {
+              "template": "templates/請求書.docx",
+              "path": "output/請求書/請求書_{{ customer }}.docx",
+              "values": {
+                "顧客": "{{ customer }}",
+                "発行日": "{{ formatDate(today(), 'yyyy年M月d日') }}",
+                "当月": "{{ month }}",
+                "合計": "{{ formatNumber(subtotal) }}",
+                "明細": "{{ map(lines, o => { '注文番号': o['注文番号'], '商品': o['商品'], '金額': formatNumber(num(o['金額'])) }) }}"
+              }
+            }
+          },
+          { "id": "stp_row", "type": "variable.set", "name": "一覧に足す", "params": { "name": "summary", "expression": "summary + [{ '取引先': customer, '件数': len(lines), '請求額': subtotal, '請求書': '請求書_' + customer + '.docx' }]" } }
+        ]
+      }
+    },
+    { "id": "stp_clear", "type": "file.delete", "name": "前回の一覧を消す", "params": { "path": "output/請求一覧.xlsx" } },
+    { "id": "stp_sheet", "type": "excel.addSheet", "name": "一覧のシート", "params": { "path": "output/請求一覧.xlsx", "sheet": "請求一覧" } },
+    { "id": "stp_list", "type": "excel.appendRows", "name": "請求一覧を書く", "params": { "path": "output/請求一覧.xlsx", "sheet": "請求一覧", "rows": "{{ summary }}" } },
+    { "id": "stp_count", "type": "variable.set", "name": "請求書の数", "params": { "name": "invoiceCount", "expression": "len(summary)" } },
+    { "id": "stp_sum", "type": "variable.set", "name": "請求額の合計", "params": { "name": "grandTotal", "expression": "sum(map(summary, s => s['請求額']))" } },
+    { "id": "stp_done", "type": "log.message", "name": "結果", "params": { "message": "{{ month }}分の請求書を {{ invoiceCount }} 通、合計 {{ formatNumber(grandTotal) }} 円で作りました" } }
+  ]
+}

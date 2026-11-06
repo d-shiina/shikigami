@@ -61,6 +61,14 @@ jobs:
       - run: cargo test --workspace
         env:
           SHIKIGAMI_SNAPSHOT_DIR: ${{ runner.temp }}/dialogs
+      - name: Tutorial examples run, and their bundles are current
+        shell: bash
+        run: |
+          node examples/build-tutorials.mjs
+          git diff --exit-code -- examples/tutorials
+          for t in examples/tutorials/*.shikigami.json; do
+            cargo run -q -p shikigami-cli -- run "$t"
+          done
       # Pictures of the dialog.* dialogs, drawn by the Windows test.
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows' && always()

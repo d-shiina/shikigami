@@ -18,6 +18,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じシナリオ**
 
 | ドキュメント | 内容 |
 |---|---|
+| [docs/tutorials/](docs/ja/tutorials/README.md) | チュートリアル：業務 1 本を、AI への依頼から毎月の実行まで通しで（売上 CSV を Excel に、受注一覧から請求書、Web の受注システム） |
 | [docs/architecture.md](docs/ja/architecture.md) | システム構成、シナリオ形式、Adapter / MCP / IPC / DB / エラー / セキュリティ設計、設計判断、MVP 受け入れ基準 |
 | [docs/mcp.md](docs/ja/mcp.md) | MCP サーバーの接続方法（Claude Code / Codex / Cursor）、ツール一覧、監査ログ、制約 |
 | [docs/policy.md](docs/ja/policy.md) | 無人実行は承認・公開した版だけ、許可するサイト・アプリ、AI の操作の承認（`policy.json`） |
