@@ -416,9 +416,11 @@ function TargetField({
       )}
       {ref ? (
         part ? (
-          <div className="rounded-[4px] border border-slate-200 bg-paper px-2.5 py-2 text-[12px]">
+          <div className={`rounded-[4px] border px-2.5 py-2 text-[12px] ${part.target ? "border-slate-200 bg-paper" : "border-amber-300 bg-amber-50"}`}>
             <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate">{targetText(part.target)}</span>
+              <span className={`min-w-0 flex-1 truncate ${part.target ? "" : "text-amber-700"}`}>
+                {part.target ? targetText(part.target) : t.todos.notPickedNode(part.label || ref)}
+              </span>
               <button type="button" className="shrink-0 text-[11px] text-brand-600 hover:underline" onClick={() => select({ kind: "part", name: ref })}>
                 {t.parts.open}
               </button>
@@ -530,6 +532,11 @@ function PartInspector({ name }: { name: string }) {
         </div>
       </Section>
       <Section title={t.parts.target}>
+        {!part.target && (
+          <p role="status" className="mb-1.5 rounded-[4px] border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">
+            {t.todos.notPicked}
+          </p>
+        )}
         <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
           {uses.length > 1 && <span>{t.parts.shared(uses.length)}</span>}
           {pointer && (
@@ -542,7 +549,7 @@ function PartInspector({ name }: { name: string }) {
             />
           )}
         </div>
-        <ObjectFields schema={schema} value={part.target as Record<string, unknown>} onChange={(target) => target && set({ target: target as Part["target"] })} />
+        <ObjectFields schema={schema} value={(part.target ?? undefined) as Record<string, unknown> | undefined} onChange={(target) => target && set({ target: target as Part["target"] })} />
       </Section>
       <Section title={t.parts.usedBy}>
         {uses.length === 0 ? (

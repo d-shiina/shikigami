@@ -35,7 +35,7 @@ export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: nu
     <span
       style={{ width: size, height: size }}
       className={`grid shrink-0 place-items-center rounded-full text-[10px] font-bold ${
-        entry.actor.kind === "mcp"
+        entry.actor.kind === "mcp" || entry.actor.kind === "chat"
           ? "bg-brand-500 text-white"
           : external
             ? "bg-slate-300 text-slate-700"
@@ -43,7 +43,7 @@ export function ActorMark({ entry, size = 24 }: { entry: HistoryEntry; size?: nu
       }`}
       title={actorLabel(entry)}
     >
-      {entry.actor.kind === "mcp" ? "AI" : entry.actor.kind === "studio" ? t.personMark : t.actor[entry.actor.kind].slice(0, 2)}
+      {entry.actor.kind === "mcp" || entry.actor.kind === "chat" ? "AI" : entry.actor.kind === "studio" ? t.personMark : t.actor[entry.actor.kind].slice(0, 2)}
     </span>
   );
 }

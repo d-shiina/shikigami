@@ -35,6 +35,11 @@ import { isErrorPayload } from "@shikigami/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+/** Why a pasted answer could not be read, written for the AI that wrote it. */
+export type AnswerProblem = { path?: string; message: string };
+/** The flow a pasted answer made or changed, or the problems to send back (nothing changed then). */
+export type PasteOutcome = { outcome?: EditOutcome; problems: AnswerProblem[] };
+
 /** When a schedule fires (docs/schedules.md). Times are local, "08:00". */
 export type ScheduleWhen =
   | { kind: "daily"; at: string; days?: string[] }
@@ -185,6 +190,11 @@ export const api = {
   cancelPickRequest: (id: string) => call<void>("cancel_pick_request", { id }),
   /** Writes a bundle to the Downloads folder; returns its path. */
   exportFlow: (id: string) => call<string>("export_flow", { id }),
+  /** Writes the guide for an AI without MCP into Downloads and opens the folder; returns its path. */
+  saveAiGuide: () => call<string>("save_ai_guide"),
+  /** Takes in an answer pasted from an AI chat: a new flow, or the new content of `into`. */
+  pasteAiAnswer: (text: string, into?: string, expectedRevision?: number) =>
+    call<PasteOutcome>("paste_ai_answer", { text, into, expectedRevision }),
   importFlow: (contents: string, onConflict?: ImportConflict) =>
     call<ImportOutcome>("import_flow", { contents, onConflict }),
   listFlows: () => call<FlowSummary[]>("list_flows"),

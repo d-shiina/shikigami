@@ -80,6 +80,9 @@ impl Actor {
 pub enum ActorKind {
     Studio,
     Mcp,
+    /// An AI in a chat window without MCP (Microsoft Copilot, ...): a
+    /// person pasted its answer into Studio. Reviewed like an MCP edit.
+    Chat,
     Cli,
     System,
 }
