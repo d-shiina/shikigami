@@ -23,15 +23,15 @@ describe("explainError", () => {
 
   it("uses the details the Runtime gives", () => {
     expect(explainError({ code: "STEP_TIMEOUT", message: "step timed out after 30000 ms", details: { timeoutMs: 30000 } }).what).toBe(
-      "30 秒たっても終わりませんでした",
+      "30 秒以内に完了しませんでした",
     );
     expect(explainError({ code: "EXPR_UNDEFINED_VARIABLE", message: "undefined variable: total", details: { variable: "total" } }).what).toBe(
-      "変数「total」がまだありません",
+      "変数「total」がありません",
     );
     expect(explainError({ code: "HTTP_ERROR", message: "", details: { status: 404 } }).todo).toContain("アドレス");
     expect(explainError({ code: "SHEET_NOT_FOUND", message: "", details: { sheets: ["売上", "経費"] } }, step("excel.readRows", { sheet: "請求" }))).toMatchObject({
       what: "シート「請求」がありません",
-      todo: "あるのは 売上、経費 です",
+      todo: "存在するシートは 売上、経費 です",
     });
   });
 
