@@ -31,6 +31,51 @@ pub enum AgentCmd {
     Install,
     /// Remove the task `agent install` made (and stop the agent).
     Uninstall,
+    /// Connect this PC to a management server with the one-time code it
+    /// gave you. Jobs are taken only when policy.json has `remote.enabled`,
+    /// `remote.manager` and `remote.flows` (docs/remote.md).
+    Enroll {
+        /// The server's URL (https://, or http://localhost).
+        manager: String,
+        /// The one-time enrollment code.
+        code: String,
+    },
+    /// Forget the management server enrollment and its key.
+    Unenroll,
+}
+
+#[derive(Subcommand)]
+pub enum ManagerCmd {
+    /// Run the reference management server (protocol v1) until stopped. Its
+    /// state and admin token are kept in --data.
+    Serve {
+        /// Address to listen on. Put it behind HTTPS (a reverse proxy) for
+        /// anything beyond this PC.
+        #[arg(long, default_value = "127.0.0.1:8740")]
+        listen: std::net::SocketAddr,
+        #[arg(long, default_value = "shikigami-manager")]
+        data: std::path::PathBuf,
+    },
+}
+
+/// `shikigami manager …`.
+pub fn manager_cmd(cmd: &ManagerCmd) -> Result<ExitCode> {
+    match cmd {
+        ManagerCmd::Serve { listen, data } => {
+            let manager = shikigami_manager::Manager::open(data)
+                .with_context(|| format!("opening {}", data.display()))?;
+            eprintln!(
+                "Shikigami manager on http://{listen} (data: {})",
+                data.display()
+            );
+            eprintln!(
+                "admin API: Authorization: Bearer <{}>",
+                data.join("admin-token").display()
+            );
+            rt()?.block_on(shikigami_manager::serve(manager, *listen))?;
+        }
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 #[derive(Subcommand)]
@@ -234,6 +279,16 @@ pub fn agent_cmd(
             if let Some(problem) = &status.problem {
                 println!("! schedules not read: {problem}");
             }
+            if let Some(remote) = &status.remote {
+                println!(
+                    "management server: {} as {}",
+                    remote.manager.as_deref().unwrap_or("(not set)"),
+                    remote.worker_id.as_deref().unwrap_or("(not enrolled)")
+                );
+                if let Some(problem) = &remote.problem {
+                    println!("! {problem}");
+                }
+            }
             for run in &status.running {
                 println!("▶ {} {} ({})", run.run_id, run.flow_name, run.started_at);
             }
@@ -250,6 +305,43 @@ pub fn agent_cmd(
             Some(_) => println!("stopping the agent"),
             None => println!("the agent is not running"),
         },
+        AgentCmd::Enroll { manager, code } => {
+            let keys = shikigami_agent::remote::default_key_store(&local_root);
+            let enrolled = rt()?
+                .block_on(shikigami_agent::remote::enroll(
+                    &local_root,
+                    workspace,
+                    keys.as_ref(),
+                    manager,
+                    code,
+                ))
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            println!(
+                "enrolled as {} with {}",
+                enrolled.worker_id, enrolled.manager
+            );
+            let policy =
+                Policy::load(&Policy::path(svc.store().root())).map_err(crate::core_err)?;
+            if !policy.remote.enabled
+                || policy
+                    .remote
+                    .manager
+                    .as_deref()
+                    .map(|m| m.trim_end_matches('/'))
+                    != Some(enrolled.manager.as_str())
+            {
+                eprintln!(
+                    "note: jobs are taken only when policy.json has \"remote\": {{ \"enabled\": true, \"manager\": \"{}\", \"flows\": [...] }}",
+                    enrolled.manager
+                );
+            }
+        }
+        AgentCmd::Unenroll => {
+            let keys = shikigami_agent::remote::default_key_store(&local_root);
+            shikigami_agent::remote::unenroll(&local_root, keys.as_ref())
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            println!("this PC is no longer enrolled");
+        }
         AgentCmd::Install => install(workspace)?,
         AgentCmd::Uninstall => {
             let _ = ask(&local_root, &Request::Stop);

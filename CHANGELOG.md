@@ -17,6 +17,7 @@
 - 実行画面の入力欄：変数に任意の印 `format`（`file`・`folder`・`date`・`month`）と `choices`（選択肢）を書くと、実行画面がファイル・フォルダーを選択する「参照…」、カレンダー、選択肢の一覧を出します。検査のエラー `INVALID_VARIABLE_FORMAT` / `INVALID_VARIABLE_CHOICES`。フロー形式 `schemaVersion` 6（古いファイルはそのまま読めます。6 のファイルは 0.1.3 までの Shikigami では開けません）（docs/runner.md）
 - タスクトレイのアイコン：クリックで実行画面、右クリックで「実行画面を開く」「Studio を開く」「終了」。`--runner` で起動すると実行画面を閉じてもトレイに残り、`--tray` でトレイだけで起動します（docs/runner.md）
 - 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
+- 管理サーバー（プロトコル v1、docs/remote.md）：`shikigami agent enroll <URL> <コード>` で PC を一度だけ使える登録コードで登録（鍵の組は PC で作り、秘密鍵は資格情報マネージャー）。`policy.json` の `remote` で許したフローの公開版だけを、手が空いたエージェントが自分から取りに行き、イベントとレポートを返す。サーバーでの取り消し、断ったジョブ（`REMOTE_NOT_ALLOWED` / `NOT_PUBLISHED` / `VERSION_MISMATCH`）、`shikigami agent unenroll`、`agent status` にサーバーとの接続。参考実装のサーバー `shikigami manager serve`（登録コード・ワーカー・ジョブの管理用 API）
 
 ### 変更
 

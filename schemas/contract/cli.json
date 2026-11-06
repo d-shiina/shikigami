@@ -835,6 +835,30 @@
         },
         {
           "name": "uninstall"
+        },
+        {
+          "name": "enroll",
+          "args": [
+            {
+              "id": "manager",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "code",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "unenroll"
         }
       ]
     },
@@ -1004,6 +1028,32 @@
               "repeatable": false,
               "global": false,
               "positional": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "manager",
+      "subcommands": [
+        {
+          "name": "serve",
+          "args": [
+            {
+              "id": "listen",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "listen"
+            },
+            {
+              "id": "data",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "data"
             }
           ]
         }

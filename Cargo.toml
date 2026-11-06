@@ -19,6 +19,7 @@ members = [
     "crates/shikigami-mail",
     "crates/shikigami-db",
     "crates/shikigami-agent",
+    "crates/shikigami-manager",
     "apps/studio/src-tauri",
 ]
 
@@ -47,6 +48,7 @@ shikigami-com = { path = "crates/shikigami-com" }
 shikigami-mail = { path = "crates/shikigami-mail" }
 shikigami-db = { path = "crates/shikigami-db" }
 shikigami-agent = { path = "crates/shikigami-agent" }
+shikigami-manager = { path = "crates/shikigami-manager" }
 
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
