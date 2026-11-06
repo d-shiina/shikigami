@@ -773,14 +773,27 @@ fn pivot(params: &Value, book: &Object, session: &Session) -> Result<Value, Step
             format!("there are no rows below the header row {header_row}"),
         ));
     }
-    for name in pivot
+    // Fields by their position in the source, not by name: Excel's field
+    // names keep spaces and repeats that the header texts here do not.
+    let index = |name: &str| {
+        shape::column(&headers, header_row, name)
+            .map(|column| (column - whole.start.column + 1) as i32)
+    };
+    let rows = pivot
         .rows
         .iter()
-        .chain(&pivot.columns)
-        .chain(pivot.values.iter().map(|(name, _)| name))
-    {
-        shape::column(&headers, header_row, name)?;
-    }
+        .map(|n| index(n))
+        .collect::<Result<Vec<_>, _>>()?;
+    let columns = pivot
+        .columns
+        .iter()
+        .map(|n| index(n))
+        .collect::<Result<Vec<_>, _>>()?;
+    let values = pivot
+        .values
+        .iter()
+        .map(|(n, function)| Ok((index(n)?, *function)))
+        .collect::<Result<Vec<_>, StepError>>()?;
     if sheet_names(book)?.contains(&pivot.to_sheet) {
         return Err(StepError::permanent(
             "SHEET_EXISTS",
@@ -817,24 +830,21 @@ fn pivot(params: &Value, book: &Object, session: &Session) -> Result<Value, Step
         )?;
         let corner = added.object("Range", vec![Var::str("A3")])?;
         let table = cache.object("CreatePivotTable", vec![Var::from_object(&corner)])?;
-        let field = |name: &str| table.object("PivotFields", vec![Var::str(name)]);
-        for (names, orientation) in [
-            (&pivot.rows, XL_ROW_FIELD),
-            (&pivot.columns, XL_COLUMN_FIELD),
-        ] {
-            for (i, name) in names.iter().enumerate() {
+        let field = |n: i32| table.object("PivotFields", vec![Var::i32(n)]);
+        for (fields, orientation) in [(&rows, XL_ROW_FIELD), (&columns, XL_COLUMN_FIELD)] {
+            for (i, n) in fields.iter().enumerate() {
                 session.check()?;
-                let f = field(name)?;
+                let f = field(*n)?;
                 f.put("Orientation", Var::i32(orientation))?;
                 f.put("Position", Var::i32(i as i32 + 1))?;
             }
         }
-        for (name, function) in &pivot.values {
+        for (n, function) in &values {
             session.check()?;
             table.call(
                 "AddDataField",
                 vec![
-                    Var::from_object(&field(name)?),
+                    Var::from_object(&field(*n)?),
                     Var::missing(),
                     Var::i32(*function),
                 ],

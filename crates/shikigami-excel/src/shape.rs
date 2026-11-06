@@ -317,6 +317,16 @@ pub fn pivot(params: &Value) -> Result<Pivot, StepError> {
         values,
         to_sheet,
     };
+    // A field is on one axis only: Excel would move it, not repeat it.
+    let mut seen: Vec<&String> = Vec::new();
+    for name in pivot.rows.iter().chain(&pivot.columns) {
+        if seen.contains(&name) {
+            return Err(StepError::invalid_params(format!(
+                "'{name}' is named twice in 'rows' and 'columns': a column groups the table once"
+            )));
+        }
+        seen.push(name);
+    }
     if pivot.rows.is_empty() && pivot.columns.is_empty() {
         return Err(StepError::invalid_params(
             "give 'rows' (and/or 'columns'): the header texts to group by",
@@ -387,6 +397,10 @@ mod tests {
         assert!(pivot(&json!({ "rows": ["担当"], "values": [{ "column": "金額" }] })).is_err());
         assert!(
             pivot(&json!({ "toSheet": "集計", "rows": ["担当"], "values": [{ "column": "金額", "function": "median" }] }))
+                .is_err()
+        );
+        assert!(
+            pivot(&json!({ "toSheet": "集計", "rows": ["担当"], "columns": [" 担当"], "values": [{ "column": "金額" }] }))
                 .is_err()
         );
         let p = pivot(&json!({
