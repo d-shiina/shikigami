@@ -122,7 +122,30 @@ pub(crate) fn on_startup() {
         // Studio's version is the workspace version, as in `package_info`.
         restore_parked_exes(&dir, env!("CARGO_PKG_VERSION"));
     }
-    let _ = std::fs::remove_dir_all(download_dir());
+    clean_downloads(&download_dir(), env!("CARGO_PKG_VERSION"));
+}
+
+/// Deletes downloaded installers this version no longer needs: those not
+/// newer than it (already installed, or older). A newer one may belong to
+/// another Studio window that is waiting to restart, so it stays.
+fn clean_downloads(dir: &Path, current_version: &str) {
+    let Ok(current) = semver::Version::parse(current_version) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()) {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let newer = name
+            .strip_prefix("shikigami-")
+            .and_then(|n| n.strip_suffix(".update"))
+            .and_then(|v| semver::Version::parse(v).ok())
+            .is_some_and(|v| v > current);
+        if !newer {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
 }
 
 #[tauri::command]
@@ -324,6 +347,26 @@ mod tests {
 
     fn tempdir() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn startup_keeps_only_newer_downloads() {
+        let dir = tempdir();
+        for name in [
+            "shikigami-0.1.1.update",
+            "shikigami-0.1.2.update",
+            "shikigami-0.1.3.update",
+            "junk",
+        ] {
+            write(&dir.path().join(name), "x");
+        }
+        clean_downloads(dir.path(), "0.1.2");
+        let mut left: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["shikigami-0.1.3.update"]);
     }
 
     #[test]

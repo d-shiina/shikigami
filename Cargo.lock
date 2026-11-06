@@ -4531,6 +4531,7 @@ dependencies = [
  "base64 0.22.1",
  "dirs",
  "notify",
+ "semver",
  "serde",
  "serde_json",
  "shikigami-adapters",
