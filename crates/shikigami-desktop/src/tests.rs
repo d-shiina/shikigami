@@ -851,6 +851,19 @@ fn grids_are_read_from_their_element_tree() {
         grid.records(),
         vec![json!({ "名前": "a.txt", "サイズ": "1 KB" })]
     );
+    // The same text in the first two columns stays in both.
+    let same = vec![
+        cell(0, "list", "", None),
+        cell(1, "header", "", None),
+        cell(2, "columnheader", "出発", None),
+        cell(2, "columnheader", "到着", None),
+        cell(1, "listitem", "東京", None),
+        cell(2, "text", "東京", None),
+    ];
+    assert_eq!(
+        grid_from_nodes(&same, 10).records(),
+        vec![json!({ "出発": "東京", "到着": "東京" })]
+    );
     // A plain list: one column of item names.
     let plain = vec![
         cell(0, "list", "", None),

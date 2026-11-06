@@ -191,7 +191,7 @@ pub fn grid_from_nodes(nodes: &[NodeInfo], max_rows: usize) -> Grid {
     let rows = rows
         .into_iter()
         .map(|(name, mut row)| {
-            if row.len() + 1 == headers.len() && row.first() != Some(&name) {
+            if row.len() + 1 == headers.len() {
                 row.insert(0, name);
             }
             row
