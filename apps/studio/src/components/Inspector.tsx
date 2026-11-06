@@ -4,6 +4,7 @@ import { useStudio } from "../context";
 import type { SecretField } from "../lib/api";
 import { stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
+import { stepSummary } from "../lib/palette";
 import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { sentence } from "../lib/sentence";
 import { findStep, revertBlocker, touchedSteps } from "../store";
@@ -623,7 +624,7 @@ function StepInspector() {
             <div className="text-[13px] leading-snug">
               <Sentence parts={sentence(step, def)} />
             </div>
-            {def?.description && <p className="text-[11px] text-slate-500">{def.description}</p>}
+            {def && <p className="text-[11px] text-slate-500">{stepSummary(def.type, def.description)}</p>}
           </div>
         </div>
         {pending

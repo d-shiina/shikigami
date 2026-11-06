@@ -1,11 +1,20 @@
-import type { StepTypeDef } from "@shikigami/schema";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Clock, Search } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
-import { stepLabel, t } from "../lib/i18n";
-import { KEYWORD } from "../lib/keywords";
-import { presets } from "../lib/presets";
-
-export const categoryLabel = (category: string): string => (t.categories as Record<string, string>)[category] ?? category;
+import { blockName, stepLabel, t } from "../lib/i18n";
+import {
+  FREQUENT,
+  frequent,
+  groupLabel,
+  groups,
+  loadRecent,
+  type PaletteItem,
+  paletteItems,
+  remember,
+  search,
+  sectionOf,
+} from "../lib/palette";
+import { insertPlace } from "../store";
 
 /** Category colour, taken from the logo swirl. Used for node stripes too. */
 export const CATEGORY_COLOR: Record<string, string> = {
@@ -16,6 +25,9 @@ export const CATEGORY_COLOR: Record<string, string> = {
   browser: "var(--cat-browser)",
   windows: "var(--cat-windows)",
   office: "var(--cat-office)",
+  excel: "var(--cat-office)",
+  word: "var(--cat-office)",
+  outlook: "var(--cat-office)",
   file: "var(--cat-file)",
   network: "var(--cat-browser)",
   system: "var(--cat-windows)",
@@ -27,111 +39,61 @@ export const CATEGORY_COLOR: Record<string, string> = {
   other: "var(--cat-other)",
 };
 
-/** Categories in the order they are listed: the flow's own steps first, then what they drive. */
-const ORDER = ["control", "variable", "text", "number", "date", "list", "flow", "log", "browser", "windows", "office", "file", "network", "system", "other"];
-const CATEGORY_KEY = "shikigami.studio.paletteCategory";
+const color = (group: string) => CATEGORY_COLOR[group] ?? CATEGORY_COLOR.other;
 
-const rank = (category: string) => {
-  const at = ORDER.indexOf(category);
-  return at < 0 ? ORDER.length : at;
-};
-
-/** One line of the palette: a step type, or a ready-made "変数に代入" (preset). */
-type Item = { key: string; category: string; label: string; keyword?: string; summary: string; search: string; add: (addStep: AddStep) => void };
-type AddStep = (type: string, params?: Record<string, unknown>, name?: string) => Promise<void>;
-
-function stepItem(def: StepTypeDef): Item {
-  return {
-    key: def.type,
-    category: def.category,
-    label: stepLabel(def.type, def.label),
-    keyword: KEYWORD[def.type],
-    summary: summary(def.description ?? def.type),
-    search: `${stepLabel(def.type, def.label)} ${def.label} ${def.type} ${def.description ?? ""}`,
-    add: (addStep) => void addStep(def.type),
-  };
-}
-
-const presetItems = (): Item[] =>
-  presets().map((preset) => ({
-  key: preset.key,
-  category: preset.category,
-  label: preset.label,
-  keyword: preset.keyword,
-  summary: `${preset.description}　${preset.name} ← ${preset.expression}`,
-  search: `${preset.label} ${preset.keyword} ${preset.description}`,
-  add: (addStep) => void addStep("variable.set", { name: preset.name, expression: preset.expression }, preset.label),
-  }));
-
-/** The first sentence of a description: enough to tell steps apart in a list. */
-function summary(text: string): string {
-  // "e.g." and "i.e." do not end a sentence.
-  const end = text.search(/(?<!\b(?:e\.g|i\.e))\.\s|。/);
-  return end < 0 ? text : text.slice(0, end + 1);
-}
-
-function loadCategory(): string {
-  try {
-    return globalThis.localStorage?.getItem(CATEGORY_KEY) ?? "control";
-  } catch {
-    return "control";
-  }
-}
-
-function matches(item: Item, query: string): boolean {
-  if (!query) return true;
-  const haystack = `${item.search} ${categoryLabel(item.category)}`.toLowerCase();
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .every((word) => haystack.includes(word));
-}
+/** A list entry: an item, or a heading inside the list (frequent view). */
+type Row = { item: PaletteItem } | { heading: string };
 
 /**
- * Ctrl+K: summon a step by typing what you want instead of hunting a toolbox.
- * Without a query it browses one category at a time (←→ or the list on the
- * left); typing searches every category, grouped under their names.
+ * Ctrl+K, the dock's "ノード追加", a "+" on the flow chart or an empty block:
+ * summon a node by typing what you want instead of hunting a toolbox. It
+ * opens on the nodes used most; the groups on the left follow what the
+ * scenario works on (browser, Excel, files…); typing searches all of them,
+ * best match first. The bottom line says where the node will go.
  */
 export function CommandPalette() {
   const open = useStudio((s) => s.paletteOpen);
   const setOpen = useStudio((s) => s.setPaletteOpen);
   const stepTypes = useStudio((s) => s.stepTypes);
+  const scenario = useStudio((s) => s.scenario);
   const selection = useStudio((s) => s.selection);
+  const at = useStudio((s) => s.paletteAt);
   const addStep = useStudio((s) => s.addStep);
   const [query, setQuery] = useState("");
-  const [category, setCategoryState] = useState(loadCategory);
+  const [group, setGroup] = useState(FREQUENT);
+  const [recent, setRecent] = useState(loadRecent);
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
 
-  const items = useMemo(() => [...stepTypes.map(stepItem), ...presetItems()], [stepTypes]);
-  const categories = useMemo(() => {
+  const items = useMemo(() => paletteItems(stepTypes), [stepTypes]);
+  const all = useMemo(() => groups(items), [items]);
+  const found = useMemo(() => (query.trim() ? search(items, query, recent) : null), [items, query, recent]);
+  const nav: [string, number][] = useMemo(() => {
+    if (!found) return all;
     const counts = new Map<string, number>();
-    for (const i of items) counts.set(i.category, (counts.get(i.category) ?? 0) + 1);
-    return [...counts].sort((a, b) => rank(a[0]) - rank(b[0]));
-  }, [items]);
-  const current = categories.some(([c]) => c === category) ? category : (categories[0]?.[0] ?? "control");
-  const results = useMemo(
-    () =>
-      query
-        ? items.filter((i) => matches(i, query)).sort((a, b) => rank(a.category) - rank(b.category))
-        : items.filter((i) => i.category === current),
-    [items, query, current],
-  );
-
-  const setCategory = (next: string) => {
-    setCategoryState(next);
-    setActive(0);
-    try {
-      globalThis.localStorage?.setItem(CATEGORY_KEY, next);
-    } catch {
-      // Only a remembered preference.
-    }
-  };
+    for (const i of found) counts.set(i.group, (counts.get(i.group) ?? 0) + 1);
+    return all.map(([g]) => [g, counts.get(g) ?? 0]);
+  }, [all, found]);
+  const current = group === FREQUENT || all.some(([g]) => g === group) ? group : FREQUENT;
+  const rows: Row[] = useMemo(() => {
+    if (found) return found.map((item) => ({ item }));
+    if (current !== FREQUENT) return items.filter((i) => i.group === current).map((item) => ({ item }));
+    const view = frequent(items, recent);
+    return [
+      ...(view.recent.length > 0 ? [{ heading: t.palette.recent }, ...view.recent.map((item) => ({ item }))] : []),
+      ...(view.common.length > 0 ? [{ heading: t.palette.common }, ...view.common.map((item) => ({ item }))] : []),
+    ];
+  }, [found, current, items, recent]);
+  const choices = rows.flatMap((r) => ("item" in r ? [r.item] : []));
+  /** Group tags help where groups mix: "クリック" is in the browser and in desktop apps. */
+  const tagged = Boolean(found) || current === FREQUENT;
 
   useEffect(() => {
     if (open) {
       setQuery("");
+      setGroup(FREQUENT);
+      setRecent(loadRecent());
       setActive(0);
       input.current?.focus();
     }
@@ -145,106 +107,175 @@ export function CommandPalette() {
 
   if (!open) return null;
 
-  const choose = (item: Item | undefined) => {
+  const choose = (item: PaletteItem | undefined) => {
     if (!item) return;
+    setRecent(remember(recent, item.key));
     setOpen(false);
-    item.add(addStep);
+    void addStep(item.type, item.params, item.name);
   };
-  const shiftCategory = (delta: number) => {
-    const at = categories.findIndex(([c]) => c === current);
-    const next = categories[(at + delta + categories.length) % categories.length];
-    if (next) setCategory(next[0]);
+  const pick = (next: string) => {
+    setQuery("");
+    setGroup(next);
+    setActive(0);
+    input.current?.focus();
+  };
+  const order = [FREQUENT, ...all.map(([g]) => g)];
+  const shiftGroup = (delta: number) => {
+    const i = order.indexOf(current);
+    pick(order[(i + delta + order.length) % order.length] ?? FREQUENT);
   };
 
+  const where = (() => {
+    const defs = new Map(stepTypes.map((d) => [d.type, d]));
+    const place = insertPlace(scenario?.steps ?? [], selection, at);
+    const name = (step: { name?: string | null; type: string }) => step.name || stepLabel(step.type, defs.get(step.type)?.label);
+    if (place.before) return t.palette.before(name(place.before));
+    if (place.after) return t.palette.after(name(place.after));
+    if (place.into) {
+      const def = defs.get(place.into.parent.type);
+      const label = def?.blocks?.find((b) => b.name === place.into!.block)?.label ?? place.into.block;
+      return t.palette.into(name(place.into.parent), blockName(place.into.parent.type, place.into.block, label));
+    }
+    return t.palette.atEnd;
+  })();
+
+  let index = -1;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/20 pt-[12vh] backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/20 pt-[10vh] backdrop-blur-[1px]"
       onMouseDown={() => setOpen(false)}
     >
       <div
-        className="flex max-h-[70vh] w-[min(760px,92vw)] flex-col overflow-hidden rounded-[4px] border border-slate-300 bg-sheet shadow-dialog"
+        role="dialog"
+        aria-label={t.addStep}
+        className="flex h-[min(620px,78vh)] w-[min(800px,92vw)] flex-col overflow-hidden rounded-[4px] border border-slate-300 bg-sheet shadow-dialog"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
-          <img src="/mark.png" alt="" className="h-5 w-5" />
+        <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-3">
+          <Search size={18} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
           <input
             ref={input}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
               if (e.key === "Escape") setOpen(false);
               else if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setActive((a) => Math.min(a + 1, results.length - 1));
+                setActive((a) => Math.min(a + 1, choices.length - 1));
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setActive((a) => Math.max(a - 1, 0));
               } else if (!query && (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Tab")) {
                 e.preventDefault();
-                shiftCategory(e.key === "ArrowLeft" || (e.key === "Tab" && e.shiftKey) ? -1 : 1);
-              } else if (e.key === "Enter") choose(results[active]);
+                shiftGroup(e.key === "ArrowLeft" || (e.key === "Tab" && e.shiftKey) ? -1 : 1);
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                choose(choices[active]);
+              }
             }}
-            placeholder={t.palettePlaceholder}
+            placeholder={t.palette.placeholder}
+            aria-label={t.palette.placeholder}
             className="flex-1 bg-transparent text-base outline-none placeholder:text-slate-400"
           />
-          <kbd className="rounded border border-slate-300 px-1 text-[10px] text-slate-500">Esc</kbd>
-        </div>
-        <div className="flex items-center gap-2 px-4 pt-2 text-[11px] text-slate-500">
-          {t.paletteTitle} · {selection?.kind === "slot" ? t.addInto : selection?.kind === "step" ? t.addAfterSelection : t.addHere}
-          <span className="ml-auto">{query ? t.palette.searchAll : t.palette.switchHint}</span>
+          <kbd className="rounded-[2px] border border-slate-300 px-1 text-[10px] text-slate-500">Esc</kbd>
         </div>
         <div className="flex min-h-0 flex-1">
-          <nav className="w-[156px] shrink-0 overflow-y-auto border-r border-slate-100 p-2">
-            {categories.map(([c, count]) => {
-              const on = !query && c === current;
+          <nav className="w-[200px] shrink-0 overflow-y-auto border-r border-slate-200 bg-paper p-2">
+            <NavButton on={!found && current === FREQUENT} onClick={() => pick(FREQUENT)}>
+              <Clock size={14} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+              <span className="flex-1 truncate">{t.palette.frequent}</span>
+            </NavButton>
+            {nav.map(([g, count], i) => {
+              const section = sectionOf(g);
+              const heading = section !== sectionOf(nav[i - 1]?.[0] ?? "") || i === 0;
               return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => {
-                    setQuery("");
-                    setCategory(c);
-                    input.current?.focus();
-                  }}
-                  className={`flex w-full items-center gap-2 rounded-[3px] px-2.5 py-1.5 text-left text-[13px] ${
-                    on ? "bg-slate-100 font-semibold text-ink" : "text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="h-3.5 w-1 shrink-0 rounded-[1px]" style={{ background: CATEGORY_COLOR[c] ?? CATEGORY_COLOR.other }} />
-                  <span className="flex-1 truncate">{categoryLabel(c)}</span>
-                  <span className="text-[11px] text-slate-400">{count}</span>
-                </button>
+                <Fragment key={g}>
+                  {heading && <div className="px-2.5 pt-3 pb-1 text-[11px] font-bold text-slate-500">{t.palette.sections[section]}</div>}
+                  <NavButton on={!found && g === current} dim={Boolean(found) && count === 0} onClick={() => pick(g)}>
+                    <span className="h-3.5 w-1 shrink-0 rounded-[1px]" style={{ background: color(g) }} />
+                    <span className="flex-1 truncate">{groupLabel(g)}</span>
+                    <span className="text-[11px] text-slate-500">{count}</span>
+                  </NavButton>
+                </Fragment>
               );
             })}
           </nav>
-          <ul ref={list} className="min-w-0 flex-1 overflow-y-auto p-2">
-            {results.length === 0 && <li className="px-3 py-4 text-sm text-slate-400">{t.paletteEmpty}</li>}
-            {results.map((item, i) => (
-              <li key={item.key}>
-                {query && item.category !== results[i - 1]?.category && (
-                  <div className="px-3 pt-2 pb-1 text-[11px] font-bold text-slate-400">{categoryLabel(item.category)}</div>
-                )}
-                <button
-                  type="button"
-                  data-index={i}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(item)}
-                  className={`flex w-full items-center gap-3 rounded-[3px] px-3 py-2 text-left ${i === active ? "bg-slate-100" : ""}`}
-                >
-                  <span className="h-7 w-1 shrink-0 rounded-[1px]" style={{ background: CATEGORY_COLOR[item.category] ?? CATEGORY_COLOR.other }} />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-sm font-medium">
-                      {item.label}
-                      {item.keyword && <span className="font-mono text-[11px] font-normal text-slate-400">{item.keyword}</span>}
+          <ul ref={list} className="min-w-0 flex-1 overflow-y-auto p-2" aria-label={t.addStep}>
+            {choices.length === 0 && <li className="px-3 py-4 text-sm text-slate-500">{t.palette.empty(query)}</li>}
+            {rows.map((row) => {
+              if ("heading" in row) {
+                return (
+                  <li key={`h:${row.heading}`} className="px-3 pt-2 pb-1 text-[11px] font-bold text-slate-500">
+                    {row.heading}
+                  </li>
+                );
+              }
+              const item = row.item;
+              const i = ++index;
+              return (
+                <li key={item.key}>
+                  <button
+                    type="button"
+                    data-index={i}
+                    onMouseMove={() => i !== active && setActive(i)}
+                    onClick={() => choose(item)}
+                    className={`flex w-full items-center gap-3 rounded-[3px] px-3 py-2 text-left ${i === active ? "bg-slate-100" : ""}`}
+                  >
+                    <span className="h-8 w-1 shrink-0 rounded-[1px]" style={{ background: color(item.group) }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-1.5 text-sm font-medium text-ink">
+                        <span className="truncate">{item.label}</span>
+                        {item.keyword && <span className="font-mono text-[11px] font-normal text-slate-500">{item.keyword}</span>}
+                      </span>
+                      <span className="block truncate text-xs text-slate-500">{item.summary}</span>
                     </span>
-                    <span className="block truncate text-xs text-slate-500">{item.summary}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
+                    {tagged && (
+                      <span className="shrink-0 rounded-[2px] border border-slate-200 px-1.5 text-[11px] leading-[18px] text-slate-600">
+                        {groupLabel(item.group)}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
+        </div>
+        <div className="flex items-center gap-3 border-t border-slate-200 bg-paper px-4 py-2 text-[11px] text-slate-600">
+          <span className="min-w-0 truncate">
+            <span className="text-slate-500">{t.palette.where}</span>
+            <span className="ml-1.5 font-medium text-ink">{where}</span>
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-3 text-slate-500">
+            <span>
+              <kbd className="rounded-[2px] bg-slate-100 px-1">↑↓</kbd> {t.palette.choose}
+            </span>
+            <span>
+              <kbd className="rounded-[2px] bg-slate-100 px-1">Enter</kbd> {t.palette.add}
+            </span>
+            {!query && (
+              <span>
+                <kbd className="rounded-[2px] bg-slate-100 px-1">←→</kbd> {t.palette.group}
+              </span>
+            )}
+          </span>
         </div>
       </div>
     </div>
+  );
+}
+
+function NavButton({ on, dim, onClick, children }: { on: boolean; dim?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={on || undefined}
+      className={`flex w-full items-center gap-2 rounded-[3px] px-2.5 py-1.5 text-left text-[13px] ${
+        on ? "bg-sheet font-semibold text-ink shadow-sheet" : dim ? "text-slate-400 hover:bg-slate-100" : "text-slate-600 hover:bg-slate-100"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

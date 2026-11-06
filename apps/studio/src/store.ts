@@ -47,6 +47,9 @@ export type Selection =
   | { kind: "slot"; parentId: string | null; block: string | null }
   | null;
 
+/** A place between nodes (the "+" on a line of the flow chart): a new node goes at `index` of the block. */
+export type InsertAt = { parentId: string | null; block: string | null; index: number };
+
 /**
  * The places in the sidebar; each fills the window right of it. "library" is
  * the page of all scenarios, "scenarios" the editor of the open one.
@@ -223,6 +226,8 @@ export type StudioState = {
   breakpoints: Record<string, string[]>;
   outlineOpen: boolean;
   paletteOpen: boolean;
+  /** Where the palette adds, when it was opened from a "+" between nodes; otherwise after the selection. */
+  paletteAt: InsertAt | null;
   place: Place;
   /** The panel under the chart (run log, issues); null when closed. */
   bottom: BottomTab | null;
@@ -342,7 +347,8 @@ export type StudioState = {
   revertAll(): Promise<void>;
   loadInbox(): Promise<void>;
   setReviewing(on: boolean): void;
-  setPaletteOpen(open: boolean): void;
+  /** Opens the node palette, adding at `at` (or after the selection) when a node is picked. */
+  setPaletteOpen(open: boolean, at?: InsertAt): void;
   loadVersions(): Promise<void>;
   createVersion(name: string, note: string): Promise<boolean>;
   restoreVersion(number: number): Promise<void>;
@@ -567,6 +573,43 @@ export function locate(steps: Step[], id: string, parentId: string | null = null
   return null;
 }
 
+type Position = { parentId?: string | null; block?: string | null; index?: number | null };
+
+/**
+ * Where a new node goes, and which node it goes next to: at the "+" it was
+ * asked for, else after the selected node, else at the end of the selected
+ * empty block, else at the end of the scenario.
+ */
+export function insertPlace(
+  steps: Step[],
+  selection: Selection,
+  at: InsertAt | null,
+): { position: Position; before?: Step; after?: Step; into?: { parent: Step; block: string } } {
+  if (at) {
+    const siblings = at.parentId === null ? steps : (findStep(steps, at.parentId)?.blocks?.[at.block ?? ""] ?? []);
+    const before = siblings[at.index];
+    const after = siblings[at.index - 1];
+    const parent = at.parentId === null ? null : findStep(steps, at.parentId);
+    return {
+      position: { parentId: at.parentId, block: at.block, index: at.index },
+      ...(before ? { before } : after ? { after } : parent && at.block ? { into: { parent, block: at.block } } : {}),
+    };
+  }
+  if (selection?.kind === "slot") {
+    const parent = selection.parentId === null ? null : findStep(steps, selection.parentId);
+    return {
+      position: { parentId: selection.parentId, block: selection.block },
+      ...(parent && selection.block ? { into: { parent, block: selection.block } } : {}),
+    };
+  }
+  if (selection?.kind === "step") {
+    const loc = locate(steps, selection.stepId);
+    const step = findStep(steps, selection.stepId);
+    if (loc && step) return { position: { parentId: loc.parentId, block: loc.block, index: loc.index + 1 }, after: step };
+  }
+  return { position: {} };
+}
+
 export function findStep(steps: Step[], id: string): Step | null {
   for (const step of steps) {
     if (step.id === id) return step;
@@ -674,6 +717,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
+      paletteAt: null,
       place: "library",
       bottom: null,
       historyOpen: false,
@@ -946,15 +990,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async addStep(type, params, name) {
-        const { scenario, selection } = get();
+        const { scenario, selection, paletteAt } = get();
         if (!scenario) return;
-        let position: { parentId?: string | null; block?: string | null; index?: number | null } = {};
-        if (selection?.kind === "slot") {
-          position = { parentId: selection.parentId, block: selection.block };
-        } else if (selection?.kind === "step") {
-          const loc = locate(scenario.steps ?? [], selection.stepId);
-          if (loc) position = { parentId: loc.parentId, block: loc.block, index: loc.index + 1 };
-        }
+        const { position } = insertPlace(scenario.steps ?? [], selection, paletteAt);
         const step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
         const ok = await get().applyOps([{ op: "addStep", step, position }]);
         if (ok && step.id) set({ selection: { kind: "step", stepId: step.id } });
@@ -1493,9 +1531,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ reviewing: on, place: on ? "review" : "scenarios", secretsOpen: false });
       },
 
-      setPaletteOpen(open) {
+      setPaletteOpen(open, at) {
         // Steps are added to the open scenario: show it.
-        set(open ? { paletteOpen: open, dive: [] } : { paletteOpen: open });
+        set(open ? { paletteOpen: true, paletteAt: at ?? null, dive: [] } : { paletteOpen: false, paletteAt: null });
       },
 
       async loadVersions() {
