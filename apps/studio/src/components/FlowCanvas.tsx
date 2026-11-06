@@ -1026,6 +1026,13 @@ export function FlowCanvas() {
   );
   const layout = useMemo(() => layoutFlow(flow?.steps ?? [], defs, extra), [flow, defs, extra]);
   const tails = useMemo(() => new Set(layout.nodes.filter((n) => n.data.kind === "slot" && n.data.tail).map((n) => n.id)), [layout]);
+  // Steps whose failure the run goes on past (onError: continue, their own or the flow's).
+  const continues = useMemo(() => {
+    const flowDefault = flow?.settings?.onError;
+    return new Set(
+      layout.nodes.flatMap((n) => (n.data.kind === "step" && (n.data.step.onError ?? flowDefault) === "continue" ? [n.id] : [])),
+    );
+  }, [layout, flow]);
   // A node added on a line goes just before the step the line leads to. Not
   // where that would start another branch running at the same time.
   const insertBefore = useMemo(() => {
@@ -1132,7 +1139,7 @@ export function FlowCanvas() {
     }));
 
   // The lines the run took stay coloured after it ends, as the way it went.
-  const taken = trailLines(layout.edges, states, tails);
+  const taken = trailLines(layout.edges, states, tails, continues);
   const edges: Edge[] = layout.edges.map((e) => {
     const trail = taken.get(e.id);
     return {

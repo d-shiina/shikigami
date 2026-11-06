@@ -19,15 +19,18 @@ export function trailLines(
   lines: readonly Line[],
   stepStates: Readonly<Record<string, StepRunState>>,
   through: ReadonlySet<string> = new Set(),
+  continues: ReadonlySet<string> = new Set(),
 ): Map<string, LineTrail> {
   // A point the line only passes through (the "+" at the end of a block) was
-  // passed when a line into it came from a step the run got past.
+  // passed when a line into it came from a step the run got past: one that
+  // succeeded, or failed and was set to continue on errors (`continues`).
   const states: Record<string, StepRunState> = { ...stepStates };
   const passed = (id: string, seen: Set<string>): boolean =>
     lines.some((l) => {
       if (l.target !== id || seen.has(l.source)) return false;
       if (through.has(l.source)) return passed(l.source, new Set([...seen, l.source]));
-      return stepStates[l.source] === "succeeded";
+      const state = stepStates[l.source];
+      return state === "succeeded" || (state === "failed" && continues.has(l.source));
     });
   for (const id of through) if (passed(id, new Set([id]))) states[id] = "succeeded";
   const reached = (id: string) => {

@@ -53,5 +53,10 @@ describe("trailLines", () => {
     // A step that failed at the end of a block never got past it.
     const failed = trailLines([line("t", "end:then"), line("end:then", "after")], { t: "failed" }, new Set(["end:then"]));
     expect(failed.size).toBe(0);
+    // Unless it was set to continue on errors: then the run went on through the "+".
+    const lines2 = [line("t", "end:then"), line("end:then", "after")];
+    const went = trailLines(lines2, { t: "failed", after: "succeeded" }, new Set(["end:then"]), new Set(["t"]));
+    expect(went.get("t->end:then")).toBe("done");
+    expect(went.get("end:then->after")).toBe("done");
   });
 });
