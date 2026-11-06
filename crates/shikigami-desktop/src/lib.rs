@@ -54,9 +54,9 @@ pub mod roles;
 #[cfg(windows)]
 mod sap;
 pub mod sapgui;
-pub mod table;
 #[cfg(windows)]
 pub mod session;
+pub mod table;
 pub mod target;
 #[cfg(windows)]
 mod uia;
