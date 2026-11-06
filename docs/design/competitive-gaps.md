@@ -139,7 +139,7 @@
 - **相手**：3 製品とも標準
 - **影響**：業務サイトの多くで「CSV をダウンロードする」「ファイルを添付する」「別ウィンドウで開く」が出てくる。ここで止まる
 - **方向**：組込ノードとして足す（外に触れる操作なので方針どおりノード）。ダウンロードは `file.*` と同じくプロジェクトフォルダー基準の保存先にする
-- **対応**：`browser.switchTab` / `browser.closeTab`、出す操作のノードの `dialog`（alert / confirm / prompt）、`target.frame`（iframe）、`browser.hover` / `browser.scroll` / `browser.getAttribute`（PR #83）、`browser.download` / `browser.upload`（保存先・添付するファイルはプロジェクトフォルダー基準、PR #88）。残り：ページ送りしながらの表の取得、実機の Edge での確認
+- **対応**：`browser.switchTab` / `browser.closeTab`、出す操作のノードの `dialog`（alert / confirm / prompt）、`target.frame`（iframe）、`browser.hover` / `browser.scroll` / `browser.getAttribute`（PR #83）、`browser.download` / `browser.upload`（保存先・添付するファイルはプロジェクトフォルダー基準、PR #88）。ページ送りしながらの表は既存のノードのくり返しで読む書き方を [browser.md](../browser.md)「Tables across pages」に追加（PR #98）。残り：実機の Edge での確認
 
 ### 12. デスクトップ操作の欠け
 

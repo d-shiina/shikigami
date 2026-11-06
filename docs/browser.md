@@ -110,6 +110,28 @@ The step that causes the dialog answers it with `dialog`: `"accept"` (OK), `"dis
 
 Without `dialog`, a dialog is closed the way a browser without a person would (alert: OK, confirm / prompt: Cancel), and the next failing step says so in `details.dismissedDialog`. Dialogs drawn by the page itself are ordinary elements: click their buttons.
 
+### Tables across pages
+
+A list split over pages ("Next" under the table) is read with a loop of the nodes above; there is no separate node. Read the page, add it to the rows, and click "Next" while it is there:
+
+```jsonc
+{ "type": "variable.set", "params": { "name": "rows", "expression": "[]" } },
+{ "type": "variable.set", "params": { "name": "more", "expression": "true" } },
+{ "type": "variable.set", "params": { "name": "pageNo", "expression": "1" } },
+{ "type": "control.while", "params": { "condition": "more", "maxIterations": 200 }, "blocks": { "body": [
+  { "type": "browser.getTable", "params": { "target": { "css": "#orders" } }, "saveAs": "page" },
+  { "type": "variable.set", "params": { "name": "rows", "expression": "rows + page" } },
+  { "type": "browser.isVisible", "params": { "target": { "role": "link", "name": "Next" } }, "saveAs": "more" },
+  { "type": "control.if", "params": { "condition": "more" }, "blocks": { "then": [
+    { "type": "browser.click", "params": { "target": { "role": "link", "name": "Next" } } },
+    { "type": "variable.set", "params": { "name": "pageNo", "expression": "pageNo + 1" } },
+    { "type": "browser.waitFor", "params": { "target": { "text": "Page {{ pageNo }}" } } }
+  ] } }
+] } }
+```
+
+After the click, wait for something that only the next page shows (here its page number), or `getTable` may read the old table again. When the last page still shows a greyed-out "Next", give `target` something only the working link has, such as `css: "a.next:not(.disabled)"`.
+
 ### Frames
 
 Elements inside an iframe, or inside a `<frame>` of an old frameset page, need `frame` in their `target`: the frame by its `name` (or `id`) attribute, part of its `title` or `src`, or `css`. A frame inside a frame gives the outer one as `frame.frame`.

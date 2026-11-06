@@ -110,6 +110,28 @@ Edge が IE モードで表示するページは古い Internet Explorer のエ�
 
 `dialog` がないときは、人のいないブラウザと同じように閉じ（alert は OK、confirm・prompt はキャンセル）、次に失敗したノードの `details.dismissedDialog` に出します。ページが自分で描くダイアログは普通の部品なので、そのボタンを `browser.click` で押します。
 
+### 何ページにも分かれた表
+
+表の下の「次へ」で何ページにも分かれた一覧は、上のノードのくり返しで読みます（専用のノードはありません）。ページを読んで行に足し、「次へ」がある間はそれを押します：
+
+```jsonc
+{ "type": "variable.set", "params": { "name": "rows", "expression": "[]" } },
+{ "type": "variable.set", "params": { "name": "more", "expression": "true" } },
+{ "type": "variable.set", "params": { "name": "pageNo", "expression": "1" } },
+{ "type": "control.while", "params": { "condition": "more", "maxIterations": 200 }, "blocks": { "body": [
+  { "type": "browser.getTable", "params": { "target": { "css": "#orders" } }, "saveAs": "page" },
+  { "type": "variable.set", "params": { "name": "rows", "expression": "rows + page" } },
+  { "type": "browser.isVisible", "params": { "target": { "role": "link", "name": "次へ" } }, "saveAs": "more" },
+  { "type": "control.if", "params": { "condition": "more" }, "blocks": { "then": [
+    { "type": "browser.click", "params": { "target": { "role": "link", "name": "次へ" } } },
+    { "type": "variable.set", "params": { "name": "pageNo", "expression": "pageNo + 1" } },
+    { "type": "browser.waitFor", "params": { "target": { "text": "{{ pageNo }} ページ" } } }
+  ] } }
+] } }
+```
+
+押したあとは次のページにしか出ないもの（ここではページ番号）を待ちます。待たないと `getTable` が前の表をもう一度読むことがあります。最後のページにも灰色の「次へ」が残るサイトでは、押せるリンクだけにあるもので `target` を書きます（例 `css: "a.next:not(.disabled)"`）。
+
 ### フレーム
 
 iframe の中や、古いフレームセットのページの `<frame>` の中の部品は、`target` に `frame` を付けます：フレームの `name`（または `id`）属性、`title` や `src` の一部、または `css`。フレームの中のフレームは、外側を `frame.frame` に書きます。
