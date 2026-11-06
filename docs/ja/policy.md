@@ -77,6 +77,7 @@
 | `remote.enabled` | false | 管理サーバーからの実行を受けるか（[design/remote-runs.md](../design/remote-runs.md)）。枠の予約で、管理サーバーへの接続はまだない |
 | `remote.manager` | なし | 管理サーバーの URL。`https://`（`http://` は `localhost` だけ） |
 | `remote.scenarios` | 空（なし） | 管理サーバーが始めてよいシナリオの ID。`"*"` ですべて。`scenarios.<id>.unattended: false` のものはここで許しても動かない |
+| `notify` | 空 | 無人実行（エージェントのスケジュールと `shikigami run`）の終わりを知らせる先：`{ "webhook", "on", "format", "scenarios" }` の並び。[schedules.md](schedules.md#通知) |
 | `remote.acceptBundles` | false | このワークスペースの公開版だけでなく、管理サーバーがバンドルで送るシナリオも動かすか |
 
 `allow`＝そのまま、`ask`＝人が Studio で承認してから、`deny`＝させない。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。

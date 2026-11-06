@@ -227,6 +227,13 @@ export type ReviewVerdict = "approved" | "rejected";
  */
 export type Decision = ("allow" | "deny") | "ask";
 /**
+ * How an unattended run ended, for [`NotifyRule::on`].
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "RunOutcome".
+ */
+export type RunOutcome = "succeeded" | "failed" | "cancelled";
+/**
  * Identifier of a request for a person's approval of an AI action.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -255,6 +262,13 @@ export type VarType = "string" | "number" | "boolean" | "object" | "array" | "an
  * via the `definition` "VarDirection".
  */
 export type VarDirection = "local" | "input" | "output" | "inOut";
+/**
+ * The shape of the message posted to a webhook.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "NotifyFormat".
+ */
+export type NotifyFormat = "teams" | "slack" | "json";
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "PartApp".
@@ -1409,6 +1423,10 @@ export interface Policy {
   };
   records?: RecordsPolicy;
   remote?: RemotePolicy;
+  /**
+   * Who hears about unattended runs (the agent's and `shikigami run`).
+   */
+  notify?: NotifyRule[];
 }
 /**
  * What an AI client (MCP) may do. Studio and the CLI are people and are not
@@ -1511,6 +1529,31 @@ export interface RemotePolicy {
    * versions in this workspace).
    */
   acceptBundles?: boolean;
+}
+/**
+ * One place unattended runs are reported to.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "NotifyRule".
+ */
+export interface NotifyRule {
+  /**
+   * Which endings to report. Default: failures only.
+   */
+  on?: RunOutcome[];
+  /**
+   * Only these scenario IDs (default: every scenario).
+   */
+  scenarios?: string[];
+  /**
+   * The webhook URL (`https://`). Anyone with it can post to the channel:
+   * treat it like a password.
+   */
+  webhook: string;
+  /**
+   * The shape of the message posted to a webhook.
+   */
+  format?: "teams" | "slack" | "json";
 }
 /**
  * One request, `approvals/<id>.json`.

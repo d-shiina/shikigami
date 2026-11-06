@@ -163,7 +163,15 @@ pub fn agent_cmd(
                 .clone()
                 .with_secrets(Arc::new(Vault::open(svc.store().root())))
                 .with_policy(Policy::path(svc.store().root()));
+            let policy_path = Policy::path(svc.store().root());
             let agent = Agent::new(Arc::new(svc), runtime);
+            agent.on_finished(Arc::new(move |report| {
+                let report = report.clone();
+                let policy_path = policy_path.clone();
+                tokio::spawn(async move {
+                    shikigami_agent::notify::notify(&policy_path, &report).await;
+                });
+            }));
             let rt = rt()?;
             rt.block_on(async {
                 let stop = agent.stopping();

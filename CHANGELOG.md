@@ -15,6 +15,7 @@
 - `desktop.getTable`：アプリの表・グリッド・一覧をまとめて読み、`browser.getTable` と同じ「列見出しをキーにしたオブジェクトのリスト」で返します。対応しているグリッドは画面外の行も読みます。10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE`
 - メールの送信 `mail.send`（dangerous、承認の対象）。`via` で送り方を選びます：`outlook`（既定、この PC の Outlook）、`microsoft365`（Microsoft Graph、`oauth.signIn` でサインインしたシークレットの `accessToken`、サイトに `https://graph.microsoft.com`）、`smtp`（`server`・`from`、ログインはシークレットでサイトに `smtp:<サーバー>`、パスワードは TLS なしでは送らない）。シークレットのサイトの書き方 `smtp:<サーバー>` を追加（docs/office.md）
 - スケジュールとエージェント：`shikigami agent install` で PC ごとのエージェントがサインイン時に起動し、`schedules.json` のスケジュール（毎日・曜日・毎月・n 分ごと・1 回）と、フォルダーにファイルが置かれたときに公開版を実行します。`shikigami agent status / stop / run / uninstall`、`shikigami schedule list / add / remove / enable / disable`（docs/schedules.md）
+- 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、シナリオ・エラー・PC・時刻つきで知らせます（docs/schedules.md）
 
 ### 変更
 

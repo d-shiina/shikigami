@@ -52,3 +52,23 @@ shikigami schedule disable sch_…   # enable / remove
 - **逃した時刻は取り戻しません。** エージェントが止まっている間（PC の電源が切れていた、誰もサインインしていなかった）に過ぎた時刻は飛ばし、次の時刻に動きます。
 - **同時には 1 つ。** 前の実行がまだ続いているうちに次の時刻が来たら、その回は飛ばします。ファイルのきっかけは、ファイル 1 つにつき 1 回動きます。
 - 始められなかったスケジュール（公開していない、ポリシーで止められた）は、通知では失敗した実行として扱います。
+
+## 通知
+
+`policy.json` の `notify` で、無人実行の終わりを知らせます。対象はエージェントが始める実行と `shikigami run`（タスク スケジューラー・バッチファイル）です。Studio の実行と AI の試し実行は人が見ているので知らせません。シナリオの `catch` でメールを送る必要はありません。
+
+```json
+"notify": [
+  { "webhook": "https://….logic.azure.com/workflows/…", "format": "teams" },
+  { "webhook": "https://hooks.slack.com/services/…", "format": "slack", "on": ["failed", "succeeded"], "scenarios": ["scn_01a1…"] }
+]
+```
+
+| 項目 | 既定 | 意味 |
+|---|---|---|
+| `webhook` | （必須） | 送り先。`https://`（`http://` は `localhost` だけ）。URL を知っていれば誰でも投稿できるので、パスワードと同じように扱う |
+| `on` | `["failed"]` | どの終わり方を知らせるか：`failed`・`succeeded`・`cancelled` |
+| `format` | `teams` | `teams`：Teams の「ワークフロー」の Webhook 向けのカード（Power Automate の「HTTP 要求の受信時」でも受けられ、メールにもできる）。`slack`：Slack などの `{ "text": … }`。`json`：自社のシステム向けの実行の要約 |
+| `scenarios` | すべて | このシナリオ ID だけ |
+
+知らせる内容は、シナリオ、エラー（コード・メッセージ・ノード）、きっかけ（スケジュールの名前）、PC、時刻、版、実行 ID です。出力の値は送りません。始められなかったスケジュール（公開していない、ポリシーで止められた）は失敗として知らせます。送れなかった通知はログに残すだけで、実行の結果は変わりません。
