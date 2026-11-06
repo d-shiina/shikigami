@@ -169,7 +169,7 @@
 
 ### 16. データベースのノードがない
 
-- **今**：該当なし（組込ノード一覧に `db.*` なし）
+- **今**：`db.query` / `db.execute`（ODBC、[database.md](../ja/database.md)）で済み。組込にした（ODBC はどの DB にも同じ書き方で、Windows に標準で入っているため）
 - **相手**：3 製品とも SQL の実行がある
 - **影響**：基幹システムの DB から抜いて Excel にする、は定番。`process.run` で `sqlcmd` を呼ぶのは AI にも人にも筋が悪い
 - **方向**：`db.query` / `db.execute`（ODBC と SQL Server を先に。接続文字列はシークレット）。プラグインでなく組込にするかはここで決める

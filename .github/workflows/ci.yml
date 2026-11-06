@@ -22,11 +22,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Tauri system dependencies (Linux)
+      - name: Install Tauri system dependencies and ODBC (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev unixodbc-dev libsqliteodbc
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -61,6 +61,8 @@ jobs:
       - run: cargo test --workspace
         env:
           SHIKIGAMI_SNAPSHOT_DIR: ${{ runner.temp }}/dialogs
+          # The db.* tests run SQL through the SQLite ODBC driver installed above.
+          SHIKIGAMI_REQUIRE_ODBC: ${{ runner.os == 'Linux' && '1' || '' }}
       - name: Tutorial examples run, and their bundles are current
         shell: bash
         run: |

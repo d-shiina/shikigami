@@ -67,6 +67,8 @@ pub enum StepCategory {
     Network,
     /// Programs, the clipboard and dialogs (`process.*`, `clipboard.*`, `dialog.*`).
     System,
+    /// Databases through ODBC (`db.*`).
+    Database,
     Other,
 }
 

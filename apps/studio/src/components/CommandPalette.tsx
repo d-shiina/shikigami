@@ -22,6 +22,7 @@ export const CATEGORY_COLOR: Record<string, string> = {
   outlook: "var(--cat-office)",
   file: "var(--cat-file)",
   network: "var(--cat-browser)",
+  database: "var(--cat-file)",
   system: "var(--cat-windows)",
   // Presets are "変数に代入" steps underneath, so they share its colour.
   text: "var(--cat-variable)",
