@@ -38,6 +38,7 @@ import {
   type PickRequest,
   type SecretRequest,
 } from "./lib/api";
+import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
 import { summarize } from "./lib/review";
@@ -1298,7 +1299,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               if (human?.stepId === env.stepId) human = null;
               run.steps[env.stepId] = env.outcome;
               if (env.error) {
-                push("error", `${env.error.code}: ${env.error.message}${env.willRetry ? t.runMsg.willRetry : ""}`, env.stepId);
+                push("error", `${errorLine(env.error, findStep(s.scenario?.steps ?? [], env.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, env.stepId);
                 secretFix = secretFixOf(env.error) ?? secretFix;
               }
               break;
