@@ -93,7 +93,7 @@ fn examples_validate_and_targets_are_checked() {
     let runtime = runtime(Scripted::new(vec![]));
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 18);
+    assert_eq!(defs.len(), 19);
     for def in &defs {
         assert!(def.step_type.starts_with("desktop."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
@@ -108,6 +108,7 @@ fn examples_validate_and_targets_are_checked() {
                 "total",
                 "confirmShown",
                 "scrolled",
+                "orders",
             ]
             .iter()
             .map(|n| VariableDef::new(*n, VarType::Any))
@@ -739,4 +740,125 @@ fn a_picked_element_gets_the_sturdiest_target() {
             i
         );
     }
+}
+
+#[test]
+fn grids_become_lists_of_records() {
+    use crate::table::{Grid, clean_cell};
+    let grid = Grid {
+        headers: vec!["受注番号".into(), "".into(), "金額".into(), "金額".into()],
+        rows: vec![
+            vec!["A-1".into(), "x".into(), "1,200".into(), "100".into()],
+            vec!["".into(), " ".into()],
+            vec!["A-2".into()],
+        ],
+        truncated: false,
+    };
+    assert_eq!(
+        grid.records(),
+        vec![
+            json!({ "受注番号": "A-1", "列2": "x", "金額": "1,200", "金額 2": "100" }),
+            json!({ "受注番号": "A-2", "列2": "", "金額": "", "金額 2": "" }),
+        ]
+    );
+    assert_eq!(Grid::from_json(&grid.to_json()).unwrap(), grid);
+    assert_eq!(clean_cell(" (null) "), "");
+    assert_eq!(clean_cell(" 東京 "), "東京");
+}
+
+#[tokio::test]
+async fn get_table_returns_records_and_refuses_silent_truncation() {
+    let grid = |truncated: bool| {
+        Ok(
+            json!({ "headers": ["品名", "数量"], "rows": [["りんご", "3"]], "truncated": truncated }),
+        )
+    };
+    let backend = Scripted::new(vec![grid(false), grid(true), grid(true)]);
+    let rt = runtime(backend.clone());
+    let target = json!({ "window": { "process": "billing.exe" } });
+    let read = |extra: Value| {
+        let mut params = json!({ "target": target });
+        params
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        vec![step(types::GET_TABLE, params).saving("out")]
+    };
+    let report = run(&rt, read(json!({}))).await;
+    assert_eq!(
+        report.outputs["out"],
+        json!([{ "品名": "りんご", "数量": "3" }])
+    );
+    let report = run(&rt, read(json!({}))).await;
+    assert_eq!(report.error.unwrap().code, "TABLE_TOO_LARGE");
+    let report = run(&rt, read(json!({ "maxRows": 1 }))).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let Op::GetTable { max_rows, .. } = &backend.calls()[2] else {
+        panic!()
+    };
+    assert_eq!(*max_rows, 1);
+}
+
+#[test]
+fn grids_are_read_from_their_element_tree() {
+    use crate::table::grid_from_nodes;
+    let cell = |depth: usize, role: &'static str, name: &str, value: Option<&str>| NodeInfo {
+        depth,
+        role,
+        name: name.into(),
+        value: value.map(Into::into),
+        enabled: true,
+        ..NodeInfo::default()
+    };
+    // WinForms DataGridView: a top row of header cells, a row header cell
+    // first in every row, "(null)" for empty cells.
+    let winforms = vec![
+        cell(0, "table", "受注", None),
+        cell(1, "row", "Top Row", None),
+        cell(2, "columnheader", "", None),
+        cell(2, "columnheader", "番号", None),
+        cell(2, "columnheader", "金額", None),
+        cell(1, "row", "Row 0", None),
+        cell(2, "columnheader", "", None),
+        cell(2, "custom", "番号 Row 0", Some("A-1")),
+        cell(2, "custom", "金額 Row 0", Some("1,200")),
+        cell(1, "row", "Row 1", None),
+        cell(2, "columnheader", "", None),
+        cell(2, "custom", "番号 Row 1", Some("(null)")),
+        cell(2, "custom", "金額 Row 1", Some("(null)")),
+        cell(1, "scrollbar", "", None),
+    ];
+    let grid = grid_from_nodes(&winforms, 100);
+    assert_eq!(grid.headers, ["番号", "金額"]);
+    assert_eq!(
+        grid.records(),
+        vec![json!({ "番号": "A-1", "金額": "1,200" })]
+    );
+    // A Win32 list view: a header bar, the first column as the item's name.
+    let list_view = vec![
+        cell(0, "list", "", None),
+        cell(1, "header", "", None),
+        cell(2, "columnheader", "名前", None),
+        cell(2, "columnheader", "サイズ", None),
+        cell(1, "listitem", "a.txt", None),
+        cell(2, "text", "1 KB", None),
+        cell(1, "listitem", "b.txt", None),
+        cell(2, "text", "2 KB", None),
+    ];
+    let grid = grid_from_nodes(&list_view, 1);
+    assert!(grid.truncated);
+    assert_eq!(
+        grid.records(),
+        vec![json!({ "名前": "a.txt", "サイズ": "1 KB" })]
+    );
+    // A plain list: one column of item names.
+    let plain = vec![
+        cell(0, "list", "", None),
+        cell(1, "listitem", "東京", None),
+        cell(1, "listitem", "大阪", None),
+    ];
+    assert_eq!(
+        grid_from_nodes(&plain, 10).records(),
+        vec![json!({ "列1": "東京" }), json!({ "列1": "大阪" })]
+    );
 }

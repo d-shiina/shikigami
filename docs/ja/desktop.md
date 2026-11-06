@@ -41,6 +41,7 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 | `desktop.press` | `target`, `key`（`Enter` `Control+S` `Alt+F4` など。ブラウザと同じ書き方） | – | **使う** |
 | `desktop.readText` | `target`（ウィンドウ・`element`・`region`）または `file`（画像ファイル） | `{ text, lines }`（OCR） | 使わない |
 | `desktop.screenshot` | `target`（ウィンドウ・`element`・`region`）, `path` | 保存したパス | 使わない |
+| `desktop.getTable` | `target`（表・グリッド・一覧。ウィンドウだけなら最初の 1 つ）, `maxRows` | 列見出しをキーにしたオブジェクトのリスト（`browser.getTable` と同じ形） | 使わない |
 | `desktop.selectMenu` | `target`（ウィンドウならメニューバーか開いているメニュー、部品ならその右クリックメニュー）, `path`（上から順の名前。例 `["ファイル", "名前を付けて保存"]`） | – | 使わない |
 | `desktop.scroll` | `target`。`direction` なしならその部品が見えるまで、`direction`（`up` `down` `left` `right` `top` `bottom`）・`amount`・`unit`（`page` / `line`）ありなら一覧や枠をスクロール | `{ verticalPercent, horizontalPercent, atEnd }` | 使わない |
 | `desktop.mouseScroll` | `target`, `direction`（`up` `down` `left` `right`）, `amount`（ホイールの刻み、既定 3） | – | **使う** |
@@ -50,6 +51,7 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 - **待ち時間を書かなくてよい**：どのノードも、ウィンドウや部品が現れる（無効なら有効になる）まで自動で探し直します。上限はノードの `timeoutMs`（既定 30 秒）。消えるのを待つときだけ `desktop.waitFor` の `state: "hidden"` を使います
 - **まずマウスを使わない操作**：`desktop.click` はボタンを押す・チェックを切り替える・項目を選ぶ・ツリーを開く操作を、マウスを動かさずに行います。ウィンドウが裏にあっても動き、ほかの作業と並行できます。反応しないアプリだけ `desktop.mouseClick` / `desktop.type` を使います
 - **メニューは名前で**：`desktop.selectMenu` は名前を画面の表示どおりに、アクセスキー（`(F)`・`&`）・末尾の `...`・ショートカットを除いて照らし合わせ、サブメニューが開くのを待ちます。部品の右クリックメニューがマウスなしで開かない（`NOT_SUPPORTED`）ときは、`desktop.mouseClick`（`button: "right"`）で開いてから、`desktop.selectMenu` にウィンドウだけを渡します
+- **表はまとめて**：`desktop.getTable` は、対応しているグリッド（WPF、多くの WinForms・Win32 のもの）なら画面外の行も含めて全部読みます。そうでない一覧は、アプリが作ってある行だけです。空のセルは `""`（WinForms の `(null)` も）、文字のない行は除き、10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE` で止まります
 - **長い一覧をページごとに読む**：`desktop.scroll` に `direction: "down"` を付けると `atEnd` が返るので、`control.while` で「読む→スクロール」を最後まで繰り返せます
 - **マウス・キーボードは 1 組だけ**：「使う」のノードは画面の使用権（`desktop.input`）を自動で取ってから動くので、並行ブランチの中でも同時には動きません。同じアプリ（`process` が同じ）へのノードも 1 つずつ動きます。シナリオにロックは書きません
 
@@ -150,13 +152,14 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 | `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | 複数見つかった（候補の位置つき）。`nth` か `region` で決める |
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | 画像ファイルがない／一色だけの画像（どこにでも当たる） |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` なのに PaddleOCR が入っていない／Windows OCR にその言語がない |
+| `TABLE_TOO_LARGE` | 10000 行を超えた。`maxRows` を書くか、アプリで絞り込んでから読む |
 | `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | その名前のメニュー項目が出ていない（出ている項目つき）／複数ある。上のメニューから順に書く |
 | `PLATFORM_UNSUPPORTED` | Windows 以外で実行した |
 
 ## 確認済みの事項と制約
 
-- **確認済み**：ノード定義・検証・自動待ち・ロック・シークレットの照合を、偽のバックエンドで自動テスト（Linux / Windows の CI）。Windows の CI でメモ帳を起動し、文字の入力と読み取り、文章の最後までと戻りのスクロール、メニューバーからの「ヘルプ > バージョン情報」を UI Automation で行うテスト。画像検索と、日本語の業務画面の絵（12px の文字）を PaddleOCR で読むテスト（Linux / Windows の CI）。Windows の CI でメモ帳の絵を撮って OCR し、切り出した画像をもう一度見つけるテスト
+- **確認済み**：ノード定義・検証・自動待ち・ロック・シークレットの照合を、偽のバックエンドで自動テスト（Linux / Windows の CI）。Windows の CI で PowerShell が出す WinForms の画面を使い、メニューバーからの選択、文字の入力と読み取り、最後までのスクロール、DataGridView と一覧の `desktop.getTable` を UI Automation で行うテスト（メモ帳のテストは、CI のランナーのように古い Edit のないメモ帳では飛ばされます）。画像検索と、日本語の業務画面の絵（12px の文字）を PaddleOCR で読むテスト（Linux / Windows の CI）。Windows の CI でメモ帳の絵を撮って OCR し、切り出した画像をもう一度見つけるテスト
 - **未確認**：実際の業務アプリ・SAP GUI・Java アプリ・Citrix での動作、マウス・キーボード操作（CI では画面操作をテストしていない）、高 DPI・複数モニター
 - 画像検索はフル HD のウィンドウで 1 回 0.2〜0.5 秒、PaddleOCR は小さい画面で 0.3 秒ほど（CPU 4 コア）です。大きなウィンドウ全体の OCR は 1 秒を超えることがあるので、`region` で絞ると速くなります
 - Studio・CLI・MCP サーバーなど **別プロセス間** のマウス・キーボードの排他は未実装です（同じプロセス内のみ）
-- 表（グリッド）の一括読み取りはまだありません。回転・拡大縮小した画像は探せません
+- 回転・拡大縮小した画像は探せません

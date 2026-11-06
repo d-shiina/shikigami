@@ -1120,6 +1120,7 @@ export const en: Dict = {
     "desktop.click": "Click",
     "desktop.closeWindow": "Close window",
     "desktop.drag": "Drag",
+    "desktop.getTable": "Read table",
     "desktop.getValue": "Read value",
     "desktop.hover": "Hover",
     "desktop.isVisible": "Is visible",
