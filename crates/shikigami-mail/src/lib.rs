@@ -121,7 +121,12 @@ impl ActionHandler for MailStep {
     fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
         let kind = self.kind;
         let request = parse(kind, &input.params);
-        let timeout = Duration::from_millis(input.timeout_ms.saturating_sub(1_000).max(1_000));
+        // A send must end before the Runtime's timeout, which would retry it.
+        let timeout = Duration::from_millis(if kind == Kind::Send {
+            send::send_limit_ms(input.timeout_ms)
+        } else {
+            input.timeout_ms.saturating_sub(1_000).max(1_000)
+        });
         let cancel = input.cancel.clone();
         Box::pin(async move {
             let request = request?;

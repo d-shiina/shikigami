@@ -352,6 +352,12 @@ pub fn send_limit_ms(timeout_ms: u64) -> u64 {
     }
 }
 
+/// lettre's error for a connection that could not be made (its kind is not
+/// public; the text is checked by a test).
+fn smtp_never_connected(e: &lettre::transport::smtp::Error) -> bool {
+    e.to_string().starts_with("Connection error")
+}
+
 /// The message may or may not have gone out: never retried, so a retry
 /// cannot send it twice.
 pub fn delivery_unknown(message: String) -> StepError {
@@ -434,18 +440,20 @@ pub async fn smtp_send(
         ));
     }
     builder.build().send(message).await.map_err(|e| {
-        if e.is_timeout() {
-            // The server may have taken the message before going quiet.
-            return delivery_unknown(format!("{}:{}: {e}", smtp.host, smtp.port));
-        }
+        let message = format!("{}:{}: {e}", smtp.host, smtp.port);
+        // Only an answer from the server (it refused, for now or for good)
+        // or a failure to connect at all says nothing was sent. Anything
+        // else (a timeout, a connection cut mid-way) may come after the
+        // server took the message, so it is never retried.
         let (code, retryable) = if e.is_permanent() {
             ("MAIL_SEND_FAILED", false)
         } else if e.is_transient() {
             ("MAIL_SEND_FAILED", true)
-        } else {
+        } else if smtp_never_connected(&e) {
             ("MAIL_SERVER_UNREACHABLE", true)
+        } else {
+            return delivery_unknown(message);
         };
-        let message = format!("{}:{}: {e}", smtp.host, smtp.port);
         let error = if retryable {
             StepError::new(code, message)
         } else {

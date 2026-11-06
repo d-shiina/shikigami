@@ -539,3 +539,57 @@ fn a_send_ends_before_the_step_time() {
     assert_eq!(send::send_limit_ms(60_000), 59_000);
     assert_eq!(send::send_limit_ms(1_000), 500);
 }
+
+#[tokio::test]
+async fn an_smtp_connection_cut_after_the_message_is_never_retried() {
+    let dir = tempfile::tempdir().unwrap();
+    // The server takes the whole message, then hangs up without "queued".
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.unwrap();
+        let (read, mut write) = socket.into_split();
+        let mut lines = BufReader::new(read).lines();
+        write.write_all(b"220 test ESMTP\r\n").await.unwrap();
+        let mut in_data = false;
+        while let Ok(Some(line)) = lines.next_line().await {
+            if in_data {
+                if line == "." {
+                    break;
+                }
+                continue;
+            }
+            let command = line.to_uppercase();
+            let reply: &[u8] = if command.starts_with("EHLO") {
+                b"250-test\r\n250 8BITMIME\r\n"
+            } else if command.starts_with("DATA") {
+                in_data = true;
+                b"354 go\r\n"
+            } else {
+                b"250 ok\r\n"
+            };
+            write.write_all(reply).await.unwrap();
+        }
+    });
+    let smtp = |port| send::Smtp {
+        host: "127.0.0.1".into(),
+        port,
+        security: send::Security::None,
+        from: "robot@example.co.jp".into(),
+    };
+    let e = send::smtp_send(&smtp(port), None, &sample(dir.path()), 10_000)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "MAIL_DELIVERY_UNKNOWN", "{}", e.message);
+    assert!(!e.retryable);
+
+    // Nothing listening: nothing was sent, so a retry is safe.
+    let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = closed.local_addr().unwrap().port();
+    drop(closed);
+    let e = send::smtp_send(&smtp(port), None, &sample(dir.path()), 10_000)
+        .await
+        .unwrap_err();
+    assert_eq!(e.code, "MAIL_SERVER_UNREACHABLE", "{}", e.message);
+    assert!(e.retryable);
+}
