@@ -1691,7 +1691,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           if (result.outcome) {
             applyOutcome(result.outcome);
             set({ selection: null, error: null, ...(flow ? {} : { history: [], versions: [] }) });
-            await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
+            await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions(), get().loadCalled()]);
           }
           return result;
         } catch (e) {

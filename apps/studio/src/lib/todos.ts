@@ -141,11 +141,18 @@ export function authorIssues(validation: ValidationReport | null | undefined): V
 export function flowForChat(flow: Flow): string {
   const content: Record<string, unknown> = { name: flow.name };
   if (flow.description) content.description = flow.description;
-  if (flow.variables?.length) content.variables = flow.variables;
+  // A secret's value never leaves Studio, even one wrongly saved as a default
+  // (the bundle export drops it the same way).
+  if (flow.variables?.length) content.variables = flow.variables.map((v) => (v.secret ? withoutDefault(v) : v));
   if (flow.parts && Object.keys(flow.parts).length) content.parts = flow.parts;
   content.steps = flow.steps ?? [];
   if (flow.settings && Object.keys(flow.settings).length) content.settings = flow.settings;
   return JSON.stringify({ format: "shikigami.answer", summary: "", checks: [], flow: content }, null, 2);
+}
+
+function withoutDefault<T extends { default?: unknown }>(v: T): Omit<T, "default"> {
+  const { default: _value, ...rest } = v;
+  return rest;
 }
 
 const fence = (json: string) => "```json\n" + json + "\n```";

@@ -72,4 +72,11 @@ describe("text for the AI", () => {
     expect(Object.keys(answer.flow)).toEqual(["name", "parts", "steps"]);
     expect(handOffText(flow)).toContain("```json");
   });
+
+  it("never hands a secret's value to the AI", () => {
+    const withSecret = { ...flow, variables: [{ name: "pw", type: "string", secret: true, default: "hunter2" }, { name: "n", type: "number", default: 3 }] } as Flow;
+    const text = flowForChat(withSecret);
+    expect(text).not.toContain("hunter2");
+    expect(text).toContain('"default": 3');
+  });
 });
