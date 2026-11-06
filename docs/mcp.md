@@ -85,7 +85,8 @@ args = ["mcp"]
 |  | `request_secret` | Ask the person for login details. Studio shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Studio and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
 | run | `run_scenario` | Run the work in progress with the Runtime (the AI's trial run; the AI takes no part in running it). `waitMs` waits for it to finish. `published: true` runs the published version. Input variables marked `secret: true` cannot be passed |
 |  | `stop_scenario` | Cancel a run |
-| browser | `inspect_page` | The page's accessibility tree (how to choose a `target`: [browser.md](browser.md)). Saves the tree and a screenshot as evidence and returns an `observationId` |
+| browser | `inspect_page` | The page's accessibility tree (how to choose a `target`: [browser.md](browser.md)). Saves the tree and a screenshot as evidence and returns an `observationId`. `image: true` also returns the screenshot to the AI |
+|  | `ask_user_to_pick` | When the AI cannot tell which element is meant, the person clicks it in the browser (the click does not reach the page) and it comes back as a `target`. Studio shows the request and can decline it ([browser.md](browser.md)) |
 | desktop | `inspect_ui` | The open windows, or the elements of one window (how to choose a `target`: [desktop.md](desktop.md)). When it looks at a window it saves the element tree as evidence and returns an `observationId` |
 | try | `test_step` | Run one node on the spot and return its output (for a browser node also the page after it, for a desktop node the window it worked on). Does not change the scenario. Saves the result as evidence and returns an `observationId` |
 

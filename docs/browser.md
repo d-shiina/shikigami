@@ -84,10 +84,11 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 
 ## Building scenarios from AI (MCP)
 
-The MCP server has two tools for this (class `run`):
+The MCP server has three tools for this (class `run`):
 
-- `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is
-- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario
+- `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is. `image: true` also hands the screenshot to the AI, for pages whose tree does not tell elements apart (icons without names)
+- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario. Before a browser node runs, its target is outlined in the browser for a moment (「ここを押します」), so the person watching sees what the AI is about to touch
+- `ask_user_to_pick`: when the AI cannot tell which element is meant (two 「編集」 buttons, an icon without a name), it asks the person instead of guessing. The browser window comes to the front with the AI's `message` in a banner, the `candidates` it is torn between are outlined with numbers, and the person's click is caught before the page sees it (nothing is pressed). The element comes back as a `target` (with `nth` and the text of its table row `row` when it repeats). Studio shows 「AI がブラウザの画面で指してほしいと言っています」 at the same time and can decline it; 「わからない」 or Esc in the browser declines too (`status: "cancelled"`). It needs a visible browser
 
 With these the AI checks the site while it builds the nodes, then confirms an AI-free run with `validate_scenario` → `run_scenario`.
 

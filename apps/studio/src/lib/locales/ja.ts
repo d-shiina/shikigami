@@ -177,6 +177,10 @@ export const ja = {
       REVISION_CONFLICT: "確認中に内容が変わりました。もう一度確認してください。",
     })[code] ?? message,
   approvalAsked: "AI が承認を求めています",
+  pickAsked: "AI がブラウザの画面で指してほしいと言っています",
+  pickHow: (candidates: number) =>
+    `ブラウザのウィンドウに切り替えて、その部品をクリックしてください。クリックはページには伝わらないので、ボタンが押されることはありません。${candidates > 1 ? `迷っている候補には 1〜${candidates} の番号が付いています。` : ""}わからなければ、ブラウザの「わからない」かここで断れます。`,
+  pickCancel: "指さずに断る",
   approvalSummary: (action: string, scenario: string | null, types: string[], risk: string) =>
     `${action}${scenario ? `「${scenario}」` : ""}（${types.length > 0 ? `${types.join("、")}・` : ""}${risk}）`,
   approvalLater: "あとで",

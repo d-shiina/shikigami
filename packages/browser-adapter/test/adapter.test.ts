@@ -219,6 +219,91 @@ describe("browser adapter", () => {
   });
 });
 
+describe("pointing at the page", () => {
+  const person = new Adapter({ forceHeadless: true, scriptedHuman: true, timeoutMs: 3000, executablePath: process.env.SHIKIGAMI_BROWSER_PATH });
+  const r = { runId: "run_pick" };
+
+  beforeAll(async () => {
+    await person.call("open", { ...r, url: base });
+    await person.call("fill", { ...r, target: { label: "ユーザー名" }, value: "demo" });
+    await person.call("fill", { ...r, target: { label: "パスワード" }, value: "shikigami" });
+    await person.call("click", { ...r, target: { role: "button", name: "ログイン" } });
+    await person.call("waitFor", { ...r, target: { role: "heading", name: "受注一覧" } });
+  });
+
+  afterAll(async () => {
+    await person.shutdown();
+  });
+
+  /** Starts a pick, then plays the person clicking `target` once the banner is up. */
+  async function pointAt(target: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+    const asked = person.call("pick", { ...r, message: "出荷するボタンを押してください", timeoutMs: 5000, ...extra });
+    for (let i = 0; ; i++) {
+      const up = await person.call("isVisible", { ...r, target: { text: "クリックして教えてください" }, waitMs: 100 });
+      if (up) break;
+      if (i > 50) throw new Error("banner never appeared");
+    }
+    await person.call("click", { ...r, target });
+    return (await asked) as Record<string, unknown>;
+  }
+
+  it("returns the clicked button as a target without clicking it", async () => {
+    const picked = await pointAt({ role: "button", name: "A-1001 を出荷" });
+    expect(picked).toMatchObject({
+      status: "picked",
+      target: { role: "button", name: "A-1001 を出荷", exact: true },
+      matches: 1,
+    });
+    expect(String(picked.row)).toContain("青葉商店");
+    // The page never saw the click.
+    const rows = (await person.call("getTable", r)) as Record<string, string>[];
+    expect(rows[0]?.状態).toBe("未処理");
+    // And the banner is gone.
+    expect(await person.call("isVisible", { ...r, target: { text: "クリックして教えてください" }, waitMs: 0 })).toBe(false);
+  });
+
+  it("adds nth when the same target repeats, and tells which candidate was picked", async () => {
+    const cells = { role: "cell", name: "未処理", exact: true };
+    const picked = await pointAt({ ...cells, nth: 1 }, { candidates: [{ role: "button", name: "A-1001 を出荷" }, cells] });
+    expect(picked.alternatives).toContainEqual({ text: "未処理", exact: true });
+    expect(picked.target).toEqual({ ...cells, nth: 1 });
+    expect(picked.matches).toBeGreaterThan(1);
+    expect(picked.candidate).toBe(2);
+  });
+
+  it("can be cancelled with Esc", async () => {
+    const asked = person.call("pick", { ...r, timeoutMs: 5000 });
+    for (let i = 0; i < 50; i++) {
+      if (await person.call("isVisible", { ...r, target: { text: "クリックして教えてください" }, waitMs: 100 })) break;
+    }
+    await person.call("press", { ...r, key: "Escape" });
+    expect(await asked).toMatchObject({ status: "cancelled" });
+  });
+
+  it("ends when Studio cancels it", async () => {
+    const asked = person.call("pick", { ...r, timeoutMs: 5000 });
+    for (let i = 0; i < 50; i++) {
+      if (await person.call("isVisible", { ...r, target: { text: "クリックして教えてください" }, waitMs: 100 })) break;
+    }
+    expect(await person.call("cancelPick", r)).toBe(true);
+    expect(await asked).toMatchObject({ status: "cancelled" });
+  });
+
+  it("needs a visible browser", async () => {
+    const unseen = { runId: "run_pick_headless" };
+    await adapter.call("open", { ...unseen, url: base });
+    const err = await failure(adapter.call("pick", { ...unseen, timeoutMs: 500 }));
+    expect(err.code).toBe("HUMAN_REQUIRED");
+    await adapter.call("closeRun", unseen);
+  });
+
+  it("outlines targets for a moment", async () => {
+    const { shown } = (await person.call("highlight", { ...r, target: { role: "cell", name: "未処理", exact: true }, durationMs: 300 })) as { shown: number };
+    // Headless sessions skip it (nobody would see it).
+    expect(shown).toBe(0);
+  });
+});
+
 describe("OAuth sign-in", () => {
   // The provider shows a consent page whose button redirects (302) to the
   // fixed redirect URL on another site, as Box and others do.

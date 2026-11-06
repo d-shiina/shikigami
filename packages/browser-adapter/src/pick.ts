@@ -1,0 +1,411 @@
+// Pointing at the page: the person shows which element they mean.
+//
+// `pick` draws a banner on the open page, outlines whatever the pointer is
+// over and catches the next click before the page sees it (so picking the
+// 「出荷」 button does not ship anything). The clicked element is turned
+// into a scenario Target (role + accessible name, as inspect_page lists
+// them), with `nth` when the same target matches several elements.
+// `highlight` outlines targets for a moment so the person can see what a
+// step is about to touch. Both are used by AI clients (ask_user_to_pick,
+// test_step) and by Studio's picker for a node's target.
+
+import type { Locator, Page } from "playwright-core";
+
+import { AdapterError, locate, type AriaRole, type Target } from "./targets.ts";
+
+const HOST_ID = "__shikigami_pick";
+const HIGHLIGHT_HOST_ID = "__shikigami_highlight";
+const PICKED = "data-shikigami-picked";
+const CANDIDATE = "data-shikigami-candidate";
+const HIGHLIGHT = "data-shikigami-highlight";
+
+export interface PickOptions {
+  /** What to point at, shown in the banner (the AI's words). */
+  message?: string;
+  /** Targets the AI is torn between: outlined with numbers 1, 2, … */
+  candidates?: Target[];
+  /** Banner language: "ja" (default) or "en". */
+  lang?: string;
+  timeoutMs: number;
+}
+
+export interface Picked {
+  status: "picked";
+  /** The element as a step target, ready for browser.click and friends. */
+  target: Target;
+  /** How many elements `target` matches without `nth` (1: it is unique). */
+  matches: number;
+  /** Other ways to name the same element (label, placeholder, text). */
+  alternatives: Target[];
+  /** The element's own text (shortened). */
+  text: string;
+  /** The text of the table row or list item it sits in, when there is one. */
+  row?: string;
+  /** 1-based number of the candidate the person picked, when it is one. */
+  candidate?: number;
+  url: string;
+}
+
+export interface Cancelled {
+  status: "cancelled";
+  url: string;
+}
+
+/** Waits for the person to click an element (or press わからない / Esc). */
+export async function pick(page: Page, options: PickOptions): Promise<Picked | Cancelled> {
+  await page.bringToFront().catch(() => {});
+  await clear(page);
+  await mark(page, options.candidates ?? [], CANDIDATE);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new AdapterError("HUMAN_TIMEOUT", `nobody pointed at anything within ${Math.round(options.timeoutMs / 1000)} s`, {
+              details: { hint: "Ask the user in chat whether they are at the PC, then call it again." },
+            }),
+          ),
+        options.timeoutMs,
+      );
+    });
+    const answer = page.evaluate(overlay, {
+      hostId: HOST_ID,
+      picked: PICKED,
+      candidate: CANDIDATE,
+      message: options.message ?? "",
+      lang: options.lang ?? "ja",
+    });
+    let outcome: "picked" | "cancelled";
+    try {
+      outcome = await Promise.race([answer, timeout]);
+    } catch (error) {
+      if (error instanceof AdapterError) throw error;
+      // The page navigated or closed while waiting.
+      throw new AdapterError("PICK_INTERRUPTED", "the page changed before anything was picked", {
+        details: { url: page.url(), hint: "Look at the page again (inspect_page) and ask once more if needed." },
+      });
+    }
+    if (outcome === "cancelled") return { status: "cancelled", url: page.url() };
+    return await describePicked(page);
+  } finally {
+    if (timer) clearTimeout(timer);
+    await clear(page);
+  }
+}
+
+/** Ends a waiting pick as if the person pressed わからない (Studio cancelled it). */
+export async function cancelPick(page: Page): Promise<boolean> {
+  return await page
+    .evaluate((hostId) => {
+      const button = document.getElementById(hostId)?.shadowRoot?.querySelector<HTMLButtonElement>(".bar button");
+      button?.click();
+      return Boolean(button);
+    }, HOST_ID)
+    .catch(() => false);
+}
+
+/** Outlines every element `targets` match for `durationMs` (numbered when `numbered`). */
+export async function highlight(
+  page: Page,
+  targets: Target[],
+  options: { durationMs: number; label?: string; numbered?: boolean },
+): Promise<number> {
+  await page.evaluate(removeOverlay, { hostId: HIGHLIGHT_HOST_ID, attrs: [HIGHLIGHT] }).catch(() => {});
+  const count = await mark(page, targets, HIGHLIGHT, options.numbered ?? targets.length > 1);
+  if (count === 0) return 0;
+  await page
+    .evaluate(drawHighlights, { hostId: HIGHLIGHT_HOST_ID, attr: HIGHLIGHT, label: options.label ?? "", durationMs: options.durationMs })
+    .catch(() => {});
+  return count;
+}
+
+// ---------------------------------------------------------------------------
+
+/** Tags the elements of each target with `attr` = its 1-based number. */
+async function mark(page: Page, targets: Target[], attr: string, numbered = true): Promise<number> {
+  let count = 0;
+  for (const [i, target] of targets.entries()) {
+    let locator: Locator;
+    try {
+      locator = locate(page, target);
+    } catch {
+      continue;
+    }
+    count += await locator
+      .evaluateAll((els, [a, n]) => {
+        for (const el of els) el.setAttribute(a, n);
+        return els.length;
+      }, [attr, numbered ? String(i + 1) : ""] as const)
+      .catch(() => 0);
+  }
+  return count;
+}
+
+async function clear(page: Page): Promise<void> {
+  await page.evaluate(removeOverlay, { hostId: HOST_ID, attrs: [PICKED, CANDIDATE] }).catch(() => {});
+}
+
+/** Turns the element tagged PICKED into a Target. */
+async function describePicked(page: Page): Promise<Picked> {
+  const el = page.locator(`[${PICKED}]`).first();
+  const facts = await el.evaluate(
+    (node, attr) => {
+      const short = (s: string | null | undefined, n: number) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+      const row = node.closest("tr, [role=row], li, [role=listitem], [role=option]");
+      const input = node as HTMLInputElement;
+      let label = "";
+      if (input.labels && input.labels.length > 0) label = short(input.labels[0]?.textContent, 80);
+      const candidate = node.closest(`[${attr}]`)?.getAttribute(attr) ?? "";
+      return {
+        text: short((node as HTMLElement).innerText ?? node.textContent, 100),
+        row: row && row !== node ? short((row as HTMLElement).innerText, 200) : "",
+        label,
+        placeholder: node.getAttribute("placeholder") ?? "",
+        testId: node.getAttribute("data-testid") ?? "",
+        id: node.id,
+        tag: node.tagName.toLowerCase(),
+        candidate,
+      };
+    },
+    CANDIDATE,
+  );
+  const aria = parseAria(await el.ariaSnapshot({ timeout: 2000 }).catch(() => ""));
+
+  const alternatives: Target[] = [];
+  if (facts.label) alternatives.push({ label: facts.label, exact: true });
+  if (facts.placeholder) alternatives.push({ placeholder: facts.placeholder, exact: true });
+  if (facts.testId) alternatives.push({ testId: facts.testId });
+  if (facts.text && facts.text.length <= 40) alternatives.push({ text: facts.text, exact: true });
+
+  let base: Target;
+  if (aria && aria.name) base = { role: aria.role as AriaRole, name: aria.name, exact: true };
+  else if (alternatives[0]) base = alternatives.shift()!;
+  else if (facts.id && /^[A-Za-z][\w-]*$/.test(facts.id)) base = { css: `#${facts.id}` };
+  else if (aria) base = { role: aria.role as AriaRole };
+  else base = { css: facts.tag };
+
+  const { matches, index } = await position(page, base);
+  const target = matches > 1 && index >= 0 ? { ...base, nth: index } : base;
+  const result: Picked = {
+    status: "picked",
+    target,
+    matches,
+    alternatives,
+    text: facts.text,
+    url: page.url(),
+  };
+  if (facts.row) result.row = facts.row;
+  if (facts.candidate) result.candidate = Number(facts.candidate);
+  return result;
+}
+
+/** How many elements `target` matches, and which of them is the picked one. */
+async function position(page: Page, target: Target): Promise<{ matches: number; index: number }> {
+  try {
+    return await locate(page, target).evaluateAll(
+      (els, attr) => ({ matches: els.length, index: els.findIndex((e) => e.hasAttribute(attr)) }),
+      PICKED,
+    );
+  } catch {
+    return { matches: 0, index: -1 };
+  }
+}
+
+/** `- button "A-1001 を出荷"` → { role: "button", name: "A-1001 を出荷" } (the first line only). */
+export function parseAria(snapshot: string): { role: string; name: string } | undefined {
+  const first = snapshot.split("\n")[0] ?? "";
+  const m = /^\s*- ([a-z]+)(?: "((?:[^"\\]|\\.)*)")?/.exec(first);
+  if (!m || !m[1] || m[1] === "text") return undefined;
+  let name = "";
+  if (m[2] !== undefined) {
+    try {
+      name = JSON.parse(`"${m[2]}"`) as string;
+    } catch {
+      name = m[2];
+    }
+  }
+  return { role: m[1], name };
+}
+
+// ---------------------------------------------------------------------------
+// In-page code (runs in the browser; must not use anything from this module).
+
+interface OverlayArgs {
+  hostId: string;
+  picked: string;
+  candidate: string;
+  message: string;
+  lang: string;
+}
+
+function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Promise<"picked" | "cancelled"> {
+  const words = lang !== "en"
+    ? { title: "Shikigami：クリックして教えてください", unsure: "わからない", hint: "Esc でやめる" }
+    : { title: "Shikigami: click to show it", unsure: "Not sure", hint: "Esc to cancel" };
+  const host = document.createElement("div");
+  host.id = hostId;
+  host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none";
+  const root = host.attachShadow({ mode: "open" });
+  root.innerHTML = `<style>
+    *{box-sizing:border-box;font-family:"Yu Gothic UI","Meiryo UI","Noto Sans JP",sans-serif}
+    .bar{position:fixed;top:12px;left:50%;transform:translateX(-50%);max-width:min(720px,calc(100vw - 24px));
+      display:flex;gap:12px;align-items:center;padding:10px 12px 10px 16px;border-radius:8px;
+      background:#fff;color:#1e2a4a;border:2px solid #2b7bd6;box-shadow:0 6px 24px rgba(20,40,80,.25);pointer-events:auto}
+    .bar b{display:block;font-size:13px}
+    .bar span{display:block;font-size:14px;margin-top:2px;white-space:pre-wrap}
+    .bar small{color:#4a5670;font-size:12px;white-space:nowrap}
+    .bar button{font-size:13px;padding:6px 12px;border-radius:6px;border:1px solid #9aa6bd;background:#f4f6fa;color:#1e2a4a;cursor:pointer;white-space:nowrap}
+    .box{position:fixed;border:2px solid #2b7bd6;background:rgba(43,123,214,.12);border-radius:4px;pointer-events:none;display:none}
+    .cand{position:fixed;border:2px dashed #e8862a;border-radius:4px;pointer-events:none}
+    .cand i{position:absolute;top:-11px;left:-11px;width:22px;height:22px;border-radius:11px;background:#e8862a;color:#fff;
+      font:700 12px/22px sans-serif;text-align:center;font-style:normal}
+  </style>
+  <div class="bar"><div style="flex:1"><b></b><span></span></div><small></small><button type="button"></button></div>
+  <div class="box"></div>`;
+  (root.querySelector(".bar b") as HTMLElement).textContent = words.title;
+  (root.querySelector(".bar span") as HTMLElement).textContent = message;
+  (root.querySelector(".bar small") as HTMLElement).textContent = words.hint;
+  const unsure = root.querySelector(".bar button") as HTMLButtonElement;
+  unsure.textContent = words.unsure;
+  const bar = root.querySelector(".bar") as HTMLElement;
+  const box = root.querySelector(".box") as HTMLElement;
+  document.documentElement.appendChild(host);
+
+  const cands = Array.from(document.querySelectorAll(`[${candidate}]`)).map((el) => {
+    const d = document.createElement("div");
+    d.className = "cand";
+    const n = el.getAttribute(candidate);
+    if (n) {
+      const i = document.createElement("i");
+      i.textContent = n;
+      d.appendChild(i);
+    }
+    root.appendChild(d);
+    return { el, d };
+  });
+
+  // What a click on `node` means: the control it belongs to, not the icon or span inside it.
+  const meaningful = (node: Element): Element =>
+    node.closest(
+      "button, a[href], input, select, textarea, label, summary, option, [role=button], [role=link], [role=checkbox], [role=radio], [role=tab], [role=menuitem], [role=option], [role=switch], [role=combobox], [role=textbox], [role=cell], [role=gridcell], td, th, [onclick], [tabindex]",
+    ) ?? node;
+  const under = (x: number, y: number): Element | null => {
+    const el = document.elementFromPoint(x, y);
+    return el && el !== host ? meaningful(el) : null;
+  };
+  const place = (d: HTMLElement, el: Element) => {
+    const r = el.getBoundingClientRect();
+    d.style.left = `${r.left - 3}px`;
+    d.style.top = `${r.top - 3}px`;
+    d.style.width = `${r.width + 6}px`;
+    d.style.height = `${r.height + 6}px`;
+  };
+  let current: Element | null = null;
+  let raf = 0;
+  const tick = () => {
+    for (const c of cands) place(c.d, c.el);
+    if (current) place(box, current);
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+
+  return new Promise((resolve) => {
+    const onBar = (e: Event) => e.composedPath().includes(bar);
+    const swallow = (e: Event) => {
+      if (onBar(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    };
+    const move = (e: MouseEvent) => {
+      if (onBar(e)) {
+        box.style.display = "none";
+        current = null;
+        return;
+      }
+      current = under(e.clientX, e.clientY);
+      box.style.display = current ? "block" : "none";
+    };
+    const done = (outcome: "picked" | "cancelled") => {
+      cancelAnimationFrame(raf);
+      for (const t of ["pointerdown", "mousedown", "pointerup", "mouseup", "dblclick", "auxclick", "contextmenu"]) {
+        window.removeEventListener(t, swallow, true);
+      }
+      window.removeEventListener("click", click, true);
+      window.removeEventListener("mousemove", move, true);
+      window.removeEventListener("keydown", key, true);
+      resolve(outcome);
+    };
+    const click = (e: MouseEvent) => {
+      if (onBar(e)) return;
+      swallow(e);
+      const el = under(e.clientX, e.clientY) ?? (e.target as Element);
+      el.setAttribute(picked, "");
+      box.style.display = "block";
+      place(box, el);
+      done("picked");
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        swallow(e);
+        done("cancelled");
+      }
+    };
+    for (const t of ["pointerdown", "mousedown", "pointerup", "mouseup", "dblclick", "auxclick", "contextmenu"]) {
+      window.addEventListener(t, swallow, true);
+    }
+    window.addEventListener("click", click, true);
+    window.addEventListener("mousemove", move, true);
+    window.addEventListener("keydown", key, true);
+    unsure.addEventListener("click", () => done("cancelled"));
+  });
+}
+
+function removeOverlay({ hostId, attrs }: { hostId: string; attrs: string[] }): void {
+  document.getElementById(hostId)?.remove();
+  for (const a of attrs) for (const el of Array.from(document.querySelectorAll(`[${a}]`))) el.removeAttribute(a);
+}
+
+function drawHighlights({ hostId, attr, label, durationMs }: { hostId: string; attr: string; label: string; durationMs: number }): void {
+  const host = document.createElement("div");
+  host.id = hostId;
+  host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none";
+  const root = host.attachShadow({ mode: "open" });
+  root.innerHTML = `<style>
+    .hl{position:fixed;border:3px solid #2b7bd6;background:rgba(43,123,214,.10);border-radius:4px;box-shadow:0 0 0 4px rgba(43,123,214,.25)}
+    .hl i{position:absolute;top:-24px;left:-3px;padding:2px 8px;border-radius:4px;background:#2b7bd6;color:#fff;white-space:nowrap;
+      font:600 12px/18px "Yu Gothic UI","Meiryo UI","Noto Sans JP",sans-serif;font-style:normal}
+  </style>`;
+  const items = Array.from(document.querySelectorAll(`[${attr}]`)).map((el) => {
+    const d = document.createElement("div");
+    d.className = "hl";
+    const n = el.getAttribute(attr);
+    const text = [n, label].filter(Boolean).join(" ");
+    if (text) {
+      const i = document.createElement("i");
+      i.textContent = text;
+      d.appendChild(i);
+    }
+    root.appendChild(d);
+    return { el, d };
+  });
+  document.documentElement.appendChild(host);
+  let raf = 0;
+  const tick = () => {
+    for (const { el, d } of items) {
+      const r = el.getBoundingClientRect();
+      d.style.left = `${r.left - 4}px`;
+      d.style.top = `${r.top - 4}px`;
+      d.style.width = `${r.width + 8}px`;
+      d.style.height = `${r.height + 8}px`;
+    }
+    raf = requestAnimationFrame(tick);
+  };
+  tick();
+  setTimeout(() => {
+    cancelAnimationFrame(raf);
+    if (host.isConnected) host.remove();
+    for (const el of Array.from(document.querySelectorAll(`[${attr}]`))) el.removeAttribute(attr);
+  }, durationMs);
+}
