@@ -277,6 +277,9 @@ pub fn prune(
     if records.keep_days.is_none() && records.keep_runs.is_none() {
         return 0;
     }
+    if let Some(days) = records.keep_days {
+        crate::audit::prune_mcp_log(workspace, days);
+    }
     let Ok(ids) = list_runs(workspace) else {
         return 0;
     };

@@ -15,6 +15,7 @@
 - タスクトレイのアイコン：クリックで実行画面、右クリックで「実行画面を開く」「Studio を開く」「終了」。`--runner` で起動すると実行画面を閉じてもトレイに残り、`--tray` でトレイだけで起動します（docs/runner.md）
 - 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
 - 管理サーバー（プロトコル v1、docs/remote.md）：`shikigami agent enroll <URL> <コード>` で PC を一度だけ使える登録コードで登録（鍵の組は PC で作り、秘密鍵は資格情報マネージャー）。`policy.json` の `remote` で許したフローの公開版だけを、手が空いたエージェントが自分から取りに行き、イベントとレポートを返す。サーバーでの取り消し、断ったジョブ（`REMOTE_NOT_ALLOWED` / `NOT_PUBLISHED` / `VERSION_MISMATCH`）、`shikigami agent unenroll`、`agent status` にサーバーとの接続。参考実装のサーバー `shikigami manager serve`（登録コード・ワーカー・ジョブの管理用 API）
+- 監査の記録 `shikigami audit`：変更・公開・AI（MCP）の操作・実行を、誰がどこからしたかつきで 1 つの一覧に（`--since` / `--until` / `--flow` / `--json`）。`records.keepDays` は MCP の呼び出しの記録も期限で削除します（docs/audit.md）
 
 ### 変更
 

@@ -72,7 +72,7 @@
 | `ai.deleteFlow` | ask | AI の `delete_flow` |
 | `flows.<id>.aiRun` | なし | このフロー（と、これを呼ぶ実行・試行）だけ厳しくする。全体の規則より緩くはならない |
 | `flows.<id>.unattended` | true | false なら `shikigami run` で動かさない。これを呼ぶフローも動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
-| `records.keepDays` | なし（残す） | 各 PC が、この日数より古い実行記録（`runs/<run-id>/`）を消す。実行が終わったときに適用し、実行中のものは消さない |
+| `records.keepDays` | なし（残す） | 各 PC が、この日数より古い実行記録（`runs/<run-id>/`）と MCP の呼び出し（`audit/mcp.jsonl`）を消す（[audit.md](audit.md)）。実行が終わったときに適用し、実行中のものは消さない |
 | `records.keepRuns` | なし（残す） | 各 PC が残す実行記録の数（新しいものから） |
 | `remote.enabled` | false | 管理サーバーからジョブを受けるか（[remote.md](remote.md)）。PC の登録（`shikigami agent enroll`）も要る |
 | `remote.manager` | なし | 管理サーバーの URL。`https://`（`http://` は `localhost` だけ） |
