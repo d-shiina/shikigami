@@ -71,10 +71,19 @@ pub fn try_run(
         cancel,
         move |session| {
             let path = crate::string(&params, "path")?;
-            let Some((_app, book)) = open_book(Path::new(&path))? else {
+            let Some((app, book)) = open_book(Path::new(&path))? else {
                 return Ok(None);
             };
-            step(kind, &params, &book, session).map(Some).map_err(busy)
+            // The workbook's event code (Worksheet_Change, BeforeSave) does
+            // not run for these steps, as it would not on the file; the
+            // person's setting is put back afterwards.
+            let events = app.get("EnableEvents").map_err(busy)?.to_bool();
+            app.put("EnableEvents", Var::bool(false)).map_err(busy)?;
+            let result = step(kind, &params, &book, session).map(Some).map_err(busy);
+            if events {
+                let _ = app.put("EnableEvents", Var::bool(true));
+            }
+            result
         },
         |gave_up| {
             match gave_up.reason {
@@ -528,6 +537,8 @@ fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
             )?;
             sort.call("SetRange", vec![Var::from_object(&whole)])?;
             sort.put("Header", Var::i32(XL_YES))?;
+            // Rows, whatever the person last sorted by (xlTopToBottom).
+            sort.put("Orientation", Var::i32(1))?;
             sort.put("MatchCase", Var::bool(false))?;
             sort.call("Apply", vec![])?;
             save(book, session)?;
