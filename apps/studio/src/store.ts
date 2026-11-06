@@ -42,6 +42,7 @@ import {
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
+import { resultName } from "./lib/resultName";
 import { summarize } from "./lib/review";
 import { setFlowNames } from "./lib/sentence";
 
@@ -696,6 +697,7 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
 };
 
 const SWITCH = "control.switch";
+const FOR_EACH = "control.forEach";
 const CASE = "control.case";
 
 /** A case of a switch, with nothing to compare to yet. */
@@ -1058,6 +1060,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (!flow) return;
         const { position } = insertPlace(flow.steps ?? [], selection, paletteAt);
         let step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
+        // Keep the result under a name from the start, so the next node can use it without one being invented.
+        const saveAs = resultName(get().stepTypes.find((d) => d.type === type), flow.variables, flow.steps ?? []);
+        if (saveAs) step.saveAs = saveAs;
+        // A repeat added after a node that read a list goes over that list.
+        const after = selection?.kind === "step" ? findStep(flow.steps ?? [], selection.stepId) : null;
+        if (type === FOR_EACH && !params && after?.saveAs) step.params = { ...step.params, items: after.saveAs };
         // A switch starts with its first case; a node added among the cases becomes a case of its own.
         if (type === SWITCH) step.blocks = { cases: [newCase()] };
         const parent = position.parentId ? findStep(flow.steps ?? [], position.parentId) : null;

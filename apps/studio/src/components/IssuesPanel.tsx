@@ -1,11 +1,13 @@
-import type { Flow, ValidationIssue } from "@shikigami/schema";
+import type { Flow, StepTypeDef, ValidationIssue } from "@shikigami/schema";
 import { Check, ClipboardCopy, FolderOpen, KeyRound, MousePointerClick } from "lucide-react";
 import { useState } from "react";
 import { useStudio } from "../context";
-import { t } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
+import { issueText } from "../lib/issueText";
 import { authorIssues, PERSON_CODES, returnText, type Todo, todoTitle } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { useProjectMaybe } from "../project";
+import { findStep } from "../store";
 
 /**
  * The flow's checks, in the order a person deals with them: what only they
@@ -123,9 +125,9 @@ function AiIssues({ issues, flow, goTo }: { issues: ValidationIssue[]; flow: Flo
       <div className="flex items-start gap-3 px-4 pt-2.5 pb-1">
         <div className="min-w-0 flex-1">
           <h3 id="ai-issues-title" className="text-xs font-semibold text-shu-600">
-            {t.todos.aiTitle}
+            {t.todos.fixTitle}
           </h3>
-          <p className="mt-0.5 text-[12px] text-slate-600">{t.todos.aiLead}</p>
+          <p className="mt-0.5 text-[12px] text-slate-600">{t.todos.fixLead}</p>
         </div>
         <CopyForAi text={returnText(issues, flow)} />
       </div>
@@ -135,20 +137,33 @@ function AiIssues({ issues, flow, goTo }: { issues: ValidationIssue[]; flow: Flo
 }
 
 function IssueList({ issues, goTo }: { issues: ValidationIssue[]; goTo: (id: string) => void }) {
+  const flow = useStudio((s) => s.flow);
+  const defs = useStudio((s) => s.stepTypes);
   return (
     <ul className="divide-y divide-slate-100">
       {issues.map((issue) => (
         <li key={`${issue.code}${issue.path}${issue.message}`}>
-          <button type="button" className="w-full px-4 py-2 text-left hover:bg-slate-50" onClick={() => issue.stepId && goTo(issue.stepId)}>
+          <button
+            type="button"
+            className="w-full px-4 py-2 text-left hover:bg-slate-50"
+            // Core's own words (for the AI) stay one hover away.
+            title={[issue.code, issue.message, issue.hint].filter(Boolean).join("\n")}
+            onClick={() => issue.stepId && goTo(issue.stepId)}
+          >
             <div className={`text-xs font-semibold ${issue.severity === "error" ? "text-shu-600" : "text-amber-700"}`}>
-              {issue.severity === "error" ? t.severity.error : t.severity.warning} · {issue.code}
+              {issue.severity === "error" ? t.severity.error : t.severity.warning}
+              {stepName(flow, defs, issue.stepId)}
             </div>
-            <div className="text-sm">{issue.message}</div>
-            {issue.hint && <div className="mt-0.5 text-xs text-slate-600">→ {issue.hint}</div>}
-            <div className="font-mono text-[10px] text-slate-400">{issue.path}</div>
+            <div className="text-sm">{issueText(issue, flow)}</div>
           </button>
         </li>
       ))}
     </ul>
   );
+}
+
+/** " · 「表を行ごとに読む」": which node an issue is on, by the name the chart shows. */
+function stepName(flow: Flow | null, defs: StepTypeDef[], id: string | null | undefined): string {
+  const step = flow && id ? findStep(flow.steps ?? [], id) : null;
+  return step ? ` · ${t.quote(step.name || stepLabel(step.type, defs.find((d) => d.type === step.type)?.label))}` : "";
 }
