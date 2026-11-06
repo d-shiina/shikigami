@@ -145,6 +145,19 @@ pub enum Op {
     Hover {
         target: Target,
     },
+    /// Reads a grid, list or table (`target.element`, or the first one in
+    /// the window): a [`crate::table::Grid`] as JSON, at most `max_rows`
+    /// rows (`truncated` when there were more).
+    GetTable {
+        target: Target,
+        max_rows: usize,
+    },
+    /// Starts a SAP transaction in the SAP GUI window of `target`.
+    /// Output: the status bar `{ type, text }`.
+    SapTransaction {
+        target: Target,
+        code: String,
+    },
     /// Opens the context menu of `target.element` (or uses the open menu /
     /// the menu bar of `target.window`) and picks `path` item by item.
     Menu {
@@ -157,6 +170,17 @@ pub enum Op {
     /// `{ cancelled: true }` on Esc or after `timeout_ms`.
     Pick {
         message: Option<String>,
+        timeout_ms: u64,
+    },
+    /// Records what the user does until the banner is clicked or
+    /// `timeout_ms` passes: each click (with the target of what was
+    /// clicked, as `Pick` builds it), each text field's final text, and
+    /// each command key. Answers `{ status: "stopped" | "timedOut",
+    /// actions: [...] }`. `title` is the banner's first line, with `{n}`
+    /// replaced by the number of actions so far.
+    Record {
+        title: String,
+        hint: String,
         timeout_ms: u64,
     },
     /// Frames the target on screen for `ms`: `{ found, rect? }`.

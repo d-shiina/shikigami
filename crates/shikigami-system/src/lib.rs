@@ -21,6 +21,9 @@ use shikigami_runtime::{
 mod desktop;
 mod http;
 pub mod oauth;
+/// The HTTP client and the site check of `http.request`, for other steps that
+/// call web APIs with a secret (`mail.send` through Microsoft 365).
+pub use http::{check_site, client as http_client};
 mod process;
 
 #[cfg(test)]

@@ -204,6 +204,15 @@ fn sites_are_normalized_to_origins() {
     assert!(normalize_site(r"app:C:\x\a.exe").is_err());
     assert!(normalize_site("example.com").is_err());
     assert!(normalize_site("file:///c:/x").is_err());
+    assert_eq!(
+        normalize_site(r"db:DB01\SQLEXPRESS").unwrap(),
+        r"db:db01\sqlexpress"
+    );
+    assert_eq!(
+        normalize_site("smtp:Mail.Example.co.jp").unwrap(),
+        "smtp:mail.example.co.jp"
+    );
+    assert!(normalize_site("db:").is_err() && normalize_site("smtp://x").is_err());
     let dir = tempfile::tempdir().unwrap();
     let mut i = input("a");
     i.sites = Some(vec!["ftp://x".into()]);

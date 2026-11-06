@@ -38,8 +38,13 @@ use shikigami_runtime::{
 pub mod backend;
 pub mod bitmap;
 #[cfg(windows)]
+mod bridge;
+#[cfg(windows)]
 mod capture;
 pub mod engine;
+#[cfg(windows)]
+mod jab;
+pub mod jabmap;
 pub mod keys;
 pub mod menu;
 #[cfg(windows)]
@@ -47,7 +52,11 @@ mod overlay;
 pub mod paddle;
 pub mod roles;
 #[cfg(windows)]
+mod sap;
+pub mod sapgui;
+#[cfg(windows)]
 pub mod session;
+pub mod table;
 pub mod target;
 #[cfg(windows)]
 mod uia;
@@ -77,6 +86,8 @@ pub mod types {
     pub const DRAG: &str = "desktop.drag";
     pub const HOVER: &str = "desktop.hover";
     pub const SELECT_MENU: &str = "desktop.selectMenu";
+    pub const GET_TABLE: &str = "desktop.getTable";
+    pub const SAP_RUN_TRANSACTION: &str = "sap.runTransaction";
 }
 
 /// How much earlier than the step timeout the adapter stops waiting.
@@ -86,6 +97,8 @@ const POLL: Duration = Duration::from_millis(250);
 const DEFAULT_MAX_NODES: usize = 1500;
 /// How long the picker waits for a click.
 const PICK_TIMEOUT_MS: u64 = 60_000;
+/// How long a recording runs at most unless asked otherwise.
+const RECORD_TIMEOUT_MS: u64 = 30 * 60 * 1000;
 /// How long a highlight stays on screen.
 const HIGHLIGHT_MS: u64 = 2_000;
 
@@ -148,7 +161,9 @@ impl Adapter for DesktopAdapter {
     /// Without `window`: the open windows. With it: that window's element
     /// tree (`element` narrows it to one part, `maxNodes` caps its size).
     /// `action: "pick"` lets the user point at an element on screen and
-    /// returns its target; `action: "highlight"` frames `target` on screen.
+    /// returns its target; `action: "highlight"` frames `target` on screen;
+    /// `action: "record"` writes down what the user does until they click
+    /// the banner (`Op::Record`).
     fn inspect<'a>(
         &'a self,
         _session: &'a str,
@@ -170,6 +185,27 @@ impl Adapter for DesktopAdapter {
                         .backend
                         .call(Op::Pick {
                             message,
+                            timeout_ms,
+                        })
+                        .await;
+                }
+                Some("record") => {
+                    let text = |key: &str, default: &str| {
+                        params
+                            .get(key)
+                            .and_then(Value::as_str)
+                            .unwrap_or(default)
+                            .to_owned()
+                    };
+                    let timeout_ms = params
+                        .get("timeoutMs")
+                        .and_then(Value::as_u64)
+                        .map_or(RECORD_TIMEOUT_MS, |ms| ms.clamp(10_000, 4 * 60 * 60 * 1000));
+                    return self
+                        .backend
+                        .call(Op::Record {
+                            title: text("title", "Recording ({n}) - click here to stop"),
+                            hint: text("hint", "Clicks, typed text and keys are written down"),
                             timeout_ms,
                         })
                         .await;
@@ -309,6 +345,8 @@ enum Kind {
     Drag,
     Hover,
     SelectMenu,
+    GetTable,
+    SapTransaction,
 }
 
 struct DesktopStep {
@@ -328,6 +366,7 @@ impl ActionHandler for DesktopStep {
                 Kind::IsVisible => return self.is_visible(&input).await,
                 Kind::ReadText => return self.read_text(&input, deadline).await,
                 Kind::Screenshot => return self.screenshot(&input, deadline).await,
+                Kind::GetTable => return self.get_table(&input, deadline).await,
                 Kind::Click => Op::Click {
                     target: target(params, Allow::Plain)?,
                 },
@@ -430,6 +469,19 @@ impl ActionHandler for DesktopStep {
                         .mouse_target(params, "target", &input, deadline)
                         .await?,
                 },
+                Kind::SapTransaction => {
+                    let code = string(params, "code")?;
+                    let code = code.trim();
+                    if code.is_empty() {
+                        return Err(StepError::invalid_params(
+                            "'code' is the transaction code, e.g. VA03",
+                        ));
+                    }
+                    Op::SapTransaction {
+                        target: target(params, Allow::Plain)?,
+                        code: code.to_owned(),
+                    }
+                }
                 Kind::SelectMenu => {
                     let path: Vec<String> = match params.get("path") {
                         Some(Value::Array(items)) => items
@@ -469,7 +521,11 @@ impl ActionHandler for DesktopStep {
 fn is_not_ready(e: &StepError) -> bool {
     matches!(
         e.code.as_str(),
-        "WINDOW_NOT_FOUND" | "ELEMENT_NOT_FOUND" | "ELEMENT_DISABLED" | "ELEMENT_GONE"
+        "WINDOW_NOT_FOUND"
+            | "ELEMENT_NOT_FOUND"
+            | "ELEMENT_DISABLED"
+            | "ELEMENT_GONE"
+            | "JAVA_NOT_READY"
     )
 }
 
@@ -718,6 +774,30 @@ impl DesktopStep {
             ));
         }
         Ok(output)
+    }
+
+    async fn get_table(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
+        let params = &input.params;
+        let limit = params.get("maxRows").and_then(Value::as_u64);
+        let max_rows = limit.map_or(table::DEFAULT_MAX_ROWS, |n| n.clamp(1, 100_000) as usize);
+        let op = Op::GetTable {
+            target: target(params, Allow::Plain)?,
+            max_rows,
+        };
+        let grid = table::Grid::from_json(&self.until_found(op, input, deadline).await?)?;
+        if grid.truncated && limit.is_none() {
+            return Err(StepError::permanent(
+                "TABLE_TOO_LARGE",
+                format!(
+                    "the table has more rows than were read at once ({} read)",
+                    grid.rows.len()
+                ),
+            )
+            .with_details(json!({
+                "hint": "Set maxRows to read only the first rows, or narrow the list in the app (search or filter) before reading it."
+            })));
+        }
+        Ok(Value::Array(grid.records()))
     }
 
     async fn screenshot(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
@@ -1226,6 +1306,41 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             ],
             secret_params: &[],
             input: true,
+        },
+        Def {
+            step_type: GET_TABLE,
+            kind: Kind::GetTable,
+            label: "表を読み取る",
+            description: "Reads a grid, table or list view of an app at once into a list of objects keyed by the column headers, like browser.getTable (cell text as strings; use num() for amounts; an empty header becomes 列1, 列2..., a repeated one gets \" 2\"). `target.element` is the grid (role table, grid or list in inspect_ui), or omit it for the first one in the window. Rows with every cell empty are left out. Grids that support it are read whole, including rows scrolled out of view; other lists give the rows the app has created (read, then desktop.scroll, in a loop). Fails with TABLE_TOO_LARGE over 10000 rows unless `maxRows` says how many to read. Use with control.forEach.",
+            params: json!({
+                "target": target,
+                "maxRows": { "type": "integer", "minimum": 1, "maximum": 100000, "description": "読む行数の上限（既定は 10000 行を超えたら失敗）" }
+            }),
+            required: &["target"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": GET_TABLE, "name": "受注一覧を読む", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "gridOrders" } } }, "saveAs": "orders" }),
+                json!({ "type": GET_TABLE, "params": { "target": { "window": { "title": "販売管理" } }, "maxRows": 100 }, "saveAs": "orders" }),
+            ],
+            secret_params: &[],
+            input: false,
+        },
+        Def {
+            step_type: SAP_RUN_TRANSACTION,
+            kind: Kind::SapTransaction,
+            label: "SAP のトランザクションを開始",
+            description: "Starts the SAP transaction `code` (e.g. VA03, /nVA03 is not needed) in the SAP GUI window `target.window`, as typing it into the command field does. Output: the status bar then, { type, text } (type S success, W warning, E error, A abort, I info, or empty). Needs SAP GUI Scripting (enabled on the SAP server with sapgui/user_scripting and in SAP GUI's options). The other steps on SAP GUI are the usual desktop.* ones with SAP component ids from inspect_ui.",
+            params: json!({
+                "target": target,
+                "code": { "type": "string", "minLength": 1, "description": "トランザクションコード（例 VA03）" }
+            }),
+            required: &["target", "code"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": SAP_RUN_TRANSACTION, "name": "受注照会を開く", "params": { "target": { "window": { "process": "saplogon.exe", "title": "SAP Easy Access" } }, "code": "VA03" }, "saveAs": "status" }),
+            ],
+            secret_params: &[],
+            input: false,
         },
         Def {
             step_type: SELECT_MENU,

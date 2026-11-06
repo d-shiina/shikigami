@@ -93,9 +93,9 @@ fn examples_validate_and_targets_are_checked() {
     let runtime = runtime(Scripted::new(vec![]));
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 18);
+    assert_eq!(defs.len(), 20);
     for def in &defs {
-        assert!(def.step_type.starts_with("desktop."));
+        assert!(def.step_type.starts_with("desktop.") || def.step_type.starts_with("sap."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
@@ -108,6 +108,8 @@ fn examples_validate_and_targets_are_checked() {
                 "total",
                 "confirmShown",
                 "scrolled",
+                "orders",
+                "status",
             ]
             .iter()
             .map(|n| VariableDef::new(*n, VarType::Any))
@@ -496,6 +498,44 @@ fn elements_match_and_render_as_inspect_shows_them() {
 }
 
 #[test]
+fn recorded_keys_are_named_as_press_reads_them() {
+    use keys::Held;
+    let ctrl = Held {
+        ctrl: true,
+        ..Held::default()
+    };
+    let ctrl_shift = Held {
+        shift: true,
+        ..ctrl
+    };
+    assert_eq!(
+        keys::name(0x53, ctrl_shift).as_deref(),
+        Some("Control+Shift+S")
+    );
+    assert_eq!(keys::name(0x0D, Held::default()).as_deref(), Some("Enter"));
+    assert_eq!(keys::name(0x1B, Held::default()).as_deref(), Some("Escape"));
+    assert_eq!(keys::name(0x74, Held::default()).as_deref(), Some("F5"));
+    assert_eq!(keys::name(0x28, ctrl).as_deref(), Some("Control+ArrowDown"));
+    assert_eq!(keys::name(0xE5, Held::default()), None);
+    for vk in [0x53, 0x0D, 0x1B, 0x74, 0x28, 0x31] {
+        let name = keys::name(vk, ctrl_shift).unwrap();
+        assert_eq!(keys::parse(&name).unwrap().key.vk, vk, "{name}");
+    }
+    // Typing is read from the field; commands are written down.
+    assert!(!keys::is_command(0x41, Held::default()));
+    assert!(!keys::is_command(0x11, ctrl));
+    assert!(keys::is_command(0x0D, Held::default()));
+    assert!(keys::is_command(0x53, ctrl));
+    assert!(keys::is_text_edit(0x56, ctrl));
+    assert!(!keys::is_text_edit(0x53, ctrl));
+    // Kana conversion and cancelling it belong to the typing.
+    assert!(keys::is_ime_key(0x76, Held::default(), false));
+    assert!(keys::is_ime_key(0x1B, Held::default(), true));
+    assert!(!keys::is_ime_key(0x1B, Held::default(), false));
+    assert!(!keys::is_ime_key(0x74, Held::default(), true));
+}
+
+#[test]
 fn keys_use_browser_names() {
     let chord = keys::parse("Shift+ArrowDown").unwrap();
     assert_eq!(chord.modifiers[0].vk, 0x10);
@@ -739,4 +779,236 @@ fn a_picked_element_gets_the_sturdiest_target() {
             i
         );
     }
+}
+
+#[test]
+fn grids_become_lists_of_records() {
+    use crate::table::{Grid, clean_cell};
+    let grid = Grid {
+        headers: vec!["受注番号".into(), "".into(), "金額".into(), "金額".into()],
+        rows: vec![
+            vec!["A-1".into(), "x".into(), "1,200".into(), "100".into()],
+            vec!["".into(), " ".into()],
+            vec!["A-2".into()],
+        ],
+        truncated: false,
+    };
+    assert_eq!(
+        grid.records(),
+        vec![
+            json!({ "受注番号": "A-1", "列2": "x", "金額": "1,200", "金額 2": "100" }),
+            json!({ "受注番号": "A-2", "列2": "", "金額": "", "金額 2": "" }),
+        ]
+    );
+    assert_eq!(Grid::from_json(&grid.to_json()).unwrap(), grid);
+    assert_eq!(clean_cell(" (null) "), "");
+    assert_eq!(clean_cell(" 東京 "), "東京");
+}
+
+#[tokio::test]
+async fn get_table_returns_records_and_refuses_silent_truncation() {
+    let grid = |truncated: bool| {
+        Ok(
+            json!({ "headers": ["品名", "数量"], "rows": [["りんご", "3"]], "truncated": truncated }),
+        )
+    };
+    let backend = Scripted::new(vec![grid(false), grid(true), grid(true)]);
+    let rt = runtime(backend.clone());
+    let target = json!({ "window": { "process": "billing.exe" } });
+    let read = |extra: Value| {
+        let mut params = json!({ "target": target });
+        params
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        vec![step(types::GET_TABLE, params).saving("out")]
+    };
+    let report = run(&rt, read(json!({}))).await;
+    assert_eq!(
+        report.outputs["out"],
+        json!([{ "品名": "りんご", "数量": "3" }])
+    );
+    let report = run(&rt, read(json!({}))).await;
+    assert_eq!(report.error.unwrap().code, "TABLE_TOO_LARGE");
+    let report = run(&rt, read(json!({ "maxRows": 1 }))).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let Op::GetTable { max_rows, .. } = &backend.calls()[2] else {
+        panic!()
+    };
+    assert_eq!(*max_rows, 1);
+}
+
+#[test]
+fn grids_are_read_from_their_element_tree() {
+    use crate::table::grid_from_nodes;
+    let cell = |depth: usize, role: &'static str, name: &str, value: Option<&str>| NodeInfo {
+        depth,
+        role,
+        name: name.into(),
+        value: value.map(Into::into),
+        enabled: true,
+        ..NodeInfo::default()
+    };
+    // WinForms DataGridView: a top row of header cells, a row header cell
+    // first in every row, "(null)" for empty cells.
+    let winforms = vec![
+        cell(0, "table", "受注", None),
+        cell(1, "row", "Top Row", None),
+        cell(2, "columnheader", "", None),
+        cell(2, "columnheader", "番号", None),
+        cell(2, "columnheader", "金額", None),
+        cell(1, "row", "Row 0", None),
+        cell(2, "columnheader", "", None),
+        cell(2, "custom", "番号 Row 0", Some("A-1")),
+        cell(2, "custom", "金額 Row 0", Some("1,200")),
+        cell(1, "row", "Row 1", None),
+        cell(2, "columnheader", "", None),
+        cell(2, "custom", "番号 Row 1", Some("(null)")),
+        cell(2, "custom", "金額 Row 1", Some("(null)")),
+        cell(1, "scrollbar", "", None),
+    ];
+    let grid = grid_from_nodes(&winforms, 100);
+    assert_eq!(grid.headers, ["番号", "金額"]);
+    // A WinForms DataGridView as UI Automation shows it: rows as custom
+    // elements, a row header first, the cells as rows.
+    let datagridview = vec![
+        cell(0, "table", "DataGridView", None),
+        cell(1, "custom", "Top Row", None),
+        cell(2, "header", "Top Left Header Cell", None),
+        cell(2, "header", "番号", None),
+        cell(2, "header", "金額", None),
+        cell(1, "custom", "Row 0", None),
+        cell(2, "header", "Row 0", None),
+        cell(2, "row", "番号 Row 0", Some("A-1")),
+        cell(2, "row", "金額 Row 0", Some("1,200")),
+        cell(1, "custom", "Row 1", None),
+        cell(2, "header", "Row 1", None),
+        cell(2, "row", "番号 Row 1", Some("(null)")),
+        cell(2, "row", "金額 Row 1", Some("(null)")),
+        cell(1, "scrollbar", "", None),
+    ];
+    let real = grid_from_nodes(&datagridview, 100);
+    assert_eq!(real.headers, ["番号", "金額"]);
+    assert_eq!(
+        real.records(),
+        vec![json!({ "番号": "A-1", "金額": "1,200" })]
+    );
+    assert_eq!(
+        grid.records(),
+        vec![json!({ "番号": "A-1", "金額": "1,200" })]
+    );
+    // A Win32 list view: a header bar, the first column as the item's name.
+    let list_view = vec![
+        cell(0, "list", "", None),
+        cell(1, "header", "", None),
+        cell(2, "columnheader", "名前", None),
+        cell(2, "columnheader", "サイズ", None),
+        cell(1, "listitem", "a.txt", None),
+        cell(2, "text", "1 KB", None),
+        cell(1, "listitem", "b.txt", None),
+        cell(2, "text", "2 KB", None),
+    ];
+    let grid = grid_from_nodes(&list_view, 1);
+    assert!(grid.truncated);
+    assert_eq!(
+        grid.records(),
+        vec![json!({ "名前": "a.txt", "サイズ": "1 KB" })]
+    );
+    // The same text in the first two columns stays in both.
+    let same = vec![
+        cell(0, "list", "", None),
+        cell(1, "header", "", None),
+        cell(2, "columnheader", "出発", None),
+        cell(2, "columnheader", "到着", None),
+        cell(1, "listitem", "東京", None),
+        cell(2, "text", "東京", None),
+    ];
+    assert_eq!(
+        grid_from_nodes(&same, 10).records(),
+        vec![json!({ "出発": "東京", "到着": "東京" })]
+    );
+    // A plain list: one column of item names.
+    let plain = vec![
+        cell(0, "list", "", None),
+        cell(1, "listitem", "東京", None),
+        cell(1, "listitem", "大阪", None),
+    ];
+    assert_eq!(
+        grid_from_nodes(&plain, 10).records(),
+        vec![json!({ "列1": "東京" }), json!({ "列1": "大阪" })]
+    );
+}
+
+#[test]
+fn sap_gui_words_map_to_desktop_ones() {
+    use crate::sapgui::{component_id, looks_like_component_id, role, vkey};
+    assert_eq!(role("GuiCTextField", ""), "textbox");
+    assert_eq!(role("GuiButton", ""), "button");
+    assert_eq!(role("GuiShell", "GridView"), "grid");
+    assert_eq!(role("GuiTableControl", ""), "table");
+    assert_eq!(role("GuiSomethingNew", ""), "custom");
+    // Every SAP role is one of the shared roles.
+    for kind in [
+        "GuiTextField",
+        "GuiTab",
+        "GuiStatusbar",
+        "GuiUserArea",
+        "GuiBox",
+    ] {
+        assert!(roles::control_type(role(kind, "")).is_some(), "{kind}");
+    }
+    assert_eq!(
+        component_id("wnd[0]", "usr/txtRSYST-BNAME"),
+        "wnd[0]/usr/txtRSYST-BNAME"
+    );
+    assert_eq!(
+        component_id("wnd[1]", "wnd[0]/tbar[0]/okcd"),
+        "wnd[0]/tbar[0]/okcd"
+    );
+    assert_eq!(
+        component_id("wnd[0]", "/app/con[0]/ses[1]/wnd[1]/usr/btnOK"),
+        "wnd[1]/usr/btnOK"
+    );
+    assert_eq!(component_id("", "/app/con[0]/ses[0]/wnd[0]"), "wnd[0]");
+    assert!(looks_like_component_id("wnd[0]/usr/txtA"));
+    assert!(!looks_like_component_id("btnSave"));
+    let key = |text: &str| vkey(&keys::parse(text).unwrap());
+    assert_eq!(key("Enter"), Some(0));
+    assert_eq!(key("F3"), Some(3));
+    assert_eq!(key("Shift+F2"), Some(14));
+    assert_eq!(key("Control+F1"), Some(25));
+    assert_eq!(key("Control+Shift+F12"), Some(48));
+    assert_eq!(key("Control+S"), Some(11));
+    assert_eq!(key("Escape"), Some(12));
+    assert_eq!(key("PageDown"), Some(82));
+    assert_eq!(key("Alt+F4"), None);
+    assert_eq!(key("Tab"), None);
+}
+
+#[test]
+fn java_words_map_to_desktop_ones() {
+    use crate::jabmap::{has_state, role, wide};
+    for (java, shared) in [
+        ("push button", "button"),
+        ("text", "textbox"),
+        ("password text", "textbox"),
+        ("check box", "checkbox"),
+        ("menu", "menuitem"),
+        ("table", "table"),
+        ("label", "text"),
+        ("something new", "custom"),
+    ] {
+        assert_eq!(role(java), shared, "{java}");
+        assert!(roles::control_type(shared).is_some(), "{shared}");
+    }
+    assert!(has_state(
+        "enabled,focusable,visible,showing,checked",
+        "checked"
+    ));
+    assert!(!has_state("enabled,unchecked", "checked"));
+    let mut buffer = [0u16; 8];
+    for (i, c) in "登録".encode_utf16().enumerate() {
+        buffer[i] = c;
+    }
+    assert_eq!(wide(&buffer), "登録");
 }
