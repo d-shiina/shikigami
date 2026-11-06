@@ -411,7 +411,9 @@ impl Uia {
     /// element turned into its place on the screen) back to UI Automation.
     fn via_app(&self, op: Op) -> Result<Routed, StepError> {
         let window = match &op {
-            Op::ListWindows => return Ok(Routed::Uia(Box::new(op))),
+            Op::ListWindows | Op::Pick { .. } | Op::Highlight { .. } => {
+                return Ok(Routed::Uia(Box::new(op)));
+            }
             Op::Inspect { window, .. } => window,
             Op::Drag { from, .. } => &from.window,
             Op::Probe { target }
@@ -1879,8 +1881,9 @@ enum Routed {
 /// The target an op acts on (the start of a drag).
 fn op_target(op: &Op) -> Option<&Target> {
     match op {
-        Op::ListWindows | Op::Inspect { .. } => None,
+        Op::ListWindows | Op::Inspect { .. } | Op::Pick { .. } => None,
         Op::Drag { from, .. } => Some(from),
+        Op::Highlight { target, .. } => Some(target),
         Op::Probe { target }
         | Op::Click { target }
         | Op::SetValue { target, .. }
