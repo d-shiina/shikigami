@@ -115,7 +115,7 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 |---|---|---|
 | Win32 / WinForms / WPF / UWP, Office windows | Elements are visible through UI Automation | – |
 | SAP GUI for Windows | Through SAP GUI Scripting when it is enabled (see "SAP GUI" below); otherwise only part of it through UI Automation (`inspect_ui` notes this) | – |
-| Java (Swing…) | Often only the frame (noted) | Java Access Bridge (enable with `jabswitch -enable`) |
+| Java (Swing, AWT…) | Through the Java Access Bridge when it is on (see "Java apps" below); otherwise only the frame (noted) | – |
 | Inside Citrix / Remote Desktop | No elements visible; places are found by picture (`image`) and text (`ocr`) | – |
 | Excel data | – | `excel.*`, reading and writing xlsx directly ([adapters.md](adapters.md)) |
 
@@ -129,6 +129,16 @@ When the target window belongs to SAP GUI for Windows and SAP GUI Scripting is e
 - `sap.runTransaction` starts a transaction (`code`: `VA03`) and returns the status bar `{ type, text }` (`S` success, `W` warning, `E` error…), so a scenario can check it with `control.if`
 - When scripting is off, targets with a SAP component id stop with `SAP_SCRIPTING_OFF` (with the steps to enable it); the window itself, OCR and images still work through UI Automation
 - **Not yet verified on a real SAP system**: this was written against SAP's scripting API documentation; CI has no SAP GUI
+
+## Java apps
+
+Java apps (Swing, AWT, and apps built on them, such as many in-house systems) show only their frame to UI Automation. When the Java Access Bridge is on, the same `desktop.*` nodes act through it instead.
+
+- **Switch the bridge on** (once per PC and user): run `jabswitch -enable` from the `bin` folder of the Java the app uses, then restart the app. Shikigami loads `WindowsAccessBridge-64.dll` from Windows, from the folder of the app's `java.exe`, or from `JAVA_HOME\bin`
+- `inspect_ui` lists Java components with the same roles as other apps (`textbox`, `button`, `checkbox`, `combobox`, `table`, `menuitem`…). Java components have no id: target them with `role` + `name` (and `index` when names repeat)
+- What each node does there: `desktop.click` runs the component's action (press, toggle, select); `desktop.setValue` / `desktop.getValue` write and read text fields (password fields can only be written); `desktop.select` picks a list or combo box entry; `desktop.selectMenu` walks the menu bar; `desktop.getTable` reads a `JTable` whole with its column headers; `desktop.type`, `desktop.press` and the mouse nodes focus the component or use its place on the screen
+- When the bridge is off, targets with an element stop with `JAVA_BRIDGE_OFF` (with the steps to switch it on); the window itself, OCR and images still work through UI Automation
+- CI runs a small Swing window through the bridge; real business Java apps (Oracle Forms, Java Web Start…) are not yet verified
 
 ## How it works
 
@@ -157,6 +167,8 @@ When the target window belongs to SAP GUI for Windows and SAP GUI Scripting is e
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | No such image file / an image of one flat colour (it would match anywhere) |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` but PaddleOCR is not installed / Windows OCR lacks that language |
 | `SAP_SCRIPTING_OFF` | A SAP component id, but SAP GUI Scripting cannot reach the window. Enable it (see "SAP GUI") |
+| `JAVA_BRIDGE_OFF` | A Java window, but the Java Access Bridge is off or missing. Switch it on (see "Java apps") |
+| `JAVA_NOT_READY` | The Java app is still starting; retried until the step's wait runs out |
 | `NOT_SAP_WINDOW` | `sap.runTransaction` on a window that is not SAP GUI |
 | `TABLE_TOO_LARGE` | More than 10000 rows. Set `maxRows`, or narrow the list in the app first |
 | `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | No shown menu item has that name (with the items shown) / several do. Write the names from the first menu down |
@@ -165,7 +177,7 @@ When the target window belongs to SAP GUI for Windows and SAP GUI Scripting is e
 ## Verified and limits
 
 - **Verified**: node definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI opens a WinForms window (drawn by PowerShell) and, through UI Automation, picks an item from its menu bar, writes and reads text, scrolls it to the end, and reads its DataGridView and list view with `desktop.getTable`. (The Notepad test is skipped where Notepad has no classic Edit control, as on the CI runners.) Image search, and PaddleOCR reading a picture of a Japanese business screen (12 px text), are tested on Linux and Windows CI. Windows CI also pictures Notepad, reads it with OCR and finds a cut-out part again
-- **Not yet verified**: real business apps, SAP GUI, Java apps and Citrix; mouse and keyboard actions (CI does not test screen input); high DPI and multiple monitors
+- **Not yet verified**: real business apps, SAP GUI, business Java apps and Citrix; mouse and keyboard actions (CI does not test screen input); high DPI and multiple monitors
 - Image search takes 0.2–0.5 s per look on a Full HD window, PaddleOCR about 0.3 s on a small screen (4 CPU cores). OCR of a whole large window can take over a second: `region` makes it faster
 - Mouse and keyboard exclusion **across processes** (Studio, CLI, MCP server) is not implemented (within one process only)
 - Rotated or scaled images are not found

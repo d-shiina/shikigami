@@ -9,6 +9,7 @@
 ### 追加
 
 - SAP GUI for Windows：SAP GUI Scripting が有効なら、同じ `desktop.*` のノードがスクリプトの仕組みを通して動きます（`inspect_ui` は SAP の部品 id と役割を一覧に、クリック・入力・読み取り・コンボボックス・ファンクションキー・メニューバー・`desktop.getTable` でテーブルコントロールと ALV グリッドの全行）。新しいノード `sap.runTransaction`（トランザクションを開き、ステータスバーを返す）。無効なときに SAP の部品 id を書くと `SAP_SCRIPTING_OFF`（有効にする手順つき）。実際の SAP ではまだ確認していません（docs/desktop.md「SAP GUI」）
+- Java アプリ（Swing・AWT）：Java Access Bridge（`jabswitch -enable`）が有効なら、同じ `desktop.*` のノードがそれを通して動きます（`inspect_ui` は役割と名前で一覧に、クリック・入力・読み取り・一覧の選択・メニューバー・`desktop.getTable` で `JTable`）。無効なときは `JAVA_BRIDGE_OFF`（有効にする手順つき）（docs/desktop.md「Java アプリ」）
 - `desktop.getTable`：アプリの表・グリッド・一覧をまとめて読み、`browser.getTable` と同じ「列見出しをキーにしたオブジェクトのリスト」で返します。対応しているグリッドは画面外の行も読みます。10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE`
 - デスクトップのノード `desktop.selectMenu`（メニューバー・右クリックメニューの項目を上から名前でたどって選ぶ。アクセスキー `(F)`・`...`・ショートカットは省いてよい）、`desktop.scroll`（マウスを使わずに一覧や枠をスクロール、部品が見えるまで動かす。`atEnd` で最後まで来たかがわかる）、`desktop.mouseScroll`（マウスのホイール）、`desktop.drag`（マウスでドラッグ。別のウィンドウへも）、`desktop.hover`（マウスを重ねる）。マウスのノードは `target.ocr` / `target.image` / `target.point` も使えます（docs/desktop.md）
 
