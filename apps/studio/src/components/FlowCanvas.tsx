@@ -27,6 +27,8 @@ import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
 import { type FrameKind, layoutFlow, NODE_W, READ_ROOM, type SlotNodeData, SLOT_H, type StepNodeData, WRITE_ROOM } from "../flow/layout";
 import { nodeIcon } from "../lib/nodeIcons";
+import { PERSON_CODES, todosByStep } from "../lib/todos";
+import { useTodos } from "../lib/useTodos";
 import { stepLabel, t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
 import type { HistoryEntry, Flow, StepTypeDef } from "@shikigami/schema";
@@ -81,7 +83,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; todos: string[]; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -703,8 +705,16 @@ function StepNode({ data }: StepNodeProps) {
             AI
           </span>
         )}
+        {data.todos.length > 0 && (
+          <span
+            className={`${data.byAi ? "" : "ml-auto"} shrink-0 rounded-[3px] bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800`}
+            title={data.todos.join("\n")}
+          >
+            {t.todos.badge}
+          </span>
+        )}
         {data.issueCount > 0 && (
-          <span className={`${data.byAi ? "" : "ml-auto"} shrink-0 rounded-[3px] bg-shu-100 px-1.5 text-[10px] font-semibold text-shu-600`}>
+          <span className={`${data.byAi || data.todos.length > 0 ? "" : "ml-auto"} shrink-0 rounded-[3px] bg-shu-100 px-1.5 text-[10px] font-semibold text-shu-600`}>
             ! {data.issueCount}
           </span>
         )}
@@ -920,6 +930,7 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
 
 const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode };
 const NO_BREAKPOINTS: string[] = [];
+const NO_TODOS: string[] = [];
 const NO_STATES: Record<string, StepRunState> = {};
 
 export function FlowCanvas() {
@@ -1032,10 +1043,12 @@ export function FlowCanvas() {
   const issueCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const issue of inside ? [] : (validation?.issues ?? [])) {
-      if (issue.stepId && issue.severity === "error") counts.set(issue.stepId, (counts.get(issue.stepId) ?? 0) + 1);
+      if (issue.stepId && issue.severity === "error" && !PERSON_CODES.has(issue.code)) counts.set(issue.stepId, (counts.get(issue.stepId) ?? 0) + 1);
     }
     return counts;
   }, [validation, inside]);
+  const todoList = useTodos();
+  const todos = useMemo(() => (inside ? new Map<string, string[]>() : todosByStep(todoList)), [todoList, inside]);
   const states = inside ? (run?.inner[callKey(path)] ?? NO_STATES) : (run?.steps ?? NO_STATES);
 
   // Frames first and beneath the lines, outer ones before the ones inside them.
@@ -1063,6 +1076,7 @@ export function FlowCanvas() {
           owner: flow?.id ?? "",
           pausedHere: run?.pause?.stepId === id && callKey(run.pause.callPath) === callKey(path),
           issueCount: issueCounts.get(id) ?? 0,
+          todos: todos.get(id) ?? NO_TODOS,
           selected: !inside && selection?.kind === "step" && selection.stepId === id,
           byAi: !inside && !reviewing && reviews.has(id),
           reviews: inside || reviewing ? [] : (reviews.get(id) ?? []),

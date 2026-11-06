@@ -221,6 +221,71 @@ pub fn export_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<String> 
     Ok(path.display().to_string())
 }
 
+// -- an AI without MCP (Copilot, a chat window) --------------------------
+
+/// Writes the guide for an AI without MCP (instructions and reference, see
+/// `shikigami_core::chat`) into `Downloads\Shikigami AI 仕様書`, opens the
+/// folder and returns its path.
+#[tauri::command]
+pub fn save_ai_guide(state: State<'_, AppState>) -> CmdResult<String> {
+    let dir = dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .ok_or_else(|| err("STORAGE_ERROR", "保存先フォルダが見つかりません"))?
+        .join("Shikigami AI 仕様書");
+    std::fs::create_dir_all(&dir).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    for file in shikigami_core::chat::guide(state.service.registry()) {
+        std::fs::write(dir.join(&file.name), file.text)
+            .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    }
+    let opener = if cfg!(windows) {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    // Only a convenience: the path is shown either way.
+    let _ = std::process::Command::new(opener).arg(&dir).spawn();
+    Ok(dir.display().to_string())
+}
+
+/// What pasting an AI's answer did: the flow it made or changed, or the
+/// problems to send back to the AI (nothing was changed then).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PasteOutcome {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outcome: Option<EditOutcome>,
+    problems: Vec<shikigami_core::chat::AnswerProblem>,
+}
+
+/// Takes in an answer pasted from an AI chat: a new flow, or with `into`
+/// the new content of that flow (one undoable edit). Recorded as the AI's
+/// change, so it waits in 確認待ち like an MCP edit; only a person publishes.
+#[tauri::command]
+pub fn paste_ai_answer(
+    state: State<'_, AppState>,
+    text: String,
+    into: Option<FlowId>,
+    expected_revision: Option<u64>,
+) -> CmdResult<PasteOutcome> {
+    let answer = match shikigami_core::chat::read_answer(&text) {
+        Ok(answer) => answer,
+        Err(problems) => {
+            return Ok(PasteOutcome {
+                outcome: None,
+                problems,
+            });
+        }
+    };
+    let actor = Actor::named(ActorKind::Chat, "AI（貼り付け）");
+    let outcome = state
+        .service
+        .apply_answer(answer, into.as_ref(), expected_revision, actor)?;
+    Ok(PasteOutcome {
+        outcome: Some(outcome),
+        problems: Vec::new(),
+    })
+}
+
 /// Imports the text of a bundle or flow file chosen in the UI.
 #[tauri::command]
 pub fn import_flow(

@@ -11,6 +11,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { ContextMenu } from "./components/ContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
+import { AiPasteDialog } from "./components/AiPasteDialog";
 import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
@@ -384,6 +385,7 @@ function Shell() {
       <StatusBar />
       <CommandPalette />
       <HistoryDialog />
+      <AiPasteDialog />
       <SecretAskDialog />
       <ApprovalDialog />
       <PickRequestCard />

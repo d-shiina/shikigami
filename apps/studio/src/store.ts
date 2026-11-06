@@ -35,6 +35,7 @@ import {
   type SecretField,
   type SecretInfo,
   type SecretInput,
+  type PasteOutcome,
   type PickRequest,
   type SecretRequest,
 } from "./lib/api";
@@ -267,11 +268,15 @@ export type StudioState = {
   workspace: WorkspaceInfo | null;
   /** A file whose flow already exists, waiting for the user's choice. */
   pendingImport: { contents: string; name: string } | null;
+  /** The dialog for an answer pasted from an AI chat without MCP: a new flow, or into the open one. */
+  pasteOpen: "new" | "into" | null;
   /** Registered secrets (names, user names, sites; never values). */
   secrets: SecretInfo[];
   secretKeyLocation: string;
   /** Secrets are listed by name only: their key is not on this PC / user. */
   secretKeyMissing: boolean;
+  /** Whether `secrets` has been read once (until then nothing counts as unregistered). */
+  secretsLoaded: boolean;
   secretsOpen: boolean;
   /** A running step waits for the person at the PC (manual login, MFA). */
   human: { stepId: string; message: string } | null;
@@ -374,6 +379,12 @@ export type StudioState = {
   /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. True once it is in. */
   importFile(contents: string, onConflict?: ImportConflict): Promise<boolean>;
   cancelImport(): void;
+  setPasteOpen(mode: "new" | "into" | null): void;
+  /**
+   * Takes in an AI's answer: a new flow, or with `into` the open flow's new
+   * content. Opens the flow it made; returns what happened, null on an error.
+   */
+  pasteAnswer(text: string, into: boolean): Promise<PasteOutcome | null>;
   setWorkspace(path: string, shared: boolean): Promise<void>;
   loadSecrets(): Promise<void>;
   /** Returns true when saved. */
@@ -768,9 +779,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       dive: [],
       workspace: null,
       pendingImport: null,
+      pasteOpen: null,
       secrets: [],
       secretKeyLocation: "",
       secretKeyMissing: false,
+      secretsLoaded: false,
       secretsOpen: false,
       human: null,
       secretRequests: [],
@@ -794,7 +807,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async loadSecrets() {
         try {
           const { secrets, keyLocation, keyMissing } = await api.listSecrets();
-          set({ secrets, secretKeyLocation: keyLocation, secretKeyMissing: keyMissing });
+          set({ secrets, secretKeyLocation: keyLocation, secretKeyMissing: keyMissing, secretsLoaded: true });
         } catch (e) {
           set({ error: message(e) });
         }
@@ -1665,6 +1678,26 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       cancelImport() {
         set({ pendingImport: null });
+      },
+
+      setPasteOpen(mode) {
+        set({ pasteOpen: mode });
+      },
+
+      async pasteAnswer(text, into) {
+        const flow = into ? get().flow : null;
+        try {
+          const result = await api.pasteAiAnswer(text, flow?.id, flow?.revision);
+          if (result.outcome) {
+            applyOutcome(result.outcome);
+            set({ selection: null, error: null, ...(flow ? {} : { history: [], versions: [] }) });
+            await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
+          }
+          return result;
+        } catch (e) {
+          set({ error: message(e) });
+          return null;
+        }
       },
 
       async setWorkspace(path, shared) {

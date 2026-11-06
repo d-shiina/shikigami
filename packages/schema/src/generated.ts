@@ -114,7 +114,7 @@ export type ChangeKind = "create" | "edit" | "undo" | "redo" | "delete";
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ActorKind".
  */
-export type ActorKind = "studio" | "mcp" | "cli" | "system";
+export type ActorKind = ("studio" | "mcp" | "cli" | "system") | "chat";
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "DiffKind".
@@ -401,9 +401,12 @@ export interface Part {
    */
   app: "browser" | "desktop";
   /**
-   * The target, exactly as the nodes of `app` take it.
+   * The target, exactly as the nodes of `app` take it. Left out (null)
+   * when the author could not see the screen (an AI in a chat window):
+   * a person picks it in Studio, and until then the nodes that use the
+   * part do not validate (`PART_NOT_PICKED`).
    */
-  target: {
+  target?: {
     [k: string]: unknown;
   };
 }

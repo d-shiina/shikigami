@@ -312,7 +312,11 @@ pub struct Part {
     pub label: String,
     /// The kind of node that can use it.
     pub app: PartApp,
-    /// The target, exactly as the nodes of `app` take it.
+    /// The target, exactly as the nodes of `app` take it. Left out (null)
+    /// when the author could not see the screen (an AI in a chat window):
+    /// a person picks it in Studio, and until then the nodes that use the
+    /// part do not validate (`PART_NOT_PICKED`).
+    #[serde(default, skip_serializing_if = "Value::is_null")]
     pub target: Value,
 }
 

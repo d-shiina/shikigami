@@ -6,6 +6,8 @@ import {
   ArrowDown,
   ArrowUp,
   CircleDot,
+  ClipboardCopy,
+  ClipboardPaste,
   Copy,
   Eraser,
   Eye,
@@ -27,6 +29,7 @@ import { useStudioApi } from "../context";
 import { isActive, trailOf } from "../store";
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
+import { handOffText } from "../lib/todos";
 
 /** A call step as the chart shows it. */
 export type CallMenu = { key: string; canEnter: boolean; unfolded: boolean };
@@ -116,6 +119,9 @@ export function usePaneMenu() {
       { label: t.redo, icon: Redo2, shortcut: "Ctrl+Y", disabled: !s.canRedo, run: () => void store.getState().redo() },
       "-",
       { label: t.menu.fitView, icon: Scan, run: options.fit },
+      "-",
+      { label: t.paste.menu, icon: ClipboardPaste, run: () => store.getState().setPasteOpen("into") },
+      s.flow && { label: t.paste.copyFlow, icon: ClipboardCopy, run: () => copyText(handOffText(store.getState().flow!)) },
       ended && { label: t.clearTrail, icon: Eraser, run: () => store.getState().hideTrail() },
       {
         label: s.outlineOpen ? t.menu.outlineClose : t.menu.outlineOpen,

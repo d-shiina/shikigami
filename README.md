@@ -23,6 +23,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/tutorials/](docs/tutorials/README.md) | Tutorials: one piece of office work from the request to the AI to a monthly run (sales CSVs into Excel, invoices from an order list, a web order system) |
 | [docs/architecture.md](docs/architecture.md) | System layout, flow format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
+| [docs/ai-chat.md](docs/ai-chat.md) | Building flows with an AI chat that has no MCP (Microsoft Copilot): the guide to give it, pasting its answer into Studio, what is left for a person |
 | [docs/runner.md](docs/runner.md) | The run window for the people who only run flows: published flows, a form made from the inputs, results and files |
 | [docs/policy.md](docs/policy.md) | Unattended runs use only an approved, published version; allowed sites and apps; approving AI operations (`policy.json`) |
 | [docs/expressions.md](docs/expressions.md) | Functions available in flow expressions |

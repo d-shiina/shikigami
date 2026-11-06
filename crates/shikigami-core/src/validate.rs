@@ -310,7 +310,21 @@ impl Cx<'_> {
                 );
                 self.hint("Use letters, digits and _ like a variable name (saveButton); put the words people use in `label`.".to_owned());
             }
-            if !part.target.is_object() {
+            if part.target.is_null() {
+                // The nodes that use it say so; an unused one only reminds.
+                if !flow
+                    .walk()
+                    .any(|s| crate::model::target_part(s) == Some(name.as_str()))
+                {
+                    self.warn(
+                        "PART_NOT_PICKED",
+                        format!("part '{name}' has no target yet and no node uses it"),
+                        format!("{path}/target"),
+                        None,
+                    );
+                    self.hint("Pick it on the screen in Studio, or remove the part.".to_owned());
+                }
+            } else if !part.target.is_object() {
                 self.error(
                     "INVALID_PART",
                     format!("part '{name}' needs a target object"),
@@ -778,6 +792,24 @@ impl Cx<'_> {
                 });
                 continue;
             };
+            if part.target.is_null() {
+                broken = true;
+                let label = if part.label.is_empty() {
+                    name
+                } else {
+                    part.label.as_str()
+                };
+                self.error(
+                    "PART_NOT_PICKED",
+                    format!("part '{name}' ({label}) has not been picked on the screen yet"),
+                    param_path,
+                    id,
+                );
+                self.hint(format!(
+                    "A person picks it in Studio (select the part '{name}' and press 画面から選ぶ). Leave the node as it is."
+                ));
+                continue;
+            }
             if part.app.as_str() != app {
                 broken = true;
                 self.error(
@@ -1657,6 +1689,34 @@ mod tests {
             ["UNKNOWN_PART", "PART_APP_MISMATCH", "PART_WITH_FIELDS"]
         );
         assert!(hint_of(&report, "UNKNOWN_PART").contains("saveButton"));
+
+        // A part the author could not see waits for a person to pick it:
+        // each node that uses it says so, an unused one only reminds.
+        s.parts.insert(
+            "okButton".into(),
+            Part {
+                label: "OK ボタン".into(),
+                app: PartApp::Desktop,
+                target: Value::Null,
+            },
+        );
+        s.steps = vec![
+            poke("e", json!({ "part": "okButton" })),
+            poke("f", json!({ "part": "okButton" })),
+        ];
+        let report = validator.validate(&s);
+        assert_eq!(codes(&report), ["PART_NOT_PICKED", "PART_NOT_PICKED"]);
+        assert!(
+            report
+                .issues
+                .iter()
+                .all(|i| i.severity == Severity::Error && i.step_id.is_some())
+        );
+        s.steps = vec![poke("a", json!({ "part": "saveButton" }))];
+        let report = validator.validate(&s);
+        assert!(report.valid, "{report:?}");
+        assert_eq!(codes(&report), ["PART_NOT_PICKED"]);
+        s.parts.remove("okButton");
 
         // The Runtime runs the part's target.
         s.steps = vec![poke("a", json!({ "part": "saveButton" }))];

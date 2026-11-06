@@ -2285,8 +2285,7 @@
             },
             "additionalProperties": false,
             "required": [
-              "app",
-              "target"
+              "app"
             ]
           },
           "PartApp": {
@@ -2669,8 +2668,7 @@
             },
             "additionalProperties": false,
             "required": [
-              "app",
-              "target"
+              "app"
             ]
           },
           "PartApp": {

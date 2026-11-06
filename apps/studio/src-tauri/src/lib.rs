@@ -104,6 +104,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::workspace_info,
+            commands::save_ai_guide,
+            commands::paste_ai_answer,
             commands::set_workspace,
             commands::list_versions,
             commands::create_version,

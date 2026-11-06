@@ -9,6 +9,8 @@
 ### 追加
 
 - Studio：現場の人が使う実行画面「Shikigami 実行」（別ウィンドウ）。公開されたフローだけが並び、入力変数から作るフォームで入力し、公開版を実行。実行中は一番上の段のノードの進み、終わると出力変数と `output/` に書いたファイル、失敗は日本語のエラー。サイドバーの「実行画面」か、Studio を `--runner` で起動して開く（docs/runner.md）
+- MCP を使えない AI（Microsoft Copilot など）でフローを作る：`shikigami ai-guide`（Studio の「AI の答えを貼り付け」›「仕様書を保存」）が AI に読ませる指示（8,000 文字未満）と詳細（全ノード・関数）を書き出し、AI の答え（`{ "format": "shikigami.answer", "summary", "checks", "flow" }`、前後の文章つきでも可）を Studio に貼り付けると検証して取り込みます。人の手直し（部品を画面から選ぶ・ログイン情報の登録・入力ファイル）は一覧とフロー図の「要手直し」で、AI の誤りは AI に返す文面のコピーで示します。取り込みは「AI（貼り付け）」の変更として確認待ちに入ります（docs/ai-chat.md）
+- フロー形式：部品（`parts`）の `target` を省けるようにしました。省いた部品は人が画面から選ぶまで、それを使うノードが `PART_NOT_PICKED` で検証を通りません。変更履歴の `actor.kind` に `chat`（AI の答えの貼り付け）を追加
 - 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
 
 ## [0.1.3] - 2026-11-06
