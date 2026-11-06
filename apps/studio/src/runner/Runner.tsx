@@ -5,7 +5,7 @@ import type { ProjectFile, RunEventEnvelope, RunReport, StepTypeDef } from "@shi
 import { Check, Circle, FileText, FolderOpen, Loader2, Play, Search, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WindowControls } from "../components/WindowControls";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import { relativeTime } from "../lib/changes";
 import { explainError } from "../lib/errorText";
 import { t } from "../lib/i18n";
@@ -141,7 +141,7 @@ function useTick(on: boolean) {
   return now;
 }
 
-type Run = { runId: string | null; startedAt: number };
+type Run = { runId: string | null; startedAt: number; stopping?: boolean };
 
 export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   const [items, setItems] = useState<RunnerItem[] | null>(null);
@@ -235,7 +235,27 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
       setProblem(err.code ? explainError({ code: err.code, message: err.message ?? "" }).what : message(e));
     }
   };
-  const stop = () => run?.runId && void backend.stop(run.runId).catch((e) => setProblem(message(e)));
+  const stop = () => {
+    const runId = run?.runId;
+    if (!runId) return;
+    setRun((r) => (r?.runId === runId ? { ...r, stopping: true } : r));
+    backend.stop(runId).catch(async (e) => {
+      if (!(e instanceof ApiError && e.code === "RUN_NOT_FOUND")) return setProblem(message(e));
+      // It already ended but its last event never came: end it from its record.
+      const r = await backend.report(runId).catch(() => null);
+      const end: RunEventEnvelope = {
+        runId,
+        seq: Number.MAX_SAFE_INTEGER,
+        at: new Date().toISOString(),
+        type: "runFinished",
+        status: r?.status ?? "cancelled",
+        error: r?.error ?? null,
+        durationMs: r ? Math.max(0, Date.parse(r.finishedAt) - Date.parse(r.startedAt)) : Date.now() - (run?.startedAt ?? Date.now()),
+      } as RunEventEnvelope;
+      seen.current = [...seen.current, end];
+      setEvents(seen.current);
+    });
+  };
   const reset = () => {
     setRun(null);
     setReport(null);
@@ -337,11 +357,12 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                   <button
                     type="button"
                     onClick={stop}
+                    title={run?.stopping ? t.stopAgainTitle : undefined}
                     disabled={!run?.runId}
                     className="flex h-8 items-center gap-1.5 rounded-[4px] border border-shu-500 bg-sheet px-4 text-[13px] font-semibold text-shu-600 hover:bg-shu-50 disabled:opacity-60"
                   >
-                    <Square size={12} strokeWidth={2.5} aria-hidden="true" />
-                    {t.runner.stop}
+                    <Square size={12} strokeWidth={2.5} aria-hidden="true" className={run?.stopping ? "animate-pulse" : undefined} />
+                    {run?.stopping ? t.stopping : t.runner.stop}
                   </button>
                 )}
                 {finished && (

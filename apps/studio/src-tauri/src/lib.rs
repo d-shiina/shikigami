@@ -17,12 +17,11 @@ use std::sync::{Arc, Mutex};
 
 use shikigami_core::FlowId;
 use shikigami_core::{ApprovalStore, FileStore, FlowService, Policy, RunId};
-use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime};
+use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime, Stopper};
 use shikigami_secrets::Vault;
-use tokio_util::sync::CancellationToken;
 
 pub(crate) struct ActiveRun {
-    pub cancel: CancellationToken,
+    pub cancel: Stopper,
     pub snapshot: Arc<Mutex<RunSnapshot>>,
     pub flow_id: FlowId,
     /// Studio runs are interactive: they pause on errors and breakpoints.

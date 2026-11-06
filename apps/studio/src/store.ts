@@ -153,6 +153,8 @@ export type RunState = {
   revision: number | null;
   /** The person cleared the marks it left on the chart. */
   trailHidden: boolean;
+  /** Stop was pressed and the run has not ended yet. */
+  stopping: boolean;
 };
 
 /** The `flow.call` steps a run event happened inside (outermost first). */
@@ -542,6 +544,7 @@ const newRun = (runId: string, flowId: string | null = null): RunState => ({
   innerLatest: {},
   revision: null,
   trailHidden: false,
+  stopping: false,
 });
 
 /**
@@ -1175,9 +1178,20 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async stopRun() {
         const run = get().run;
         if (!run) return;
+        set((s) => (s.run?.runId === run.runId && isActive(s.run) ? { run: { ...s.run, stopping: true } } : s));
         try {
           await api.stopRun(run.runId);
         } catch (e) {
+          if (e instanceof ApiError && e.code === "RUN_NOT_FOUND") {
+            // It already ended but its last event never came: do not leave
+            // the chart saying it runs, with a stop button that does nothing.
+            set((s) =>
+              s.run?.runId === run.runId && isActive(s.run)
+                ? { run: { ...s.run, status: "cancelled", pause: null, stopping: false }, human: null }
+                : s,
+            );
+            return;
+          }
           set({ error: message(e) });
         }
       },
@@ -1348,6 +1362,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             }
             case "runFinished":
               human = null;
+              run.stopping = false;
               run.status = env.status;
               run.pause = null;
               run.failure = env.status === "failed" ? (env.error ?? null) : null;
