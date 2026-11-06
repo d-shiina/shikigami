@@ -1490,8 +1490,8 @@ impl ShikigamiMcp {
     /// name, or the words in inspect_page do not say which one the user means. Do not guess with
     /// `nth`. The browser window comes to the front with your `message` in a banner; `candidates`
     /// are outlined with numbers. The user's click is caught before the page sees it (nothing is
-    /// pressed) and returned as a step target. Also tell the user in chat to click it in the
-    /// browser. status: `picked` (`target`, `matches`, `row`, `candidate`, `alternatives`,
+    /// pressed) and returned as a step target (with `frame` when it is inside an iframe, nested
+    /// and cross-site frames included). Also tell the user in chat to click it in the browser. status: `picked` (`target`, `matches`, `row`, `candidate`, `alternatives`,
     /// observationId) or `cancelled` (ask in chat). The page must be open (inspect_page `url`).
     #[tool(annotations(read_only_hint = true, open_world_hint = true))]
     async fn ask_user_to_pick(

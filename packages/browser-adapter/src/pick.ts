@@ -4,20 +4,25 @@
 // over and catches the next click before the page sees it (so picking the
 // 「出荷」 button does not ship anything). The clicked element is turned
 // into a flow Target (role + accessible name, as inspect_page lists
-// them), with `nth` when the same target matches several elements.
+// them), with `nth` when the same target matches several elements and
+// `frame` when it is inside an iframe (nested and cross-site ones too).
 // `highlight` outlines targets for a moment so the person can see what a
 // step is about to touch. Both are used by AI clients (ask_user_to_pick,
 // test_step) and by Studio's picker for a node's target.
 
-import type { Locator, Page } from "playwright-core";
+import type { ElementHandle, Frame as PageFrame, Locator, Page } from "playwright-core";
 
-import { AdapterError, locate, type AriaRole, type Target } from "./targets.ts";
+import { AdapterError, frameSelector, locate, type AriaRole, type Frame, type Target } from "./targets.ts";
 
 const HOST_ID = "__shikigami_pick";
 const HIGHLIGHT_HOST_ID = "__shikigami_highlight";
 const PICKED = "data-shikigami-picked";
 const CANDIDATE = "data-shikigami-candidate";
 const HIGHLIGHT = "data-shikigami-highlight";
+/** On an iframe whose page has its own picker: the outer page stops covering it. */
+const ARMED = "data-shikigami-armed";
+/** Briefly on the iframe being described, to find its position among the others. */
+const THIS_FRAME = "data-shikigami-this-frame";
 
 export interface PickOptions {
   /** What to point at, shown in the banner (the AI's words). */
@@ -31,7 +36,7 @@ export interface PickOptions {
 
 export interface Picked {
   status: "picked";
-  /** The element as a step target, ready for browser.click and friends. */
+  /** The element as a step target, ready for browser.click and friends (with `frame` inside an iframe). */
   target: Target;
   /** How many elements `target` matches without `nth` (1: it is unique). */
   matches: number;
@@ -51,12 +56,61 @@ export interface Cancelled {
   url: string;
 }
 
-/** Waits for the person to click an element (or press わからない / Esc). */
+/**
+ * Waits for the person to click an element (or press わからない / Esc).
+ *
+ * Every frame of the page gets its own picker, cross-origin ones too
+ * (Playwright reaches into them), since a frame's clicks never reach the
+ * page around it. Only the top page shows the banner. A frame that has no
+ * picker yet (still loading, or one Playwright cannot reach) stays covered
+ * by its parent's picker, so a click there never reaches the page.
+ */
 export async function pick(page: Page, options: PickOptions): Promise<Picked | Cancelled> {
   await page.bringToFront().catch(() => {});
   await clear(page);
   await mark(page, options.candidates ?? [], CANDIDATE);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let finished = false;
+  let settle!: (answer: { frame: PageFrame; outcome: "picked" | "cancelled" }) => void;
+  let fail!: (error: unknown) => void;
+  const answer = new Promise<{ frame: PageFrame; outcome: "picked" | "cancelled" }>((ok, ko) => {
+    settle = ok;
+    fail = ko;
+  });
+  const main = page.mainFrame();
+  const arm = async (frame: PageFrame) => {
+    const top = frame === main;
+    try {
+      if (!top) await setOnFrameElement(frame, ARMED, false);
+      await frame.evaluate(overlay, {
+        hostId: HOST_ID,
+        picked: PICKED,
+        candidate: CANDIDATE,
+        armed: ARMED,
+        message: options.message ?? "",
+        lang: options.lang ?? "ja",
+        banner: top,
+      });
+      if (finished) return;
+      if (!top) await setOnFrameElement(frame, ARMED, true);
+      const outcome = await frame.evaluate(waitForOverlay, HOST_ID);
+      if (!finished) settle({ frame, outcome });
+    } catch (error) {
+      if (finished) return;
+      if (top) {
+        fail(error);
+        return;
+      }
+      // The frame's page went away (it navigated or was removed): cover it
+      // again until its next page gets a picker.
+      const waiting = await frame.evaluate((id) => Boolean(document.getElementById(id)), HOST_ID).catch(() => false);
+      if (!waiting) await setOnFrameElement(frame, ARMED, false);
+    }
+  };
+  const onNavigated = (frame: PageFrame) => {
+    if (frame !== main && !finished) void arm(frame);
+  };
+  page.on("framenavigated", onNavigated);
   try {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
@@ -69,14 +123,8 @@ export async function pick(page: Page, options: PickOptions): Promise<Picked | C
         options.timeoutMs,
       );
     });
-    const answer = page.evaluate(overlay, {
-      hostId: HOST_ID,
-      picked: PICKED,
-      candidate: CANDIDATE,
-      message: options.message ?? "",
-      lang: options.lang ?? "ja",
-    });
-    let outcome: "picked" | "cancelled";
+    for (const frame of page.frames()) void arm(frame);
+    let outcome: { frame: PageFrame; outcome: "picked" | "cancelled" };
     try {
       outcome = await Promise.race([answer, timeout]);
     } catch (error) {
@@ -85,10 +133,14 @@ export async function pick(page: Page, options: PickOptions): Promise<Picked | C
       throw new AdapterError("PICK_INTERRUPTED", "the page changed before anything was picked", {
         details: { url: page.url(), hint: "Look at the page again (inspect_page) and ask once more if needed." },
       });
+    } finally {
+      finished = true;
+      page.off("framenavigated", onNavigated);
     }
-    if (outcome === "cancelled") return { status: "cancelled", url: page.url() };
-    return await describePicked(page);
+    if (outcome.outcome === "cancelled") return { status: "cancelled", url: page.url() };
+    return await describePicked(page, outcome.frame);
   } finally {
+    finished = true;
     if (timer) clearTimeout(timer);
     await clear(page);
   }
@@ -105,22 +157,43 @@ export async function cancelPick(page: Page): Promise<boolean> {
     .catch(() => false);
 }
 
-/** Outlines every element `targets` match for `durationMs` (numbered when `numbered`). */
+/**
+ * Outlines every element `targets` match for `durationMs` (numbered when
+ * `numbered`). Elements inside frames are outlined inside their frame.
+ */
 export async function highlight(
   page: Page,
   targets: Target[],
   options: { durationMs: number; label?: string; numbered?: boolean },
 ): Promise<number> {
-  await page.evaluate(removeOverlay, { hostId: HIGHLIGHT_HOST_ID, attrs: [HIGHLIGHT] }).catch(() => {});
+  await everyFrame(page, (frame) => frame.evaluate(removeOverlay, { hostId: HIGHLIGHT_HOST_ID, attrs: [HIGHLIGHT] }));
   const count = await mark(page, targets, HIGHLIGHT, options.numbered ?? targets.length > 1);
   if (count === 0) return 0;
-  await page
-    .evaluate(drawHighlights, { hostId: HIGHLIGHT_HOST_ID, attr: HIGHLIGHT, label: options.label ?? "", durationMs: options.durationMs })
-    .catch(() => {});
+  await everyFrame(page, (frame) =>
+    frame.evaluate(drawHighlights, { hostId: HIGHLIGHT_HOST_ID, attr: HIGHLIGHT, label: options.label ?? "", durationMs: options.durationMs }),
+  );
   return count;
 }
 
 // ---------------------------------------------------------------------------
+
+/** Runs `fn` on each frame of the page, ignoring frames it cannot reach. */
+async function everyFrame(page: Page, fn: (frame: PageFrame) => Promise<unknown>): Promise<void> {
+  await Promise.all(page.frames().map((frame) => fn(frame).catch(() => {})));
+}
+
+/** Sets (or removes) `attr` on the iframe element that holds `frame`, in its parent page. */
+async function setOnFrameElement(frame: PageFrame, attr: string, on: boolean): Promise<void> {
+  let handle: ElementHandle<Element> | undefined;
+  try {
+    handle = (await frame.frameElement()) as ElementHandle<Element>;
+    await handle.evaluate((el, [a, set]) => (set ? el.setAttribute(a, "") : el.removeAttribute(a)), [attr, on] as const);
+  } catch {
+    // The frame is gone.
+  } finally {
+    await handle?.dispose().catch(() => {});
+  }
+}
 
 /** Tags the elements of each target with `attr` = its 1-based number. */
 async function mark(page: Page, targets: Target[], attr: string, numbered = true): Promise<number> {
@@ -143,12 +216,12 @@ async function mark(page: Page, targets: Target[], attr: string, numbered = true
 }
 
 async function clear(page: Page): Promise<void> {
-  await page.evaluate(removeOverlay, { hostId: HOST_ID, attrs: [PICKED, CANDIDATE] }).catch(() => {});
+  await everyFrame(page, (frame) => frame.evaluate(removeOverlay, { hostId: HOST_ID, attrs: [PICKED, CANDIDATE, ARMED] }));
 }
 
-/** Turns the element tagged PICKED into a Target. */
-async function describePicked(page: Page): Promise<Picked> {
-  const el = page.locator(`[${PICKED}]`).first();
+/** Turns the element tagged PICKED in `frame` into a Target (with `frame` when it is not the top page). */
+async function describePicked(page: Page, frame: PageFrame): Promise<Picked> {
+  const el = frame.locator(`[${PICKED}]`).first();
   const facts = await el.evaluate(
     (node, attr) => {
       const short = (s: string | null | undefined, n: number) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -171,6 +244,8 @@ async function describePicked(page: Page): Promise<Picked> {
     CANDIDATE,
   );
   const aria = parseAria(await el.ariaSnapshot({ timeout: 2000 }).catch(() => ""));
+  const where = await framePath(frame);
+  const inFrame = (t: Target): Target => (where ? { ...t, frame: where } : t);
 
   const alternatives: Target[] = [];
   if (facts.label) alternatives.push({ label: facts.label, exact: true });
@@ -185,19 +260,68 @@ async function describePicked(page: Page): Promise<Picked> {
   else if (aria) base = { role: aria.role as AriaRole };
   else base = { css: facts.tag };
 
-  const { matches, index } = await position(page, base);
-  const target = matches > 1 && index >= 0 ? { ...base, nth: index } : base;
+  const { matches, index } = await position(page, inFrame(base));
+  const target = inFrame(matches > 1 && index >= 0 ? { ...base, nth: index } : base);
   const result: Picked = {
     status: "picked",
     target,
     matches,
-    alternatives,
+    alternatives: alternatives.map(inFrame),
     text: facts.text,
     url: page.url(),
   };
   if (facts.row) result.row = facts.row;
   if (facts.candidate) result.candidate = Number(facts.candidate);
   return result;
+}
+
+/**
+ * How a step target names `frame` (outermost frame innermost in the
+ * object, as `target.frame.frame`), or undefined for the top page.
+ */
+export async function framePath(frame: PageFrame): Promise<Frame | undefined> {
+  const parent = frame.parentFrame();
+  if (!parent) return undefined;
+  const outer = await framePath(parent);
+  const handle = (await frame.frameElement()) as ElementHandle<Element>;
+  try {
+    const own = await nameFrame(parent, handle);
+    return outer ? { ...own, frame: outer } : own;
+  } finally {
+    await handle.dispose().catch(() => {});
+  }
+}
+
+/** The steadiest way to name the iframe `handle` among the frames of `parent`: name, title, src, then its tag. */
+async function nameFrame(parent: PageFrame, handle: ElementHandle<Element>): Promise<Frame> {
+  const attrs = await handle.evaluate((el) => ({
+    name: el.getAttribute("name") || el.id || "",
+    title: el.getAttribute("title") ?? "",
+    src: el.getAttribute("src") ?? "",
+    tag: el.tagName.toLowerCase(),
+  }));
+  const ways: Frame[] = [];
+  if (attrs.name) ways.push({ name: attrs.name });
+  if (attrs.title) ways.push({ title: attrs.title });
+  // A data: or javascript: address is the page itself, not a place.
+  if (attrs.src && /^(https?:|\/|\.|[\w-]+(\/|\.|$))/i.test(attrs.src)) ways.push({ src: attrs.src });
+  ways.push({ css: attrs.tag });
+  await handle.evaluate((el, a) => el.setAttribute(a, ""), THIS_FRAME);
+  try {
+    let repeated: Frame | undefined;
+    for (const way of ways) {
+      const { count, index } = await parent
+        .locator(frameSelector(way))
+        .evaluateAll((els, a) => ({ count: els.length, index: els.findIndex((e) => e.hasAttribute(a)) }), THIS_FRAME)
+        .catch(() => ({ count: 0, index: -1 }));
+      if (index < 0) continue;
+      if (count === 1) return way;
+      repeated ??= { ...way, nth: index };
+    }
+    return repeated ?? { css: attrs.tag };
+  } finally {
+    await handle.evaluate((el, a) => el.removeAttribute(a), THIS_FRAME).catch(() => {});
+  }
 }
 
 /** How many elements `target` matches, and which of them is the picked one. */
@@ -235,14 +359,20 @@ interface OverlayArgs {
   hostId: string;
   picked: string;
   candidate: string;
+  armed: string;
   message: string;
   lang: string;
+  /** Show the banner (the top page only; frames just catch their clicks). */
+  banner: boolean;
 }
 
-function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Promise<"picked" | "cancelled"> {
+/** Sets up the picker in this document; `waitForOverlay` then waits for its answer. */
+function overlay({ hostId, picked, candidate, armed, message, lang, banner }: OverlayArgs): void {
+  // Already waiting here (a frame armed twice while it loaded).
+  if (document.getElementById(hostId)) return;
   const words = lang !== "en"
-    ? { title: "Shikigami：クリックして教えてください", unsure: "わからない", hint: "Esc でやめる", frame: "枠の中は選べません" }
-    : { title: "Shikigami: click to show it", unsure: "Not sure", hint: "Esc to cancel", frame: "Not inside this frame" };
+    ? { title: "Shikigami：クリックして教えてください", unsure: "わからない", hint: "Esc でやめる", frame: "ここは選べません" }
+    : { title: "Shikigami: click to show it", unsure: "Not sure", hint: "Esc to cancel", frame: "Cannot pick here" };
   const host = document.createElement("div");
   host.id = hostId;
   host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none";
@@ -266,6 +396,7 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
   </style>
   <div class="bar"><div style="flex:1"><b></b><span></span></div><small></small><button type="button"></button></div>
   <div class="box"></div>`;
+  if (!banner) (root.querySelector(".bar") as HTMLElement).style.display = "none";
   (root.querySelector(".bar b") as HTMLElement).textContent = words.title;
   (root.querySelector(".bar span") as HTMLElement).textContent = message;
   (root.querySelector(".bar small") as HTMLElement).textContent = words.hint;
@@ -295,7 +426,9 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
     ) ?? node;
   const under = (x: number, y: number): Element | null => {
     const el = document.elementFromPoint(x, y);
-    return el && el !== host ? meaningful(el) : null;
+    // A frame with its own picker answers for what is inside it.
+    if (!el || el === host || el.hasAttribute(armed)) return null;
+    return meaningful(el);
   };
   const place = (d: HTMLElement, el: Element) => {
     const r = el.getBoundingClientRect();
@@ -304,11 +437,15 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
     d.style.width = `${r.width + 6}px`;
     d.style.height = `${r.height + 6}px`;
   };
-  // Frames get their own events, which these listeners never see: cover them
-  // so a click there cannot reach the control inside.
+  // Frames get their own events, which these listeners never see. A frame
+  // with its own picker (marked `armed`) catches its clicks itself; cover
+  // the others (still loading, out of reach, plug-ins) so a click there
+  // cannot reach the control inside.
   const shields = new Map<Element, HTMLElement>();
   const shieldFrames = () => {
-    const frames = new Set(Array.from(document.querySelectorAll("iframe, frame, embed, object")));
+    const frames = new Set(
+      Array.from(document.querySelectorAll("iframe, frame, embed, object")).filter((el) => !el.hasAttribute(armed)),
+    );
     for (const [el, d] of shields) {
       if (!frames.has(el) || !el.isConnected) {
         d.remove();
@@ -344,8 +481,8 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
   };
   raf = requestAnimationFrame(tick);
 
-  return new Promise((resolve) => {
-    const onBar = (e: Event) => e.composedPath().includes(bar);
+  (host as HostWithStop).__shikigamiWait = new Promise((resolve) => {
+    const onBar = (e: Event) => banner && e.composedPath().includes(bar);
     const swallow = (e: Event) => {
       if (onBar(e)) return;
       e.preventDefault();
@@ -361,6 +498,14 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
       current = under(e.clientX, e.clientY);
       box.style.display = current ? "block" : "none";
     };
+    // Leaving this page (into a frame, or out of a frame): its box goes.
+    const out = (e: MouseEvent) => {
+      const to = e.relatedTarget as Element | null;
+      if (!to || to.matches?.("iframe, frame")) {
+        box.style.display = "none";
+        current = null;
+      }
+    };
     const done = (outcome: "picked" | "cancelled") => {
       cancelAnimationFrame(raf);
       delete (host as HostWithStop).__shikigamiStop;
@@ -369,6 +514,7 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
       }
       window.removeEventListener("click", click, true);
       window.removeEventListener("mousemove", move, true);
+      window.removeEventListener("mouseout", out, true);
       window.removeEventListener("keydown", key, true);
       resolve(outcome);
     };
@@ -394,6 +540,7 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
     }
     window.addEventListener("click", click, true);
     window.addEventListener("mousemove", move, true);
+    window.addEventListener("mouseout", out, true);
     window.addEventListener("keydown", key, true);
     unsure.addEventListener("click", () => done("cancelled"));
     // A timeout or a new pick ends this one from outside (removeOverlay).
@@ -401,7 +548,14 @@ function overlay({ hostId, picked, candidate, message, lang }: OverlayArgs): Pro
   });
 }
 
-type HostWithStop = HTMLElement & { __shikigamiStop?: () => void };
+type HostWithStop = HTMLElement & { __shikigamiStop?: () => void; __shikigamiWait?: Promise<"picked" | "cancelled"> };
+
+/** The answer of the picker `overlay` set up in this document. */
+function waitForOverlay(hostId: string): Promise<"picked" | "cancelled"> {
+  const wait = (document.getElementById(hostId) as HostWithStop | null)?.__shikigamiWait;
+  if (!wait) throw new Error("the picker is gone");
+  return wait;
+}
 
 function removeOverlay({ hostId, attrs }: { hostId: string; attrs: string[] }): void {
   const host = document.getElementById(hostId) as (HTMLElement & { __shikigamiStop?: () => void }) | null;
@@ -434,6 +588,8 @@ function drawHighlights({ hostId, attr, label, durationMs }: { hostId: string; a
     root.appendChild(d);
     return { el, d };
   });
+  // Nothing of this page is outlined (it is in another frame).
+  if (items.length === 0) return;
   document.documentElement.appendChild(host);
   let raf = 0;
   const tick = () => {
