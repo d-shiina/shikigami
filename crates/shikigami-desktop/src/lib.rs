@@ -46,9 +46,9 @@ pub mod menu;
 mod overlay;
 pub mod paddle;
 pub mod roles;
-pub mod table;
 #[cfg(windows)]
 pub mod session;
+pub mod table;
 pub mod target;
 #[cfg(windows)]
 mod uia;
