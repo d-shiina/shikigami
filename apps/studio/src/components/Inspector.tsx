@@ -9,10 +9,12 @@ import { stepSummary } from "../lib/palette";
 import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { outline } from "../lib/outline";
 import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../lib/parts";
+import { describeWhen } from "../lib/schedule";
 import { sentence, targetText } from "../lib/sentence";
 import { findStep, isActive, revertBlocker, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
+import { openNewSchedule, useSchedulesOf } from "./RunsPage";
 import { ActorMark, usePendingReview } from "./Timeline";
 import { VarIcon } from "./VarIcon";
 import { VariablesPanel } from "./VariablesPanel";
@@ -1288,6 +1290,38 @@ function StepInspector() {
   );
 }
 
+/** When this flow runs by itself on this PC; they are edited in 「自動実行」. */
+function SchedulesSection({ flowId }: { flowId: string }) {
+  const schedules = useSchedulesOf(flowId);
+  const setPlace = useStudio((s) => s.setPlace);
+  if (!schedules) return null;
+  return (
+    <Section title={t.runs.schedules}>
+      <ul className="space-y-1 text-xs">
+        {schedules.length === 0 && <li className="text-slate-500">{t.runs.none}</li>}
+        {schedules.map((s) => (
+          <li key={s.id} className={s.enabled ? "" : "text-slate-500"}>
+            <button type="button" className="text-left hover:underline" onClick={() => setPlace("runs")}>
+              {describeWhen(s.when)}
+              {!s.enabled && `（${t.runs.paused}）`}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className="mt-1.5 text-xs text-brand-600 hover:underline"
+        onClick={() => {
+          openNewSchedule();
+          setPlace("runs");
+        }}
+      >
+        {t.runs.add}
+      </button>
+    </Section>
+  );
+}
+
 /** With nothing selected, the inspector shows the flow itself: what it is, its variables, how it runs. */
 function FlowInspector() {
   const flow = useStudio((s) => s.flow);
@@ -1326,6 +1360,7 @@ function FlowInspector() {
           </select>
         </Row>
       </Section>
+      <SchedulesSection flowId={flow.id} />
       <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{flow.id}</p>
     </div>
   );
