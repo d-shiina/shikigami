@@ -108,6 +108,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -355,6 +443,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -540,6 +716,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -749,6 +1013,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -934,6 +1286,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1109,6 +1549,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1289,6 +1817,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1466,6 +2082,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1715,6 +2419,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1950,6 +2742,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -2131,6 +3011,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -2355,6 +3323,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -2549,6 +3605,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -2737,6 +3881,94 @@
                       "nth": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "frame": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "src": {
+                            "type": "string"
+                          },
+                          "css": {
+                            "type": "string"
+                          },
+                          "nth": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "frame": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "src": {
+                                "type": "string"
+                              },
+                              "css": {
+                                "type": "string"
+                              },
+                              "nth": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "required": [
+                                  "name"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "title"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "src"
+                                ]
+                              },
+                              {
+                                "required": [
+                                  "css"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "anyOf": [
+                          {
+                            "required": [
+                              "name"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "title"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "src"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "css"
+                            ]
+                          }
+                        ]
                       }
                     },
                     "additionalProperties": false,

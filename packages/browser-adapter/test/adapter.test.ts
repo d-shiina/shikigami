@@ -298,7 +298,7 @@ describe("pointing at the page", () => {
     expect(picked.status).toBe("picked");
   });
 
-  it("does not let a click inside a frame through", async () => {
+  it("picks inside a frame without letting the click through", async () => {
     const f = { runId: "run_pick_frame" };
     const frame = `<button onclick="parent.document.title='pressed'">中のボタン</button>`;
     await person.call("open", { ...f, url: `data:text/html;charset=utf-8,${encodeURIComponent(`<title>frames</title><button>外のボタン</button><iframe srcdoc="${frame.replace(/"/g, "&quot;")}"></iframe>`)}` });
@@ -306,11 +306,9 @@ describe("pointing at the page", () => {
     for (let i = 0; i < 50; i++) {
       if (await person.call("isVisible", { ...f, target: { text: "クリックして教えてください" }, waitMs: 100 })) break;
     }
-    expect(await person.call("isVisible", { ...f, target: { text: "枠の中は選べません" }, waitMs: 500 })).toBe(true);
-    // The shield covers the frame: a real click there lands on it, not on the button inside.
-    await person.call("click", { ...f, target: { text: "枠の中は選べません" } });
-    await person.call("click", { ...f, target: { role: "button", name: "外のボタン" } });
-    expect(await asked).toMatchObject({ status: "picked", target: { role: "button", name: "外のボタン" } });
+    // A frame without a name, title or address is named by its tag.
+    await person.call("click", { ...f, target: { role: "button", name: "中のボタン", frame: { css: "iframe" } } });
+    expect(await asked).toMatchObject({ status: "picked", target: { role: "button", name: "中のボタン", frame: { css: "iframe" } } });
     expect(((await person.call("snapshot", f)) as { title: string }).title).toBe("frames");
     await person.call("closeRun", f);
   });
