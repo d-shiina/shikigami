@@ -32,7 +32,7 @@ import { agent, api, events } from "./lib/api";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
 import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
-import { shouldFollow } from "./lib/followAi";
+import { lastAdded, shouldFollow, stepIds } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
 
@@ -451,18 +451,30 @@ export function App() {
 
   useEffect(() => {
     void store.getState().init();
-    // A scenario the AI has just made opens, so its flow chart grows in view.
+    // While the AI asked in the pane works, Studio follows it: a scenario it
+    // has just made opens, and the chart pans to the nodes it adds. Only
+    // changes from outside count, so the person's own edits never move the view.
     const followChange = async (id: string) => {
-      const known = store.getState().summaries.some((s) => s.id === id);
+      const before = store.getState();
+      const known = before.summaries.some((s) => s.id === id);
+      const shown = before.scenario?.id === id ? stepIds(before.scenario.steps ?? []) : null;
       await store.getState().onExternalChange(id);
       const now = store.getState();
       const working = activity(agentStore.getState());
+      if (!working) return;
       // The pane and the status bar already say the AI is at work; a notice per edit is noise.
-      if (working && now.notice === t.externalChange) store.setState({ notice: null });
-      if (!shouldFollow(id, known, working, now)) return;
-      await now.open(id);
-      const name = store.getState().scenario?.name;
-      if (store.getState().scenario?.id === id && name) store.setState({ notice: t.openedAiScenario(name) });
+      if (now.notice === t.externalChange) store.setState({ notice: null });
+      let opened = false;
+      if (shouldFollow(id, known, working, now)) {
+        await now.open(id);
+        opened = store.getState().scenario?.id === id;
+        const name = store.getState().scenario?.name;
+        if (opened && name) store.setState({ notice: t.openedAiScenario(name) });
+      }
+      const after = store.getState();
+      if (after.scenario?.id !== id || (!opened && shown === null)) return;
+      const stepId = lastAdded(opened ? null : shown, after.scenario.steps ?? []);
+      if (stepId) store.setState({ reveal: { stepId, seq: (after.reveal?.seq ?? 0) + 1 } });
     };
     const unlisten = [
       events.onScenarioChanged((id) => void followChange(id)),

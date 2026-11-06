@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldFollow } from "./followAi";
+import { lastAdded, shouldFollow } from "./followAi";
 
 const working = { scenarioId: null, tool: "create_scenario" };
 
@@ -21,5 +21,20 @@ describe("shouldFollow", () => {
     expect(shouldFollow("scn_new", true, working, { place: "library", scenario: null })).toBe(false);
     expect(shouldFollow("scn_new", false, working, { place: "settings", scenario: null })).toBe(false);
     expect(shouldFollow("scn_new", false, working, { place: "scenarios", scenario: { id: "scn_new", steps: [] } })).toBe(false);
+  });
+});
+
+describe("lastAdded", () => {
+  const steps = [
+    { id: "a", type: "log.message" },
+    { id: "b", type: "control.if", blocks: { then: [{ id: "b1", type: "log.message" }] } },
+    { id: "c", type: "log.message" },
+  ];
+  it("is the last new step in reading order, nested ones included", () => {
+    expect(lastAdded(["a", "c"], steps)).toBe("b1");
+    expect(lastAdded(null, steps)).toBe("c");
+  });
+  it("is nothing when the edit only changed steps", () => {
+    expect(lastAdded(["a", "b", "b1", "c"], steps)).toBeUndefined();
   });
 });

@@ -22,14 +22,13 @@ import {
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { activity, useAgentMaybe } from "../agent";
 import { useStudio } from "../context";
 import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
 import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
 import { stepLabel, t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
-import type { HistoryEntry, Scenario, Step, StepTypeDef } from "@shikigami/schema";
+import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
 import { useTheme } from "../lib/theme";
@@ -827,36 +826,6 @@ function Follow() {
 }
 
 /**
- * While the AI asked in the AI pane works on the open scenario, keeps the
- * nodes it adds in view, so the person watches the chart grow. The person's
- * own additions do not move the view.
- */
-function FollowAi({ scenario }: { scenario: Scenario | null }) {
-  const latest = useBringIntoView();
-  const bring = useRef(latest);
-  bring.current = latest;
-  const working = useAgentMaybe((s) => activity(s) !== null, false);
-  const seen = useRef<{ id: string | undefined; steps: Set<string> }>({ id: undefined, steps: new Set() });
-  useEffect(() => {
-    const ids = stepIds(scenario?.steps ?? []);
-    const before = seen.current;
-    seen.current = { id: scenario?.id, steps: new Set(ids) };
-    // A scenario just opened (or made by the AI): its first nodes are new too.
-    const added = ids.filter((id) => !(before.id === scenario?.id && before.steps.has(id)));
-    const last = added.at(-1);
-    if (!working || !last) return;
-    // After the chart has placed and measured the new node.
-    const timer = setTimeout(() => bring.current(last), 150);
-    return () => clearTimeout(timer);
-  }, [scenario, working]);
-  return null;
-}
-
-function stepIds(steps: Step[]): string[] {
-  return steps.flatMap((step) => [...(step.id ? [step.id] : []), ...Object.values(step.blocks ?? {}).flatMap(stepIds)]);
-}
-
-/**
  * Where the chart is when it has entered calls: the open scenario, then each
  * called one, to click back up to; and a way to open the shown one for editing.
  */
@@ -1196,7 +1165,6 @@ export function FlowCanvas() {
     >
       <Background gap={24} size={1.2} color="var(--color-slate-300)" />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
-      {!inside && !reviewing && <FollowAi scenario={scenario} />}
       {inside && (
         <Panel position="top-center">
           <DiveBar root={root} chain={chain} />
