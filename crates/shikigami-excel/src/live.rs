@@ -449,6 +449,7 @@ fn step(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
             let sheets = book.get("Worksheets")?.object("Worksheets")?;
             let count = sheets.get("Count")?.to_i64().unwrap_or(1);
             let last = sheets.object("Item", vec![Var::i32(count as i32)])?;
+            session.check()?;
             let added = sheets.object("Add", vec![Var::missing(), Var::from_object(&last)])?;
             added.put("Name", Var::str(&name)).map_err(|e| {
                 let _ = added.call("Delete", vec![]);
@@ -482,6 +483,7 @@ fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
         Kind::Recalculate => {
             session.check()?;
             let app = book.get("Application")?.object("Application")?;
+            session.check()?;
             app.call("CalculateFull", vec![])?;
             save(book, session)?;
             Ok(Value::Null)
@@ -549,6 +551,8 @@ fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
             // Rows, whatever the person last sorted by (xlTopToBottom).
             sort.put("Orientation", Var::i32(1))?;
             sort.put("MatchCase", Var::bool(false))?;
+            // Last chance to stop before the rows move.
+            session.check()?;
             sort.call("Apply", vec![])?;
             save(book, session)?;
             Ok(json!({ "count": last_row - header_row }))
@@ -581,6 +585,7 @@ fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
                 Some(name) => sheet(book, Some(&name))?,
                 None => book.clone(),
             };
+            session.check()?;
             what.call("ExportAsFixedFormat", vec![Var::i32(XL_TYPE_PDF), Var::str(&to)])
                 .map_err(|e| {
                     StepError::permanent("PDF_EXPORT_FAILED", format!("Excel could not save {to} as PDF: {}", e.message))
