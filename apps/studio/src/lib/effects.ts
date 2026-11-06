@@ -22,7 +22,7 @@ export type Effect = {
 };
 
 /** Steps that only move around inside a window or ask the person: not effects outside. */
-const INSIDE = /^(browser\.(?!open$)|desktop\.(?!launch$)|dialog\.|clipboard\.|control\.|variable\.|log\.|flow\.|wait\.|scenario\.call$|config\.read$)/;
+const INSIDE = /^(browser\.(?!(?:open|attach|download|upload)$)|desktop\.(?!launch$)|dialog\.|clipboard\.|control\.|variable\.|log\.|flow\.|wait\.|scenario\.call$|config\.read$)/;
 
 const TARGET_PARAMS = ["url", "command", "program", "path", "to"];
 

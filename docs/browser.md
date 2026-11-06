@@ -39,7 +39,10 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 | type | Main params | Output |
 |---|---|---|
 | `browser.open` | `url`, `headless`, `session` (name under which the login state is saved and reused), `dialog` | `{ url, title }` |
+| `browser.attach` | `port` (default 9222), `title` / `url` (which tab) | `{ url, title }` |
 | `browser.click` | `target`, `dialog` (answer to the JS dialog the click shows) | the dialog's message / `null` |
+| `browser.download` | `target` (what to click), `path` (the file) or `folder` (keep the site's name) | `{ path, fileName }` |
+| `browser.upload` | `target` (the file input, or the button that opens the file picker), `path` (a file or a list) | – |
 | `browser.hover` | `target` | – |
 | `browser.scroll` | `target` (bring into view) and/or `to` (`top` / `bottom`) | – |
 | `browser.fill` | `target`, `value` (text, or a registered secret `{ "secret": "name", "field": "password" }`) | – |
@@ -68,6 +71,38 @@ A link with `target="_blank"` or a button that opens a window adds a tab to the 
 { "type": "browser.getText", "params": { "target": { "role": "heading" } }, "saveAs": "title" },
 { "type": "browser.closeTab" }
 ```
+
+### Using a browser the person opened (`browser.attach`)
+
+Some sites only open in the person's own browser: SSO with the PC's sign-in, client certificates, a required extension. `browser.attach` takes over an Edge or Chrome that is already open instead of starting a new one, and later steps on the same `context` work in it. It reaches only `127.0.0.1`, and when the run ends it lets go of the browser without closing it.
+
+The browser has to be started with a debugging port. Chrome 136 and later ignore the port on the everyday profile ([Chrome's announcement](https://developer.chrome.com/blog/remote-debugging-port)), and Edge is expected to do the same, so give it a profile folder of its own and sign in there once (a shortcut with these arguments is the easiest):
+
+```powershell
+& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Shikigami\edge-profile"
+```
+
+```jsonc
+{ "type": "browser.attach", "params": { "title": "Attendance" } }
+```
+
+Notes:
+
+- While the browser waits on the port, any program on this PC can drive it. Open it this way only for the work that needs it
+- The workspace's allowed sites (policy) are checked by `browser.open`; tabs the person already opened are not checked
+- Not for unattended runs (nobody starts the browser): use `browser.open` with `session` there
+- JS dialogs in that browser are answered by the run while it is attached
+- **Not yet tried on a Windows PC with Edge** (tested with Chromium)
+
+### Edge IE mode
+
+Pages that Edge shows in IE mode run on the old Internet Explorer engine, which Playwright (and so `browser.*`) cannot reach. Use the desktop nodes there: the IE mode page is part of the Edge window, so target it with `{ "window": { "process": "msedge.exe", "title": "<part of the page title>" }, "element": { … } }` and look at it with `inspect_ui`. **Whether UI Automation lists the elements of IE mode pages has not been verified yet** ([desktop.md](desktop.md)).
+
+### Downloads and uploads
+
+`browser.download` clicks the link or button and saves the file it downloads. Paths are relative to the scenario folder, so `"path": "input/orders.csv"` puts it where `file.readCsv` / `excel.readRows` read it next. With `folder` instead of `path`, the file keeps the name the site gives it (`fileName` in the output). `browser.upload` attaches files to a form; it works on the file input itself and on a button that opens the file picker (the picker never shows). It only fills the form: click the send button next.
+
+Both are `dangerous` (a download writes a file, an upload sends one out), so they show under "effects outside" in the review panel.
 
 ### JS dialogs (alert / confirm / prompt)
 
@@ -100,6 +135,8 @@ By meaning; CSS is the last resort.
 // common: exact (exact match), nth (0-based index when several match), frame (the iframe it is in)
 ```
 
+In Studio, a browser node's target has **Pick on screen** and **Highlight** while the scenario runs (or is paused at a node): Studio steps aside and the person clicks the element in the run's browser (Esc to cancel, the page never gets the click). Before a run there is no browser to pick in, so the buttons are off. Frames cannot be picked into yet.
+
 Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the node's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
 
 ### Errors
@@ -112,6 +149,12 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 | `TAB_NOT_FOUND` | No tab matches `browser.switchTab`. `details.tabs` lists them | yes |
 | `LAST_TAB` | `browser.closeTab` on the only tab (use `browser.close`) | no |
 | `DIALOG_NOT_SHOWN` | The step has `dialog` but no JS dialog showed | no |
+| `BROWSER_NOT_RUNNING` | `browser.attach` finds no browser on `port`. `details.hint` says how to start one | yes |
+| `CONTEXT_IN_USE` | `browser.attach` on a `context` that `browser.open` already uses | no |
+| `DOWNLOAD_NOT_STARTED` | `browser.download` clicked but nothing downloaded | no |
+| `DOWNLOAD_FAILED` | The download broke off | yes |
+| `FILE_NOT_FOUND` | A file for `browser.upload` is missing | no |
+| `FILE_CHOOSER_NOT_SHOWN` | The `browser.upload` target is neither a file input nor opens the file picker | no |
 | `BROWSER_NOT_OPEN` | No `browser.open` for that `context` | no |
 | `NAVIGATION_FAILED` | The page cannot be opened | yes |
 | `BROWSER_LAUNCH_FAILED` | The browser cannot be started | no |

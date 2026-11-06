@@ -226,6 +226,9 @@ const BUILDERS: Record<string, Builder> = {
   "browser.open": (p) => [...template(p.url), w(" をブラウザで開く")],
   "browser.click": (p, s) => [w(`${targetText(p.target)}を押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`), ...saveAs(s)],
   "browser.hover": (p) => [w(`${targetText(p.target)}にマウスを乗せる`)],
+  "browser.attach": (p) => [w(p.title || p.url ? `開いているブラウザの「${String(p.title ?? p.url)}」のタブを使う` : "開いているブラウザを使う")],
+  "browser.download": (p, s) => [w(`${targetText(p.target)}を押してダウンロードし、`), code(p.path ?? p.folder), w(p.path ? " に保存する" : " に保存する（名前はサイトのまま）"), ...saveAs(s)],
+  "browser.upload": (p) => [w(`${targetText(p.target)}に `), code(Array.isArray(p.path) ? p.path.join(", ") : p.path), w(" を添付する")],
   "browser.scroll": (p) => [
     w(
       p.target
@@ -260,6 +263,11 @@ const BUILDERS: Record<string, Builder> = {
   "desktop.readText": (p, s) => [...(p.file !== undefined && p.target === undefined ? [...template(p.file), w(" の画像の文字を OCR で読む")] : [w(`${targetText(p.target)}の文字を OCR で読む`)]), ...saveAs(s)],
   "desktop.waitFor": (p) => [w(`${targetText(p.target)}が${p.state === "hidden" ? "消える" : "出る"}まで待つ`)],
   "desktop.closeWindow": (p) => [w(`${targetText(p.target)}を閉じる`)],
+  "desktop.selectMenu": (p) => [w(`${targetText(p.target)}${isTargetElement(p.target) ? "の右クリックメニュー" : ""}で `), code(menuPath(p.path)), w(" を選ぶ")],
+  "desktop.scroll": (p, s) => [w(p.direction ? `${targetText(p.target)}を${DIRECTION_JA[String(p.direction)] ?? String(p.direction)}へスクロールする` : `${targetText(p.target)}が見えるまでスクロールする`), ...saveAs(s)],
+  "desktop.mouseScroll": (p) => [w(`${targetText(p.target)}の上でホイールを${DIRECTION_JA[String(p.direction)] ?? String(p.direction)}へ回す`)],
+  "desktop.drag": (p) => [w(`${targetText(p.target)}を${targetText(p.to)}へドラッグする`)],
+  "desktop.hover": (p) => [w(`${targetText(p.target)}にマウスを重ねる`)],
 };
 
 const BUILDERS_EN: Record<string, Builder> = {
@@ -281,6 +289,9 @@ const BUILDERS_EN: Record<string, Builder> = {
   "browser.open": (p) => [w("Open "), ...template(p.url), w(" in the browser")],
   "browser.click": (p, s) => [w(`Click ${targetText(p.target)}${dialogText(p.dialog)}`), ...saveAs(s)],
   "browser.hover": (p) => [w(`Hover over ${targetText(p.target)}`)],
+  "browser.attach": (p) => [w(p.title || p.url ? `Use the "${String(p.title ?? p.url)}" tab of the open browser` : "Use the open browser")],
+  "browser.download": (p, s) => [w(`Click ${targetText(p.target)} and save the download to `), code(p.path ?? p.folder), w(p.path ? "" : " (keeping the site's name)"), ...saveAs(s)],
+  "browser.upload": (p) => [w("Attach "), code(Array.isArray(p.path) ? p.path.join(", ") : p.path), w(` to ${targetText(p.target)}`)],
   "browser.scroll": (p) => [
     w(
       p.target
@@ -317,7 +328,23 @@ const BUILDERS_EN: Record<string, Builder> = {
   "desktop.readText": (p, s) => [...(p.file !== undefined && p.target === undefined ? [w("Read the text in the image "), ...template(p.file), w(" with OCR")] : [w(`Read the text of ${targetText(p.target)} with OCR`)]), ...saveAs(s)],
   "desktop.waitFor": (p) => [w(`Wait until ${targetText(p.target)} ${p.state === "hidden" ? "disappears" : "appears"}`)],
   "desktop.closeWindow": (p) => [w(`Close ${targetText(p.target)}`)],
+  "desktop.selectMenu": (p) => [w("Choose "), code(menuPath(p.path)), w(isTargetElement(p.target) ? ` from the right-click menu of ${targetText(p.target)}` : ` in ${targetText(p.target)}`)],
+  "desktop.scroll": (p, s) => [w(p.direction ? `Scroll ${targetText(p.target)} ${String(p.direction)}` : `Scroll until ${targetText(p.target)} is in view`), ...saveAs(s)],
+  "desktop.mouseScroll": (p) => [w(`Turn the mouse wheel ${String(p.direction)} over ${targetText(p.target)}`)],
+  "desktop.drag": (p) => [w(`Drag ${targetText(p.target)} to ${targetText(p.to)}`)],
+  "desktop.hover": (p) => [w(`Move the mouse onto ${targetText(p.target)}`)],
 };
+
+const DIRECTION_JA: Record<string, string> = { up: "上", down: "下", left: "左", right: "右", top: "いちばん上", bottom: "いちばん下" };
+
+/** A menu path as a person reads it: ファイル › 名前を付けて保存. */
+function menuPath(path: unknown): string {
+  return Array.isArray(path) ? path.map(String).join(" › ") : String(path ?? "");
+}
+
+function isTargetElement(target: unknown): boolean {
+  return !!target && typeof target === "object" && "element" in target && !!(target as { element?: unknown }).element;
+}
 
 function saveAs(step: Step): Part[] {
   if (!step.saveAs) return [];

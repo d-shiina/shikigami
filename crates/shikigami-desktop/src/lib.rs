@@ -41,17 +41,20 @@ pub mod bitmap;
 mod capture;
 pub mod engine;
 pub mod keys;
+pub mod menu;
 #[cfg(windows)]
 mod overlay;
 pub mod paddle;
 pub mod roles;
+#[cfg(windows)]
+pub mod session;
 pub mod target;
 #[cfg(windows)]
 mod uia;
 pub mod vision;
 pub mod visual;
 
-use backend::{Backend, MouseButton, OcrEngine, Op, Text};
+use backend::{Backend, Direction, MouseButton, OcrEngine, Op, ScrollUnit, Text};
 use target::{APP_SITE_PREFIX, Allow, ElementQuery, Target, WindowQuery};
 use visual::Looking;
 
@@ -69,6 +72,11 @@ pub mod types {
     pub const CLOSE_WINDOW: &str = "desktop.closeWindow";
     pub const READ_TEXT: &str = "desktop.readText";
     pub const SCREENSHOT: &str = "desktop.screenshot";
+    pub const SCROLL: &str = "desktop.scroll";
+    pub const MOUSE_SCROLL: &str = "desktop.mouseScroll";
+    pub const DRAG: &str = "desktop.drag";
+    pub const HOVER: &str = "desktop.hover";
+    pub const SELECT_MENU: &str = "desktop.selectMenu";
 }
 
 /// How much earlier than the step timeout the adapter stops waiting.
@@ -129,6 +137,10 @@ impl Adapter for DesktopAdapter {
                     kind,
                 },
             );
+        }
+        #[cfg(windows)]
+        {
+            builder = builder.desktop_probe(std::sync::Arc::new(session::desktop_unavailable));
         }
         builder
     }
@@ -292,6 +304,11 @@ enum Kind {
     CloseWindow,
     ReadText,
     Screenshot,
+    Scroll,
+    MouseScroll,
+    Drag,
+    Hover,
+    SelectMenu,
 }
 
 struct DesktopStep {
@@ -374,6 +391,72 @@ impl ActionHandler for DesktopStep {
                 Kind::CloseWindow => Op::CloseWindow {
                     target: target(params, Allow::Plain)?,
                 },
+                Kind::Scroll => Op::Scroll {
+                    target: target(params, Allow::Plain)?,
+                    direction: params
+                        .get("direction")
+                        .and_then(Value::as_str)
+                        .map(Direction::parse)
+                        .transpose()?,
+                    amount: count(params, "amount", 1)?,
+                    unit: match params.get("unit").and_then(Value::as_str) {
+                        Some("line") => ScrollUnit::Line,
+                        _ => ScrollUnit::Page,
+                    },
+                },
+                Kind::MouseScroll => {
+                    let direction = Direction::parse(&string(params, "direction")?)?;
+                    if matches!(direction, Direction::Top | Direction::Bottom) {
+                        return Err(StepError::invalid_params(
+                            "the mouse wheel turns up, down, left or right; use desktop.scroll for top / bottom",
+                        ));
+                    }
+                    Op::Wheel {
+                        target: self
+                            .mouse_target(params, "target", &input, deadline)
+                            .await?,
+                        direction,
+                        notches: count(params, "amount", 3)?,
+                    }
+                }
+                Kind::Drag => Op::Drag {
+                    from: self
+                        .mouse_target(params, "target", &input, deadline)
+                        .await?,
+                    to: Box::new(self.mouse_target(params, "to", &input, deadline).await?),
+                },
+                Kind::Hover => Op::Hover {
+                    target: self
+                        .mouse_target(params, "target", &input, deadline)
+                        .await?,
+                },
+                Kind::SelectMenu => {
+                    let path: Vec<String> = match params.get("path") {
+                        Some(Value::Array(items)) => items
+                            .iter()
+                            .map(|v| v.as_str().map(str::to_owned))
+                            .collect::<Option<_>>()
+                            .ok_or_else(|| {
+                                StepError::invalid_params(
+                                    "'path' must be a list of menu item names",
+                                )
+                            })?,
+                        _ => {
+                            return Err(StepError::invalid_params(
+                                "'path' must be a list of menu item names",
+                            ));
+                        }
+                    };
+                    if path.is_empty() || path.iter().any(|p| p.trim().is_empty()) {
+                        return Err(StepError::invalid_params(
+                            "'path' needs at least one menu item name, e.g. [\"ファイル\", \"名前を付けて保存\"]",
+                        ));
+                    }
+                    Op::Menu {
+                        target: target(params, Allow::Plain)?,
+                        path,
+                    }
+                }
             };
             let output = self.until_found(op, &input, deadline).await?;
             Ok(output)
@@ -388,6 +471,20 @@ fn is_not_ready(e: &StepError) -> bool {
         e.code.as_str(),
         "WINDOW_NOT_FOUND" | "ELEMENT_NOT_FOUND" | "ELEMENT_DISABLED" | "ELEMENT_GONE"
     )
+}
+
+/// A positive whole number param (`default` when omitted).
+fn count(params: &Value, key: &str, default: u32) -> Result<u32, StepError> {
+    match params.get(key) {
+        None => Ok(default),
+        Some(v) => v
+            .as_u64()
+            .filter(|n| (1..=1000).contains(n))
+            .map(|n| n as u32)
+            .ok_or_else(|| {
+                StepError::invalid_params(format!("'{key}' must be a whole number from 1 to 1000"))
+            }),
+    }
 }
 
 impl DesktopStep {
@@ -408,6 +505,22 @@ impl DesktopStep {
                 other => return other,
             }
         }
+    }
+
+    /// A mouse step's target (`key`), with an image or text found on the
+    /// screen turned into its place.
+    async fn mouse_target(
+        &self,
+        params: &Value,
+        key: &str,
+        input: &ActionInput,
+        deadline: Instant,
+    ) -> Result<Target, StepError> {
+        let target = Target::from_params(params, key, Allow::Mouse)?;
+        if target.is_visual() {
+            return self.located(&target, input, deadline).await;
+        }
+        Ok(target)
     }
 
     /// The target with `point` set where its image or text is now, waiting
@@ -1042,6 +1155,96 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             secret_params: &[],
             input: false,
         },
+        Def {
+            step_type: SCROLL,
+            kind: Kind::Scroll,
+            label: "スクロール",
+            description: "Scrolls without the mouse. Without `direction`, brings the element `target` into view (e.g. a row or field below the visible part). With `direction` (up, down, left, right, or top / bottom to go to the end), scrolls the list, table or pane `target` (or the nearest scrollable area around it) by `amount` (default 1) `unit`s (page, the default, or line). Output: { verticalPercent, horizontalPercent, atEnd } (percent 0–100, null when it cannot scroll that way; atEnd is true when it cannot go further in `direction`), so a control.while loop can read a page and scroll until atEnd. For apps that ignore it, use desktop.mouseScroll.",
+            params: json!({
+                "target": target,
+                "direction": { "enum": ["up", "down", "left", "right", "top", "bottom"] },
+                "amount": { "type": "integer", "minimum": 1, "maximum": 1000 },
+                "unit": { "enum": ["page", "line"] }
+            }),
+            required: &["target"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": SCROLL, "name": "一覧を 1 ページ下へ", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "lstOrders" } }, "direction": "down" }, "saveAs": "scrolled" }),
+                json!({ "type": SCROLL, "name": "備考欄が見えるまでスクロール", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "txtNote" } } } }),
+            ],
+            secret_params: &[],
+            input: false,
+        },
+        Def {
+            step_type: MOUSE_SCROLL,
+            kind: Kind::MouseScroll,
+            label: "マウスでスクロール",
+            description: "Brings the window to the front, puts the real mouse over `target` and turns the wheel `amount` notches (default 3) in `direction` (up, down, left, right). Use desktop.scroll first; this is for apps that ignore it and for screens without elements (`target.ocr`, `target.image`, `target.point`).",
+            params: json!({
+                "target": target_schema(Allow::Mouse),
+                "direction": { "enum": ["up", "down", "left", "right"] },
+                "amount": { "type": "integer", "minimum": 1, "maximum": 1000 }
+            }),
+            required: &["target", "direction"],
+            has_output: false,
+            examples: vec![
+                json!({ "type": MOUSE_SCROLL, "params": { "target": { "window": { "title": "Citrix" }, "ocr": { "text": "受注一覧" }, "offset": { "x": 0, "y": 200 } }, "direction": "down", "amount": 5 } }),
+            ],
+            secret_params: &[],
+            input: true,
+        },
+        Def {
+            step_type: DRAG,
+            kind: Kind::Drag,
+            label: "ドラッグ",
+            description: "Brings the window to the front and drags with the real mouse (left button) from `target` to `to`: moving a row, a file onto an app, a slider. `to` is a target like `target` and may be in another window (e.g. from Explorer into the app). Both may find their place on the screen (`ocr`, `image`, `point`).",
+            params: json!({
+                "target": target_schema(Allow::Mouse),
+                "to": target_schema(Allow::Mouse)
+            }),
+            required: &["target", "to"],
+            has_output: false,
+            examples: vec![
+                json!({ "type": DRAG, "name": "明細を 1 行目へ移す", "params": {
+                    "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ orderNo }}" } },
+                    "to": { "window": { "process": "billing.exe" }, "element": { "role": "row", "nth": 0 } }
+                } }),
+            ],
+            secret_params: &[],
+            input: true,
+        },
+        Def {
+            step_type: HOVER,
+            kind: Kind::Hover,
+            label: "マウスを重ねる",
+            description: "Brings the window to the front and moves the real mouse onto `target` without clicking: shows a tooltip or a menu that opens on hover. Read the tooltip afterwards with desktop.getValue on { \"role\": \"tooltip\" } or desktop.readText.",
+            params: json!({ "target": target_schema(Allow::Mouse) }),
+            required: &["target"],
+            has_output: false,
+            examples: vec![
+                json!({ "type": HOVER, "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "icoWarning" } } } }),
+            ],
+            secret_params: &[],
+            input: true,
+        },
+        Def {
+            step_type: SELECT_MENU,
+            kind: Kind::SelectMenu,
+            label: "メニューを選ぶ",
+            description: "Picks a menu item by its names from the top, e.g. path [\"ファイル\", \"名前を付けて保存\"], without the mouse. With only `target.window`, starts at the window's menu bar (or at a menu that is already open, e.g. after desktop.mouseClick with button right). With `target.element`, opens that element's context (right-click) menu first. Each name is matched as shown, without access keys like (F), a trailing ... or the shortcut; the same name first, then the only item containing it. Each menu is waited for as it opens.",
+            params: json!({
+                "target": target,
+                "path": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "description": "上のメニューから順に項目の名前" }
+            }),
+            required: &["target", "path"],
+            has_output: false,
+            examples: vec![
+                json!({ "type": SELECT_MENU, "name": "名前を付けて保存", "params": { "target": { "window": { "process": "notepad.exe" } }, "path": ["ファイル", "名前を付けて保存"] } }),
+                json!({ "type": SELECT_MENU, "name": "行の右クリックメニューで削除", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "role": "row", "name": "{{ orderNo }}" } }, "path": ["削除"] } }),
+            ],
+            secret_params: &[],
+            input: false,
+        },
     ];
 
     defs.into_iter()
@@ -1050,6 +1253,9 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             let has_target = d.params.get("target").is_some();
             if has_target {
                 resources.push(ResourceDef::window("target"));
+            }
+            if d.params.get("to").is_some() {
+                resources.push(ResourceDef::window("to"));
             }
             if d.kind == Kind::Screenshot {
                 resources.push(ResourceDef::file("path"));
@@ -1092,6 +1298,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                     "desktop.launch" => vec!["workingDir".into()],
                     types::SCREENSHOT => vec!["path".into()],
                     types::READ_TEXT => vec!["file".into(), "target.image.path".into()],
+                    types::DRAG => vec!["target.image.path".into(), "to.image.path".into()],
                     _ if has_target => vec!["target.image.path".into()],
                     _ => vec![],
                 },

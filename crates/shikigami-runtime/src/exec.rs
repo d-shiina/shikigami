@@ -16,7 +16,7 @@ use shikigami_core::expr::{self, Expr};
 use shikigami_core::policy::{Policy, TargetDef};
 use shikigami_core::project;
 use shikigami_core::registry::{builtin, control, is_control_type, scenario};
-use shikigami_core::resource::{ResourceDef, resource_keys};
+use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef, resource_keys};
 use shikigami_core::secret::SecretProvider;
 use shikigami_core::validate::LAST_ERROR_VAR;
 use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, ScenarioId, Step, StepId};
@@ -314,9 +314,27 @@ fn preview(value: Value) -> (Value, bool) {
 // ---------------------------------------------------------------------------
 // Exclusive resources shared by every run of one Runtime
 
+/// Tells whether this PC's desktop can take mouse and keyboard input now:
+/// `None` when it can, else why not (the screen is locked, nobody is signed
+/// in, the remote session is disconnected).
+pub type DesktopProbe = Arc<dyn Fn() -> Option<String> + Send + Sync>;
+
 #[derive(Default)]
 pub(crate) struct ResourceLocks {
-    locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    pub(crate) locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Folder of the lock files that make [`DESKTOP_INPUT`] exclusive across
+    /// processes (Studio, the MCP server, the CLI, the agent).
+    pub(crate) pc_lock_dir: Option<PathBuf>,
+    pub(crate) desktop_probe: Option<DesktopProbe>,
+}
+
+/// Held while a step uses a resource.
+pub(crate) enum ResourceGuard {
+    #[allow(dead_code)]
+    Local(OwnedMutexGuard<()>),
+    /// Closing the file releases the lock.
+    #[allow(dead_code)]
+    Pc(std::fs::File),
 }
 
 impl ResourceLocks {
@@ -331,14 +349,69 @@ impl ResourceLocks {
     /// Acquires all `names` in a fixed order so two steps needing the same
     /// set can never deadlock.
     /// `names` must be sorted and deduplicated (see `resource_keys`).
-    async fn acquire(&self, names: &[String]) -> Vec<OwnedMutexGuard<()>> {
-        let mut guards = Vec::with_capacity(names.len());
+    /// [`DESKTOP_INPUT`] is also taken PC-wide, and refused while the
+    /// desktop cannot take input (`DESKTOP_UNAVAILABLE`).
+    async fn acquire(&self, names: &[String]) -> Result<Vec<ResourceGuard>, RunError> {
+        let mut guards = Vec::with_capacity(names.len() + 1);
         for name in names {
-            guards.push(self.lock_for(name).lock_owned().await);
+            if name == DESKTOP_INPUT {
+                self.check_desktop()?;
+            }
+            guards.push(ResourceGuard::Local(self.lock_for(name).lock_owned().await));
+            if name == DESKTOP_INPUT
+                && let Some(dir) = &self.pc_lock_dir
+            {
+                guards.push(ResourceGuard::Pc(pc_lock(dir, name).await?));
+                // The screen may have locked while waiting.
+                self.check_desktop()?;
+            }
         }
-        guards
+        Ok(guards)
+    }
+
+    fn check_desktop(&self) -> Result<(), RunError> {
+        match self.desktop_probe.as_ref().and_then(|probe| probe()) {
+            None => Ok(()),
+            Some(reason) => Err(RunError {
+                details: Some(serde_json::json!({ "reason": reason })),
+                ..RunError::new(
+                    "DESKTOP_UNAVAILABLE",
+                    format!("the desktop cannot take mouse and keyboard input now: {reason}"),
+                )
+            }),
+        }
     }
 }
+
+/// Waits for the PC-wide lock file of `name` (polling, so the caller's
+/// cancellation still applies while it waits).
+async fn pc_lock(dir: &Path, name: &str) -> Result<std::fs::File, RunError> {
+    let storage = |e: std::io::Error| {
+        RunError::new(
+            "STORAGE_ERROR",
+            format!("could not open the lock for {name}: {e}"),
+        )
+    };
+    std::fs::create_dir_all(dir).map_err(storage)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join(format!("{name}.lock")))
+        .map_err(storage)?;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(std::fs::TryLockError::WouldBlock) => {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(std::fs::TryLockError::Error(e)) => return Err(storage(e)),
+        }
+    }
+}
+
+/// How long `finally` may take after a run was cancelled.
+pub(crate) const FINALLY_GRACE: Duration = Duration::from_secs(60);
 
 // ---------------------------------------------------------------------------
 // Interpreter
@@ -985,8 +1058,27 @@ impl Executor {
                     self.set_var(&error_var, value, Some(&step.id));
                     result = self.sub_block(step, "catch").await;
                 }
-                // `finally` runs after success or failure, but not after cancellation.
+                // After cancellation `finally` still runs (to close what
+                // the `try` opened), for at most FINALLY_GRACE, and the run
+                // ends cancelled whatever it does.
                 if matches!(result, Err(Interrupt::Cancelled)) {
+                    if step.block("finally").is_empty() {
+                        return result;
+                    }
+                    self.emitter.log(
+                        LogLevel::Info,
+                        "取り消されたので finally だけ実行します".to_owned(),
+                        Some(step.id.clone()),
+                    );
+                    let cleanup = CancellationToken::new();
+                    let outer = std::mem::replace(&mut self.cancel, cleanup.clone());
+                    let timer = tokio::spawn(async move {
+                        tokio::time::sleep(FINALLY_GRACE).await;
+                        cleanup.cancel();
+                    });
+                    let _ = self.sub_block(step, "finally").await;
+                    timer.abort();
+                    self.cancel = outer;
                     return result;
                 }
                 match self.sub_block(step, "finally").await {
@@ -1524,7 +1616,10 @@ impl Executor {
                 tokio::select! {
                     biased;
                     () = self.cancel.cancelled() => return Err(Interrupt::Cancelled),
-                    g = self.resources.acquire(&resources) => g,
+                    g = self.resources.acquire(&resources) => match g {
+                        Ok(g) => g,
+                        Err(e) => return Err(e.at_step(&step.id, &step.step_type).into()),
+                    },
                 }
             };
             let outcome = tokio::select! {

@@ -543,6 +543,20 @@
             "null"
           ],
           "default": null
+        },
+        "inputs": {
+          "description": "Input variables (`input` and `inOut`), in declared order: what a\n`scenario.call` to it can pass in.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputs": {
+          "description": "Output variables (`output` and `inOut`): what a call can receive.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

@@ -21,7 +21,7 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
 
 /// Runs `params` (with `action: "pick" | "highlight"`) on the `adapter`
 /// (`desktop` / `browser`). `session` is the run whose browser to use.
-/// While picking, Studio gets out of the way: it is minimised, and comes
+/// While picking (desktop or browser), Studio gets out of the way: it is minimised, and comes
 /// back when the user has clicked (or pressed Esc).
 #[tauri::command]
 pub async fn point_at(
@@ -36,7 +36,7 @@ pub async fn point_at(
     };
     let picking = params.get("action").and_then(Value::as_str) == Some("pick");
     let window = app.get_webview_window("main");
-    if picking && adapter == "desktop" {
+    if picking {
         if let Some(w) = &window {
             let _ = w.minimize();
         }
