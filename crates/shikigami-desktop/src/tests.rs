@@ -525,3 +525,67 @@ fn every_role_maps_both_ways() {
     }
     assert_eq!(roles::of_control_type(1), "custom");
 }
+
+#[test]
+fn a_picked_element_gets_the_sturdiest_target() {
+    use crate::target::{Point, picked_target};
+    let at = Point { x: 5, y: 6 };
+    let windows = vec![
+        window("請求システム", "billing.exe"),
+        window("メモ帳", "notepad.exe"),
+    ];
+    let nodes = vec![
+        node(0, "window", "請求システム", ""),
+        node(1, "button", "保存", "btnSave"),
+        node(1, "button", "閉じる", ""),
+        node(1, "button", "閉じる", ""),
+        node(1, "pane", "", "row"),
+        node(1, "pane", "", "row"),
+        node(1, "pane", "", ""),
+    ];
+    let pick = |element| picked_target(&windows, 0, &nodes, element, at);
+
+    let by_id = pick(Some(1));
+    assert_eq!(by_id.how, "id");
+    assert_eq!(
+        by_id.target,
+        json!({ "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } })
+    );
+
+    let second = pick(Some(3));
+    assert_eq!(second.how, "nth");
+    assert_eq!(
+        second.target["element"],
+        json!({ "role": "button", "name": "閉じる", "exact": true, "nth": 1 })
+    );
+
+    assert_eq!(
+        pick(Some(5)).target["element"],
+        json!({ "id": "row", "nth": 1 })
+    );
+
+    let drawn = pick(Some(6));
+    assert_eq!(drawn.how, "point");
+    assert_eq!(drawn.target["point"], json!({ "x": 5, "y": 6 }));
+
+    assert_eq!(pick(None).how, "window");
+
+    // The same app twice: the title tells the windows apart.
+    let two = vec![
+        window("請求 - A社", "billing.exe"),
+        window("請求 - B社", "billing.exe"),
+    ];
+    let picked = picked_target(&two, 1, &nodes, Some(1), at);
+    assert_eq!(
+        picked.target["window"],
+        json!({ "process": "billing.exe", "title": "請求 - B社", "exact": true })
+    );
+    // Every picked target finds the element it was built from.
+    for i in 1..nodes.len() - 1 {
+        let target: crate::target::Target = serde_json::from_value(pick(Some(i)).target).unwrap();
+        assert_eq!(
+            pick_element(target.element.as_ref().unwrap(), &nodes).unwrap(),
+            i
+        );
+    }
+}

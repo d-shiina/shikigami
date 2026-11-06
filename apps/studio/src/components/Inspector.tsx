@@ -1,7 +1,8 @@
 import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
-import type { SecretField } from "../lib/api";
+import { Crosshair, ScanSearch } from "lucide-react";
+import { api, type SecretField } from "../lib/api";
 import { locale, stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { stepSummary } from "../lib/palette";
@@ -200,6 +201,7 @@ function ParamField({
   required,
   socket,
   secretCapable,
+  pointer,
   onChange,
 }: {
   name: string;
@@ -208,6 +210,8 @@ function ParamField({
   required: boolean;
   socket?: string;
   secretCapable: boolean;
+  /** The adapter that can pick this target on screen and highlight it. */
+  pointer?: string;
   onChange: (value: unknown) => void;
 }) {
   const label = `${paramLabel(name)}${required ? " *" : ""}`;
@@ -249,9 +253,10 @@ function ParamField({
     // A target and other small records: one field per item, never JSON by hand.
     return (
       <div className="py-1">
-        <div className="mb-1 flex items-center gap-1.5 pl-1 text-[11px] text-slate-500" title={schema.description ?? name}>
+        <div className="mb-1 flex flex-wrap items-center gap-1.5 pl-1 text-[11px] text-slate-500" title={schema.description ?? name}>
           {socket && <span className="h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
           {label}
+          {pointer && <PointTools adapter={pointer} schema={schema} value={value} onChange={onChange} />}
         </div>
         <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} onChange={onChange} />
       </div>
@@ -288,6 +293,83 @@ const BROWSER_ROLES = ["button", "link", "textbox", "checkbox", "radio", "combob
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** An object param with declared items, holding nothing or a plain object (not an expression). */
+/** The adapters whose targets can be picked on screen from Studio. */
+const POINTERS = new Set(["desktop"]);
+const pointerOf = (type: string) => {
+  const adapter = type.split(".")[0] ?? "";
+  return POINTERS.has(adapter) ? adapter : undefined;
+};
+
+/**
+ * "画面から選ぶ" and "光らせる" beside a target: the adapter builds the
+ * target from what the user clicks, and frames the current one on screen.
+ */
+function PointTools({
+  adapter,
+  schema,
+  value,
+  onChange,
+}: {
+  adapter: string;
+  schema: JsonSchema;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; warn?: boolean } | null>(null);
+  const canPoint = Boolean(schema.properties?.point);
+  const pick = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await api.pointAt(adapter, { action: "pick", message: t.picker.banner });
+      if (result.cancelled) {
+        setNote({ text: t.picker.cancelled });
+      } else if (result.how === "point" && !canPoint) {
+        setNote({ text: t.picker.pointNotAllowed, warn: true });
+      } else {
+        onChange(result.target);
+        setNote(result.how === "point" ? { text: t.picker.byPoint, warn: true } : { text: t.picker.picked(String(result.label ?? "")) });
+      }
+    } catch (e) {
+      setNote({ text: t.picker.failed(e instanceof Error ? e.message : String(e)), warn: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const highlight = async () => {
+    setNote(null);
+    try {
+      const result = await api.pointAt(adapter, { action: "highlight", target: value });
+      setNote(
+        !result.found ? { text: t.picker.notFound, warn: true } : result.visible === false ? { text: t.picker.hidden, warn: true } : { text: t.picker.found },
+      );
+    } catch (e) {
+      setNote({ text: t.picker.failed(e instanceof Error ? e.message : String(e)), warn: true });
+    }
+  };
+  const button = "inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] text-brand-700 hover:bg-brand-50 disabled:opacity-50";
+  return (
+    <>
+      <span className="ml-auto flex items-center gap-0.5">
+        <button type="button" className={button} title={t.picker.pickTitle} disabled={busy} onClick={() => void pick()}>
+          <Crosshair size={13} strokeWidth={1.75} />
+          {t.picker.pick}
+        </button>
+        <button type="button" className={button} title={t.picker.highlightTitle} disabled={busy || !isRecord(value)} onClick={() => void highlight()}>
+          <ScanSearch size={13} strokeWidth={1.75} />
+          {t.picker.highlight}
+        </button>
+      </span>
+      {note && (
+        <span role="status" className={`basis-full pt-0.5 text-[11px] ${note.warn ? "text-shu-600" : "text-slate-600"}`}>
+          {note.text}
+        </span>
+      )}
+    </>
+  );
+}
+
 function isForm(schema: JsonSchema, value: unknown): boolean {
   return schema.type === "object" && Object.keys(schema.properties ?? {}).length > 0 && (value === undefined || value === null || isRecord(value));
 }
@@ -487,6 +569,7 @@ function ParamsEditor({
               required={schema.required?.includes(key) ?? false}
               socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}
               secretCapable={def?.secretParams?.includes(key) ?? false}
+              pointer={key === "target" ? pointerOf(step.type) : undefined}
               // JSON Merge Patch: null removes the key.
               onChange={(value) => update({ params: { [key]: value } })}
             />
