@@ -40,6 +40,8 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 |---|---|---|
 | `browser.open` | `url`, `headless`, `session`（ログイン状態を保存・再利用する名前）, `dialog` | `{ url, title }` |
 | `browser.click` | `target`, `dialog`（クリックで出る JS のダイアログへの答え） | ダイアログの文 / `null` |
+| `browser.download` | `target`（押すもの）, `path`（保存するファイル）か `folder`（サイトの名前のまま） | `{ path, fileName }` |
+| `browser.upload` | `target`（ファイルの入力欄、またはファイル選択を開くボタン）, `path`（ファイル 1 つか配列） | – |
 | `browser.hover` | `target` | – |
 | `browser.scroll` | `target`（見えるところまで）と `to`（`top` / `bottom`）のどちらか、または両方 | – |
 | `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`） | – |
@@ -68,6 +70,12 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 { "type": "browser.getText", "params": { "target": { "role": "heading" } }, "saveAs": "title" },
 { "type": "browser.closeTab" }
 ```
+
+### ダウンロードとアップロード
+
+`browser.download` はリンクやボタンを押して、ダウンロードされたファイルを保存します。パスはシナリオのフォルダーからの相対で、`"path": "input/受注.csv"` とすれば次の `file.readCsv` / `excel.readRows` がそのまま読めます。`path` の代わりに `folder` を書くと、サイトが付けた名前のまま保存します（出力の `fileName`）。`browser.upload` はフォームにファイルを添付します。ファイルの入力欄そのものでも、ファイル選択を開くボタンでも使えます（選択の画面は出ません）。添付するだけなので、続けて送信ボタンを押します。
+
+どちらも `dangerous`（ダウンロードはファイルを書き、アップロードは外に送る）なので、確認パネルの「外への影響」に出ます。
 
 ### JS のダイアログ（alert・confirm・prompt）
 
@@ -112,6 +120,10 @@ iframe の中や、古いフレームセットのページの `<frame>` の中�
 | `TAB_NOT_FOUND` | `browser.switchTab` に合うタブがない。`details.tabs` にタブの一覧 | する |
 | `LAST_TAB` | タブが 1 つだけのときの `browser.closeTab`（`browser.close` を使う） | しない |
 | `DIALOG_NOT_SHOWN` | `dialog` を付けたのに JS のダイアログが出なかった | しない |
+| `DOWNLOAD_NOT_STARTED` | `browser.download` で押したがダウンロードが始まらない | しない |
+| `DOWNLOAD_FAILED` | ダウンロードが途中で切れた | する |
+| `FILE_NOT_FOUND` | `browser.upload` のファイルがない | しない |
+| `FILE_CHOOSER_NOT_SHOWN` | `browser.upload` の対象がファイルの入力欄でも、ファイル選択を開くものでもない | しない |
 | `BROWSER_NOT_OPEN` | 同じ `context` の `browser.open` がない | しない |
 | `NAVIGATION_FAILED` | ページを開けない | する |
 | `BROWSER_LAUNCH_FAILED` | ブラウザを起動できない | しない |

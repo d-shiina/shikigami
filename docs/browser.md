@@ -40,6 +40,8 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 |---|---|---|
 | `browser.open` | `url`, `headless`, `session` (name under which the login state is saved and reused), `dialog` | `{ url, title }` |
 | `browser.click` | `target`, `dialog` (answer to the JS dialog the click shows) | the dialog's message / `null` |
+| `browser.download` | `target` (what to click), `path` (the file) or `folder` (keep the site's name) | `{ path, fileName }` |
+| `browser.upload` | `target` (the file input, or the button that opens the file picker), `path` (a file or a list) | – |
 | `browser.hover` | `target` | – |
 | `browser.scroll` | `target` (bring into view) and/or `to` (`top` / `bottom`) | – |
 | `browser.fill` | `target`, `value` (text, or a registered secret `{ "secret": "name", "field": "password" }`) | – |
@@ -68,6 +70,12 @@ A link with `target="_blank"` or a button that opens a window adds a tab to the 
 { "type": "browser.getText", "params": { "target": { "role": "heading" } }, "saveAs": "title" },
 { "type": "browser.closeTab" }
 ```
+
+### Downloads and uploads
+
+`browser.download` clicks the link or button and saves the file it downloads. Paths are relative to the scenario folder, so `"path": "input/orders.csv"` puts it where `file.readCsv` / `excel.readRows` read it next. With `folder` instead of `path`, the file keeps the name the site gives it (`fileName` in the output). `browser.upload` attaches files to a form; it works on the file input itself and on a button that opens the file picker (the picker never shows). It only fills the form: click the send button next.
+
+Both are `dangerous` (a download writes a file, an upload sends one out), so they show under "effects outside" in the review panel.
 
 ### JS dialogs (alert / confirm / prompt)
 
@@ -112,6 +120,10 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 | `TAB_NOT_FOUND` | No tab matches `browser.switchTab`. `details.tabs` lists them | yes |
 | `LAST_TAB` | `browser.closeTab` on the only tab (use `browser.close`) | no |
 | `DIALOG_NOT_SHOWN` | The step has `dialog` but no JS dialog showed | no |
+| `DOWNLOAD_NOT_STARTED` | `browser.download` clicked but nothing downloaded | no |
+| `DOWNLOAD_FAILED` | The download broke off | yes |
+| `FILE_NOT_FOUND` | A file for `browser.upload` is missing | no |
+| `FILE_CHOOSER_NOT_SHOWN` | The `browser.upload` target is neither a file input nor opens the file picker | no |
 | `BROWSER_NOT_OPEN` | No `browser.open` for that `context` | no |
 | `NAVIGATION_FAILED` | The page cannot be opened | yes |
 | `BROWSER_LAUNCH_FAILED` | The browser cannot be started | no |

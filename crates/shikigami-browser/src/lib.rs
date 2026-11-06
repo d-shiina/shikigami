@@ -48,6 +48,8 @@ pub mod types {
     pub const GET_ATTRIBUTE: &str = "browser.getAttribute";
     pub const SWITCH_TAB: &str = "browser.switchTab";
     pub const CLOSE_TAB: &str = "browser.closeTab";
+    pub const DOWNLOAD: &str = "browser.download";
+    pub const UPLOAD: &str = "browser.upload";
     pub const FILL: &str = "browser.fill";
     pub const SELECT: &str = "browser.select";
     pub const PRESS: &str = "browser.press";
@@ -484,6 +486,43 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             ..Def::default()
         },
         Def {
+            step_type: DOWNLOAD,
+            method: "download",
+            label: "ダウンロード",
+            description: "Clicks `target` (the link or button that downloads a file, e.g. CSV出力) and saves the file: to `path`, or into `folder` under the name the site gives it (one of the two). Paths are relative to the scenario folder, e.g. \"input/受注.csv\" to read it next with file.readCsv or excel.readRows; an existing file is replaced. Output: { path, fileName } (fileName: the site's name). Fails with DOWNLOAD_NOT_STARTED when the click starts no download.",
+            params: json!({
+                "target": target,
+                "path": { "type": "string", "minLength": 1, "description": "保存するファイル（シナリオのフォルダーからの相対パス可）" },
+                "folder": { "type": "string", "minLength": 1, "description": "保存するフォルダー。名前はサイトが付けたもの" }
+            }),
+            required: &["target"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": DOWNLOAD, "name": "受注の CSV を落とす", "params": { "target": { "role": "button", "name": "CSV出力" }, "path": "input/受注.csv" }, "saveAs": "csv" }),
+                json!({ "type": DOWNLOAD, "name": "請求書を落とす（サイトの名前のまま）", "params": { "target": { "role": "link", "name": "請求書" }, "folder": "output" } }),
+            ],
+            ..Def::default()
+        },
+        Def {
+            step_type: UPLOAD,
+            method: "upload",
+            label: "ファイルを添付",
+            description: "Attaches the file `path` (or a list of files) to the file input `target`, or to the button that opens the file picker (the picker is answered without a window). Paths are relative to the scenario folder. It only fills the form: click the send button next. Fails with FILE_NOT_FOUND when a file is missing.",
+            params: json!({
+                "target": target,
+                "path": { "oneOf": [
+                    { "type": "string", "minLength": 1 },
+                    { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+                ], "description": "添付するファイル（複数なら配列）" }
+            }),
+            required: &["target", "path"],
+            has_output: false,
+            examples: vec![
+                json!({ "type": UPLOAD, "name": "請求書を添付", "params": { "target": { "label": "添付ファイル" }, "path": "output/請求書.pdf" } }),
+            ],
+            ..Def::default()
+        },
+        Def {
             step_type: HOVER,
             method: "hover",
             label: "マウスを乗せる",
@@ -720,8 +759,13 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
     defs.into_iter()
         .map(|d| {
             let mut resources = vec![ResourceDef::browser_context("context")];
-            if d.step_type == SCREENSHOT {
-                resources.push(ResourceDef::file("path"));
+            match d.step_type {
+                SCREENSHOT | UPLOAD => resources.push(ResourceDef::file("path")),
+                DOWNLOAD => {
+                    resources.push(ResourceDef::file("path"));
+                    resources.push(ResourceDef::file("folder"));
+                }
+                _ => {}
             }
             let oauth = d.step_type == OAUTH_SIGN_IN;
             let targets = if d.step_type == OPEN {
@@ -746,7 +790,8 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 has_output: d.has_output,
                 expression_params: vec![],
                 binds_variables: vec![],
-                risk: if oauth {
+                // Downloads write files; uploads send them out.
+                risk: if oauth || d.step_type == DOWNLOAD || d.step_type == UPLOAD {
                     RiskLevel::Dangerous
                 } else {
                     RiskLevel::Interactive

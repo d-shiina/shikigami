@@ -39,6 +39,15 @@ describe("sentence", () => {
     );
   });
 
+  it("reads downloads and uploads with their files", () => {
+    expect(plain(sentence({ type: "browser.download", params: { target: { role: "button", name: "CSV出力" }, path: "input/受注.csv" } }, undefined))).toBe(
+      "「CSV出力」ボタンを押してダウンロードし、input/受注.csv に保存する",
+    );
+    expect(plain(sentence({ type: "browser.upload", params: { target: { label: "添付" }, path: "output/a.pdf" } }, undefined))).toBe(
+      "「添付」欄に output/a.pdf を添付する",
+    );
+  });
+
   it("describes desktop targets with their window", () => {
     const win = { title: "Citrix" };
     expect(targetText({ window: win })).toBe("「Citrix」ウィンドウ");

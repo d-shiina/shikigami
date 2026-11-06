@@ -2,6 +2,8 @@
 export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "browser.open": { summary: "Open a web page; the sign-in is saved for next time", words: "url site page visit navigate chrome edge" },
   "browser.click": { summary: "Click a button or link on the page", words: "press button link" },
+  "browser.download": { summary: "Click to download a file and save it", words: "download save csv export file" },
+  "browser.upload": { summary: "Attach a file to a form on the page", words: "upload attach file browse send" },
   "browser.hover": { summary: "Move the mouse over an element (menus that open on hover…)", words: "hover mouseover menu tooltip" },
   "browser.scroll": { summary: "Scroll the page or a list (to the end, or until an element shows)", words: "scroll down up load more infinite" },
   "browser.getAttribute": { summary: "Read an attribute of an element (link address, image address…)", words: "attribute href link url src get" },

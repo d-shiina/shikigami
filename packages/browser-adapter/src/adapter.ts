@@ -5,6 +5,9 @@
 // concurrent runs) using different context names never share cookies or
 // tabs. Waiting relies on Playwright's auto-waiting, never on fixed sleeps.
 
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+
 import { chromium } from "playwright-core";
 import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Dialog, LaunchOptions, Locator, Page } from "playwright-core";
 
@@ -130,6 +133,10 @@ export class Adapter {
           return await this.click(params);
         case "hover":
           return await this.hover(params);
+        case "download":
+          return await this.download(params);
+        case "upload":
+          return await this.upload(params);
         case "scroll":
           return await this.scroll(params);
         case "getAttribute":
@@ -371,6 +378,83 @@ export class Adapter {
     const session = this.session(params);
     const { locator } = this.target(params);
     return await this.withDialog(session, params, () => locator.click({ timeout: this.limit(params) }));
+  }
+
+  /**
+   * Clicks `target` and saves the file the page downloads: to `path`, or
+   * into `folder` under the name the site gives it.
+   */
+  private async download(params: Params): Promise<{ path: string; fileName: string }> {
+    const path = typeof params.path === "string" && params.path ? params.path : undefined;
+    const folder = typeof params.folder === "string" && params.folder ? params.folder : undefined;
+    if (!path === !folder) throw new AdapterError("INVALID_PARAMS", "give either `path` (the file to save) or `folder` (keep the site's file name)");
+    const { page, locator } = this.target(params);
+    const timeout = this.limit(params);
+    const started = page.waitForEvent("download", { timeout });
+    started.catch(() => {});
+    await locator.click({ timeout });
+    let download;
+    try {
+      download = await started;
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new AdapterError("DOWNLOAD_NOT_STARTED", "the click started no download", {
+          details: {
+            target: params.target,
+            hint: "Check that `target` is the link or button that downloads the file. If it opens the file in a new tab (a PDF viewer), use browser.switchTab and browser.getAttribute href with http.request instead. A page that asks first (a JS confirm) needs browser.click with dialog before this.",
+          },
+        });
+      }
+      throw error;
+    }
+    const fileName = download.suggestedFilename();
+    const target = path ?? join(folder!, basename(fileName) || "download");
+    mkdirSync(dirname(target), { recursive: true });
+    const failed = await download.failure();
+    if (failed) {
+      throw new AdapterError("DOWNLOAD_FAILED", `the download failed: ${failed}`, { retryable: true, details: { fileName } });
+    }
+    await download.saveAs(target);
+    return { path: target, fileName };
+  }
+
+  /**
+   * Gives the file input `target` the files `path` (one or a list). A button
+   * that opens the file picker works too: the picker is answered without
+   * showing it.
+   */
+  private async upload(params: Params): Promise<null> {
+    const files = (Array.isArray(params.path) ? params.path : [params.path]).filter((f): f is string => typeof f === "string" && f !== "");
+    if (files.length === 0) throw new AdapterError("INVALID_PARAMS", "path is required: the file to upload, or a list of files");
+    for (const file of files) {
+      if (!existsSync(file) || !statSync(file).isFile()) {
+        throw new AdapterError("FILE_NOT_FOUND", `no file at ${file}`, {
+          details: { path: file, hint: "Write the path relative to the scenario folder (e.g. output/請求書.pdf) and check that an earlier step made the file." },
+        });
+      }
+    }
+    const { page, locator } = this.target(params);
+    const timeout = this.limit(params);
+    await locator.first().waitFor({ state: "attached", timeout });
+    const isFileInput = await locator.evaluate((el) => el instanceof HTMLInputElement && el.type === "file", undefined, { timeout });
+    if (isFileInput) {
+      await locator.setInputFiles(files, { timeout });
+      return null;
+    }
+    const chooser = page.waitForEvent("filechooser", { timeout });
+    chooser.catch(() => {});
+    await locator.click({ timeout });
+    try {
+      await (await chooser).setFiles(files, { timeout });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new AdapterError("FILE_CHOOSER_NOT_SHOWN", "clicking the target opened no file picker", {
+          details: { target: params.target, hint: "Target the file input itself (inspect_page shows it as a button such as \"ファイルを選択\"), or the button that opens the picker." },
+        });
+      }
+      throw error;
+    }
+    return null;
   }
 
   private async hover(params: Params): Promise<null> {
