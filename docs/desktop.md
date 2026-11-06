@@ -52,6 +52,7 @@ When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one n
 | `desktop.press` | `target`, `key` (`Enter` `Control+S` `Alt+F4`…, written as for the browser) | – | **used** |
 | `desktop.readText` | `target` (window, `element` or `region`) or `file` (an image file) | `{ text, lines }` (OCR) | not used |
 | `desktop.screenshot` | `target` (window, `element` or `region`), `path` | the saved path | not used |
+| `desktop.getTable` | `target` (a grid, table or list; the window for its first one), `maxRows` | list of objects keyed by the column headers (as `browser.getTable`) | not used |
 | `desktop.selectMenu` | `target` (window: its menu bar or the open menu; element: its right-click menu), `path` (names from the top, e.g. `["File", "Save As"]`) | – | not used |
 | `desktop.scroll` | `target`; without `direction` the element is brought into view, with `direction` (`up` `down` `left` `right` `top` `bottom`), `amount`, `unit` (`page` / `line`) its list or pane scrolls | `{ verticalPercent, horizontalPercent, atEnd }` | not used |
 | `desktop.mouseScroll` | `target`, `direction` (`up` `down` `left` `right`), `amount` (wheel notches, default 3) | – | **used** |
@@ -61,6 +62,7 @@ When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one n
 - **No waits to write**: every node keeps looking until the window or element appears (and is enabled). The limit is the node's `timeoutMs` (default 30 s). Use `desktop.waitFor` with `state: "hidden"` only to wait for something to go away
 - **Mouse-free first**: `desktop.click` presses buttons, toggles checkboxes, selects items and expands trees without moving the mouse. It works on windows in the background and alongside other work. Only for apps that do not respond, use `desktop.mouseClick` / `desktop.type`
 - **Menus by their names**: `desktop.selectMenu` matches each name as shown, without access keys (`(F)`, `&`), a trailing `...` or the shortcut, and waits for each submenu to open. When an element's right-click menu does not open without the mouse (`NOT_SUPPORTED`), open it with `desktop.mouseClick` (`button: "right"`) and give `desktop.selectMenu` only the window
+- **Tables at once**: `desktop.getTable` reads grids that support it (WPF, many WinForms and Win32 grids) whole, including rows scrolled out of view; other lists give the rows the app has created. Empty cells are `""` (WinForms' `(null)` too), rows with no text are left out, and over 10000 rows it stops with `TABLE_TOO_LARGE` unless `maxRows` is set
 - **Reading a long list page by page**: `desktop.scroll` with `direction: "down"` returns `atEnd`, so a `control.while` loop can read, scroll and stop at the end
 - **One mouse and keyboard**: nodes marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Nodes on the same app (same `process`) also run one at a time. Scenarios never declare locks
 
@@ -140,7 +142,7 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 - Classic Win32 buttons are clicked by posting the click, so a dialog opened by the button does not block
 - Apps running as administrator cannot be driven from Shikigami running with normal rights (a Windows restriction). This is reported as `ELEVATION_REQUIRED`
 - Requests whose node timed out or was stopped while waiting in the queue are dropped without running (no double clicks or typing after a stop or retry)
-- Before using the mouse or keyboard the window is brought to the front. When Windows refuses (e.g. the screen is locked) the node stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`
+- Before using the mouse or keyboard the window is brought to the front. While the screen is locked, the sign-in screen or an elevation prompt has the input, or a remote session is disconnected or minimized, such nodes stop with `DESKTOP_UNAVAILABLE` before they start (nodes without the mouse and keyboard still run). When Windows refuses for another reason the node stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`. The mouse and keyboard go to one node at a time across Studio, the CLI and the MCP server
 - The thread is Per-Monitor DPI aware so coordinates stay right on high-DPI screens
 
 ## Main errors
@@ -159,13 +161,14 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 | `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | Found several times (with the places). Choose with `nth` or `region` |
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | No such image file / an image of one flat colour (it would match anywhere) |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` but PaddleOCR is not installed / Windows OCR lacks that language |
+| `TABLE_TOO_LARGE` | More than 10000 rows. Set `maxRows`, or narrow the list in the app first |
 | `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | No shown menu item has that name (with the items shown) / several do. Write the names from the first menu down |
 | `PLATFORM_UNSUPPORTED` | Run on something other than Windows |
 
 ## Verified and limits
 
-- **Verified**: node definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI starts Notepad, types and reads text through UI Automation, scrolls its text to the end and back, and opens Help > About from the menu bar. Image search, and PaddleOCR reading a picture of a Japanese business screen (12 px text), are tested on Linux and Windows CI. Windows CI also pictures Notepad, reads it with OCR and finds a cut-out part again
+- **Verified**: node definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI opens a WinForms window (drawn by PowerShell) and, through UI Automation, picks an item from its menu bar, writes and reads text, scrolls it to the end, and reads its DataGridView and list view with `desktop.getTable`. (The Notepad test is skipped where Notepad has no classic Edit control, as on the CI runners.) Image search, and PaddleOCR reading a picture of a Japanese business screen (12 px text), are tested on Linux and Windows CI. Windows CI also pictures Notepad, reads it with OCR and finds a cut-out part again
 - **Not yet verified**: real business apps, SAP GUI, Java apps and Citrix; mouse and keyboard actions (CI does not test screen input); high DPI and multiple monitors
 - Image search takes 0.2–0.5 s per look on a Full HD window, PaddleOCR about 0.3 s on a small screen (4 CPU cores). OCR of a whole large window can take over a second: `region` makes it faster
 - Mouse and keyboard exclusion **across processes** (Studio, CLI, MCP server) is not implemented (within one process only)
-- Reading a whole grid at once is not implemented yet. Rotated or scaled images are not found
+- Rotated or scaled images are not found

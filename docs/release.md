@@ -2,7 +2,7 @@
 
 English | [日本語](ja/release.md)
 
-The installed Studio checks for a new version at startup and updates with "Update and restart" from the version menu at the bottom right. It uses the official Tauri updater.
+The installed Studio updates itself the way VS Code does. It checks for a new version at startup (or with "Check again" in Settings), downloads it in the background, and installs it silently with no installer window: either when you press "Restart to update" in Settings (Studio opens again as the new version a few seconds later) or when you close Studio (the next launch is the new version). The version at the bottom right turns blue while an update waits. It uses the official Tauri updater (`installMode: quiet`).
 
 - Distribution: this repository's GitHub Releases (`latest.json` and the installers)
 - Checked at: `https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`

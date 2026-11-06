@@ -20,6 +20,7 @@ pub fn builtin() -> Vec<Arc<dyn Adapter>> {
         Arc::new(shikigami_pdf::PdfAdapter::new()),
         Arc::new(shikigami_word::WordAdapter::new()),
         Arc::new(shikigami_mail::MailAdapter::new()),
+        Arc::new(shikigami_db::DbAdapter::new()),
     ];
     adapters.extend(shikigami_system::adapters());
     adapters
@@ -58,7 +59,9 @@ pub fn all() -> Vec<Arc<dyn Adapter>> {
     load().adapters
 }
 
-/// A Runtime with the built-in steps plus every adapter's steps.
+/// A Runtime with the built-in steps plus every adapter's steps. The mouse
+/// and keyboard (`desktop.input`) are shared with every other Shikigami
+/// process of this Windows user (Studio, the MCP server, the CLI).
 pub fn runtime(adapters: &[Arc<dyn Adapter>]) -> Runtime {
     adapters
         .iter()
@@ -66,4 +69,5 @@ pub fn runtime(adapters: &[Arc<dyn Adapter>]) -> Runtime {
             builder.adapter(adapter.as_ref())
         })
         .build()
+        .with_pc_locks(shikigami_runtime::default_pc_lock_dir())
 }

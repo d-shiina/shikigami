@@ -3186,6 +3186,211 @@
       "deprecated": null
     },
     {
+      "type": "db.execute",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string",
+            "minLength": 1
+          },
+          "user": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "password": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "required": [
+          "connection",
+          "sql"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "user",
+        "password"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "db.query",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string",
+            "minLength": 1
+          },
+          "user": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "password": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "maxRows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "connection",
+          "sql"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "user",
+        "password"
+      ],
+      "deprecated": null
+    },
+    {
       "type": "desktop.click",
       "params": {
         "type": "object",
@@ -4035,6 +4240,173 @@
       },
       "blocks": [],
       "hasOutput": false,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "desktop.getTable",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "maxRows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
       "risk": "interactive",
       "expressionParams": [],
       "bindsVariables": [],

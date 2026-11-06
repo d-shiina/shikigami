@@ -146,6 +146,7 @@ pub fn run() {
             picker::point_at,
             updater::app_info,
             updater::check_update,
+            updater::download_update,
             updater::install_update,
             commands::list_secrets,
             commands::set_secret,
@@ -162,7 +163,14 @@ pub fn run() {
             agent::agent_login_cancel,
             agent::agent_open_url,
         ])
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!())
+        .map(|app| {
+            app.run(|app, event| {
+                if let tauri::RunEvent::Exit = event {
+                    updater::install_on_exit(app);
+                }
+            });
+        });
     if let Err(e) = result {
         tracing::error!(error = %e, "Studio exited with an error");
         std::process::exit(1);
