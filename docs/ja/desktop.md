@@ -137,7 +137,7 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 Java のアプリ（Swing・AWT と、それで作られた多くの社内システム）は、UI Automation には枠しか見えません。Java Access Bridge が有効なら、同じ `desktop.*` のノードがその仕組みを通して動きます。
 
 - **Java Access Bridge を有効にする**（PC・ユーザーごとに一度）：アプリが使う Java の `bin` フォルダーで `jabswitch -enable` を実行し、アプリを起動し直します。Shikigami は `WindowsAccessBridge-64.dll` を Windows、アプリの `java.exe` のフォルダー、`JAVA_HOME\bin` の順に探します
-- `inspect_ui` は Java の部品をほかのアプリと同じ役割（`textbox`・`button`・`checkbox`・`combobox`・`table`・`menuitem` など）で一覧にします。Java の部品には id がないので、`role` ＋ `name`（同じ名前が並ぶときは `index`）で指定します
+- `inspect_ui` は Java の部品をほかのアプリと同じ役割（`textbox`・`button`・`checkbox`・`combobox`・`table`・`menuitem` など）で一覧にします。Java の部品には id がないので、`role` ＋ `name`（同じ名前が並ぶときは `nth`）で指定します
 - 各ノードの動き：`desktop.click` は部品の動作（押す・切り替え・選ぶ）を実行。`desktop.setValue` / `desktop.getValue` は入力欄の書き込みと読み取り（パスワード欄は書き込みだけ）。`desktop.select` は一覧やコンボボックスの項目を選ぶ。`desktop.selectMenu` はメニューバーをたどる。`desktop.getTable` は `JTable` を列見出しつきで全部読む。`desktop.type`・`desktop.press`・マウスのノードは、その部品にフォーカスを移すか、画面上の位置を使う
 - 無効なときに部品を指定した対象は `JAVA_BRIDGE_OFF`（有効にする手順つき）で止まります。ウィンドウそのもの・OCR・画像は UI Automation で動きます
 - CI では小さな Swing の画面で確認しています。実際の業務用 Java アプリ（Oracle Forms、Java Web Start など）ではまだ確認していません
