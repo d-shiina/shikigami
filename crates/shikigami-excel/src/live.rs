@@ -210,6 +210,27 @@ fn grid(sheet: &Object, range: Option<Range>) -> Result<Vec<Vec<Value>>, StepErr
         .collect())
 }
 
+/// `grid` for finding the last row in use: a formula whose result is ""
+/// still holds its cell (as on the file), so it shows as its formula.
+fn occupied_grid(sheet: &Object, range: Option<Range>) -> Result<Vec<Vec<Value>>, StepError> {
+    let mut values = grid(sheet, range)?;
+    let Some(range) = range else {
+        return Ok(values);
+    };
+    let formulas = cells(sheet, range)?.get("Formula")?.to_grid();
+    for (row, formulas) in values.iter_mut().zip(&formulas) {
+        for (value, formula) in row.iter_mut().zip(formulas) {
+            if value.is_null()
+                && let Value::String(formula) = formula.to_json()
+                && formula.starts_with('=')
+            {
+                *value = Value::String(formula);
+            }
+        }
+    }
+    Ok(values)
+}
+
 /// Puts `value` in a cell with the same rules as the file steps: text stays
 /// text, `{ "date": … }` and `{ "formula": … }`, null empties the cell.
 fn write(sheet: &Object, cell: Cell, value: &Value, date1904: bool) -> Result<(), StepError> {
@@ -393,7 +414,7 @@ fn step(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
             };
             let sheet = sheet(book, sheet_name)?;
             let plan = table::append(
-                &grid(&sheet, used(&sheet)?)?,
+                &occupied_grid(&sheet, used(&sheet)?)?,
                 crate::header_row(params)?,
                 rows,
             )?;

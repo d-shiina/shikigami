@@ -691,7 +691,12 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                     RiskLevel::Safe
                 },
                 examples: d.examples,
-                resources: vec![ResourceDef::file("path")],
+                // Files the step writes (exportPdf's `to`) are locked too,
+                // so two steps never write the same file at once.
+                resources: std::iter::once("path")
+                    .chain(d.more_paths.iter().copied())
+                    .map(ResourceDef::file)
+                    .collect(),
                 secret_params: vec![],
                 default_timeout_ms: d.needs_excel.then_some(300_000),
                 deprecated: None,

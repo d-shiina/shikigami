@@ -331,6 +331,14 @@ fn excel_only_steps_need_excel_and_write_their_pdf_by_path() {
         assert_eq!(def(t).default_timeout_ms, Some(300_000), "{t}");
     }
     assert_eq!(def(types::EXPORT_PDF).path_params, ["path", "to"]);
+    // Two exports to the same PDF never run at once.
+    assert_eq!(
+        def(types::EXPORT_PDF).resources,
+        [
+            shikigami_core::resource::ResourceDef::file("path"),
+            shikigami_core::resource::ResourceDef::file("to")
+        ]
+    );
     assert_eq!(def(types::RUN_MACRO).risk, RiskLevel::Dangerous);
 }
 
