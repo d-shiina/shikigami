@@ -24,12 +24,29 @@ pub struct RunRecorder {
     events: BufWriter<File>,
     /// `policy.json` whose `records` settings apply when the run ends.
     retention: Option<PathBuf>,
+    /// Locked while this process records the run: a record without
+    /// `report.json` whose lock nobody holds was left behind by a process
+    /// that ended mid-run (see [`close_interrupted`]).
+    _alive: Option<File>,
 }
 
+/// The lock file that tells a run in progress from one left behind.
+const ALIVE_FILE: &str = "running.lock";
+
 impl RunRecorder {
+    /// Starts the record of a run. Records that crashed processes left
+    /// behind are closed first ([`close_interrupted`]).
     pub fn create(workspace: &Path, run_id: &RunId) -> std::io::Result<Self> {
+        close_interrupted(workspace);
         let dir = run_dir(workspace, run_id)?;
         fs::create_dir_all(&dir)?;
+        let alive = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join(ALIVE_FILE))
+            .ok()
+            .filter(|f| f.try_lock().is_ok());
         let file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -40,6 +57,7 @@ impl RunRecorder {
             dir,
             events: BufWriter::new(file),
             retention: None,
+            _alive: alive,
         })
     }
 
@@ -60,6 +78,8 @@ impl RunRecorder {
         self.events.flush()?;
         let bytes = serde_json::to_vec_pretty(report)?;
         fs::write(self.dir.join("report.json"), bytes)?;
+        drop(self._alive.take());
+        let _ = fs::remove_file(self.dir.join(ALIVE_FILE));
         if let Some(policy) = &self.retention {
             prune_by_policy(&self.workspace, policy, std::slice::from_ref(&self.run_id));
         }
@@ -114,6 +134,128 @@ pub fn list_runs(workspace: &Path) -> std::io::Result<Vec<RunId>> {
     ids.sort();
     ids.reverse();
     Ok(ids)
+}
+
+/// Error code of runs whose process ended before they did (power loss, a
+/// crash, the process killed).
+pub const RUN_INTERRUPTED: &str = "RUN_INTERRUPTED";
+
+/// Closes run records left behind by processes that ended mid-run: they get
+/// a `runFinished` event and a report with status `failed` and error
+/// `RUN_INTERRUPTED`, so they no longer look like they are still going.
+/// Runs do not resume; start them again. Returns the runs closed.
+pub fn close_interrupted(workspace: &Path) -> Vec<RunId> {
+    let mut closed = Vec::new();
+    for id in list_runs(workspace).unwrap_or_default() {
+        let Ok(dir) = run_dir(workspace, &id) else {
+            continue;
+        };
+        if dir.join("report.json").exists() {
+            continue;
+        }
+        // Records from before the lock file existed are left alone.
+        let Ok(alive) = OpenOptions::new().write(true).open(dir.join(ALIVE_FILE)) else {
+            continue;
+        };
+        if alive.try_lock().is_err() {
+            continue; // still running in another process
+        }
+        match close_one(&dir, &id) {
+            Ok(()) => closed.push(id),
+            Err(e) => {
+                tracing::warn!(run = %id.as_str(), error = %e, "could not close an interrupted run");
+            }
+        }
+        drop(alive);
+        let _ = fs::remove_file(dir.join(ALIVE_FILE));
+    }
+    closed
+}
+
+fn close_one(dir: &Path, id: &RunId) -> std::io::Result<()> {
+    use crate::event::{RunError, RunEvent, RunStatus};
+    let events = {
+        let file = File::open(dir.join("events.jsonl"))?;
+        let mut out = Vec::new();
+        for line in BufReader::new(file).lines() {
+            // A line cut off by the crash is skipped.
+            if let Ok(event) = serde_json::from_str::<RunEventEnvelope>(&line?) {
+                out.push(event);
+            }
+        }
+        out
+    };
+    let Some((started_at, scenario_id, scenario_name, revision, origin)) =
+        events.iter().find_map(|e| match &e.event {
+            RunEvent::RunStarted {
+                scenario_id,
+                scenario_name,
+                revision,
+                origin,
+            } => Some((
+                e.at,
+                scenario_id.clone(),
+                scenario_name.clone(),
+                *revision,
+                origin.clone(),
+            )),
+            _ => None,
+        })
+    else {
+        // Nothing worth a report: the run never started.
+        return fs::remove_dir_all(dir);
+    };
+    let last = events.last();
+    let finished_at = last.map_or(started_at, |e| e.at);
+    let error = RunError {
+        step_id: events.iter().rev().find_map(|e| match &e.event {
+            RunEvent::StepStarted { step_id, .. } => Some(step_id.clone()),
+            _ => None,
+        }),
+        ..RunError::new(
+            RUN_INTERRUPTED,
+            "the process running this ended before the run did (crash, shutdown or killed); start the run again",
+        )
+    };
+    let finished = RunEventEnvelope {
+        run_id: id.clone(),
+        seq: last.map_or(0, |e| e.seq + 1),
+        at: finished_at,
+        call_path: Vec::new(),
+        event: RunEvent::RunFinished {
+            status: RunStatus::Failed,
+            error: Some(error.clone()),
+            duration_ms: u64::try_from((finished_at - started_at).whole_milliseconds())
+                .unwrap_or(0),
+        },
+    };
+    // Written again in full rather than appended: the crash may have cut
+    // the last line off (no newline, half an event), which would make the
+    // file unreadable.
+    let mut lines = Vec::new();
+    for event in events.iter().chain(std::iter::once(&finished)) {
+        serde_json::to_writer(&mut lines, event)?;
+        lines.push(b'\n');
+    }
+    let path = dir.join("events.jsonl");
+    let tmp = dir.join("events.jsonl.tmp");
+    fs::write(&tmp, &lines)?;
+    fs::rename(&tmp, &path)?;
+    let report = RunReport {
+        run_id: id.clone(),
+        scenario_id,
+        scenario_name,
+        revision,
+        version: None,
+        status: RunStatus::Failed,
+        started_at,
+        finished_at,
+        error: Some(error),
+        outputs: serde_json::Map::new(),
+        subscenarios: Vec::new(),
+        origin,
+    };
+    fs::write(dir.join("report.json"), serde_json::to_vec_pretty(&report)?)
 }
 
 /// When a run started, from its time-ordered ID (`run_<uuidv7>`), in
@@ -182,6 +324,83 @@ pub fn prune_by_policy(workspace: &Path, policy_path: &Path, keep: &[RunId]) -> 
     match shikigami_core::Policy::load(policy_path) {
         Ok(policy) => prune(workspace, &policy.records, keep),
         Err(_) => 0,
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod interrupted_tests {
+    use super::*;
+    use crate::event::{RunEvent, RunStatus};
+    use shikigami_core::ScenarioId;
+
+    fn started(run_id: &RunId) -> RunEventEnvelope {
+        RunEventEnvelope {
+            run_id: run_id.clone(),
+            seq: 0,
+            at: time::OffsetDateTime::now_utc(),
+            call_path: Vec::new(),
+            event: RunEvent::RunStarted {
+                scenario_id: ScenarioId::new("scn_a"),
+                scenario_name: "A".into(),
+                revision: 3,
+                origin: crate::RunOrigin::new(crate::RunTrigger::Cli),
+            },
+        }
+    }
+
+    #[test]
+    fn a_line_cut_off_by_the_crash_does_not_spoil_the_record() {
+        let tmp = tempfile::tempdir().unwrap();
+        let gone = RunId::generate();
+        let mut recorder = RunRecorder::create(tmp.path(), &gone).unwrap();
+        recorder.write_event(&started(&gone)).unwrap();
+        drop(recorder);
+        let file = tmp
+            .path()
+            .join("runs")
+            .join(gone.as_str())
+            .join("events.jsonl");
+        let mut whole = fs::read(&file).unwrap();
+        // The process died half way through writing the next event.
+        whole.extend_from_slice(b"{\"runId\":\"run_");
+        fs::write(&file, whole).unwrap();
+
+        let going = RunId::generate();
+        let _live = RunRecorder::create(tmp.path(), &going).unwrap();
+        let events = read_events(tmp.path(), &gone).unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[1].event, RunEvent::RunFinished { .. }));
+    }
+
+    #[test]
+    fn a_run_left_behind_is_closed_but_not_one_still_going() {
+        let tmp = tempfile::tempdir().unwrap();
+        let gone = RunId::generate();
+        let mut recorder = RunRecorder::create(tmp.path(), &gone).unwrap();
+        recorder.write_event(&started(&gone)).unwrap();
+        // The process "crashes": the lock is released, no report written.
+        drop(recorder);
+
+        let going = RunId::generate();
+        let mut live = RunRecorder::create(tmp.path(), &going).unwrap();
+        live.write_event(&started(&going)).unwrap();
+        // Creating `going` already closed `gone`.
+        let report = read_report(tmp.path(), &gone).unwrap().unwrap();
+        assert_eq!(report.status, RunStatus::Failed);
+        assert_eq!(report.error.unwrap().code, RUN_INTERRUPTED);
+        assert_eq!(report.revision, 3);
+        let events = read_events(tmp.path(), &gone).unwrap();
+        assert!(matches!(
+            events.last().unwrap().event,
+            RunEvent::RunFinished {
+                status: RunStatus::Failed,
+                ..
+            }
+        ));
+
+        assert!(close_interrupted(tmp.path()).is_empty());
+        assert!(read_report(tmp.path(), &going).unwrap().is_none());
     }
 }
 

@@ -25,7 +25,8 @@ import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
-import { CHIP_ROOM, layoutScenario, NODE_W, type SlotNodeData, SLOT_H, type StepNodeData } from "../flow/layout";
+import { type FrameKind, layoutScenario, NODE_W, READ_ROOM, type SlotNodeData, SLOT_H, type StepNodeData, WRITE_ROOM } from "../flow/layout";
+import { nodeIcon } from "../lib/nodeIcons";
 import { stepLabel, t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
 import type { HistoryEntry, Scenario, StepTypeDef } from "@shikigami/schema";
@@ -747,6 +748,30 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
   );
 }
 
+type FrameData = { kind: FrameKind; type: string; width: number; height: number };
+
+/**
+ * The frame around a loop (if, try, …) and everything in its blocks, so the
+ * nodes that run inside it read apart from the ones after it. A loop's frame
+ * is tinted, and frames inside it tint deeper; the others are only outlined.
+ * The tag on its top edge names what it is.
+ */
+function FrameNode({ data }: NodeProps<Node<FrameData>>) {
+  const Icon = nodeIcon(data.type, "control");
+  const loop = data.kind === "loop";
+  return (
+    <div
+      style={{ width: data.width, height: data.height }}
+      className={`flow-frame pointer-events-none relative rounded-[4px] border ${loop ? "flow-frame-loop" : "border-dashed"}`}
+    >
+      <span className="flow-frame-tag absolute -top-[9px] left-2.5 flex items-center gap-1 rounded-[3px] px-1.5 text-[11px] leading-4 font-medium">
+        <Icon size={11} strokeWidth={2} aria-hidden="true" />
+        {t.flow.frame[data.kind]}
+      </span>
+    </div>
+  );
+}
+
 /**
  * On the review desk, brings a step into view: the first one the AI changed,
  * then whichever change the reviewer picks.
@@ -893,7 +918,7 @@ function DiveBar({ root, chain }: { root: Scenario; chain: DiveLevel[] }) {
   );
 }
 
-const nodeTypes = { step: StepNode, slot: SlotNode };
+const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode };
 const NO_BREAKPOINTS: string[] = [];
 const NO_STATES: Record<string, StepRunState> = {};
 
@@ -1013,6 +1038,17 @@ export function FlowCanvas() {
   }, [validation, inside]);
   const states = inside ? (run?.inner[callKey(path)] ?? NO_STATES) : (run?.steps ?? NO_STATES);
 
+  // Frames first and beneath the lines, outer ones before the ones inside them.
+  const frames: Node[] = layout.frames.map((f) => ({
+    id: `frame:${f.id}`,
+    type: "frame",
+    position: { x: f.x, y: f.y },
+    data: { kind: f.kind, type: f.type, width: f.width, height: f.height } satisfies FrameData,
+    draggable: false,
+    selectable: false,
+    focusable: false,
+    zIndex: -1,
+  }));
   const nodes: Node[] = layout.nodes.map((n) => {
     if (n.data.kind === "step") {
       const id = n.data.step.id ?? n.id;
@@ -1052,8 +1088,7 @@ export function FlowCanvas() {
   });
 
   // Read chips stick out left of a step, write chips right of it.
-  const chips = CHIP_ROOM;
-  const bounds = { x: -chips, y: 0, width: layout.width + chips * 2, height: layout.height };
+  const bounds = { x: -READ_ROOM, y: 0, width: layout.width + READ_ROOM + WRITE_ROOM, height: layout.height };
 
   const selectedId = selection?.kind === "step" ? selection.stepId : null;
   const links = useMemo(
@@ -1117,7 +1152,7 @@ export function FlowCanvas() {
       key={`${root.id}/${callKey(path)}`}
       className="canvas-bg"
       colorMode={theme}
-      nodes={nodes}
+      nodes={[...frames, ...nodes]}
       edges={edges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
@@ -1142,7 +1177,7 @@ export function FlowCanvas() {
       }}
       minZoom={0.2}
       onNodeClick={(event, node) => {
-        if (inside) return;
+        if (inside || node.type === "frame") return;
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
         else {
@@ -1158,6 +1193,7 @@ export function FlowCanvas() {
       onNodeContextMenu={(event, node) =>
         menuFor(() => {
           const data = node.data as StepNodeData | SlotNodeData;
+          if (node.type === "frame") return [];
           if (data.kind === "slot") return inside ? [] : slotMenu(data.parentId, data.block);
           const id = data.step.id ?? node.id;
           const call = calls.get(id);

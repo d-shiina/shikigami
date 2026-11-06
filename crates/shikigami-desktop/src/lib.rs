@@ -55,6 +55,8 @@ pub mod roles;
 mod sap;
 pub mod sapgui;
 pub mod table;
+#[cfg(windows)]
+pub mod session;
 pub mod target;
 #[cfg(windows)]
 mod uia;
@@ -146,6 +148,10 @@ impl Adapter for DesktopAdapter {
                     kind,
                 },
             );
+        }
+        #[cfg(windows)]
+        {
+            builder = builder.desktop_probe(std::sync::Arc::new(session::desktop_unavailable));
         }
         builder
     }

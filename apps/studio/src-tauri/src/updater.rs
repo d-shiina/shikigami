@@ -5,6 +5,12 @@
 //! signature against the public key in `tauri.conf.json`, and runs the
 //! installer. Development builds never check.
 //!
+//! It works like VS Code: a new version found at launch (or by "check for
+//! updates") is downloaded in the background, and the installer runs
+//! silently (`installMode: quiet`, no window) either when the user presses
+//! "restart to update" (Studio comes back as the new version) or when Studio
+//! is closed (it stays closed; the next launch is the new version).
+//!
 //! The installer also carries the `shikigami` CLI (the MCP server), which an
 //! MCP client such as Claude Code may be running from the install folder,
 //! and Node.js (`node\node.exe`), which runs the browser adapter for Studio
@@ -40,9 +46,24 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
     }
 }
 
-/// The update found by the last check, kept until the user installs it.
+/// The update found by the last check, and the installer once it has been
+/// downloaded, kept until it is installed.
 #[derive(Default)]
-pub(crate) struct PendingUpdate(Mutex<Option<Update>>);
+pub(crate) struct PendingUpdate {
+    found: Mutex<Option<Update>>,
+    ready: Mutex<Option<Ready>>,
+}
+
+/// A downloaded, signature-checked installer waiting for a restart or exit.
+struct Ready {
+    update: Update,
+    file: PathBuf,
+}
+
+/// Downloaded installers wait here; a later launch clears it.
+fn download_dir() -> PathBuf {
+    std::env::temp_dir().join("shikigami-update")
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,6 +122,30 @@ pub(crate) fn on_startup() {
         // Studio's version is the workspace version, as in `package_info`.
         restore_parked_exes(&dir, env!("CARGO_PKG_VERSION"));
     }
+    clean_downloads(&download_dir(), env!("CARGO_PKG_VERSION"));
+}
+
+/// Deletes downloaded installers this version no longer needs: those not
+/// newer than it (already installed, or older). A newer one may belong to
+/// another Studio window that is waiting to restart, so it stays.
+fn clean_downloads(dir: &Path, current_version: &str) {
+    let Ok(current) = semver::Version::parse(current_version) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()) {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let newer = name
+            .strip_prefix("shikigami-")
+            .and_then(|n| n.strip_suffix(".update"))
+            .and_then(|v| semver::Version::parse(v).ok())
+            .is_some_and(|v| v > current);
+        if !newer {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
 }
 
 #[tauri::command]
@@ -135,18 +180,25 @@ pub async fn check_update(
         current_version: u.current_version.clone(),
         notes: u.body.clone(),
     });
-    *lock(&pending) = update;
+    *lock(&pending.found) = update;
     Ok(info)
 }
 
-/// Downloads and installs the pending update. On Windows the installer
-/// replaces the running app and starts it again, so this never returns on
-/// success.
+/// Downloads the update found by the last check in the background and keeps
+/// the installer until a restart or exit. Returns the version now ready.
 #[tauri::command]
-pub async fn install_update(app: AppHandle, pending: State<'_, PendingUpdate>) -> CmdResult<()> {
-    let Some(update) = lock(&pending).take() else {
+pub async fn download_update(
+    app: AppHandle,
+    pending: State<'_, PendingUpdate>,
+) -> CmdResult<String> {
+    let Some(update) = lock(&pending.found).clone() else {
         return Err(err("NO_PENDING_UPDATE", "check for updates first"));
     };
+    if let Some(ready) = lock(&pending.ready).as_ref()
+        && ready.update.version == update.version
+    {
+        return Ok(update.version);
+    }
     let mut downloaded = 0u64;
     let bytes = update
         .download(
@@ -158,6 +210,51 @@ pub async fn install_update(app: AppHandle, pending: State<'_, PendingUpdate>) -
         )
         .await
         .map_err(|e| err("UPDATE_DOWNLOAD_FAILED", e.to_string()))?;
+    let dir = download_dir();
+    let file = dir.join(format!("shikigami-{}.update", update.version));
+    std::fs::create_dir_all(&dir)
+        .and_then(|()| std::fs::write(&file, &bytes))
+        .map_err(|e| err("UPDATE_DOWNLOAD_FAILED", e.to_string()))?;
+    let version = update.version.clone();
+    *lock(&pending.ready) = Some(Ready { update, file });
+    Ok(version)
+}
+
+/// Installs the downloaded update now and starts Studio again as the new
+/// version. Never returns on success.
+#[tauri::command]
+pub fn install_update(app: AppHandle, pending: State<'_, PendingUpdate>) -> CmdResult<()> {
+    let Some(ready) = lock(&pending.ready).take() else {
+        return Err(err(
+            "NO_PENDING_UPDATE",
+            "the update has not been downloaded yet",
+        ));
+    };
+    install(ready, true)?;
+    app.restart()
+}
+
+/// Called as Studio exits: a downloaded update is installed silently, and
+/// Studio stays closed until the user starts it again.
+pub(crate) fn install_on_exit<R: Runtime>(app: &AppHandle<R>) {
+    use tauri::Manager;
+    let Some(ready) = app
+        .try_state::<PendingUpdate>()
+        .and_then(|p| lock(&p.ready).take())
+    else {
+        return;
+    };
+    if let Err(e) = install(ready, false) {
+        tracing::warn!(error = %e.message, "cannot install the update on exit");
+    }
+}
+
+/// Moves the running executables aside and starts the installer, which
+/// exits Studio on success.
+fn install(ready: Ready, restart: bool) -> CmdResult<()> {
+    let bytes =
+        std::fs::read(&ready.file).map_err(|e| err("UPDATE_INSTALL_FAILED", e.to_string()))?;
+    let update = ready.update.restart_after_install(restart);
     if let Some(dir) = install_dir() {
         for exe in PARKED_EXES {
             let exe = dir.join(exe);
@@ -174,13 +271,11 @@ pub async fn install_update(app: AppHandle, pending: State<'_, PendingUpdate>) -
         }
         return Err(err("UPDATE_INSTALL_FAILED", e.to_string()));
     }
-    app.restart()
+    Ok(())
 }
 
-fn lock(pending: &PendingUpdate) -> std::sync::MutexGuard<'_, Option<Update>> {
-    pending
-        .0
-        .lock()
+fn lock<T>(slot: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    slot.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
@@ -252,6 +347,26 @@ mod tests {
 
     fn tempdir() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn startup_keeps_only_newer_downloads() {
+        let dir = tempdir();
+        for name in [
+            "shikigami-0.1.1.update",
+            "shikigami-0.1.2.update",
+            "shikigami-0.1.3.update",
+            "junk",
+        ] {
+            write(&dir.path().join(name), "x");
+        }
+        clean_downloads(dir.path(), "0.1.2");
+        let mut left: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["shikigami-0.1.3.update"]);
     }
 
     #[test]
