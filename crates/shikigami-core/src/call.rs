@@ -482,10 +482,20 @@ pub fn extract(
     }
     let removed: Vec<StepId> = steps.iter().map(|s| s.id.clone()).collect();
 
+    // Variables used inside a named part count where the part is used.
+    let inlined = {
+        let mut c = caller.clone();
+        c.inline_parts();
+        c
+    };
+    let (_, inlined_list, _) = locate(&inlined.steps, first, None)
+        .ok_or_else(|| CoreError::StepNotFound(first.clone()))?;
+    let analysed = &inlined_list[start..=end];
+
     // Inside the extracted steps.
     let (mut reads_in, mut writes_in, mut binders) =
         (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
-    for step in &steps {
+    for step in analysed {
         collect_writes(step, registry, &mut writes_in);
         for s in step.walk() {
             own_reads(s, registry, &mut reads_in);
@@ -497,7 +507,7 @@ pub fn extract(
     let (mut reads_out, mut writes_before, mut writes_after) =
         (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
     let mut before = true;
-    let mut stack: Vec<&Step> = caller.steps.iter().rev().collect();
+    let mut stack: Vec<&Step> = inlined.steps.iter().rev().collect();
     while let Some(step) = stack.pop() {
         if removed.contains(&step.id) {
             before = false;
@@ -596,6 +606,13 @@ pub fn extract(
     let mut subscenario = Scenario::new(name.clone());
     subscenario.description = format!("「{}」から切り出した処理", caller.name);
     subscenario.variables = variables;
+    // The parts the steps name go with them, so they still resolve.
+    subscenario.parts = caller
+        .parts
+        .iter()
+        .filter(|(name, _)| steps.iter().any(|s| s.walk().any(|s| uses_part(s, name))))
+        .map(|(name, part)| (name.clone(), part.clone()))
+        .collect();
     subscenario.steps = steps;
     // Same defaults, so the steps time out, retry and fail as before.
     subscenario.settings = caller.settings.clone();
@@ -629,6 +646,10 @@ pub fn extract(
         call,
         declare,
     })
+}
+
+fn uses_part(step: &Step, name: &str) -> bool {
+    crate::model::target_part(step) == Some(name)
 }
 
 #[cfg(test)]
@@ -874,6 +895,38 @@ mod tests {
         // `item` and `double` stay inside.
         assert!(plan.subscenario.variable("item").is_none());
         assert!(plan.subscenario.variable("double").is_none());
+    }
+
+    #[test]
+    fn extracted_nodes_take_the_parts_they_name() {
+        use crate::model::{Part, PartApp};
+        let registry = StepRegistry::with_builtins();
+        let mut caller = scenario(
+            "main",
+            vec![var("who", VarType::String, VarDirection::Input)],
+            vec![
+                Step::new("browser.click").with_param("target", json!({ "part": "row" })),
+                Step::new("log.message").with_param("message", "done"),
+            ],
+        );
+        for (name, label) in [("row", "{{ who }}"), ("other", "x")] {
+            caller.parts.insert(
+                name.into(),
+                Part {
+                    label: String::new(),
+                    app: PartApp::Browser,
+                    target: json!({ "label": label }),
+                },
+            );
+        }
+        let plan = extract(&caller, &[caller.steps[0].id.clone()], "x", &registry).unwrap();
+        assert_eq!(plan.subscenario.parts.keys().collect::<Vec<_>>(), ["row"]);
+        assert_eq!(
+            plan.subscenario.steps[0].params["target"],
+            json!({ "part": "row" })
+        );
+        // `who` is read inside the part, so it goes in.
+        assert_eq!(plan.call.params["inputs"]["who"], json!("{{ who }}"));
     }
 
     #[test]

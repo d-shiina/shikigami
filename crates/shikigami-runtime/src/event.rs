@@ -98,6 +98,9 @@ pub enum RunEvent {
         scenario_id: ScenarioId,
         scenario_name: String,
         revision: u64,
+        /// Who asked for the run, from where, on which PC.
+        #[serde(default, skip_serializing_if = "RunOrigin::is_empty")]
+        origin: RunOrigin,
     },
     StepStarted {
         step_id: StepId,
@@ -231,6 +234,79 @@ pub struct RunReport {
     /// run started.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub subscenarios: Vec<SubscenarioRef>,
+    /// Who asked for the run, from where, on which PC.
+    #[serde(default, skip_serializing_if = "RunOrigin::is_empty")]
+    pub origin: RunOrigin,
+}
+
+/// How a run was started.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RunTrigger {
+    /// "Run" in Studio (a person watching).
+    Studio,
+    /// An AI client's `run_scenario` / `test_step`.
+    Mcp,
+    /// `shikigami run` (a person, a batch file or Task Scheduler).
+    Cli,
+    /// A schedule of the agent.
+    Schedule,
+    /// A job from a management server.
+    Remote,
+}
+
+/// Who asked for a run, from where, and on which PC. Recorded in
+/// `runStarted` and the report so that runs can be told apart later (and
+/// collected from many PCs).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RunOrigin {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<RunTrigger>,
+    /// The person, AI client, schedule or manager that asked, in its own
+    /// words (e.g. "claude-code", a schedule's name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_by: Option<String>,
+    /// The job of a schedule or management server this run carries out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
+    /// The PC the run happened on (its computer name). Filled in by the
+    /// Runtime when not given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
+}
+
+impl RunOrigin {
+    pub fn new(trigger: RunTrigger) -> Self {
+        Self {
+            trigger: Some(trigger),
+            ..Self::default()
+        }
+    }
+
+    pub fn requested_by(mut self, who: impl Into<String>) -> Self {
+        self.requested_by = Some(who.into());
+        self
+    }
+
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// This PC's name (`COMPUTERNAME` on Windows), if known.
+pub fn machine_name() -> Option<String> {
+    ["COMPUTERNAME", "HOSTNAME"]
+        .iter()
+        .filter_map(|k| std::env::var(k).ok())
+        .map(|v| v.trim().to_string())
+        .find(|v| !v.is_empty())
+        .or_else(|| {
+            std::fs::read_to_string("/etc/hostname")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        })
 }
 
 /// A called scenario's content as used by a run.

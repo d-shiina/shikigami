@@ -7,6 +7,7 @@
 mod agent;
 mod commands;
 mod debug;
+mod picker;
 mod updater;
 mod watcher;
 
@@ -87,6 +88,10 @@ pub fn run() {
                 app.handle().clone(),
                 service.store().local_root().join("approvals"),
             );
+            watcher::spawn_pick_requests(
+                app.handle().clone(),
+                service.store().local_root().join("picks"),
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -104,6 +109,8 @@ pub fn run() {
             commands::save_policy,
             commands::list_approvals,
             commands::decide_approval,
+            commands::list_pick_requests,
+            commands::cancel_pick_request,
             commands::export_scenario,
             commands::import_scenario,
             commands::list_scenarios,
@@ -136,6 +143,7 @@ pub fn run() {
             commands::stop_run,
             commands::run_status,
             debug::debug_run,
+            picker::point_at,
             updater::app_info,
             updater::check_update,
             updater::install_update,

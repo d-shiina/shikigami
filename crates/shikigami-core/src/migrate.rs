@@ -37,6 +37,10 @@ const MIGRATIONS: &[Migration] = &[
         from: 2,
         apply: v2_to_v3,
     },
+    Migration {
+        from: 3,
+        apply: v3_to_v4,
+    },
 ];
 
 /// Parses scenario JSON text, applying migrations when needed.
@@ -130,6 +134,10 @@ fn v1_to_v2(_value: &mut Value) {}
 /// the process started in (and validation warned against them), so there
 /// is nothing to rewrite.
 fn v2_to_v3(_value: &mut Value) {}
+
+/// 3 → 4: adds `parts` (named screen parts that a node's target can name
+/// with `{ "part": … }`). Nothing to rewrite.
+fn v3_to_v4(_value: &mut Value) {}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

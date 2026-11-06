@@ -12,6 +12,7 @@ import { basename, dirname, join } from "node:path";
 import { chromium } from "playwright-core";
 import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Dialog, LaunchOptions, Locator, Page } from "playwright-core";
 
+import { cancelPick, highlight, pick } from "./pick.ts";
 import { AdapterError, describe, locate, type Target } from "./targets.ts";
 
 export interface AdapterOptions {
@@ -192,6 +193,12 @@ export class Adapter {
           return await this.isVisible(params);
         case "waitForHuman":
           return await this.waitForHuman(params);
+        case "pick":
+          return await this.pick(params);
+        case "highlight":
+          return await this.highlight(params);
+        case "cancelPick":
+          return await cancelPick(this.session(params).page);
         case "authorize":
           return await this.authorize(params);
         case "close":
@@ -872,6 +879,72 @@ export class Adapter {
   }
 
   /**
+   * Lets the person at the PC point at an element: a banner shows `message`,
+   * `candidates` are outlined with numbers, and the next click is caught
+   * before the page sees it. Returns the element as a Target (with `nth`
+   * when it repeats), or `{ status: "cancelled" }`.
+   */
+  private async pick(params: Params): Promise<unknown> {
+    const session = this.session(params);
+    if (session.headless && !this.options.scriptedHuman) {
+      throw new AdapterError("HUMAN_REQUIRED", "pointing needs a person, but the browser runs without a window", {
+        details: {
+          hint: "Open the page with a visible browser (SHIKIGAMI_BROWSER_HEADLESS unset), or ask the user in chat to describe the element.",
+        },
+      });
+    }
+    const timeoutMs = typeof params.timeoutMs === "number" ? params.timeoutMs : 300_000;
+    const candidates = Array.isArray(params.candidates) ? (params.candidates as Target[]) : [];
+    const result = await pick(session.page, {
+      message: typeof params.message === "string" ? params.message : undefined,
+      candidates,
+      lang: typeof params.lang === "string" ? params.lang : undefined,
+      timeoutMs,
+    });
+    if (result.status === "picked") {
+      // Review evidence: the page with the picked element still outlined.
+      if (typeof params.screenshotPath === "string" && params.screenshotPath) {
+        await highlight(session.page, [result.target], { durationMs: 1500, numbered: false });
+        await this.capture(session, params.screenshotPath);
+      }
+    }
+    return result;
+  }
+
+  /** Outlines `target` (or each of `targets`) for `durationMs`; waits `waitMs` so the person sees it. */
+  private async highlight(params: Params): Promise<unknown> {
+    const session = this.session(params);
+    const targets = Array.isArray(params.targets)
+      ? (params.targets as Target[])
+      : params.target
+        ? [params.target as Target]
+        : [];
+    if (session.headless) return { shown: 0 };
+    const durationMs = typeof params.durationMs === "number" ? params.durationMs : 1500;
+    const shown = await highlight(session.page, targets, {
+      durationMs,
+      label: typeof params.label === "string" ? params.label : undefined,
+    });
+    const waitMs = typeof params.waitMs === "number" ? Math.min(params.waitMs, durationMs) : 0;
+    if (shown > 0 && waitMs > 0) await new Promise((ok) => setTimeout(ok, waitMs));
+    return { shown };
+  }
+
+  /** The visible part of the page as JPEG, secrets blacked out; best effort. */
+  private async capture(session: Session, path: string): Promise<void> {
+    await session.page
+      .screenshot({
+        path,
+        type: "jpeg",
+        quality: 70,
+        mask: [session.page.locator(PASSWORD_FIELDS), ...session.secretFields],
+        maskColor: "#000",
+        timeout: 10_000,
+      })
+      .catch(() => {});
+  }
+
+  /**
    * OAuth sign-in: opens the authorization page `url` and waits while the
    * person signs in and allows access. The provider then sends the browser
    * to `redirectUrl`; that request is caught inside the browser (Chromium's
@@ -982,16 +1055,7 @@ export class Adapter {
     // Review evidence: the visible part of the page, secrets blacked out as in browser.screenshot.
     // Best effort: a page that cannot be captured still gets its tree.
     if (typeof params.screenshotPath === "string" && params.screenshotPath) {
-      await page
-        .screenshot({
-          path: params.screenshotPath,
-          type: "jpeg",
-          quality: 70,
-          mask: [page.locator(PASSWORD_FIELDS), ...session.secretFields],
-          maskColor: "#000",
-          timeout: 10_000,
-        })
-        .catch(() => {});
+      await this.capture(session, params.screenshotPath);
     }
     if (await page.locator(PASSWORD_FIELDS).first().isVisible().catch(() => false)) {
       result.login = {
@@ -1063,7 +1127,7 @@ export class Adapter {
       return new AdapterError("ELEMENT_AMBIGUOUS", `${count ?? "several"} elements match ${describe(target)}`, {
         details: {
           target,
-          hint: "Make the target more specific (role + exact name), or add `nth` (0-based) to pick one.",
+          hint: "Make the target more specific (role + exact name). If you cannot tell which one is meant, ask the user to point at it (MCP ask_user_to_pick) instead of guessing an `nth` (0-based).",
         },
       });
     }
