@@ -80,6 +80,19 @@ pub enum Op {
     CloseWindow {
         target: Target,
     },
+    /// Lets the user point at an element on screen: follows the mouse with
+    /// a frame, takes the next click (the app never gets it) and answers
+    /// `{ target, how, rect, window }` (see `target::picked_target`), or
+    /// `{ cancelled: true }` on Esc or after `timeout_ms`.
+    Pick {
+        message: Option<String>,
+        timeout_ms: u64,
+    },
+    /// Frames the target on screen for `ms`: `{ found, rect? }`.
+    Highlight {
+        target: Target,
+        ms: u64,
+    },
 }
 
 /// A picture of a window as it is shown now.

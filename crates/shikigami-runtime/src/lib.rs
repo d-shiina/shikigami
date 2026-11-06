@@ -506,10 +506,13 @@ pub(crate) fn init_variables(
             _ => match &var.default {
                 Some(default) => default.clone(),
                 None if var.direction.is_input() => {
-                    return Err(RunError::new(
-                        "MISSING_INPUT",
-                        format!("input '{}' is required", var.name),
-                    ));
+                    return Err(RunError {
+                        details: Some(serde_json::json!({ "input": var.name })),
+                        ..RunError::new(
+                            "MISSING_INPUT",
+                            format!("input '{}' is required", var.name),
+                        )
+                    });
                 }
                 None => Value::Null,
             },

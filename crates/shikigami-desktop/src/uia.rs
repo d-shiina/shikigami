@@ -15,6 +15,7 @@
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Mutex, mpsc};
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use shikigami_runtime::{BoxFuture, StepError};
@@ -41,8 +42,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_RIGHTUP, MOUSEINPUT, SendInput, VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    BM_CLICK, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, PostMessageW, SW_RESTORE,
-    SetCursorPos, SetForegroundWindow, ShowWindow, WM_CLOSE,
+    BM_CLICK, GetCursorPos, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, PostMessageW,
+    SW_RESTORE, SetCursorPos, SetForegroundWindow, ShowWindow, WM_CLOSE,
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
@@ -51,10 +52,11 @@ use crate::bitmap::{Bitmap, Rect};
 use crate::capture;
 use crate::engine::Engine;
 use crate::keys::{Chord, Key};
+use crate::overlay::{Input, Overlay};
 use crate::roles;
 use crate::target::{
-    ElementQuery, NodeInfo, Target, WindowInfo, WindowQuery, app_allowed, pick_element,
-    pick_window, render_tree,
+    ElementQuery, NodeInfo, Point, Target, WindowInfo, WindowQuery, app_allowed, describe,
+    pick_element, pick_window, picked_target, render_tree,
 };
 use crate::vision::OcrLine;
 
@@ -335,6 +337,11 @@ impl Uia {
             Op::Type { target, text } => self.type_text(&target, &text),
             Op::Press { target, chord } => self.press(&target, &chord),
             Op::CloseWindow { target } => self.close_window(&target),
+            Op::Pick {
+                message,
+                timeout_ms,
+            } => self.pick(message, timeout_ms),
+            Op::Highlight { target, ms } => self.highlight(&target, ms),
         }
     }
 
@@ -516,6 +523,203 @@ impl Uia {
             }
             Err(e) => Err(e),
         }
+    }
+
+    // -- pointing on screen ----------------------------------------------------------
+
+    /// Lets the user point at an element (see `Op::Pick`).
+    fn pick(&self, message: Option<String>, timeout_ms: u64) -> Result<Value, StepError> {
+        let message = message.unwrap_or_else(|| "Click the part to pick (Esc to cancel)".into());
+        let overlay = Overlay::pick(message)?;
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        // SAFETY: plain Win32 call.
+        let own = unsafe { GetCurrentProcessId() };
+        let mut shown: Option<(i32, i32, i32, i32)> = None;
+        let clicked = loop {
+            match overlay.take_input() {
+                Some(Input::Clicked(pt)) => break pt,
+                Some(Input::Cancelled) => return Ok(json!({ "cancelled": true })),
+                None => {}
+            }
+            if Instant::now() >= deadline {
+                return Ok(json!({ "cancelled": true, "timedOut": true }));
+            }
+            let mut pt = POINT::default();
+            // SAFETY: UIA / Win32 calls on the UIA thread.
+            let under = unsafe {
+                GetCursorPos(&mut pt)
+                    .ok()
+                    .and_then(|()| self.automation.ElementFromPoint(pt).ok())
+            };
+            if let Some(el) = under {
+                // SAFETY: reading the element's current properties.
+                let (pid, rect) = unsafe {
+                    (
+                        el.CurrentProcessId().unwrap_or(0) as u32,
+                        el.CurrentBoundingRectangle().ok(),
+                    )
+                };
+                if let Some(rect) = rect.filter(|_| pid != own) {
+                    let key = (rect.left, rect.top, rect.right, rect.bottom);
+                    if shown != Some(key) {
+                        shown = Some(key);
+                        overlay.frame(Some(rect));
+                        overlay.detail(self.describe_live(&el));
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        };
+        // The frame must not be under the click when it is looked up.
+        drop(overlay);
+        self.picked_at(clicked)
+    }
+
+    /// `button "保存"` for the banner, without building a cache.
+    fn describe_live(&self, el: &IUIAutomationElement) -> String {
+        // SAFETY: reading the element's current properties on the UIA thread.
+        unsafe {
+            let role = roles::of_control_type(el.CurrentControlType().map(|t| t.0).unwrap_or(0));
+            let name = el.CurrentName().map(|b| b.to_string()).unwrap_or_default();
+            let id = el
+                .CurrentAutomationId()
+                .map(|b| b.to_string())
+                .unwrap_or_default();
+            let mut line = role.to_owned();
+            if !name.trim().is_empty() {
+                line.push_str(&format!(" \u{300c}{}\u{300d}", name.trim()));
+            }
+            if !id.is_empty() {
+                line.push_str(&format!(" id={id}"));
+            }
+            line
+        }
+    }
+
+    /// The target for the element at `pt` on screen.
+    fn picked_at(&self, pt: POINT) -> Result<Value, StepError> {
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            let el = self.automation.ElementFromPoint(pt).or_fail()?;
+            let root = self.automation.GetRootElement().or_fail()?;
+            let walker = self.automation.ControlViewWalker().or_fail()?;
+            // The top-level window: the last element before the desktop.
+            let mut top = el.clone();
+            let mut chain = vec![el.clone()];
+            for _ in 0..200 {
+                let Ok(parent) = walker.GetParentElement(&top) else {
+                    break;
+                };
+                if self
+                    .automation
+                    .CompareElements(&parent, &root)
+                    .map(|b| b.as_bool())
+                    .unwrap_or(true)
+                {
+                    break;
+                }
+                chain.push(parent.clone());
+                top = parent;
+            }
+            let windows = self.windows()?;
+            let same = |a: &IUIAutomationElement, b: &IUIAutomationElement| {
+                self.automation
+                    .CompareElements(a, b)
+                    .map(|b| b.as_bool())
+                    .unwrap_or(false)
+            };
+            let Some(window) = windows.iter().position(|(w, _, _)| same(w, &top)) else {
+                return Err(StepError::new(
+                    "WINDOW_NOT_FOUND",
+                    "the place clicked is not in an app window",
+                ));
+            };
+            let (window_el, info, _) = &windows[window];
+            if !self.elevated && is_elevated(info.pid) == Some(true) {
+                return Err(elevation_error());
+            }
+            let tree = self.tree(window_el, FIND_LIMIT)?;
+            // The element itself, else its nearest ancestor in the tree.
+            let element = chain
+                .iter()
+                .find_map(|link| tree.iter().position(|(t, _)| same(t, link)))
+                .filter(|&i| i > 0);
+            let window_rect = window_el.CurrentBoundingRectangle().or_fail()?;
+            let point = Point {
+                x: pt.x - window_rect.left,
+                y: pt.y - window_rect.top,
+            };
+            let infos: Vec<WindowInfo> = windows.iter().map(|(_, w, _)| w.clone()).collect();
+            let nodes: Vec<NodeInfo> = tree.iter().map(|(_, n)| n.clone()).collect();
+            let picked = picked_target(&infos, window, &nodes, element, point);
+            let rect = match element {
+                Some(i) => tree[i].0.CurrentBoundingRectangle().unwrap_or(window_rect),
+                None => window_rect,
+            };
+            let label = element.map_or_else(|| info.title.clone(), |i| describe(&nodes[i]));
+            let mut result = json!({
+                "target": picked.target,
+                "how": picked.how,
+                "label": label,
+                "window": { "title": info.title, "process": info.process },
+                "rect": { "x": rect.left, "y": rect.top, "width": rect.right - rect.left, "height": rect.bottom - rect.top },
+            });
+            if picked.how == "point" {
+                result["note"] = json!(
+                    "The part has no id or name, so it is pointed at by its place in the window: it breaks if the layout changes."
+                );
+            }
+            Ok(result)
+        }
+    }
+
+    /// Frames the target on screen (see `Op::Highlight`).
+    fn highlight(&self, target: &Target, ms: u64) -> Result<Value, StepError> {
+        let found = match self.resolve(&target.window_part()) {
+            Ok(found) => found,
+            Err(e)
+                if matches!(
+                    e.code.as_str(),
+                    "WINDOW_NOT_FOUND" | "ELEMENT_NOT_FOUND" | "ELEMENT_GONE"
+                ) =>
+            {
+                return Ok(json!({ "found": false, "code": e.code, "message": e.message }));
+            }
+            Err(e) => return Err(e),
+        };
+        // SAFETY: UIA calls on the UIA thread.
+        let rect = unsafe {
+            let window = found.window_el.CurrentBoundingRectangle().or_fail()?;
+            if let Some(p) = target.point {
+                const HALF: i32 = 12;
+                let (x, y) = (window.left + p.x, window.top + p.y);
+                RECT {
+                    left: x - HALF,
+                    top: y - HALF,
+                    right: x + HALF,
+                    bottom: y + HALF,
+                }
+            } else if let Some(r) = &target.region {
+                let (x, y) = (window.left + r.x, window.top + r.y);
+                RECT {
+                    left: x,
+                    top: y,
+                    right: x + r.width as i32,
+                    bottom: y + r.height as i32,
+                }
+            } else {
+                found.el.CurrentBoundingRectangle().or_fail()?
+            }
+        };
+        if rect.right <= rect.left || rect.bottom <= rect.top {
+            return Ok(json!({ "found": true, "visible": false }));
+        }
+        Overlay::flash(rect, Duration::from_millis(ms))?;
+        Ok(json!({
+            "found": true,
+            "visible": true,
+            "rect": { "x": rect.left, "y": rect.top, "width": rect.right - rect.left, "height": rect.bottom - rect.top },
+        }))
     }
 
     // -- acting without the mouse -------------------------------------------------

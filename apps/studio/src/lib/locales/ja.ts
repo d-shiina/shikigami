@@ -1,5 +1,6 @@
 // The Japanese dictionary. Internal identifiers stay English; only display
 // strings live here. en.ts must have the same shape (checked by `Dict`).
+import { errorsJa } from "./errors.ja";
 import { stepHelpJa } from "./stepHelp.ja";
 
 export const ja = {
@@ -332,6 +333,24 @@ export const ja = {
       test_step: "ノードを試行",
     },
     newChat: "新しい会話",
+    newChatAbout: (name: string) => `「${name}」で新しい会話`,
+    newScenarioChat: "新しいシナリオを作る",
+    untitled: "新しいシナリオ",
+    earlier: "以前の会話",
+    chats: "会話",
+    continued: "前回の会話の続きから話せます",
+    openScenario: "このシナリオを開く",
+    busyElsewhere: "このシナリオは別の会話で作業中です",
+    removeChat: "会話を閉じる",
+    chatWorking: "作業中",
+    chatDone: "終わりました",
+    chatFailed: "止まりました",
+    otherWorking: (n: number) => `ほかに ${n} 件作業中`,
+    otherDone: (n: number) => `終わった会話 ${n}`,
+    interrupt: "割り込む",
+    interruptHint: "送ると今の作業を止めて割り込みます",
+    interrupting: "止まりしだい送ります",
+    interrupted: "ここで止めて、次のメッセージに切り替えました",
     selectedStep: "選択中のノード",
     placeholderEdit: "例：ログインの後で受注一覧をCSVに保存して",
     placeholderNew: "例：受注システムから未出荷の注文を集めるシナリオを作って",
@@ -615,10 +634,27 @@ export const ja = {
     process: "アプリ（exe）",
     className: "クラス名",
     id: "ID",
+    frame: "フレーム",
+    src: "アドレス",
     more: "詳しく指定",
     less: "たたむ",
     otherRole: "その他（直接入力）",
   } as Record<string, string>,
+  picker: {
+    pick: "画面から選ぶ",
+    pickTitle: "Studio をしまい、選びたい部品を画面でクリックします（Esc か右クリックでやめる）",
+    banner: "選びたい部品をクリック（Esc か右クリックでやめる）",
+    highlight: "光らせる",
+    highlightTitle: "今の画面でこの対象を探し、見つかったら枠で囲みます",
+    picked: (label: string) => `「${label}」を選びました`,
+    cancelled: "選ぶのをやめました",
+    found: "見つかりました（枠で囲んでいます）",
+    notFound: "今の画面では見つかりません",
+    hidden: "見つかりましたが、画面に出ていません",
+    byPoint: "名前も ID もない部品なので、ウィンドウの中の位置で指しています。画面の配置が変わると外れます。",
+    pointNotAllowed: "名前も ID もない部品で、このノードでは指せません。「マウスでクリック」のノードなら位置で指せます。",
+    failed: (message: string) => `うまくいきませんでした：${message}`,
+  },
   roles: {
     button: "ボタン",
     link: "リンク",
@@ -797,6 +833,7 @@ export const ja = {
     review: "確認する",
     capturing: "止まったときの画面を取得しています…",
     captureFailed: "画面を取得できませんでした",
+    original: "英語の原文",
     variablesNow: "この時点の変数",
   },
   list: {
@@ -1005,6 +1042,7 @@ export const ja = {
     confirmDelete: "もう一度押すと削除",
   },
   stepTypes: {} as Record<string, string>,
+  runErrors: errorsJa,
   stepHelp: stepHelpJa as Record<string, { summary: string; words: string }>,
   blockNames: {} as Record<string, string>,
 };

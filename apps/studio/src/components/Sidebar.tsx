@@ -6,7 +6,7 @@
 // the AI: its chat opens right beside this column, as Notion AI and Linear's
 // agent do, since it works on whatever place is open.
 import { Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, Settings2, Workflow } from "lucide-react";
-import { useAgent } from "../agent";
+import { anyBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import type { Place } from "../store";
@@ -53,9 +53,11 @@ function Item({ icon: Icon, label, on, onClick, count, tone, dot, busy, title, i
 function AgentItem() {
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
-  const busy = useAgent((s) => s.turnId !== null || s.sending);
+  const busy = useAgent(anyBusy);
+  // A conversation finished while the pane was closed or showing another.
+  const news = useAgent((s) => s.chats.some((c) => c.unread));
   const name = useAgent((s) => s.info?.name ?? "AI");
-  return <Item icon={MessageSquareText} label={name} on={open} onClick={() => setOpen(!open)} busy={busy} title={`${name}（Ctrl+J）`} />;
+  return <Item icon={MessageSquareText} label={name} on={open} onClick={() => setOpen(!open)} busy={busy} dot={news} title={`${name}（Ctrl+J）`} />;
 }
 
 /** The folder the scenarios live in; the full path and the change are in Settings. */
