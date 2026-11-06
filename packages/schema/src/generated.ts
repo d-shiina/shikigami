@@ -263,17 +263,17 @@ export type VarType = "string" | "number" | "boolean" | "object" | "array" | "an
  */
 export type VarDirection = "local" | "input" | "output" | "inOut";
 /**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PartApp".
+ */
+export type PartApp = "browser" | "desktop";
+/**
  * The shape of the message posted to a webhook.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "NotifyFormat".
  */
 export type NotifyFormat = "teams" | "slack" | "json";
-/**
- * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "PartApp".
- */
-export type PartApp = "browser" | "desktop";
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ConfigType".
