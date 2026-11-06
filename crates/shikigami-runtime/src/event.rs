@@ -95,7 +95,9 @@ impl RunError {
 )]
 pub enum RunEvent {
     RunStarted {
+        #[serde(alias = "scenarioId")]
         flow_id: FlowId,
+        #[serde(alias = "scenarioName")]
         flow_name: String,
         revision: u64,
     },
@@ -261,4 +263,27 @@ pub struct RunSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_step: Option<StepId>,
     pub steps_executed: u64,
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// Runs recorded before flows were renamed (up to 0.1.1) still read.
+    #[test]
+    fn reads_run_started_events_from_0_1() {
+        let event: RunEvent = serde_json::from_value(serde_json::json!({
+            "type": "runStarted", "scenarioId": "scn_x", "scenarioName": "x", "revision": 3
+        }))
+        .unwrap();
+        let RunEvent::RunStarted {
+            flow_id, flow_name, ..
+        } = event
+        else {
+            panic!("not runStarted");
+        };
+        assert_eq!(flow_id.as_str(), "scn_x");
+        assert_eq!(flow_name, "x");
+    }
 }
