@@ -1,0 +1,28 @@
+[package]
+name = "shikigami-agent"
+description = "Shikigami agent: one process per PC that runs scenarios unattended (schedules, file triggers, later a management server)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+shikigami-core.workspace = true
+shikigami-runtime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+tokio-util.workspace = true
+tracing.workspace = true
+time.workspace = true
+jiff.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

@@ -4312,6 +4312,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "shikigami-agent"
+version = "0.1.1"
+dependencies = [
+ "jiff",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "shikigami-core",
+ "shikigami-runtime",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "shikigami-browser"
 version = "0.1.1"
 dependencies = [
@@ -4335,6 +4354,7 @@ dependencies = [
  "rpassword",
  "serde_json",
  "shikigami-adapters",
+ "shikigami-agent",
  "shikigami-core",
  "shikigami-mcp",
  "shikigami-plugins",

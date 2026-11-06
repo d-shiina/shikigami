@@ -1,0 +1,70 @@
+# Schedules and the agent
+
+English | [日本語](ja/schedules.md)
+
+Shikigami starts scenarios by itself: every morning at 8, on the 25th of each month, every 30 minutes during working hours, or when a file is put in a folder. Windows Task Scheduler is not needed.
+
+## The agent
+
+The **agent** is one process per PC (per Windows user and workspace) that fires the schedules and runs them. It needs neither Studio nor an AI.
+
+```powershell
+shikigami agent install     # start it whenever you sign in to Windows (and now)
+shikigami agent status      # is it running, what is it running, what comes next
+shikigami agent stop
+shikigami agent run         # run it in this window instead (Ctrl+C stops)
+shikigami agent uninstall
+```
+
+`agent install` registers the Task Scheduler task `Shikigami\Agent` for your user ("at log on"), so the agent runs in your signed-in desktop session, where it can use the mouse and keyboard. A second agent for the same workspace refuses to start.
+
+- Runs the agent starts are **unattended runs**: they execute the published version (and `scenarios.<id>.unattended: false` in `policy.json` refuses them), exactly as `shikigami run <id>`. A scenario that is not published fails with `NOT_PUBLISHED`.
+- They are recorded like any run, with `origin.trigger: "schedule"`, `origin.requestedBy` the schedule's name and `origin.jobId` its ID.
+- The mouse and keyboard are shared with Studio, the CLI and the MCP server: nodes that use them take turns across processes. While the screen is locked they stop with `DESKTOP_UNAVAILABLE` (browser and file work still runs). Keep the PC signed in and unlocked for desktop scenarios.
+- Other processes talk to the agent over a local named pipe that only your user can write to (`\\.\pipe\shikigami-agent-…`).
+
+## Schedules
+
+Schedules belong to the PC that runs them (`schedules.json` in the per-PC area of the workspace, next to the run records). When several PCs share a workspace folder, only the PC a schedule was made on runs it.
+
+```powershell
+shikigami schedule add scn_01a1… --name "毎朝の受注取り込み" --daily 08:00 --days mon,tue,wed,thu,fri
+shikigami schedule add scn_01a1… --monthly 25@09:00          # -1@18:00 is the last day of the month
+shikigami schedule add scn_01a1… --every 30 --from 09:00 --to 18:00
+shikigami schedule add scn_01a1… --once 2026-11-07T08:00
+shikigami schedule add scn_01a1… --file-added input --pattern "*.xlsx" --file-input file
+shikigami schedule list
+shikigami schedule disable sch_…   # enable / remove
+```
+
+`-i NAME=VALUE` sets input variables, as with `shikigami run`.
+
+| `when.kind` | Fields | Fires |
+|---|---|---|
+| `daily` | `at` ("08:00"), `days` (optional: "mon" … "sun", or 月 … 日) | Every day (or on those days) at that time |
+| `monthly` | `day` (1–31, -1 = last day), `at` | Every month. A day the month lacks (31 in June) is its last day |
+| `every` | `minutes`, `from` / `to` (optional), `days` (optional) | `from`, `from` + `minutes`, … up to `to` (the whole day without them) |
+| `once` | `at` ("2026-11-07T08:00") | Once |
+| `fileAdded` | `folder` (relative to the scenario's folder, or a full path), `pattern` ("*.xlsx"), `input` (optional) | Once per new file whose name matches, after its size stops changing. Its full path goes into the input variable `input`. Files already there when the agent starts, Office lock files (`~$…`) and partial downloads do not count |
+
+```json
+{
+  "formatVersion": 1,
+  "schedules": [
+    {
+      "id": "sch_01a1…",
+      "name": "毎朝の受注取り込み",
+      "scenarioId": "scn_01a1…",
+      "enabled": true,
+      "when": { "kind": "daily", "at": "08:00", "days": ["mon", "tue", "wed", "thu", "fri"] },
+      "inputs": {}
+    }
+  ]
+}
+```
+
+Times are the PC's local time. The agent reads the file again when it changes. A broken file is not guessed at: `agent status` shows the problem and no schedule fires until it is fixed (`SCHEDULE_INVALID`).
+
+- **Missed times are not made up for.** A time that passes while the agent is off (the PC was off, nobody signed in) is skipped; the schedule fires at its next time.
+- **One at a time.** When a timed schedule comes round while its previous run is still going, that time is skipped. A file trigger starts one run per file.
+- A schedule that cannot start (not published, refused by the policy) counts as a failed run for notifications.

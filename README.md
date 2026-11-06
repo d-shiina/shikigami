@@ -25,6 +25,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/policy.md](docs/policy.md) | Unattended runs use only an approved, published version; allowed sites and apps; approving AI operations (`policy.json`) |
 | [docs/expressions.md](docs/expressions.md) | Functions available in scenario expressions |
 | [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md) | Built-in nodes: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF |
+| [docs/schedules.md](docs/schedules.md) | Schedules and file triggers; the agent that runs them on each PC |
 | [docs/secrets.md](docs/secrets.md) | Logins: secrets the AI refers to by name only |
 | [docs/oauth.md](docs/oauth.md) | Web APIs that need an OAuth sign-in (Box and others), with any fixed redirect URL |
 | [docs/adapters.md](docs/adapters.md) | Where each node type comes from, and node plugins |

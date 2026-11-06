@@ -805,6 +805,211 @@
       ]
     },
     {
+      "name": "agent",
+      "subcommands": [
+        {
+          "name": "run"
+        },
+        {
+          "name": "status",
+          "args": [
+            {
+              "id": "json",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "json",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "stop"
+        },
+        {
+          "name": "install"
+        },
+        {
+          "name": "uninstall"
+        }
+      ]
+    },
+    {
+      "name": "schedule",
+      "subcommands": [
+        {
+          "name": "list",
+          "args": [
+            {
+              "id": "json",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "json",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "add",
+          "args": [
+            {
+              "id": "scenario",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "name",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "name"
+            },
+            {
+              "id": "daily",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "daily"
+            },
+            {
+              "id": "days",
+              "required": false,
+              "takesValue": true,
+              "repeatable": true,
+              "global": false,
+              "long": "days"
+            },
+            {
+              "id": "monthly",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "monthly"
+            },
+            {
+              "id": "every",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "every"
+            },
+            {
+              "id": "from",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "from"
+            },
+            {
+              "id": "to",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "to"
+            },
+            {
+              "id": "once",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "once"
+            },
+            {
+              "id": "file_added",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "file-added"
+            },
+            {
+              "id": "pattern",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "pattern"
+            },
+            {
+              "id": "file_input",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "file-input"
+            },
+            {
+              "id": "inputs",
+              "required": false,
+              "takesValue": true,
+              "repeatable": true,
+              "global": false,
+              "long": "input",
+              "short": "i"
+            }
+          ]
+        },
+        {
+          "name": "remove",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "enable",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "disable",
+          "args": [
+            {
+              "id": "id",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "mcp",
       "args": [
         {
