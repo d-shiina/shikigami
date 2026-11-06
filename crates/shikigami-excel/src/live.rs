@@ -567,6 +567,26 @@ fn header_table(sheet: &Object, header_row: u32) -> Result<(Vec<(u32, String)>, 
     ))
 }
 
+/// The cells of a table (ListObject): header, body and totals row.
+fn table_range(table: &Object) -> Result<Range, StepError> {
+    let range = table.get("Range")?.object("Range")?;
+    let row = range.get("Row")?.to_i64()? as u32;
+    let column = range.get("Column")?.to_i64()? as u32;
+    let rows = range.get("Rows")?.object("Rows")?.get("Count")?.to_i64()? as u32;
+    let columns = range
+        .get("Columns")?
+        .object("Columns")?
+        .get("Count")?
+        .to_i64()? as u32;
+    Ok(Range {
+        start: Cell { column, row },
+        end: Cell {
+            column: column + columns - 1,
+            row: row + rows - 1,
+        },
+    })
+}
+
 /// Deletes a sheet the step added, without Excel asking about it.
 fn discard_sheet(book: &Object, added: &Object) {
     let app = book
@@ -673,22 +693,7 @@ fn filter(params: &Value, book: &Object, session: &Session) -> Result<Value, Ste
     // A table filters through its own AutoFilter, over its own columns.
     let table = list_object(&sheet, whole.start);
     if let Some(table) = &table {
-        let range = table.get("Range")?.object("Range")?;
-        let row = range.get("Row")?.to_i64()? as u32;
-        let column = range.get("Column")?.to_i64()? as u32;
-        let rows = range.get("Rows")?.object("Rows")?.get("Count")?.to_i64()? as u32;
-        let columns = range
-            .get("Columns")?
-            .object("Columns")?
-            .get("Count")?
-            .to_i64()? as u32;
-        whole = Range {
-            start: Cell { column, row },
-            end: Cell {
-                column: column + columns - 1,
-                row: row + rows - 1,
-            },
-        };
+        whole = table_range(table)?;
     }
     let target = cells(&sheet, whole)?;
     session.check()?;
@@ -741,8 +746,15 @@ fn pivot(params: &Value, book: &Object, session: &Session) -> Result<Value, Step
     let sheet_name = crate::optional_string(params, "sheet")?;
     let source = sheet(book, sheet_name.as_deref())?;
     let header_row = crate::header_row(params)?;
-    let (headers, whole) = header_table(&source, header_row)?;
-    if whole.end.row == header_row {
+    let (headers, mut whole) = header_table(&source, header_row)?;
+    // A table's totals row is not a record: total only its header and body.
+    if let Some(table) = list_object(&source, whole.start) {
+        whole = table_range(&table)?;
+        if table.get("ShowTotals")?.to_bool() {
+            whole.end.row = (whole.end.row - 1).max(whole.start.row);
+        }
+    }
+    if whole.end.row == whole.start.row {
         return Err(StepError::permanent(
             "EMPTY_TABLE",
             format!("there are no rows below the header row {header_row}"),
