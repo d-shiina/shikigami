@@ -153,13 +153,18 @@ fn error_text(code: i32) -> &'static str {
 /// A cell as the file steps give it, from its `Value` (which tells dates
 /// apart) and its `Value2` (numbers at full precision: `Value` turns
 /// currency-formatted numbers into Currency, four decimals only).
-fn value(var: &Var, raw: &Var) -> Value {
+/// `format` gives the cell's number format, asked only for dates: the
+/// format, not the serial, says date or date and time (midnight shows
+/// as 00:00:00 when the format has a time), as on the file.
+fn value(var: &Var, raw: &Var, format: impl FnOnce() -> Option<String>) -> Value {
     if let Some(code) = var.error_code() {
         return json!(error_text(code));
     }
     if var.is_date() {
         let serial = var.to_f64().unwrap_or(0.0);
-        let kind = if serial < 1.0 {
+        let kind = if let Some(kind) = format().and_then(|f| date::format_kind(0, &f)) {
+            kind
+        } else if serial < 1.0 {
             date::Kind::Time
         } else if serial.fract() == 0.0 {
             date::Kind::Date
@@ -214,17 +219,45 @@ fn used(sheet: &Object) -> Result<Option<Range>, StepError> {
     }))
 }
 
+fn number_format(sheet: &Object, cell: Cell) -> Option<String> {
+    let target = sheet
+        .object(
+            "Cells",
+            vec![Var::i32(cell.row as i32), Var::i32(cell.column as i32)],
+        )
+        .ok()?;
+    Some(target.get("NumberFormat").ok()?.to_text())
+}
+
 fn grid(sheet: &Object, range: Option<Range>) -> Result<Vec<Vec<Value>>, StepError> {
     let Some(range) = range else {
         return Ok(Vec::new());
     };
+    let start = range.start;
     let range = cells(sheet, range)?;
     let values = range.get("Value")?.to_grid();
     let raw = range.get("Value2")?.to_grid();
     Ok(values
         .iter()
         .zip(&raw)
-        .map(|(row, raw)| row.iter().zip(raw).map(|(v, r)| value(v, r)).collect())
+        .enumerate()
+        .map(|(r, (row, raw))| {
+            row.iter()
+                .zip(raw)
+                .enumerate()
+                .map(|(c, (v, raw))| {
+                    value(v, raw, || {
+                        number_format(
+                            sheet,
+                            Cell {
+                                column: start.column + c as u32,
+                                row: start.row + r as u32,
+                            },
+                        )
+                    })
+                })
+                .collect()
+        })
         .collect())
 }
 
@@ -384,7 +417,9 @@ fn step(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
                 "Cells",
                 vec![Var::i32(cell.row as i32), Var::i32(cell.column as i32)],
             )?;
-            Ok(value(&target.get("Value")?, &target.get("Value2")?))
+            Ok(value(&target.get("Value")?, &target.get("Value2")?, || {
+                number_format(&sheet, cell)
+            }))
         }
         Kind::ReadRange => {
             let sheet = sheet(book, sheet_name)?;
