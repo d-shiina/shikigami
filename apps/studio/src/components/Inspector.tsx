@@ -9,11 +9,14 @@ import { stepSummary } from "../lib/palette";
 import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { outline } from "../lib/outline";
 import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../lib/parts";
-import { sentence, targetText } from "../lib/sentence";
+import { runScope } from "../lib/runScope";
+import { sentence, targetText, typeTitle } from "../lib/sentence";
 import { findStep, isActive, revertBlocker, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ActorMark, usePendingReview } from "./Timeline";
+import { ExpressionField } from "./ExpressionField";
+import { VariableSetForm } from "./TransformForm";
 import { VarIcon } from "./VarIcon";
 import { VariablesPanel } from "./VariablesPanel";
 
@@ -795,6 +798,10 @@ function ParamsEditor({
   const props = schema.properties ?? {};
   const params = step.params ?? {};
   const known = new Set(vars.keys());
+  const run = useStudio((s) => s.run);
+  const flowId = useStudio((s) => s.flow?.id);
+  const scope = useMemo(() => runScope(run, flowId), [run, flowId]);
+  const expressionParams = new Set(def?.expressionParams ?? []);
   const [raw, setRaw] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -838,6 +845,8 @@ function ParamsEditor({
             {t.apply}
           </button>
         </div>
+      ) : step.type === "variable.set" && params.value === undefined ? (
+        <VariableSetForm step={step} types={vars} scope={scope} update={update} />
       ) : (
         Object.entries(props).map(([key, propSchema]) => {
           const ref = referencedVariables(params[key], known)[0];
@@ -847,6 +856,20 @@ function ParamsEditor({
             else next[key] = value;
             update({ replaceParams: next });
           };
+          if (expressionParams.has(key) && (params[key] === undefined || typeof params[key] === "string")) {
+            const required = schema.required?.includes(key) ?? false;
+            return (
+              <Row key={key} label={`${paramLabel(key)}${required ? " *" : ""}`} title={key} socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}>
+                <ExpressionField
+                  value={typeof params[key] === "string" ? params[key] : ""}
+                  onCommit={(text) => setParam(text.trim() === "" ? null : text)}
+                  types={vars}
+                  scope={scope}
+                  label={paramLabel(key)}
+                />
+              </Row>
+            );
+          }
           if (key === "target" && appOf(step.type)) {
             return (
               <TargetField
@@ -1145,7 +1168,7 @@ function StepInspector() {
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
             <span className="text-sm font-bold" style={{ color }}>
-              {stepLabel(step.type, def?.label)}
+              {typeTitle(step, def)}
             </span>
             <span className="ml-auto font-mono text-[10px] text-slate-400" title={`ID: ${id}`}>
               {step.type}
@@ -1344,7 +1367,7 @@ export function Inspector() {
               {t.shell.flow}
             </button>
             <span className="text-slate-400">›</span>
-            <span className="truncate font-semibold">{step.name || stepLabel(step.type, def?.label)}</span>
+            <span className="truncate font-semibold">{step.name || typeTitle(step, def)}</span>
           </>
         ) : (
           <span className="font-semibold">{t.shell.flow}</span>

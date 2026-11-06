@@ -6,6 +6,8 @@ The functions available in flow expressions (the values of `expressionParams`, a
 
 Functions have no side effects (they never touch files, the screen or the network). Only `now()` / `today()` / `env()` read the clock and environment variables.
 
+In Studio, people rarely type these. A `variable.set` whose expression has a common shape (`trim(text)`, `sum(map(rows, r => num(r.金額)))`, `filter(rows, r => num(r.金額) >= limit)` …) is shown as a form ("Total a column · Table · Column") that writes the same expression back, and expression fields suggest variables, columns and functions and show the result with the last run's values. Writing the plain shapes in the tables below keeps a flow readable as forms.
+
 ## Basics
 
 - Join text with `+` or a template, not a function: `sei + mei`, `sei + '様'`, `"{{ sei }} {{ mei }} 様"`. `+` on a number and a string gives a string
