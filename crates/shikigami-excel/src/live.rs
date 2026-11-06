@@ -503,7 +503,20 @@ fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
                 return Ok(json!({ "count": 0 }));
             };
             session.check()?;
-            let sort = sheet.get("Sort")?.object("Sort")?;
+            // A table (Format as Table, a ListObject) is sorted through its
+            // own Sort: the sheet's Sort.SetRange refuses ranges in a table.
+            let table = sheet
+                .object(
+                    "Cells",
+                    vec![Var::i32(header_row as i32), Var::i32(first as i32)],
+                )?
+                .get("ListObject")
+                .ok()
+                .and_then(|v| v.object("ListObject").ok());
+            let sort = match &table {
+                Some(table) => table.get("Sort")?.object("Sort")?,
+                None => sheet.get("Sort")?.object("Sort")?,
+            };
             let fields = sort.get("SortFields")?.object("SortFields")?;
             fields.call("Clear", vec![])?;
             for (column, descending) in keys {
@@ -546,7 +559,9 @@ fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
                     },
                 },
             )?;
-            sort.call("SetRange", vec![Var::from_object(&whole)])?;
+            if table.is_none() {
+                sort.call("SetRange", vec![Var::from_object(&whole)])?;
+            }
             sort.put("Header", Var::i32(XL_YES))?;
             // Rows, whatever the person last sorted by (xlTopToBottom).
             sort.put("Orientation", Var::i32(1))?;
