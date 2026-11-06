@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useStudio } from "../context";
 import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleView, type ScheduleWhen } from "../lib/api";
 import { t } from "../lib/i18n";
-import { blankWhen, DAYS, describeWhen, KINDS, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
+import { blankWhen, DAYS, describeWhen, KINDS, normalizeDays, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
 
 const inputClass = "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm focus:border-ink focus:outline-none";
 
@@ -25,8 +25,11 @@ function Labeled({ label, hint, children }: { label: string; hint?: string; chil
   );
 }
 
-function DayPicker({ days, onChange }: { days: string[]; onChange: (days: string[]) => void }) {
+function DayPicker({ days: given, onChange }: { days: string[]; onChange: (days: string[]) => void }) {
   const names = t.runs.dayNames as Record<string, string>;
+  // "月" or "Mon" written by hand or with the CLI shows as selected, and is
+  // saved back as "mon".
+  const days: string[] = normalizeDays(given);
   return (
     <div className="flex gap-1">
       {DAYS.map((d) => {
@@ -138,20 +141,71 @@ function WhenFields({ when, onChange, inputs }: { when: ScheduleWhen; onChange: 
   }
 }
 
+type InputVar = { name: string; type: string; required: boolean };
+
+function asText(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+/** What was typed, as the variable's type (numbers and true/false). */
+function asValue(text: string, type: string): unknown {
+  if (type === "number" && text.trim() !== "" && !Number.isNaN(Number(text))) return Number(text);
+  if (type === "boolean" && (text === "true" || text === "false")) return text === "true";
+  return text;
+}
+
+/** Values for the flow's inputs; ones without a default must be given. */
+function InputFields({ vars, values, onChange }: { vars: InputVar[]; values: Record<string, unknown>; onChange: (v: Record<string, unknown>) => void }) {
+  const r = t.runs;
+  if (vars.length === 0) return null;
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-xs font-medium text-slate-600">{r.inputs}</legend>
+      {vars.map((v) => (
+        <Labeled key={v.name} label={v.required ? `${v.name}（${r.required}）` : v.name}>
+          <input
+            className={inputClass}
+            value={asText(values[v.name])}
+            required={v.required}
+            placeholder={v.required ? "" : r.defaultPlaceholder}
+            onChange={(e) => {
+              const next = { ...values };
+              if (e.target.value === "") delete next[v.name];
+              else next[v.name] = asValue(e.target.value, v.type);
+              onChange(next);
+            }}
+          />
+        </Labeled>
+      ))}
+    </fieldset>
+  );
+}
+
 function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSaved: (list: ScheduleList) => void; onCancel: () => void }) {
   const summaries = useStudio((s) => s.summaries);
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState<string | null>(null);
-  const [inputs, setInputs] = useState<string[]>([]);
+  const [vars, setVars] = useState<InputVar[]>([]);
+  const inputs = vars.map((v) => v.name);
   const r = t.runs;
-  // The input variables of the flow, for the file trigger's path.
+  // The input variables of the flow: the file trigger's path goes in one,
+  // and the others are given here (the agent passes them to every run).
   useEffect(() => {
-    if (!draft.flowId) return setInputs([]);
+    if (!draft.flowId) return setVars([]);
     let live = true;
     api
       .getFlow(draft.flowId)
-      .then((s) => live && setInputs((s.variables ?? []).filter((v) => v.direction === "input" || v.direction === "inOut").map((v) => v.name)))
-      .catch(() => live && setInputs([]));
+      .then(
+        (s) =>
+          live &&
+          setVars(
+            (s.variables ?? [])
+              .filter((v) => v.direction === "input" || v.direction === "inOut")
+              .map((v) => ({ name: v.name, type: v.type ?? "any", required: v.default === undefined })),
+          ),
+      )
+      .catch(() => live && setVars([]));
     return () => {
       live = false;
     };
@@ -204,6 +258,11 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
         </div>
       </div>
       <WhenFields when={draft.when} inputs={inputs} onChange={(when) => setDraft({ ...draft, when })} />
+      <InputFields
+        vars={vars.filter((v) => !(draft.when.kind === "fileAdded" && draft.when.input === v.name))}
+        values={draft.inputs ?? {}}
+        onChange={(inputs) => setDraft({ ...draft, inputs })}
+      />
       <p className="text-xs text-slate-600">{describeWhen(draft.when)}</p>
       {error && <p className="rounded border border-shu-600/40 bg-shu-600/5 px-2 py-1.5 text-xs text-shu-600">{error}</p>}
       <div className="flex justify-end gap-2">

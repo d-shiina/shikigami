@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use serde::Serialize;
 use shikigami_agent::ipc::{self, Request};
-use shikigami_agent::{AgentStatus, Schedule, Schedules};
-use shikigami_core::{ErrorPayload, FlowService};
+use shikigami_agent::{AgentStatus, Schedule, Schedules, When};
+use shikigami_core::{ErrorPayload, FlowService, VariableDef};
 use tauri::State;
 
 use crate::AppState;
@@ -83,13 +83,32 @@ pub fn save_schedule(state: State<'_, AppState>, schedule: Schedule) -> CmdResul
     if let Some(problem) = schedule.when.problem() {
         return Err(err("SCHEDULE_INVALID", problem));
     }
-    let flow = svc.get(&schedule.flow_id)?;
-    schedule.name = schedule.name.trim().to_owned();
-    if schedule.name.is_empty() {
-        schedule.name = flow.name;
-    }
     let path = path(svc);
     let mut all = Schedules::load(&path)?;
+    schedule.name = schedule.name.trim().to_owned();
+    match svc.get(&schedule.flow_id) {
+        Ok(flow) => {
+            // Schedules run the published version, so its inputs are the
+            // ones that must have a value.
+            let published = svc.published_version(&schedule.flow_id).ok().flatten();
+            let vars = published
+                .as_ref()
+                .map_or(&flow.variables, |v| &v.flow.variables);
+            if let Some(problem) = missing_inputs(vars, &schedule) {
+                return Err(err("SCHEDULE_INVALID", problem));
+            }
+            if schedule.name.is_empty() {
+                schedule.name = flow.name;
+            }
+        }
+        // A schedule whose flow was deleted can still be switched off or
+        // renamed, but not pointed at it anew.
+        Err(_)
+            if all.schedules.iter().any(|s| {
+                s.id == schedule.id && !schedule.id.is_empty() && s.flow_id == schedule.flow_id
+            }) => {}
+        Err(e) => return Err(e.into()),
+    }
     if schedule.id.is_empty() {
         schedule.id = shikigami_agent::schedule::new_id();
         all.schedules.push(schedule);
@@ -113,6 +132,29 @@ pub fn delete_schedule(state: State<'_, AppState>, id: String) -> CmdResult<Sche
     all.schedules.retain(|s| s.id != id);
     all.save(&path)?;
     list(svc)
+}
+
+/// The input variables without a default that the schedule gives no value
+/// (a file trigger fills its `input` with the file's path); every run would
+/// fail with `MISSING_INPUT` otherwise.
+fn missing_inputs(vars: &[VariableDef], schedule: &Schedule) -> Option<String> {
+    let from_file = match &schedule.when {
+        When::FileAdded { input, .. } => input.as_deref(),
+        _ => None,
+    };
+    let missing: Vec<&str> = vars
+        .iter()
+        .filter(|v| v.direction.is_input() && v.default.is_none())
+        .filter(|v| Some(v.name.as_str()) != from_file)
+        .filter(|v| {
+            schedule
+                .inputs
+                .get(&v.name)
+                .is_none_or(|x| x.is_null() || x == "")
+        })
+        .map(|v| v.name.as_str())
+        .collect();
+    (!missing.is_empty()).then(|| format!("give a value to the input {}", missing.join(", ")))
 }
 
 async fn status(svc: &FlowService) -> CmdResult<Option<AgentStatus>> {

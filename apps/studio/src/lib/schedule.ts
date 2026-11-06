@@ -49,9 +49,24 @@ export function whenProblem(when: ScheduleWhen): string | null {
   }
 }
 
+const JA_DAYS: Record<string, Day> = { 月: "mon", 火: "tue", 水: "wed", 木: "thu", 金: "fri", 土: "sat", 日: "sun" };
+
+/** The days as the agent reads them ("月", "Mon", "mon" are all Monday), in
+ * one spelling; ones it does not know are dropped, as it ignores them. */
+export function normalizeDays(days: string[] | undefined): Day[] {
+  const out = new Set<Day>();
+  for (const raw of days ?? []) {
+    const d = raw.trim().toLowerCase();
+    const day = (DAYS as readonly string[]).includes(d) ? (d as Day) : JA_DAYS[d];
+    if (day) out.add(day);
+  }
+  return DAYS.filter((d) => out.has(d));
+}
+
 function dayList(days: string[] | undefined): string {
   const names = t.runs.dayNames as Record<string, string>;
-  return DAYS.filter((d) => days?.includes(d))
+  const on = normalizeDays(days);
+  return DAYS.filter((d) => on.includes(d))
     .map((d) => names[d])
     .join(t.runs.describe.daysJoin);
 }

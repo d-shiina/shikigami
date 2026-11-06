@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blankWhen, describeWhen, isTime, shortTime, whenProblem } from "./schedule";
+import { blankWhen, describeWhen, isTime, normalizeDays, shortTime, whenProblem } from "./schedule";
 
 describe("schedule", () => {
   it("says when a schedule fires", () => {
@@ -25,5 +25,12 @@ describe("schedule", () => {
 
   it("shortens the agent's times", () => {
     expect(shortTime("2026-11-07T08:00:00+09:00")).toBe("11/7 08:00");
+  });
+});
+
+describe("normalizeDays", () => {
+  it("reads the spellings the agent accepts", () => {
+    expect(normalizeDays(["月", "Wed", " fri ", "x", "mon"])).toEqual(["mon", "wed", "fri"]);
+    expect(describeWhen({ kind: "daily", at: "08:00", days: ["月"] })).toBe(describeWhen({ kind: "daily", at: "08:00", days: ["mon"] }));
   });
 });
