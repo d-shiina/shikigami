@@ -10,7 +10,16 @@ MCP-native desktop RPA where AI and humans build, edit, and run the same automat
 
 Shikigami is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same flows**. AI builds them; finished flows run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
 
-![Shikigami Studio (Phase 1)](docs/assets/studio-phase1.png)
+![Shikigami Studio](docs/assets/studio-phase1.png)
+
+## Getting started
+
+1. Download `Shikigami.Studio_<version>_x64-setup.exe` from the [latest release](https://github.com/d-shiina/shikigami/releases/latest) and run it. It installs per user, so no administrator rights are needed. Studio updates itself from then on.
+2. Start **Shikigami Studio** from the Start menu. Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
+3. To have AI build flows, install [Claude Code](https://claude.com/claude-code), sign in, and open "Claude Code" at the top left of Studio (Ctrl+J). Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
+4. Check the AI's changes under "To review" in the sidebar and press "Review and publish". Published flows run without AI from Studio, from the "Shikigami Run" window, or on a schedule.
+
+To try one task from start to finish, see the [tutorials](docs/tutorials/README.md) (about 15 minutes each, with sample files). The rest of this page is for developers.
 
 ## Status
 

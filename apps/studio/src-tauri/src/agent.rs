@@ -239,7 +239,7 @@ pub fn agent_info() -> AgentInfo {
     let command = config.executable();
     let problem = match (&command, cli_path()) {
         (None, _) if config.kind == AgentKind::ClaudeCode => Some(
-            "Claude Code が見つかりません。インストールしてログインすると、ここから話しかけられます。"
+            "Claude Code が見つかりません。インストールしてログインすると、ここから作業を依頼できます。"
                 .to_owned(),
         ),
         (None, _) => Some("config.json の agent.command が見つかりません。".to_owned()),
