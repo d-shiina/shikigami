@@ -384,7 +384,9 @@ pub struct InspectPageParams {
     /// Browser context to use (default "default"). Contexts here belong to the MCP session, not to runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
-    /// Limit the snapshot to one element, e.g. { "role": "table", "name": "受注" }.
+    /// Limit the snapshot to one element, e.g. { "role": "table", "name": "受注" }. The tree does
+    /// not show the inside of frames: look into one (listed under `frames`) with
+    /// { "css": "body", "frame": { "name": "main" } }.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<Value>,
     /// Keep a screenshot with the observation for the human reviewer
