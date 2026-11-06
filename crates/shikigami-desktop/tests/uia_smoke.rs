@@ -212,3 +212,85 @@ fn kill(pid: u64) {
         .args(["/PID", &pid.to_string(), "/F"])
         .status();
 }
+
+/// A WinForms window with a DataGridView and a list view, drawn by
+/// PowerShell (every Windows has it), read with desktop.getTable.
+#[tokio::test]
+async fn winforms_grids_read_as_tables() {
+    let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.Form
+$f.Text = 'Shikigami Grid Test'
+$f.Width = 600; $f.Height = 500
+$g = New-Object System.Windows.Forms.DataGridView
+$g.Name = 'grid'; $g.Dock = 'Top'; $g.Height = 200
+[void]$g.Columns.Add('no', '番号')
+[void]$g.Columns.Add('amount', '金額')
+[void]$g.Rows.Add('A-1', '1,200')
+[void]$g.Rows.Add('A-2', '300')
+$l = New-Object System.Windows.Forms.ListView
+$l.Name = 'files'; $l.View = 'Details'; $l.Dock = 'Bottom'; $l.Height = 200
+[void]$l.Columns.Add('名前', 100)
+[void]$l.Columns.Add('サイズ', 100)
+$i = New-Object System.Windows.Forms.ListViewItem('a.txt')
+[void]$i.SubItems.Add('1 KB')
+[void]$l.Items.Add($i)
+$f.Controls.Add($g); $f.Controls.Add($l)
+[System.Windows.Forms.Application]::Run($f)
+"#;
+    let path = std::env::temp_dir().join("shikigami-grid-test.ps1");
+    let mut bytes = b"\xEF\xBB\xBF".to_vec();
+    bytes.extend_from_slice(script.as_bytes());
+    std::fs::write(&path, bytes).unwrap();
+
+    let adapter = DesktopAdapter::new();
+    let runtime = Runtime::builder().adapter(&adapter).build();
+    let mut s = Scenario::new("grids");
+    for name in ["pid", "grid", "files"] {
+        s.variables.push(VariableDef {
+            direction: VarDirection::Output,
+            ..VariableDef::new(name, VarType::Any)
+        });
+    }
+    let window = json!({ "title": "Shikigami Grid Test" });
+    s.steps = vec![
+        step(
+            types::LAUNCH,
+            json!({ "path": "powershell.exe", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.display().to_string()] }),
+            Some("pid"),
+        ),
+        step(
+            types::GET_TABLE,
+            json!({ "target": { "window": window } }),
+            Some("grid"),
+        ),
+        step(
+            types::GET_TABLE,
+            json!({ "target": { "window": window, "element": { "id": "files" } } }),
+            Some("files"),
+        ),
+    ];
+    let report = runtime
+        .start(s, RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    let tree = adapter
+        .inspect("smoke", json!({ "window": window }))
+        .await
+        .map(|t| t["snapshot"].as_str().unwrap_or_default().to_owned());
+    eprintln!("{tree:?}\n{:?}\n{:?}", report.outputs, report.error);
+    if let Some(pid) = report.outputs["pid"]["pid"].as_u64() {
+        kill(pid);
+    }
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(
+        report.outputs["grid"],
+        json!([{ "番号": "A-1", "金額": "1,200" }, { "番号": "A-2", "金額": "300" }])
+    );
+    assert_eq!(
+        report.outputs["files"],
+        json!([{ "名前": "a.txt", "サイズ": "1 KB" }])
+    );
+}
