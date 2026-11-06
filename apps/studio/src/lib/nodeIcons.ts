@@ -2,6 +2,8 @@
 // Studio), so a node can be told apart at a glance in the palette.
 import {
   AppWindow,
+  ArrowDownToLine,
+  ArrowLeftRight,
   Braces,
   Calendar,
   Camera,
@@ -41,6 +43,7 @@ import {
   MousePointerClick,
   MoveRight,
   Network,
+  Pointer,
   OctagonX,
   Paperclip,
   Puzzle,
@@ -51,7 +54,9 @@ import {
   Settings2,
   ShieldAlert,
   SkipForward,
+  SquareX,
   Table,
+  Tag,
   Terminal,
   TextCursorInput,
   Timer,
@@ -63,6 +68,11 @@ import {
 const BY_TYPE: Record<string, LucideIcon> = {
   "browser.open": Globe,
   "browser.click": MousePointerClick,
+  "browser.hover": Pointer,
+  "browser.scroll": ArrowDownToLine,
+  "browser.getAttribute": Tag,
+  "browser.switchTab": ArrowLeftRight,
+  "browser.closeTab": SquareX,
   "browser.fill": TextCursorInput,
   "browser.select": ListFilter,
   "browser.press": Keyboard,

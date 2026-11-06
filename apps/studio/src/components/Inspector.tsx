@@ -216,7 +216,21 @@ function ParamField({
   }
   let hint = schema.description;
   let editor: React.ReactNode;
-  if (schema.enum) {
+  // A choice that can also be written out in full (a dialog's answer): the
+  // choice, unless the value is already the long form.
+  const choices = schema.oneOf?.find((branch) => branch.enum)?.enum;
+  if (choices && !isRecord(value)) {
+    editor = (
+      <select className={inputClass} value={String(value ?? "")} onChange={(e) => onChange(e.target.value || null)}>
+        <option value="">{t.props.unset}</option>
+        {choices.map((v) => (
+          <option key={String(v)} value={String(v)}>
+            {String(v)}
+          </option>
+        ))}
+      </select>
+    );
+  } else if (schema.enum) {
     editor = (
       <select className={inputClass} value={String(value ?? "")} onChange={(e) => onChange(e.target.value || null)}>
         <option value="">{t.props.unset}</option>
@@ -229,7 +243,7 @@ function ParamField({
     );
   } else if (schema.type === "boolean") {
     editor = <input type="checkbox" className="mt-1.5" checked={value === true} onChange={(e) => onChange(e.target.checked)} />;
-  } else if (schema.type === "integer" || schema.type === "number" || schema.oneOf) {
+  } else if (schema.type === "integer" || schema.type === "number" || (schema.oneOf && !choices)) {
     // number | expression string (oneOf), or plain number
     hint ??= t.props.numberHint;
     editor = (
@@ -281,7 +295,7 @@ function ParamField({
 }
 
 /** Items set rarely: shown under "詳しく指定" unless they hold a value. */
-const RARE = new Set(["testId", "css", "exact", "nth", "className", "placeholder"]);
+const RARE = new Set(["testId", "css", "exact", "nth", "className", "placeholder", "frame"]);
 /** ARIA roles offered for a browser target, whose role is free text. */
 const BROWSER_ROLES = ["button", "link", "textbox", "checkbox", "radio", "combobox", "listitem", "menuitem", "tab", "heading", "cell", "row", "image"];
 

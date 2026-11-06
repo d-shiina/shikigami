@@ -634,6 +634,8 @@ export const ja = {
     process: "アプリ（exe）",
     className: "クラス名",
     id: "ID",
+    frame: "フレーム",
+    src: "アドレス",
     more: "詳しく指定",
     less: "たたむ",
     otherRole: "その他（直接入力）",

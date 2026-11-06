@@ -6,7 +6,7 @@
 // tabs. Waiting relies on Playwright's auto-waiting, never on fixed sleeps.
 
 import { chromium } from "playwright-core";
-import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, LaunchOptions, Locator, Page } from "playwright-core";
+import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Dialog, LaunchOptions, Locator, Page } from "playwright-core";
 
 import { AdapterError, describe, locate, type Target } from "./targets.ts";
 
@@ -31,9 +31,31 @@ interface Common {
 
 type Params = Common & Record<string, unknown>;
 
+/** How the step that sets it answers the JS dialog (alert / confirm / prompt) it causes. */
+interface DialogPlan {
+  action: "accept" | "dismiss";
+  promptText?: string;
+}
+
+interface DialogSeen {
+  type: string;
+  message: string;
+}
+
 interface Session {
   context: BrowserContext;
+  /** The current tab: every step works on it (browser.switchTab changes it). */
   page: Page;
+  /** Tabs in the order they became current, to go back when one closes. */
+  history: Page[];
+  /** The answer for dialogs while a step with `dialog` runs. */
+  dialogPlan?: DialogPlan;
+  /** Dialogs answered by the running step. */
+  answered: DialogSeen[];
+  /** Tells the running step that its dialog came. */
+  onDialog?: () => void;
+  /** The last dialog nobody asked for (dismissed); reported in the next failure. */
+  unanswered?: DialogSeen;
   headless: boolean;
   /** Name the login state is saved under when the context closes (`session` of browser.open). */
   saveAs?: string;
@@ -106,6 +128,16 @@ export class Adapter {
           return await this.open(params);
         case "click":
           return await this.click(params);
+        case "hover":
+          return await this.hover(params);
+        case "scroll":
+          return await this.scroll(params);
+        case "getAttribute":
+          return await this.getAttribute(params);
+        case "switchTab":
+          return await this.switchTab(params);
+        case "closeTab":
+          return await this.closeTab(params);
         case "fill":
           return await this.fill(params);
         case "select":
@@ -189,6 +221,8 @@ export class Adapter {
 
   private session(params: Params): Session {
     const session = this.sessions.get(this.key(params));
+    // The current tab closed itself (a popup that finished): go back to the one before it.
+    if (session && session.page.isClosed()) this.backToOpenTab(session);
     if (!session || session.page.isClosed()) {
       throw new AdapterError("BROWSER_NOT_OPEN", `browser context '${params.context ?? "default"}' is not open`, {
         details: { hint: "Add a browser.open step (with the same `context`) before this step." },
@@ -207,10 +241,105 @@ export class Adapter {
       const context = await (await this.browser(headless)).newContext({ locale: "ja-JP", storageState });
       context.setDefaultTimeout(this.timeout);
       const page = await context.newPage();
-      session = { context, page, headless, secrets: new Set(), secretFields: [] };
+      const created: Session = { context, page, headless, history: [page], answered: [], secrets: new Set(), secretFields: [] };
+      context.on("page", (p) => this.watchTab(created, p));
+      this.watchTab(created, page);
+      session = created;
       this.sessions.set(key, session);
     }
     return session;
+  }
+
+  /** Every tab of a context answers its JS dialogs as the running step says. */
+  private watchTab(session: Session, page: Page): void {
+    page.on("dialog", (dialog: Dialog) => {
+      // Secrets typed earlier may be quoted in the message (outputs and logs reach AI clients).
+      const seen = { type: dialog.type(), message: this.mask(session, dialog.message()) };
+      const plan = session.dialogPlan;
+      if (plan) {
+        session.answered.push(seen);
+        const answer = plan.action === "accept" ? dialog.accept(plan.promptText) : dialog.dismiss();
+        answer.catch(() => {});
+        session.onDialog?.();
+      } else {
+        // Nobody asked for it: close it like the browser would without a
+        // person (alert: OK, confirm / prompt: cancel) and tell the next failure.
+        session.unanswered = seen;
+        process.stderr.write(`dialog dismissed (no step answers it): ${seen.type} ${JSON.stringify(seen.message)}\n`);
+        dialog.dismiss().catch(() => {});
+      }
+    });
+  }
+
+  private backToOpenTab(session: Session): void {
+    session.history = session.history.filter((p) => !p.isClosed());
+    const previous = session.history.at(-1) ?? session.context.pages().at(-1);
+    if (previous) session.page = previous;
+  }
+
+  private makeCurrent(session: Session, page: Page): void {
+    session.page = page;
+    session.history = [...session.history.filter((p) => p !== page && !p.isClosed()), page];
+  }
+
+  /**
+   * Runs an action that may raise a JS dialog. With `dialog` in the params the
+   * step answers it (and waits for it when the action is done before the
+   * dialog shows) and returns its message; without, any dialog is dismissed.
+   */
+  private async withDialog(session: Session, params: Params, action: () => Promise<unknown>): Promise<string | null> {
+    const plan = this.dialogPlan(params);
+    if (!plan) {
+      await action();
+      return null;
+    }
+    // One time budget for the action and the wait for its dialog, so the
+    // step never outlives the Runtime's limit with an answer still armed.
+    const deadline = Date.now() + this.limit(params);
+    session.answered = [];
+    session.dialogPlan = plan;
+    const shown = new Promise<void>((resolve) => (session.onDialog = resolve));
+    try {
+      await action();
+      if (session.answered.length === 0) {
+        let timer: NodeJS.Timeout | undefined;
+        const expired = new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new AdapterError("DIALOG_NOT_SHOWN", "no dialog (alert / confirm / prompt) appeared", {
+                  details: {
+                    hint: "The action ran but the page showed no JS dialog. Remove `dialog` if none is expected; a dialog drawn by the page itself (not alert / confirm / prompt) is an element: use browser.click on its button.",
+                  },
+                }),
+              ),
+            Math.max(deadline - Date.now(), 1),
+          );
+        });
+        try {
+          await Promise.race([shown, expired]);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      return session.answered[0]?.message ?? null;
+    } finally {
+      session.dialogPlan = undefined;
+      session.onDialog = undefined;
+    }
+  }
+
+  private dialogPlan(params: Params): DialogPlan | undefined {
+    const dialog = params.dialog;
+    if (dialog === undefined || dialog === null) return undefined;
+    if (dialog === "accept" || dialog === "dismiss") return { action: dialog };
+    if (typeof dialog === "object") {
+      const d = dialog as Record<string, unknown>;
+      if (d.action === "accept" || d.action === "dismiss") {
+        return { action: d.action, promptText: typeof d.promptText === "string" ? d.promptText : undefined };
+      }
+    }
+    throw new AdapterError("INVALID_PARAMS", 'dialog must be "accept", "dismiss" or { "action": "accept", "promptText": "…" }');
   }
 
   private async open(params: Params): Promise<unknown> {
@@ -218,15 +347,19 @@ export class Adapter {
     if (!url) throw new AdapterError("INVALID_PARAMS", "url is required");
     const session = await this.ensureSession(params);
     if (typeof params.session === "string" && params.session) session.saveAs = params.session;
+    let dialog: string | null = null;
     try {
-      await session.page.goto(url, { waitUntil: "load", timeout: this.limit(params) });
+      dialog = await this.withDialog(session, params, () => session.page.goto(url, { waitUntil: "load", timeout: this.limit(params) }));
     } catch (error) {
+      if (error instanceof AdapterError) throw error;
       throw new AdapterError("NAVIGATION_FAILED", `could not open ${url}: ${(error as Error).message.split("\n")[0]}`, {
         retryable: true,
         details: { url },
       });
     }
-    return { url: session.page.url(), title: await session.page.title() };
+    const opened: Record<string, unknown> = { url: session.page.url(), title: await session.page.title() };
+    if (dialog !== null) opened.dialog = dialog;
+    return opened;
   }
 
   private target(params: Params): { page: Page; locator: Locator } {
@@ -234,9 +367,150 @@ export class Adapter {
     return { page, locator: locate(page, params.target as Target | undefined) };
   }
 
-  private async click({ ...params }: Params): Promise<null> {
-    await this.target(params).locator.click({ timeout: this.limit(params) });
+  private async click(params: Params): Promise<string | null> {
+    const session = this.session(params);
+    const { locator } = this.target(params);
+    return await this.withDialog(session, params, () => locator.click({ timeout: this.limit(params) }));
+  }
+
+  private async hover(params: Params): Promise<null> {
+    await this.target(params).locator.hover({ timeout: this.limit(params) });
     return null;
+  }
+
+  /**
+   * `target` alone: brings it into view. `to` alone: the page to its top or
+   * bottom. Both: scrolls inside `target` (a list that scrolls by itself).
+   */
+  private async scroll(params: Params): Promise<null> {
+    const to = params.to as "top" | "bottom" | undefined;
+    if (to !== undefined && to !== "top" && to !== "bottom") throw new AdapterError("INVALID_PARAMS", 'to must be "top" or "bottom"');
+    if (!params.target && !to) throw new AdapterError("INVALID_PARAMS", "give `target` (to bring it into view) or `to` (top / bottom)");
+    const timeout = this.limit(params);
+    if (!params.target) {
+      await this.session(params).page.evaluate((bottom) => {
+        const el = document.scrollingElement ?? document.documentElement;
+        window.scrollTo(0, bottom ? el.scrollHeight : 0);
+      }, to === "bottom");
+      return null;
+    }
+    const { locator } = this.target(params);
+    if (!to) {
+      await locator.scrollIntoViewIfNeeded({ timeout });
+      return null;
+    }
+    await locator.evaluate(
+      (el, bottom) => {
+        el.scrollTop = bottom ? el.scrollHeight : 0;
+        el.dispatchEvent(new Event("scroll"));
+      },
+      to === "bottom",
+      { timeout },
+    );
+    return null;
+  }
+
+  /** An attribute of `target` (`href` / `src` as full addresses); null when it has none. */
+  private async getAttribute(params: Params): Promise<unknown> {
+    const name = String(params.name ?? "");
+    if (!name) throw new AdapterError("INVALID_PARAMS", "name is required, e.g. \"href\"");
+    const session = this.session(params);
+    const { locator } = this.target(params);
+    const mask = (v: string | null) => (v === null ? null : this.mask(session, v));
+    // Runs in the page (no closures): href / src / action as full addresses.
+    const read = (el: Element, attr: string): string | null => {
+      if (!el.hasAttribute(attr)) return null;
+      const property = (el as unknown as Record<string, unknown>)[attr];
+      return (attr === "href" || attr === "src" || attr === "action") && typeof property === "string" ? property : el.getAttribute(attr);
+    };
+    if (params.all === true) {
+      await locator.first().waitFor({ state: "attached", timeout: this.limit(params) });
+      const values: (string | null)[] = [];
+      for (const el of await locator.all()) values.push(await el.evaluate(read, name));
+      return values.map(mask);
+    }
+    return mask(await locator.evaluate(read, name, { timeout: this.limit(params) }));
+  }
+
+  /**
+   * Makes another tab of the context current: the newest one whose title or
+   * address contains `title` / `url`, or the `index`-th in opening order.
+   * Waits for it to open (a popup a click just asked for).
+   */
+  private async switchTab(params: Params): Promise<unknown> {
+    const session = this.session(params);
+    const title = typeof params.title === "string" ? params.title : undefined;
+    const url = typeof params.url === "string" ? params.url : undefined;
+    const index = typeof params.index === "number" ? params.index : undefined;
+    if (title === undefined && url === undefined && index === undefined) {
+      throw new AdapterError("INVALID_PARAMS", "give `title`, `url` or `index` of the tab");
+    }
+    const deadline = Date.now() + this.limit(params);
+    for (;;) {
+      const pages = session.context.pages().filter((p) => !p.isClosed());
+      let found: Page | undefined;
+      if (index !== undefined) {
+        found = pages[index];
+      } else {
+        for (const page of [...pages].reverse()) {
+          const pageTitle = await page.title().catch(() => "");
+          if ((title === undefined || pageTitle.includes(title)) && (url === undefined || page.url().includes(url))) {
+            found = page;
+            break;
+          }
+        }
+      }
+      if (found) {
+        await found.waitForLoadState("load", { timeout: Math.max(deadline - Date.now(), 1) }).catch(() => {});
+        this.makeCurrent(session, found);
+        await found.bringToFront().catch(() => {});
+        return { url: found.url(), title: await found.title(), index: pages.indexOf(found) };
+      }
+      if (Date.now() >= deadline) {
+        throw new AdapterError("TAB_NOT_FOUND", `no tab matches ${JSON.stringify({ title, url, index })}`, {
+          retryable: true,
+          details: { tabs: await this.tabs(session), hint: "Pick the tab by `title` or `url` from `tabs` (part of it is enough), or by `index`." },
+        });
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
+  /** Closes the current tab and goes back to the one before it. */
+  private async closeTab(params: Params): Promise<unknown> {
+    const session = this.session(params);
+    const open = session.context.pages().filter((p) => !p.isClosed());
+    if (open.length <= 1) {
+      throw new AdapterError("LAST_TAB", "this is the only tab of the context", {
+        details: { hint: "Use browser.close to close the browser (or leave it: the run closes it at the end)." },
+      });
+    }
+    await session.page.close();
+    this.backToOpenTab(session);
+    await session.page.bringToFront().catch(() => {});
+    return { url: session.page.url(), title: await session.page.title() };
+  }
+
+  private async tabs(session: Session): Promise<{ index: number; title: string; url: string; current: boolean }[]> {
+    const pages = session.context.pages().filter((p) => !p.isClosed());
+    return Promise.all(
+      pages.map(async (p, index) => ({ index, title: await p.title().catch(() => ""), url: p.url(), current: p === session.page })),
+    );
+  }
+
+  /** The frames of the current tab (for finding elements inside them). */
+  private async frames(session: Session): Promise<{ name: string; src: string; title?: string }[]> {
+    const page = session.page;
+    return page
+      .locator("iframe, frame")
+      .evaluateAll((els) =>
+        els.map((el) => ({
+          name: el.getAttribute("name") ?? el.id ?? "",
+          src: el.getAttribute("src") ?? "",
+          title: el.getAttribute("title") ?? undefined,
+        })),
+      )
+      .catch(() => []);
   }
 
   private async fill(params: Params): Promise<null> {
@@ -300,14 +574,14 @@ export class Adapter {
     return await locator.selectOption(choices, { timeout });
   }
 
-  private async press(params: Params): Promise<null> {
+  private async press(params: Params): Promise<string | null> {
     const key = String(params.key ?? "");
+    const session = this.session(params);
     if (params.target) {
-      await this.target(params).locator.press(key, { timeout: this.limit(params) });
-    } else {
-      await this.session(params).page.keyboard.press(key);
+      const { locator } = this.target(params);
+      return await this.withDialog(session, params, () => locator.press(key, { timeout: this.limit(params) }));
     }
-    return null;
+    return await this.withDialog(session, params, () => session.page.keyboard.press(key));
   }
 
   private async getText(params: Params): Promise<unknown> {
@@ -512,6 +786,14 @@ export class Adapter {
     const root = params.target ? locate(page, params.target as Target) : page.locator("body");
     const snapshot = await this.redact(session, await root.ariaSnapshot());
     const result: Record<string, unknown> = { url: page.url(), title: await page.title(), snapshot };
+    const frames = params.target ? [] : await this.frames(session);
+    if (frames.length > 0) {
+      result.frames = frames;
+      result.framesHint =
+        "The page has frames; their contents are not in `snapshot`. To see one, call again with target { css: \"body\", frame: { name: \"<name>\" } } (or title / src); steps reach elements inside it with the same `frame` in their target.";
+    }
+    const tabs = await this.tabs(session);
+    if (tabs.length > 1) result.tabs = tabs;
     // Review evidence: the visible part of the page, secrets blacked out as in browser.screenshot.
     // Best effort: a page that cannot be captured still gets its tree.
     if (typeof params.screenshotPath === "string" && params.screenshotPath) {
@@ -594,15 +876,32 @@ export class Adapter {
       });
     }
     if (error instanceof Error && error.name === "TimeoutError") {
-      return new AdapterError("ELEMENT_NOT_FOUND", `no element matches ${describe(target)}`, {
-        retryable: true,
-        details: {
-          target,
-          url: this.currentUrl(params),
-          page: await this.pageSnapshot(params),
-          hint: "Pick the target from `page` (role and name as listed), or wait for the page with browser.waitFor.",
-        },
-      });
+      const details: Record<string, unknown> = {
+        target,
+        url: this.currentUrl(params),
+        page: await this.pageSnapshot(params),
+        hint: "Pick the target from `page` (role and name as listed), or wait for the page with browser.waitFor.",
+      };
+      const session = this.sessions.get(this.key(params));
+      if (session && !session.page.isClosed()) {
+        const hints = [String(details.hint)];
+        const frames = await this.frames(session);
+        if (frames.length > 0 && !target?.frame) {
+          details.frames = frames;
+          hints.push("The page has frames: an element inside one needs `frame` in its target, e.g. { ..., \"frame\": { \"name\": \"main\" } }.");
+        }
+        const tabs = await this.tabs(session);
+        if (tabs.length > 1) {
+          details.tabs = tabs;
+          hints.push("Several tabs are open: steps work on the current one; use browser.switchTab to move to another (e.g. a popup).");
+        }
+        if (session.unanswered) {
+          details.dismissedDialog = session.unanswered;
+          hints.push("A JS dialog was dismissed because no step answered it: add `dialog: \"accept\"` to the step that causes it.");
+        }
+        details.hint = hints.join(" ");
+      }
+      return new AdapterError("ELEMENT_NOT_FOUND", `no element matches ${describe(target)}`, { retryable: true, details });
     }
     return new AdapterError("BROWSER_ERROR", firstLine, { details: { target } });
   }
