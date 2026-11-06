@@ -97,7 +97,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったシ
 2. 書く前に `test_step` で `excel.listSheets` か `excel.readRange` を実行し、返る `state`（全シートの使用範囲と先頭の数行）で見出しの位置とシート名を確かめる。
 3. 見出し行のある表は `excel.readRows`（見出しをキーにしたレコード、行番号 `_row` つき）→ `control.forEach`。同じ行に結果を書くときは `excel.writeCell` の `cell` を `"F{{ row._row }}"` にする。結果を貯めるときは `excel.appendRows`（キーは見出しと完全一致）。
 4. 日付は読むと `"2026-10-28"`、書くときは `{ "date": "2026-10-28" }`。数式は `{ "formula": "SUM(B2:B9)" }`。ただの文字列は文字のまま書かれる。
-5. マクロを動かすときだけ `excel.runMacro`（`macro: "Module1.集計"`、Windows と Excel が必要）。MsgBox を出すマクロは終わらないので使わない。セルの読み書きをマクロで代用しない。数式の結果が要るなら `excel.recalculate`、並べ替えは `excel.sort`（`by: [{ "column": "金額", "order": "desc" }]`）、PDF にするなら `excel.exportPdf`（`to: "output/請求書.pdf"`）。どれも Windows と Excel が必要。
+5. マクロを動かすときだけ `excel.runMacro`（`macro: "Module1.集計"`、Windows と Excel が必要）。MsgBox を出すマクロは終わらないので使わない。セルの読み書きをマクロで代用しない。数式の結果が要るなら `excel.recalculate`、並べ替えは `excel.sort`（`by: [{ "column": "金額", "order": "desc" }]`）、PDF にするなら `excel.exportPdf`（`to: "output/請求書.pdf"`）。見た目を整えるのは `excel.format`（`range` と変えたいものだけ）、絞り込みは `excel.filter`、集計表は `excel.pivot`（新しいシート `toSheet` に作る。値の集計だけなら式の関数で足りる）。どれも Windows と Excel が必要。
 6. 同じブックへのステップは自動で順番待ちになる。ロックや「開く・保存・閉じる」のステップは書かない（書き込みはステップごとに保存される）。ユーザーがこの PC の Excel でブックを開いていれば、`excel.*` は開いているブックに読み書きして保存する（閉じてもらう必要はない）。`FILE_IN_USE` はほかの場所（共有フォルダーで別の人など）で開かれているので、閉じてもらう。`EXCEL_BUSY` はセルの編集中かダイアログが出ているので、終わらせてもらってから再実行。
 
 ## Word の書類を作るシナリオ

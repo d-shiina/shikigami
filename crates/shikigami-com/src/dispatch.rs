@@ -21,8 +21,8 @@ use windows::Win32::System::Com::{
     MkParseDisplayName,
 };
 use windows::Win32::System::Ole::{
-    DISPID_PROPERTYPUT, GetActiveObject, SafeArrayGetDim, SafeArrayGetElement, SafeArrayGetLBound,
-    SafeArrayGetUBound,
+    DISPID_PROPERTYPUT, GetActiveObject, SafeArrayCreateVector, SafeArrayGetDim,
+    SafeArrayGetElement, SafeArrayGetLBound, SafeArrayGetUBound, SafeArrayPutElement,
 };
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
 use windows::Win32::System::Variant::{
@@ -365,6 +365,29 @@ impl Var {
         Self::with(VT_BOOL, |u| {
             u.boolVal = if b { VARIANT_TRUE } else { VARIANT_FALSE }
         })
+    }
+
+    /// A list of texts as one argument (a SAFEARRAY of VARIANTs), e.g. the
+    /// values of `Range.AutoFilter` with `xlFilterValues`.
+    pub fn str_array(items: &[String]) -> Self {
+        let Ok(count) = u32::try_from(items.len()) else {
+            return Self::empty();
+        };
+        // SAFETY: a fresh one-dimensional array of `count` VARIANTs; each
+        // element is copied in by SafeArrayPutElement, and the array is
+        // owned by the VARIANT (freed by VariantClear on drop).
+        unsafe {
+            let array = SafeArrayCreateVector(VT_VARIANT, 0, count);
+            if array.is_null() {
+                return Self::empty();
+            }
+            for (i, item) in items.iter().enumerate() {
+                let element = Var::str(item);
+                let index = i as i32;
+                let _ = SafeArrayPutElement(array, &index, (&raw const element.0).cast());
+            }
+            Self::with(VARENUM(VT_ARRAY.0 | VT_VARIANT.0), |u| u.parray = array)
+        }
     }
 
     /// Text, a number, true/false or null as an argument.

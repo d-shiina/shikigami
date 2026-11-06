@@ -36,6 +36,8 @@ pub mod date;
 mod live;
 pub mod macros;
 #[cfg(any(windows, test))]
+mod shape;
+#[cfg(any(windows, test))]
 mod table;
 
 use a1::Range;
@@ -53,6 +55,9 @@ pub mod types {
     pub const RECALCULATE: &str = "excel.recalculate";
     pub const SORT: &str = "excel.sort";
     pub const EXPORT_PDF: &str = "excel.exportPdf";
+    pub const FORMAT: &str = "excel.format";
+    pub const FILTER: &str = "excel.filter";
+    pub const PIVOT: &str = "excel.pivot";
 }
 
 /// Workbook file steps; needs nothing installed.
@@ -136,13 +141,24 @@ enum Kind {
     Recalculate,
     Sort,
     ExportPdf,
+    Format,
+    Filter,
+    Pivot,
 }
 
 impl Kind {
     /// Steps only Excel itself can do.
     #[cfg_attr(not(windows), allow(dead_code))]
     fn needs_excel(self) -> bool {
-        matches!(self, Kind::Recalculate | Kind::Sort | Kind::ExportPdf)
+        matches!(
+            self,
+            Kind::Recalculate
+                | Kind::Sort
+                | Kind::ExportPdf
+                | Kind::Format
+                | Kind::Filter
+                | Kind::Pivot
+        )
     }
 }
 
@@ -290,9 +306,14 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
             "INTERNAL",
             "runMacro is run by the handler",
         )),
-        Kind::Recalculate | Kind::Sort | Kind::ExportPdf => Err(StepError::permanent(
+        Kind::Recalculate
+        | Kind::Sort
+        | Kind::ExportPdf
+        | Kind::Format
+        | Kind::Filter
+        | Kind::Pivot => Err(StepError::permanent(
             "PLATFORM_UNSUPPORTED",
-            "recalculating, sorting and saving as PDF need Windows with Excel installed",
+            "recalculating, sorting, formatting, filtering, pivot tables and saving as PDF need Windows with Excel installed",
         )),
         Kind::AddSheet => {
             let name = string(params, "sheet")?;
@@ -666,6 +687,105 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             more_paths: &["to"],
             examples: vec![
                 json!({ "type": EXPORT_PDF, "name": "請求書を PDF にする", "params": { "path": "output/請求書.xlsx", "sheet": "請求書", "to": "output/請求書_{{ customer.コード }}.pdf" } }),
+            ],
+        },
+        Def {
+            step_type: FORMAT,
+            kind: Kind::Format,
+            label: "書式を設定",
+            description: "Formats the cells `range` (e.g. \"A1:D1\", \"B2:B100\") on `sheet` and saves the workbook. Give only what to change: `bold`, `italic`, `fontColor` and `fillColor` as \"#RRGGBB\" (`fillColor: null` takes the fill away), `numberFormat` as in Excel (\"#,##0\", \"yyyy/mm/dd\", \"0.0%\"), `align` (left / center / right), `wrapText`, `borders` (true: thin lines around every cell, false: none), `columnWidth` (characters) or `autoFit` (fit the columns to their contents). Uses the workbook open in Excel on this PC when it is open, otherwise a separate, hidden Excel. Needs Windows with desktop Excel.",
+            params: props(json!({
+                "range": { "type": "string", "minLength": 1, "description": "書式を変えるセル（例 A1:D1、B2:B100）" },
+                "bold": { "type": "boolean", "description": "太字" },
+                "italic": { "type": "boolean", "description": "斜体" },
+                "fontColor": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$", "description": "文字の色（例 #C00000）" },
+                "fillColor": { "type": ["string", "null"], "pattern": "^#?[0-9A-Fa-f]{6}$", "description": "塗りつぶしの色（例 #FFF2CC）。null で塗りつぶしなし" },
+                "numberFormat": { "type": "string", "minLength": 1, "description": "表示形式（例 #,##0、yyyy/mm/dd、0.0%）" },
+                "align": { "enum": ["left", "center", "right"], "description": "横の配置" },
+                "wrapText": { "type": "boolean", "description": "折り返して全体を表示する" },
+                "borders": { "type": "boolean", "description": "true で各セルに細い罫線、false で罫線なし" },
+                "columnWidth": { "type": "number", "minimum": 0, "maximum": 255, "description": "列の幅（文字数）" },
+                "autoFit": { "type": "boolean", "description": "列の幅を中身に合わせる" }
+            })),
+            required: &["path", "range"],
+            has_output: false,
+            writes: true,
+            excel_app: false,
+            needs_excel: true,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": FORMAT, "name": "見出しを太字・水色にする", "params": { "path": PATH, "sheet": "受注", "range": "A1:F1", "bold": true, "fillColor": "#DDEBF7", "align": "center" } }),
+                json!({ "type": FORMAT, "name": "金額を 3 桁区切りにする", "params": { "path": PATH, "sheet": "受注", "range": "E2:E1000", "numberFormat": "#,##0", "autoFit": true } }),
+            ],
+        },
+        Def {
+            step_type: FILTER,
+            kind: Kind::Filter,
+            label: "フィルター",
+            description: "Sets the filter of the table on `sheet` (header row `headerRow`, default 1), so only the rows whose `column` shows one of `values` stay visible: `filters` is a list of { column: header text, values: [...] }, all of which must hold. Values are matched as Excel shows them (\"1,200\" for a number shown with a separator). `clear: true` shows every row again. Saves the workbook. Uses the workbook open in Excel on this PC when it is open, otherwise a separate, hidden Excel. Needs Windows with desktop Excel. Output: { visible } rows left showing.",
+            params: props(json!({
+                "headerRow": header_row,
+                "filters": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "column": { "type": "string", "minLength": 1, "description": "見出しの文字（完全一致）" },
+                            "values": { "type": "array", "minItems": 1, "items": { "type": ["string", "number", "boolean"] }, "description": "表示する値（どれかに一致する行を残す）" }
+                        },
+                        "required": ["column", "values"],
+                        "additionalProperties": false
+                    },
+                    "description": "絞り込みの条件（すべてを満たす行を残す）"
+                },
+                "clear": { "type": "boolean", "description": "true で絞り込みを解除してすべての行を表示する" }
+            })),
+            required: &["path"],
+            has_output: true,
+            writes: true,
+            excel_app: false,
+            needs_excel: true,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": FILTER, "name": "未処理だけ表示する", "params": { "path": PATH, "sheet": "受注", "filters": [ { "column": "状態", "values": ["未処理", "保留"] } ] } }),
+                json!({ "type": FILTER, "name": "絞り込みを解除する", "params": { "path": PATH, "sheet": "受注", "clear": true } }),
+            ],
+        },
+        Def {
+            step_type: PIVOT,
+            kind: Kind::Pivot,
+            label: "ピボットテーブル",
+            description: "Builds a pivot table from the table on `sheet` (header row `headerRow`, default 1) on a new sheet `toSheet` (SHEET_EXISTS when there is one already), and saves the workbook. `rows` and `columns` are header texts to group by; `values` lists what to total, { column: header text, function: \"sum\" (default) | \"count\" | \"average\" | \"max\" | \"min\" }. Read the result with excel.readRange on `toSheet`. Uses the workbook open in Excel on this PC when it is open, otherwise a separate, hidden Excel. Needs Windows with desktop Excel. Output: { sheet }.",
+            params: props(json!({
+                "headerRow": header_row,
+                "toSheet": { "type": "string", "minLength": 1, "maxLength": 31, "description": "ピボットテーブルを置く新しいシートの名前" },
+                "rows": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "行に並べる見出し（例 [\"担当\"]）" },
+                "columns": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "列に並べる見出し（例 [\"月\"]）" },
+                "values": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "column": { "type": "string", "minLength": 1, "description": "集計する列の見出し" },
+                            "function": { "enum": ["sum", "count", "average", "max", "min"], "description": "集計方法（既定 sum）" }
+                        },
+                        "required": ["column"],
+                        "additionalProperties": false
+                    },
+                    "description": "集計する値"
+                }
+            })),
+            required: &["path", "toSheet", "values"],
+            has_output: true,
+            writes: true,
+            excel_app: false,
+            needs_excel: true,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": PIVOT, "name": "担当ごとの金額を集計する", "params": { "path": PATH, "sheet": "受注", "toSheet": "担当別集計", "rows": ["担当"], "values": [ { "column": "金額", "function": "sum" }, { "column": "受注番号", "function": "count" } ] } }),
             ],
         },
     ];

@@ -5,9 +5,10 @@
 //!   steps work on that open workbook instead of the file: reads see what
 //!   is on screen (unsaved changes, recalculated formulas), writes go into
 //!   it and the workbook is saved. The person's Excel is never closed.
-//! - `excel.recalculate`, `excel.sort` and `excel.exportPdf` use the open
-//!   workbook too, or else open the file in an Excel of their own (ended
-//!   when the step's time is up, like `excel.runMacro`).
+//! - `excel.recalculate`, `excel.sort`, `excel.format`, `excel.filter`,
+//!   `excel.pivot` and `excel.exportPdf` use the open workbook too, or else
+//!   open the file in an Excel of their own (ended when the step's time is
+//!   up, like `excel.runMacro`).
 
 use std::path::Path;
 use std::time::Duration;
@@ -18,7 +19,7 @@ use shikigami_runtime::StepError;
 use tokio_util::sync::CancellationToken;
 
 use crate::a1::{Cell, Range};
-use crate::{Kind, book, date, table};
+use crate::{Kind, book, date, shape, table};
 
 /// `C:\Work\受注.xlsx` and `c:/work/受注.XLSX` name the same workbook.
 fn same_file(full_name: &str, path: &Path) -> bool {
@@ -494,7 +495,12 @@ fn step(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
             save(book, session)?;
             Ok(Value::Null)
         }
-        Kind::Recalculate | Kind::Sort | Kind::ExportPdf => work(kind, params, book, session),
+        Kind::Recalculate
+        | Kind::Sort
+        | Kind::ExportPdf
+        | Kind::Format
+        | Kind::Filter
+        | Kind::Pivot => work(kind, params, book, session),
         Kind::RunMacro => Err(StepError::permanent(
             "INTERNAL",
             "runMacro has its own Excel",
@@ -509,9 +515,322 @@ const XL_DESCENDING: i32 = 2;
 const XL_SORT_ON_VALUES: i32 = 0;
 const XL_YES: i32 = 1;
 const XL_TYPE_PDF: i32 = 0;
+const XL_NONE: i32 = -4142;
+const XL_CONTINUOUS: i32 = 1;
+const XL_THIN: i32 = 2;
+const XL_FILTER_VALUES: i32 = 7;
+const XL_CELL_TYPE_VISIBLE: i32 = 12;
+const XL_DATABASE: i32 = 1;
+const XL_ROW_FIELD: i32 = 1;
+const XL_COLUMN_FIELD: i32 = 2;
+
+/// The table (Format as Table, a ListObject) whose cells include `cell`.
+fn list_object(sheet: &Object, cell: Cell) -> Option<Object> {
+    sheet
+        .object(
+            "Cells",
+            vec![Var::i32(cell.row as i32), Var::i32(cell.column as i32)],
+        )
+        .ok()?
+        .get("ListObject")
+        .ok()
+        .and_then(|v| v.object("ListObject").ok())
+}
+
+/// The header row and the rows below it, by the header texts: (headers,
+/// whole range). `EMPTY_TABLE` when the header row is empty.
+fn header_table(sheet: &Object, header_row: u32) -> Result<(Vec<(u32, String)>, Range), StepError> {
+    let grid = grid(sheet, used(sheet)?)?;
+    let headers = table::headers(&grid, header_row);
+    let (Some((first, _)), Some((last_column, _))) = (headers.first(), headers.last()) else {
+        return Err(StepError::permanent(
+            "EMPTY_TABLE",
+            format!("row {header_row} has no headers"),
+        )
+        .with_details(
+            json!({ "hint": "Point `headerRow` at the row that holds the column headers." }),
+        ));
+    };
+    let last_row = table::extent(&grid, header_row).map_or(header_row, |(_, _, row)| row);
+    Ok((
+        headers.clone(),
+        Range {
+            start: Cell {
+                column: *first,
+                row: header_row,
+            },
+            end: Cell {
+                column: *last_column,
+                row: last_row,
+            },
+        },
+    ))
+}
+
+/// Deletes a sheet the step added, without Excel asking about it.
+fn discard_sheet(book: &Object, added: &Object) {
+    let app = book
+        .get("Application")
+        .and_then(|v| v.object("Application"));
+    let alerts = app
+        .as_ref()
+        .ok()
+        .and_then(|app| app.get("DisplayAlerts").ok())
+        .map(|v| v.to_bool());
+    if let Ok(app) = &app {
+        let _ = app.put("DisplayAlerts", Var::bool(false));
+    }
+    let _ = added.call("Delete", vec![]);
+    if let (Ok(app), Some(alerts)) = (&app, alerts) {
+        let _ = app.put("DisplayAlerts", Var::bool(alerts));
+    }
+}
+
+fn format_cells(params: &Value, book: &Object, session: &Session) -> Result<Value, StepError> {
+    let format = shape::format(params)?;
+    let sheet_name = crate::optional_string(params, "sheet")?;
+    let sheet = sheet(book, sheet_name.as_deref())?;
+    let Some(range) = format.range else {
+        return Err(StepError::invalid_params("'range' is required"));
+    };
+    let target = cells(&sheet, range)?;
+    session.check()?;
+    if format.bold.is_some() || format.italic.is_some() || format.font_color.is_some() {
+        let font = target.get("Font")?.object("Font")?;
+        if let Some(bold) = format.bold {
+            font.put("Bold", Var::bool(bold))?;
+        }
+        if let Some(italic) = format.italic {
+            font.put("Italic", Var::bool(italic))?;
+        }
+        if let Some(color) = format.font_color {
+            font.put("Color", Var::i32(color))?;
+        }
+    }
+    if let Some(fill) = format.fill {
+        let interior = target.get("Interior")?.object("Interior")?;
+        match fill {
+            Some(color) => interior.put("Color", Var::i32(color))?,
+            None => interior.put("ColorIndex", Var::i32(XL_NONE))?,
+        }
+    }
+    if let Some(number_format) = &format.number_format {
+        target
+            .put("NumberFormat", Var::str(number_format))
+            .map_err(|e| {
+                StepError::permanent(
+                    "INVALID_NUMBER_FORMAT",
+                    format!("Excel does not take the number format '{number_format}': {}", e.message),
+                )
+                .with_details(json!({ "hint": "Write it as in Excel's Format Cells > Custom, e.g. #,##0 or yyyy/mm/dd." }))
+            })?;
+    }
+    if let Some(align) = format.align {
+        target.put("HorizontalAlignment", Var::i32(align))?;
+    }
+    if let Some(wrap) = format.wrap {
+        target.put("WrapText", Var::bool(wrap))?;
+    }
+    if let Some(borders) = format.borders {
+        // The edges and the lines inside, never the diagonals.
+        let all = target.get("Borders")?.object("Borders")?;
+        if borders {
+            all.put("LineStyle", Var::i32(XL_CONTINUOUS))?;
+            all.put("Weight", Var::i32(XL_THIN))?;
+        } else {
+            all.put("LineStyle", Var::i32(XL_NONE))?;
+        }
+    }
+    if let Some(width) = format.column_width {
+        target
+            .get("EntireColumn")?
+            .object("EntireColumn")?
+            .put("ColumnWidth", Var::f64(width))?;
+    }
+    if format.auto_fit {
+        target
+            .get("Columns")?
+            .object("Columns")?
+            .call("AutoFit", vec![])?;
+    }
+    save(book, session)?;
+    Ok(Value::Null)
+}
+
+fn filter(params: &Value, book: &Object, session: &Session) -> Result<Value, StepError> {
+    let filters = shape::filters(params)?;
+    let sheet_name = crate::optional_string(params, "sheet")?;
+    let sheet = sheet(book, sheet_name.as_deref())?;
+    let header_row = crate::header_row(params)?;
+    let (headers, mut whole) = header_table(&sheet, header_row)?;
+    let fields = match &filters {
+        None => Vec::new(),
+        Some(filters) => filters
+            .iter()
+            .map(|f| Ok((shape::column(&headers, header_row, &f.column)?, &f.values)))
+            .collect::<Result<Vec<_>, StepError>>()?,
+    };
+    // A table filters through its own AutoFilter, over its own columns.
+    let table = list_object(&sheet, whole.start);
+    if let Some(table) = &table {
+        let range = table.get("Range")?.object("Range")?;
+        let row = range.get("Row")?.to_i64()? as u32;
+        let column = range.get("Column")?.to_i64()? as u32;
+        let rows = range.get("Rows")?.object("Rows")?.get("Count")?.to_i64()? as u32;
+        let columns = range
+            .get("Columns")?
+            .object("Columns")?
+            .get("Count")?
+            .to_i64()? as u32;
+        whole = Range {
+            start: Cell { column, row },
+            end: Cell {
+                column: column + columns - 1,
+                row: row + rows - 1,
+            },
+        };
+    }
+    let target = cells(&sheet, whole)?;
+    session.check()?;
+    match &table {
+        Some(table) => {
+            if let Ok(auto) = table.get("AutoFilter").and_then(|v| v.object("AutoFilter"))
+                && auto.get("FilterMode")?.to_bool()
+            {
+                auto.call("ShowAllData", vec![])?;
+            }
+        }
+        None => {
+            // A filter set before (maybe on other cells) goes first.
+            if sheet.get("AutoFilterMode")?.to_bool() {
+                sheet.put("AutoFilterMode", Var::bool(false))?;
+            }
+        }
+    }
+    if filters.is_some() {
+        for (column, values) in &fields {
+            session.check()?;
+            target.call(
+                "AutoFilter",
+                vec![
+                    Var::i32((column - whole.start.column + 1) as i32),
+                    Var::str_array(values),
+                    Var::i32(XL_FILTER_VALUES),
+                ],
+            )?;
+        }
+    }
+    let visible = target
+        .object("Columns", vec![Var::i32(1)])?
+        .object("SpecialCells", vec![Var::i32(XL_CELL_TYPE_VISIBLE)])
+        .and_then(|v| v.get("Count"))
+        .and_then(|v| v.to_i64())
+        .map_or(0, |n| n - 1);
+    save(book, session)?;
+    Ok(json!({ "visible": visible.max(0) }))
+}
+
+fn pivot(params: &Value, book: &Object, session: &Session) -> Result<Value, StepError> {
+    let pivot = shape::pivot(params)?;
+    let sheet_name = crate::optional_string(params, "sheet")?;
+    let source = sheet(book, sheet_name.as_deref())?;
+    let header_row = crate::header_row(params)?;
+    let (headers, whole) = header_table(&source, header_row)?;
+    if whole.end.row == header_row {
+        return Err(StepError::permanent(
+            "EMPTY_TABLE",
+            format!("there are no rows below the header row {header_row}"),
+        ));
+    }
+    for name in pivot
+        .rows
+        .iter()
+        .chain(&pivot.columns)
+        .chain(pivot.values.iter().map(|(name, _)| name))
+    {
+        shape::column(&headers, header_row, name)?;
+    }
+    if sheet_names(book)?.contains(&pivot.to_sheet) {
+        return Err(StepError::permanent(
+            "SHEET_EXISTS",
+            format!("there is already a sheet named '{}'", pivot.to_sheet),
+        )
+        .with_details(json!({ "hint": "Give `toSheet` a new name; a pivot table is always built on a sheet of its own." })));
+    }
+    // R1C1 works whatever reference style the person's Excel uses.
+    let source_name = source.get("Name")?.to_text().replace('\'', "''");
+    let source_data = format!(
+        "'{source_name}'!R{}C{}:R{}C{}",
+        whole.start.row, whole.start.column, whole.end.row, whole.end.column
+    );
+    session.check()?;
+    let sheets = book.get("Worksheets")?.object("Worksheets")?;
+    let count = sheets.get("Count")?.to_i64().unwrap_or(1);
+    let last = sheets.object("Item", vec![Var::i32(count as i32)])?;
+    session.check()?;
+    let added = sheets.object("Add", vec![Var::missing(), Var::from_object(&last)])?;
+    let built = (|| {
+        added.put("Name", Var::str(&pivot.to_sheet)).map_err(|e| {
+            StepError::permanent(
+                "INVALID_SHEET_NAME",
+                format!("cannot add sheet '{}': {}", pivot.to_sheet, e.message),
+            )
+            .with_details(
+                json!({ "hint": "Sheet names have at most 31 characters and no \\ / ? * [ ] :" }),
+            )
+        })?;
+        session.check()?;
+        let cache = book.get("PivotCaches")?.object("PivotCaches")?.object(
+            "Create",
+            vec![Var::i32(XL_DATABASE), Var::str(&source_data)],
+        )?;
+        let corner = added.object("Range", vec![Var::str("A3")])?;
+        let table = cache.object("CreatePivotTable", vec![Var::from_object(&corner)])?;
+        let field = |name: &str| table.object("PivotFields", vec![Var::str(name)]);
+        for (names, orientation) in [
+            (&pivot.rows, XL_ROW_FIELD),
+            (&pivot.columns, XL_COLUMN_FIELD),
+        ] {
+            for (i, name) in names.iter().enumerate() {
+                session.check()?;
+                let f = field(name)?;
+                f.put("Orientation", Var::i32(orientation))?;
+                f.put("Position", Var::i32(i as i32 + 1))?;
+            }
+        }
+        for (name, function) in &pivot.values {
+            session.check()?;
+            table.call(
+                "AddDataField",
+                vec![
+                    Var::from_object(&field(name)?),
+                    Var::missing(),
+                    Var::i32(*function),
+                ],
+            )?;
+        }
+        Ok::<_, StepError>(())
+    })();
+    if let Err(e) = built {
+        discard_sheet(book, &added);
+        return Err(match e.code.as_str() {
+            "COM_ERROR" => StepError::permanent(
+                "PIVOT_FAILED",
+                format!("Excel could not build the pivot table: {}", e.message),
+            )
+            .with_details(json!({ "hint": "Check that every column of the table has a header and that the header texts are what `rows`, `columns` and `values` name." })),
+            _ => e,
+        });
+    }
+    save(book, session)?;
+    Ok(json!({ "sheet": pivot.to_sheet }))
+}
 
 fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<Value, StepError> {
-    if matches!(kind, Kind::Recalculate | Kind::Sort) {
+    if matches!(
+        kind,
+        Kind::Recalculate | Kind::Sort | Kind::Format | Kind::Filter | Kind::Pivot
+    ) {
         writable(book)?;
     }
     match kind {
@@ -643,12 +962,15 @@ fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
                 })?;
             Ok(json!({ "path": to }))
         }
+        Kind::Format => format_cells(params, book, session),
+        Kind::Filter => filter(params, book, session),
+        Kind::Pivot => pivot(params, book, session),
         _ => Err(StepError::permanent("INTERNAL", "not an Excel-only step")),
     }
 }
 
-/// `excel.recalculate`, `excel.sort` and `excel.exportPdf`: on the open
-/// workbook, or else in an Excel of the step's own.
+/// The steps only Excel can do: on the open workbook, or else in an Excel
+/// of the step's own.
 pub fn run_excel_only(
     kind: Kind,
     params: &Value,
@@ -678,7 +1000,7 @@ pub fn run_excel_only(
         move |session| {
             let app = Object::create("Excel.Application", || {
                 StepError::permanent("EXCEL_NOT_INSTALLED", "Excel is not installed on this PC")
-                    .with_details(json!({ "hint": "excel.recalculate, excel.sort and excel.exportPdf need desktop Excel. Reading and writing cells works without it." }))
+                    .with_details(json!({ "hint": "excel.recalculate, excel.sort, excel.format, excel.filter, excel.pivot and excel.exportPdf need desktop Excel. Reading and writing cells works without it." }))
             })?;
             if let Some(id) = app.window_process() {
                 session.report_process(id);

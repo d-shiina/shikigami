@@ -47,7 +47,7 @@ fn examples_validate_and_every_step_locks_its_workbook() {
     let runtime = runtime();
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 12);
+    assert_eq!(defs.len(), 15);
     for def in &defs {
         assert!(def.step_type.starts_with("excel."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
@@ -326,7 +326,14 @@ async fn macros_need_windows_and_an_existing_workbook() {
 fn excel_only_steps_need_excel_and_write_their_pdf_by_path() {
     let defs = definitions();
     let def = |t: &str| defs.iter().find(|d| d.step_type == t).unwrap();
-    for t in [types::RECALCULATE, types::SORT, types::EXPORT_PDF] {
+    for t in [
+        types::RECALCULATE,
+        types::SORT,
+        types::EXPORT_PDF,
+        types::FORMAT,
+        types::FILTER,
+        types::PIVOT,
+    ] {
         assert_eq!(def(t).risk, RiskLevel::Interactive, "{t}");
         assert_eq!(def(t).default_timeout_ms, Some(300_000), "{t}");
     }
