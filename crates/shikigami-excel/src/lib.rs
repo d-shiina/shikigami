@@ -6,8 +6,11 @@
 //! its lock: steps on the same workbook take turns, steps on different
 //! workbooks run side by side. Writes are saved before the step ends.
 //!
-//! Running a workbook's macros needs Excel itself; that is a separate,
-//! Windows-only step on top of COM (see docs/office.md).
+//! When the workbook is open in Excel on this PC, the steps work on the
+//! open workbook through COM instead (live.rs): reads see what is on the
+//! screen, writes go into it and it is saved. Running macros,
+//! recalculating, sorting and saving as PDF need Excel itself; those are
+//! Windows-only steps on top of COM (see docs/office.md).
 
 // StepError is the Runtime's handler error type; boxing it here would only
 // move the allocation.
@@ -29,7 +32,11 @@ pub mod book;
 #[cfg(windows)]
 mod com;
 pub mod date;
+#[cfg(windows)]
+mod live;
 pub mod macros;
+#[cfg(any(windows, test))]
+mod table;
 
 use a1::Range;
 
@@ -43,6 +50,9 @@ pub mod types {
     pub const LIST_SHEETS: &str = "excel.listSheets";
     pub const ADD_SHEET: &str = "excel.addSheet";
     pub const RUN_MACRO: &str = "excel.runMacro";
+    pub const RECALCULATE: &str = "excel.recalculate";
+    pub const SORT: &str = "excel.sort";
+    pub const EXPORT_PDF: &str = "excel.exportPdf";
 }
 
 /// Workbook file steps; needs nothing installed.
@@ -123,6 +133,17 @@ enum Kind {
     ListSheets,
     AddSheet,
     RunMacro,
+    Recalculate,
+    Sort,
+    ExportPdf,
+}
+
+impl Kind {
+    /// Steps only Excel itself can do.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn needs_excel(self) -> bool {
+        matches!(self, Kind::Recalculate | Kind::Sort | Kind::ExportPdf)
+    }
 }
 
 struct ExcelStep {
@@ -146,6 +167,18 @@ impl ActionHandler for ExcelStep {
                 let _held = lock.lock().unwrap_or_else(|e| e.into_inner());
                 if kind == Kind::RunMacro {
                     return macros::run(macros::request(&params)?, timeout, &cancel);
+                }
+                #[cfg(windows)]
+                {
+                    if kind.needs_excel() {
+                        return live::run_excel_only(kind, &params, timeout, &cancel);
+                    }
+                    let path = string(&params, "path")?;
+                    if book::open_in_excel(std::path::Path::new(&path))
+                        && let Some(result) = live::try_run(kind, &params, timeout, &cancel)
+                    {
+                        return result;
+                    }
                 }
                 run_step(kind, &params, &cancel)
             })
@@ -256,6 +289,10 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
         Kind::RunMacro => Err(StepError::permanent(
             "INTERNAL",
             "runMacro is run by the handler",
+        )),
+        Kind::Recalculate | Kind::Sort | Kind::ExportPdf => Err(StepError::permanent(
+            "PLATFORM_UNSUPPORTED",
+            "recalculating, sorting and saving as PDF need Windows with Excel installed",
         )),
         Kind::AddSheet => {
             let name = string(params, "sheet")?;
@@ -375,6 +412,10 @@ struct Def {
     writes: bool,
     /// Runs code in Excel (macros): dangerous, slower default timeout.
     excel_app: bool,
+    /// Needs Excel itself (COM): Windows only, slower default timeout.
+    needs_excel: bool,
+    /// More path parameters than `path` (files the step writes).
+    more_paths: &'static [&'static str],
     examples: Vec<Value>,
 }
 
@@ -395,12 +436,14 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: READ_ROWS,
             kind: Kind::ReadRows,
             label: "表を行ごとに読む",
-            description: "Reads the table on `sheet` as a list of records, one per row below the header row `headerRow` (default 1), keyed by the header texts. Each record also has `_row`, its row number, for writing back to the same row (cell \"E{{ row._row }}\"). Empty rows are skipped. Use with control.forEach. Values are text, numbers, true/false, dates as \"2026-10-28\" (\"2026-10-28T09:30:00\" with a time) or null.",
+            description: "Reads the table on `sheet` as a list of records, one per row below the header row `headerRow` (default 1), keyed by the header texts. Each record also has `_row`, its row number, for writing back to the same row (cell \"E{{ row._row }}\"). Empty rows are skipped. Use with control.forEach. Values are text, numbers, true/false, dates as \"2026-10-28\" (\"2026-10-28T09:30:00\" with a time) or null. When the workbook is open in Excel on this PC, reads what is on the screen, unsaved changes included.",
             params: props(json!({ "headerRow": header_row })),
             required: &["path"],
             has_output: true,
             writes: false,
             excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": READ_ROWS, "name": "受注一覧を読む", "params": { "path": PATH, "sheet": "受注" }, "saveAs": "orders" }),
                 json!({ "type": "control.forEach", "params": { "items": "orders", "itemVar": "order" }, "blocks": { "body": [
@@ -412,7 +455,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: APPEND_ROWS,
             kind: Kind::AppendRows,
             label: "表に行を追加",
-            description: "Adds `rows` (records keyed by the header texts of `headerRow`, default 1) below the last row of the table on `sheet`. Keys must match the headers exactly (`_row` is ignored); missing keys leave the cell empty. On a new workbook or empty sheet the header row is written from the records' keys first. Creates the workbook if the file does not exist. Output: { firstRow, count }.",
+            description: "Adds `rows` (records keyed by the header texts of `headerRow`, default 1) below the last row of the table on `sheet`. Keys must match the headers exactly (`_row` is ignored); missing keys leave the cell empty. On a new workbook or empty sheet the header row is written from the records' keys first. Creates the workbook if the file does not exist. Output: { firstRow, count }. When the workbook is open in Excel on this PC, the step writes into the open workbook and saves it (the person's Excel stays open).",
             params: props(json!({
                 "rows": list_or_template(json!({ "type": "object" }), "追加する行。見出し名をキーにしたレコードの配列、または {{ 変数 }}"),
                 "headerRow": header_row
@@ -421,6 +464,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: true,
             writes: true,
             excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": APPEND_ROWS, "name": "結果を 1 行追加", "params": { "path": "output/結果.xlsx", "rows": [ { "受注番号": "{{ order.受注番号 }}", "金額": "{{ order.金額 }}", "受注日": { "date": "{{ order.受注日 }}" } } ] } }),
                 json!({ "type": APPEND_ROWS, "params": { "path": "output/結果.xlsx", "sheet": "集計", "rows": "{{ results }}" } }),
@@ -438,6 +483,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: true,
             writes: false,
             excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": READ_CELL, "name": "締め日を読む", "params": { "path": PATH, "sheet": "設定", "cell": "B2" }, "saveAs": "closingDate" }),
             ],
@@ -446,7 +493,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: WRITE_CELL,
             kind: Kind::WriteCell,
             label: "セルに書く",
-            description: "Puts `value` in `cell` of `sheet` and saves the workbook, keeping the cell's formatting. `value`: text (always stays text), a number, true/false, null to empty the cell, { \"date\": \"2026-10-28\" } for a date, or { \"formula\": \"SUM(B2:B9)\" }. Creates the workbook if the file does not exist. A formula's result is calculated when the workbook is next opened in Excel.",
+            description: "Puts `value` in `cell` of `sheet` and saves the workbook, keeping the cell's formatting. `value`: text (always stays text), a number, true/false, null to empty the cell, { \"date\": \"2026-10-28\" } for a date, or { \"formula\": \"SUM(B2:B9)\" }. Creates the workbook if the file does not exist. A formula's result is calculated when the workbook is next opened in Excel. When the workbook is open in Excel on this PC, the step writes into the open workbook and saves it (the person's Excel stays open).",
             params: props(json!({
                 "cell": { "type": "string", "minLength": 2, "description": "セル番地（例 B3）" },
                 "value": cell_value_schema()
@@ -455,6 +502,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: false,
             writes: true,
             excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": WRITE_CELL, "name": "処理日を書く", "params": { "path": PATH, "sheet": "受注", "cell": "G{{ order._row }}", "value": { "date": "{{ processedAt }}" } } }),
                 json!({ "type": WRITE_CELL, "params": { "path": PATH, "sheet": "集計", "cell": "B10", "value": { "formula": "SUM(B2:B9)" } } }),
@@ -472,6 +521,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: true,
             writes: false,
             excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": READ_RANGE, "params": { "path": PATH, "sheet": "単価表", "range": "A2:C50" }, "saveAs": "prices" }),
             ],
@@ -480,7 +531,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: WRITE_RANGE,
             kind: Kind::WriteRange,
             label: "範囲に書く",
-            description: "Writes `values` (a list of rows, each a list of cell values as in excel.writeCell) with its top-left at `cell`, and saves the workbook. Cells outside `values` are left as they are. Creates the workbook if the file does not exist. Output: { range } written.",
+            description: "Writes `values` (a list of rows, each a list of cell values as in excel.writeCell) with its top-left at `cell`, and saves the workbook. Cells outside `values` are left as they are. Creates the workbook if the file does not exist. Output: { range } written. When the workbook is open in Excel on this PC, the step writes into the open workbook and saves it (the person's Excel stays open).",
             params: props(json!({
                 "cell": { "type": "string", "minLength": 2, "description": "書き始める左上のセル（例 A1）" },
                 "values": list_or_template(json!({ "type": "array", "items": cell_value_schema() }), "行の配列。各行はセル値の配列、または {{ 変数 }}")
@@ -489,6 +540,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: true,
             writes: true,
             excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": WRITE_RANGE, "name": "見出しを書く", "params": { "path": "output/結果.xlsx", "cell": "A1", "values": [["受注番号", "金額", "状態"]] } }),
             ],
@@ -503,6 +556,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: true,
             writes: false,
             excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": LIST_SHEETS, "params": { "path": PATH }, "saveAs": "sheets" }),
             ],
@@ -517,6 +572,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: false,
             writes: true,
             excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": ADD_SHEET, "params": { "path": "output/結果.xlsx", "sheet": "{{ month }}月" } }),
             ],
@@ -536,9 +593,79 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: true,
             writes: true,
             excel_app: true,
+            needs_excel: true,
+            more_paths: &[],
             examples: vec![
                 json!({ "type": RUN_MACRO, "name": "集計マクロを実行", "params": { "path": "templates/集計.xlsm", "macro": "Module1.集計" } }),
                 json!({ "type": RUN_MACRO, "params": { "path": "templates/集計.xlsm", "macro": "月次レポート", "args": ["{{ month }}", 2026] }, "saveAs": "result" }),
+            ],
+        },
+        Def {
+            step_type: RECALCULATE,
+            kind: Kind::Recalculate,
+            label: "再計算",
+            description: "Has Excel recalculate every formula of the workbook `path` and saves it, so formulas written by excel.writeCell show their results and later reads get them. Uses the workbook open in Excel on this PC when it is open, otherwise a separate, hidden Excel. Needs Windows with desktop Excel.",
+            params: json!({ "path": props(json!({}))["path"] }),
+            required: &["path"],
+            has_output: false,
+            writes: true,
+            excel_app: false,
+            needs_excel: true,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": RECALCULATE, "name": "数式を計算し直す", "params": { "path": "output/集計.xlsx" } }),
+            ],
+        },
+        Def {
+            step_type: SORT,
+            kind: Kind::Sort,
+            label: "表を並べ替え",
+            description: "Sorts the table on `sheet` (header row `headerRow`, default 1, and the rows below it down to the last row in use) by `by`, a list of { column: header text, order: \"asc\" | \"desc\" } (the first is the main key), and saves the workbook. Uses Excel's own sort, so formatting moves with the rows. Uses the workbook open in Excel on this PC when it is open, otherwise a separate, hidden Excel. Needs Windows with desktop Excel. Output: { count } rows sorted.",
+            params: props(json!({
+                "headerRow": header_row,
+                "by": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "column": { "type": "string", "minLength": 1, "description": "見出しの文字（完全一致）" },
+                            "order": { "enum": ["asc", "desc"], "description": "asc＝小さい順（既定）、desc＝大きい順" }
+                        },
+                        "required": ["column"],
+                        "additionalProperties": false
+                    },
+                    "description": "並べ替えの基準（先頭が優先）"
+                }
+            })),
+            required: &["path", "by"],
+            has_output: true,
+            writes: true,
+            excel_app: false,
+            needs_excel: true,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": SORT, "name": "金額の大きい順に並べる", "params": { "path": PATH, "sheet": "受注", "by": [ { "column": "金額", "order": "desc" }, { "column": "受注日" } ] } }),
+            ],
+        },
+        Def {
+            step_type: EXPORT_PDF,
+            kind: Kind::ExportPdf,
+            label: "PDF で保存",
+            description: "Saves the workbook `path` (or only `sheet`) as the PDF `to`, laid out as Excel prints it (print area, page setup). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Uses the workbook open in Excel on this PC when it is open (what is on the screen), otherwise opens the file read-only in a separate, hidden Excel. Needs Windows with desktop Excel. Output: { path }.",
+            params: props(json!({
+                "to": { "type": "string", "minLength": 1, "description": "保存する PDF：シナリオのフォルダーからの相対パス（例 output/請求書.pdf）か絶対パス" },
+                "overwrite": { "type": "boolean", "description": "同じ名前のファイルがあれば上書きする（既定 false）" }
+            })),
+            required: &["path", "to"],
+            has_output: true,
+            writes: true,
+            excel_app: false,
+            needs_excel: true,
+            more_paths: &["to"],
+            examples: vec![
+                json!({ "type": EXPORT_PDF, "name": "請求書を PDF にする", "params": { "path": "output/請求書.xlsx", "sheet": "請求書", "to": "output/請求書_{{ customer.コード }}.pdf" } }),
             ],
         },
     ];
@@ -564,12 +691,20 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                     RiskLevel::Safe
                 },
                 examples: d.examples,
-                resources: vec![ResourceDef::file("path")],
+                // Files the step writes (exportPdf's `to`) are locked too,
+                // so two steps never write the same file at once.
+                resources: std::iter::once("path")
+                    .chain(d.more_paths.iter().copied())
+                    .map(ResourceDef::file)
+                    .collect(),
                 secret_params: vec![],
-                default_timeout_ms: d.excel_app.then_some(300_000),
+                default_timeout_ms: d.needs_excel.then_some(300_000),
                 deprecated: None,
                 plugin: None,
-                path_params: vec!["path".into()],
+                path_params: std::iter::once("path")
+                    .chain(d.more_paths.iter().copied())
+                    .map(Into::into)
+                    .collect(),
             };
             (def, d.kind)
         })

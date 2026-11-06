@@ -47,7 +47,7 @@ fn examples_validate_and_every_step_locks_its_workbook() {
     let runtime = runtime();
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 9);
+    assert_eq!(defs.len(), 12);
     for def in &defs {
         assert!(def.step_type.starts_with("excel."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
@@ -69,6 +69,7 @@ fn examples_validate_and_every_step_locks_its_workbook() {
                 "results",
                 "result",
                 "month",
+                "customer",
             ]
             .iter()
             .map(|n| VariableDef::new(*n, VarType::Any))
@@ -319,4 +320,36 @@ async fn macros_need_windows_and_an_existing_workbook() {
         .unwrap();
     assert_eq!(def.risk, RiskLevel::Dangerous);
     assert_eq!(def.default_timeout_ms, Some(300_000));
+}
+
+#[test]
+fn excel_only_steps_need_excel_and_write_their_pdf_by_path() {
+    let defs = definitions();
+    let def = |t: &str| defs.iter().find(|d| d.step_type == t).unwrap();
+    for t in [types::RECALCULATE, types::SORT, types::EXPORT_PDF] {
+        assert_eq!(def(t).risk, RiskLevel::Interactive, "{t}");
+        assert_eq!(def(t).default_timeout_ms, Some(300_000), "{t}");
+    }
+    assert_eq!(def(types::EXPORT_PDF).path_params, ["path", "to"]);
+    // Two exports to the same PDF never run at once.
+    assert_eq!(
+        def(types::EXPORT_PDF).resources,
+        [
+            shikigami_core::resource::ResourceDef::file("path"),
+            shikigami_core::resource::ResourceDef::file("to")
+        ]
+    );
+    assert_eq!(def(types::RUN_MACRO).risk, RiskLevel::Dangerous);
+}
+
+#[cfg(not(windows))]
+#[tokio::test]
+async fn excel_only_steps_say_they_need_windows() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = workbook(&dir, "a.xlsx");
+    let report = run(vec![step(types::RECALCULATE, json!({ "path": path }))]).await;
+    assert_eq!(
+        report.error.as_ref().map(|e| e.code.as_str()),
+        Some("PLATFORM_UNSUPPORTED")
+    );
 }
