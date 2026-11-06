@@ -62,7 +62,26 @@ function template(value: unknown): Part[] {
 
 /** A browser target such as { role: "button", name: "ログイン" }, or a desktop one, in words. */
 export function targetText(target: unknown): string {
-  return locale === "ja" ? targetJa(target) : targetEn(target);
+  const text = locale === "ja" ? targetJa(target) : targetEn(target);
+  const frame = target && typeof target === "object" ? (target as Record<string, unknown>).frame : undefined;
+  return frame ? `${text}${frameText(frame)}` : text;
+}
+
+/** "（フレーム「main」の中）": where an element inside an iframe is. */
+function frameText(frame: unknown): string {
+  if (!frame || typeof frame !== "object") return "";
+  const f = frame as Record<string, unknown>;
+  const name = String(f.name ?? f.title ?? f.src ?? f.css ?? "");
+  const outer = f.frame ? frameText(f.frame) : "";
+  return locale === "ja" ? `（フレーム「${name}」の中）${outer}` : ` in the frame "${name}"${outer}`;
+}
+
+/** What a step answers to the JS dialog it causes, if it says. */
+function dialogText(dialog: unknown): string {
+  const action = typeof dialog === "string" ? dialog : dialog && typeof dialog === "object" ? (dialog as Record<string, unknown>).action : undefined;
+  if (action !== "accept" && action !== "dismiss") return "";
+  if (locale === "ja") return action === "accept" ? "て、確認に OK で答える" : "て、確認をキャンセルする";
+  return action === "accept" ? ", answering OK to the dialog" : ", cancelling the dialog";
 }
 
 /** The file name at the end of a Windows or POSIX path. */
@@ -105,8 +124,21 @@ function desktopEn(t: Record<string, unknown>): string {
   return `${targetEn(el)} in ${name}`;
 }
 
+/** The open scenario's parts, for `{ part: "<name>" }` targets (set by the store). */
+let partLookup: (name: string) => { label?: string } | undefined = () => undefined;
+export function setPartLookup(lookup: typeof partLookup) {
+  partLookup = lookup;
+}
+const partName = (target: unknown): string | undefined => {
+  const t = target as Record<string, unknown> | null;
+  if (!t || typeof t !== "object" || Object.keys(t).length !== 1 || typeof t.part !== "string") return undefined;
+  return partLookup(t.part)?.label || t.part;
+};
+
 function targetJa(target: unknown): string {
   if (!target || typeof target !== "object") return "（要素未設定）";
+  const part = partName(target);
+  if (part) return `部品「${part}」`;
   const t = target as Record<string, unknown>;
   if (t.window) return desktopJa(t);
   const nth = typeof t.nth === "number" ? `の${t.nth + 1}番目` : "";
@@ -123,6 +155,8 @@ function targetJa(target: unknown): string {
 
 function targetEn(target: unknown): string {
   if (!target || typeof target !== "object") return "(no element set)";
+  const part = partName(target);
+  if (part) return `the part "${part}"`;
   const t = target as Record<string, unknown>;
   if (t.window) return desktopEn(t);
   const nth = typeof t.nth === "number" ? ` #${t.nth + 1}` : "";
@@ -190,10 +224,26 @@ const BUILDERS: Record<string, Builder> = {
     return name ? [w(`サブシナリオ「${name}」を呼ぶ`)] : [w("サブシナリオを呼ぶ（呼ぶシナリオが未設定）")];
   },
   "browser.open": (p) => [...template(p.url), w(" をブラウザで開く")],
-  "browser.click": (p) => [w(`${targetText(p.target)}を押す`)],
+  "browser.click": (p, s) => [w(`${targetText(p.target)}を押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`), ...saveAs(s)],
+  "browser.hover": (p) => [w(`${targetText(p.target)}にマウスを乗せる`)],
+  "browser.scroll": (p) => [
+    w(
+      p.target
+        ? p.to
+          ? `${targetText(p.target)}の中を${p.to === "top" ? "一番上" : "一番下"}までスクロールする`
+          : `${targetText(p.target)}が見えるまでスクロールする`
+        : `ページを${p.to === "top" ? "一番上" : "一番下"}までスクロールする`,
+    ),
+  ],
+  "browser.getAttribute": (p, s) => [w(`${targetText(p.target)}の `), code(p.name), w(" 属性を読む"), ...saveAs(s)],
+  "browser.switchTab": (p, s) => [
+    w(typeof p.index === "number" ? `${p.index + 1}番目のタブに移る` : `「${String(p.title ?? p.url ?? "")}」のタブに移る`),
+    ...saveAs(s),
+  ],
+  "browser.closeTab": () => [w("今のタブを閉じて前のタブに戻る")],
   "browser.fill": (p) => [w(`${targetText(p.target)}に `), ...template(p.value), w(" を入れる")],
   "browser.select": (p) => [w(`${targetText(p.target)}で `), code(p.value), w(" を選ぶ")],
-  "browser.press": (p) => [w(p.target ? `${targetText(p.target)}で ` : ""), code(p.key), w(" キーを押す")],
+  "browser.press": (p) => [w(p.target ? `${targetText(p.target)}で ` : ""), code(p.key), w(` キーを押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`)],
   "browser.getText": (p, s) => [w(`${targetText(p.target)}の文字を読む`), ...saveAs(s)],
   "browser.getTable": (p, s) => [w(`${targetText(p.target)}を表として読む`), ...saveAs(s)],
   "browser.waitFor": (p) => [w(`${targetText(p.target)}が${p.state === "hidden" || p.state === "detached" ? "消える" : "出る"}まで待つ`)],
@@ -229,10 +279,26 @@ const BUILDERS_EN: Record<string, Builder> = {
     return name ? [w(`Call the subscenario "${name}"`)] : [w("Call a subscenario (none chosen)")];
   },
   "browser.open": (p) => [w("Open "), ...template(p.url), w(" in the browser")],
-  "browser.click": (p) => [w(`Click ${targetText(p.target)}`)],
+  "browser.click": (p, s) => [w(`Click ${targetText(p.target)}${dialogText(p.dialog)}`), ...saveAs(s)],
+  "browser.hover": (p) => [w(`Hover over ${targetText(p.target)}`)],
+  "browser.scroll": (p) => [
+    w(
+      p.target
+        ? p.to
+          ? `Scroll ${targetText(p.target)} to the ${p.to === "top" ? "top" : "bottom"}`
+          : `Scroll until ${targetText(p.target)} is in view`
+        : `Scroll the page to the ${p.to === "top" ? "top" : "bottom"}`,
+    ),
+  ],
+  "browser.getAttribute": (p, s) => [w("Read the "), code(p.name), w(` attribute of ${targetText(p.target)}`), ...saveAs(s)],
+  "browser.switchTab": (p, s) => [
+    w(typeof p.index === "number" ? `Move to tab #${p.index + 1}` : `Move to the "${String(p.title ?? p.url ?? "")}" tab`),
+    ...saveAs(s),
+  ],
+  "browser.closeTab": () => [w("Close this tab and go back to the previous one")],
   "browser.fill": (p) => [w("Fill "), ...template(p.value), w(` into ${targetText(p.target)}`)],
   "browser.select": (p) => [w("Select "), code(p.value), w(` in ${targetText(p.target)}`)],
-  "browser.press": (p) => [w("Press "), code(p.key), w(p.target ? ` on ${targetText(p.target)}` : "")],
+  "browser.press": (p) => [w("Press "), code(p.key), w(`${p.target ? ` on ${targetText(p.target)}` : ""}${dialogText(p.dialog)}`)],
   "browser.getText": (p, s) => [w(`Read the text of ${targetText(p.target)}`), ...saveAs(s)],
   "browser.getTable": (p, s) => [w(`Read ${targetText(p.target)} as a table`), ...saveAs(s)],
   "browser.waitFor": (p) => [

@@ -38,20 +38,53 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 
 | type | Main params | Output |
 |---|---|---|
-| `browser.open` | `url`, `headless`, `session` (name under which the login state is saved and reused) | `{ url, title }` |
-| `browser.click` | `target` | – |
+| `browser.open` | `url`, `headless`, `session` (name under which the login state is saved and reused), `dialog` | `{ url, title }` |
+| `browser.click` | `target`, `dialog` (answer to the JS dialog the click shows) | the dialog's message / `null` |
+| `browser.hover` | `target` | – |
+| `browser.scroll` | `target` (bring into view) and/or `to` (`top` / `bottom`) | – |
 | `browser.fill` | `target`, `value` (text, or a registered secret `{ "secret": "name", "field": "password" }`) | – |
 | `browser.select` | `target`, `value` (visible label, or a list) | – |
-| `browser.press` | `key` (`Enter` and so on), `target` (the page when omitted) | – |
+| `browser.press` | `key` (`Enter` and so on), `target` (the page when omitted), `dialog` | the dialog's message / `null` |
 | `browser.getText` | `target`, `all` (`true` for a list of every match) | text / list |
 | `browser.getTable` | `target` (the first table when omitted) | list of objects keyed by the header cells |
+| `browser.getAttribute` | `target`, `name` (`href`, `src`, `value`, `data-id`…), `all` | text / `null` / list (`href` / `src` as full addresses) |
+| `browser.switchTab` | `title` / `url` (part of it) or `index` (0 = first tab) | `{ url, title, index }` |
+| `browser.closeTab` | – | `{ url, title }` of the tab it goes back to |
 | `browser.waitFor` | `target`, `state` (`visible` / `hidden` / `attached` / `detached`) | – |
 | `browser.screenshot` | `path` (absolute), `fullPage` | the path |
 | `browser.isVisible` | `target`, `waitMs` (default 2000) | `true` / `false` (never fails when missing) |
 | `browser.waitForHuman` | `message`, `until` (an element that appears when the person is done) | – |
 | `browser.close` | – | – |
 
-Every node has a `context` (default `default`). Each `context` has its own cookies and tabs; **nodes on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so scenarios never declare locks). Contexts opened by a run are closed when it ends.
+Every node has a `context` (default `default`). Each `context` has its own cookies and tabs, and its steps work on its **current tab**; **nodes on the same `context` run one at a time, different `context`s run at the same time** (the Runtime works out the locking from `context`, so scenarios never declare locks). Contexts opened by a run are closed when it ends.
+
+### Tabs and popups
+
+A link with `target="_blank"` or a button that opens a window adds a tab to the context, but steps stay on the current tab until `browser.switchTab` moves them. Put it right after the click: it waits for the tab to open, and picks the newest tab whose title contains `title` (or address contains `url`). `browser.closeTab` closes the current tab and goes back to the one before it; a popup that closes itself (`window.close()`) goes back on its own.
+
+```jsonc
+{ "type": "browser.click", "params": { "target": { "role": "button", "name": "Details" } } },
+{ "type": "browser.switchTab", "params": { "title": "Order details" } },
+{ "type": "browser.getText", "params": { "target": { "role": "heading" } }, "saveAs": "title" },
+{ "type": "browser.closeTab" }
+```
+
+### JS dialogs (alert / confirm / prompt)
+
+The step that causes the dialog answers it with `dialog`: `"accept"` (OK), `"dismiss"` (Cancel), or `{ "action": "accept", "promptText": "…" }` for a prompt. The step waits for the dialog (also one that shows a little after the click, such as "Saved" after the server answers) and outputs its message, so `saveAs` keeps a receipt number in an alert. If no dialog shows within the step's time limit it fails with `DIALOG_NOT_SHOWN`.
+
+Without `dialog`, a dialog is closed the way a browser without a person would (alert: OK, confirm / prompt: Cancel), and the next failing step says so in `details.dismissedDialog`. Dialogs drawn by the page itself are ordinary elements: click their buttons.
+
+### Frames
+
+Elements inside an iframe, or inside a `<frame>` of an old frameset page, need `frame` in their `target`: the frame by its `name` (or `id`) attribute, part of its `title` or `src`, or `css`. A frame inside a frame gives the outer one as `frame.frame`.
+
+```jsonc
+{ "label": "Remarks", "frame": { "name": "main" } }
+{ "role": "button", "name": "Search", "frame": { "name": "body", "frame": { "name": "main" } } }
+```
+
+`inspect_page` lists the page's frames (`frames`), and shows the inside of one when called with `target: { "css": "body", "frame": { "name": "main" } }`. A failing step lists them in `details.frames` as well.
 
 For logins, passwords and MFA, see [secrets.md](secrets.md). For web APIs that need an OAuth sign-in in the browser (`oauth.signIn`), see [oauth.md](oauth.md).
 
@@ -64,7 +97,7 @@ By meaning; CSS is the last resort.
 { "label": "Username" }                        // input fields
 { "text": "Shipped A-1001" }                   // visible text
 { "placeholder": "e.g. Aoba Store" } / { "testId": "submit" } / { "css": "#q" }
-// common: exact (exact match), nth (0-based index when several match)
+// common: exact (exact match), nth (0-based index when several match), frame (the iframe it is in)
 ```
 
 Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the node's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
@@ -76,6 +109,9 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 | `ELEMENT_NOT_FOUND` | No such element. `details.page` holds the page at that moment (accessibility tree) and hints for fixing it | yes |
 | `OPTION_NOT_FOUND` | The `browser.select` value is neither a label nor a value of the options. `details.options` lists them | no |
 | `ELEMENT_AMBIGUOUS` | Several elements match. Narrow it with `exact` / `nth` | no |
+| `TAB_NOT_FOUND` | No tab matches `browser.switchTab`. `details.tabs` lists them | yes |
+| `LAST_TAB` | `browser.closeTab` on the only tab (use `browser.close`) | no |
+| `DIALOG_NOT_SHOWN` | The step has `dialog` but no JS dialog showed | no |
 | `BROWSER_NOT_OPEN` | No `browser.open` for that `context` | no |
 | `NAVIGATION_FAILED` | The page cannot be opened | yes |
 | `BROWSER_LAUNCH_FAILED` | The browser cannot be started | no |
@@ -84,10 +120,11 @@ Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between.
 
 ## Building scenarios from AI (MCP)
 
-The MCP server has two tools for this (class `run`):
+The MCP server has three tools for this (class `run`):
 
-- `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is
-- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario
+- `inspect_page`: opens a page (or uses the open one) and returns its accessibility tree. A line `- button "Log in"` means `{ "role": "button", "name": "Log in" }` works as a `target` as is. `image: true` also hands the screenshot to the AI, for pages whose tree does not tell elements apart (icons without names)
+- `test_step`: runs one node on the spot and returns its output and the page after it (works for nodes of any adapter). Use it to look ahead, such as logging in and then inspecting the next page. It does not change the scenario. Before a browser node runs, its target is outlined in the browser for a moment (「ここを押します」), so the person watching sees what the AI is about to touch
+- `ask_user_to_pick`: when the AI cannot tell which element is meant (two 「編集」 buttons, an icon without a name), it asks the person instead of guessing. The browser window comes to the front with the AI's `message` in a banner, the `candidates` it is torn between are outlined with numbers, and the person's click is caught before the page sees it (nothing is pressed). The element comes back as a `target` (with `nth` and the text of its table row `row` when it repeats). Studio shows 「AI がブラウザの画面で指してほしいと言っています」 at the same time and can decline it; 「わからない」 or Esc in the browser declines too (`status: "cancelled"`). It needs a visible browser
 
 With these the AI checks the site while it builds the nodes, then confirms an AI-free run with `validate_scenario` → `run_scenario`.
 

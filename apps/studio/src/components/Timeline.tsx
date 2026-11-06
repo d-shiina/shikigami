@@ -56,6 +56,7 @@ const VERB_STYLE: Record<ChangeLine["verb"], string> = {
   scenario: "bg-slate-100 text-slate-600",
   variable: "bg-mizu-100 text-mizu-500",
   replace: "bg-shu-50 text-shu-600",
+  part: "bg-mizu-100 text-mizu-500",
 };
 
 export function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: boolean }) {

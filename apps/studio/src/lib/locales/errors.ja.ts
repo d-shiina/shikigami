@@ -80,6 +80,12 @@ export const errorsJa: Record<string, ErrorText> = {
     todo: (c) => (c.list("options").length > 0 ? `選べるのは ${c.list("options").slice(0, 8).join("、")} です` : "選べる選択肢を確かめてください"),
   },
   BROWSER_NOT_OPEN: { what: "ブラウザが開いていません", todo: "このノードより前に「ブラウザを開く」を置いてください" },
+  TAB_NOT_FOUND: {
+    what: (c) => `移る先のタブ${c.q(c.p("title") || c.p("url"))}が見つかりません`,
+    todo: "前のクリックで本当に新しいタブが開くか、タイトルやアドレスの一部が合っているか確かめてください",
+  },
+  LAST_TAB: { what: "タブが 1 つしかないので閉じられません", todo: "ブラウザごと閉じるときは「ブラウザを閉じる」を使ってください" },
+  DIALOG_NOT_SHOWN: { what: "確認のダイアログ（OK・キャンセル）が出ませんでした", todo: "このノードでダイアログが出ないなら「ダイアログ」の設定を外してください" },
   NAVIGATION_FAILED: { what: (c) => `ページ${c.q(c.p("url"))}を開けませんでした`, todo: "アドレスとネットワークの接続を確かめてください" },
   BROWSER_LAUNCH_FAILED: { what: "ブラウザを起動できませんでした", todo: "Microsoft Edge か Google Chrome が入っているか確かめてください" },
   BROWSER_ERROR: { what: "ブラウザの操作に失敗しました", todo: "もう一度実行してください。続くときは英語の原文を確かめてください" },

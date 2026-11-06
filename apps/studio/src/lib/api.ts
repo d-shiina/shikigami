@@ -72,6 +72,17 @@ export type SecretRequest = {
   missing: { registered: boolean; fields: SecretField[]; sites: string[] };
 };
 
+/** An AI waiting for the person to point at something in the browser (ask_user_to_pick). */
+export type PickRequest = {
+  id: string;
+  /** Written by the AI: shown as its words. */
+  message: string;
+  url?: string;
+  /** How many elements the AI outlined with numbers on the page. */
+  candidates: number;
+  requestedAt: string;
+};
+
 /** The screen a run paused on (see `capture_pause`). */
 export type RunEvidence = {
   runId: string;
@@ -130,6 +141,9 @@ export const api = {
   /** Requests from AI clients waiting for the person's approval. */
   listApprovals: () => call<ApprovalRequest[]>("list_approvals"),
   decideApproval: (id: string, approve: boolean) => call<ApprovalRequest>("decide_approval", { id, approve }),
+  /** AI clients waiting for the person to point at something in the browser. */
+  listPickRequests: () => call<PickRequest[]>("list_pick_requests"),
+  cancelPickRequest: (id: string) => call<void>("cancel_pick_request", { id }),
   /** Writes a bundle to the Downloads folder; returns its path. */
   exportScenario: (id: string) => call<string>("export_scenario", { id }),
   importScenario: (contents: string, onConflict?: ImportConflict) =>
@@ -166,6 +180,9 @@ export const api = {
   debugRun: (runId: string, command: DebugCommand) =>
     call<{ revision: number; updated: boolean }>("debug_run", { runId, command }),
   stopRun: (runId: string) => call<void>("stop_run", { runId }),
+  /** The picker (`action: "pick"`) and highlight (`action: "highlight"`) of an adapter. */
+  pointAt: (adapter: string, params: Record<string, unknown>, session?: string) =>
+    call<Record<string, unknown>>("point_at", { adapter, session, params }),
   runStatus: (runId: string) => call<RunSnapshot | null>("run_status", { runId }),
   listSecrets: () => call<{ secrets: SecretInfo[]; keyLocation: string; keyMissing: boolean }>("list_secrets"),
   setSecret: (input: SecretInput) => call<SecretInfo>("set_secret", { input }),
@@ -271,4 +288,6 @@ export const events = {
     listen("secret-requests-changed", () => handler()),
   /** An AI client asked for approval, or a request was answered, used or expired. */
   onApprovalsChanged: (handler: () => void): Promise<UnlistenFn> => listen("approvals-changed", () => handler()),
+  /** An AI client asked the person to point at something, or stopped waiting. */
+  onPickRequestsChanged: (handler: () => void): Promise<UnlistenFn> => listen("pick-requests-changed", () => handler()),
 };
