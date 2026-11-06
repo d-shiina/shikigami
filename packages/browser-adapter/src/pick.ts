@@ -91,8 +91,18 @@ export async function pick(page: Page, options: PickOptions): Promise<Picked | C
         lang: options.lang ?? "ja",
         banner: top,
       });
-      if (finished) return;
+      // The pick ended while this frame was being set up, maybe after the
+      // final clear ran: take down what was just put up here.
+      if (finished) {
+        await frame.evaluate(removeOverlay, { hostId: HOST_ID, attrs: [PICKED, CANDIDATE] }).catch(() => {});
+        return;
+      }
       if (!top) await setOnFrameElement(frame, ARMED, true);
+      if (finished) {
+        await frame.evaluate(removeOverlay, { hostId: HOST_ID, attrs: [PICKED, CANDIDATE] }).catch(() => {});
+        if (!top) await setOnFrameElement(frame, ARMED, false);
+        return;
+      }
       const outcome = await frame.evaluate(waitForOverlay, HOST_ID);
       if (!finished) settle({ frame, outcome });
     } catch (error) {
