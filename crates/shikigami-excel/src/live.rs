@@ -208,7 +208,7 @@ fn grid(sheet: &Object, range: Option<Range>) -> Result<Vec<Vec<Value>>, StepErr
 
 /// Puts `value` in a cell with the same rules as the file steps: text stays
 /// text, `{ "date": … }` and `{ "formula": … }`, null empties the cell.
-fn write(sheet: &Object, cell: Cell, value: &Value) -> Result<(), StepError> {
+fn write(sheet: &Object, cell: Cell, value: &Value, date1904: bool) -> Result<(), StepError> {
     let target = sheet.object(
         "Cells",
         vec![Var::i32(cell.row as i32), Var::i32(cell.column as i32)],
@@ -234,7 +234,7 @@ fn write(sheet: &Object, cell: Cell, value: &Value) -> Result<(), StepError> {
                 let formula = formula.strip_prefix('=').unwrap_or(formula);
                 target.put("Formula", Var::str(&format!("={formula}")))?;
             } else if let Some(Value::String(text)) = map.get("date") {
-                let (serial, has_time) = date::from_text(text, false).ok_or_else(|| {
+                let (serial, has_time) = date::from_text(text, date1904).ok_or_else(|| {
                     StepError::permanent("INVALID_DATE", format!("'{text}' is not a date"))
                         .with_details(json!({ "hint": "Write dates as { \"date\": \"2026-10-28\" } or { \"date\": \"2026-10-28T09:30:00\" }." }))
                 })?;
@@ -274,8 +274,17 @@ fn write_all(sheet: &Object, writes: &[(Cell, Value)], session: &Session) -> Res
             return Err(invalid(value));
         }
     }
+    // Dates are serials counted from the workbook's own start (1900 or 1904).
+    let date1904 = sheet
+        .get("Parent")?
+        .object("Parent")?
+        .get("Date1904")?
+        .to_bool();
     for (cell, value) in writes {
-        write(sheet, *cell, value)?;
+        // Stop as soon as the step is given up on, so a retry or the next
+        // step never races with writes still going into the open workbook.
+        session.check()?;
+        write(sheet, *cell, value, date1904)?;
     }
     Ok(())
 }
@@ -543,6 +552,10 @@ pub fn run_excel_only(
                 session.report_process(id);
             }
             let result = (|| {
+                // These steps run no code of the workbook: Workbooks.Open
+                // would otherwise run Workbook_Open of an .xlsm
+                // (msoAutomationSecurityForceDisable = 3).
+                app.put("AutomationSecurity", Var::i32(3))?;
                 app.put("DisplayAlerts", Var::bool(false))?;
                 let _ = app.put("AskToUpdateLinks", Var::bool(false));
                 let books = app.get("Workbooks")?.object("Workbooks")?;
