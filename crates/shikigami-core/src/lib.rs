@@ -30,8 +30,8 @@ pub use call::Subscenario;
 pub use error::{CoreError, CoreResult, ErrorPayload};
 pub use ids::{ApprovalId, ObservationId, RunId, ScenarioId, StepId};
 pub use model::{
-    Metadata, OnError, RetryPolicy, SCHEMA_VERSION, Scenario, ScenarioSettings, ScenarioSummary,
-    Step, VarDirection, VarType, VariableDef,
+    Metadata, OnError, Part, PartApp, RetryPolicy, SCHEMA_VERSION, Scenario, ScenarioSettings,
+    ScenarioSummary, Step, VarDirection, VarType, VariableDef, part_ref, takes_part, target_part,
 };
 pub use ops::{EditOp, Position, ScenarioPatch, StepPatch};
 pub use policy::{Decision, Policy, TargetDef, TargetKind};

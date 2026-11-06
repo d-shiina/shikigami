@@ -58,6 +58,15 @@ export type EditOp =
       name: string;
     }
   | {
+      op: "setPart";
+      name: string;
+      part: Part;
+    }
+  | {
+      op: "removePart";
+      name: string;
+    }
+  | {
       op: "replaceSteps";
       steps: Step[];
     };
@@ -247,6 +256,11 @@ export type VarType = "string" | "number" | "boolean" | "object" | "array" | "an
 export type VarDirection = "local" | "input" | "output" | "inOut";
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PartApp".
+ */
+export type PartApp = "browser" | "desktop";
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ConfigType".
  */
 export type ConfigType = ("text" | "number" | "boolean") | "date" | "list";
@@ -324,6 +338,14 @@ export interface Scenario {
    */
   variables?: VariableDef[];
   /**
+   * Named screen parts (a button, a field…): a node's `target` can be
+   * `{ "part": "<name>" }` instead of the whole target, so a part that
+   * changes is fixed in one place. Keys are like variable names.
+   */
+  parts?: {
+    [k: string]: Part;
+  };
+  /**
    * Top-level steps, executed in order.
    */
   steps?: Step[];
@@ -347,6 +369,28 @@ export interface VariableDef {
    * Secret values are masked in logs, events and run records.
    */
   secret?: boolean;
+}
+/**
+ * A named screen part: what a node finds on screen, kept in one place.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "Part".
+ */
+export interface Part {
+  /**
+   * What people call it (保存ボタン). The key is for nodes and AI.
+   */
+  label?: string;
+  /**
+   * The kind of node that can use it.
+   */
+  app: "browser" | "desktop";
+  /**
+   * The target, exactly as the nodes of `app` take it.
+   */
+  target: {
+    [k: string]: unknown;
+  };
 }
 /**
  * A single step. Control-flow and action steps share this shape.
@@ -904,7 +948,9 @@ export interface ScenarioDiff {
    */
   identical: boolean;
   /**
-   * Scenario-level fields: name, description, tags, settings.
+   * Scenario-level fields: name, description, tags, settings, and each
+   * named part (`parts.<name>`; `before` / `after` is absent when it was
+   * added / removed).
    */
   scenario: FieldChange[];
   variables: VariableChange[];

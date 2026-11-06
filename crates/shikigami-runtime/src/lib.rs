@@ -132,7 +132,11 @@ impl Runtime {
         let library: HashMap<ScenarioId, Arc<Scenario>> = options
             .subscenarios
             .iter()
-            .map(|s| (s.scenario.id.clone(), Arc::new(s.scenario.clone())))
+            .map(|s| {
+                let mut called = s.scenario.clone();
+                called.inline_parts();
+                (s.scenario.id.clone(), Arc::new(called))
+            })
             .collect();
         let project_dirs: HashMap<ScenarioId, PathBuf> = options
             .subscenarios
@@ -148,6 +152,9 @@ impl Runtime {
                 ..RunError::new("VALIDATION_FAILED", "the scenario has validation errors")
             });
         }
+        // Nodes that name a part run with its target.
+        let mut scenario = scenario;
+        scenario.inline_parts();
 
         let policy = match &self.policy_path {
             Some(path) => Policy::load(path).map_err(|e| RunError {
