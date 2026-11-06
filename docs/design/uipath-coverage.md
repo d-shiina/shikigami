@@ -147,7 +147,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 |---|---|---|
 | Read PDF Text | `pdf.readText`（テキスト層のある PDF。パスワード付きも可） | ✅ |
 | Read PDF With OCR | OCR エンジンの選定が要る。プラグイン候補 | 🔜（未定） |
-| Join / Extract PDF Page Range | 需要を見て | 🔜（未定） |
+| Join / Extract PDF Page Range | `pdf.merge` / `pdf.extractPages` / `pdf.split` | ✅ |
 
 ## 実装順
 
