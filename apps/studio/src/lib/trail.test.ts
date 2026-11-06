@@ -41,4 +41,22 @@ describe("trailLines", () => {
     expect(out.get("loop->body")).toBe("failed");
     expect(out.has("body->loop")).toBe(false);
   });
+
+  it("passes through the \"+\" at the end of a block", () => {
+    const states = { if: "succeeded", t: "succeeded", e: "succeeded", after: "running" } as const;
+    const lines = [line("if", "t"), line("t", "end:then"), line("end:then", "after"), line("if", "x"), line("x", "end:else"), line("end:else", "after")];
+    const out = trailLines(lines, states, new Set(["end:then", "end:else"]));
+    expect(out.get("t->end:then")).toBe("done");
+    expect(out.get("end:then->after")).toBe("now");
+    expect(out.has("x->end:else")).toBe(false);
+    expect(out.has("end:else->after")).toBe(false);
+    // A step that failed at the end of a block never got past it.
+    const failed = trailLines([line("t", "end:then"), line("end:then", "after")], { t: "failed" }, new Set(["end:then"]));
+    expect(failed.size).toBe(0);
+    // Unless it was set to continue on errors: then the run went on through the "+".
+    const lines2 = [line("t", "end:then"), line("end:then", "after")];
+    const went = trailLines(lines2, { t: "failed", after: "succeeded" }, new Set(["end:then"]), new Set(["t"]));
+    expect(went.get("t->end:then")).toBe("done");
+    expect(went.get("end:then->after")).toBe("done");
+  });
 });

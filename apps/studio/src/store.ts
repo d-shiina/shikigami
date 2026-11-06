@@ -61,7 +61,7 @@ export type PaletteAnchor = { left: number; top: number; right: number; bottom: 
  * The places in the sidebar; each fills the window right of it. "library" is
  * the page of all flows, "flows" the editor of the open one.
  */
-export type Place = "library" | "flows" | "review" | "secrets" | "settings";
+export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "settings";
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues";
@@ -153,6 +153,8 @@ export type RunState = {
   revision: number | null;
   /** The person cleared the marks it left on the chart. */
   trailHidden: boolean;
+  /** Stop was pressed and the run has not ended yet. */
+  stopping: boolean;
 };
 
 /** The `flow.call` steps a run event happened inside (outermost first). */
@@ -186,7 +188,7 @@ export function diveChain(root: Flow | null, called: Record<string, Flow>, path:
  * Breakpoints a run of the open flow stops at: its own, and those of every
  * flow it calls as `<flowId>/<stepId>` (copies of a flow share step IDs).
  */
-function runBreakpoints(s: Pick<StudioState, "flow" | "called" | "breakpoints">): string[] {
+export function runBreakpoints(s: Pick<StudioState, "flow" | "called" | "breakpoints">): string[] {
   if (!s.flow) return [];
   const called = Object.keys(s.called).flatMap((id) => (s.breakpoints[id] ?? []).map((step) => `${id}/${step}`));
   return [...(s.breakpoints[s.flow.id] ?? []), ...called];
@@ -330,6 +332,8 @@ export type StudioState = {
   debug(command: DebugCommand): Promise<boolean>;
   /** `flowId`: the flow the step is in, when it is a called one shown on the chart. */
   toggleBreakpoint(stepId: string, flowId?: string): void;
+  /** Removes every breakpoint of the open flow and of the flows it calls. */
+  clearBreakpoints(): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -542,6 +546,7 @@ const newRun = (runId: string, flowId: string | null = null): RunState => ({
   innerLatest: {},
   revision: null,
   trailHidden: false,
+  stopping: false,
 });
 
 /**
@@ -658,6 +663,8 @@ export function findStep(steps: Step[], id: string): Step | null {
 /** Sensible starting params so a freshly added step is close to runnable. */
 const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "control.if": { condition: "true" },
+  "control.switch": { value: "''" },
+  "control.case": { values: [""] },
   "control.while": { condition: "false" },
   "control.repeat": { count: 1 },
   "control.forEach": { items: "[]", itemVar: "item" },
@@ -676,6 +683,14 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "browser.getText": { target: { text: "" } },
   "browser.press": { key: "Enter" },
 };
+
+const SWITCH = "control.switch";
+const CASE = "control.case";
+
+/** A case of a switch, with nothing to compare to yet. */
+function newCase(body: Step[] = []): Step {
+  return { id: newStepId(), type: CASE, params: { ...(DEFAULT_PARAMS[CASE] ?? {}) }, ...(body.length > 0 ? { blocks: { body } } : {}) };
+}
 
 export function newStepId(): string {
   return `stp_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -1029,7 +1044,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const { flow, selection, paletteAt } = get();
         if (!flow) return;
         const { position } = insertPlace(flow.steps ?? [], selection, paletteAt);
-        const step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
+        let step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
+        // A switch starts with its first case; a node added among the cases becomes a case of its own.
+        if (type === SWITCH) step.blocks = { cases: [newCase()] };
+        const parent = position.parentId ? findStep(flow.steps ?? [], position.parentId) : null;
+        if (parent?.type === SWITCH && position.block === "cases" && type !== CASE) step = newCase([step]);
         const ok = await get().applyOps([{ op: "addStep", step, position }]);
         if (ok && step.id) set({ selection: { kind: "step", stepId: step.id } });
       },
@@ -1175,9 +1194,20 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async stopRun() {
         const run = get().run;
         if (!run) return;
+        set((s) => (s.run?.runId === run.runId && isActive(s.run) ? { run: { ...s.run, stopping: true } } : s));
         try {
           await api.stopRun(run.runId);
         } catch (e) {
+          if (e instanceof ApiError && e.code === "RUN_NOT_FOUND") {
+            // It already ended but its last event never came: do not leave
+            // the chart saying it runs, with a stop button that does nothing.
+            set((s) =>
+              s.run?.runId === run.runId && isActive(s.run)
+                ? { run: { ...s.run, status: "cancelled", pause: null, stopping: false }, human: null }
+                : s,
+            );
+            return;
+          }
           set({ error: message(e) });
         }
       },
@@ -1218,6 +1248,20 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const run = get().run;
         if (run && isActive(run) && run.flowId === get().flow?.id) {
           void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: runBreakpoints(get()) }).catch(() => {});
+        }
+      },
+
+      clearBreakpoints() {
+        const flow = get().flow;
+        if (!flow) return;
+        const breakpoints = { ...get().breakpoints };
+        delete breakpoints[flow.id];
+        for (const id of Object.keys(get().called)) delete breakpoints[id];
+        saveBreakpoints(breakpoints);
+        set({ breakpoints });
+        const run = get().run;
+        if (run && isActive(run) && run.flowId === flow.id) {
+          void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: [] }).catch(() => {});
         }
       },
 
@@ -1348,6 +1392,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             }
             case "runFinished":
               human = null;
+              run.stopping = false;
               run.status = env.status;
               run.pause = null;
               run.failure = env.status === "failed" ? (env.error ?? null) : null;

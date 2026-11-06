@@ -852,7 +852,7 @@ fn exe(name: &str) -> String {
 
 /// The `shikigami` CLI next to Studio (installed, or `target/<profile>` in
 /// development), else on PATH.
-fn cli_path() -> Option<PathBuf> {
+pub(crate) fn cli_path() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join(exe("shikigami"))))

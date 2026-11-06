@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::expr::{self, Expr};
 use crate::ids::StepId;
-use crate::model::{Flow, SCHEMA_VERSION, Step};
+use crate::model::{Flow, SCHEMA_VERSION, Step, VarFormat, VarType, VariableDef};
 use crate::registry::{StepRegistry, StepTypeDef, control, is_identifier};
 use crate::requires::{self, PLUGIN_PREFIX};
 use crate::secret::{self, SecretRef};
@@ -92,6 +92,7 @@ impl Validator {
             validator: self,
             issues: Vec::new(),
             seen_ids: HashSet::new(),
+            in_cases: false,
             known_vars: known_variables(flow, &self.registry),
             declared_vars: flow.variables.iter().map(|v| v.name.clone()).collect(),
             requires: flow.requires.clone(),
@@ -183,6 +184,8 @@ struct Cx<'a> {
     declared_vars: BTreeSet<String>,
     requires: BTreeMap<String, String>,
     parts: BTreeMap<String, crate::model::Part>,
+    /// The steps being checked are the `cases` of a `control.switch`.
+    in_cases: bool,
 }
 
 impl Cx<'_> {
@@ -205,6 +208,90 @@ impl Cx<'_> {
     }
 
     /// Attaches a context-specific hint to the issue pushed last.
+    /// `format` and `choices`: how the run window asks for the variable.
+    fn check_input_form(&mut self, var: &VariableDef, path: &str) {
+        if let Some(format) = var.format {
+            if !matches!(var.var_type, VarType::String | VarType::Any) {
+                self.error(
+                    "INVALID_VARIABLE_FORMAT",
+                    format!(
+                        "format of '{}' needs type string, not {:?}",
+                        var.name, var.var_type
+                    ),
+                    format!("{path}/format"),
+                    None,
+                );
+            } else if let Some(Value::String(text)) = &var.default
+                && !text.is_empty()
+                && !format_accepts(format, text)
+            {
+                self.error(
+                    "INVALID_VARIABLE_FORMAT",
+                    format!("default of '{}' is not a {}", var.name, format_name(format)),
+                    format!("{path}/default"),
+                    None,
+                );
+            }
+        }
+        if var.choices.is_empty() {
+            return;
+        }
+        let choices = format!("{path}/choices");
+        if !matches!(var.var_type, VarType::String | VarType::Number) {
+            self.error(
+                "INVALID_VARIABLE_CHOICES",
+                format!(
+                    "choices of '{}' need type string or number, not {:?}",
+                    var.name, var.var_type
+                ),
+                choices,
+                None,
+            );
+            return;
+        }
+        if var.secret || var.format.is_some() {
+            self.error(
+                "INVALID_VARIABLE_CHOICES",
+                format!(
+                    "'{}' has choices, so it cannot also be secret or have a format",
+                    var.name
+                ),
+                choices.clone(),
+                None,
+            );
+        }
+        for (i, choice) in var.choices.iter().enumerate() {
+            if !var.var_type.accepts(choice) {
+                self.error(
+                    "INVALID_VARIABLE_CHOICES",
+                    format!(
+                        "choice {choice} of '{}' does not match type {:?}",
+                        var.name, var.var_type
+                    ),
+                    format!("{choices}/{i}"),
+                    None,
+                );
+            } else if var.choices[..i].contains(choice) {
+                self.error(
+                    "INVALID_VARIABLE_CHOICES",
+                    format!("choice {choice} of '{}' is listed twice", var.name),
+                    format!("{choices}/{i}"),
+                    None,
+                );
+            }
+        }
+        if let Some(default) = &var.default
+            && !var.choices.contains(default)
+        {
+            self.error(
+                "INVALID_VARIABLE_CHOICES",
+                format!("default of '{}' is not one of its choices", var.name),
+                format!("{path}/default"),
+                None,
+            );
+        }
+    }
+
     fn hint(&mut self, hint: impl Into<String>) {
         if let Some(issue) = self.issues.last_mut() {
             issue.hint = Some(hint.into());
@@ -364,6 +451,7 @@ impl Cx<'_> {
                     None,
                 );
             }
+            self.check_input_form(var, &path);
         }
 
         if let Some(retry) = &flow.settings.default_retry
@@ -381,12 +469,16 @@ impl Cx<'_> {
     }
 
     fn steps(&mut self, steps: &[Step], path: &str, loop_depth: usize) {
+        let in_cases = self.in_cases;
         for (i, step) in steps.iter().enumerate() {
+            self.in_cases = in_cases;
             self.step(step, &format!("{path}/{i}"), loop_depth);
         }
+        self.in_cases = false;
     }
 
     fn step(&mut self, step: &Step, path: &str, loop_depth: usize) {
+        let in_cases = std::mem::take(&mut self.in_cases);
         let id = Some(&step.id);
         if step.id.is_empty() {
             self.error(
@@ -509,6 +601,8 @@ impl Cx<'_> {
             }
         }
 
+        self.switch_case(step, path, in_cases);
+
         if matches!(step.step_type.as_str(), control::BREAK | control::CONTINUE) && loop_depth == 0
         {
             self.error(
@@ -566,7 +660,32 @@ impl Cx<'_> {
                     )
                 });
             }
+            self.in_cases = step.step_type == control::SWITCH && name == "cases";
             self.steps(children, &block_path, child_depth);
+        }
+    }
+
+    /// `control.case` steps live in the `cases` of a `control.switch`, and
+    /// nothing else does.
+    fn switch_case(&mut self, step: &Step, path: &str, in_cases: bool) {
+        let is_case = step.step_type == control::CASE;
+        if is_case && !in_cases {
+            self.error(
+                "CASE_OUTSIDE_SWITCH",
+                "'control.case' must be in the `cases` block of a control.switch".into(),
+                format!("{path}/type"),
+                Some(&step.id),
+            );
+        } else if !is_case && in_cases {
+            self.error(
+                "NOT_A_CASE",
+                format!(
+                    "the `cases` of control.switch hold only control.case steps, not '{}'",
+                    step.step_type
+                ),
+                format!("{path}/type"),
+                Some(&step.id),
+            );
         }
     }
 
@@ -1051,6 +1170,33 @@ fn find_accumulators(steps: &[Step], out: &mut BTreeSet<String>) {
     }
 }
 
+fn format_name(format: VarFormat) -> &'static str {
+    match format {
+        VarFormat::File => "file path",
+        VarFormat::Folder => "folder path",
+        VarFormat::Date => "date (YYYY-MM-DD)",
+        VarFormat::Month => "month (YYYY-MM)",
+    }
+}
+
+/// Whether a default fits `format`. Paths are not checked: the file may
+/// only exist on the PC that runs the flow.
+fn format_accepts(format: VarFormat, text: &str) -> bool {
+    let num =
+        |part: &str, len: usize| part.len() == len && part.bytes().all(|b| b.is_ascii_digit());
+    let month_ok = |m: &str| num(m, 2) && (1..=12).contains(&m.parse::<u8>().unwrap_or(0));
+    match format {
+        VarFormat::File | VarFormat::Folder => true,
+        VarFormat::Month => {
+            matches!(text.split('-').collect::<Vec<_>>()[..], [y, m] if num(y, 4) && month_ok(m))
+        }
+        VarFormat::Date => matches!(
+            text.split('-').collect::<Vec<_>>()[..],
+            [y, m, d] if num(y, 4) && month_ok(m) && num(d, 2) && (1..=31).contains(&d.parse::<u8>().unwrap_or(0))
+        ),
+    }
+}
+
 /// Fix instructions for issues without a more specific hint.
 fn generic_hint(code: &str) -> Option<&'static str> {
     Some(match code {
@@ -1061,12 +1207,24 @@ fn generic_hint(code: &str) -> Option<&'static str> {
             "Put break/continue inside control.while, control.repeat or control.forEach. A control.parallel branch cannot leave an outer loop; end the branch or use control.fail."
         }
         "NO_OUTPUT" => "Remove `saveAs`: this step type returns no value.",
+        "CASE_OUTSIDE_SWITCH" => {
+            "Put the control.case into `blocks.cases` of a control.switch, or use control.if for a single condition."
+        }
+        "NOT_A_CASE" => {
+            "Wrap the step in a control.case (`params.values` or `params.condition`, the step in `blocks.body`), or move it to the switch's `default` block."
+        }
         "INVALID_VARIABLE_NAME" => {
             "Use letters, digits and '_' and start with a letter or '_' (e.g. invoiceTotal)."
         }
         "DUPLICATE_VARIABLE" => "Keep one declaration per variable name.",
         "VARIABLE_TYPE_MISMATCH" => {
             "Make `default` match `type`, or change `type` (any accepts every value)."
+        }
+        "INVALID_VARIABLE_FORMAT" => {
+            "`format` (file, folder, date, month) is for string variables; a date default is YYYY-MM-DD and a month YYYY-MM."
+        }
+        "INVALID_VARIABLE_CHOICES" => {
+            "`choices` lists the values a string or number input takes, each once and of the variable's type; `default` must be one of them."
         }
         "INVALID_RETRY" => "Set retry.maxAttempts to 1 or more (1 means no retry).",
         "EMPTY_NAME" => "Give the flow a short descriptive name.",
@@ -1265,6 +1423,63 @@ mod tests {
     }
 
     #[test]
+    fn input_formats_and_choices_are_checked() {
+        let v = Validator::new(typing_registry());
+        let var = |name: &str, ty, f: &dyn Fn(&mut VariableDef)| {
+            let mut var = VariableDef::new(name, ty);
+            f(&mut var);
+            var
+        };
+        let mut s = Flow::new("t");
+        s.variables = vec![
+            // Fine: a file, a month with a default, choices with one picked.
+            var("book", VarType::String, &|v| {
+                v.format = Some(VarFormat::File)
+            }),
+            var("month", VarType::String, &|v| {
+                v.format = Some(VarFormat::Month);
+                v.default = Some(json!("2026-11"));
+            }),
+            var("branch", VarType::String, &|v| {
+                v.choices = vec![json!("東京"), json!("大阪")];
+                v.default = Some(json!("大阪"));
+            }),
+            var("count", VarType::Number, &|v| {
+                v.format = Some(VarFormat::Date)
+            }),
+            var("day", VarType::String, &|v| {
+                v.format = Some(VarFormat::Date);
+                v.default = Some(json!("2026/11/06"));
+            }),
+            var("flag", VarType::Boolean, &|v| v.choices = vec![json!(true)]),
+            var("size", VarType::Number, &|v| {
+                v.choices = vec![json!(1), json!("2"), json!(1)];
+                v.default = Some(json!(3));
+            }),
+        ];
+        let report = v.validate(&s);
+        let found: Vec<_> = report
+            .issues
+            .iter()
+            .map(|i| (i.code.as_str(), i.path.as_str()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("INVALID_VARIABLE_FORMAT", "/variables/3/format"),
+                ("INVALID_VARIABLE_FORMAT", "/variables/4/default"),
+                ("INVALID_VARIABLE_CHOICES", "/variables/5/choices"),
+                ("INVALID_VARIABLE_CHOICES", "/variables/6/choices/1"),
+                ("INVALID_VARIABLE_CHOICES", "/variables/6/choices/2"),
+                ("INVALID_VARIABLE_CHOICES", "/variables/6/default"),
+            ]
+        );
+        assert!(hint_of(&report, "INVALID_VARIABLE_FORMAT").contains("YYYY-MM"));
+        assert!(format_accepts(VarFormat::Date, "2026-02-28"));
+        assert!(!format_accepts(VarFormat::Month, "2026-13"));
+    }
+
+    #[test]
     fn valid_flow_passes() {
         let mut s = Flow::new("ok");
         s.variables.push(VariableDef::new("count", VarType::Number));
@@ -1381,6 +1596,61 @@ mod tests {
             .find(|i| i.code == code)
             .and_then(|i| i.hint.as_deref())
             .unwrap_or_else(|| panic!("no hint for {code}: {report:?}"))
+    }
+
+    #[test]
+    fn cases_belong_to_a_switch() {
+        let log = |id: &str| {
+            Step::new("log.message")
+                .with_id(id)
+                .with_param("message", "x")
+        };
+        let case = |id: &str, body: &str| {
+            Step::new(control::CASE)
+                .with_id(id)
+                .with_param("values", json!(["A"]))
+                .with_block("body", vec![log(body)])
+        };
+        let mut s = Flow::new("switch");
+        s.steps = vec![
+            Step::new(control::SWITCH)
+                .with_id("sw")
+                .with_param("value", "'A'")
+                .with_block("cases", vec![case("c1", "l1"), log("stray")])
+                .with_block("default", vec![case("lost", "l2")]),
+            case("top", "l3"),
+        ];
+        let report = validator().validate(&s);
+        let found: Vec<(&str, &str)> = report
+            .issues
+            .iter()
+            .map(|i| {
+                (
+                    i.code.as_str(),
+                    i.step_id.as_ref().map_or("", |id| id.as_str()),
+                )
+            })
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("NOT_A_CASE", "stray"),
+                ("CASE_OUTSIDE_SWITCH", "lost"),
+                ("CASE_OUTSIDE_SWITCH", "top"),
+            ],
+            "{:?}",
+            report.issues
+        );
+
+        // A case needs `values` or `condition`.
+        let mut empty = Flow::new("switch");
+        empty.steps = vec![
+            Step::new(control::SWITCH)
+                .with_id("sw")
+                .with_param("value", "1")
+                .with_block("cases", vec![Step::new(control::CASE).with_id("c")]),
+        ];
+        assert!(codes(&validator().validate(&empty)).contains(&"INVALID_PARAMS"));
     }
 
     #[test]
@@ -1526,6 +1796,11 @@ mod tests {
                         .with_id("loop")
                         .with_param("count", 1)
                         .with_block("body", vec![step])
+                } else if def.step_type == control::CASE {
+                    Step::new(control::SWITCH)
+                        .with_id("switch")
+                        .with_param("value", "'東京'")
+                        .with_block("cases", vec![step])
                 } else {
                     step
                 };

@@ -52,8 +52,8 @@ fn ok() -> Response {
     }
 }
 
-/// The pipe's name for the workspace whose per-PC folder is `local_root`.
-pub fn endpoint(local_root: &Path) -> String {
+/// A short name for the workspace whose per-PC folder is `local_root`.
+pub(crate) fn workspace_hash(local_root: &Path) -> String {
     // FNV-1a: stable across builds (unlike `DefaultHasher`).
     let text = local_root.to_string_lossy().to_lowercase();
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -61,7 +61,12 @@ pub fn endpoint(local_root: &Path) -> String {
         hash ^= u64::from(b);
         hash = hash.wrapping_mul(0x0100_0000_01b3);
     }
-    let name = format!("shikigami-agent-{hash:016x}");
+    format!("{hash:016x}")
+}
+
+/// The pipe's name for the workspace whose per-PC folder is `local_root`.
+pub fn endpoint(local_root: &Path) -> String {
+    let name = format!("shikigami-agent-{}", workspace_hash(local_root));
     if cfg!(windows) {
         format!(r"\\.\pipe\{name}")
     } else {

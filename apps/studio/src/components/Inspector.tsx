@@ -10,15 +10,18 @@ import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables
 import { outline } from "../lib/outline";
 import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../lib/parts";
 import { runScope } from "../lib/runScope";
+import { describeWhen } from "../lib/schedule";
 import { sentence, targetText, typeTitle } from "../lib/sentence";
 import { findStep, isActive, revertBlocker, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
+import { openNewSchedule, useSchedulesOf } from "./RunsPage";
 import { ActorMark, usePendingReview } from "./Timeline";
 import { ExpressionField } from "./ExpressionField";
 import { VariableSetForm } from "./TransformForm";
 import { VarIcon } from "./VarIcon";
 import { VariablesPanel } from "./VariablesPanel";
+import { listToText, textToList } from "../lib/listText";
 
 type JsonSchema = {
   type?: string;
@@ -27,6 +30,7 @@ type JsonSchema = {
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
+  items?: JsonSchema | { type?: string | string[] };
 };
 
 const inputClass =
@@ -199,6 +203,14 @@ function TextOrSecretField({
   );
 }
 
+/** An array of strings, numbers and booleans, held as such (not yet something else). */
+function isScalarList(schema: JsonSchema, value: unknown): boolean {
+  const items = schema.items?.type;
+  const types = Array.isArray(items) ? items : items ? [items] : [];
+  const scalar = types.length > 0 && types.every((ty) => ["string", "number", "integer", "boolean", "null"].includes(ty));
+  return scalar && (value === undefined || value === null || (Array.isArray(value) && value.every((v) => v === null || typeof v !== "object")));
+}
+
 function ParamField({
   name,
   schema,
@@ -268,6 +280,18 @@ function ParamField({
     );
   } else if (schema.type === "string") {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
+  } else if (schema.type === "array" && isScalarList(schema, value)) {
+    // A few plain values (a case's values): one line, comma-separated.
+    hint = t.props.listHint;
+    editor = (
+      <CommitInput
+        value={listToText(value)}
+        onCommit={(text) => {
+          const list = textToList(text);
+          onChange(list.length === 0 ? null : list);
+        }}
+      />
+    );
   } else if (isForm(schema, value)) {
     // A target and other small records: one field per item, never JSON by hand.
     return (
@@ -1289,6 +1313,38 @@ function StepInspector() {
   );
 }
 
+/** When this flow runs by itself on this PC; they are edited in 「自動実行」. */
+function SchedulesSection({ flowId }: { flowId: string }) {
+  const schedules = useSchedulesOf(flowId);
+  const setPlace = useStudio((s) => s.setPlace);
+  if (!schedules) return null;
+  return (
+    <Section title={t.runs.schedules}>
+      <ul className="space-y-1 text-xs">
+        {schedules.length === 0 && <li className="text-slate-500">{t.runs.none}</li>}
+        {schedules.map((s) => (
+          <li key={s.id} className={s.enabled ? "" : "text-slate-500"}>
+            <button type="button" className="text-left hover:underline" onClick={() => setPlace("runs")}>
+              {describeWhen(s.when)}
+              {!s.enabled && `（${t.runs.paused}）`}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className="mt-1.5 text-xs text-brand-600 hover:underline"
+        onClick={() => {
+          openNewSchedule();
+          setPlace("runs");
+        }}
+      >
+        {t.runs.add}
+      </button>
+    </Section>
+  );
+}
+
 /** With nothing selected, the inspector shows the flow itself: what it is, its variables, how it runs. */
 function FlowInspector() {
   const flow = useStudio((s) => s.flow);
@@ -1327,6 +1383,7 @@ function FlowInspector() {
           </select>
         </Row>
       </Section>
+      <SchedulesSection flowId={flow.id} />
       <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{flow.id}</p>
     </div>
   );

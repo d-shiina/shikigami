@@ -31,6 +31,8 @@ export const runnerApi = {
   files: (id: string) => call<ProjectFiles>("project_files", { id }),
   /** With its app, or the folder (`""`) in Explorer. */
   open: (id: string, path: string) => call<void>("open_project_file", { id, path, reveal: false }),
+  /** The file or folder dialog for a `format: file` / `folder` input; null when cancelled. */
+  pick: (kind: "file" | "folder", start: string) => call<string | null>("runner_pick", { kind, start: start || null }),
   /** Opens the run window (from Studio). */
   openWindow: () => call<void>("open_runner"),
   onEvent: (handler: (event: RunEventEnvelope) => void): Promise<UnlistenFn> =>
@@ -38,3 +40,7 @@ export const runnerApi = {
 };
 
 export type RunnerApi = typeof runnerApi;
+
+/** The words of the tray menu, in the current language. */
+export const setTrayLabels = (labels: { tooltip: string; openRunner: string; openStudio: string; quit: string }) =>
+  call<void>("set_tray_labels", { labels });

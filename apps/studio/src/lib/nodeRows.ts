@@ -3,6 +3,7 @@
 // layout uses the same rows to size nodes, so both always agree.
 import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
 import { formatValue } from "./changes";
+import { listToText } from "./listText";
 import { readable, targetText } from "./sentence";
 import { t } from "./i18n";
 
@@ -55,12 +56,18 @@ const EXPRESSION_KEYS = new Set(["condition", "expression", "items", "count"]);
 
 function display(key: string, value: unknown): string {
   if (key === "target" || key === "to") return targetText(value);
+  // A case's values read as a list, the way they are typed in.
+  if (key === "values" && Array.isArray(value)) return truncate(listToText(value));
   const text =
     typeof value !== "string"
       ? formatValue(value)
       : EXPRESSION_KEYS.has(key)
         ? readable(value)
         : value.replace(/\{\{(.*?)\}\}/g, (_, expr: string) => `{{ ${readable(expr.trim())} }}`);
+  return truncate(text);
+}
+
+function truncate(text: string): string {
   return text.length > 40 ? `${text.slice(0, 40)}…` : text;
 }
 

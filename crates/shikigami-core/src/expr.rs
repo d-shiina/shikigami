@@ -660,7 +660,8 @@ fn type_name(value: &Value) -> &'static str {
     }
 }
 
-fn loose_eq(a: &Value, b: &Value) -> bool {
+/// Equality as `==` sees it: numbers by value (`1 == 1.0`), the rest exactly.
+pub fn loose_eq(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Number(x), Value::Number(y)) => x.as_f64() == y.as_f64(),
         _ => a == b,

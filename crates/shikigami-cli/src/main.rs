@@ -97,6 +97,25 @@ enum Command {
     /// minutes, once, or when a file appears.
     #[command(subcommand)]
     Schedule(agent_cmd::ScheduleCmd),
+    /// A small reference management server for agents (protocol v1).
+    #[command(subcommand)]
+    Manager(agent_cmd::ManagerCmd),
+    /// This PC's audit trail: who changed, published and ran which flow,
+    /// from Studio, the CLI, an AI, a schedule or a management server.
+    Audit {
+        /// Only from this day or time on (2026-11-01 or RFC 3339).
+        #[arg(long)]
+        since: Option<String>,
+        /// Only before this day or time.
+        #[arg(long)]
+        until: Option<String>,
+        /// Only this flow.
+        #[arg(long)]
+        flow: Option<String>,
+        /// One JSON object per line.
+        #[arg(long)]
+        json: bool,
+    },
     /// Serve MCP over stdio for AI clients (Claude Code, Codex, Cursor, ...).
     Mcp {
         /// Tool classes to expose, comma separated: read, write, run.
@@ -367,6 +386,22 @@ fn real_main() -> Result<ExitCode> {
         }
         Command::Schedule(cmd) => {
             return agent_cmd::schedule_cmd(&open_service()?, cmd, parse_inputs);
+        }
+        Command::Manager(cmd) => return agent_cmd::manager_cmd(cmd),
+        Command::Audit {
+            since,
+            until,
+            flow,
+            json,
+        } => {
+            let svc = open_service()?;
+            audit_cmd(
+                &svc,
+                since.as_deref(),
+                until.as_deref(),
+                flow.as_deref(),
+                *json,
+            )?;
         }
         Command::Flow(cmd) => {
             let svc = open_service()?;
@@ -1217,6 +1252,70 @@ async fn run(
         }
     }
     Ok(report.status)
+}
+
+/// "2026-11-01" (that day, local midnight as UTC) or an RFC 3339 time.
+fn parse_when(text: &str) -> Result<time::OffsetDateTime> {
+    use time::format_description::well_known::Rfc3339;
+    if let Ok(t) = time::OffsetDateTime::parse(text, &Rfc3339) {
+        return Ok(t);
+    }
+    let format = time::macros::format_description!("[year]-[month]-[day]");
+    let day = time::Date::parse(text, &format)
+        .map_err(|_| anyhow::anyhow!("'{text}' is not a day (2026-11-01) or an RFC 3339 time"))?;
+    Ok(day.midnight().assume_utc())
+}
+
+fn audit_cmd(
+    svc: &FlowService,
+    since: Option<&str>,
+    until: Option<&str>,
+    flow: Option<&str>,
+    json: bool,
+) -> Result<()> {
+    use shikigami_runtime::audit::{self, AuditQuery};
+    let query = AuditQuery {
+        since: since.map(parse_when).transpose()?,
+        until: until.map(parse_when).transpose()?,
+        flow_id: flow.map(FlowId::new),
+    };
+    let entries = audit::collect(svc.store(), &query);
+    if json {
+        for e in &entries {
+            println!("{}", serde_json::to_string(e)?);
+        }
+        return Ok(());
+    }
+    if entries.is_empty() {
+        println!("nothing recorded");
+    }
+    for e in &entries {
+        let at =
+            e.at.format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default();
+        let who = e
+            .who
+            .as_deref()
+            .map(|w| format!(" ({w})"))
+            .unwrap_or_default();
+        let flow = e.flow_id.as_deref().unwrap_or("-");
+        let ok = if e.ok { "" } else { " FAILED" };
+        let code = e
+            .error_code
+            .as_deref()
+            .map(|c| format!(" {c}"))
+            .unwrap_or_default();
+        let detail = if e.detail.is_empty() {
+            String::new()
+        } else {
+            format!("  {}", e.detail)
+        };
+        println!(
+            "{at}  {}{who}  {}  {flow}{ok}{code}{detail}",
+            e.actor, e.action
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]

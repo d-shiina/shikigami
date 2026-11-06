@@ -19,11 +19,12 @@ members = [
     "crates/shikigami-mail",
     "crates/shikigami-db",
     "crates/shikigami-agent",
+    "crates/shikigami-manager",
     "apps/studio/src-tauri",
 ]
 
 [workspace.package]
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 rust-version = "1.90"
 license = "Apache-2.0"
@@ -47,6 +48,7 @@ shikigami-com = { path = "crates/shikigami-com" }
 shikigami-mail = { path = "crates/shikigami-mail" }
 shikigami-db = { path = "crates/shikigami-db" }
 shikigami-agent = { path = "crates/shikigami-agent" }
+shikigami-manager = { path = "crates/shikigami-manager" }
 
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }

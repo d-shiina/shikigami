@@ -31,6 +31,34 @@ describe("the run window's form", () => {
     ]);
   });
 
+  it("offers pickers, a calendar and a list where the variable says so", () => {
+    const flow = makeFlow({
+      variables: [
+        { name: "book", type: "string", direction: "input", format: "file", description: "売上のブック" },
+        { name: "dir", type: "string", direction: "input", format: "folder", default: "C:\\out" },
+        { name: "month", type: "string", direction: "input", format: "month", default: "2026-11" },
+        { name: "day", type: "string", direction: "input", format: "date" },
+        { name: "branch", type: "string", direction: "input", choices: ["東京", "大阪"] },
+        { name: "rank", type: "number", direction: "input", choices: [1, 2, 3], default: 2 },
+      ],
+    });
+    const fields = fieldsOf(flow);
+    expect(fields.map((f) => [f.name, f.kind, f.required, f.initial])).toEqual([
+      ["book", "file", true, ""],
+      ["dir", "folder", false, "C:\\out"],
+      ["month", "month", false, "2026-11"],
+      ["day", "date", true, ""],
+      ["branch", "select", true, ""],
+      ["rank", "select", false, "1"],
+    ]);
+    expect(collect(fields, initialValues(fields)).errors).toEqual({ book: "入力してください", day: "入力してください", branch: "入力してください" });
+    const values = { ...initialValues(fields), book: "C:\\売上.xlsx", day: "2026-11-06", branch: "1", rank: "0" };
+    expect(collect(fields, values)).toEqual({
+      inputs: { book: "C:\\売上.xlsx", dir: "C:\\out", month: "2026-11", day: "2026-11-06", branch: "大阪", rank: 1 },
+      errors: {},
+    });
+  });
+
   it("turns what was typed into the inputs, by type", () => {
     const fields = fieldsOf(invoices);
     const values = { ...initialValues(fields), month: "2026-10", threshold: "120,000", mail: true, names: "東京\n大阪\n", password: "x" };

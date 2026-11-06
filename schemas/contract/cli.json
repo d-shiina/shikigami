@@ -835,6 +835,30 @@
         },
         {
           "name": "uninstall"
+        },
+        {
+          "name": "enroll",
+          "args": [
+            {
+              "id": "manager",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "code",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "unenroll"
         }
       ]
     },
@@ -1005,6 +1029,73 @@
               "global": false,
               "positional": true
             }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "manager",
+      "subcommands": [
+        {
+          "name": "serve",
+          "args": [
+            {
+              "id": "listen",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "listen"
+            },
+            {
+              "id": "data",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "data"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "args": [
+        {
+          "id": "since",
+          "required": false,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "long": "since"
+        },
+        {
+          "id": "until",
+          "required": false,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "long": "until"
+        },
+        {
+          "id": "flow",
+          "required": false,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "long": "flow"
+        },
+        {
+          "id": "json",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "json",
+          "values": [
+            "true",
+            "false"
           ]
         }
       ]

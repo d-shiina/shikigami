@@ -3,7 +3,7 @@
 //! Flow changes are additionally journaled by Core; this log also covers
 //! reads, runs and denied calls so a user can see what an AI client did.
 
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -66,9 +66,8 @@ impl AuditLog {
         let mut line = serde_json::to_vec(record)?;
         line.push(b'\n');
         let _guard = self.guard.lock();
-        if let Some(dir) = self.path.parent() {
-            fs::create_dir_all(dir)?;
-        }
+        // Also held by the pruner of `records.keepDays` in other processes.
+        let _lock = shikigami_runtime::audit::lock_log(&self.path)?;
         OpenOptions::new()
             .create(true)
             .append(true)

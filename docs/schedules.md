@@ -8,6 +8,8 @@ Shikigami starts flows by itself: every morning at 8, on the 25th of each month,
 
 The **agent** is one process per PC (per Windows user and workspace) that fires the schedules and runs them. It needs neither Studio nor an AI.
 
+In Studio, **Automation** in the sidebar shows whether the agent is running and what it is running, and **Start the agent** starts it (registered to start at every sign-in, as `agent install` does). Schedules are added, edited and switched on and off on the same page. The flow inspector's **Schedules** section lists the flow's own.
+
 ```powershell
 shikigami agent install     # start it whenever you sign in to Windows (and now)
 shikigami agent status      # is it running, what is it running, what comes next

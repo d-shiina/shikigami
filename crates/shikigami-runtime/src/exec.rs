@@ -460,6 +460,9 @@ pub(crate) struct Executor {
     pub iteration: Option<usize>,
     pub emitter: Emitter,
     pub cancel: CancellationToken,
+    /// Pressed stop a second time: `finally` blocks after a stop end now
+    /// instead of getting their grace period.
+    pub force: CancellationToken,
     pub default_timeout_ms: u64,
     pub default_retry: Option<RetryPolicy>,
     pub default_on_error: OnError,
@@ -536,6 +539,7 @@ impl Executor {
             iteration: self.iteration,
             emitter: self.emitter.clone(),
             cancel,
+            force: self.force.clone(),
             default_timeout_ms: self.default_timeout_ms,
             default_retry: self.default_retry,
             default_on_error: self.default_on_error,
@@ -1057,7 +1061,7 @@ impl Executor {
                 }
                 // After cancellation `finally` still runs (to close what
                 // the `try` opened), for at most FINALLY_GRACE, and the run
-                // ends cancelled whatever it does.
+                // ends cancelled whatever it does. Stopping again ends it at once.
                 if matches!(result, Err(Interrupt::Cancelled)) {
                     if step.block("finally").is_empty() {
                         return result;
@@ -1069,8 +1073,13 @@ impl Executor {
                     );
                     let cleanup = CancellationToken::new();
                     let outer = std::mem::replace(&mut self.cancel, cleanup.clone());
+                    // A second stop ends the clean-up too.
+                    let force = self.force.clone();
                     let timer = tokio::spawn(async move {
-                        tokio::time::sleep(FINALLY_GRACE).await;
+                        tokio::select! {
+                            () = tokio::time::sleep(FINALLY_GRACE) => {}
+                            () = force.cancelled() => {}
+                        }
                         cleanup.cancel();
                     });
                     let _ = self.sub_block(step, "finally").await;
@@ -1083,7 +1092,8 @@ impl Executor {
                     other => other,
                 }
             }
-            control::GROUP => self.sub_block(step, "body").await,
+            control::SWITCH => self.switch(step).await,
+            control::GROUP | control::CASE => self.sub_block(step, "body").await,
             control::PARALLEL => self.parallel(step).await,
             control::WAIT_UNTIL => self.wait_until(step).await,
             flow::CALL => self.call(step).await,
@@ -1107,6 +1117,60 @@ impl Executor {
                 format!("unknown control step '{other}'"),
             )
             .into()),
+        }
+    }
+
+    /// Runs the first case that matches the value, or `default`. The case
+    /// runs as a step of its own, so the run shows which branch was taken.
+    async fn switch(&mut self, step: &Step) -> StepResult {
+        let value = self.eval(param_str(step, "value")?)?;
+        for case in step.block("cases") {
+            if case.disabled || case.step_type != control::CASE {
+                continue;
+            }
+            if !self.case_matches(case, &value)? {
+                continue;
+            }
+            // An interactive run keeps the case in its block stack, as
+            // `sub_block` does, so a revision swapped in while paused in
+            // the case finds the run where it is.
+            let frame = self.debug.clone().filter(|_| self.in_call.is_none());
+            if let Some(debug) = &frame {
+                debug.push_frame(BlockKey::Child {
+                    parent: step.id.clone(),
+                    name: "cases".to_owned(),
+                });
+                debug.set_current(Some(case.id.clone()));
+            }
+            let result = loop {
+                match self.block(std::slice::from_ref(case)).await {
+                    Ok(Proceed::Retry) => {}
+                    other => break other,
+                }
+            };
+            if let Some(debug) = &frame {
+                debug.pop_frame();
+            }
+            return result;
+        }
+        self.sub_block(step, "default").await
+    }
+
+    fn case_matches(&self, case: &Step, value: &Value) -> Result<bool, RunError> {
+        let at = |e: RunError| e.at_step(&case.id, &case.step_type);
+        if let Some(Value::Array(values)) = case.params.get("values") {
+            for candidate in values {
+                let candidate = expr::render_value(candidate, &self.vars)
+                    .map_err(expr_error)
+                    .map_err(at)?;
+                if expr::loose_eq(&candidate, value) {
+                    return Ok(true);
+                }
+            }
+        }
+        match case.params.get("condition").and_then(Value::as_str) {
+            Some(condition) => Ok(expr::truthy(&self.eval(condition).map_err(at)?)),
+            None => Ok(false),
         }
     }
 
