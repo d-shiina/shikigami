@@ -2,6 +2,11 @@
 export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "browser.open": { summary: "Open a web page; the sign-in is saved for next time", words: "url site page visit navigate chrome edge" },
   "browser.click": { summary: "Click a button or link on the page", words: "press button link" },
+  "browser.hover": { summary: "Move the mouse over an element (menus that open on hover…)", words: "hover mouseover menu tooltip" },
+  "browser.scroll": { summary: "Scroll the page or a list (to the end, or until an element shows)", words: "scroll down up load more infinite" },
+  "browser.getAttribute": { summary: "Read an attribute of an element (link address, image address…)", words: "attribute href link url src get" },
+  "browser.switchTab": { summary: "Move to another tab or popup window", words: "tab window popup switch new tab" },
+  "browser.closeTab": { summary: "Close the current tab and go back to the one before", words: "tab window popup close back" },
   "browser.fill": { summary: "Type text into an input on the page", words: "input type enter text form login" },
   "browser.select": { summary: "Pick an option from a drop-down on the page", words: "choose dropdown option" },
   "browser.press": { summary: "Press a key on the page (Enter, Tab…)", words: "keyboard enter submit" },

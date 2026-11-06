@@ -42,6 +42,8 @@ mod capture;
 pub mod engine;
 pub mod keys;
 pub mod menu;
+#[cfg(windows)]
+mod overlay;
 pub mod paddle;
 pub mod roles;
 pub mod target;
@@ -80,6 +82,10 @@ const TIMEOUT_MARGIN_MS: u64 = 500;
 /// How often a missing window or element is looked for again.
 const POLL: Duration = Duration::from_millis(250);
 const DEFAULT_MAX_NODES: usize = 1500;
+/// How long the picker waits for a click.
+const PICK_TIMEOUT_MS: u64 = 60_000;
+/// How long a highlight stays on screen.
+const HIGHLIGHT_MS: u64 = 2_000;
 
 /// Desktop steps backed by the platform's backend (UI Automation on
 /// Windows; elsewhere every step fails with `PLATFORM_UNSUPPORTED`).
@@ -135,12 +141,66 @@ impl Adapter for DesktopAdapter {
 
     /// Without `window`: the open windows. With it: that window's element
     /// tree (`element` narrows it to one part, `maxNodes` caps its size).
+    /// `action: "pick"` lets the user point at an element on screen and
+    /// returns its target; `action: "highlight"` frames `target` on screen.
     fn inspect<'a>(
         &'a self,
         _session: &'a str,
         params: Value,
     ) -> BoxFuture<'a, Result<Value, StepError>> {
         Box::pin(async move {
+            match params.get("action").and_then(Value::as_str) {
+                None | Some("tree") => {}
+                Some("pick") => {
+                    let message = params
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned);
+                    let timeout_ms = params
+                        .get("timeoutMs")
+                        .and_then(Value::as_u64)
+                        .map_or(PICK_TIMEOUT_MS, |ms| ms.clamp(1_000, 600_000));
+                    return self
+                        .backend
+                        .call(Op::Pick {
+                            message,
+                            timeout_ms,
+                        })
+                        .await;
+                }
+                Some("highlight") => {
+                    let mut target = target(&params, Allow::Any)?;
+                    if target.image.is_some() || target.ocr.is_some() {
+                        // Find the picture or text once; frame where it is.
+                        let Some(looking) = Looking::new(self.backend.as_ref(), &target).await?
+                        else {
+                            return Ok(json!({ "found": false }));
+                        };
+                        let seen = visual::look(self.backend.as_ref(), &target, &looking).await;
+                        match seen.and_then(|seen| visual::pick(&target, &looking, &seen)) {
+                            Ok(point) => {
+                                let mut at = Target::window_only(target.window.clone());
+                                at.point = Some(point);
+                                target = at;
+                            }
+                            Err(e) if is_not_ready(&e) || visual::is_not_seen(&e) => {
+                                return Ok(json!({ "found": false }));
+                            }
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    let ms = params
+                        .get("ms")
+                        .and_then(Value::as_u64)
+                        .map_or(HIGHLIGHT_MS, |ms| ms.clamp(200, 10_000));
+                    return self.backend.call(Op::Highlight { target, ms }).await;
+                }
+                Some(other) => {
+                    return Err(StepError::invalid_params(format!(
+                        "unknown action {other:?}: use \"pick\" or \"highlight\", or leave it out to read the windows"
+                    )));
+                }
+            }
             let Some(window) = params.get("window") else {
                 let windows = self.backend.call(Op::ListWindows).await?;
                 return Ok(json!({

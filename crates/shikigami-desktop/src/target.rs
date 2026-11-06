@@ -89,6 +89,8 @@ pub enum Allow {
     Visual,
     /// Also `region` (steps that read or save the picture itself).
     Picture,
+    /// Every kind of place (highlighting a target on screen).
+    Any,
 }
 
 pub const DEFAULT_IMAGE_THRESHOLD: f32 = 0.9;
@@ -173,6 +175,9 @@ impl Target {
     }
 
     fn check_allowed(&self, allow: Allow) -> Result<(), StepError> {
+        if allow == Allow::Any {
+            return Ok(());
+        }
         let refuse = |what: &str, steps: &str| {
             Err(StepError::invalid_params(format!(
                 "target.{what} works only with {steps}"
@@ -495,4 +500,120 @@ pub fn app_allowed(sites: &[String], process: &str) -> bool {
         site.strip_prefix(APP_SITE_PREFIX)
             .is_some_and(|app| process_key(app) == want)
     })
+}
+
+/// A target for what the user pointed at on screen (the picker), built to
+/// be as sturdy as the app allows, and how it tells the element apart.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Picked {
+    pub target: Value,
+    /// `window`, `id`, `name`, `nth` or `point`.
+    pub how: &'static str,
+}
+
+/// The target for `nodes[element]` (`None`: the window itself) in
+/// `windows[window]`. `point` is where the user clicked, from the window's
+/// top-left corner: the last resort for an element with no id and no name.
+///
+/// In order: the window by its exe name (with its title only when the app
+/// has several windows open); the element by an id unique in the window,
+/// else role + name (exact), else with `nth`; else the point.
+pub fn picked_target(
+    windows: &[WindowInfo],
+    window: usize,
+    nodes: &[NodeInfo],
+    element: Option<usize>,
+    point: Point,
+) -> Picked {
+    let w = &windows[window];
+    let mut window_query = WindowQuery {
+        process: Some(w.process.clone()),
+        ..WindowQuery::default()
+    };
+    let mut window_json = json!({ "process": w.process });
+    let same_app = |q: &WindowQuery| {
+        (0..windows.len())
+            .filter(|&i| q.matches(&windows[i]))
+            .collect::<Vec<_>>()
+    };
+    if same_app(&window_query).len() > 1 && !w.title.trim().is_empty() {
+        window_query.title = Some(w.title.clone());
+        window_query.exact = true;
+        window_json["title"] = json!(w.title);
+        window_json["exact"] = json!(true);
+    }
+    let hits = same_app(&window_query);
+    if hits.len() > 1
+        && let Some(n) = hits.iter().position(|&i| i == window)
+    {
+        window_json["nth"] = json!(n);
+    }
+    let Some(index) = element.filter(|&i| i > 0 && i < nodes.len()) else {
+        return Picked {
+            target: json!({ "window": window_json }),
+            how: "window",
+        };
+    };
+    let node = &nodes[index];
+    let count = |q: &ElementQuery| -> Vec<usize> {
+        (1..nodes.len()).filter(|&i| q.matches(&nodes[i])).collect()
+    };
+    let element_json = |q: &ElementQuery, nth: Option<usize>| -> Value {
+        let mut e = serde_json::Map::new();
+        if let Some(id) = &q.id {
+            e.insert("id".into(), json!(id));
+        }
+        if let Some(role) = &q.role {
+            e.insert("role".into(), json!(role));
+        }
+        if let Some(name) = &q.name {
+            e.insert("name".into(), json!(name));
+        }
+        if q.exact {
+            e.insert("exact".into(), json!(true));
+        }
+        if let Some(n) = nth {
+            e.insert("nth".into(), json!(n));
+        }
+        Value::Object(e)
+    };
+    let done = |e: Value, how| Picked {
+        target: json!({ "window": window_json, "element": e }),
+        how,
+    };
+    if !node.id.is_empty() {
+        let q = ElementQuery {
+            id: Some(node.id.clone()),
+            ..ElementQuery::default()
+        };
+        if count(&q).len() == 1 {
+            return done(element_json(&q, None), "id");
+        }
+    }
+    if !node.name.trim().is_empty() {
+        let q = ElementQuery {
+            role: Some(node.role.to_owned()),
+            name: Some(node.name.clone()),
+            exact: true,
+            ..ElementQuery::default()
+        };
+        let hits = count(&q);
+        if hits.len() == 1 {
+            return done(element_json(&q, None), "name");
+        }
+        let nth = hits.iter().position(|&i| i == index);
+        return done(element_json(&q, nth), "nth");
+    }
+    if !node.id.is_empty() {
+        let q = ElementQuery {
+            id: Some(node.id.clone()),
+            ..ElementQuery::default()
+        };
+        let nth = count(&q).iter().position(|&i| i == index);
+        return done(element_json(&q, nth), "nth");
+    }
+    Picked {
+        target: json!({ "window": window_json, "point": { "x": point.x, "y": point.y } }),
+        how: "point",
+    }
 }
