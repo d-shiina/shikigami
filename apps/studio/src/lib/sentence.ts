@@ -124,8 +124,21 @@ function desktopEn(t: Record<string, unknown>): string {
   return `${targetEn(el)} in ${name}`;
 }
 
+/** The open scenario's parts, for `{ part: "<name>" }` targets (set by the store). */
+let partLookup: (name: string) => { label?: string } | undefined = () => undefined;
+export function setPartLookup(lookup: typeof partLookup) {
+  partLookup = lookup;
+}
+const partName = (target: unknown): string | undefined => {
+  const t = target as Record<string, unknown> | null;
+  if (!t || typeof t !== "object" || Object.keys(t).length !== 1 || typeof t.part !== "string") return undefined;
+  return partLookup(t.part)?.label || t.part;
+};
+
 function targetJa(target: unknown): string {
   if (!target || typeof target !== "object") return "（要素未設定）";
+  const part = partName(target);
+  if (part) return `部品「${part}」`;
   const t = target as Record<string, unknown>;
   if (t.window) return desktopJa(t);
   const nth = typeof t.nth === "number" ? `の${t.nth + 1}番目` : "";
@@ -142,6 +155,8 @@ function targetJa(target: unknown): string {
 
 function targetEn(target: unknown): string {
   if (!target || typeof target !== "object") return "(no element set)";
+  const part = partName(target);
+  if (part) return `the part "${part}"`;
   const t = target as Record<string, unknown>;
   if (t.window) return desktopEn(t);
   const nth = typeof t.nth === "number" ? ` #${t.nth + 1}` : "";

@@ -393,6 +393,28 @@ pub struct InspectPageParams {
     /// (default true; password fields are blacked out). It is not returned to you.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub screenshot: Option<bool>,
+    /// Also return the screenshot to you as an image. Only when the tree is not enough to tell
+    /// elements apart (icons without names, a layout the words do not show); it costs tokens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AskUserToPickParams {
+    /// What to point at, in one sentence for the user, shown on the page (Japanese is fine),
+    /// e.g. 「出荷するときに押すボタンをクリックしてください」.
+    pub message: String,
+    /// Elements you are torn between, as step targets. They are outlined with numbers 1, 2, …
+    /// so the user can click one of them (or something else).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<Value>,
+    /// Browser context whose page to point at (default "default").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    /// How long to wait for the click in milliseconds (default 120000, max 300000).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

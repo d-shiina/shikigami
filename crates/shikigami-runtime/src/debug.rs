@@ -403,15 +403,17 @@ impl Debugger {
                 "the run belongs to another scenario",
             ));
         }
-        if scenario.revision == state.scenario.revision && scenario == *state.scenario {
-            return Ok(false);
-        }
         let report = self.validator.validate(&scenario);
         if !report.valid {
             return Err(RunError {
                 details: serde_json::to_value(&report).ok(),
                 ..RunError::new("VALIDATION_FAILED", "the scenario has validation errors")
             });
+        }
+        let mut scenario = scenario;
+        scenario.inline_parts();
+        if scenario.revision == state.scenario.revision && scenario == *state.scenario {
+            return Ok(false);
         }
         check_position(&state.scenario, &scenario, &state.frames)?;
         state.scenario = Arc::new(scenario);
