@@ -199,6 +199,17 @@ const BUILDERS: Record<string, Builder> = {
   "browser.waitFor": (p) => [w(`${targetText(p.target)}が${p.state === "hidden" || p.state === "detached" ? "消える" : "出る"}まで待つ`)],
   "browser.screenshot": (p) => [w("画面を "), code(p.path), w(" に保存する")],
   "browser.close": () => [w("ブラウザを閉じる")],
+  "desktop.launch": (p) => [code(p.path), w(" を起動する")],
+  "desktop.click": (p) => [w(`${targetText(p.target)}を押す`)],
+  "desktop.mouseClick": (p) => [w(`${targetText(p.target)}をマウスでクリックする`)],
+  "desktop.setValue": (p) => [w(`${targetText(p.target)}に `), ...template(p.value), w(" を入れる")],
+  "desktop.type": (p) => [w(`${targetText(p.target)}に `), ...template(p.text), w(" を打つ")],
+  "desktop.press": (p) => [w(p.target ? `${targetText(p.target)}で ` : ""), code(p.key), w(" キーを押す")],
+  "desktop.select": (p) => [w(`${targetText(p.target)}で `), code(p.value), w(" を選ぶ")],
+  "desktop.getValue": (p, s) => [w(`${targetText(p.target)}の値を読む`), ...saveAs(s)],
+  "desktop.readText": (p, s) => [w(`${targetText(p.target)}の文字を OCR で読む`), ...saveAs(s)],
+  "desktop.waitFor": (p) => [w(`${targetText(p.target)}が${p.state === "hidden" ? "消える" : "出る"}まで待つ`)],
+  "desktop.closeWindow": (p) => [w(`${targetText(p.target)}を閉じる`)],
 };
 
 const BUILDERS_EN: Record<string, Builder> = {
@@ -229,6 +240,17 @@ const BUILDERS_EN: Record<string, Builder> = {
   ],
   "browser.screenshot": (p) => [w("Save the screen to "), code(p.path)],
   "browser.close": () => [w("Close the browser")],
+  "desktop.launch": (p) => [w("Launch "), code(p.path)],
+  "desktop.click": (p) => [w(`Press ${targetText(p.target)}`)],
+  "desktop.mouseClick": (p) => [w(`Click ${targetText(p.target)} with the mouse`)],
+  "desktop.setValue": (p) => [w("Put "), ...template(p.value), w(` into ${targetText(p.target)}`)],
+  "desktop.type": (p) => [w("Type "), ...template(p.text), w(` into ${targetText(p.target)}`)],
+  "desktop.press": (p) => [w("Press "), code(p.key), w(p.target ? ` on ${targetText(p.target)}` : "")],
+  "desktop.select": (p) => [w("Select "), code(p.value), w(` in ${targetText(p.target)}`)],
+  "desktop.getValue": (p, s) => [w(`Read the value of ${targetText(p.target)}`), ...saveAs(s)],
+  "desktop.readText": (p, s) => [w(`Read the text of ${targetText(p.target)} with OCR`), ...saveAs(s)],
+  "desktop.waitFor": (p) => [w(`Wait until ${targetText(p.target)} ${p.state === "hidden" ? "disappears" : "appears"}`)],
+  "desktop.closeWindow": (p) => [w(`Close ${targetText(p.target)}`)],
 };
 
 function saveAs(step: Step): Part[] {
@@ -242,7 +264,8 @@ export function sentence(step: Step, def: StepTypeDef | undefined): Part[] {
   // Unknown or adapter-provided types: the registry label, then its params.
   const parts: Part[] = [w(stepLabel(step.type, def?.label))];
   for (const [key, value] of Object.entries(step.params ?? {}).slice(0, 3)) {
-    parts.push(w(` ${key} `), code(value));
+    // A target reads as words ("billing.exe の [btnSave]"), never as JSON.
+    parts.push(...(key === "target" ? [w(` ${targetText(value)}`)] : [w(` ${key} `), code(value)]));
   }
   return [...parts, ...saveAs(step)];
 }

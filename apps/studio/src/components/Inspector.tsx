@@ -2,7 +2,7 @@ import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import type { SecretField } from "../lib/api";
-import { stepLabel, t } from "../lib/i18n";
+import { locale, stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { stepSummary } from "../lib/palette";
 import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
@@ -245,6 +245,17 @@ function ParamField({
     );
   } else if (schema.type === "string") {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
+  } else if (isForm(schema, value)) {
+    // A target and other small records: one field per item, never JSON by hand.
+    return (
+      <div className="py-1">
+        <div className="mb-1 flex items-center gap-1.5 pl-1 text-[11px] text-slate-500" title={schema.description ?? name}>
+          {socket && <span className="h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
+          {label}
+        </div>
+        <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} onChange={onChange} />
+      </div>
+    );
   } else {
     // Anything else (objects, arrays, untyped values): edit as JSON.
     hint = t.props.jsonHint;
@@ -266,6 +277,117 @@ function ParamField({
     <Row label={label} title={name} socket={socket} hint={hint}>
       {editor}
     </Row>
+  );
+}
+
+/** Items set rarely: shown under "詳しく指定" unless they hold a value. */
+const RARE = new Set(["testId", "css", "exact", "nth", "className", "placeholder"]);
+/** ARIA roles offered for a browser target, whose role is free text. */
+const BROWSER_ROLES = ["button", "link", "textbox", "checkbox", "radio", "combobox", "listitem", "menuitem", "tab", "heading", "cell", "row", "image"];
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** An object param with declared items, holding nothing or a plain object (not an expression). */
+function isForm(schema: JsonSchema, value: unknown): boolean {
+  return schema.type === "object" && Object.keys(schema.properties ?? {}).length > 0 && (value === undefined || value === null || isRecord(value));
+}
+
+const fieldLabel = (key: string) => t.targetFields[key] ?? key;
+const roleLabel = (role: string) => (!t.roles[role] ? role : locale === "ja" ? `${t.roles[role]}（${role}）` : `${t.roles[role]} (${role})`);
+
+/**
+ * An object param as fields: what to click as kind + name, a window as app +
+ * title. Nested records (window, element) get their own box; rarely used
+ * items fold away. Empty items are dropped, an empty record becomes unset.
+ */
+function ObjectFields({
+  schema,
+  value,
+  onChange,
+}: {
+  schema: JsonSchema;
+  value: Record<string, unknown> | undefined;
+  onChange: (value: unknown) => void;
+}) {
+  const props = schema.properties ?? {};
+  const current = value ?? {};
+  const keys = Object.keys(props);
+  const rare = keys.filter((k) => RARE.has(k));
+  const [more, setMore] = useState(() => rare.some((k) => current[k] !== undefined));
+  const set = (key: string, v: unknown) => {
+    const next = { ...current };
+    if (v === null || v === undefined || v === "" || v === false || (isRecord(v) && Object.keys(v).length === 0)) delete next[key];
+    else next[key] = v;
+    onChange(Object.keys(next).length === 0 ? null : next);
+  };
+  const shown = keys.filter((k) => more || !RARE.has(k));
+  return (
+    <div className="space-y-1 rounded-[4px] border border-slate-200 bg-paper px-2 py-1.5">
+      {shown.map((key) => {
+        const sub = props[key]!;
+        const v = current[key];
+        if (isForm(sub, v)) {
+          return (
+            <div key={key} className="pt-0.5">
+              <div className="mb-1 text-[11px] font-semibold text-slate-600" title={sub.description}>
+                {fieldLabel(key)}
+              </div>
+              <ObjectFields schema={sub} value={v as Record<string, unknown> | undefined} onChange={(next) => set(key, next)} />
+            </div>
+          );
+        }
+        let editor: React.ReactNode;
+        if (sub.enum) {
+          editor = (
+            <select className={inputClass} value={String(v ?? "")} onChange={(e) => set(key, e.target.value || null)}>
+              <option value="">{t.props.unset}</option>
+              {sub.enum.map((option) => (
+                <option key={String(option)} value={String(option)}>
+                  {key === "role" ? roleLabel(String(option)) : String(option)}
+                </option>
+              ))}
+            </select>
+          );
+        } else if (sub.type === "boolean") {
+          editor = <input type="checkbox" className="mt-1.5" checked={v === true} onChange={(e) => set(key, e.target.checked)} />;
+        } else if (sub.type === "integer" || sub.type === "number") {
+          editor = (
+            <CommitInput
+              value={v === undefined ? "" : String(v)}
+              onCommit={(text) => {
+                const n = Number(text.trim());
+                set(key, text.trim() === "" || !Number.isFinite(n) ? null : n);
+              }}
+            />
+          );
+        } else if (key === "role") {
+          // The browser's role is free text: offer the common ones, in words.
+          editor = (
+            <select className={inputClass} value={String(v ?? "")} onChange={(e) => set(key, e.target.value || null)}>
+              <option value="">{t.props.unset}</option>
+              {[...BROWSER_ROLES, ...(typeof v === "string" && v && !BROWSER_ROLES.includes(v) ? [v] : [])].map((role) => (
+                <option key={role} value={role}>
+                  {roleLabel(role)}
+                </option>
+              ))}
+            </select>
+          );
+        } else {
+          editor = <CommitInput mono={key === "css"} value={typeof v === "string" ? v : v === undefined ? "" : JSON.stringify(v)} onCommit={(text) => set(key, text)} />;
+        }
+        return (
+          <label key={key} className="grid grid-cols-[76px_1fr] items-center gap-x-2" title={sub.description}>
+            <span className="truncate text-right text-[11px] text-slate-500">{fieldLabel(key)}</span>
+            <span className="min-w-0">{editor}</span>
+          </label>
+        );
+      })}
+      {rare.length > 0 && (
+        <button type="button" className="ml-[84px] text-[11px] text-brand-600 hover:underline" onClick={() => setMore(!more)}>
+          {more ? t.targetFields.less : t.targetFields.more}
+        </button>
+      )}
+    </div>
   );
 }
 
