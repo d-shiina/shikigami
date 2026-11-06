@@ -25,7 +25,7 @@ import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { KEYWORD } from "../lib/keywords";
 import { VarIcon } from "./VarIcon";
-import { type FrameKind, layoutFlow, NODE_W, READ_ROOM, type SlotNodeData, SLOT_H, type StepNodeData, WRITE_ROOM } from "../flow/layout";
+import { type FrameKind, layoutFlow, NODE_W, READ_ROOM, type SlotNodeData, SLOT_H, type StepNodeData, TAIL_SIZE, WRITE_ROOM } from "../flow/layout";
 import { nodeIcon } from "../lib/nodeIcons";
 import { stepLabel, t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
@@ -729,6 +729,25 @@ function StepNode({ data }: StepNodeProps) {
 
 function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
   // An empty block, an empty flow, or the faint "+" under the last node: each adds a node there.
+  if (data.tail) {
+    // The end of a block with nodes: a small "+" on the line, inside the frame.
+    const title = data.label ? t.flow.addAtBlockEnd(data.label) : t.menu.addHere;
+    return (
+      <div
+        style={{ width: TAIL_SIZE, height: TAIL_SIZE }}
+        title={title}
+        aria-label={title}
+        className={`flex cursor-pointer items-center justify-center rounded-[4px] border ${
+          data.selected
+            ? "border-brand-500 bg-brand-50 text-brand-600"
+            : "border-dashed border-slate-400 bg-sheet text-slate-600 hover:border-solid hover:border-ink hover:bg-ink hover:text-white"
+        }`}
+      >
+        <FlowHandles />
+        <Plus size={14} strokeWidth={2.25} aria-hidden="true" />
+      </div>
+    );
+  }
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
@@ -1006,6 +1025,14 @@ export function FlowCanvas() {
     [calls],
   );
   const layout = useMemo(() => layoutFlow(flow?.steps ?? [], defs, extra), [flow, defs, extra]);
+  const tails = useMemo(() => new Set(layout.nodes.filter((n) => n.data.kind === "slot" && n.data.tail).map((n) => n.id)), [layout]);
+  // Steps whose failure the run goes on past (onError: continue, their own or the flow's).
+  const continues = useMemo(() => {
+    const flowDefault = flow?.settings?.onError;
+    return new Set(
+      layout.nodes.flatMap((n) => (n.data.kind === "step" && (n.data.step.onError ?? flowDefault) === "continue" ? [n.id] : [])),
+    );
+  }, [layout, flow]);
   // A node added on a line goes just before the step the line leads to. Not
   // where that would start another branch running at the same time.
   const insertBefore = useMemo(() => {
@@ -1112,7 +1139,7 @@ export function FlowCanvas() {
     }));
 
   // The lines the run took stay coloured after it ends, as the way it went.
-  const taken = trailLines(layout.edges, states);
+  const taken = trailLines(layout.edges, states, tails, continues);
   const edges: Edge[] = layout.edges.map((e) => {
     const trail = taken.get(e.id);
     return {

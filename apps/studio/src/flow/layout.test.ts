@@ -56,13 +56,14 @@ describe("layoutFlow", () => {
     ];
     const layout = layoutFlow(steps, defs);
     const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
-    const elseSlot = layout.nodes.find((n) => n.type === "slot");
+    const elseSlot = layout.nodes.find((n) => n.id.startsWith("slot:"));
     expect(elseSlot?.id).toBe("slot:if:else");
     // then-lane is left of the else-lane
     expect(pos.t1!.x).toBeLessThan(elseSlot!.position.x);
     // both branches flow into "after"
     const intoAfter = layout.edges.filter((e) => e.target === "after").map((e) => e.source);
-    expect(intoAfter.sort()).toEqual(["slot:if:else", "t2"]);
+    expect(intoAfter.sort()).toEqual(["end:if:then", "slot:if:else"]);
+    expect(layout.edges.some((e) => e.source === "t2" && e.target === "end:if:then")).toBe(true);
     expect(layout.width).toBeGreaterThanOrEqual(NODE_W * 2);
   });
 
@@ -72,7 +73,8 @@ describe("layoutFlow", () => {
       log("after"),
     ];
     const layout = layoutFlow(steps, defs);
-    expect(layout.edges.find((e) => e.source === "x" && e.target === "loop")?.loop).toBe(true);
+    expect(layout.edges.some((e) => e.source === "x" && e.target === "end:loop:body")).toBe(true);
+    expect(layout.edges.find((e) => e.source === "end:loop:body" && e.target === "loop")?.loop).toBe(true);
     expect(layout.edges.some((e) => e.source === "loop" && e.target === "after")).toBe(true);
   });
 
@@ -138,7 +140,7 @@ describe("layoutFlow", () => {
     expect(inner.right).toBeLessThan(outer.right);
     expect(inner.bottom).toBeLessThan(outer.bottom);
     // The lines around a loop's body run inside its frame, outside the inner one.
-    const back = layout.edges.find((e) => e.source === "inner" && e.target === "outer")!;
+    const back = layout.edges.find((e) => e.source === "end:outer:body" && e.target === "outer")!;
     expect(back.detourX).toBeGreaterThan(inner.right);
     expect(back.detourX).toBeLessThan(outer.right);
     const exit = layout.edges.find((e) => e.source === "outer" && e.target === "after")!;
@@ -163,5 +165,43 @@ describe("layoutFlow", () => {
     expect(f.l1!.x).toBeGreaterThan(f.if!.x);
     expect(f.l2!.x + f.l2!.width).toBeLessThan(f.if!.x + f.if!.width);
     expect(layoutFlow([log("a")], defs).frames).toEqual([]);
+  });
+
+  it("ends every block that has nodes with a \"+\" under its last node, inside its frame", () => {
+    const steps: Step[] = [
+      {
+        id: "loop",
+        type: "control.repeat",
+        blocks: { body: [{ id: "if", type: "control.if", blocks: { then: [log("t")], else: [log("e1"), log("e2")] } }] },
+      },
+      { id: "par", type: "control.parallel", blocks: { branches: [log("p1"), log("p2")] } },
+      log("after"),
+    ];
+    const layout = layoutFlow(steps, defs);
+    const tails = layout.nodes.filter((n) => n.data.kind === "slot" && n.data.tail);
+    // Each branch, the loop's body after the if; not a parallel's branches (that would add a branch), not the flow itself.
+    expect(tails.map((n) => n.id).sort()).toEqual(["end:if:else", "end:if:then", "end:loop:body"]);
+    for (const n of tails) expect(n.data).toMatchObject({ kind: "slot", parentId: n.id.split(":")[1], block: n.id.split(":")[2] });
+    const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
+    // Under the last node of its block, on its line.
+    expect(pos["end:if:then"]!.y).toBeGreaterThan(pos.t!.y);
+    expect(pos["end:if:else"]!.y).toBeGreaterThan(pos.e2!.y);
+    expect(pos["end:if:then"]!.x + 12).toBe(pos.t!.x + NODE_W / 2);
+    // The branches run through their "+" into the end of the loop's body, and that back up into the loop.
+    const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
+    expect(into("end:if:then")).toEqual(["t"]);
+    expect(into("end:if:else")).toEqual(["e2"]);
+    expect(into("end:loop:body")).toEqual(["end:if:else", "end:if:then"]);
+    expect(layout.edges.find((e) => e.source === "end:loop:body")?.target).toBe("loop");
+    // Inside the frames: the branches' in the if's, the body's below it but in the loop's.
+    const frame = (id: string) => layout.frames.find((f) => f.id === id)!;
+    const inside = (id: string, n: string) => {
+      const f = frame(id);
+      const p = pos[n]!;
+      return p.y > f.y && p.y + 24 < f.y + f.height;
+    };
+    expect(inside("if", "end:if:then")).toBe(true);
+    expect(inside("if", "end:loop:body")).toBe(false);
+    expect(inside("loop", "end:loop:body")).toBe(true);
   });
 });
