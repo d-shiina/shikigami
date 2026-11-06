@@ -55,6 +55,8 @@ fn busy(e: StepError) -> StepError {
         .with_details(json!({ "hint": "Excel may be editing a cell or showing a dialog on the person's screen. Ask them to finish it (Enter or Esc), then run again; the step is retried when it has a retry policy." }))
 }
 
+static LIVE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Runs a read or write step on the workbook open in Excel. `None` when
 /// the workbook is not open in this user's Excel (the step then works on
 /// the file as usual).
@@ -71,6 +73,13 @@ pub fn try_run(
         cancel,
         move |session| {
             let path = crate::string(&params, "path")?;
+            // EnableEvents belongs to the whole Excel, not the workbook: one
+            // live step at a time, held by this worker until it really ends
+            // (even after the step was given up on), so no step ever puts
+            // events back on while another is still writing.
+            let _one_at_a_time = LIVE
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let Some((app, book)) = open_book(Path::new(&path))? else {
                 return Ok(None);
             };
