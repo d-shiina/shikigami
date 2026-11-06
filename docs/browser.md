@@ -100,6 +100,8 @@ By meaning; CSS is the last resort.
 // common: exact (exact match), nth (0-based index when several match), frame (the iframe it is in)
 ```
 
+In Studio, a browser node's target has **Pick on screen** and **Highlight** while the scenario runs (or is paused at a node): Studio steps aside and the person clicks the element in the run's browser (Esc to cancel, the page never gets the click). Before a run there is no browser to pick in, so the buttons are off. Frames cannot be picked into yet.
+
 Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the node's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
 
 ### Errors
