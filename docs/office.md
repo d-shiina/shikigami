@@ -83,7 +83,7 @@ Only "run a workbook's VBA macro", which files alone cannot do, goes through Exc
 - Workbooks downloaded from the internet and blocked ("Unblock" not checked in the file's properties) cannot run macros and give `MACRO_FAILED`
 - Any code can run, so the node's risk is `Dangerous`
 
-## Excel itself: the open workbook, recalculation, sorting, PDF (implemented)
+## Excel itself: the open workbook, recalculation, sorting, formatting, filters, pivot tables, PDF (implemented)
 
 Some work needs Excel itself (COM). It needs Windows and desktop Excel (`PLATFORM_UNSUPPORTED` elsewhere, `EXCEL_NOT_INSTALLED` without Excel).
 
@@ -98,10 +98,16 @@ Some work needs Excel itself (COM). It needs Windows and desktop Excel (`PLATFOR
 |---|---|---|
 | `excel.recalculate` | `path` | – (recalculates every formula and saves) |
 | `excel.sort` | `path`, `sheet`, `headerRow`, `by` (`[{ "column": "Amount", "order": "desc" }]`, first is the main key) | `{ count }` rows sorted |
+| `excel.format` | `path`, `sheet`, `range` (`A1:F1`) and only what to change: `bold`, `italic`, `fontColor` / `fillColor` (`"#DDEBF7"`, `fillColor: null` takes the fill away), `numberFormat` (`"#,##0"`, `"yyyy/mm/dd"`), `align` (`left` / `center` / `right`), `wrapText`, `borders` (thin lines around every cell, `false` for none), `columnWidth`, `autoFit` | – |
+| `excel.filter` | `path`, `sheet`, `headerRow`, `filters` (`[{ "column": "Status", "values": ["Open", "On hold"] }]`, all must hold) or `clear: true` | `{ visible }` rows left showing |
+| `excel.pivot` | `path`, `sheet` (the table), `headerRow`, `toSheet` (a new sheet), `rows` / `columns` (header texts to group by), `values` (`[{ "column": "Amount", "function": "sum" }]`; `sum` `count` `average` `max` `min`) | `{ sheet }` |
 | `excel.exportPdf` | `path`, `sheet` (the whole workbook when omitted), `to`, `overwrite` | `{ path }` |
 
 - They use the open workbook when it is open, otherwise they open the file in **their own hidden Excel** like `excel.runMacro` (read-only for `excel.exportPdf`) and quit it afterwards
 - `excel.sort` names columns by header text (`UNKNOWN_COLUMN` lists them) and uses Excel's own sort, so formatting moves with the rows
+- `excel.format` checks every parameter before touching the workbook. Colours are `#RRGGBB`; `numberFormat` is written as in Excel's Format Cells > Custom (`INVALID_NUMBER_FORMAT` when Excel refuses it)
+- `excel.filter` replaces the sheet's filter (or the table's, for Format as Table) with `filters`; values are matched as Excel shows them (`"1,200"` for a number shown with a separator). The rows stay in the workbook: `excel.readRows` still reads all of them
+- `excel.pivot` builds on a new sheet (`SHEET_EXISTS` when `toSheet` is taken) and leaves no sheet behind when it fails (`PIVOT_FAILED`). Read the totals with `excel.readRange` on `toSheet`
 - `excel.exportPdf` lays out the pages as Excel prints them (print area, page setup). `FILE_EXISTS` when `to` exists unless `overwrite: true`
 - The default timeout is 5 minutes; on timeout their own Excel is quit without saving (`EXCEL_TIMEOUT`)
 - They change files but run no code of the workbook, so their risk is `Interactive`
@@ -162,6 +168,5 @@ A message that has gone cannot be taken back, so `mail.send` is `dangerous`: it 
 
 ## Next (planned)
 
-1. **Excel formatting, filters and pivot tables**: through Excel itself, like `excel.sort`
-2. **Word PDF export**: through COM (the same way as Excel macros)
-3. **Reading mail without Outlook**: `mail.list` / `mail.saveAttachments` through Microsoft 365 and IMAP
+1. **Word PDF export**: through COM (the same way as Excel macros)
+2. **Reading mail without Outlook**: `mail.list` / `mail.saveAttachments` through Microsoft 365 and IMAP
