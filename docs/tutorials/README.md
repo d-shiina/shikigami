@@ -14,7 +14,7 @@ Each tutorial takes one piece of office work from start to finish: ask the AI fo
 
 - Install and start Shikigami Studio ([README](../../README.md))
 - Open the AI pane with "Claude Code" at the top left of Studio (Ctrl+J) and sign in
-- The sample files are in `examples/tutorials/`. The finished scenarios (`*.shikigami.json`) are there too; open one with "Import from file" on the Scenarios page to look at it without the AI
+- The sample files are in `examples/tutorials/`. The finished scenarios (`*.shikigami.json`) are there too. To look at one without the AI, press "Open finished" under "Samples" on Studio's Scenarios page (the sample files come with it), or open the bundle with "Import from file"
 
 ## The steps every tutorial shares
 

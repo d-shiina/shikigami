@@ -917,6 +917,19 @@ export const ja = {
     original: "英語の原文",
     variablesNow: "この時点の変数",
   },
+  samples: {
+    title: "見本",
+    lead: "業務を 1 本、AI に頼んで作るところから毎月動かすまで。完成形を開いて中身を見ることもできます",
+    all: "チュートリアルの一覧",
+    open: "完成形を開く",
+    read: "手順を読む",
+    needsSite: "練習用のサイトで試します",
+    items: {
+      "sales-csv": { name: "支店の売上 CSV を 1 つの Excel にまとめる", uses: "CSV・Excel" },
+      invoices: { name: "受注一覧から取引先ごとの請求書を作る", uses: "Excel・Word のひな形" },
+      "web-orders": { name: "Web の受注システムで未処理の注文を出荷する", uses: "ブラウザ・ログイン" },
+    } as Record<string, { name: string; uses: string }>,
+  },
   list: {
     noTag: "タグなし",
     stepCount: (n: number) => `${n} ノード`,
