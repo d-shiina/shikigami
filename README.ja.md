@@ -6,11 +6,18 @@
 
 [English](README.md) | 日本語
 
-MCP-native desktop RPA where AI and humans build, edit, and run the same automation flows.
-
 AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したフローは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
 
-![Shikigami Studio（Phase 1）](docs/assets/studio-phase1.png)
+![Shikigami Studio](docs/assets/studio-phase1.png)
+
+## 使い始める
+
+1. [最新のリリース](https://github.com/d-shiina/shikigami/releases/latest)から `Shikigami.Studio_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Studio が自動で更新されます。
+2. スタートメニューから **Shikigami Studio** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
+3. AI にフローの作成を依頼するには、[Claude Code](https://claude.com/claude-code) をインストールしてサインインし、Studio 左上の「Claude Code」（Ctrl+J）を開きます。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
+4. AI の変更はサイドバーの「確認待ち」で確認し、「確認して公開」を押します。公開したフローは、AI なしで Studio・実行画面「Shikigami 実行」・スケジュールから実行できます。
+
+業務 1 本を最初から最後まで通して試すには、[チュートリアル](docs/ja/tutorials/README.md)（各 15 分ほど、見本のファイル付き）を参照してください。以下は開発者向けの情報です。
 
 ## 現在の状態
 
