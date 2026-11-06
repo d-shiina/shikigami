@@ -63,6 +63,22 @@ jobs:
           SHIKIGAMI_SNAPSHOT_DIR: ${{ runner.temp }}/dialogs
           # The db.* tests run SQL through the SQLite ODBC driver installed above.
           SHIKIGAMI_REQUIRE_ODBC: ${{ runner.os == 'Linux' && '1' || '' }}
+      # An experiment, not a gate: does an Edge IE mode page show its
+      # elements to UI Automation? The test reports what it saw as annotations.
+      - name: Edge IE mode through UI Automation (experiment)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+          New-Item -Path $key -Force | Out-Null
+          $sites = Join-Path $env:RUNNER_TEMP 'ie-sites.xml'
+          '<site-list version="1"><site url="127.0.0.1:8799"><compat-mode>Default</compat-mode><open-in>IE11</open-in></site></site-list>' | Set-Content -Encoding utf8 $sites
+          Set-ItemProperty $key InternetExplorerIntegrationLevel 1 -Type DWord
+          Set-ItemProperty $key InternetExplorerIntegrationSiteList ('file:///' + $sites.Replace('\', '/'))
+          Set-ItemProperty $key InternetExplorerIntegrationTestingAllowed 1 -Type DWord
+          Set-ItemProperty $key HideFirstRunExperience 1 -Type DWord
+          cargo test -p shikigami-desktop --test ie_mode -- --ignored --nocapture
       # Pictures of the dialog.* dialogs, drawn by the Windows test.
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows' && always()

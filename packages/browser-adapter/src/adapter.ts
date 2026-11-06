@@ -5,9 +5,14 @@
 // concurrent runs) using different context names never share cookies or
 // tabs. Waiting relies on Playwright's auto-waiting, never on fixed sleeps.
 
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { get as httpGet } from "node:http";
+import { basename, dirname, join } from "node:path";
+
 import { chromium } from "playwright-core";
 import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Dialog, LaunchOptions, Locator, Page } from "playwright-core";
 
+import { cancelPick, highlight, pick } from "./pick.ts";
 import { AdapterError, describe, locate, type Target } from "./targets.ts";
 
 export interface AdapterOptions {
@@ -54,6 +59,8 @@ interface Session {
   answered: DialogSeen[];
   /** Tells the running step that its dialog came. */
   onDialog?: () => void;
+  /** Set when the context is a browser the person started (browser.attach): never closed, only let go. */
+  attached?: Browser;
   /** The last dialog nobody asked for (dismissed); reported in the next failure. */
   unanswered?: DialogSeen;
   headless: boolean;
@@ -98,6 +105,28 @@ interface SavedSession {
   state: unknown;
 }
 
+/** The browser's DevTools WebSocket address from `/json/version` on 127.0.0.1. */
+function debuggerUrl(port: number, timeout: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = httpGet({ host: "127.0.0.1", port, path: "/json/version", timeout }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => (body += chunk));
+      res.on("end", () => {
+        try {
+          const url = (JSON.parse(body) as { webSocketDebuggerUrl?: unknown }).webSocketDebuggerUrl;
+          if (typeof url === "string") resolve(url);
+          else reject(new Error("the answer on that port has no webSocketDebuggerUrl"));
+        } catch {
+          reject(new Error("the answer on that port is not a browser's"));
+        }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error(`no answer within ${timeout} ms`)));
+    req.on("error", reject);
+  });
+}
+
 export function optionsFromEnv(env: NodeJS.ProcessEnv = process.env): AdapterOptions {
   const headlessEnv = env.SHIKIGAMI_BROWSER_HEADLESS;
   const noDisplay = process.platform === "linux" && !env.DISPLAY && !env.WAYLAND_DISPLAY;
@@ -126,10 +155,16 @@ export class Adapter {
           return "pong";
         case "open":
           return await this.open(params);
+        case "attach":
+          return await this.attach(params);
         case "click":
           return await this.click(params);
         case "hover":
           return await this.hover(params);
+        case "download":
+          return await this.download(params);
+        case "upload":
+          return await this.upload(params);
         case "scroll":
           return await this.scroll(params);
         case "getAttribute":
@@ -158,6 +193,12 @@ export class Adapter {
           return await this.isVisible(params);
         case "waitForHuman":
           return await this.waitForHuman(params);
+        case "pick":
+          return await this.pick(params);
+        case "highlight":
+          return await this.highlight(params);
+        case "cancelPick":
+          return await cancelPick(this.session(params).page);
         case "authorize":
           return await this.authorize(params);
         case "close":
@@ -362,6 +403,54 @@ export class Adapter {
     return opened;
   }
 
+  /**
+   * Takes over a browser the person started with a debugging port
+   * (`msedge --remote-debugging-port=9222`): its tabs, logins and
+   * extensions. Only this PC (127.0.0.1) is reached. The browser is never
+   * closed; the run lets go of it when it ends.
+   */
+  private async attach(params: Params): Promise<unknown> {
+    const port = params.port === undefined ? 9222 : Number(params.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new AdapterError("INVALID_PARAMS", "port must be a port number such as 9222");
+    const key = this.key(params);
+    const existing = this.sessions.get(key);
+    if (existing && !existing.attached) {
+      throw new AdapterError("CONTEXT_IN_USE", `browser context '${params.context ?? "default"}' already has a browser opened by browser.open`, {
+        details: { hint: "Give browser.attach its own `context` name, or close the other one first with browser.close." },
+      });
+    }
+    let session = existing;
+    if (!session || !session.attached?.isConnected()) {
+      let browser: Browser;
+      try {
+        // Ask the browser for its address directly: a proxy set for the PC
+        // (HTTP_PROXY) must never be asked to reach 127.0.0.1.
+        const endpoint = await debuggerUrl(port, this.limit(params));
+        browser = await chromium.connectOverCDP(endpoint, { timeout: this.limit(params) });
+      } catch (error) {
+        throw new AdapterError("BROWSER_NOT_RUNNING", `no browser is waiting on port ${port}: ${(error as Error).message.split("\n")[0]}`, {
+          retryable: true,
+          details: {
+            port,
+            hint: `Start Edge with a debugging port and its own profile folder, e.g. msedge.exe --remote-debugging-port=${port} --user-data-dir="%LOCALAPPDATA%\\Shikigami\\edge-profile" (Edge and Chrome ignore the port on their everyday profile), sign in there once, and leave it open. See docs/browser.md "Using a browser the person opened".`,
+          },
+        });
+      }
+      const context = browser.contexts()[0] ?? (await browser.newContext());
+      const pages = context.pages();
+      const page = pages.find((p) => !p.url().startsWith("devtools://")) ?? (await context.newPage());
+      const created: Session = { context, page, headless: false, history: [page], answered: [], secrets: new Set(), secretFields: [], attached: browser };
+      for (const p of pages) this.watchTab(created, p);
+      context.on("page", (p) => this.watchTab(created, p));
+      session = created;
+      this.sessions.set(key, session);
+    }
+    if (params.title !== undefined || params.url !== undefined) {
+      return await this.switchTab({ ...params, index: undefined });
+    }
+    return { url: session.page.url(), title: await session.page.title() };
+  }
+
   private target(params: Params): { page: Page; locator: Locator } {
     const { page } = this.session(params);
     return { page, locator: locate(page, params.target as Target | undefined) };
@@ -369,8 +458,111 @@ export class Adapter {
 
   private async click(params: Params): Promise<string | null> {
     const session = this.session(params);
-    const { locator } = this.target(params);
-    return await this.withDialog(session, params, () => locator.click({ timeout: this.limit(params) }));
+    const { page, locator } = this.target(params);
+    return await this.withDialog(session, params, () =>
+      locator.click({ timeout: this.limit(params) }).catch((error: unknown) => {
+        // A "閉じる" button of a popup closes its own tab while the click is
+        // still being confirmed: the click did its work.
+        if (page.isClosed()) return;
+        throw error;
+      }),
+    );
+  }
+
+  /**
+   * Clicks `target` and saves the file the page downloads: to `path`, or
+   * into `folder` under the name the site gives it.
+   */
+  private async download(params: Params): Promise<{ path: string; fileName: string }> {
+    const path = typeof params.path === "string" && params.path ? params.path : undefined;
+    const folder = typeof params.folder === "string" && params.folder ? params.folder : undefined;
+    if (!path === !folder) throw new AdapterError("INVALID_PARAMS", "give either `path` (the file to save) or `folder` (keep the site's file name)");
+    const { page, locator } = this.target(params);
+    const timeout = this.limit(params);
+    // One deadline for the click, the transfer and the save, so a slow
+    // download never writes the file after the Runtime gave up on the step.
+    const deadline = Date.now() + timeout;
+    const started = page.waitForEvent("download", { timeout });
+    started.catch(() => {});
+    await locator.click({ timeout });
+    let download;
+    try {
+      download = await started;
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new AdapterError("DOWNLOAD_NOT_STARTED", "the click started no download", {
+          details: {
+            target: params.target,
+            hint: "Check that `target` is the link or button that downloads the file. If it opens the file in a new tab (a PDF viewer), use browser.switchTab and browser.getAttribute href with http.request instead. A page that asks first (a JS confirm) needs browser.click with dialog before this.",
+          },
+        });
+      }
+      throw error;
+    }
+    const fileName = download.suggestedFilename();
+    const target = path ?? join(folder!, basename(fileName) || "download");
+    mkdirSync(dirname(target), { recursive: true });
+    let timer: NodeJS.Timeout | undefined;
+    const expired = new Promise<"expired">((resolve) => {
+      timer = setTimeout(() => resolve("expired"), Math.max(deadline - Date.now(), 1));
+    });
+    let failed: string | null | "expired";
+    try {
+      failed = await Promise.race([download.failure(), expired]);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (failed === "expired") {
+      await download.cancel().catch(() => {});
+      throw new AdapterError("DOWNLOAD_FAILED", `the download did not finish within ${Math.round(timeout / 1000)} s`, {
+        retryable: true,
+        details: { fileName, hint: "Raise the step's timeoutMs for large files." },
+      });
+    }
+    if (failed) {
+      throw new AdapterError("DOWNLOAD_FAILED", `the download failed: ${failed}`, { retryable: true, details: { fileName } });
+    }
+    await download.saveAs(target);
+    return { path: target, fileName };
+  }
+
+  /**
+   * Gives the file input `target` the files `path` (one or a list). A button
+   * that opens the file picker works too: the picker is answered without
+   * showing it.
+   */
+  private async upload(params: Params): Promise<null> {
+    const files = (Array.isArray(params.path) ? params.path : [params.path]).filter((f): f is string => typeof f === "string" && f !== "");
+    if (files.length === 0) throw new AdapterError("INVALID_PARAMS", "path is required: the file to upload, or a list of files");
+    for (const file of files) {
+      if (!existsSync(file) || !statSync(file).isFile()) {
+        throw new AdapterError("FILE_NOT_FOUND", `no file at ${file}`, {
+          details: { path: file, hint: "Write the path relative to the scenario folder (e.g. output/請求書.pdf) and check that an earlier step made the file." },
+        });
+      }
+    }
+    const { page, locator } = this.target(params);
+    const timeout = this.limit(params);
+    await locator.first().waitFor({ state: "attached", timeout });
+    const isFileInput = await locator.evaluate((el) => el instanceof HTMLInputElement && el.type === "file", undefined, { timeout });
+    if (isFileInput) {
+      await locator.setInputFiles(files, { timeout });
+      return null;
+    }
+    const chooser = page.waitForEvent("filechooser", { timeout });
+    chooser.catch(() => {});
+    await locator.click({ timeout });
+    try {
+      await (await chooser).setFiles(files, { timeout });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new AdapterError("FILE_CHOOSER_NOT_SHOWN", "clicking the target opened no file picker", {
+          details: { target: params.target, hint: "Target the file input itself (inspect_page shows it as a button such as \"ファイルを選択\"), or the button that opens the picker." },
+        });
+      }
+      throw error;
+    }
+    return null;
   }
 
   private async hover(params: Params): Promise<null> {
@@ -687,6 +879,72 @@ export class Adapter {
   }
 
   /**
+   * Lets the person at the PC point at an element: a banner shows `message`,
+   * `candidates` are outlined with numbers, and the next click is caught
+   * before the page sees it. Returns the element as a Target (with `nth`
+   * when it repeats), or `{ status: "cancelled" }`.
+   */
+  private async pick(params: Params): Promise<unknown> {
+    const session = this.session(params);
+    if (session.headless && !this.options.scriptedHuman) {
+      throw new AdapterError("HUMAN_REQUIRED", "pointing needs a person, but the browser runs without a window", {
+        details: {
+          hint: "Open the page with a visible browser (SHIKIGAMI_BROWSER_HEADLESS unset), or ask the user in chat to describe the element.",
+        },
+      });
+    }
+    const timeoutMs = typeof params.timeoutMs === "number" ? params.timeoutMs : 300_000;
+    const candidates = Array.isArray(params.candidates) ? (params.candidates as Target[]) : [];
+    const result = await pick(session.page, {
+      message: typeof params.message === "string" ? params.message : undefined,
+      candidates,
+      lang: typeof params.lang === "string" ? params.lang : undefined,
+      timeoutMs,
+    });
+    if (result.status === "picked") {
+      // Review evidence: the page with the picked element still outlined.
+      if (typeof params.screenshotPath === "string" && params.screenshotPath) {
+        await highlight(session.page, [result.target], { durationMs: 1500, numbered: false });
+        await this.capture(session, params.screenshotPath);
+      }
+    }
+    return result;
+  }
+
+  /** Outlines `target` (or each of `targets`) for `durationMs`; waits `waitMs` so the person sees it. */
+  private async highlight(params: Params): Promise<unknown> {
+    const session = this.session(params);
+    const targets = Array.isArray(params.targets)
+      ? (params.targets as Target[])
+      : params.target
+        ? [params.target as Target]
+        : [];
+    if (session.headless) return { shown: 0 };
+    const durationMs = typeof params.durationMs === "number" ? params.durationMs : 1500;
+    const shown = await highlight(session.page, targets, {
+      durationMs,
+      label: typeof params.label === "string" ? params.label : undefined,
+    });
+    const waitMs = typeof params.waitMs === "number" ? Math.min(params.waitMs, durationMs) : 0;
+    if (shown > 0 && waitMs > 0) await new Promise((ok) => setTimeout(ok, waitMs));
+    return { shown };
+  }
+
+  /** The visible part of the page as JPEG, secrets blacked out; best effort. */
+  private async capture(session: Session, path: string): Promise<void> {
+    await session.page
+      .screenshot({
+        path,
+        type: "jpeg",
+        quality: 70,
+        mask: [session.page.locator(PASSWORD_FIELDS), ...session.secretFields],
+        maskColor: "#000",
+        timeout: 10_000,
+      })
+      .catch(() => {});
+  }
+
+  /**
    * OAuth sign-in: opens the authorization page `url` and waits while the
    * person signs in and allows access. The provider then sends the browser
    * to `redirectUrl`; that request is caught inside the browser (Chromium's
@@ -797,16 +1055,7 @@ export class Adapter {
     // Review evidence: the visible part of the page, secrets blacked out as in browser.screenshot.
     // Best effort: a page that cannot be captured still gets its tree.
     if (typeof params.screenshotPath === "string" && params.screenshotPath) {
-      await page
-        .screenshot({
-          path: params.screenshotPath,
-          type: "jpeg",
-          quality: 70,
-          mask: [page.locator(PASSWORD_FIELDS), ...session.secretFields],
-          maskColor: "#000",
-          timeout: 10_000,
-        })
-        .catch(() => {});
+      await this.capture(session, params.screenshotPath);
     }
     if (await page.locator(PASSWORD_FIELDS).first().isVisible().catch(() => false)) {
       result.login = {
@@ -851,6 +1100,13 @@ export class Adapter {
   }
 
   private async closeSession(session: Session): Promise<SavedSession[]> {
+    if (session.attached) {
+      // The person's browser stays as it is: only the connection goes.
+      session.context.removeAllListeners("page");
+      for (const page of session.context.pages()) page.removeAllListeners("dialog");
+      await session.attached.close().catch(() => {});
+      return [];
+    }
     let saved: SavedSession[] = [];
     if (session.saveAs) {
       const state = await session.context.storageState().catch(() => undefined);
@@ -871,7 +1127,7 @@ export class Adapter {
       return new AdapterError("ELEMENT_AMBIGUOUS", `${count ?? "several"} elements match ${describe(target)}`, {
         details: {
           target,
-          hint: "Make the target more specific (role + exact name), or add `nth` (0-based) to pick one.",
+          hint: "Make the target more specific (role + exact name). If you cannot tell which one is meant, ask the user to point at it (MCP ask_user_to_pick) instead of guessing an `nth` (0-based).",
         },
       });
     }

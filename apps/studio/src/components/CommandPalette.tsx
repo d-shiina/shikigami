@@ -9,6 +9,8 @@ import { insertPlace, type PaletteAnchor } from "../store";
 /** Category colour, taken from the logo swirl. Used for node stripes too. */
 export const CATEGORY_COLOR: Record<string, string> = {
   control: "var(--cat-control)",
+  // A call is a control step underneath.
+  subflow: "var(--cat-control)",
   variable: "var(--cat-variable)",
   log: "var(--cat-log)",
   flow: "var(--cat-flow)",
@@ -103,6 +105,7 @@ export function CommandPalette() {
   const at = useStudio((s) => s.paletteAt);
   const anchor = useStudio((s) => s.paletteAnchor);
   const addStep = useStudio((s) => s.addStep);
+  const summaries = useStudio((s) => s.summaries);
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<string | null>(null);
   const [recent, setRecent] = useState(loadRecent);
@@ -111,7 +114,7 @@ export function CommandPalette() {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
 
-  const items = useMemo(() => paletteItems(stepTypes), [stepTypes]);
+  const items = useMemo(() => paletteItems(stepTypes, summaries, scenario?.id), [stepTypes, summaries, scenario?.id]);
   const all = useMemo(() => groups(items), [items]);
   const rows: Row[] = useMemo(() => {
     if (query.trim()) return search(items, query, recent).map((item) => ({ item, tagged: true }));

@@ -143,6 +143,74 @@ pub struct Policy {
     /// Per-scenario settings, keyed by scenario ID.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub scenarios: BTreeMap<String, ScenarioPolicy>,
+    /// How long this PC keeps run records (`runs/`).
+    #[serde(default, skip_serializing_if = "RecordsPolicy::is_default")]
+    pub records: RecordsPolicy,
+    /// Runs asked for by a management server (see
+    /// docs/design/remote-runs.md). Off unless enabled here.
+    #[serde(default, skip_serializing_if = "RemotePolicy::is_default")]
+    pub remote: RemotePolicy,
+}
+
+/// How long run records are kept. Each PC applies it to its own records;
+/// without a limit they are kept until deleted by hand.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RecordsPolicy {
+    /// Delete run records older than this many days.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_days: Option<u32>,
+    /// Keep at most this many run records (the newest).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_runs: Option<u32>,
+}
+
+impl RecordsPolicy {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Runs a management server may ask this PC for. Everything is closed by
+/// default; `scenarios.<id>.unattended: false` still refuses a scenario.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemotePolicy {
+    /// Connect to the management server at all.
+    #[serde(default)]
+    pub enabled: bool,
+    /// The management server's URL (`https://…`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manager: Option<String>,
+    /// Scenario IDs it may start (`"*"` for every scenario). Empty: none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scenarios: Vec<String>,
+    /// Run scenarios the server sends as bundles (not only the published
+    /// versions in this workspace).
+    #[serde(default)]
+    pub accept_bundles: bool,
+}
+
+impl RemotePolicy {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Whether the management server may start `scenario_id`.
+    pub fn allows(&self, scenario_id: &str) -> bool {
+        self.enabled && self.scenarios.iter().any(|s| s == "*" || s == scenario_id)
+    }
+}
+
+/// `http://localhost…` / `http://127.0.0.1…`: allowed for trying a manager
+/// on the same PC.
+pub fn is_local_http(url: &str) -> bool {
+    ["http://localhost", "http://127.0.0.1", "http://[::1]"]
+        .iter()
+        .any(|p| {
+            url.strip_prefix(p)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with([':', '/']))
+        })
 }
 
 fn format_version() -> u32 {
@@ -157,6 +225,8 @@ impl Default for Policy {
             apps: Vec::new(),
             ai: AiPolicy::default(),
             scenarios: BTreeMap::new(),
+            records: RecordsPolicy::default(),
+            remote: RemotePolicy::default(),
         }
     }
 }
@@ -270,6 +340,18 @@ impl Policy {
         for app in &self.apps {
             if app.trim().is_empty() {
                 out.push("apps: empty entry".into());
+            }
+        }
+        if self.records.keep_days == Some(0) || self.records.keep_runs == Some(0) {
+            out.push("records: 0 would delete every run record; leave it out to keep them".into());
+        }
+        if self.remote.enabled {
+            match self.remote.manager.as_deref() {
+                None => out.push("remote: enabled without a manager URL".into()),
+                Some(url) if !url.starts_with("https://") && !is_local_http(url) => out.push(
+                    format!("remote.manager: '{url}' must start with https:// (http:// only for localhost)"),
+                ),
+                Some(_) => {}
             }
         }
         out
@@ -510,6 +592,30 @@ mod tests {
 
     fn policy(value: Value) -> Policy {
         serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn remote_runs_are_closed_by_default() {
+        let p = Policy::default();
+        assert!(!p.remote.allows("scn_a"));
+        assert!(p.problems().is_empty());
+        let p = policy(json!({
+            "remote": { "enabled": true, "manager": "https://m.example", "scenarios": ["scn_a"] },
+            "records": { "keepDays": 90 }
+        }));
+        assert!(p.remote.allows("scn_a"));
+        assert!(!p.remote.allows("scn_b"));
+        assert_eq!(p.records.keep_days, Some(90));
+        assert!(p.problems().is_empty());
+        let p = policy(json!({ "remote": { "enabled": true, "scenarios": ["*"] } }));
+        assert!(p.remote.allows("scn_b"));
+        assert_eq!(p.problems().len(), 1);
+        let p = policy(json!({ "remote": { "enabled": true, "manager": "http://m.example" } }));
+        assert_eq!(p.problems().len(), 1);
+        let p =
+            policy(json!({ "remote": { "enabled": true, "manager": "http://localhost:8787" } }));
+        assert!(p.problems().is_empty());
+        assert!(!is_local_http("http://localhost.evil.example"));
     }
 
     #[test]

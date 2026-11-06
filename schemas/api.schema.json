@@ -184,6 +184,13 @@
             "$ref": "#/$defs/VariableDef"
           }
         },
+        "parts": {
+          "description": "Named screen parts (a button, a field…): a node's `target` can be\n`{ \"part\": \"<name>\" }` instead of the whole target, so a part that\nchanges is fixed in one place. Keys are like variable names.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Part"
+          }
+        },
         "steps": {
           "description": "Top-level steps, executed in order.",
           "type": "array",
@@ -275,6 +282,35 @@
           "type": "string",
           "const": "inOut"
         }
+      ]
+    },
+    "Part": {
+      "description": "A named screen part: what a node finds on screen, kept in one place.",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "What people call it (保存ボタン). The key is for nodes and AI.",
+          "type": "string"
+        },
+        "app": {
+          "description": "The kind of node that can use it.",
+          "$ref": "#/$defs/PartApp"
+        },
+        "target": {
+          "description": "The target, exactly as the nodes of `app` take it."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "target"
+      ]
+    },
+    "PartApp": {
+      "type": "string",
+      "enum": [
+        "browser",
+        "desktop"
       ]
     },
     "Step": {
@@ -507,6 +543,20 @@
             "null"
           ],
           "default": null
+        },
+        "inputs": {
+          "description": "Input variables (`input` and `inOut`), in declared order: what a\n`scenario.call` to it can pass in.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputs": {
+          "description": "Output variables (`output` and `inOut`): what a call can receive.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -683,6 +733,43 @@
             "op": {
               "type": "string",
               "const": "removeVariable"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ]
+        },
+        {
+          "description": "Adds or replaces (by name) a named screen part. Nodes use it as\n`\"target\": { \"part\": \"<name>\" }`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setPart"
+            },
+            "name": {
+              "type": "string"
+            },
+            "part": {
+              "$ref": "#/$defs/Part"
+            }
+          },
+          "required": [
+            "op",
+            "name",
+            "part"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "removePart"
             },
             "name": {
               "type": "string"
@@ -1493,7 +1580,7 @@
           "type": "boolean"
         },
         "scenario": {
-          "description": "Scenario-level fields: name, description, tags, settings.",
+          "description": "Scenario-level fields: name, description, tags, settings, and each\nnamed part (`parts.<name>`; `before` / `after` is absent when it was\nadded / removed).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/FieldChange"
@@ -2530,6 +2617,14 @@
           "additionalProperties": {
             "$ref": "#/$defs/ScenarioPolicy"
           }
+        },
+        "records": {
+          "description": "How long this PC keeps run records (`runs/`).",
+          "$ref": "#/$defs/RecordsPolicy"
+        },
+        "remote": {
+          "description": "Runs asked for by a management server (see\ndocs/design/remote-runs.md). Off unless enabled here.",
+          "$ref": "#/$defs/RemotePolicy"
         }
       },
       "additionalProperties": false
@@ -2621,6 +2716,62 @@
             "boolean",
             "null"
           ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RecordsPolicy": {
+      "description": "How long run records are kept. Each PC applies it to its own records;\nwithout a limit they are kept until deleted by hand.",
+      "type": "object",
+      "properties": {
+        "keepDays": {
+          "description": "Delete run records older than this many days.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "keepRuns": {
+          "description": "Keep at most this many run records (the newest).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "RemotePolicy": {
+      "description": "Runs a management server may ask this PC for. Everything is closed by\ndefault; `scenarios.<id>.unattended: false` still refuses a scenario.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Connect to the management server at all.",
+          "type": "boolean",
+          "default": false
+        },
+        "manager": {
+          "description": "The management server's URL (`https://…`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenarios": {
+          "description": "Scenario IDs it may start (`\"*\"` for every scenario). Empty: none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "acceptBundles": {
+          "description": "Run scenarios the server sends as bundles (not only the published\nversions in this workspace).",
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false
