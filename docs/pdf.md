@@ -34,7 +34,7 @@ Nothing needs to be installed (no Acrobat). Each writes new files and never chan
 - `pdf.extractPages`: the pages `pages` of `path` into `to`. Pages are written like `"1-3,5"`, and `"2-"` means page 2 to the last. Page 1 is the first page; pages go out in the order written (`"3,1"` puts page 3 first). A page past the end gives `PDF_PAGE_OUT_OF_RANGE` (its `details.pageCount` says how many there are).
 - `pdf.split`: `path` into files of `pagesPerFile` pages (default 1) in `folder`, named after the PDF: `invoice_01.pdf`, `invoice_02.pdf`, …. The output is the list of new paths, ready for `control.forEach`.
 - An existing `to` (or any of the split files) gives `FILE_EXISTS` before anything is written, unless `overwrite: true`.
-- The new file holds only the chosen pages and what they draw. Bookmarks, form fields and links to pages left out are not carried over, so a page split out of a batch of invoices never carries the other customers' pages inside the file.
+- The new file holds only the chosen pages and what they draw. Bookmarks, form fields and links to pages left out are not carried over, so a page split out of a batch of invoices never carries the other customers' pages inside the file. Images the pages share a resource list for (as scanners write them) are kept only for the pages that draw them.
 - `pdf.extractPages` and `pdf.split` open a password-protected PDF with `password` (as in `pdf.readText`); the new files have no password. `pdf.merge` opens PDFs that only restrict printing or copying; one that needs a password to open gives `PDF_PASSWORD_REQUIRED` (take its pages out with `pdf.extractPages` first).
 
 ```json

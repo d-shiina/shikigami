@@ -5,9 +5,13 @@
 //! else that points at other pages (bookmarks, the tag tree, form fields,
 //! links to pages left out) is not carried over, so a page split out of a
 //! batch of invoices never carries another customer's page inside the file.
+//! Resources the pages share (one `/XObject` dictionary holding every
+//! page's scanned image, as scanners write it) are cut down to what each
+//! kept page draws, for the same reason.
 
 use std::collections::{BTreeSet, HashSet};
 
+use pdf_extract::content::Content;
 use pdf_extract::{Dictionary, Document, Object, ObjectId};
 use serde_json::json;
 use shikigami_runtime::StepError;
@@ -45,6 +49,10 @@ pub fn assemble(sources: Vec<Source>) -> Document {
                     page.set(key, value);
                 }
             }
+        }
+        let mut forms = HashSet::new();
+        for id in &chosen {
+            scope_page_resources(&mut doc, *id, &mut forms);
         }
         let keep: HashSet<ObjectId> = chosen.iter().copied().collect();
         // Every page left out, every node of the old page tree and the old
@@ -105,6 +113,112 @@ pub fn assemble(sources: Vec<Source>) -> Document {
     out.prune_objects();
     out.renumber_objects();
     out
+}
+
+/// The names `Do` draws in a content stream (images and forms), or `None`
+/// when the content cannot be read (then nothing is cut).
+fn drawn_names(content: &[u8]) -> Option<HashSet<Vec<u8>>> {
+    let content = Content::decode(content).ok()?;
+    Some(
+        content
+            .operations
+            .iter()
+            .filter(|op| op.operator == "Do")
+            .filter_map(|op| op.operands.first()?.as_name().ok().map(<[u8]>::to_vec))
+            .collect(),
+    )
+}
+
+/// `object` as a dictionary, following one reference.
+fn dictionary(doc: &Document, object: &Object) -> Option<Dictionary> {
+    match object {
+        Object::Dictionary(d) => Some(d.clone()),
+        Object::Reference(id) => doc.get_dictionary(*id).ok().cloned(),
+        _ => None,
+    }
+}
+
+/// `resources` with only the XObjects named in `used`; the Form XObjects
+/// kept are returned so their own resources can be cut down too.
+fn scoped(
+    doc: &Document,
+    mut resources: Dictionary,
+    used: &HashSet<Vec<u8>>,
+) -> (Dictionary, Vec<ObjectId>) {
+    let Some(mut xobjects) = resources
+        .get(b"XObject")
+        .ok()
+        .and_then(|x| dictionary(doc, x))
+    else {
+        return (resources, Vec::new());
+    };
+    let names: Vec<Vec<u8>> = xobjects.iter().map(|(k, _)| k.clone()).collect();
+    for name in names {
+        if !used.contains(&name) {
+            xobjects.remove(&name);
+        }
+    }
+    let forms = xobjects
+        .iter()
+        .filter_map(|(_, v)| v.as_reference().ok())
+        .filter(|id| {
+            doc.get_object(*id).and_then(Object::as_stream).is_ok_and(
+                |s| matches!(s.dict.get(b"Subtype"), Ok(Object::Name(n)) if n == b"Form"),
+            )
+        })
+        .collect();
+    resources.set("XObject", Object::Dictionary(xobjects));
+    (resources, forms)
+}
+
+/// Gives `page` its own resources holding only the images and forms it
+/// draws, and does the same inside those forms.
+fn scope_page_resources(doc: &mut Document, page: ObjectId, forms_done: &mut HashSet<ObjectId>) {
+    let Ok(content) = doc.get_page_content(page) else {
+        return;
+    };
+    let Some(used) = drawn_names(&content) else {
+        return;
+    };
+    let Some(resources) = doc
+        .get_dictionary(page)
+        .ok()
+        .and_then(|p| p.get(b"Resources").ok())
+        .and_then(|r| dictionary(doc, r))
+    else {
+        return;
+    };
+    let (resources, mut forms) = scoped(doc, resources, &used);
+    if let Ok(dict) = doc.get_dictionary_mut(page) {
+        dict.set("Resources", Object::Dictionary(resources));
+    }
+    while let Some(form) = forms.pop() {
+        if !forms_done.insert(form) {
+            continue;
+        }
+        let Ok(stream) = doc.get_object(form).and_then(Object::as_stream) else {
+            continue;
+        };
+        let content = stream
+            .decompressed_content()
+            .unwrap_or_else(|_| stream.content.clone());
+        let Some(used) = drawn_names(&content) else {
+            continue;
+        };
+        let Some(resources) = stream
+            .dict
+            .get(b"Resources")
+            .ok()
+            .and_then(|r| dictionary(doc, r))
+        else {
+            continue;
+        };
+        let (resources, more) = scoped(doc, resources, &used);
+        forms.extend(more);
+        if let Ok(Object::Stream(stream)) = doc.get_object_mut(form) {
+            stream.dict.set("Resources", Object::Dictionary(resources));
+        }
+    }
 }
 
 /// The inherited attributes `page` lacks, from the nearest parent having them.
