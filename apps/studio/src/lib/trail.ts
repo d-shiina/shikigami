@@ -7,7 +7,8 @@ export type LineTrail = "done" | "failed" | "now";
 
 const REACHED = new Set<StepRunState>(["running", "succeeded", "failed", "paused"]);
 
-type Line = { id: string; source: string; target: string };
+/** `loop`: the way back up from the end of a loop's body into the loop. */
+type Line = { id: string; source: string; target: string; loop?: boolean };
 
 /**
  * The taken lines, by id. A block (if, loop, try) fails with the step inside it
@@ -19,7 +20,8 @@ export function trailLines(lines: readonly Line[], states: Readonly<Record<strin
     const state = states[id];
     return state !== undefined && REACHED.has(state);
   };
-  const taken = lines.filter((l) => reached(l.source) && reached(l.target));
+  // A step that failed at the end of a loop's body never went back up.
+  const taken = lines.filter((l) => reached(l.source) && reached(l.target) && !(l.loop && states[l.source] === "failed"));
   // Steps the run went on from: down into a block, or on to the next step.
   const wentOn = new Set(taken.map((l) => l.source));
   const out = new Map<string, LineTrail>();
