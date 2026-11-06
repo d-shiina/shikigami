@@ -2,7 +2,7 @@
 
 English | [日本語](ja/schedules.md)
 
-Shikigami starts scenarios by itself: every morning at 8, on the 25th of each month, every 30 minutes during working hours, or when a file is put in a folder. Windows Task Scheduler is not needed.
+Shikigami starts flows by itself: every morning at 8, on the 25th of each month, every 30 minutes during working hours, or when a file is put in a folder. Windows Task Scheduler is not needed.
 
 ## The agent
 
@@ -18,9 +18,9 @@ shikigami agent uninstall
 
 `agent install` registers the Task Scheduler task `Shikigami\Agent` for your user ("at log on"), so the agent runs in your signed-in desktop session, where it can use the mouse and keyboard. A second agent for the same workspace refuses to start.
 
-- Runs the agent starts are **unattended runs**: they execute the published version (and `scenarios.<id>.unattended: false` in `policy.json` refuses them), exactly as `shikigami run <id>`. A scenario that is not published fails with `NOT_PUBLISHED`.
+- Runs the agent starts are **unattended runs**: they execute the published version (and `flows.<id>.unattended: false` in `policy.json` refuses them), exactly as `shikigami run <id>`. A flow that is not published fails with `NOT_PUBLISHED`.
 - They are recorded like any run, with `origin.trigger: "schedule"`, `origin.requestedBy` the schedule's name and `origin.jobId` its ID.
-- The mouse and keyboard are shared with Studio, the CLI and the MCP server: nodes that use them take turns across processes. While the screen is locked they stop with `DESKTOP_UNAVAILABLE` (browser and file work still runs). Keep the PC signed in and unlocked for desktop scenarios.
+- The mouse and keyboard are shared with Studio, the CLI and the MCP server: nodes that use them take turns across processes. While the screen is locked they stop with `DESKTOP_UNAVAILABLE` (browser and file work still runs). Keep the PC signed in and unlocked for desktop flows.
 - Other processes talk to the agent over a local named pipe that only your user can write to (`\\.\pipe\shikigami-agent-…`).
 
 ## Schedules
@@ -45,7 +45,7 @@ shikigami schedule disable sch_…   # enable / remove
 | `monthly` | `day` (1–31, -1 = last day), `at` | Every month. A day the month lacks (31 in June) is its last day |
 | `every` | `minutes`, `from` / `to` (optional), `days` (optional) | `from`, `from` + `minutes`, … up to `to` (the whole day without them) |
 | `once` | `at` ("2026-11-07T08:00") | Once |
-| `fileAdded` | `folder` (relative to the scenario's folder, or a full path), `pattern` ("*.xlsx"), `input` (optional) | Once per new file whose name matches, after its size stops changing. Its full path goes into the input variable `input`. Files already there when the agent starts, Office lock files (`~$…`) and partial downloads do not count |
+| `fileAdded` | `folder` (relative to the flow's folder, or a full path), `pattern` ("*.xlsx"), `input` (optional) | Once per new file whose name matches, after its size stops changing. Its full path goes into the input variable `input`. Files already there when the agent starts, Office lock files (`~$…`) and partial downloads do not count |
 
 ```json
 {
@@ -54,7 +54,7 @@ shikigami schedule disable sch_…   # enable / remove
     {
       "id": "sch_01a1…",
       "name": "毎朝の受注取り込み",
-      "scenarioId": "scn_01a1…",
+      "flowId": "scn_01a1…",
       "enabled": true,
       "when": { "kind": "daily", "at": "08:00", "days": ["mon", "tue", "wed", "thu", "fri"] },
       "inputs": {}

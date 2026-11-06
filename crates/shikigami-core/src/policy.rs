@@ -1,4 +1,4 @@
-//! Workspace policy (`policy.json`): what scenarios may reach and what an AI
+//! Workspace policy (`policy.json`): what flows may reach and what an AI
 //! may do without a person's approval.
 //!
 //! The file sits in the shared part of the workspace and only people change
@@ -11,7 +11,7 @@
 //!   checks them on every step, after templates are rendered.
 //! - `ai`: per AI action and step risk, `allow` / `ask` (a person approves in
 //!   Studio first) / `deny`.
-//! - `scenarios`: per-scenario overrides (may an AI run it, may it run
+//! - `flows`: per-flow overrides (may an AI run it, may it run
 //!   unattended).
 //!
 //! A missing file means the defaults ([`Policy::default`]); an unreadable one
@@ -85,34 +85,36 @@ fn ask() -> Decision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AiPolicy {
-    /// `run_scenario`, by the riskiest step the run may execute (including
-    /// the scenarios it calls).
+    /// `run_flow`, by the riskiest step the run may execute (including
+    /// the flows it calls).
     #[serde(default)]
-    pub run_scenario: ByRisk,
-    /// `test_step`, by the step's risk (a `scenario.call` counts as the
-    /// riskiest step of the scenarios it calls).
+    #[serde(alias = "runScenario")]
+    pub run_flow: ByRisk,
+    /// `test_step`, by the step's risk (a `flow.call` counts as the
+    /// riskiest step of the flows it calls).
     #[serde(default)]
     pub test_step: ByRisk,
-    /// `delete_scenario` (moves to the trash).
+    /// `delete_flow` (moves to the trash).
     #[serde(default = "ask")]
-    pub delete_scenario: Decision,
+    #[serde(alias = "deleteScenario")]
+    pub delete_flow: Decision,
 }
 
 impl Default for AiPolicy {
     fn default() -> Self {
         Self {
-            run_scenario: ByRisk::default(),
+            run_flow: ByRisk::default(),
             test_step: ByRisk::default(),
-            delete_scenario: Decision::Ask,
+            delete_flow: Decision::Ask,
         }
     }
 }
 
-/// Settings for one scenario.
+/// Settings for one flow.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ScenarioPolicy {
-    /// Whether an AI may run or test this scenario. Overrides `ai.runScenario`
+pub struct FlowPolicy {
+    /// Whether an AI may run or test this flow. Overrides `ai.runFlow`
     /// (and `ai.testStep` for calls of it) when it is stricter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ai_run: Option<Decision>,
@@ -140,9 +142,10 @@ pub struct Policy {
     pub apps: Vec<String>,
     #[serde(default)]
     pub ai: AiPolicy,
-    /// Per-scenario settings, keyed by scenario ID.
+    /// Per-flow settings, keyed by flow ID.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub scenarios: BTreeMap<String, ScenarioPolicy>,
+    #[serde(alias = "scenarios")]
+    pub flows: BTreeMap<String, FlowPolicy>,
     /// How long this PC keeps run records (`runs/`).
     #[serde(default, skip_serializing_if = "RecordsPolicy::is_default")]
     pub records: RecordsPolicy,
@@ -172,7 +175,7 @@ impl RecordsPolicy {
 }
 
 /// Runs a management server may ask this PC for. Everything is closed by
-/// default; `scenarios.<id>.unattended: false` still refuses a scenario.
+/// default; `flows.<id>.unattended: false` still refuses a flow.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RemotePolicy {
@@ -182,10 +185,10 @@ pub struct RemotePolicy {
     /// The management server's URL (`https://…`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub manager: Option<String>,
-    /// Scenario IDs it may start (`"*"` for every scenario). Empty: none.
+    /// Flow IDs it may start (`"*"` for every flow). Empty: none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub scenarios: Vec<String>,
-    /// Run scenarios the server sends as bundles (not only the published
+    pub flows: Vec<String>,
+    /// Run flows the server sends as bundles (not only the published
     /// versions in this workspace).
     #[serde(default)]
     pub accept_bundles: bool,
@@ -196,9 +199,9 @@ impl RemotePolicy {
         *self == Self::default()
     }
 
-    /// Whether the management server may start `scenario_id`.
-    pub fn allows(&self, scenario_id: &str) -> bool {
-        self.enabled && self.scenarios.iter().any(|s| s == "*" || s == scenario_id)
+    /// Whether the management server may start `flow_id`.
+    pub fn allows(&self, flow_id: &str) -> bool {
+        self.enabled && self.flows.iter().any(|s| s == "*" || s == flow_id)
     }
 }
 
@@ -224,7 +227,7 @@ impl Default for Policy {
             sites: Vec::new(),
             apps: Vec::new(),
             ai: AiPolicy::default(),
-            scenarios: BTreeMap::new(),
+            flows: BTreeMap::new(),
             records: RecordsPolicy::default(),
             remote: RemotePolicy::default(),
         }
@@ -357,40 +360,40 @@ impl Policy {
         out
     }
 
-    fn scenario(&self, id: &str) -> Option<&ScenarioPolicy> {
-        self.scenarios.get(id)
+    fn flow(&self, id: &str) -> Option<&FlowPolicy> {
+        self.flows.get(id)
     }
 
-    /// May `shikigami run` start this scenario without a person?
-    pub fn allows_unattended(&self, scenario_id: &str) -> bool {
-        self.scenario(scenario_id)
+    /// May `shikigami run` start this flow without a person?
+    pub fn allows_unattended(&self, flow_id: &str) -> bool {
+        self.flow(flow_id)
             .and_then(|s| s.unattended)
             .unwrap_or(true)
     }
 
-    /// The scenario's own `aiRun` setting combined with `by_risk`: the
+    /// The flow's own `aiRun` setting combined with `by_risk`: the
     /// stricter of the two wins.
-    fn with_scenario(&self, decision: Decision, scenario_ids: &[&str]) -> Decision {
-        scenario_ids
+    fn with_flow(&self, decision: Decision, flow_ids: &[&str]) -> Decision {
+        flow_ids
             .iter()
-            .filter_map(|id| self.scenario(id).and_then(|s| s.ai_run))
+            .filter_map(|id| self.flow(id).and_then(|s| s.ai_run))
             .fold(decision, stricter)
     }
 
-    /// Decision for an AI's `run_scenario`. `scenario_ids` are the scenario
-    /// and every scenario it calls.
-    pub fn ai_run(&self, risk: RiskLevel, scenario_ids: &[&str]) -> Decision {
-        self.with_scenario(self.ai.run_scenario.get(risk), scenario_ids)
+    /// Decision for an AI's `run_flow`. `flow_ids` are the flow
+    /// and every flow it calls.
+    pub fn ai_run(&self, risk: RiskLevel, flow_ids: &[&str]) -> Decision {
+        self.with_flow(self.ai.run_flow.get(risk), flow_ids)
     }
 
-    /// Decision for an AI's `test_step`. `scenario_ids` are the scenarios a
-    /// tested `scenario.call` reaches.
-    pub fn ai_test_step(&self, risk: RiskLevel, scenario_ids: &[&str]) -> Decision {
-        self.with_scenario(self.ai.test_step.get(risk), scenario_ids)
+    /// Decision for an AI's `test_step`. `flow_ids` are the flows a
+    /// tested `flow.call` reaches.
+    pub fn ai_test_step(&self, risk: RiskLevel, flow_ids: &[&str]) -> Decision {
+        self.with_flow(self.ai.test_step.get(risk), flow_ids)
     }
 
     pub fn ai_delete(&self) -> Decision {
-        self.ai.delete_scenario
+        self.ai.delete_flow
     }
 
     /// Checks one rendered param value against the allow-lists. Values that
@@ -600,14 +603,14 @@ mod tests {
         assert!(!p.remote.allows("scn_a"));
         assert!(p.problems().is_empty());
         let p = policy(json!({
-            "remote": { "enabled": true, "manager": "https://m.example", "scenarios": ["scn_a"] },
+            "remote": { "enabled": true, "manager": "https://m.example", "flows": ["scn_a"] },
             "records": { "keepDays": 90 }
         }));
         assert!(p.remote.allows("scn_a"));
         assert!(!p.remote.allows("scn_b"));
         assert_eq!(p.records.keep_days, Some(90));
         assert!(p.problems().is_empty());
-        let p = policy(json!({ "remote": { "enabled": true, "scenarios": ["*"] } }));
+        let p = policy(json!({ "remote": { "enabled": true, "flows": ["*"] } }));
         assert!(p.remote.allows("scn_b"));
         assert_eq!(p.problems().len(), 1);
         let p = policy(json!({ "remote": { "enabled": true, "manager": "http://m.example" } }));
@@ -670,10 +673,10 @@ mod tests {
     }
 
     #[test]
-    fn scenario_settings_only_tighten() {
+    fn flow_settings_only_tighten() {
         let p = policy(json!({
-            "ai": { "runScenario": { "interactive": "allow" } },
-            "scenarios": {
+            "ai": { "runFlow": { "interactive": "allow" } },
+            "flows": {
                 "scn_pay": { "aiRun": "deny", "unattended": false },
                 "scn_open": { "aiRun": "allow" }
             }
@@ -682,7 +685,7 @@ mod tests {
             p.ai_run(RiskLevel::Interactive, &["scn_x", "scn_pay"]),
             Decision::Deny
         );
-        // "allow" on a scenario never loosens the risk rule.
+        // "allow" on a flow never loosens the risk rule.
         assert_eq!(p.ai_run(RiskLevel::Dangerous, &["scn_open"]), Decision::Ask);
         assert!(!p.allows_unattended("scn_pay"));
     }
@@ -694,7 +697,7 @@ mod tests {
         assert_eq!(Policy::load(&path).unwrap(), Policy::default());
         std::fs::write(&path, r#"{ "sites": ["example.com"] }"#).unwrap();
         assert_eq!(Policy::load(&path).unwrap_err().code(), "POLICY_INVALID");
-        std::fs::write(&path, r#"{ "ai": { "runScenario": "allow" } }"#).unwrap();
+        std::fs::write(&path, r#"{ "ai": { "runFlow": "allow" } }"#).unwrap();
         assert_eq!(Policy::load(&path).unwrap_err().code(), "POLICY_INVALID");
         std::fs::write(&path, r#"{ "sitez": [] }"#).unwrap();
         assert_eq!(Policy::load(&path).unwrap_err().code(), "POLICY_INVALID");

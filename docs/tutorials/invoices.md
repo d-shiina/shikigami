@@ -10,9 +10,9 @@ Group an Excel order list by customer and fill a Word template to make the invoi
 
 ![Flow chart](../assets/tutorials/invoices-flow.png)
 
-## 1. Make a scenario and add the files
+## 1. Make a flow and add the files
 
-1. "New scenario" on the Scenarios page
+1. "New flow" on the Flows page
 2. Drop these two on the project shelf
    - `input/受注一覧.xlsx`: sheet 受注 with 注文番号 (order no.), 受注日 (date), 取引先 (customer), 商品 (item), 金額 (amount)
    - `templates/請求書_ひな形.docx`: the invoice template (ひな形, "template", in the name sorts it onto the "Templates" shelf)

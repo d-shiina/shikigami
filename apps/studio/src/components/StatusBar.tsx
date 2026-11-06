@@ -15,7 +15,7 @@ import { useAppVersion, useUpdate } from "./AppMenu";
 const ITEM = "flex h-full shrink-0 items-center gap-1.5 px-2 whitespace-nowrap";
 const BUTTON = `${ITEM} hover:bg-slate-100 hover:text-ink`;
 
-/** Changes where scenarios are stored (e.g. a shared folder); Studio restarts on it. */
+/** Changes where flows are stored (e.g. a shared folder); Studio restarts on it. */
 export function WorkspaceSection() {
   const workspace = useStudio((s) => s.workspace);
   const setWorkspace = useStudio((s) => s.setWorkspace);
@@ -59,7 +59,7 @@ export function WorkspaceSection() {
 /**
  * While the AI asked in the AI pane works: what it is doing now, so it shows
  * from every place, not only in the pane. Otherwise the latest edit an AI
- * made through MCP, in any scenario loaded so far.
+ * made through MCP, in any flow loaded so far.
  */
 function AiActivity() {
   const working = useAgentMaybe((s) => activity(s) !== null, false);
@@ -97,7 +97,7 @@ function LastAiEdit() {
 
 function RunStatus() {
   const run = useStudio((s) => s.run);
-  const steps = useStudio((s) => s.scenario?.steps);
+  const steps = useStudio((s) => s.flow?.steps);
   const goTo = useStudio((s) => s.goTo);
   if (!run) return null;
   const current = run.status === "paused" ? run.pause?.stepId : run.status === "running" ? run.starts.at(-1)?.stepId : undefined;
@@ -126,14 +126,14 @@ function findName(steps: Step[], id: string): string | undefined {
 
 /** "ノード 3 / 12" for the selected step, in reading order. */
 function Position() {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
   const ids = useMemo(() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
-    return outline(scenario?.steps ?? [], defs).map((i) => i.id);
-  }, [scenario, stepTypes]);
-  if (!scenario) return null;
+    return outline(flow?.steps ?? [], defs).map((i) => i.id);
+  }, [flow, stepTypes]);
+  if (!flow) return null;
   const at = selection?.kind === "step" ? ids.indexOf(selection.stepId) : -1;
   return (
     <span className={ITEM} title={t.bar.positionTitle}>

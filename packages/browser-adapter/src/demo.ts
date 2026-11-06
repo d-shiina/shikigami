@@ -7,7 +7,7 @@
 // (set SHIKIGAMI_BROWSER_SLOWMO=0 to run at full speed).
 //
 // The demo account is registered as the secret 「デモ受注システム」 first, so the
-// scenario never contains the password; the login is kept between runs
+// flow never contains the password; the login is kept between runs
 // (run it twice: the second run skips the login page).
 //
 // The CLI is built into target/demo so a shikigami.exe already running from

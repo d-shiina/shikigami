@@ -154,7 +154,7 @@ fn read_text_def() -> StepTypeDef {
         params_schema: json!({
             "type": "object",
             "properties": {
-                "path": { "type": "string", "minLength": 1, "description": "PDF：シナリオのフォルダーからの相対パス（例 input/請求書.pdf）か絶対パス" },
+                "path": { "type": "string", "minLength": 1, "description": "PDF：フローのフォルダーからの相対パス（例 input/請求書.pdf）か絶対パス" },
                 "password": text_or_secret_schema("開くためのパスワード。登録済みのシークレット { \"secret\": \"名前\", \"field\": \"password\" } を使う"),
             },
             "required": ["path"],
@@ -441,7 +441,7 @@ fn page_defs() -> Vec<(StepTypeDef, PageKind)> {
                     json!({
                         "files": {
                             "type": "array",
-                            "items": pdf_path("PDF：シナリオのフォルダーからの相対パスか絶対パス"),
+                            "items": pdf_path("PDF：フローのフォルダーからの相対パスか絶対パス"),
                             "minItems": 1,
                             "description": "結合する PDF（この順につなぐ）"
                         },
@@ -468,7 +468,7 @@ fn page_defs() -> Vec<(StepTypeDef, PageKind)> {
                 ),
                 schema(
                     json!({
-                        "path": pdf_path("PDF：シナリオのフォルダーからの相対パスか絶対パス"),
+                        "path": pdf_path("PDF：フローのフォルダーからの相対パスか絶対パス"),
                         "pages": { "type": "string", "minLength": 1, "description": "ページ（例 1-3,5 / 2- は 2 ページ目から最後まで）" },
                         "to": pdf_path("作る PDF（例 output/1ページ目.pdf）"),
                         "password": password.clone(),
@@ -494,7 +494,7 @@ fn page_defs() -> Vec<(StepTypeDef, PageKind)> {
                 ),
                 schema(
                     json!({
-                        "path": pdf_path("PDF：シナリオのフォルダーからの相対パスか絶対パス"),
+                        "path": pdf_path("PDF：フローのフォルダーからの相対パスか絶対パス"),
                         "folder": pdf_path("保存先フォルダー（例 work/分割）"),
                         "pagesPerFile": { "type": "integer", "minimum": 1, "description": "1 ファイルあたりのページ数（既定 1）" },
                         "password": password,

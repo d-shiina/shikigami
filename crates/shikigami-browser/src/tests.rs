@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde_json::{Value, json};
-use shikigami_core::{Scenario, Step, Validator};
+use shikigami_core::{Flow, Step, Validator};
 use shikigami_runtime::{RunOptions, RunReport, RunStatus, Runtime};
 
 use super::*;
@@ -71,7 +71,7 @@ fn calls(log: &Path) -> Vec<Value> {
 }
 
 async fn run(runtime: &Runtime, steps: Vec<Step>) -> RunReport {
-    let mut s = Scenario::new("browser");
+    let mut s = Flow::new("browser");
     s.steps = steps;
     for step in &mut s.steps {
         shikigami_core::ops::assign_missing_ids(step);
@@ -99,7 +99,7 @@ fn every_example_is_a_valid_step() {
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
-            let mut s = Scenario::new("example");
+            let mut s = Flow::new("example");
             s.steps = vec![step];
             let report = validator.validate(&s);
             assert_eq!(
@@ -112,7 +112,7 @@ fn every_example_is_a_valid_step() {
         }
     }
     // A target needs at least one way to find the element.
-    let mut s = Scenario::new("bad");
+    let mut s = Flow::new("bad");
     s.steps = vec![
         Step::new(types::CLICK)
             .with_id("c")
@@ -313,7 +313,7 @@ async fn token_endpoint() -> (String, Arc<std::sync::Mutex<String>>) {
 
 async fn sign_in(runtime: &Runtime, params: Value) -> RunReport {
     use shikigami_core::{VarDirection, VarType, VariableDef};
-    let mut s = Scenario::new("oauth");
+    let mut s = Flow::new("oauth");
     s.variables.push(VariableDef {
         direction: VarDirection::Output,
         ..VariableDef::new("out", VarType::Any)

@@ -6,13 +6,24 @@
 
 ## 未リリース
 
+### 変更（呼び名：シナリオ → フロー）
+
+- 「シナリオ」を「フロー / Flow」に改名しました（サブシナリオは「サブフロー / Subflow」）。Studio・ドキュメント・MCP・CLI・保存形式のすべてが対象です。製品名 Shikigami は変わりません
+- 保存先：`scenarios/<id>/scenario.json` は `flows/<id>/flow.json` になりました。古いワークスペースは開いたときに自動で移します（ごみ箱の中も）
+- フロー形式 `schemaVersion` 5：呼び出しノード `scenario.call { scenario }` は `flow.call { flow }` になりました。古いファイル・版・バンドルは読み込み時に自動で書き換えます
+- バンドルの `format` は `shikigami.flowBundle`、中身は `flow` / `subflows` です。0.1.2 までの `shikigami.scenarioBundle` も読めます
+- MCP ツール：`list_flows` / `get_flow` / `validate_flow` / `export_flow` / `create_flow` / `update_flow` / `delete_flow` / `import_flow` / `extract_subflow` / `run_flow` / `stop_flow`、引数は `flowId`。旧名（`create_scenario` など）と `scenarioId` も当面は受け付けます（一覧には出しません）
+- CLI：`shikigami flow …`（`shikigami scenario …` も当面は動きます）
+- policy.json：`flows`、`ai.runFlow` / `ai.deleteFlow`（旧名 `scenarios` / `runScenario` / `deleteScenario` も読めます）
+- **互換性のない変更**：出力側の名前は新しい名前だけになります。エラーコード `SCENARIO_*` は `FLOW_*`（`SUBSCENARIO_NOT_PUBLISHED` は `SUBFLOW_NOT_PUBLISHED`）、`run --json` と MCP の結果の `scenarioId` / `scenarioName` / `scenario` は `flowId` / `flowName` / `flow` です
+
 ### 追加
 
-- 業務別のチュートリアル 3 本（`docs/ja/tutorials/`、英語は `docs/tutorials/`）：支店の売上 CSV を 1 つの Excel に、受注一覧から取引先ごとの Word 請求書、Web の受注システムで出荷。見本のファイルと完成形のシナリオ（`examples/tutorials/*.shikigami.json`、「ファイルから読み込む」で開ける）付き
-- Studio のシナリオの画面の下に「見本」：チュートリアルの手順のページを開く、完成形のシナリオを見本のファイルごと開く
+- 業務別のチュートリアル 3 本（`docs/ja/tutorials/`、英語は `docs/tutorials/`）：支店の売上 CSV を 1 つの Excel に、受注一覧から取引先ごとの Word 請求書、Web の受注システムで出荷。見本のファイルと完成形のフロー（`examples/tutorials/*.shikigami.json`、「ファイルから読み込む」で開ける）付き
+- Studio のフローの画面の下に「見本」：チュートリアルの手順のページを開く、完成形のフローを見本のファイルごと開く
 - SAP GUI for Windows：SAP GUI Scripting が有効なら、同じ `desktop.*` のノードがスクリプトの仕組みを通して動きます（`inspect_ui` は SAP の部品 id と役割を一覧に、クリック・入力・読み取り・コンボボックス・ファンクションキー・メニューバー・`desktop.getTable` でテーブルコントロールと ALV グリッドの全行）。新しいノード `sap.runTransaction`（トランザクションを開き、ステータスバーを返す）。無効なときに SAP の部品 id を書くと `SAP_SCRIPTING_OFF`（有効にする手順つき）。実際の SAP ではまだ確認していません（docs/desktop.md「SAP GUI」）
 - Java アプリ（Swing・AWT）：Java Access Bridge（`jabswitch -enable`）が有効なら、同じ `desktop.*` のノードがそれを通して動きます（`inspect_ui` は役割と名前で一覧に、クリック・入力・読み取り・一覧の選択・メニューバー・`desktop.getTable` で `JTable`）。無効なときは `JAVA_BRIDGE_OFF`（有効にする手順つき）（docs/desktop.md「Java アプリ」）
-- 操作の記録（デスクトップ）：フロー図のドックの「記録」で、クリック（押した部品の対象つき）・入力欄の最終的な文字・Enter や Ctrl+S などのキーを書き留め、「そのままノードにする」か「AI に整えてもらう」を選べます。パスワード欄の文字は記録しません。元データはシナリオの `logs/recordings/` に残ります。デスクトップアダプターの inspect に `action: "record"`（docs/desktop.md）
+- 操作の記録（デスクトップ）：フロー図のドックの「記録」で、クリック（押した部品の対象つき）・入力欄の最終的な文字・Enter や Ctrl+S などのキーを書き留め、「そのままノードにする」か「AI に整えてもらう」を選べます。パスワード欄の文字は記録しません。元データはフローの `logs/recordings/` に残ります。デスクトップアダプターの inspect に `action: "record"`（docs/desktop.md）
 - `desktop.getTable`：アプリの表・グリッド・一覧をまとめて読み、`browser.getTable` と同じ「列見出しをキーにしたオブジェクトのリスト」で返します。対応しているグリッドは画面外の行も読みます。10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE`
 - メールの送信 `mail.send`（dangerous、承認の対象）。`via` で送り方を選びます：`outlook`（既定、この PC の Outlook）、`microsoft365`（Microsoft Graph、`oauth.signIn` でサインインしたシークレットの `accessToken`、サイトに `https://graph.microsoft.com`）、`smtp`（`server`・`from`、ログインはシークレットでサイトに `smtp:<サーバー>`、パスワードは TLS なしでは送らない）。シークレットのサイトの書き方 `smtp:<サーバー>` を追加（docs/office.md）
 - Excel 本体での操作：この PC の Excel でブックを開いているときは、`excel.*` の読み書きがファイルではなく開いているブックに働きます（画面の内容を読み、書いたら保存、Excel は閉じない）。`excel.recalculate`（数式を計算し直して保存）、`excel.sort`（見出しの列で並べ替え）、`excel.exportPdf`（ブックかシートを PDF に）を追加。どれもデスクトップ版 Excel が要り、ブックが開いていなければ見えない別の Excel を使います（docs/office.md）

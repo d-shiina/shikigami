@@ -12,7 +12,7 @@ use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use shikigami_core::{Scenario, Step};
+use shikigami_core::{Flow, Step};
 use shikigami_desktop::{DesktopAdapter, types};
 use shikigami_runtime::{Adapter, RunOptions, Runtime};
 
@@ -61,7 +61,7 @@ fn step(step_type: &str, params: Value) -> Step {
 }
 
 async fn run(runtime: &Runtime, steps: Vec<Step>) -> String {
-    let mut s = Scenario::new("ie");
+    let mut s = Flow::new("ie");
     s.steps = steps;
     let report = runtime
         .start(s, RunOptions::default())

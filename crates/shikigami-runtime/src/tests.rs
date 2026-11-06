@@ -7,8 +7,8 @@ use shikigami_core::{RetryPolicy, Step, VarDirection, VarType, VariableDef};
 
 use super::*;
 
-fn scenario(steps: Vec<Step>) -> Scenario {
-    let mut s = Scenario::new("test");
+fn flow(steps: Vec<Step>) -> Flow {
+    let mut s = Flow::new("test");
     s.steps = steps;
     let mut n = 0;
     for step in s.steps.iter_mut() {
@@ -47,7 +47,7 @@ fn log(message: &str) -> Step {
     Step::new("log.message").with_param("message", message)
 }
 
-async fn run(runtime: &Runtime, s: Scenario, inputs: Value) -> (RunReport, Vec<RunEventEnvelope>) {
+async fn run(runtime: &Runtime, s: Flow, inputs: Value) -> (RunReport, Vec<RunEventEnvelope>) {
     let inputs = inputs.as_object().cloned().unwrap_or_default();
     let handle = runtime
         .start(
@@ -131,11 +131,11 @@ fn flaky_runtime() -> Runtime {
 }
 
 #[tokio::test]
-async fn runs_the_example_scenario_without_ai() {
+async fn runs_the_example_flow_without_ai() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/invoice-summary.json");
     let text = std::fs::read_to_string(path).expect("example");
-    let s = shikigami_core::migrate::parse_scenario(&text).expect("parse");
+    let s = shikigami_core::migrate::parse_flow(&text).expect("parse");
     let (report, events) = run(&Runtime::new(), s, json!({})).await;
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs.get("total"), Some(&json!(170000)));
@@ -156,7 +156,7 @@ async fn runs_the_example_scenario_without_ai() {
 
 #[tokio::test]
 async fn inputs_are_type_checked() {
-    let mut s = scenario(vec![]);
+    let mut s = flow(vec![]);
     s.variables
         .push(var("n", VarType::Number, VarDirection::Input, None));
     let (report, _) = run(&Runtime::new(), s.clone(), json!({})).await;
@@ -168,8 +168,8 @@ async fn inputs_are_type_checked() {
 }
 
 #[tokio::test]
-async fn invalid_scenarios_do_not_start() {
-    let s = scenario(vec![Step::new("control.if")]);
+async fn invalid_flows_do_not_start() {
+    let s = flow(vec![Step::new("control.if")]);
     let err = Runtime::new()
         .start(s, RunOptions::default())
         .err()
@@ -179,7 +179,7 @@ async fn invalid_scenarios_do_not_start() {
 
 #[tokio::test]
 async fn loops_with_break_and_continue() {
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         set("acc", "''"),
         Step::new("control.repeat")
             .with_param("count", 10)
@@ -213,7 +213,7 @@ async fn loops_with_break_and_continue() {
 
 #[tokio::test]
 async fn infinite_loops_are_bounded() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.while")
             .with_param("condition", "true")
             .with_param("maxIterations", 5),
@@ -227,7 +227,7 @@ async fn infinite_loops_are_bounded() {
 
 #[tokio::test]
 async fn try_catch_finally() {
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         Step::new("control.try")
             .with_param("errorVar", "err")
             .with_block(
@@ -256,7 +256,7 @@ async fn try_catch_finally() {
 
 #[tokio::test]
 async fn failures_record_the_failing_step() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.if")
             .with_param("condition", "true")
             .with_block("then", vec![set("x", "undefinedThing + 1").with_id("bad")]),
@@ -298,7 +298,7 @@ async fn retries_with_backoff_then_saves_output() {
         backoff_multiplier: 2.0,
     });
     step.save_as = Some("attempts".into());
-    let mut s = scenario(vec![step]);
+    let mut s = flow(vec![step]);
     s.variables
         .push(var("attempts", VarType::Number, VarDirection::Output, None));
     let (report, events) = run(&flaky_runtime(), s, json!({})).await;
@@ -327,14 +327,14 @@ async fn retries_exhausted_fail_and_on_error_continue_records_last_error() {
         backoff_ms: 1,
         backoff_multiplier: 1.0,
     });
-    let (report, _) = run(&flaky_runtime(), scenario(vec![step.clone()]), json!({})).await;
+    let (report, _) = run(&flaky_runtime(), flow(vec![step.clone()]), json!({})).await;
     assert_eq!(
         report.error.map(|e| e.code),
         Some("ELEMENT_NOT_FOUND".into())
     );
 
     step.on_error = Some(OnError::Continue);
-    let mut s = scenario(vec![step, set("code", "lastError.code")]);
+    let mut s = flow(vec![step, set("code", "lastError.code")]);
     s.variables
         .push(var("code", VarType::String, VarDirection::Output, None));
     let (report, _) = run(&flaky_runtime(), s, json!({})).await;
@@ -346,13 +346,13 @@ async fn retries_exhausted_fail_and_on_error_continue_records_last_error() {
 async fn steps_time_out() {
     let mut step = Step::new("test.flaky").with_param("sleepMs", 5_000);
     step.timeout_ms = Some(20);
-    let (report, _) = run(&flaky_runtime(), scenario(vec![step]), json!({})).await;
+    let (report, _) = run(&flaky_runtime(), flow(vec![step]), json!({})).await;
     assert_eq!(report.error.map(|e| e.code), Some("STEP_TIMEOUT".into()));
 }
 
 #[tokio::test]
 async fn runs_can_be_cancelled_mid_step() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("flow.delay").with_param("ms", 60_000),
         log("never"),
     ]);
@@ -381,7 +381,7 @@ async fn runs_can_be_cancelled_mid_step() {
 
 #[tokio::test]
 async fn secrets_are_masked_in_logs_errors_and_outputs() {
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         log("password is {{ password }}"),
         Step::new("control.fail").with_param("message", "login failed with {{ password }}"),
     ]);
@@ -403,12 +403,7 @@ async fn secrets_are_masked_in_logs_errors_and_outputs() {
 async fn disabled_steps_are_skipped() {
     let mut skipped = log("skipped");
     skipped.disabled = true;
-    let (_, events) = run(
-        &Runtime::new(),
-        scenario(vec![skipped, log("ran")]),
-        json!({}),
-    )
-    .await;
+    let (_, events) = run(&Runtime::new(), flow(vec![skipped, log("ran")]), json!({})).await;
     assert_eq!(logs(&events), ["ran"]);
 }
 
@@ -416,7 +411,7 @@ async fn disabled_steps_are_skipped() {
 async fn run_records_round_trip() {
     let dir = tempfile::tempdir().expect("tmp");
     let handle = Runtime::new()
-        .start(scenario(vec![log("hello")]), RunOptions::default())
+        .start(flow(vec![log("hello")]), RunOptions::default())
         .expect("start");
     let run_id = handle.run_id.clone();
     let mut recorder = record::RunRecorder::create(dir.path(), &run_id).expect("recorder");
@@ -471,7 +466,7 @@ fn outputs(names: &[&str]) -> Vec<VariableDef> {
 
 #[tokio::test]
 async fn parallel_branches_run_concurrently_and_merge_variables() {
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         set("shared", "1"),
         parallel(vec![
             group(vec![delay(200), set("a", "shared + 1")]),
@@ -492,7 +487,7 @@ async fn parallel_branches_run_concurrently_and_merge_variables() {
 #[tokio::test]
 async fn parallel_branches_writing_the_same_variable_differently_conflict() {
     // Rejected by validation before the run starts...
-    let s = scenario(vec![parallel(vec![
+    let s = flow(vec![parallel(vec![
         set("x", "1"),
         group(vec![set("x", "2")]),
     ])]);
@@ -513,7 +508,7 @@ async fn parallel_branches_writing_the_same_variable_differently_conflict() {
         step.on_error = Some(OnError::Continue);
         step
     };
-    let s = scenario(vec![parallel(vec![fail(), fail()])]);
+    let s = flow(vec![parallel(vec![fail(), fail()])]);
     let err = flaky_runtime()
         .start(s, RunOptions::default())
         .err()
@@ -523,7 +518,7 @@ async fn parallel_branches_writing_the_same_variable_differently_conflict() {
 
 #[tokio::test]
 async fn a_failing_branch_cancels_the_others() {
-    let s = scenario(vec![parallel(vec![
+    let s = flow(vec![parallel(vec![
         Step::new("control.fail").with_param("message", "boom"),
         group(vec![delay(5_000), log("late")]),
     ])]);
@@ -537,7 +532,7 @@ async fn a_failing_branch_cancels_the_others() {
 
 #[tokio::test]
 async fn max_concurrency_limits_branches() {
-    let s = scenario(vec![
+    let s = flow(vec![
         parallel(vec![delay(150), delay(150)]).with_param("maxConcurrency", 1),
     ]);
     let started = std::time::Instant::now();
@@ -548,7 +543,7 @@ async fn max_concurrency_limits_branches() {
 
 #[tokio::test]
 async fn break_cannot_leave_a_parallel_branch() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.repeat")
             .with_param("count", 3)
             .with_block("body", vec![parallel(vec![Step::new("control.break")])]),
@@ -610,7 +605,7 @@ async fn desktop_input_is_exclusive_across_branches_and_runs() {
         .build();
     let click = || Step::new("test.click");
     let s = || {
-        scenario(vec![parallel(vec![
+        flow(vec![parallel(vec![
             click(),
             click(),
             group(vec![click(), delay(10)]),
@@ -653,7 +648,7 @@ async fn steps_on_the_same_file_take_turns() {
     let write = |path: &str| Step::new("test.writeFile").with_param("path", path);
 
     // Different spellings of one file (one via a template) never overlap...
-    let mut s = scenario(vec![parallel(vec![
+    let mut s = flow(vec![parallel(vec![
         write(r"C:\Data\Book.xlsx"),
         write("c:/data/./book.XLSX"),
         write("{{ dir }}\\book.xlsx"),
@@ -669,7 +664,7 @@ async fn steps_on_the_same_file_take_turns() {
     assert_eq!(writer.peak.load(Ordering::SeqCst), 1);
 
     // ...while different files run at the same time.
-    let s = scenario(vec![parallel(vec![
+    let s = flow(vec![parallel(vec![
         write(r"C:\Data\a.xlsx"),
         write(r"C:\Data\b.xlsx"),
     ])]);
@@ -680,7 +675,7 @@ async fn steps_on_the_same_file_take_turns() {
 
 #[tokio::test]
 async fn queued_branches_do_not_start_after_a_failure() {
-    let s = scenario(vec![
+    let s = flow(vec![
         parallel(vec![
             Step::new("control.fail").with_param("message", "boom"),
             log("queued"),
@@ -697,7 +692,7 @@ async fn queued_branches_do_not_start_after_a_failure() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn events_from_parallel_branches_arrive_in_seq_order() {
     let branch = || group((0..20).map(|i| log(&format!("m{i}"))).collect());
-    let s = scenario(vec![parallel((0..16).map(|_| branch()).collect())]);
+    let s = flow(vec![parallel((0..16).map(|_| branch()).collect())]);
     let (report, events) = run(&Runtime::new(), s, json!({})).await;
     assert_eq!(report.status, RunStatus::Succeeded);
     let seqs: Vec<u64> = events.iter().map(|e| e.seq).collect();
@@ -707,7 +702,7 @@ async fn events_from_parallel_branches_arrive_in_seq_order() {
 
 #[tokio::test]
 async fn numeric_params_take_an_integer_or_a_template() {
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         Step::new("control.repeat")
             .with_param("count", "{{ n }}")
             .with_block("body", vec![set("hits", "hits + 1")]),
@@ -746,7 +741,7 @@ fn wait_until(condition: &str, check: Vec<Step>) -> Step {
 
 #[tokio::test]
 async fn wait_until_runs_the_check_until_the_condition_holds() {
-    let mut s = scenario(vec![wait_until("n >= 3", vec![set("n", "n + 1")])]);
+    let mut s = flow(vec![wait_until("n >= 3", vec![set("n", "n + 1")])]);
     s.variables = vec![var(
         "n",
         VarType::Number,
@@ -762,7 +757,7 @@ async fn wait_until_runs_the_check_until_the_condition_holds() {
 async fn wait_until_fails_with_wait_timeout_and_can_be_skipped() {
     let mut wait = wait_until("false", vec![]);
     wait.timeout_ms = Some(200);
-    let (report, _) = run(&Runtime::new(), scenario(vec![wait.clone()]), json!({})).await;
+    let (report, _) = run(&Runtime::new(), flow(vec![wait.clone()]), json!({})).await;
     let error = report.error.expect("timeout");
     assert_eq!(error.code, "WAIT_TIMEOUT");
     let details = error.details.unwrap();
@@ -770,7 +765,7 @@ async fn wait_until_fails_with_wait_timeout_and_can_be_skipped() {
     assert!(details["polls"].as_u64().unwrap() >= 3);
 
     wait.on_error = Some(OnError::Continue);
-    let mut s = scenario(vec![wait, set("code", "lastError.code")]);
+    let mut s = flow(vec![wait, set("code", "lastError.code")]);
     s.variables = vec![var("code", VarType::String, VarDirection::Output, None)];
     let (report, _) = run(&Runtime::new(), s, json!({})).await;
     assert_eq!(report.status, RunStatus::Succeeded);
@@ -800,7 +795,7 @@ async fn for_each_collects_one_value_per_item() {
     )
     .with_param("collect", "doubled");
     step.save_as = Some("out".into());
-    let mut s = scenario(vec![step]);
+    let mut s = flow(vec![step]);
     s.variables = outputs(&["out"]);
     let (report, _) = run(&Runtime::new(), s, json!({})).await;
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
@@ -816,7 +811,7 @@ async fn concurrent_for_each_runs_items_at_once_and_keeps_order() {
     .with_param("collect", "doubled")
     .with_param("concurrency", "{{ workers }}");
     step.save_as = Some("out".into());
-    let mut s = scenario(vec![step]);
+    let mut s = flow(vec![step]);
     s.variables = outputs(&["out"]);
     s.variables.push(var(
         "workers",
@@ -834,7 +829,7 @@ async fn concurrent_for_each_runs_items_at_once_and_keeps_order() {
 
 #[tokio::test]
 async fn concurrent_for_each_stops_at_the_first_failure() {
-    let s = scenario(vec![
+    let s = flow(vec![
         for_each(
             "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]",
             vec![
@@ -864,7 +859,7 @@ async fn runs_the_batch_example() {
     let path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/batch-demo.json");
     let text = std::fs::read_to_string(path).expect("example");
-    let s = shikigami_core::migrate::parse_scenario(&text).expect("parse");
+    let s = shikigami_core::migrate::parse_flow(&text).expect("parse");
     let (report, _) = run(&Runtime::new(), s, json!({})).await;
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs["total"], json!(348700));
@@ -909,7 +904,7 @@ fn change(variable: &str, value: Value, step_id: Option<&str>) -> (String, Value
 
 #[tokio::test]
 async fn variable_changes_are_reported_with_the_assigning_step() {
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         set("total", "price * 2"),
         Step::new("control.repeat")
             .with_param("count", 2)
@@ -957,7 +952,7 @@ async fn variable_changes_are_reported_with_the_assigning_step() {
 
 #[tokio::test]
 async fn variable_changes_hide_secrets() {
-    let mut s = scenario(vec![set("greeting", "'pw=' + password")]);
+    let mut s = flow(vec![set("greeting", "'pw=' + password")]);
     let mut password = var("password", VarType::String, VarDirection::Input, None);
     password.secret = true;
     s.variables.push(password);
@@ -1068,7 +1063,7 @@ fn typing_runtime() -> Runtime {
 #[tokio::test]
 async fn secrets_are_resolved_for_steps_and_masked_everywhere() {
     let runtime = typing_runtime().with_secrets(Arc::new(MemorySecrets));
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         Step {
             save_as: Some("user".into()),
             ..Step::new("test.type")
@@ -1096,7 +1091,7 @@ async fn secrets_are_resolved_for_steps_and_masked_everywhere() {
 
 #[tokio::test]
 async fn large_values_are_recorded_as_a_preview() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("variable.set")
             .with_param("name", "text")
             .with_param("value", "あ".repeat(1500)),
@@ -1129,7 +1124,7 @@ async fn large_values_are_recorded_as_a_preview() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn parallel_branches_report_their_own_changes_once() {
-    let mut s = scenario(vec![parallel(vec![
+    let mut s = flow(vec![parallel(vec![
         group(vec![delay(30), set("a", "1")]),
         group(vec![set("b", "2")]),
     ])]);
@@ -1157,7 +1152,7 @@ async fn concurrent_for_each_reports_each_iteration() {
         .with_param("concurrency", 3);
     step.id = "loop".into();
     step.save_as = Some("out".into());
-    let s = scenario(vec![step]);
+    let s = flow(vec![step]);
     let (report, events) = run(&Runtime::new(), s, json!({})).await;
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     let mut recorded: Vec<_> = events
@@ -1198,7 +1193,7 @@ async fn concurrent_for_each_reports_each_iteration() {
 
 #[tokio::test]
 async fn variable_changes_mask_secrets_copied_anywhere() {
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         set("pin_copy", "pin"),
         set("user_copy", "login.user"),
         set("id_copy", "login.id"),
@@ -1252,7 +1247,7 @@ async fn variable_changes_mask_secrets_copied_anywhere() {
 #[tokio::test]
 async fn missing_secrets_fail_the_step_with_a_hint() {
     let mut s =
-        scenario(vec![Step::new("test.type").with_param(
+        flow(vec![Step::new("test.type").with_param(
             "value",
             json!({ "secret": "受注", "field": "password" }),
         )]);
@@ -1269,8 +1264,8 @@ async fn missing_secrets_fail_the_step_with_a_hint() {
 
 #[tokio::test]
 async fn step_types_can_set_their_own_default_timeout() {
-    let mut s = scenario(vec![Step::new("test.type").with_param("value", "slow")]);
-    // The scenario default is long; the step type's own 50 ms wins.
+    let mut s = flow(vec![Step::new("test.type").with_param("value", "slow")]);
+    // The flow default is long; the step type's own 50 ms wins.
     s.settings.default_timeout_ms = Some(60_000);
     let (report, _) = run(&typing_runtime(), s, json!({})).await;
     assert_eq!(report.error.unwrap().code, "STEP_TIMEOUT");
@@ -1296,8 +1291,8 @@ fn fail(message: &str) -> Step {
 /// What a test does at a pause.
 enum Answer {
     Send(DebugCommand),
-    /// Swap in this scenario, then send the command.
-    Swap(Box<Scenario>, DebugCommand),
+    /// Swap in this flow, then send the command.
+    Swap(Box<Flow>, DebugCommand),
 }
 
 /// Runs `s` interactively, answering each pause with `answer(n, event)`
@@ -1305,7 +1300,7 @@ enum Answer {
 /// pauses as (step, reason).
 async fn debug_run(
     runtime: &Runtime,
-    s: Scenario,
+    s: Flow,
     options: RunOptions,
     mut answer: impl FnMut(usize, &RunEvent) -> Answer,
 ) -> (RunReport, Vec<RunEventEnvelope>, Vec<(String, PauseReason)>) {
@@ -1326,8 +1321,8 @@ async fn debug_run(
             assert!(pauses.len() < 10, "paused over and over: {pauses:?}");
             match answer(pauses.len() - 1, &event.event) {
                 Answer::Send(command) => control.send(command).expect("command"),
-                Answer::Swap(scenario, command) => {
-                    control.update_scenario(*scenario).expect("swap");
+                Answer::Swap(flow, command) => {
+                    control.update_flow(*flow).expect("swap");
                     control.send(command).expect("command");
                 }
             }
@@ -1340,7 +1335,7 @@ async fn debug_run(
 
 #[tokio::test]
 async fn an_unhandled_error_pauses_and_a_fixed_step_resumes_with_the_variables() {
-    let s = scenario(vec![set("n", "41"), fail("boom"), set("n", "n + 1")]);
+    let s = flow(vec![set("n", "41"), fail("boom"), set("n", "n + 1")]);
     let mut fixed = s.clone();
     fixed.revision += 1;
     fixed.steps[1] = log("fixed {{ n }}");
@@ -1359,7 +1354,7 @@ async fn an_unhandled_error_pauses_and_a_fixed_step_resumes_with_the_variables()
     else {
         panic!("no pause");
     };
-    assert_eq!(error.expect("error").code, "SCENARIO_FAILED");
+    assert_eq!(error.expect("error").code, "FLOW_FAILED");
     assert_eq!(variables.get("n"), Some(&json!(41)));
     assert!(logs(&events).contains(&"fixed 41".to_owned()));
     assert!(events.iter().any(|e| matches!(
@@ -1374,7 +1369,7 @@ async fn an_unhandled_error_pauses_and_a_fixed_step_resumes_with_the_variables()
 #[tokio::test]
 async fn retry_runs_steps_inserted_before_the_failed_one() {
     // The AI adds the missing step in front of the one that failed.
-    let s = scenario(vec![
+    let s = flow(vec![
         set("ready", "false"),
         Step::new("control.if")
             .with_param("condition", "!ready")
@@ -1400,7 +1395,7 @@ async fn retry_runs_steps_inserted_before_the_failed_one() {
 
 #[tokio::test]
 async fn skipping_a_step_the_fix_removed_goes_on_with_the_rest() {
-    let s = scenario(vec![log("a"), fail("boom"), log("c"), log("d")]);
+    let s = flow(vec![log("a"), fail("boom"), log("c"), log("d")]);
     let mut fixed = s.clone();
     fixed.revision += 1;
     fixed.steps.remove(1);
@@ -1424,7 +1419,7 @@ async fn time_paused_inside_a_wait_does_not_count_towards_its_timeout() {
         .with_param("condition", "n >= 2")
         .with_block("check", vec![set("n", "n + 1")]);
     wait.timeout_ms = Some(100);
-    let mut s = scenario(vec![wait]);
+    let mut s = flow(vec![wait]);
     s.variables = vec![var(
         "n",
         VarType::Number,
@@ -1454,7 +1449,7 @@ async fn time_paused_inside_a_wait_does_not_count_towards_its_timeout() {
 
 #[tokio::test]
 async fn skip_leaves_the_failed_step_undone() {
-    let s = scenario(vec![fail("boom"), log("after")]);
+    let s = flow(vec![fail("boom"), log("after")]);
     let (report, events, _) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {
         Answer::Send(DebugCommand::Skip)
     })
@@ -1465,7 +1460,7 @@ async fn skip_leaves_the_failed_step_undone() {
 
 #[tokio::test]
 async fn abort_fails_the_run_without_pausing_again_further_out() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.group").with_block("body", vec![fail("boom")]),
         log("after"),
     ]);
@@ -1483,7 +1478,7 @@ async fn abort_fails_the_run_without_pausing_again_further_out() {
 async fn handled_errors_do_not_pause() {
     let mut on_error = fail("ignored");
     on_error.step_type = "wait.until".into();
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.try")
             .with_block("try", vec![fail("caught")])
             .with_block("catch", vec![log("in catch")]),
@@ -1497,7 +1492,7 @@ async fn handled_errors_do_not_pause() {
     assert!(pauses.is_empty());
 
     // A try without catch only has a finally: the error is not handled.
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.try")
             .with_block("try", vec![fail("not caught")])
             .with_block("finally", vec![log("finally")]),
@@ -1512,7 +1507,7 @@ async fn handled_errors_do_not_pause() {
 
 #[tokio::test]
 async fn unattended_runs_still_fail_without_pausing() {
-    let s = scenario(vec![fail("boom")]);
+    let s = flow(vec![fail("boom")]);
     let (report, events) = run(&Runtime::new(), s, json!({})).await;
     assert_eq!(report.status, RunStatus::Failed);
     assert!(
@@ -1525,7 +1520,7 @@ async fn unattended_runs_still_fail_without_pausing() {
 #[tokio::test]
 async fn breakpoints_and_step_commands_walk_the_tree() {
     // s1 group { s2, s3 }, s4
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.group").with_block("body", vec![log("a"), log("b")]),
         log("c"),
     ]);
@@ -1546,7 +1541,7 @@ async fn breakpoints_and_step_commands_walk_the_tree() {
     assert_eq!(pauses[1].1, PauseReason::Step);
 
     // Step over a block runs all of it.
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.group").with_block("body", vec![log("a"), log("b")]),
         log("c"),
     ]);
@@ -1564,7 +1559,7 @@ async fn breakpoints_and_step_commands_walk_the_tree() {
 
 #[tokio::test]
 async fn a_breakpoint_in_a_loop_pauses_every_iteration() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.repeat")
             .with_param("count", 3)
             .with_block("body", vec![log("x")]),
@@ -1579,7 +1574,7 @@ async fn a_breakpoint_in_a_loop_pauses_every_iteration() {
 
 #[tokio::test]
 async fn swaps_that_lose_the_paused_position_are_refused() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.group").with_block("body", vec![log("a"), fail("boom")]),
     ]);
     let revision = s.revision;
@@ -1595,7 +1590,7 @@ async fn swaps_that_lose_the_paused_position_are_refused() {
     let control = handle.debug_control().expect("control");
     while let Some(event) = handle.next_event().await {
         if matches!(event.event, RunEvent::Paused { .. }) {
-            let err = control.update_scenario(moved.clone()).expect_err("refused");
+            let err = control.update_flow(moved.clone()).expect_err("refused");
             assert_eq!(err.code, "RESUME_INCOMPATIBLE");
             assert_eq!(control.revision(), revision);
             control.send(DebugCommand::Abort).expect("abort");
@@ -1606,7 +1601,7 @@ async fn swaps_that_lose_the_paused_position_are_refused() {
 
 #[tokio::test]
 async fn resuming_commands_need_a_pause_and_cancel_ends_a_paused_run() {
-    let s = scenario(vec![log("a")]);
+    let s = flow(vec![log("a")]);
     let mut options = debug_options(&[]);
     if let Some(debug) = options.debug.as_mut() {
         debug.pause_at_start = true;
@@ -1639,7 +1634,7 @@ async fn resuming_commands_need_a_pause_and_cancel_ends_a_paused_run() {
 #[tokio::test]
 async fn errors_in_parallel_branches_pause_at_the_parallel_step() {
     let flaky = flaky_runtime();
-    let s = scenario(vec![Step::new("control.parallel").with_block(
+    let s = flow(vec![Step::new("control.parallel").with_block(
         "branches",
         vec![log("a"), Step::new("test.flaky").with_param("succeedOn", 2)],
     )]);
@@ -1684,7 +1679,7 @@ async fn policy_sites_are_checked_after_templates_render() {
         .register(opener_def(), Shared(opened.clone()))
         .build()
         .with_policy(path.clone());
-    let mut s = scenario(vec![
+    let mut s = flow(vec![
         Step::new("test.open").with_param("url", "https://order.example.co.jp/list"),
         Step::new("test.open").with_param("url", "{{ next }}"),
     ]);
@@ -1749,7 +1744,7 @@ fn write_file_runtime() -> Runtime {
 
 async fn run_project(
     runtime: &Runtime,
-    s: Scenario,
+    s: Flow,
     options: RunOptions,
 ) -> (RunReport, Vec<RunEventEnvelope>) {
     let mut handle = runtime.start(s, options).expect("start");
@@ -1761,7 +1756,7 @@ async fn run_project(
 }
 
 #[tokio::test]
-async fn relative_paths_are_resolved_from_each_scenarios_folder() {
+async fn relative_paths_are_resolved_from_each_flows_folder() {
     let main_dir = tempfile::tempdir().unwrap();
     let sub_dir = tempfile::tempdir().unwrap();
     let runtime = write_file_runtime();
@@ -1770,19 +1765,19 @@ async fn relative_paths_are_resolved_from_each_scenarios_folder() {
             .with_param("path", path)
             .with_param("text", "x")
     };
-    let mut sub = scenario(vec![write("output/from-sub.txt")]);
+    let mut sub = flow(vec![write("output/from-sub.txt")]);
     sub.id = "scn_sub".into();
-    let s = scenario(vec![
+    let s = flow(vec![
         write("output/{{ 'a' }}.txt"),
-        Step::new("scenario.call").with_param("scenario", "scn_sub"),
+        Step::new("flow.call").with_param("flow", "scn_sub"),
     ]);
     let (report, _) = run_project(
         &runtime,
         s,
         RunOptions {
             project_dir: Some(main_dir.path().to_path_buf()),
-            subscenarios: vec![Subscenario {
-                scenario: sub,
+            subflows: vec![Subflow {
+                flow: sub,
                 version: None,
                 project_dir: Some(sub_dir.path().to_path_buf()),
             }],
@@ -1804,7 +1799,7 @@ async fn a_full_run_starts_with_work_emptied_and_writes_a_log() {
     std::fs::create_dir_all(work.join("old")).unwrap();
     std::fs::write(work.join("stale.csv"), "x").unwrap();
     let runtime = write_file_runtime();
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("test.writeFile")
             .with_param("path", "work/new.csv")
             .with_param("text", "y"),
@@ -1850,7 +1845,7 @@ async fn the_origin_of_a_run_is_recorded() {
     let runtime = Runtime::new();
     let handle = runtime
         .start(
-            scenario(vec![set("x", "1")]),
+            flow(vec![set("x", "1")]),
             RunOptions {
                 origin: RunOrigin::new(RunTrigger::Schedule).requested_by("毎朝 8 時"),
                 ..RunOptions::default()
@@ -1911,7 +1906,7 @@ async fn desktop_input_is_exclusive_across_processes() {
             .with_pc_locks(locks.path().to_path_buf())
     };
     let (a, b) = (runtime(), runtime());
-    let s = || scenario(vec![Step::new("test.click"), Step::new("test.click")]);
+    let s = || flow(vec![Step::new("test.click"), Step::new("test.click")]);
     let (ra, rb) = tokio::join!(run(&a, s(), json!({})), run(&b, s(), json!({})));
     assert_eq!(ra.0.status, RunStatus::Succeeded);
     assert_eq!(rb.0.status, RunStatus::Succeeded);
@@ -1930,18 +1925,18 @@ async fn desktop_steps_stop_while_the_screen_is_locked() {
         )
         .desktop_probe(Arc::new(|| Some("the screen is locked".into())))
         .build();
-    let (report, _) = run(&runtime, scenario(vec![Step::new("test.click")]), json!({})).await;
+    let (report, _) = run(&runtime, flow(vec![Step::new("test.click")]), json!({})).await;
     let error = report.error.unwrap();
     assert_eq!(error.code, "DESKTOP_UNAVAILABLE");
     assert_eq!(error.step_id.as_ref().map(|s| s.as_str()), Some("s1"));
     // Steps without the mouse and keyboard are not affected.
-    let (report, _) = run(&runtime, scenario(vec![log("ok")]), json!({})).await;
+    let (report, _) = run(&runtime, flow(vec![log("ok")]), json!({})).await;
     assert_eq!(report.status, RunStatus::Succeeded);
 }
 
 #[tokio::test]
 async fn finally_still_runs_when_a_run_is_cancelled() {
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.try")
             .with_block("try", vec![delay(60_000)])
             .with_block(
@@ -1979,7 +1974,7 @@ async fn a_nested_finally_does_not_extend_the_cleanup_deadline() {
     let inner = Step::new("control.try")
         .with_block("try", vec![delay(600_000)])
         .with_block("finally", vec![delay(600_000), log("inner done")]);
-    let s = scenario(vec![
+    let s = flow(vec![
         Step::new("control.try")
             .with_block("try", vec![delay(600_000)])
             .with_block("finally", vec![inner]),

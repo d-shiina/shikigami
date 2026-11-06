@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 use shikigami_core::secret::{ResolvedSecret, SecretError, SecretProvider, SecretRef};
-use shikigami_core::{Scenario, Step, Validator, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, Validator, VarDirection, VarType, VariableDef};
 use shikigami_runtime::{RunOptions, RunReport, RunStatus, Runtime};
 
 use super::*;
@@ -19,7 +19,7 @@ fn runtime(plugin: &Plugin) -> Runtime {
 
 /// Runs `steps`; every `saveAs` target becomes an output variable.
 async fn run(runtime: &Runtime, steps: Vec<Value>) -> RunReport {
-    let mut s = Scenario::new("plugin");
+    let mut s = Flow::new("plugin");
     for value in steps {
         let mut step: Step = serde_json::from_value(value).unwrap();
         shikigami_core::ops::assign_missing_ids(&mut step);
@@ -240,7 +240,7 @@ async fn secrets_reach_only_plugins_they_allow_and_stay_masked() {
         ECHO,
     );
     let plugin = Plugin::load(plain.path(), &[]).unwrap();
-    let mut s = Scenario::new("x");
+    let mut s = Flow::new("x");
     let mut step: Step = serde_json::from_value(
         json!({ "type": "u.echo", "params": { "value": { "secret": "社内", "field": "password" } } }),
     )
@@ -298,7 +298,7 @@ fn bad_manifests_are_rejected_with_hints() {
         &problems(manifest("t", json!([echo_step(json!({ "examples": [] }))]))),
         "no examples",
     );
-    // Examples are validated like scenario steps.
+    // Examples are validated like flow steps.
     has(
         &problems(manifest(
             "t",
@@ -328,7 +328,7 @@ fn bad_manifests_are_rejected_with_hints() {
     let mut typo = manifest("t", json!([echo_step(json!({}))]));
     typo["comand"] = json!({});
     has(&problems(typo), "unknown field");
-    // Scenarios record the version in `requires`, so it must be semver.
+    // Flows record the version in `requires`, so it must be semver.
     let mut loose = manifest("t", json!([echo_step(json!({}))]));
     loose["version"] = json!("1.2");
     has(&problems(loose), "not a semver version");

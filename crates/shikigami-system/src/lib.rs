@@ -1,4 +1,4 @@
-//! Steps that reach outside the scenario but not into an application:
+//! Steps that reach outside the flow but not into an application:
 //! web APIs (`http.request`), command-line programs (`process.run`), the
 //! clipboard (`clipboard.*`) and dialogs for the person at the PC
 //! (`dialog.*`). See docs/system.md.
@@ -182,7 +182,7 @@ impl From<Def> for StepTypeDef {
 fn step_defs() -> Vec<(StepTypeDef, Kind)> {
     let text = json!({ "type": "string" });
     let object = json!({ "type": "object" });
-    let path = json!({ "type": "string", "minLength": 1, "description": "シナリオのフォルダーからの相対パス（例 output/data.json）か絶対パス" });
+    let path = json!({ "type": "string", "minLength": 1, "description": "フローのフォルダーからの相対パス（例 output/data.json）か絶対パス" });
     let dialog = |step_type, label, description, params_schema, examples| Def {
         step_type,
         category: StepCategory::System,
@@ -297,7 +297,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             dialog(
                 types::DIALOG_MESSAGE,
                 "メッセージを表示",
-                "Shows a message box to the person at the PC and waits (up to 10 minutes unless timeoutMs is set). Outputs the button pressed: \"ok\", \"cancel\", \"yes\" or \"no\". Use it only in scenarios that someone watches; unattended runs would wait until the timeout. Windows only.",
+                "Shows a message box to the person at the PC and waits (up to 10 minutes unless timeoutMs is set). Outputs the button pressed: \"ok\", \"cancel\", \"yes\" or \"no\". Use it only in flows that someone watches; unattended runs would wait until the timeout. Windows only.",
                 object_schema(
                     json!({
                         "message": { "type": "string", "minLength": 1 },

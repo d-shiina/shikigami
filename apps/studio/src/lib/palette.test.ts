@@ -1,4 +1,4 @@
-import type { ScenarioSummary, Step, StepTypeDef } from "@shikigami/schema";
+import type { FlowSummary, Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
 import { insertPlace } from "../store";
 import { setLocale, t } from "./i18n";
@@ -68,8 +68,8 @@ describe("node palette", () => {
   });
 
   it("lists reusable flows as nodes that call them, found by name", () => {
-    const flow = (id: string, name: string, more: Partial<ScenarioSummary> = {}): ScenarioSummary =>
-      ({ id, name, description: "", revision: 1, stepCount: 3, tags: [], ...more }) as ScenarioSummary;
+    const flow = (id: string, name: string, more: Partial<FlowSummary> = {}): FlowSummary =>
+      ({ id, name, description: "", revision: 1, stepCount: 3, tags: [], ...more }) as FlowSummary;
     const flows = [
       flow("scn_open", "開いているフロー", { inputs: ["x"] }),
       flow("scn_invoice", "請求書を登録する", { inputs: ["invoice"], outputs: ["no"] }),
@@ -80,7 +80,7 @@ describe("node palette", () => {
     const listed = items.filter((i) => i.group === "subflow");
     // Not the open flow (it would call itself), not whole jobs with no inputs or outputs.
     expect(listed.map((i) => i.key)).toEqual(["flow:scn_invoice", "flow:scn_login"]);
-    expect(listed[0]).toMatchObject({ type: "scenario.call", params: { scenario: "scn_invoice" }, summary: t.palette.flowShape(["invoice"], ["no"]) });
+    expect(listed[0]).toMatchObject({ type: "flow.call", params: { flow: "scn_invoice" }, summary: t.palette.flowShape(["invoice"], ["no"]) });
     expect(listed[1]!.summary).toBe("ID とパスワードで入る。");
     expect(search(items, "せいきゅうしょ").map((i) => i.key)[0]).toBe("flow:scn_invoice");
     // Listed with the flow's own nodes, after control.

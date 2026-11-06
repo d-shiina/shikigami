@@ -6,7 +6,7 @@ type State = { error: Error | null };
 
 /**
  * Last line of defence: without it, any render or effect error unmounts the
- * whole tree and Studio turns into a blank window. Scenario data lives in
+ * whole tree and Studio turns into a blank window. Flow data lives in
  * Core, so recovering only needs a re-render.
  */
 export class ErrorBoundary extends Component<Props, State> {

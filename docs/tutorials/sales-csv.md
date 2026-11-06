@@ -10,10 +10,10 @@ Every month each branch sends its sales as a CSV. Combine them into one workbook
 
 ![Flow chart](../assets/tutorials/sales-csv-flow.png)
 
-## 1. Make a scenario and add the CSVs
+## 1. Make a flow and add the CSVs
 
-1. "New scenario" on the Scenarios page
-2. Drop the three CSVs in `examples/tutorials/sales-csv/input/` (東京 Tokyo, 大阪 Osaka, 福岡 Fukuoka) on the project shelf. CSV files go to `input/` in the scenario's folder
+1. "New flow" on the Flows page
+2. Drop the three CSVs in `examples/tutorials/sales-csv/input/` (東京 Tokyo, 大阪 Osaka, 福岡 Fukuoka) on the project shelf. CSV files go to `input/` in the flow's folder
 
 Each CSV has a header row and four columns: 日付 (date), 商品 (item), 数量 (quantity), 金額 (amount). Some amounts carry commas, such as `"6,000"`.
 

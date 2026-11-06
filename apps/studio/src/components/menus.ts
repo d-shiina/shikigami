@@ -132,11 +132,11 @@ export function useVariableMenu() {
   const store = useStudioApi();
   return (name: string, options: { writer?: string; onOpenWriter?: (id: string) => void } = {}): MenuSpec[] => {
     const s = store.getState();
-    const declared = s.scenario?.variables?.some((v) => v.name === name) ?? false;
+    const declared = s.flow?.variables?.some((v) => v.name === name) ?? false;
     const { writer, onOpenWriter } = options;
     return [
       { label: t.menu.copyName, icon: Copy, run: () => copyText(name) },
-      // Variables are edited in the scenario's inspector: shown when nothing is selected.
+      // Variables are edited in the flow's inspector: shown when nothing is selected.
       declared && { label: t.menu.variableSettings, icon: Variable, run: () => store.getState().select(null) },
       writer && onOpenWriter && { label: t.menu.openWriter, icon: LogIn, run: () => onOpenWriter(writer) },
       "-",

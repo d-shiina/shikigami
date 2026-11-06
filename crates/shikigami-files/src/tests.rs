@@ -1,7 +1,7 @@
 use std::fs;
 
 use serde_json::{Value, json};
-use shikigami_core::{Scenario, Step, Validator, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, Validator, VarDirection, VarType, VariableDef};
 use shikigami_runtime::{RunOptions, RunStatus, Runtime};
 
 use super::*;
@@ -26,7 +26,7 @@ fn examples_validate() {
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
-            let mut s = Scenario::new("example");
+            let mut s = Flow::new("example");
             s.variables = [
                 "total", "results", "file", "name", "memo", "orders", "done", "csvFiles", "files",
             ]
@@ -288,13 +288,13 @@ fn zip_round_trip_and_shift_jis_names() {
 }
 
 #[tokio::test]
-async fn a_scenario_filters_a_csv_with_expressions() {
+async fn a_flow_filters_a_csv_with_expressions() {
     let dir = tempfile::tempdir().unwrap();
     let input = p(&dir, "orders.csv");
     let output = p(&dir, "big.csv");
     fs::write(&input, "番号,金額\nA,\"1,200\"\nB,300\nC,5000\n").unwrap();
     let runtime = Runtime::builder().adapter(&FileAdapter::new()).build();
-    let mut s = Scenario::new("csv");
+    let mut s = Flow::new("csv");
     s.variables.push(VariableDef {
         direction: VarDirection::Output,
         ..VariableDef::new("count", VarType::Any)

@@ -8,8 +8,8 @@ describe("samples", () => {
   it("open bundles Studio can import", async () => {
     for (const sample of SAMPLES.filter((s) => s.bundle)) {
       const bundle = JSON.parse(await sample.bundle!());
-      expect(bundle.format, sample.id).toBe("shikigami.scenarioBundle");
-      expect(bundle.scenario.id, sample.id).toMatch(/^scn_tutorial_/);
+      expect(bundle.format, sample.id).toBe("shikigami.flowBundle");
+      expect(bundle.flow.id, sample.id).toMatch(/^scn_tutorial_/);
     }
   });
 

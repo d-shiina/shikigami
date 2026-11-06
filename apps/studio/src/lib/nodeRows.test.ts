@@ -22,8 +22,8 @@ describe("nodeRows", () => {
   it("shows a call's inputs as rows and its outputs as written variables", () => {
     const call: Step = {
       id: "c1",
-      type: "scenario.call",
-      params: { scenario: "scn_tax", inputs: { amount: "{{ price }}" }, outputs: { taxed: "total" } },
+      type: "flow.call",
+      params: { flow: "scn_tax", inputs: { amount: "{{ price }}" }, outputs: { taxed: "total" } },
     };
     expect(nodeRows(call, undefined, new Set(["price"]))).toEqual([
       { kind: "param", key: "inputs.amount", label: "amount", value: "{{ price }}", refs: ["price"] },

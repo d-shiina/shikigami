@@ -1,4 +1,4 @@
-// Named screen parts (`scenario.parts`): a node's target can be
+// Named screen parts (`flow.parts`): a node's target can be
 // `{ "part": "<name>" }`, so a button used by ten nodes is fixed in one
 // place. What uses a part, how to name a new one, and the edits that turn
 // a node's own target into a part.

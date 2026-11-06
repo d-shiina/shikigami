@@ -10,7 +10,7 @@
     {
       "name": "shikigami",
       "source": "./plugins/shikigami",
-      "description": "Shikigami RPA の MCP サーバー設定と、シナリオ作成の作法を教えるスキル"
+      "description": "Shikigami RPA の MCP サーバー設定と、フロー作成の作法を教えるスキル"
     }
   ]
 }

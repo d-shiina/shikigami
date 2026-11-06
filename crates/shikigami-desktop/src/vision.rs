@@ -341,7 +341,7 @@ pub fn ocr_text(lines: &[OcrLine]) -> String {
         .join("\n")
 }
 
-/// Lines as returned to scenarios and the AI, with their places moved by
+/// Lines as returned to flows and the AI, with their places moved by
 /// (`dx`, `dy`) (into window coordinates).
 pub fn ocr_lines_json(lines: &[OcrLine], dx: i32, dy: i32) -> Value {
     Value::Array(

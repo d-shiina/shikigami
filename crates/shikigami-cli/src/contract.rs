@@ -1,4 +1,4 @@
-//! Contract snapshots: what AI clients, scripts and scenarios rely on.
+//! Contract snapshots: what AI clients, scripts and flows rely on.
 //!
 //! `shikigami schema export` writes these next to the JSON Schemas
 //! (`schemas/contract/`). They hold shapes only (names, params, flags,
@@ -20,7 +20,7 @@ pub fn files() -> Vec<(&'static str, Value)> {
     ]
 }
 
-/// Built-in step types (plugins excluded) as scenarios use them.
+/// Built-in step types (plugins excluded) as flows use them.
 fn step_types() -> Value {
     let runtime = shikigami_adapters::runtime(&shikigami_adapters::builtin());
     let types: Vec<Value> = runtime

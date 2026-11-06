@@ -18,7 +18,7 @@ DCO の要点は「この変更を自分が書いた、または OSS として�
 
 ## 変更の前に
 
-- **公開している約束を変えるとき**（シナリオのファイル形式、ステップ型の params、MCP のツール、CLI のコマンド・終了コード・`--json` の出力）は [docs/compatibility.md](docs/compatibility.md) に従ってください。`schemas/` の生成物が変わる Pull Request は、[CHANGELOG.md](CHANGELOG.md) の「未リリース」にも書く必要があります（CI で確認します）
+- **公開している約束を変えるとき**（フローのファイル形式、ステップ型の params、MCP のツール、CLI のコマンド・終了コード・`--json` の出力）は [docs/compatibility.md](docs/compatibility.md) に従ってください。`schemas/` の生成物が変わる Pull Request は、[CHANGELOG.md](CHANGELOG.md) の「未リリース」にも書く必要があります（CI で確認します）
 - 仕様は「AI が組みやすいこと」を最優先にしています（[docs/design/ai-authoring.md](docs/design/ai-authoring.md)）
 - 対象 OS は Windows 10/11 です。macOS / Linux 対応の変更は受け付けていません（Linux の CI はコアのテスト用です）
 - 大きな変更は、先に Issue で相談してください

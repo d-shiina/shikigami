@@ -1,11 +1,11 @@
-// Every variable of a scenario in one table: what it is, where it starts,
+// Every variable of a flow in one table: what it is, where it starts,
 // which steps write it and which read it. Display only, like dataFlow.ts.
 import type { Step, VarDirection, VariableDef, VarType } from "@shikigami/schema";
 import { CALL, callMap, knownVariables, outputs, referencedVariables } from "./nodeRows";
 
 export type VariableUsage = {
   name: string;
-  /** Declared on the scenario; undefined for one a step makes (a loop's element). */
+  /** Declared on the flow; undefined for one a step makes (a loop's element). */
   def?: VariableDef;
   type: VarType;
   /** "made" when no declaration exists and a step creates it. */

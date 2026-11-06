@@ -4,7 +4,7 @@
 import type { Evidence, HistoryEntry, ObservationContent, StepNote } from "@shikigami/schema";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { scenarioBusy, useAgent } from "../agent";
+import { flowBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { relativeTime } from "../lib/changes";
@@ -18,15 +18,15 @@ export type Review = Extract<Evidence, { kind: "review" }>;
 
 /** A step's name as the flow chart shows it, or a placeholder for one that is gone. */
 export function useStepLabel(): (id: string) => string {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   return useCallback(
     (id: string) => {
-      const step = findStep(scenario?.steps ?? [], id);
+      const step = findStep(flow?.steps ?? [], id);
       if (!step) return t.evidence.goneStep;
       return step.name || plain(sentence(step, stepTypes.find((d) => d.type === step.type)));
     },
-    [scenario, stepTypes],
+    [flow, stepTypes],
   );
 }
 
@@ -54,7 +54,7 @@ export function Section({ title, tone = "text-slate-500", children }: { title: s
   );
 }
 
-/** The last time someone sent this scenario back, and whether the AI has acted on it since. */
+/** The last time someone sent this flow back, and whether the AI has acted on it since. */
 export function FeedbackBox({ feedback, fixedAfter }: { feedback: Review; fixedAfter: boolean }) {
   return (
     <div className="rounded-[4px] border border-shu-100 bg-shu-50/60 px-3 py-2">
@@ -287,8 +287,8 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
 export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: () => void; onSent: () => void; initialReason?: string }) {
   const selection = useStudio((s) => s.selection);
   const sendBack = useStudio((s) => s.sendBack);
-  const scenario = useStudio((s) => s.scenario);
-  const agentReady = useAgent((s) => s.info?.available === true && !scenarioBusy(s, scenario?.id));
+  const flow = useStudio((s) => s.flow);
+  const agentReady = useAgent((s) => s.info?.available === true && !flowBusy(s, flow?.id));
   const agentName = useAgent((s) => s.info?.name ?? "AI");
   const askAgent = useAgent((s) => s.send);
   const [fixNow, setFixNow] = useKeptState("sendBack.fixNow", true);
@@ -310,9 +310,9 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
     setBusy(false);
     if (!ok) return;
     onSent();
-    if (fixNow && agentReady && scenario) {
-      // The reason itself travels through Core (get_scenario feedback); this only wakes the AI.
-      void askAgent(t.evidence.sentBackAsk(reason.trim()), { id: scenario.id, name: scenario.name }, `${scenario.name} ・ ${t.evidence.sendBackShort}`);
+    if (fixNow && agentReady && flow) {
+      // The reason itself travels through Core (get_flow feedback); this only wakes the AI.
+      void askAgent(t.evidence.sentBackAsk(reason.trim()), { id: flow.id, name: flow.name }, `${flow.name} ・ ${t.evidence.sendBackShort}`);
     }
   };
   return (

@@ -3,7 +3,7 @@
 // edits lands in 確認待ち like any other AI edit.
 import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, scenarioBusy, useAgent, useAgentApi } from "../agent";
+import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { agent } from "../lib/api";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -16,14 +16,14 @@ export function AgentPane({ width }: { width: number }) {
   const setOpen = useAgent((s) => s.setOpen);
   const info = useAgent((s) => s.info);
   const chat = useAgent(currentChat);
-  const blockedElsewhere = useAgent((s) => scenarioBusy(s, currentChat(s).scenarioId, s.current));
+  const blockedElsewhere = useAgent((s) => flowBusy(s, currentChat(s).flowId, s.current));
   const sendIn = useAgent((s) => s.sendIn);
   const stop = useAgent((s) => s.stop);
   const newChat = useAgent((s) => s.newChat);
-  const scenario = useStudio((s) => s.scenario);
-  const openScenario = useStudio((s) => s.open);
+  const flow = useStudio((s) => s.flow);
+  const openFlow = useStudio((s) => s.open);
   const selection = useStudio((s) => s.selection);
-  // One draft per conversation, so switching does not carry text to another scenario.
+  // One draft per conversation, so switching does not carry text to another flow.
   const setDraft = useAgent((s) => s.setDraft);
   const getChats = useAgentApi().getState;
   const draft = chat.draft;
@@ -37,12 +37,12 @@ export function AgentPane({ width }: { width: number }) {
     void end.current?.scrollIntoView({ block: "end" });
   }, [items, chat.id]);
   if (!open) return null;
-  // The conversation may be about another scenario than the one in the editor.
-  const here = scenario !== null && chat.scenarioId === scenario.id;
+  // The conversation may be about another flow than the one in the editor.
+  const here = flow !== null && chat.flowId === flow.id;
   const stepId = here && selection?.kind === "step" ? selection.stepId : null;
   const submit = async () => {
-    const ref = chat.scenarioId ? { id: chat.scenarioId, name: here ? scenario.name : chat.title, stepId, empty: here && (scenario.steps ?? []).length === 0 } : null;
-    const context = chat.scenarioId ? `${ref!.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
+    const ref = chat.flowId ? { id: chat.flowId, name: here ? flow.name : chat.title, stepId, empty: here && (flow.steps ?? []).length === 0 } : null;
+    const context = chat.flowId ? `${ref!.name}${stepId ? ` ・ ${t.agent.selectedStep}` : ""}` : null;
     // Cleared as it is sent, like any chat; back again if it was not taken.
     const text = draft;
     const id = chat.id;
@@ -55,7 +55,7 @@ export function AgentPane({ width }: { width: number }) {
         <ChatSwitcher chat={chat} />
         <button
           type="button"
-          onClick={() => newChat(chat.scenarioId ? { id: chat.scenarioId, name: chat.title } : null)}
+          onClick={() => newChat(chat.flowId ? { id: chat.flowId, name: chat.title } : null)}
           disabled={items.length === 0 && !chat.sessionId}
           className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
           title={t.agent.newChat}
@@ -92,15 +92,15 @@ export function AgentPane({ width }: { width: number }) {
       </div>
       <div className="border-t border-slate-200 p-3">
         <div className="mb-1.5 flex min-w-0 items-center gap-1 text-[10.5px] text-slate-500">
-          {chat.scenarioId === null ? (
-            <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.newScenarioChat}</span>
+          {chat.flowId === null ? (
+            <span className="truncate rounded-full bg-brand-50 px-2 py-0.5 text-brand-700">{t.agent.newFlowChat}</span>
           ) : here ? (
-            <span className="truncate rounded-full bg-slate-100 px-2 py-0.5">{scenario.name}</span>
+            <span className="truncate rounded-full bg-slate-100 px-2 py-0.5">{flow.name}</span>
           ) : (
             <button
               type="button"
-              onClick={() => void openScenario(chat.scenarioId!)}
-              title={t.agent.openScenario}
+              onClick={() => void openFlow(chat.flowId!)}
+              title={t.agent.openFlow}
               className="truncate rounded-full bg-slate-100 px-2 py-0.5 hover:bg-slate-200 hover:text-ink"
             >
               {chat.title} ↗
@@ -120,7 +120,7 @@ export function AgentPane({ width }: { width: number }) {
           }}
           rows={3}
           disabled={!info?.available}
-          placeholder={chat.scenarioId ? t.agent.placeholderEdit : t.agent.placeholderNew}
+          placeholder={chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
           className="w-full resize-none rounded-[4px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
@@ -163,19 +163,19 @@ function ChatDot({ chat }: { chat: Chat }) {
 
 /**
  * The pane's title: the conversation shown, and the others the AI is
- * working on or has finished, so several scenarios can be under way at once.
+ * working on or has finished, so several flows can be under way at once.
  */
 function ChatSwitcher({ chat }: { chat: Chat }) {
   const chats = useAgent((s) => s.chats);
   const select = useAgent((s) => s.select);
   const remove = useAgent((s) => s.remove);
   const newChat = useAgent((s) => s.newChat);
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const [open, setOpen] = useState(false);
   const others = chats.filter((c) => c.id !== chat.id);
   const working = others.filter(isBusy).length;
   const news = others.filter((c) => c.unread).length;
-  // The empty conversation the editor's scenario starts with is not worth a row.
+  // The empty conversation the editor's flow starts with is not worth a row.
   const listed = [...chats]
     .filter((c) => c.id === chat.id || c.items.length > 0 || c.sessionId || isBusy(c) || c.draft.trim())
     .sort((a, b) => Number(isBusy(b)) - Number(isBusy(a)) || b.updatedAt - a.updatedAt);
@@ -218,7 +218,7 @@ function ChatSwitcher({ chat }: { chat: Chat }) {
                   <button type="button" onClick={() => pick(c.id)} className="min-w-0 flex-1 text-left">
                     <div className="truncate text-[12.5px] text-ink">{chatTitle(c)}</div>
                     <div className="truncate text-[10.5px] text-slate-500">
-                      {isBusy(c) ? t.agent.chatWorking : c.scenarioId === null ? t.agent.newScenarioChat : lastWords(c)}
+                      {isBusy(c) ? t.agent.chatWorking : c.flowId === null ? t.agent.newFlowChat : lastWords(c)}
                     </div>
                   </button>
                   {c.id === chat.id && <Check size={14} className="shrink-0 text-brand-600" />}
@@ -237,17 +237,17 @@ function ChatSwitcher({ chat }: { chat: Chat }) {
               ))}
             </div>
             <div className="mt-1 border-t border-slate-200 pt-1">
-              {scenario && (
+              {flow && (
                 <button
                   type="button"
                   onClick={() => {
-                    newChat({ id: scenario.id, name: scenario.name });
+                    newChat({ id: flow.id, name: flow.name });
                     setOpen(false);
                   }}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-slate-600 hover:bg-slate-50 hover:text-ink"
                 >
                   <Plus size={14} className="shrink-0" />
-                  <span className="truncate">{t.agent.newChatAbout(scenario.name)}</span>
+                  <span className="truncate">{t.agent.newChatAbout(flow.name)}</span>
                 </button>
               )}
               <button
@@ -259,7 +259,7 @@ function ChatSwitcher({ chat }: { chat: Chat }) {
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-slate-600 hover:bg-slate-50 hover:text-ink"
               >
                 <Plus size={14} className="shrink-0" />
-                {t.agent.newScenarioChat}
+                {t.agent.newFlowChat}
               </button>
             </div>
           </div>
@@ -269,7 +269,7 @@ function ChatSwitcher({ chat }: { chat: Chat }) {
   );
 }
 
-/** The conversation's last words, to tell conversations about one scenario apart. */
+/** The conversation's last words, to tell conversations about one flow apart. */
 function lastWords(c: Chat): string {
   for (let i = c.items.length - 1; i >= 0; i--) {
     const item = c.items[i]!;

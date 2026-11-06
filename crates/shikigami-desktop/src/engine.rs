@@ -1,6 +1,6 @@
 //! Which technology can see inside a window.
 //!
-//! Scenarios never say how a window is reached: the Runtime looks at the
+//! Flows never say how a window is reached: the Runtime looks at the
 //! window and picks the backend. Today every window is driven through UI
 //! Automation, except SAP GUI windows that SAP GUI Scripting can reach
 //! (see `sap`) and Java windows the Java Access Bridge reaches (see `jab`).

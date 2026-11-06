@@ -1,5 +1,5 @@
-// The review desk: AI edits waiting to be looked at, across every scenario.
-// Opening one shows the scenario's flow chart with what changed marked on
+// The review desk: AI edits waiting to be looked at, across every flow.
+// Opening one shows the flow's chart with what changed marked on
 // it, the changes in words, and one place to keep or send them back.
 import type { HistoryEntry, Step, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
@@ -12,19 +12,19 @@ import { type ChangeCard, changeCards, checksOf, digest, headline, partDiff, pur
 import { type Part, sentence } from "../lib/sentence";
 import { approvedUpTo, groupRevertBlocker, pendingIn } from "../store";
 import { FeedbackBox, Observations, type Observed, type Review, SendBackForm, Section, TestRuns, type TestRun } from "./Evidence";
-import { Monogram } from "./ScenariosPage";
+import { Monogram } from "./FlowsPage";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
 import { stepLabel, t, useKeptState } from "../lib/i18n";
 
 export type InboxItem = {
-  scenarioId: string;
+  flowId: string;
   name: string;
   entries: HistoryEntry[];
   /** Sent back and the AI has not edited since: nothing for the person to do yet. */
   waiting: Review | null;
 };
 
-/** Scenarios with unreviewed AI edits, newest edit first. */
+/** Flows with unreviewed AI edits, newest edit first. */
 export function useInbox(): InboxItem[] {
   const summaries = useStudio((s) => s.summaries);
   const histories = useStudio((s) => s.histories);
@@ -38,7 +38,7 @@ export function useInbox(): InboxItem[] {
           const entries = pendingIn(histories[s.id] ?? [], reviewed[s.id], approvedUpTo(timeline));
           const feedback = timeline?.openFeedback?.kind === "review" ? timeline.openFeedback : null;
           const waiting = feedback && feedback.revision >= (entries[0]?.revision ?? 0) ? feedback : null;
-          return { scenarioId: s.id, name: s.name, entries, waiting };
+          return { flowId: s.id, name: s.name, entries, waiting };
         })
         .filter((i) => i.entries.length > 0)
         .sort((a, b) => (b.entries[0]?.at ?? "").localeCompare(a.entries[0]?.at ?? "")),
@@ -46,11 +46,11 @@ export function useInbox(): InboxItem[] {
   );
 }
 
-/** The inbox folded to a strip when the window is narrow: one mark per scenario that waits. */
+/** The inbox folded to a strip when the window is narrow: one mark per flow that waits. */
 export function ReviewRail({ onExpand }: { onExpand: () => void }) {
   const inbox = useInbox();
   const open = useStudio((s) => s.open);
-  const currentId = useStudio((s) => s.scenario?.id);
+  const currentId = useStudio((s) => s.flow?.id);
   return (
     <aside className="flex h-full flex-col items-center gap-2 border-r border-slate-200 bg-paper pt-3">
       <button
@@ -62,8 +62,8 @@ export function ReviewRail({ onExpand }: { onExpand: () => void }) {
         »
       </button>
       {inbox.map((item) => (
-        <button key={item.scenarioId} type="button" title={item.name} onClick={() => void open(item.scenarioId)}>
-          <Monogram name={item.name} active={item.scenarioId === currentId} />
+        <button key={item.flowId} type="button" title={item.name} onClick={() => void open(item.flowId)}>
+          <Monogram name={item.name} active={item.flowId === currentId} />
         </button>
       ))}
     </aside>
@@ -73,7 +73,7 @@ export function ReviewRail({ onExpand }: { onExpand: () => void }) {
 export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
   const inbox = useInbox();
   const open = useStudio((s) => s.open);
-  const currentId = useStudio((s) => s.scenario?.id);
+  const currentId = useStudio((s) => s.flow?.id);
   return (
     <aside className="flex h-full flex-col border-r border-slate-200 bg-paper">
       <div className="px-3 pt-3 pb-1">
@@ -100,14 +100,14 @@ export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
         )}
         {[...inbox.filter((i) => !i.waiting), ...inbox.filter((i) => i.waiting)].map((item, index, all) => {
           const newest = item.entries[0];
-          const active = item.scenarioId === currentId;
+          const active = item.flowId === currentId;
           const firstWaiting = item.waiting && !all[index - 1]?.waiting;
           return (
-            <li key={item.scenarioId}>
+            <li key={item.flowId}>
               {firstWaiting && <div className="px-2 pt-3 pb-1 text-[11px] font-bold text-slate-400">{t.desk.sentBack}</div>}
               <button
                 type="button"
-                onClick={() => void open(item.scenarioId)}
+                onClick={() => void open(item.flowId)}
                 className={`relative w-full rounded-[4px] px-2.5 py-2 text-left ${active ? "bg-sheet shadow-sheet ring-1 ring-brand-100" : "hover:bg-sheet/70"}`}
               >
                 {active && <span className="absolute top-2 bottom-2 left-0 w-[3px] rounded-[1px] bg-brand-500" />}
@@ -135,7 +135,7 @@ const EVIDENCE_POLL_MS = 5000;
 /**
  * What the person has done on this review so far: which changes they looked
  * at and how they answered the AI's questions. Kept for the session only,
- * keyed by scenario and newest revision so a new edit starts fresh.
+ * keyed by flow and newest revision so a new edit starts fresh.
  */
 type Marks = {
   seen: Record<string, true>;
@@ -156,28 +156,28 @@ const useMarks = create<Marks>((set) => ({
     }),
 }));
 
-/** What the unreviewed edits of the open scenario do, in the order a person decides: what changes, what it touches, whether it was tried, what to confirm. */
+/** What the unreviewed edits of the open flow do, in the order a person decides: what changes, what it touches, whether it was tried, what to confirm. */
 export function ReviewPanel() {
   const pending = usePendingReview();
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
   const open = useStudio((s) => s.open);
   const inbox = useInbox();
-  const timeline = useStudio((s) => (s.scenario ? s.timelines[s.scenario.id] : undefined));
+  const timeline = useStudio((s) => (s.flow ? s.timelines[s.flow.id] : undefined));
   const loadTimeline = useStudio((s) => s.loadTimeline);
   const see = useMarks((m) => m.see);
   const seenMarks = useMarks((m) => m.seen);
   const answers = useMarks((m) => m.answers);
   const [sendBackWith, setSendBackWith] = useState<string | undefined>(undefined);
   const [sending, setSending] = useKeptState("review.sending", false);
-  const scenarioId = scenario?.id;
-  // An MCP test run only appends evidence; it does not touch the scenario
+  const flowId = flow?.id;
+  // An MCP test run only appends evidence; it does not touch the flow
   // file the watcher sees. Re-read while this panel is open and on refocus.
   useEffect(() => {
-    if (!scenarioId) return;
+    if (!flowId) return;
     const refresh = () => {
-      if (document.visibilityState === "visible") void loadTimeline(scenarioId);
+      if (document.visibilityState === "visible") void loadTimeline(flowId);
     };
     const timer = window.setInterval(refresh, EVIDENCE_POLL_MS);
     window.addEventListener("focus", refresh);
@@ -185,7 +185,7 @@ export function ReviewPanel() {
       window.clearInterval(timer);
       window.removeEventListener("focus", refresh);
     };
-  }, [scenarioId, loadTimeline]);
+  }, [flowId, loadTimeline]);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const oldestFirst = useMemo(() => [...pending].reverse(), [pending]);
   const summary = useMemo(() => summarize(oldestFirst), [oldestFirst]);
@@ -197,32 +197,32 @@ export function ReviewPanel() {
   const observed = evidence.filter((e): e is Observed => e.kind === "observation");
   const feedback = timeline?.openFeedback?.kind === "review" ? timeline.openFeedback : null;
   const cards = useMemo(
-    () => changeCards(oldestFirst, summary, scenario?.steps ?? [], feedback?.revision ?? null),
-    [oldestFirst, summary, scenario, feedback],
+    () => changeCards(oldestFirst, summary, flow?.steps ?? [], feedback?.revision ?? null),
+    [oldestFirst, summary, flow, feedback],
   );
   const others = useMemo(
-    () => oldestFirst.flatMap((e) => describe(e, scenario, defs)).filter((l) => l.verb === "variable" || l.verb === "scenario" || l.verb === "replace" || (l.verb === "remove" && !l.stepId && l.subject.startsWith(t.variables))),
-    [oldestFirst, scenario, defs],
+    () => oldestFirst.flatMap((e) => describe(e, flow, defs)).filter((l) => l.verb === "variable" || l.verb === "flow" || l.verb === "replace" || (l.verb === "remove" && !l.stepId && l.subject.startsWith(t.variables))),
+    [oldestFirst, flow, defs],
   );
   const effects = useMemo(() => {
     const newestFirst = [...oldestFirst].reverse();
-    return effectsOf(scenario?.steps ?? [], summary.steps, summary.removed, defs, (step) => stepBefore(step, newestFirst));
-  }, [oldestFirst, scenario, summary, defs]);
+    return effectsOf(flow?.steps ?? [], summary.steps, summary.removed, defs, (step) => stepBefore(step, newestFirst));
+  }, [oldestFirst, flow, summary, defs]);
   const checks = useMemo(() => checksOf(oldestFirst), [oldestFirst]);
-  const markKey = `${scenarioId}@${newest?.revision ?? 0}`;
+  const markKey = `${flowId}@${newest?.revision ?? 0}`;
   const selected = selection?.kind === "step" ? selection.stepId : null;
   useEffect(() => {
     if (selected && cards.some((c) => c.stepId === selected)) see(`${markKey}:${selected}`);
   }, [selected, cards, markKey, see]);
   if (!newest || !oldest) {
-    const next = inbox.find((i) => i.scenarioId !== scenario?.id && !i.waiting);
+    const next = inbox.find((i) => i.flowId !== flow?.id && !i.waiting);
     return (
       <div className="p-5 text-[13px]">
         <div className="flex items-center gap-2 font-bold text-moegi-500">✓ {t.desk.reviewed}</div>
         {next ? (
           <button
             type="button"
-            onClick={() => void open(next.scenarioId)}
+            onClick={() => void open(next.flowId)}
             className="mt-4 flex w-full items-center gap-2 rounded-[4px] border border-slate-200 px-3 py-2 text-left hover:border-brand-500"
           >
             <span className="text-[11px] text-slate-400">{t.desk.next}</span>
@@ -261,7 +261,7 @@ export function ReviewPanel() {
                 card={card}
                 said={card.said.map((text) => dropLine(text, title)).filter(Boolean)}
                 defs={defs}
-                lines={oldestFirst.flatMap((e) => describe(e, scenario, defs)).filter((l) => l.stepId === card.stepId && l.diffs.length > 0)}
+                lines={oldestFirst.flatMap((e) => describe(e, flow, defs)).filter((l) => l.stepId === card.stepId && l.diffs.length > 0)}
                 seen={Boolean(seenMarks[`${markKey}:${card.stepId}`])}
                 current={card.stepId === selected}
                 onSee={() => see(`${markKey}:${card.stepId}`)}
@@ -282,7 +282,7 @@ export function ReviewPanel() {
         </Numbered>
 
         <Numbered n={3} title={t.desk.testResult} aside={runs.at(-1) ? relativeTime(runs.at(-1)!.finishedAt) : undefined}>
-          <TestResult runs={runs} revision={scenario?.revision ?? 0} changedIds={changedIds} />
+          <TestResult runs={runs} revision={flow?.revision ?? 0} changedIds={changedIds} />
           {observed.length > 0 && (
             <div className="mt-3">
               <Section title={t.desk.screens}>
@@ -469,7 +469,7 @@ function Marked({ parts, marks, other, tone }: { parts: Part[]; marks?: boolean[
   );
 }
 
-/** What the scenario touches outside, with what this review changes on top. */
+/** What the flow touches outside, with what this review changes on top. */
 function EffectList({ effects }: { effects: Effect[] }) {
   const [showSame, setShowSame] = useState(false);
   const changed = effects.filter((e) => e.status !== "same");

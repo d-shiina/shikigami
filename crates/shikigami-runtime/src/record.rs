@@ -185,17 +185,17 @@ fn close_one(dir: &Path, id: &RunId) -> std::io::Result<()> {
         }
         out
     };
-    let Some((started_at, scenario_id, scenario_name, revision, origin)) =
+    let Some((started_at, flow_id, flow_name, revision, origin)) =
         events.iter().find_map(|e| match &e.event {
             RunEvent::RunStarted {
-                scenario_id,
-                scenario_name,
+                flow_id,
+                flow_name,
                 revision,
                 origin,
             } => Some((
                 e.at,
-                scenario_id.clone(),
-                scenario_name.clone(),
+                flow_id.clone(),
+                flow_name.clone(),
                 *revision,
                 origin.clone(),
             )),
@@ -243,8 +243,8 @@ fn close_one(dir: &Path, id: &RunId) -> std::io::Result<()> {
     fs::rename(&tmp, &path)?;
     let report = RunReport {
         run_id: id.clone(),
-        scenario_id,
-        scenario_name,
+        flow_id,
+        flow_name,
         revision,
         version: None,
         status: RunStatus::Failed,
@@ -252,7 +252,7 @@ fn close_one(dir: &Path, id: &RunId) -> std::io::Result<()> {
         finished_at,
         error: Some(error),
         outputs: serde_json::Map::new(),
-        subscenarios: Vec::new(),
+        subflows: Vec::new(),
         origin,
     };
     fs::write(dir.join("report.json"), serde_json::to_vec_pretty(&report)?)
@@ -332,7 +332,7 @@ pub fn prune_by_policy(workspace: &Path, policy_path: &Path, keep: &[RunId]) -> 
 mod interrupted_tests {
     use super::*;
     use crate::event::{RunEvent, RunStatus};
-    use shikigami_core::ScenarioId;
+    use shikigami_core::FlowId;
 
     fn started(run_id: &RunId) -> RunEventEnvelope {
         RunEventEnvelope {
@@ -341,8 +341,8 @@ mod interrupted_tests {
             at: time::OffsetDateTime::now_utc(),
             call_path: Vec::new(),
             event: RunEvent::RunStarted {
-                scenario_id: ScenarioId::new("scn_a"),
-                scenario_name: "A".into(),
+                flow_id: FlowId::new("scn_a"),
+                flow_name: "A".into(),
                 revision: 3,
                 origin: crate::RunOrigin::new(crate::RunTrigger::Cli),
             },
@@ -481,7 +481,7 @@ mod prune_tests {
             .unwrap()
             .prune_on_finish(&policy);
         let report: RunReport = serde_json::from_value(serde_json::json!({
-            "runId": mine.as_str(), "scenarioId": "scn_a", "scenarioName": "A",
+            "runId": mine.as_str(), "flowId": "scn_a", "flowName": "A",
             "revision": 1, "status": "succeeded", "startedAt": "2026-11-06T00:00:00Z",
             "finishedAt": "2026-11-06T00:00:01Z", "outputs": {}
         }))

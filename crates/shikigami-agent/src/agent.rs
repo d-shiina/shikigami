@@ -9,7 +9,7 @@ use jiff::Zoned;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use shikigami_core::{ErrorPayload, Policy, RunId, ScenarioId, ScenarioService};
+use shikigami_core::{ErrorPayload, FlowId, FlowService, Policy, RunId};
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{RunOptions, RunOrigin, RunReport, RunTrigger, Runtime};
 use tokio_util::sync::CancellationToken;
@@ -21,7 +21,7 @@ use crate::schedule::{Schedule, ScheduleState, Schedules, When, name_matches};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RunRequest {
-    pub scenario_id: ScenarioId,
+    pub flow_id: FlowId,
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub inputs: Map<String, Value>,
     #[serde(default)]
@@ -33,8 +33,8 @@ pub struct RunRequest {
 #[serde(rename_all = "camelCase")]
 pub struct RunningRun {
     pub run_id: RunId,
-    pub scenario_id: ScenarioId,
-    pub scenario_name: String,
+    pub flow_id: FlowId,
+    pub flow_name: String,
     pub origin: RunOrigin,
     pub started_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -47,7 +47,7 @@ pub struct RunningRun {
 pub struct ScheduleStatus {
     pub id: String,
     pub name: String,
-    pub scenario_id: ScenarioId,
+    pub flow_id: FlowId,
     pub enabled: bool,
     /// When it fires next (local time, RFC 3339); none for file triggers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -92,7 +92,7 @@ struct Loop {
 }
 
 pub struct Agent {
-    svc: Arc<ScenarioService>,
+    svc: Arc<FlowService>,
     runtime: Runtime,
     started_at: String,
     active: Mutex<HashMap<RunId, Active>>,
@@ -117,7 +117,7 @@ fn now_text() -> String {
 impl Agent {
     /// `runtime` should already have the workspace's secrets and policy
     /// (`with_secrets`, `with_policy`) and the PC-wide locks.
-    pub fn new(svc: Arc<ScenarioService>, runtime: Runtime) -> Arc<Self> {
+    pub fn new(svc: Arc<FlowService>, runtime: Runtime) -> Arc<Self> {
         Arc::new(Self {
             svc,
             runtime,
@@ -129,7 +129,7 @@ impl Agent {
         })
     }
 
-    pub fn service(&self) -> &ScenarioService {
+    pub fn service(&self) -> &FlowService {
         &self.svc
     }
 
@@ -141,15 +141,15 @@ impl Agent {
         lock(&self.hooks).push(hook);
     }
 
-    /// Starts the published version of a scenario. Fails like
+    /// Starts the published version of a flow. Fails like
     /// `shikigami run` does (`NOT_PUBLISHED`, `UNATTENDED_NOT_ALLOWED`, …).
     pub fn start(
         self: &Arc<Self>,
         request: RunRequest,
         schedule_id: Option<String>,
     ) -> Result<RunId, ErrorPayload> {
-        let run = self.svc.unattended_run(&request.scenario_id)?;
-        let project_dir = self.svc.project_dir(&request.scenario_id).ok();
+        let run = self.svc.unattended_run(&request.flow_id)?;
+        let project_dir = self.svc.project_dir(&request.flow_id).ok();
         let run_id = RunId::generate();
         let root = self.local_root().to_path_buf();
         let mut recorder = RunRecorder::create(&root, &run_id)
@@ -163,16 +163,16 @@ impl Agent {
         if origin.trigger.is_none() {
             origin.trigger = Some(RunTrigger::Remote);
         }
-        let scenario_name = run.scenario.name.clone();
+        let flow_name = run.flow.name.clone();
         let handle = self
             .runtime
             .start(
-                run.scenario,
+                run.flow,
                 RunOptions {
                     inputs: request.inputs,
                     run_id: Some(run_id.clone()),
                     version: Some(run.version),
-                    subscenarios: run.subscenarios,
+                    subflows: run.subflows,
                     project_dir,
                     full_run: true,
                     origin: origin.clone(),
@@ -192,8 +192,8 @@ impl Agent {
             Active {
                 info: RunningRun {
                     run_id: run_id.clone(),
-                    scenario_id: request.scenario_id,
-                    scenario_name,
+                    flow_id: request.flow_id,
+                    flow_name,
                     origin,
                     started_at: now_text(),
                     schedule_id,
@@ -262,7 +262,7 @@ impl Agent {
                 .map(|s| ScheduleStatus {
                     id: s.id.clone(),
                     name: s.name.clone(),
-                    scenario_id: s.scenario_id.clone(),
+                    flow_id: s.flow_id.clone(),
                     enabled: s.enabled,
                     next: s
                         .enabled
@@ -418,7 +418,7 @@ impl Agent {
         if folder.is_absolute() {
             Some(folder.to_path_buf())
         } else {
-            Some(self.svc.project_dir(&s.scenario_id).ok()?.join(folder))
+            Some(self.svc.project_dir(&s.flow_id).ok()?.join(folder))
         }
     }
 
@@ -520,7 +520,7 @@ impl Agent {
         let mut inputs = s.inputs.clone();
         inputs.extend(extra);
         let request = RunRequest {
-            scenario_id: s.scenario_id.clone(),
+            flow_id: s.flow_id.clone(),
             inputs,
             origin: RunOrigin {
                 job_id: Some(s.id.clone()),
@@ -544,12 +544,12 @@ impl Agent {
             .unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
         let report = RunReport {
             run_id: RunId::generate(),
-            scenario_id: s.scenario_id.clone(),
-            scenario_name: self
+            flow_id: s.flow_id.clone(),
+            flow_name: self
                 .svc
-                .get(&s.scenario_id)
+                .get(&s.flow_id)
                 .map(|sc| sc.name)
-                .unwrap_or_else(|_| s.scenario_id.to_string()),
+                .unwrap_or_else(|_| s.flow_id.to_string()),
             revision: 0,
             version: None,
             status: shikigami_runtime::RunStatus::Failed,
@@ -560,7 +560,7 @@ impl Agent {
                 ..shikigami_runtime::RunError::new(e.code.clone(), e.message.clone())
             }),
             outputs: Map::new(),
-            subscenarios: Vec::new(),
+            subflows: Vec::new(),
             origin: RunOrigin {
                 job_id: Some(s.id.clone()),
                 ..RunOrigin::new(RunTrigger::Schedule).requested_by(s.name.clone())

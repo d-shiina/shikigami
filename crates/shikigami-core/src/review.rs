@@ -1,8 +1,8 @@
-//! Review evidence: what an AI changed in a scenario, why, and how it checked
+//! Review evidence: what an AI changed in a flow, why, and how it checked
 //! the result, so a human can review a revision in Studio and send it back
 //! with a reason the AI reads over MCP.
 //!
-//! Four kinds of records hang off a scenario's revisions:
+//! Four kinds of records hang off a flow's revisions:
 //!
 //! - the change journal ([`crate::store::HistoryEntry`]) carries the AI's own
 //!   `summary` of each edit and the IDs of the steps it touched;
@@ -14,14 +14,14 @@
 //!   reason and notes on individual steps).
 //!
 //! Everything lives in the per-PC part of the workspace next to the journal
-//! (`history/<scenario-id>/evidence.jsonl`, `observations/<id>/`).
+//! (`history/<flow-id>/evidence.jsonl`, `observations/<id>/`).
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use crate::ids::{ObservationId, RunId, ScenarioId, StepId};
+use crate::ids::{FlowId, ObservationId, RunId, StepId};
 use crate::ops::EditOp;
 use crate::store::{Actor, ChangeKind, HistoryEntry};
 
@@ -102,7 +102,8 @@ pub struct Observation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ObservationLink {
-    pub scenario_id: ScenarioId,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: FlowId,
     pub revision: u64,
 }
 
@@ -179,7 +180,7 @@ impl From<TestRun> for EvidenceDetail {
     }
 }
 
-/// One line of `history/<scenario-id>/evidence.jsonl`.
+/// One line of `history/<flow-id>/evidence.jsonl`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Evidence {
@@ -288,15 +289,16 @@ impl From<&HistoryEntry> for ChangeRecord {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewTimeline {
-    pub scenario_id: ScenarioId,
-    /// Current revision of the scenario.
+    #[serde(alias = "scenarioId")]
+    pub flow_id: FlowId,
+    /// Current revision of the flow.
     pub revision: u64,
     /// Changes and evidence after this revision are listed (by default the
     /// last approved revision, or 0).
     pub since_revision: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_approval: Option<Evidence>,
-    /// The latest review when it sent the scenario back and nobody approved
+    /// The latest review when it sent the flow back and nobody approved
     /// it since: what the AI still has to address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_feedback: Option<Evidence>,
@@ -308,7 +310,7 @@ pub struct ReviewTimeline {
 
 /// Builds the timeline from the full journal and evidence log.
 pub(crate) fn timeline(
-    scenario_id: ScenarioId,
+    flow_id: FlowId,
     revision: u64,
     since: Option<u64>,
     journal: &[HistoryEntry],
@@ -322,7 +324,7 @@ pub(crate) fn timeline(
     let open_feedback = open_feedback(&evidence);
     let since = since.unwrap_or_else(|| last_approval.as_ref().map_or(0, |a| a.revision));
     ReviewTimeline {
-        scenario_id,
+        flow_id,
         revision,
         since_revision: since,
         last_approval,

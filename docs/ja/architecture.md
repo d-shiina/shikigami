@@ -2,13 +2,13 @@
 
 [English](../architecture.md) | 日本語
 
-> MCP ネイティブなデスクトップ RPA。AI と人間が **同じシナリオ** を作成・編集・実行・保守する。
+> MCP ネイティブなデスクトップ RPA。AI と人間が **同じフロー** を作成・編集・実行・保守する。
 >
 > 本書は設計の正本。実装状況は [§13](#13-実装状況と制約) を参照。技術調査は [research.md](../research.md)。
 
 ## 0. 設計原則
 
-1. **Scenario Core が唯一の正規データ管理層。** GUI・MCP・CLI・Runtime はすべて Core の API（`ScenarioService`）を通じてのみシナリオを読み書きする。シナリオ処理ロジックを重複実装しない。
+1. **Flow Core が唯一の正規データ管理層。** GUI・MCP・CLI・Runtime はすべて Core の API（`FlowService`）を通じてのみフローを読み書きする。フロー処理ロジックを重複実装しない。
 2. **すべての変更は EditOp。** 変更は逆操作を持つ `EditOp` の列として表現する。Undo/Redo、競合検出、変更履歴、AI 修正案の差分提示はすべてこの上に成り立つ。
 3. **実行に AI も GUI も要らない。** Runtime はヘッドレスのライブラリで、CLI・Studio・MCP サーバーから同じものを使う。
 4. **ローカルファースト。** データはローカルのワークスペース（ファイル）に置き、クラウドに依存しない。
@@ -31,14 +31,14 @@ flowchart LR
     CLI["shikigami CLI"]
 
     subgraph libs[共有ライブラリ（Rust）]
-      CORE["shikigami-core<br/>Scenario Core"]
+      CORE["shikigami-core<br/>Flow Core"]
       RT["shikigami-runtime<br/>RPA Runtime"]
       WIN["shikigami-adapter-windows<br/>(UIA, 専用MTAスレッド)"]
       BRC["shikigami-adapter-browser<br/>(Node子プロセスのクライアント)"]
     end
 
     NODE["browser-adapter<br/>(Node.js + Playwright)"]
-    WS[("ワークスペース<br/>scenarios/*.json<br/>history/ runs/<br/>shikigami.db")]
+    WS[("ワークスペース<br/>flows/*.json<br/>history/ runs/<br/>shikigami.db")]
   end
 
   CC & CX & CU -- MCP stdio --> MCP
@@ -63,27 +63,27 @@ flowchart LR
 
 Studio と MCP サーバーは **別プロセスで同じワークスペースを共有** する。同期は §7 の「ファイルを正とした楽観的並行制御＋変更通知」で行う。
 
-### 処理の流れ：AI によるシナリオ生成（§6 のフロー）
+### 処理の流れ：AI によるフロー生成（§6 のフロー）
 
 ```mermaid
 sequenceDiagram
   participant AI as AIクライアント
   participant M as shikigami mcp
-  participant C as Scenario Core
+  participant C as Flow Core
   participant A as Adapter
   participant S as Studio
   AI->>M: inspect_ui / capture_screen
   M->>A: UI要素を取得（Role/AutomationId 等）
   AI->>M: click_element / type_text（試行）
   M->>A: 実操作して結果を返す
-  AI->>M: create_scenario / add_step（検証済みの操作を記録）
+  AI->>M: create_flow / add_step（検証済みの操作を記録）
   M->>C: EditOp を適用（revision+1, 履歴保存）
   C-->>S: ファイル変更通知 → 再読込
-  AI->>M: validate_scenario → run_scenario
+  AI->>M: validate_flow → run_flow
   Note over M: Runtime が AI なしで再実行
 ```
 
-**AI の操作（探索）とシナリオの保存は別ツール。** `click_element` 等の UI 操作ツールはシナリオを変更しない。シナリオに残すには明示的に `add_step` する。
+**AI の操作（探索）とフローの保存は別ツール。** `click_element` 等の UI 操作ツールはフローを変更しない。フローに残すには明示的に `add_step` する。
 
 ## 2. Monorepo 構成
 
@@ -93,7 +93,7 @@ shikigami/
 ├─ package.json               pnpm ワークスペース（scripts のみ）
 ├─ pnpm-workspace.yaml
 ├─ crates/
-│  ├─ shikigami-core/         Scenario Core（モデル・式・検証・EditOp・履歴・保存・Schema出力）
+│  ├─ shikigami-core/         Flow Core（モデル・式・検証・EditOp・履歴・保存・Schema出力）
 │  ├─ shikigami-runtime/      RPA Runtime（インタプリタ・Handler IF・実行記録）
 │  ├─ shikigami-cli/          CLI（`shikigami` バイナリ）
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
@@ -115,7 +115,7 @@ shikigami/
 │  └─ browser-adapter/        [Phase 3] Node.js + Playwright
 ├─ plugins/shikigami/        Claude Code プラグイン（MCP 設定＋スキル）
 ├─ schemas/                   生成された JSON Schema（コミット対象、CI でズレ検出）
-├─ examples/                  サンプルシナリオ（テストでも使用）
+├─ examples/                  サンプルフロー（テストでも使用）
 └─ docs/                      設計書・調査・アセット
 ```
 
@@ -125,9 +125,9 @@ shikigami/
 
 | クレート | 依存 | 主な公開 API |
 |---|---|---|
-| `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Scenario`, `Step`, `EditOp`, `ScenarioService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
+| `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Flow`, `Step`, `EditOp`, `FlowService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
 | `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
-| `shikigami-cli` | core, runtime, mcp, clap | `shikigami scenario/run/validate/step-types/schema/mcp` |
+| `shikigami-cli` | core, runtime, mcp, clap | `shikigami flow/run/validate/step-types/schema/mcp` |
 | `shikigami-studio` | core, runtime, tauri, notify | Tauri コマンド（§7.1） |
 | `shikigami-mcp` | core, runtime, rmcp | `ShikigamiMcp`（MCP ツール、§6）, `serve_stdio` |
 | `shikigami-adapter-*` (P3/P4) | runtime | `StepTypeDef` + `ActionHandler` の組 |
@@ -136,9 +136,9 @@ shikigami/
 
 コード品質ルール：`unsafe_code = "forbid"`（Windows Adapter のみ例外として局所的に許可予定）、`clippy::unwrap_used/expect_used/panic = warn`（CI では `-D warnings`）。
 
-## 4. Scenario Schema
+## 4. Flow Schema
 
-正規形式は JSON（`schemas/scenario.schema.json`）。例：[examples/invoice-summary.json](../../examples/invoice-summary.json)。
+正規形式は JSON（`schemas/flow.schema.json`）。例：[examples/invoice-summary.json](../../examples/invoice-summary.json)。
 
 ```jsonc
 {
@@ -168,7 +168,7 @@ shikigami/
 
 ### 設計のポイント
 
-- **ファイル上の名前は `step`**。Studio とこの文書ではシナリオの各要素を「ノード」と呼ぶが、シナリオファイルと MCP のツールでは `step` の名前のまま（`steps`・`stepId`・`add_step`・`StepRegistry`）。
+- **ファイル上の名前は `step`**。Studio とこの文書ではフローの各要素を「ノード」と呼ぶが、フローファイルと MCP のツールでは `step` の名前のまま（`steps`・`stepId`・`add_step`・`StepRegistry`）。
 - **全ノードが同一形状**（`id` / `type` / `params` / `blocks` / 共通オプション）。制御フローは `blocks` に名前付きの子リストを持つ木構造。
 - **ノード参照は常に安定 ID。** 位置（index）は参照に使わないため、追加・削除・移動で他の参照が壊れない。ID は `stp_` + UUIDv7。
 - **`params` は型ごとの JSON Schema で検証**（`StepRegistry` が保持）。新しいノード型はスキーマ本体を変えずに追加できる。
@@ -192,7 +192,7 @@ shikigami/
 | `control.fail` | `message`, `code` で失敗させる |
 | `variable.set` | `name` に `value`（テンプレート可）または `expression` を代入 |
 | `log.message` | 実行ログ出力 |
-| `scenario.call` | `scenario`（ID）, `inputs`, `outputs` で別のシナリオを 1 ノードとして呼ぶ（[設計](../design/subscenarios.md)） |
+| `flow.call` | `flow`（ID）, `inputs`, `outputs` で別のフローを 1 ノードとして呼ぶ（[設計](../design/subflows.md)） |
 | `flow.delay` | 時間指定待機（完了待ちには `wait.until` を使う） |
 
 ## 5. Adapter Interface
@@ -212,7 +212,7 @@ Runtime::builder()
     .build();
 ```
 
-- ハンドラーは **シナリオ変数に直接触れない**。入力は展開済み `params`、出力は戻り値（`saveAs` で変数へ）。アダプターがシナリオ状態に依存しないため単体テストしやすい。
+- ハンドラーは **フロー変数に直接触れない**。入力は展開済み `params`、出力は戻り値（`saveAs` で変数へ）。アダプターがフロー状態に依存しないため単体テストしやすい。
 - タイムアウト・リトライ・キャンセル・`onError` は Runtime 側で一律に処理する。ハンドラーは `cancel` を監視して長い処理を中断する。
 - `StepError::retryable=false`（例：パラメーター不正）はリトライしない。
 - 失敗時の証跡（UI 要素スナップショット、スクリーンショットのパス、期待状態と実状態）は `StepError.details` に入れ、実行記録と MCP から AI が取得できる（§8 / §6）。
@@ -236,7 +236,7 @@ Runtime::builder()
 
 - `windows` クレートで IUIAutomation を直接利用。`uiautomation` クレートは単独メンテのため依存せず参考に留める。
 - **専用ワーカースレッド**（ウィンドウを持たない）で `CoInitializeEx(COINIT_MULTITHREADED)`。全 UIA 呼び出しをこのスレッドへの要求キュー経由にする（Microsoft の推奨）。
-- 要素はリクエスト内でのみ保持し、スレッド外へ生ポインタを出さない。シナリオには Target（意味情報）だけを保存し、実行時に毎回解決する。
+- 要素はリクエスト内でのみ保持し、スレッド外へ生ポインタを出さない。フローには Target（意味情報）だけを保存し、実行時に毎回解決する。
 - `IUIAutomation2` の接続・トランザクションタイムアウトで応答停止アプリから保護。権限差（管理者権限のアプリは非管理者から操作不可）は専用エラー `ELEVATION_REQUIRED` で返す。
 - **実装済み**（[desktop.md](desktop.md)）：クレート `shikigami-desktop`、ノード型 `desktop.*` 11 種、MCP の `inspect_ui`。ノードはアプリの技術（Win32 / WPF / SAP GUI / Java）で分けず 1 セットとし、掴み方はウィンドウから自動で選ぶ（今は UI Automation のみ。SAP GUI と Java のウィンドウは判別して注記する）。
 
@@ -249,18 +249,18 @@ Runtime::builder()
 
 ## 6. MCP Tool Interface（Phase 2）
 
-> **実装状況**：シナリオ・ノード・実行の各ツール（UI 操作系と `debug_scenario` / `test_step` を除く）は実装済み。`get_history`、`list_runs`、`undo` / `redo` を追加し、実行ログは `get_run_logs(runId, afterSeq?)` とした。使い方・クライアント別の設定は [mcp.md](mcp.md)。UI 操作系は Phase 3 / 4。
+> **実装状況**：フロー・ノード・実行の各ツール（UI 操作系と `debug_flow` / `test_step` を除く）は実装済み。`get_history`、`list_runs`、`undo` / `redo` を追加し、実行ログは `get_run_logs(runId, afterSeq?)` とした。使い方・クライアント別の設定は [mcp.md](mcp.md)。UI 操作系は Phase 3 / 4。
 
 全ツールは Core / Runtime / Adapter を呼ぶだけの薄い層。入力スキーマは Rust 型から自動生成し、出力は構造化 JSON（`structuredContent`）で返す。エラーは §9 の `ErrorPayload` をそのまま返す。
 
 | 分類 | ツール | 主な入力 → 出力 | 権限区分 |
 |---|---|---|---|
-| シナリオ | `list_scenarios` | → `ScenarioSummary[]` | read |
-|  | `get_scenario` | `id` → `Scenario` | read |
-|  | `create_scenario` | `NewScenario` → `EditOutcome` | write |
-|  | `update_scenario` | `id, expectedRevision?, patch \| ops[]` → `EditOutcome` | write |
-|  | `delete_scenario` | `id, expectedRevision` → ok（ゴミ箱へ） | write・**要承認** |
-|  | `validate_scenario` | `id \| scenario` → `ValidationReport` | read |
+| フロー | `list_flows` | → `FlowSummary[]` | read |
+|  | `get_flow` | `id` → `Flow` | read |
+|  | `create_flow` | `NewFlow` → `EditOutcome` | write |
+|  | `update_flow` | `id, expectedRevision?, patch \| ops[]` → `EditOutcome` | write |
+|  | `delete_flow` | `id, expectedRevision` → ok（ゴミ箱へ） | write・**要承認** |
+|  | `validate_flow` | `id \| flow` → `ValidationReport` | read |
 | ノード | `add_step` / `update_step` / `remove_step` / `move_step` | 各 `EditOp` + `expectedRevision?` → `EditOutcome` | write |
 |  | `list_step_types` | → `StepTypeDef[]` | read |
 |  | `get_step_schema` | `type` → params JSON Schema | read |
@@ -269,15 +269,15 @@ Runtime::builder()
 |  | `click_element` / `type_text` / `select_element` | Target, 値 → 結果＋事後状態 | ui.act |
 |  | `wait_for_element` | Target, 状態, timeout → 結果 | ui.read |
 |  | `launch_application` / `navigate_browser` | パス・URL → 結果 | ui.act・許可リスト |
-| 実行 | `run_scenario` | `id, inputs` → `runId` | run |
-|  | `stop_scenario` | `runId` → ok | run |
+| 実行 | `run_flow` | `id, inputs` → `runId` | run |
+|  | `stop_flow` | `runId` → ok | run |
 |  | `get_run_status` | `runId` → `RunSnapshot \| RunReport` | read |
 |  | `get_run_logs` | `runId, afterSeq?, variable?` → `RunEventEnvelope[]` | read |
-|  | `debug_scenario` | `id, breakpoints[]` → `runId`（ステップ実行） | run |
-|  | `test_step` | `Step`（単体）, 変数 → 実行結果（シナリオは変更しない） | ui.act |
+|  | `debug_flow` | `id, breakpoints[]` → `runId`（ステップ実行） | run |
+|  | `test_step` | `Step`（単体）, 変数 → 実行結果（フローは変更しない） | ui.act |
 
 - **書き込み系は `expectedRevision` を受け付ける**。省略時は最新に適用（AI の利便性）、指定時は競合で `REVISION_CONFLICT`。
-- **`update_scenario` は ops 配列も受け付ける**（複数変更を1リビジョンで原子的に適用）。
+- **`update_flow` は ops 配列も受け付ける**（複数変更を1リビジョンで原子的に適用）。
 - 修復提案（Phase 6）は `propose_fix`（ops 配列を提案として保存）→ ユーザー承認 → `apply_proposal`。直接は適用しない（§8）。
 - 同梱の **Claude Code プラグイン**（MCP 設定＋スキル `SKILL.md`）で、AI に「UI を調べる → 意味的 Target を使う → validate → AI なし実行で確認」という作法を教える。
 
@@ -289,20 +289,20 @@ Runtime::builder()
 
 | コマンド | 対応する Core / Runtime API |
 |---|---|
-| `list_scenarios`, `get_scenario`, `create_scenario`, `duplicate_scenario`, `delete_scenario` | `ScenarioService::{list,get,create,duplicate,delete}` |
-| `edit_scenario(id, expectedRevision, ops)` | `ScenarioService::edit` |
-| `undo`, `redo`, `undo_state` | `ScenarioService::{undo,redo,undo_state}` |
-| `validate_scenario`, `list_step_types`, `scenario_history` | 同名 API |
-| `run_scenario`, `stop_run`, `run_status` | `Runtime::start`, `RunHandle::cancel`, `RunSnapshot` |
+| `list_flows`, `get_flow`, `create_flow`, `duplicate_flow`, `delete_flow` | `FlowService::{list,get,create,duplicate,delete}` |
+| `edit_flow(id, expectedRevision, ops)` | `FlowService::edit` |
+| `undo`, `redo`, `undo_state` | `FlowService::{undo,redo,undo_state}` |
+| `validate_flow`, `list_step_types`, `flow_history` | 同名 API |
+| `run_flow`, `stop_run`, `run_status` | `Runtime::start`, `RunHandle::cancel`, `RunSnapshot` |
 
-イベント：`scenario-changed { scenarioId }`（ファイル監視、他プロセスの変更も含む）、`run-event`（`RunEventEnvelope`）。
+イベント：`flow-changed { flowId }`（ファイル監視、他プロセスの変更も含む）、`run-event`（`RunEventEnvelope`）。
 
-### 7.2 プロセス間のシナリオ同期（Studio ⇔ MCP ⇔ CLI）
+### 7.2 プロセス間のフロー同期（Studio ⇔ MCP ⇔ CLI）
 
 - 正はワークスペースのファイル。全変更は「排他ロック（`.lock`）→ 再読込 → `revision` 照合 → 適用 → 一時ファイルへ書いて rename」。読み手は書きかけを見ない。
 - 変更通知は OS のファイル監視（`notify`）。Studio は通知を受けて Core から再取得し、表示中なら差し替えて「外部での変更を反映しました」と表示。
 - Studio の編集は常に `expectedRevision` 付き。AI が先に変更していれば `REVISION_CONFLICT` → 自動で再読込し、ユーザーに知らせる（上書きしない）。
-- Undo/Redo スタックはシナリオごとにワークスペースへ保存（`history/<id>/undo.json`）するので、**AI の変更を Studio から元に戻せる**。スタックは自身が対応する `revision` を記録しており、`git checkout` 等の外部変更で不整合になったら破棄する。
+- Undo/Redo スタックはフローごとにワークスペースへ保存（`history/<id>/undo.json`）するので、**AI の変更を Studio から元に戻せる**。スタックは自身が対応する `revision` を記録しており、`git checkout` 等の外部変更で不整合になったら破棄する。
 
 ### 7.3 Runtime ⇔ Browser Adapter（Phase 3）
 
@@ -318,7 +318,7 @@ Runtime::builder()
 
 ## 8. データベース設計
 
-**シナリオは JSON ファイル、運用データは SQLite** に分ける（§11 判断3）。Phase 1 は実行記録もファイル（JSONL）で実装済み。SQLite は Phase 2 で検索・一覧の高速化と監査ログのために導入し、ファイルを正とした索引として扱う。
+**フローは JSON ファイル、運用データは SQLite** に分ける（§11 判断3）。Phase 1 は実行記録もファイル（JSONL）で実装済み。SQLite は Phase 2 で検索・一覧の高速化と監査ログのために導入し、ファイルを正とした索引として扱う。
 
 ワークスペース配置：
 
@@ -327,14 +327,14 @@ Runtime::builder()
 ```text
 <workspace>/            既定: SHIKIGAMI_HOME > config.json の workspace > %APPDATA%\Shikigami\workspace
   workspace.json        任意。{"shared": true} なら共有ワークスペース
-  scenarios/<id>.json   シナリオ（正）
+  flows/<id>.json   フロー（正）
   versions/<id>/<n>.json  名前付きの版（不変のスナップショット）
   history/<id>/journal.jsonl  変更ジャーナル（追記のみ・監査）
   history/<id>/undo.json      Undo/Redo スタック
   runs/<run-id>/events.jsonl  実行イベント（機密値マスク済み）
   runs/<run-id>/report.json   実行結果
   runs/<run-id>/artifacts/    スクリーンショット等（Phase 3〜）
-  trash/                      削除済みシナリオ
+  trash/                      削除済みフロー
   shikigami.db                SQLite（Phase 2〜）
 ```
 
@@ -355,11 +355,11 @@ SQLite スキーマ（Phase 2 で導入予定）：
 
 ```sql
 CREATE TABLE runs (
-  run_id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, scenario_revision INTEGER NOT NULL,
+  run_id TEXT PRIMARY KEY, flow_id TEXT NOT NULL, flow_revision INTEGER NOT NULL,
   status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
   error_code TEXT, error_step_id TEXT, trigger TEXT NOT NULL  -- studio | mcp | cli | schedule
 );
-CREATE INDEX runs_by_scenario ON runs(scenario_id, started_at DESC);
+CREATE INDEX runs_by_flow ON runs(flow_id, started_at DESC);
 
 CREATE TABLE run_failures (               -- AI エラー解析用（§8 要件）
   run_id TEXT PRIMARY KEY REFERENCES runs(run_id),
@@ -373,7 +373,7 @@ CREATE TABLE audit_log (                  -- 操作監査（MCP ツール呼び�
 );
 
 CREATE TABLE proposals (                  -- AI 修復案（承認後に適用）
-  id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, base_revision INTEGER NOT NULL,
+  id TEXT PRIMARY KEY, flow_id TEXT NOT NULL, base_revision INTEGER NOT NULL,
   ops TEXT NOT NULL, rationale TEXT, status TEXT NOT NULL,  -- pending | applied | rejected
   created_at TEXT NOT NULL, decided_at TEXT
 );
@@ -388,14 +388,14 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 | 層 | 型 | 代表コード |
 |---|---|---|
-| Core | `CoreError` | `SCENARIO_NOT_FOUND`, `REVISION_CONFLICT`, `VALIDATION_FAILED`, `STEP_NOT_FOUND`, `DUPLICATE_STEP_ID`, `INVALID_EDIT`, `UNSUPPORTED_SCHEMA_VERSION`, `STORAGE_ERROR` |
+| Core | `CoreError` | `FLOW_NOT_FOUND`, `REVISION_CONFLICT`, `VALIDATION_FAILED`, `STEP_NOT_FOUND`, `DUPLICATE_STEP_ID`, `INVALID_EDIT`, `UNSUPPORTED_SCHEMA_VERSION`, `STORAGE_ERROR` |
 | 検証 | `ValidationIssue`（error / warning, JSON Pointer 付き） | `UNKNOWN_STEP_TYPE`, `INVALID_PARAMS`, `EXPR_SYNTAX`, `UNKNOWN_BLOCK`, `NOT_IN_LOOP`, `UNDEFINED_VARIABLE`(warning) |
 | 式 | `ExprError` | `EXPR_SYNTAX`, `EXPR_UNDEFINED_VARIABLE`, `EXPR_UNKNOWN_FUNCTION`, `EXPR_TYPE` |
 | Runtime | `RunError { code, message, stepId, stepType, details }` | `STEP_TIMEOUT`, `RUN_CANCELLED`, `LOOP_LIMIT_EXCEEDED`, `MISSING_INPUT`, `INVALID_INPUT`, `UNSUPPORTED_STEP_TYPE` |
 | Adapter | `StepError { code, message, details, retryable }` | `ELEMENT_NOT_FOUND`, `ELEMENT_NOT_INTERACTABLE`, `NAVIGATION_FAILED`, `ADAPTER_CRASHED`, `ELEVATION_REQUIRED`, `APP_NOT_ALLOWED` |
 
 - **検証は「全件報告」**。最初のエラーで止めず、Studio と AI が一度に直せるようにする。
-- **下書きの許容**：編集途中の不完全なシナリオ（`if` の条件未入力など）は保存できる。ただし ID 重複・不正 ID などの **構造破壊は拒否**。実行は検証エラーがあると開始しない。
+- **下書きの許容**：編集途中の不完全なフロー（`if` の条件未入力など）は保存できる。ただし ID 重複・不正 ID などの **構造破壊は拒否**。実行は検証エラーがあると開始しない。
 - 失敗時は失敗ノード ID・型・コード・メッセージ・details を `RunReport` とイベントに必ず残す。`control.try` の `errorVar` / `onError: continue` の `lastError` にも同じ構造が入る。
 - Rust 内部では `unwrap` / `panic` を使わず `Result` で伝播（clippy で警告、CI で拒否）。
 
@@ -403,19 +403,19 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 | 脅威 / 要件 | 対策 | 実装時期 |
 |---|---|---|
-| 任意コード実行 | シナリオに汎用スクリプト実行を持たせない。式言語は副作用なしの許可関数のみ（`len`, `contains` 等）。ネスト深さ制限で DoS も防止 | **P1 済** |
-| パス・トラバーサル | シナリオ/実行 ID は `[A-Za-z0-9_-]{1,128}` のみ受理し、ファイル名に使う前に検査 | **P1 済** |
+| 任意コード実行 | フローに汎用スクリプト実行を持たせない。式言語は副作用なしの許可関数のみ（`len`, `contains` 等）。ネスト深さ制限で DoS も防止 | **P1 済** |
+| パス・トラバーサル | フロー/実行 ID は `[A-Za-z0-9_-]{1,128}` のみ受理し、ファイル名に使う前に検査 | **P1 済** |
 | ログへの機密混入 | `secret` 変数とシークレットの値をログ・エラー・イベント・出力記録で `***` にマスク。スクリーンショットのパスワード欄を塗りつぶし、AI に返すページ情報からも消す | **済** |
-| 誤操作の不可逆性 | シナリオ削除はゴミ箱へ移動。全変更をジャーナルに記録し Undo 可能 | **P1 済** |
+| 誤操作の不可逆性 | フロー削除はゴミ箱へ移動。全変更をジャーナルに記録し Undo 可能 | **P1 済** |
 | Studio の権限 | Tauri capability は `core:default` のみ。ファイル・シェル系プラグインを有効にしない。CSP 設定 | **P1 済** |
 | MCP 接続のアクセス制御 | 既定 stdio（起動した AI クライアントのみ接続可）。HTTP は localhost＋トークン＋Origin 検証 | P2 |
-| ツール権限 | `--allow read,write,run` でサーバー単位に公開するツールを制限。加えてワークスペースの `policy.json` の `ai` で、AI の `run_scenario` / `test_step`（ステップの危険度ごと）と `delete_scenario` を allow / ask / deny。ask は Studio に承認依頼を出し、人が許可した同じ内容だけを 1 回実行（[policy.md](policy.md)） | **済** |
+| ツール権限 | `--allow read,write,run` でサーバー単位に公開するツールを制限。加えてワークスペースの `policy.json` の `ai` で、AI の `run_flow` / `test_step`（ステップの危険度ごと）と `delete_flow` を allow / ask / deny。ask は Studio に承認依頼を出し、人が許可した同じ内容だけを 1 回実行（[policy.md](policy.md)） | **済** |
 | 操作対象の許可リスト | `policy.json` の `sites`（`browser.open`・`oauth.signIn`・`http.request`・`inspect_page`）と `apps`（`desktop.launch`・`process.run`）。ステップ型が `targets` で対象の param を宣言し、Runtime がテンプレート展開後の値を全実行で検査 | **済** |
 | ファイル操作の制限 | ファイル系ノードはワークスペース設定で許可したディレクトリ配下のみ | P3 |
-| 認証情報 | 人が Studio / CLI で名前を付けて登録。値は AES-256-GCM でワークスペースに暗号化保存し、鍵は Windows 資格情報マネージャーにワークスペースごと 1 件。シナリオと AI には名前だけ。登録サイト以外への入力を拒否。ログイン状態（セッション）も同じ鍵で暗号化（[secrets.md](secrets.md)） | **済** |
-| プロンプトインジェクション | `inspect_ui` / ページテキスト等の取得結果は「信頼できないデータ」として明示ラベル付きの構造化データで返し、指示として扱わないよう SKILL/ツール説明で明記。UI 操作ツールはシナリオを変更せず、シナリオ保存は別操作。危険操作は人間承認 | P2 |
-| 監査 | 全 MCP ツール呼び出し・承認・実行を `audit_log` に記録（シナリオ変更は P1 からジャーナル記録済み） | P2 |
-| 実行権限 | 無人実行（`shikigami run <id>`）は人が承認・公開した版だけを動かす。シナリオ単位で「AI からの実行」（`scenarios.<id>.aiRun`）と「無人実行」（`unattended`）を設定 | **済** |
+| 認証情報 | 人が Studio / CLI で名前を付けて登録。値は AES-256-GCM でワークスペースに暗号化保存し、鍵は Windows 資格情報マネージャーにワークスペースごと 1 件。フローと AI には名前だけ。登録サイト以外への入力を拒否。ログイン状態（セッション）も同じ鍵で暗号化（[secrets.md](secrets.md)） | **済** |
+| プロンプトインジェクション | `inspect_ui` / ページテキスト等の取得結果は「信頼できないデータ」として明示ラベル付きの構造化データで返し、指示として扱わないよう SKILL/ツール説明で明記。UI 操作ツールはフローを変更せず、フロー保存は別操作。危険操作は人間承認 | P2 |
+| 監査 | 全 MCP ツール呼び出し・承認・実行を `audit_log` に記録（フロー変更は P1 からジャーナル記録済み） | P2 |
+| 実行権限 | 無人実行（`shikigami run <id>`）は人が承認・公開した版だけを動かす。フロー単位で「AI からの実行」（`flows.<id>.aiRun`）と「無人実行」（`unattended`）を設定 | **済** |
 | ファイル操作の許可フォルダ | `file.*` の操作先を許可したフォルダに限る | 未 |
 
 ## 10.5 並行実行
@@ -424,10 +424,10 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 | 段階 | 内容 | 状況 |
 |---|---|---|
-| シナリオ間 | 複数のシナリオ（同じシナリオの複数実行を含む）を同時に実行。各実行は独立した非同期タスクで、変数・キャンセル・記録も実行ごとに独立 | **実装済み**（Runtime / MCP の `run_scenario` を複数呼べる） |
-| シナリオ内 | `control.parallel`（`branches` の各ノードを同時実行し全完了を待つ。1 つ失敗したら残りをキャンセル。`maxConcurrency` で同時数を制限）。複数ノードのブランチは `control.group` で包む | **実装済み** |
-| シナリオ内（ループ） | `control.forEach` の `concurrency`（「100 件を 5 並列」）。各回は変数のコピーで動き、外へ出せるのは `collect` の値だけ（`saveAs` に `items` と同じ順の配列で入る）。集計はループ後に `sum(results)` などで行う。最初の失敗で残りをキャンセルし、エラーの `details.index` に何件目かを入れる | **実装済み** |
-| 資源の調停 | ノード型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのノードを同時に動かさない。シナリオを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスはシナリオのフォルダーから解決し、フォルダーの外を指すと検証で `PATH_OUTSIDE_PROJECT` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み**。`desktop.input` は同じ Windows ユーザーの別プロセス（Studio・CLI・MCP サーバー）の間でも排他（`%TEMP%\shikigami-locks\` のロックファイルを共有）。取る前に、画面がロック中や切断されたリモートセッションでないかを調べ、入力できなければ `DESKTOP_UNAVAILABLE` で止める |
+| フロー間 | 複数のフロー（同じフローの複数実行を含む）を同時に実行。各実行は独立した非同期タスクで、変数・キャンセル・記録も実行ごとに独立 | **実装済み**（Runtime / MCP の `run_flow` を複数呼べる） |
+| フロー内 | `control.parallel`（`branches` の各ノードを同時実行し全完了を待つ。1 つ失敗したら残りをキャンセル。`maxConcurrency` で同時数を制限）。複数ノードのブランチは `control.group` で包む | **実装済み** |
+| フロー内（ループ） | `control.forEach` の `concurrency`（「100 件を 5 並列」）。各回は変数のコピーで動き、外へ出せるのは `collect` の値だけ（`saveAs` に `items` と同じ順の配列で入る）。集計はループ後に `sum(results)` などで行う。最初の失敗で残りをキャンセルし、エラーの `details.index` に何件目かを入れる | **実装済み** |
+| 資源の調停 | ノード型定義（`StepTypeDef.resources`）が「どの params が資源を指すか」を宣言し、Runtime がテンプレート展開後の params から資源キー（`desktop.input`、`file:c:\data\book.xlsx`、`window:…`、`browser:…`）を作って、同じキーのノードを同時に動かさない。フローを書く側（AI・人間）はロック名を書かない。ファイルパスは表記ゆれ（大文字小文字・`/`・`.`/`..`・`\\?\`）を正規化して同じキーにする。相対パスはフローのフォルダーから解決し、フォルダーの外を指すと検証で `PATH_OUTSIDE_PROJECT` 警告。`desktop.input` は排他、ブラウザはコンテキスト単位で並列、データ処理は無制限 | **実装済み**。`desktop.input` は同じ Windows ユーザーの別プロセス（Studio・CLI・MCP サーバー）の間でも排他（`%TEMP%\shikigami-locks\` のロックファイルを共有）。取る前に、画面がロック中や切断されたリモートセッションでないかを調べ、入力できなければ `DESKTOP_UNAVAILABLE` で止める |
 
 - **デスクトップ操作は物理的に 1 組**：Windows のマウス・キーボード入力（SendInput）と前面ウィンドウは画面に 1 つしかないため、これらを使うノードは `desktop.input` の使用権を取得してから実行する（取得待ちの時間はタイムアウトに含めない）。UI Automation のパターン操作（Invoke / Value / SelectionItem など）はフォーカス不要なものが多く、使用権なしで並行実行できるよう型ごとに宣言する（実装済み：`desktop.click` / `setValue` などは使用権なし、`desktop.mouseClick` / `type` / `press` は使用権あり。どれも同じアプリ（`window:<process>`）へは 1 つずつ）。
 - **ブラウザは並列向き**：Playwright のブラウザコンテキストは独立しており、ヘッドレスなら多数を同時に動かせる（Phase 3）。
@@ -438,7 +438,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 ## 11. 重要な設計判断（採用理由・代替案・トレードオフ）
 
-### 判断1：シナリオは「ノード木（ブロック構造）」で表現する
+### 判断1：フローは「ノード木（ブロック構造）」で表現する
 
 - **採用理由**：AI が読み書きしやすく（JSON の入れ子がそのまま処理構造）、検証が容易（break がループ内か等）。ID 参照なので編集で壊れない。フローチャートは木から自動レイアウトで描ける。
 - **代替案**：ノード＋エッジのグラフ（BPMN 的）。任意の分岐・合流が書ける。
@@ -449,12 +449,12 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 - **採用理由**：MCP サーバーは AI クライアントが stdio で起動する別プロセスであり、GUI なしでも動く必要がある。共有デーモンなしで、ロック＋リビジョン照合＋アトミック書き込み＋ファイル監視だけで双方向編集が成立する。git での差分管理とも相性がよい。
 - **代替案A**：Studio 内に MCP サーバーを内蔵 → GUI 必須になり要件違反。
 - **代替案B**：常駐デーモン（ローカル RPC）を正とし、Studio/MCP はそのクライアント → 一貫性は強いが、プロセス管理・起動順・認証が増える。
-- **トレードオフ**：ファイル監視の遅延（数百 ms）があり、大量シナリオの一覧はファイル走査になる。同時編集は「後勝ち」ではなく「競合検出→再読込」なので安全。将来の複数ユーザー・リモート管理では B に移行できるよう、すべてのアクセスを `ScenarioService` に閉じ込めている。
+- **トレードオフ**：ファイル監視の遅延（数百 ms）があり、大量フローの一覧はファイル走査になる。同時編集は「後勝ち」ではなく「競合検出→再読込」なので安全。将来の複数ユーザー・リモート管理では B に移行できるよう、すべてのアクセスを `FlowService` に閉じ込めている。
 
-### 判断3：シナリオは JSON ファイル、運用データは SQLite
+### 判断3：フローは JSON ファイル、運用データは SQLite
 
-- **採用理由**：シナリオは人間・AI・git が直接扱える可読なテキストであるべき。実行履歴や監査ログは件数が増え、検索が必要なので DB が適する。
-- **代替案**：すべて SQLite。トランザクションは単純になるが、シナリオの差分レビュー・共有・バックアップがしにくい。
+- **採用理由**：フローは人間・AI・git が直接扱える可読なテキストであるべき。実行履歴や監査ログは件数が増え、検索が必要なので DB が適する。
+- **代替案**：すべて SQLite。トランザクションは単純になるが、フローの差分レビュー・共有・バックアップがしにくい。
 - **トレードオフ**：2 種類の永続化を持つ。Phase 1 はファイルのみで開始し、SQLite は必要になった時点（Phase 2）で導入する。
 
 ### 判断4：編集はすべて逆操作付きの EditOp
@@ -477,7 +477,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 ### 判断7：Runtime はツリー直接解釈のインタプリタ
 
-- **採用理由**：実行イベントのノード ID が編集中のシナリオと 1:1 で対応し、Studio でのハイライト・デバッグ・AI のエラー解析が単純になる。
+- **採用理由**：実行イベントのノード ID が編集中のフローと 1:1 で対応し、Studio でのハイライト・デバッグ・AI のエラー解析が単純になる。
 - **代替案**：バイトコード / 状態機械へのコンパイル。中断・再開（永続化）に有利。
 - **トレードオフ**：長時間実行の途中再開（クラッシュ後のレジューム）は現状できない。必要になれば実行位置（ノード ID のスタック）を記録する形で拡張する。
 
@@ -495,15 +495,15 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 ## 12. MVP の受け入れ基準
 
-最初の製品マイルストーン：**MCP クライアントから自然言語で Web 操作シナリオを作成し、GUI で確認・編集した後、AI なしの Runtime で同じ処理を再実行できる。**
+最初の製品マイルストーン：**MCP クライアントから自然言語で Web 操作フローを作成し、GUI で確認・編集した後、AI なしの Runtime で同じ処理を再実行できる。**
 
 | # | 基準 | 確認方法 |
 |---|---|---|
 | A1 | Claude Code / Codex から `shikigami mcp` に stdio 接続し、ツール一覧が取得できる | 手動 E2E（各クライアントの設定例を docs に記載） |
 | A2 | AI が `navigate_browser` → `inspect_ui` で要素を取得し、Role/Label ベースの Target で `click_element` / `type_text` できる | 自動 E2E（ローカルのテスト用 Web アプリ）＋手動 |
-| A3 | AI が `create_scenario` / `add_step` でシナリオを保存し、`validate_scenario` がエラー 0 を返す | 自動 E2E |
+| A3 | AI が `create_flow` / `add_step` でフローを保存し、`validate_flow` がエラー 0 を返す | 自動 E2E |
 | A4 | Studio を起動していれば、AI の変更が 1 秒以内に画面へ反映される | 自動（ファイル監視テスト）＋手動 |
-| A5 | Studio でノードを編集・追加・削除・移動でき、Undo/Redo できる。その結果を MCP の `get_scenario` で即座に取得できる | 自動（Core テスト）＋手動 |
+| A5 | Studio でノードを編集・追加・削除・移動でき、Undo/Redo できる。その結果を MCP の `get_flow` で即座に取得できる | 自動（Core テスト）＋手動 |
 | A6 | Studio と AI が同時に編集しても内容が失われない（競合時は検出して再読込） | 自動（Core テスト） |
 | A7 | `shikigami run <id>`（AI なし・GUI なし）で同じ Web 操作が成功し、終了コード 0 | 自動 E2E |
 | A8 | 失敗時、失敗ノード ID・エラーコード・スクリーンショット・UI 情報が保存され、MCP の `get_run_logs` で取得できる | 自動 E2E |
@@ -515,14 +515,14 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 ### 実装済み（テストあり）
 
 - Rust ワークスペース、pnpm ワークスペース、CI（Linux / Windows で fmt・clippy・test、TS の型チェック・テスト・生成物ズレ検出）
-- Scenario Core：モデル、JSON Schema 出力、検証（全件報告・JSON Pointer）、式言語、EditOp（全種の逆操作）、Undo/Redo（永続・プロセス間共有）、変更ジャーナル、ファイルストア（ロック・アトミック書き込み・リビジョン競合検出）、スキーマバージョン移行の枠組み
+- Flow Core：モデル、JSON Schema 出力、検証（全件報告・JSON Pointer）、式言語、EditOp（全種の逆操作）、Undo/Redo（永続・プロセス間共有）、変更ジャーナル、ファイルストア（ロック・アトミック書き込み・リビジョン競合検出）、スキーマバージョン移行の枠組み
 - Runtime：制御フロー全種、変数・入出力、テンプレート展開、タイムアウト、リトライ（指数バックオフ）、キャンセル、`onError`、機密値マスク、実行イベント・実行記録（JSONL）、ライブ状態（スナップショット）
-- CLI：`scenario list/show/create/import/edit/undo/redo/delete/history`、`run`（入力指定・JSON 出力・Ctrl+C でキャンセル）、`validate`、`step-types`、`schema export`
-- Studio（Tauri 2 + React）：シナリオ一覧・作成・複製・削除、フローチャート表示（木から自動レイアウト）、ノード追加・削除・上下移動、スキーマから生成するプロパティフォーム、変数編集、検証結果表示、Undo/Redo（Ctrl+Z / Ctrl+Y）、実行・停止・実行ログ・ノード状態のハイライト、**外部（MCP / CLI）変更のリアルタイム反映**、競合時の自動再読込
-- MCP サーバー（Phase 2）：`shikigami mcp`（stdio）、シナリオ・ノード・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
+- CLI：`flow list/show/create/import/edit/undo/redo/delete/history`、`run`（入力指定・JSON 出力・Ctrl+C でキャンセル）、`validate`、`step-types`、`schema export`
+- Studio（Tauri 2 + React）：フロー一覧・作成・複製・削除、フローチャート表示（木から自動レイアウト）、ノード追加・削除・上下移動、スキーマから生成するプロパティフォーム、変数編集、検証結果表示、Undo/Redo（Ctrl+Z / Ctrl+Y）、実行・停止・実行ログ・ノード状態のハイライト、**外部（MCP / CLI）変更のリアルタイム反映**、競合時の自動再読込
+- MCP サーバー（Phase 2）：`shikigami mcp`（stdio）、フロー・ノード・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
 - デスクトップアプリ操作（Phase 4）：`desktop.*` 11 種（UI Automation の専用 MTA スレッド、自動待ち、マウスなし操作と `desktop.input` を取る操作の区別、アプリ単位の排他、`app:` で登録したアプリにだけ入力するシークレット）と MCP の `inspect_ui`（[desktop.md](desktop.md)）
 - Excel（`excel.*` 8 種）：xlsx / xlsm を Excel なしで直接読み書き（表を行ごとに読む・行を追加・セル / 範囲の読み書き・シート一覧 / 追加）。ブックのパスで自動排他、一時ファイル経由の保存、Excel で開いているブックへの書き込みは `FILE_IN_USE`（[office.md](office.md)）
-- Claude Code プラグイン：`plugins/shikigami`（MCP 設定＋スキル `shikigami-scenarios`）とマーケットプレイス定義。`claude plugin validate` 合格
+- Claude Code プラグイン：`plugins/shikigami`（MCP 設定＋スキル `shikigami-flows`）とマーケットプレイス定義。`claude plugin validate` 合格
 
 ### 未実装（後続フェーズ）
 
@@ -532,8 +532,8 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 ### 既知の制約
 
-- Undo/Redo はシナリオ単位で **全クライアント共通の 1 本のスタック**（AI の変更を Studio から戻せる反面、ユーザーごとの Undo ではない）。
-- 変数スコープはフラット（ループ変数もシナリオ全体で 1 つ）。多くの RPA 製品と同じ挙動。
+- Undo/Redo はフロー単位で **全クライアント共通の 1 本のスタック**（AI の変更を Studio から戻せる反面、ユーザーごとの Undo ではない）。
+- 変数スコープはフラット（ループ変数もフロー全体で 1 つ）。多くの RPA 製品と同じ挙動。
 - 実行を取り消しても `control.try` の `finally` は実行する（最長 60 秒）。実行は `cancelled` で終わる。
 - 実行の途中再開（プロセス再起動後のレジューム）は未対応。プロセスが先に終わった実行（クラッシュ・シャットダウン・強制終了）は、次にどれかの Shikigami が実行を始めたときに `failed`・`RUN_INTERRUPTED` で閉じる。もう一度実行する。
 - Studio のフローチャートは表示用の自動レイアウトで、ノード位置は保存しない。

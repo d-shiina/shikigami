@@ -1,6 +1,6 @@
 [package]
 name = "shikigami-mcp"
-description = "Shikigami MCP server: lets AI clients edit and run scenarios through Scenario Core"
+description = "Shikigami MCP server: lets AI clients edit and run flows through Flow Core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

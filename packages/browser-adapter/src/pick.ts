@@ -3,7 +3,7 @@
 // `pick` draws a banner on the open page, outlines whatever the pointer is
 // over and catches the next click before the page sees it (so picking the
 // 「出荷」 button does not ship anything). The clicked element is turned
-// into a scenario Target (role + accessible name, as inspect_page lists
+// into a flow Target (role + accessible name, as inspect_page lists
 // them), with `nth` when the same target matches several elements.
 // `highlight` outlines targets for a moment so the person can see what a
 // step is about to touch. Both are used by AI clients (ask_user_to_pick,

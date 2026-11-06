@@ -1,4 +1,4 @@
-// The scenario's steps as a table of contents beside the flow chart: click
+// The flow's steps as a table of contents beside the flow chart: click
 // one (or use ↑↓) and the chart brings it into view.
 import { useEffect, useMemo, useRef } from "react";
 import { useStudio } from "../context";
@@ -21,7 +21,7 @@ const RUN_DOT: Record<string, string> = {
 export function OutlinePanel({ left = 12 }: { left?: number }) {
   const open = useStudio((s) => s.outlineOpen);
   const setOpen = useStudio((s) => s.setOutlineOpen);
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
   const runSteps = useStudio((s) => trailOf(s)?.steps);
@@ -30,7 +30,7 @@ export function OutlinePanel({ left = 12 }: { left?: number }) {
   const goTo = useStudio((s) => s.goTo);
   const pending = usePendingReview();
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
-  const items = useMemo(() => outline(scenario?.steps ?? [], defs), [scenario, defs]);
+  const items = useMemo(() => outline(flow?.steps ?? [], defs), [flow, defs]);
   const changed = useMemo(() => (reviewing ? summarize([...pending].reverse()).steps : new Map()), [reviewing, pending]);
   const errors = useMemo(
     () => new Set((validation?.issues ?? []).filter((i) => i.severity === "error" && i.stepId).map((i) => i.stepId)),
@@ -42,7 +42,7 @@ export function OutlinePanel({ left = 12 }: { left?: number }) {
     if (!selected) return;
     list.current?.querySelector(`[data-step="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: "nearest" });
   }, [selected, open]);
-  if (!open || !scenario) return null;
+  if (!open || !flow) return null;
 
   return (
     <nav style={{ left }} className="absolute top-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">

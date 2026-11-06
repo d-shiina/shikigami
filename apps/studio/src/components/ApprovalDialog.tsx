@@ -9,7 +9,7 @@ const quiet = "rounded px-3 py-1 text-sm text-slate-500 hover:bg-slate-100";
 
 /**
  * Opens by itself when an AI client asks to do something the workspace
- * policy holds for a person (run_scenario, test_step, delete_scenario).
+ * policy holds for a person (run_flow, test_step, delete_flow).
  * Approving lets that exact request run once; the AI repeats its call to use
  * it. One request at a time, oldest first; "Later" hides the ones seen so far
  * until a new request comes in.
@@ -41,7 +41,7 @@ export function ApprovalDialog() {
           {waiting.length > 1 && <span className="ml-auto text-xs text-slate-500">{t.approvalOthers(waiting.length - 1)}</span>}
         </div>
         <p className="text-sm">
-          {t.approvalSummary(t.approvalAction[request.action], request.scenarioName ?? null, request.stepTypes ?? [], t.approvalRisk[request.risk])}
+          {t.approvalSummary(t.approvalAction[request.action], request.flowName ?? null, request.stepTypes ?? [], t.approvalRisk[request.risk])}
         </p>
         <p className="text-xs text-slate-500">{by}</p>
         {request.reason && (

@@ -2,7 +2,7 @@
 
 English | [日本語](ja/desktop.md)
 
-Scenarios drive Windows apps (business systems, Notepad, the Excel window, SAP GUI…). Nodes are not split by app technology (Win32 / WinForms / WPF / UWP / SAP / Java): there is **only one set, `desktop.*`**. Shikigami looks at the target window and decides which technology to look inside it with. No AI is involved in running a scenario.
+Flows drive Windows apps (business systems, Notepad, the Excel window, SAP GUI…). Nodes are not split by app technology (Win32 / WinForms / WPF / UWP / SAP / Java): there is **only one set, `desktop.*`**. Shikigami looks at the target window and decides which technology to look inside it with. No AI is involved in running a flow.
 
 ## Writing a target
 
@@ -22,7 +22,7 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
 ### Picking on screen and named parts
 
 - In Studio, a desktop node's target has **Pick on screen** (Studio steps aside; the element under the mouse is framed; click it, Esc or right-click to cancel; the click never reaches the app) and **Highlight** (frames the target on the screen now). The target is built the sturdy way: an `id` unique in the window, else `role` + `name` (exact), else `nth`, else a `point` in the window. The same is `inspect_ui`-free for AI clients: the adapter's inspect takes `action: "pick"` / `"highlight"`.
-- **Named parts**: a scenario can keep targets under `parts` (`"parts": { "saveButton": { "label": "保存ボタン", "app": "desktop", "target": { … } } }`) and a node writes `"target": { "part": "saveButton" }` (nothing else beside it). When the screen changes, fix the part once. Studio lists them in the project panel (Parts) and turns a node's target into a part with **Make a part**; AI clients use the `setPart` / `removePart` edit ops. Browser nodes use parts the same way (`"app": "browser"`).
+- **Named parts**: a flow can keep targets under `parts` (`"parts": { "saveButton": { "label": "保存ボタン", "app": "desktop", "target": { … } } }`) and a node writes `"target": { "part": "saveButton" }` (nothing else beside it). When the screen changes, fix the part once. Studio lists them in the project panel (Parts) and turns a node's target into a part with **Make a part**; AI clients use the `setPart` / `removePart` edit ops. Browser nodes use parts the same way (`"app": "browser"`).
 
 ### Recording
 
@@ -33,7 +33,7 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
 - **Keys**: Enter, Tab, Escape, F1–F24 and shortcuts with Ctrl / Alt / Windows (`Control+S`) become `desktop.press`. Copy, paste, undo and select-all inside a field are part of the typing.
 - Not recorded: drags, the mouse wheel, Studio itself, and browsers (yet).
 
-When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one node per action where a new node would go (a target used twice or more becomes a named part). **Have the AI tidy up** hands the recording to the AI pane (or the clipboard) with what to do: waits where the screen changes, loops for repeated work, input variables for values that differ each time. The raw recording stays in the scenario's `logs/recordings/`. The adapter's inspect takes `action: "record"` for the same.
+When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one node per action where a new node would go (a target used twice or more becomes a named part). **Have the AI tidy up** hands the recording to the AI pane (or the clipboard) with what to do: waits where the screen changes, loops for repeated work, input variables for values that differ each time. The raw recording stays in the flow's `logs/recordings/`. The adapter's inspect takes `action: "record"` for the same.
 
 ## Nodes
 
@@ -64,7 +64,7 @@ When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one n
 - **Menus by their names**: `desktop.selectMenu` matches each name as shown, without access keys (`(F)`, `&`), a trailing `...` or the shortcut, and waits for each submenu to open. When an element's right-click menu does not open without the mouse (`NOT_SUPPORTED`), open it with `desktop.mouseClick` (`button: "right"`) and give `desktop.selectMenu` only the window
 - **Tables at once**: `desktop.getTable` reads grids that support it (WPF, many WinForms and Win32 grids) whole, including rows scrolled out of view; other lists give the rows the app has created. Empty cells are `""` (WinForms' `(null)` too), rows with no text are left out, and over 10000 rows it stops with `TABLE_TOO_LARGE` unless `maxRows` is set
 - **Reading a long list page by page**: `desktop.scroll` with `direction: "down"` returns `atEnd`, so a `control.while` loop can read, scroll and stop at the end
-- **One mouse and keyboard**: nodes marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Nodes on the same app (same `process`) also run one at a time. Scenarios never declare locks
+- **One mouse and keyboard**: nodes marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Nodes on the same app (same `process`) also run one at a time. Flows never declare locks
 
 ## How the AI inspects screens (MCP)
 
@@ -80,12 +80,12 @@ When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one n
     - button "Save" id=btnSave
 ```
 
-- `test_step`: runs a single node on the spot and returns its output and the windows after it, so the AI can walk through the screens before writing the scenario
+- `test_step`: runs a single node on the spot and returns its output and the windows after it, so the AI can walk through the screens before writing the flow
 - The contents of password fields appear neither in the list nor in `desktop.getValue`
 
 ## Logins (secrets)
 
-Register passwords under 🔑 Secrets in Studio and write only the name in the scenario ([secrets.md](secrets.md)). To type into a desktop app, add **`app:<executable>`** (e.g. `app:billing.exe`) to the secret's allowed sites and apps. Apps that are not listed never receive it.
+Register passwords under 🔑 Secrets in Studio and write only the name in the flow ([secrets.md](secrets.md)). To type into a desktop app, add **`app:<executable>`** (e.g. `app:billing.exe`) to the secret's allowed sites and apps. Apps that are not listed never receive it.
 
 ```json
 { "type": "desktop.setValue",
@@ -142,7 +142,7 @@ When the target window belongs to SAP GUI for Windows and SAP GUI Scripting is e
 - **Enable scripting** (once, by the SAP administrator and on each PC): on the SAP server, transaction RZ11 sets `sapgui/user_scripting` to `TRUE`; in SAP GUI, Options > Accessibility & Scripting > Scripting: "Enable scripting" on, and the two "Notify when a script…" boxes off (otherwise SAP GUI asks at every step)
 - `inspect_ui` lists SAP components with their ids (`wnd[0]/usr/txtRSYST-BNAME`) and the same roles as other apps (`textbox`, `button`, `checkbox`, `combobox`, `tab`, `table`, `grid` for ALV grids…). Copy them as `element.id`. Ids from a recorded SAP GUI script (`/app/con[0]/ses[0]/wnd[0]/…`) and ids inside the target window (`usr/…`) work too
 - What each node does there: `desktop.click` presses buttons, toggles checkboxes, selects radio buttons, tabs and menus (on labels and fields: F2, as a double click); `desktop.setValue` / `desktop.getValue` set and read fields; `desktop.select` picks a combo box entry by its text or key; `desktop.press` sends SAP's function keys (Enter, F1–F12 with Shift / Ctrl, Ctrl+S, Esc, PageUp / PageDown) without the real keyboard; `desktop.selectMenu` walks the menu bar; `desktop.getTable` reads table controls and ALV grids whole, scrolling through them; `desktop.type`, `desktop.mouseClick` and the other mouse nodes focus the component or use its place on the screen
-- `sap.runTransaction` starts a transaction (`code`: `VA03`) and returns the status bar `{ type, text }` (`S` success, `W` warning, `E` error…), so a scenario can check it with `control.if`
+- `sap.runTransaction` starts a transaction (`code`: `VA03`) and returns the status bar `{ type, text }` (`S` success, `W` warning, `E` error…), so a flow can check it with `control.if`
 - When scripting is off, targets with a SAP component id stop with `SAP_SCRIPTING_OFF` (with the steps to enable it); the window itself, OCR and images still work through UI Automation
 - **Not yet verified on a real SAP system**: this was written against SAP's scripting API documentation; CI has no SAP GUI
 

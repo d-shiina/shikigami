@@ -1,5 +1,5 @@
 // Studio state. All mutations go through the backend API as EditOps; the
-// store only mirrors what Core returns (scenario, validation, undo state).
+// store only mirrors what Core returns (flow, validation, undo state).
 import type {
   ApprovalRequest,
   DebugCommand,
@@ -15,9 +15,9 @@ import type {
   RunError,
   RunEventEnvelope,
   RunStatus,
-  Scenario,
-  ScenarioPatch,
-  ScenarioSummary,
+  Flow,
+  FlowPatch,
+  FlowSummary,
   Step,
   StepNote,
   StepPatch,
@@ -42,12 +42,12 @@ import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
 import { summarize } from "./lib/review";
-import { setScenarioNames } from "./lib/sentence";
+import { setFlowNames } from "./lib/sentence";
 
 export type Selection =
   | { kind: "step"; stepId: string }
   | { kind: "slot"; parentId: string | null; block: string | null }
-  /** A named screen part (`scenario.parts`). */
+  /** A named screen part (`flow.parts`). */
   | { kind: "part"; name: string }
   | null;
 
@@ -59,9 +59,9 @@ export type PaletteAnchor = { left: number; top: number; right: number; bottom: 
 
 /**
  * The places in the sidebar; each fills the window right of it. "library" is
- * the page of all scenarios, "scenarios" the editor of the open one.
+ * the page of all flows, "flows" the editor of the open one.
  */
-export type Place = "library" | "scenarios" | "review" | "secrets" | "settings";
+export type Place = "library" | "flows" | "review" | "secrets" | "settings";
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues";
@@ -78,9 +78,9 @@ export type Pause = {
   error: RunError | null;
   /** Every variable's value at that point (masked, previews for large ones). */
   variables: Record<string, unknown>;
-  /** The scenario revision the run executes. */
+  /** The flow revision the run executes. */
   revision: number;
-  /** The `scenario.call` steps it paused inside (outermost first); empty in the open scenario. */
+  /** The `flow.call` steps it paused inside (outermost first); empty in the open flow. */
   callPath: string[];
 };
 
@@ -129,8 +129,8 @@ function asVariableChange(env: RunEventEnvelope): VariableChange | null {
 
 export type RunState = {
   runId: string;
-  /** The scenario being run (known from `runStarted`). */
-  scenarioId: string | null;
+  /** The flow being run (known from `runStarted`). */
+  flowId: string | null;
   status: RunStatus;
   pause: Pause | null;
   /** The screen at an error pause, once Studio has looked at it. */
@@ -143,61 +143,61 @@ export type RunState = {
   /** When each step began, in run order (retries not counted), to tell what a step saw. */
   starts: StepStart[];
   /**
-   * Steps of called scenarios, by the call steps they ran under (`callKey`):
+   * Steps of called flows, by the call steps they ran under (`callKey`):
    * what an unfolded or entered call shows. Their events never touch `steps`.
    */
   inner: Record<string, Record<string, StepRunState>>;
   /** The step each call path started last (a control step stays running while its blocks run). */
   innerLatest: Record<string, string>;
-  /** The scenario revision it runs (a resume can move it to a newer one). */
+  /** The flow revision it runs (a resume can move it to a newer one). */
   revision: number | null;
   /** The person cleared the marks it left on the chart. */
   trailHidden: boolean;
 };
 
-/** The `scenario.call` steps a run event happened inside (outermost first). */
+/** The `flow.call` steps a run event happened inside (outermost first). */
 const callPathOf = (env: RunEventEnvelope): string[] => (env as { callPath?: string[] }).callPath ?? [];
 
 /** Key of a call path (outermost call step first), for `inner` and `unfolded`. */
 export const callKey = (path: string[]): string => path.join("/");
 
-/** One level of the chart the person has entered: the call step and the scenario it runs. */
-export type DiveLevel = { stepId: string; scenario: Scenario };
+/** One level of the chart the person has entered: the call step and the flow it runs. */
+export type DiveLevel = { stepId: string; flow: Flow };
 
 /**
- * The scenarios behind a path of entered call steps, outermost first. Stops at
- * the first call that is gone or whose scenario is not loaded.
+ * The flows behind a path of entered call steps, outermost first. Stops at
+ * the first call that is gone or whose flow is not loaded.
  */
-export function diveChain(root: Scenario | null, called: Record<string, Scenario>, path: string[]): DiveLevel[] {
+export function diveChain(root: Flow | null, called: Record<string, Flow>, path: string[]): DiveLevel[] {
   const chain: DiveLevel[] = [];
   let current = root;
   for (const stepId of path) {
     const step = current ? findStep(current.steps ?? [], stepId) : undefined;
-    const target = step?.type === "scenario.call" ? step.params?.scenario : undefined;
+    const target = step?.type === "flow.call" ? step.params?.flow : undefined;
     const callee = typeof target === "string" ? called[target] : undefined;
     if (!callee) break;
-    chain.push({ stepId, scenario: callee });
+    chain.push({ stepId, flow: callee });
     current = callee;
   }
   return chain;
 }
 
 /**
- * Breakpoints a run of the open scenario stops at: its own, and those of every
- * scenario it calls as `<scenarioId>/<stepId>` (copies of a scenario share step IDs).
+ * Breakpoints a run of the open flow stops at: its own, and those of every
+ * flow it calls as `<flowId>/<stepId>` (copies of a flow share step IDs).
  */
-function runBreakpoints(s: Pick<StudioState, "scenario" | "called" | "breakpoints">): string[] {
-  if (!s.scenario) return [];
+function runBreakpoints(s: Pick<StudioState, "flow" | "called" | "breakpoints">): string[] {
+  if (!s.flow) return [];
   const called = Object.keys(s.called).flatMap((id) => (s.breakpoints[id] ?? []).map((step) => `${id}/${step}`));
-  return [...(s.breakpoints[s.scenario.id] ?? []), ...called];
+  return [...(s.breakpoints[s.flow.id] ?? []), ...called];
 }
 
-/** Scenarios a step tree calls directly. */
+/** Flows a step tree calls directly. */
 export function calledIds(steps: Step[]): string[] {
   const ids = new Set<string>();
   const walk = (list: Step[]) => {
     for (const step of list) {
-      const target = step.type === "scenario.call" ? step.params?.scenario : undefined;
+      const target = step.type === "flow.call" ? step.params?.flow : undefined;
       if (typeof target === "string" && target) ids.add(target);
       for (const children of Object.values(step.blocks ?? {})) walk(children);
     }
@@ -209,9 +209,9 @@ export function calledIds(steps: Step[]): string[] {
 export type StepStart = { stepId: string; seq: number };
 
 export type StudioState = {
-  summaries: ScenarioSummary[];
+  summaries: FlowSummary[];
   stepTypes: StepTypeDef[];
-  scenario: Scenario | null;
+  flow: Flow | null;
   validation: ValidationReport | null;
   canUndo: boolean;
   canRedo: boolean;
@@ -219,21 +219,21 @@ export type StudioState = {
   notice: string | null;
   error: string | null;
   run: RunState | null;
-  /** Core's change journal for the open scenario, oldest first. */
+  /** Core's change journal for the open flow, oldest first. */
   history: HistoryEntry[];
-  /** Revisions of non-Studio changes the user has looked at, per scenario. */
+  /** Revisions of non-Studio changes the user has looked at, per flow. */
   reviewed: Record<string, number[]>;
-  /** Every scenario's journal, oldest first, for the review inbox. */
+  /** Every flow's journal, oldest first, for the review inbox. */
   histories: Record<string, HistoryEntry[]>;
-  /** Per scenario: changes and evidence since the last approval (Core's reviews). */
+  /** Per flow: changes and evidence since the last approval (Core's reviews). */
   timelines: Record<string, ReviewTimeline>;
-  /** The review desk is open instead of the scenario list. */
+  /** The review desk is open instead of the flow list. */
   reviewing: boolean;
   /** A step the canvas should bring into view; `seq` changes on every request. */
   reveal: { stepId: string; seq: number } | null;
   /** While running, keep the running step in view. */
   followRun: boolean;
-  /** Steps to pause before, per scenario (this PC only). */
+  /** Steps to pause before, per flow (this PC only). */
   breakpoints: Record<string, string[]>;
   outlineOpen: boolean;
   paletteOpen: boolean;
@@ -243,13 +243,13 @@ export type StudioState = {
   place: Place;
   /** The panel under the chart (run log, issues); null when closed. */
   bottom: BottomTab | null;
-  /** The scenario's record and versions, opened from its revision. */
+  /** The flow's record and versions, opened from its revision. */
   historyOpen: boolean;
   /** The tab the history dialog opens on. */
   historyTab: "timeline" | "versions";
-  /** Named versions of the open scenario, newest first. */
+  /** Named versions of the open flow, newest first. */
   versions: VersionSummary[];
-  /** The open scenario's published version (what unattended runs execute). */
+  /** The open flow's published version (what unattended runs execute). */
   published: PublishedState | null;
   /** Requests from AI clients waiting for the person's approval, oldest first. */
   approvals: ApprovalRequest[];
@@ -258,14 +258,14 @@ export type StudioState = {
   /** The workspace policy, while its dialog is open. */
   policy: Policy | null;
   policyOpen: boolean;
-  /** The scenarios the open one calls, directly or deeper, by id, for call nodes and their inputs. */
-  called: Record<string, Scenario>;
+  /** The flows the open one calls, directly or deeper, by id, for call nodes and their inputs. */
+  called: Record<string, Flow>;
   /** Call steps shown unfolded on the chart, by `callKey` of their path. */
   unfolded: Record<string, boolean>;
-  /** Call steps the chart has entered (double-click), outermost first: it shows the innermost one's scenario. */
+  /** Call steps the chart has entered (double-click), outermost first: it shows the innermost one's flow. */
   dive: string[];
   workspace: WorkspaceInfo | null;
-  /** A file whose scenario already exists, waiting for the user's choice. */
+  /** A file whose flow already exists, waiting for the user's choice. */
   pendingImport: { contents: string; name: string } | null;
   /** Registered secrets (names, user names, sites; never values). */
   secrets: SecretInfo[];
@@ -304,8 +304,8 @@ export type StudioState = {
   setPlace(place: Place): void;
   setBottom(tab: BottomTab | null): void;
   setHistoryOpen(open: boolean, tab?: "timeline" | "versions"): void;
-  /** Name, description and run settings of the open scenario. */
-  updateScenario(patch: ScenarioPatch): Promise<void>;
+  /** Name, description and run settings of the open flow. */
+  updateFlow(patch: FlowPatch): Promise<void>;
   /** Adds a step after the selection; `params` and `name` override the type's defaults (palette presets). */
   addStep(type: string, params?: Record<string, unknown>, name?: string): Promise<void>;
   moveSelected(delta: -1 | 1): Promise<void>;
@@ -316,20 +316,20 @@ export type StudioState = {
   loadCalled(): Promise<void>;
   /** `key`: `callKey` of the call step's path. */
   toggleUnfolded(key: string): void;
-  /** Shows the scenario a call step of the chart's current level runs, in place. */
+  /** Shows the flow a call step of the chart's current level runs, in place. */
   enterCall(stepId: string): void;
-  /** Goes back up to `depth` entered calls (0: the open scenario itself). */
+  /** Goes back up to `depth` entered calls (0: the open flow itself). */
   leaveCalls(depth: number): void;
-  /** Moves neighbouring steps into a new scenario; returns true when done. */
+  /** Moves neighbouring steps into a new flow; returns true when done. */
   extract(stepIds: string[], name: string): Promise<boolean>;
-  onExternalChange(scenarioId: string): Promise<void>;
+  onExternalChange(flowId: string): Promise<void>;
   /** `step`: pause before the first step. */
   startRun(options?: { step?: boolean }): Promise<void>;
   stopRun(): Promise<void>;
   /** Step command for the paused (or running) run; false when it was refused. */
   debug(command: DebugCommand): Promise<boolean>;
-  /** `scenarioId`: the scenario the step is in, when it is a called one shown on the chart. */
-  toggleBreakpoint(stepId: string, scenarioId?: string): void;
+  /** `flowId`: the flow the step is in, when it is a called one shown on the chart. */
+  toggleBreakpoint(stepId: string, flowId?: string): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -340,9 +340,9 @@ export type StudioState = {
   dismiss(): void;
   loadHistory(): Promise<void>;
   approve(revision: number): void;
-  /** Marks every unreviewed external change of the open scenario as looked at (this PC only). */
+  /** Marks every unreviewed external change of the open flow as looked at (this PC only). */
   markAllReviewed(): void;
-  /** Keeps the open scenario's current revision: recorded in Core as approved. */
+  /** Keeps the open flow's current revision: recorded in Core as approved. */
   approveAll(): Promise<void>;
   /** The review desk's 「残して本番に使う」: approves the current revision and publishes it. */
   approveAndPublish(): Promise<void>;
@@ -361,7 +361,7 @@ export type StudioState = {
   loadTimeline(id: string): Promise<void>;
   /** Reverts one journal entry by sending its inverse ops to Core as a new edit. */
   revert(entry: HistoryEntry): Promise<void>;
-  /** Reverts every unreviewed external change of the open scenario in one edit. */
+  /** Reverts every unreviewed external change of the open flow in one edit. */
   revertAll(): Promise<void>;
   loadInbox(): Promise<void>;
   setReviewing(on: boolean): void;
@@ -370,7 +370,7 @@ export type StudioState = {
   loadVersions(): Promise<void>;
   createVersion(name: string, note: string): Promise<boolean>;
   restoreVersion(number: number): Promise<void>;
-  exportScenario(): Promise<void>;
+  exportFlow(): Promise<void>;
   /** Imports file contents; on IMPORT_CONFLICT keeps them in `pendingImport`. True once it is in. */
   importFile(contents: string, onConflict?: ImportConflict): Promise<boolean>;
   cancelImport(): void;
@@ -433,7 +433,7 @@ function targets(entry: HistoryEntry): Set<string> {
     else if (op.op === "updateStep" || op.op === "removeStep" || op.op === "moveStep") keys.add(`step:${op.stepId}`);
     else if (op.op === "setVariable") keys.add(`var:${op.variable.name}`);
     else if (op.op === "removeVariable") keys.add(`var:${op.name}`);
-    else if (op.op === "updateScenario") keys.add("scenario");
+    else if (op.op === "updateFlow") keys.add("flow");
     else keys.add("*");
   }
   return keys;
@@ -458,9 +458,9 @@ export function revertBlocker(entry: HistoryEntry, history: HistoryEntry[]): str
 
 /** External edits the user has not reviewed yet, newest first. */
 export function pendingReview(
-  state: Pick<StudioState, "history" | "reviewed" | "scenario"> & Partial<Pick<StudioState, "timelines">>,
+  state: Pick<StudioState, "history" | "reviewed" | "flow"> & Partial<Pick<StudioState, "timelines">>,
 ): HistoryEntry[] {
-  const id = state.scenario?.id ?? "";
+  const id = state.flow?.id ?? "";
   return pendingIn(state.history, state.reviewed[id], approvedUpTo(state.timelines?.[id]));
 }
 
@@ -469,7 +469,7 @@ export function approvedUpTo(timeline: ReviewTimeline | undefined): number {
   return timeline?.lastApproval?.revision ?? 0;
 }
 
-/** Unreviewed external edits in one scenario's journal, newest first. */
+/** Unreviewed external edits in one flow's journal, newest first. */
 export function pendingIn(history: HistoryEntry[], reviewed: number[] | undefined, approved = 0): HistoryEntry[] {
   const seen = new Set(reviewed ?? []);
   return history
@@ -527,9 +527,9 @@ function saveBreakpoints(breakpoints: Record<string, string[]>) {
 /** A run that has not ended yet (running or paused). */
 export const isActive = (run: RunState | null) => run?.status === "running" || run?.status === "paused" || run?.status === "pending";
 
-const newRun = (runId: string, scenarioId: string | null = null): RunState => ({
+const newRun = (runId: string, flowId: string | null = null): RunState => ({
   runId,
-  scenarioId,
+  flowId,
   status: "running",
   pause: null,
   evidence: null,
@@ -545,17 +545,17 @@ const newRun = (runId: string, scenarioId: string | null = null): RunState => ({
 });
 
 /**
- * The run whose marks the chart shows: the open scenario's latest run, while
- * it runs and afterwards, until the scenario is edited, another run starts or
+ * The run whose marks the chart shows: the open flow's latest run, while
+ * it runs and afterwards, until the flow is edited, another run starts or
  * the person clears them. Marks of an older revision would point at steps that
  * have changed since.
  */
-export function trailOf(s: Pick<StudioState, "run" | "scenario">): RunState | null {
+export function trailOf(s: Pick<StudioState, "run" | "flow">): RunState | null {
   const run = s.run;
-  if (!run || !s.scenario || run.scenarioId !== s.scenario.id) return null;
+  if (!run || !s.flow || run.flowId !== s.flow.id) return null;
   if (isActive(run)) return run;
   if (run.trailHidden) return null;
-  return run.revision === s.scenario.revision ? run : null;
+  return run.revision === s.flow.revision ? run : null;
 }
 const OUTLINE_KEY = "shikigami.studio.outline";
 
@@ -612,7 +612,7 @@ type Position = { parentId?: string | null; block?: string | null; index?: numbe
 /**
  * Where a new node goes, and which node it goes next to: at the "+" it was
  * asked for, else after the selected node, else at the end of the selected
- * empty block, else at the end of the scenario.
+ * empty block, else at the end of the flow.
  */
 export function insertPlace(
   steps: Step[],
@@ -668,7 +668,7 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "log.message": { message: "" },
   "flow.delay": { ms: 1000 },
   "wait.until": { condition: "true" },
-  "scenario.call": { scenario: "" },
+  "flow.call": { flow: "" },
   "browser.open": { url: "https://" },
   "browser.click": { target: { role: "button", name: "" } },
   "browser.fill": { target: { label: "" }, value: "" },
@@ -693,7 +693,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
   return createStore<StudioState>()((set, get) => {
     const applyOutcome = (outcome: EditOutcome) => {
       set({
-        scenario: outcome.scenario,
+        flow: outcome.flow,
         validation: outcome.validation,
         canUndo: outcome.canUndo,
         canRedo: outcome.canRedo,
@@ -702,19 +702,19 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
     };
 
     const reloadCurrent = async () => {
-      const id = get().scenario?.id;
+      const id = get().flow?.id;
       if (!id) return;
-      const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
-      set({ scenario, validation, canUndo: undo.canUndo, canRedo: undo.canRedo });
+      const [flow, validation, undo] = await Promise.all([api.getFlow(id), api.validate(id), api.undoState(id)]);
+      set({ flow, validation, canUndo: undo.canUndo, canRedo: undo.canRedo });
       await Promise.all([get().loadHistory(), get().loadCalled(), get().loadVersions()]);
     };
 
     /** Runs a mutation; on a revision conflict reloads and tells the user. */
     const mutate = async (fn: (id: string, revision: number) => Promise<EditOutcome>): Promise<boolean> => {
-      const scenario = get().scenario;
-      if (!scenario) return false;
+      const flow = get().flow;
+      if (!flow) return false;
       try {
-        applyOutcome(await fn(scenario.id, scenario.revision ?? 0));
+        applyOutcome(await fn(flow.id, flow.revision ?? 0));
         void get().refreshList();
         void get().loadHistory();
         void get().loadCalled();
@@ -733,7 +733,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
     return {
       summaries: [],
       stepTypes: [],
-      scenario: null,
+      flow: null,
       validation: null,
       canUndo: false,
       canRedo: false,
@@ -779,8 +779,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async init() {
         try {
-          const [stepTypes, summaries] = await Promise.all([api.listStepTypes(), api.listScenarios()]);
-          setScenarioNames(new Map(summaries.map((s) => [s.id, s.name] as const)));
+          const [stepTypes, summaries] = await Promise.all([api.listStepTypes(), api.listFlows()]);
+          setFlowNames(new Map(summaries.map((s) => [s.id, s.name] as const)));
           set({ stepTypes, summaries });
           void get().loadInbox();
           set({ workspace: await api.workspaceInfo() });
@@ -852,7 +852,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setSecretsOpen(open) {
-        get().setPlace(open ? "secrets" : "scenarios");
+        get().setPlace(open ? "secrets" : "flows");
       },
 
       async loadSecretRequests() {
@@ -892,8 +892,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async refreshList() {
         try {
-          const summaries = await api.listScenarios();
-          setScenarioNames(new Map(summaries.map((s) => [s.id, s.name] as const)));
+          const summaries = await api.listFlows();
+          setFlowNames(new Map(summaries.map((s) => [s.id, s.name] as const)));
           set({ summaries });
         } catch (e) {
           set({ error: message(e) });
@@ -902,11 +902,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async open(id) {
         try {
-          const [scenario, validation, undo] = await Promise.all([api.getScenario(id), api.validate(id), api.undoState(id)]);
+          const [flow, validation, undo] = await Promise.all([api.getFlow(id), api.validate(id), api.undoState(id)]);
           set({
             // Opened from the library (or by the AI while it shows): show it in the editor.
-            ...(get().place === "library" ? { place: "scenarios" as const } : {}),
-            scenario,
+            ...(get().place === "library" ? { place: "flows" as const } : {}),
+            flow,
             validation,
             canUndo: undo.canUndo,
             canRedo: undo.canRedo,
@@ -926,7 +926,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async create(name) {
         try {
-          const outcome = await api.createScenario({ name });
+          const outcome = await api.createFlow({ name });
           applyOutcome(outcome);
           set({ selection: null, history: [], versions: [] });
           void get().loadHistory();
@@ -938,7 +938,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async duplicate(id) {
         try {
-          const outcome = await api.duplicateScenario(id);
+          const outcome = await api.duplicateFlow(id);
           applyOutcome(outcome);
           set({ history: [], versions: [] });
           void get().loadHistory();
@@ -950,12 +950,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async remove(id) {
         try {
-          const current = get().scenario;
-          await api.deleteScenario(id, current?.id === id ? current.revision : undefined);
-          if (current?.id === id) set({ scenario: null, validation: null, selection: null });
+          const current = get().flow;
+          await api.deleteFlow(id, current?.id === id ? current.revision : undefined);
+          if (current?.id === id) set({ flow: null, validation: null, selection: null });
           await get().refreshList();
         } catch (e) {
-          if (e instanceof ApiError && e.code === "SCENARIO_IN_USE") {
+          if (e instanceof ApiError && e.code === "FLOW_IN_USE") {
             const callers = ((e.details as { callers?: { name?: string }[] } | undefined)?.callers ?? []).map((c) => c.name ?? "");
             set({ error: t.inUse(callers) });
           } else {
@@ -968,7 +968,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       undo: async () => void (await mutate((id, rev) => api.undo(id, rev))),
       redo: async () => void (await mutate((id, rev) => api.redo(id, rev))),
 
-      // Picking a step of the open scenario brings the chart back up to it.
+      // Picking a step of the open flow brings the chart back up to it.
       select(selection) {
         set(selection ? { selection, dive: [] } : { selection });
       },
@@ -978,18 +978,18 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       stepBy(delta) {
-        const { scenario, stepTypes, selection } = get();
+        const { flow, stepTypes, selection } = get();
         const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
-        const ids = outline(scenario?.steps ?? [], defs).map((i) => i.id);
+        const ids = outline(flow?.steps ?? [], defs).map((i) => i.id);
         const next = neighbor(ids, selection?.kind === "step" ? selection.stepId : null, delta);
         if (next) get().goTo(next);
       },
 
       changeBy(delta) {
-        const { scenario, stepTypes, selection } = get();
+        const { flow, stepTypes, selection } = get();
         const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
         const changed = summarize([...pendingReview(get())].reverse()).steps;
-        const all = outline(scenario?.steps ?? [], defs).map((i) => i.id);
+        const all = outline(flow?.steps ?? [], defs).map((i) => i.id);
         const current = selection?.kind === "step" ? selection.stepId : null;
         const at = current ? all.indexOf(current) : -1;
         // The nearest changed step in that direction from wherever the selection is.
@@ -1021,23 +1021,23 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ historyOpen: open, historyTab: tab });
       },
 
-      async updateScenario(patch) {
-        await get().applyOps([{ op: "updateScenario", patch }]);
+      async updateFlow(patch) {
+        await get().applyOps([{ op: "updateFlow", patch }]);
       },
 
       async addStep(type, params, name) {
-        const { scenario, selection, paletteAt } = get();
-        if (!scenario) return;
-        const { position } = insertPlace(scenario.steps ?? [], selection, paletteAt);
+        const { flow, selection, paletteAt } = get();
+        if (!flow) return;
+        const { position } = insertPlace(flow.steps ?? [], selection, paletteAt);
         const step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
         const ok = await get().applyOps([{ op: "addStep", step, position }]);
         if (ok && step.id) set({ selection: { kind: "step", stepId: step.id } });
       },
 
       async moveSelected(delta) {
-        const { scenario, selection } = get();
-        if (!scenario || selection?.kind !== "step") return;
-        const loc = locate(scenario.steps ?? [], selection.stepId);
+        const { flow, selection } = get();
+        if (!flow || selection?.kind !== "step") return;
+        const loc = locate(flow.steps ?? [], selection.stepId);
         if (!loc) return;
         const index = loc.index + delta;
         if (index < 0 || index >= loc.siblings) return;
@@ -1066,16 +1066,16 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async loadCalled() {
-        const scenario = get().scenario;
-        if (!scenario) return;
-        // Calls inside called scenarios too, so the chart can enter them.
-        const called: Record<string, Scenario> = {};
-        const seen = new Set([scenario.id]);
-        let next = calledIds(scenario.steps ?? []);
+        const flow = get().flow;
+        if (!flow) return;
+        // Calls inside called flows too, so the chart can enter them.
+        const called: Record<string, Flow> = {};
+        const seen = new Set([flow.id]);
+        let next = calledIds(flow.steps ?? []);
         while (next.length > 0) {
           const ids = next.filter((id) => !seen.has(id));
           ids.forEach((id) => seen.add(id));
-          const loaded = await Promise.all(ids.map((id) => api.getScenario(id).catch(() => null)));
+          const loaded = await Promise.all(ids.map((id) => api.getFlow(id).catch(() => null)));
           next = [];
           for (const callee of loaded) {
             if (!callee) continue;
@@ -1083,8 +1083,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             next.push(...calledIds(callee.steps ?? []));
           }
         }
-        // Ignore a late answer for a scenario that is no longer open.
-        if (get().scenario?.id !== scenario.id) return;
+        // Ignore a late answer for a flow that is no longer open.
+        if (get().flow?.id !== flow.id) return;
         set({ called });
       },
 
@@ -1093,11 +1093,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       enterCall(stepId) {
-        const { scenario, called, dive } = get();
-        const chain = diveChain(scenario, called, dive);
+        const { flow, called, dive } = get();
+        const chain = diveChain(flow, called, dive);
         const path = [...dive.slice(0, chain.length), stepId];
-        if (diveChain(scenario, called, path).length !== path.length) return;
-        // The inspector edits the open scenario: nothing of it stays selected down here.
+        if (diveChain(flow, called, path).length !== path.length) return;
+        // The inspector edits the open flow: nothing of it stays selected down here.
         set({ dive: path, selection: null });
       },
 
@@ -1106,12 +1106,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async extract(stepIds, name) {
-        const scenario = get().scenario;
-        if (!scenario || stepIds.length === 0) return false;
+        const flow = get().flow;
+        if (!flow || stepIds.length === 0) return false;
         try {
-          const outcome = await api.extractSubscenario(scenario.id, scenario.revision ?? 0, stepIds, name);
+          const outcome = await api.extractSubflow(flow.id, flow.revision ?? 0, stepIds, name);
           applyOutcome(outcome.caller);
-          set({ selection: { kind: "step", stepId: outcome.callStepId }, notice: t.extracted(outcome.subscenario.scenario.name) });
+          set({ selection: { kind: "step", stepId: outcome.callStepId }, notice: t.extracted(outcome.subflow.flow.name) });
           await Promise.all([get().refreshList(), get().loadHistory(), get().loadCalled()]);
           return true;
         } catch (e) {
@@ -1125,18 +1125,18 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
-      async onExternalChange(scenarioId) {
-        if (get().called[scenarioId]) void get().loadCalled();
+      async onExternalChange(flowId) {
+        if (get().called[flowId]) void get().loadCalled();
         await get().refreshList();
         void api
-          .history(scenarioId)
-          .then((h) => set({ histories: { ...get().histories, [scenarioId]: h } }))
+          .history(flowId)
+          .then((h) => set({ histories: { ...get().histories, [flowId]: h } }))
           .catch(() => {});
-        void get().loadTimeline(scenarioId);
-        const current = get().scenario;
-        if (current?.id !== scenarioId) return;
+        void get().loadTimeline(flowId);
+        const current = get().flow;
+        if (current?.id !== flowId) return;
         try {
-          const latest = await api.getScenario(scenarioId);
+          const latest = await api.getFlow(flowId);
           if ((latest.revision ?? 0) !== (current.revision ?? 0)) {
             await reloadCurrent();
             const selection = get().selection;
@@ -1147,21 +1147,21 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           }
         } catch (e) {
           // Deleted elsewhere.
-          if (e instanceof ApiError && e.code === "SCENARIO_NOT_FOUND") {
-            set({ scenario: null, validation: null, selection: null });
+          if (e instanceof ApiError && e.code === "FLOW_NOT_FOUND") {
+            set({ flow: null, validation: null, selection: null });
           }
         }
       },
 
       async startRun(options) {
-        const scenario = get().scenario;
-        if (!scenario) return;
+        const flow = get().flow;
+        if (!flow) return;
         try {
           const breakpoints = runBreakpoints(get());
-          const runId = await api.run(scenario.id, undefined, { breakpoints, step: options?.step ?? false });
+          const runId = await api.run(flow.id, undefined, { breakpoints, step: options?.step ?? false });
           set((s) => ({
             // Events may have arrived before the command returned.
-            run: s.run?.runId === runId ? s.run : newRun(runId, scenario.id),
+            run: s.run?.runId === runId ? s.run : newRun(runId, flow.id),
             error: null,
             followRun: true,
             // A run's log opens under the chart.
@@ -1187,7 +1187,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (!run || !isActive(run)) return false;
         // Resuming runs the stored revision: never with AI edits nobody has looked at.
         const resumes = !["pause", "setBreakpoints", "abort"].includes(command.action);
-        if (resumes && run.pause && get().scenario?.revision !== run.pause.revision && pendingReview(get()).length > 0) {
+        if (resumes && run.pause && get().flow?.revision !== run.pause.revision && pendingReview(get()).length > 0) {
           set({ error: t.runMsg.reviewBeforeResume });
           return false;
         }
@@ -1206,8 +1206,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
-      toggleBreakpoint(stepId, scenarioId) {
-        const id = scenarioId ?? get().scenario?.id;
+      toggleBreakpoint(stepId, flowId) {
+        const id = flowId ?? get().flow?.id;
         if (!id) return;
         const current = get().breakpoints[id] ?? [];
         const next = current.includes(stepId) ? current.filter((s) => s !== stepId) : [...current, stepId];
@@ -1216,7 +1216,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         saveBreakpoints(breakpoints);
         set({ breakpoints });
         const run = get().run;
-        if (run && isActive(run) && run.scenarioId === get().scenario?.id) {
+        if (run && isActive(run) && run.flowId === get().flow?.id) {
           void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: runBreakpoints(get()) }).catch(() => {});
         }
       },
@@ -1242,22 +1242,22 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
           };
           const path = callPathOf(env);
-          // Followed, the chart goes where the run is: into a called scenario
+          // Followed, the chart goes where the run is: into a called flow
           // when a step starts inside it, back out when one starts outside.
           let dive = s.dive;
           if (env.type === "stepStarted" && s.followRun && callKey(path) !== callKey(s.dive)) {
             if (path.length === 0) dive = [];
-            else if (diveChain(s.scenario, s.called, path).length === path.length) dive = path;
+            else if (diveChain(s.flow, s.called, path).length === path.length) dive = path;
           }
           // A pause shows where it stopped, followed or not: inside a call, or
-          // back in the open scenario (a breakpoint after a call, a call that failed).
+          // back in the open flow (a breakpoint after a call, a call that failed).
           if (env.type === "paused" && callKey(path) !== callKey(s.dive)) {
             if (path.length === 0) dive = [];
-            else if (diveChain(s.scenario, s.called, path).length === path.length) dive = path;
+            else if (diveChain(s.flow, s.called, path).length === path.length) dive = path;
           }
           const moved = dive !== s.dive ? { dive, selection: null } : {};
           if (path.length > 0 && env.type !== "paused" && env.type !== "resumed") {
-            // Inside a called scenario: its steps and variables are not the
+            // Inside a called flow: its steps and variables are not the
             // chart's. They show when their call is unfolded or entered.
             const call = path[0]!;
             const key = callKey(path);
@@ -1285,9 +1285,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             case "runStarted":
               secretFix = null;
               run.status = "running";
-              run.scenarioId = env.scenarioId;
+              run.flowId = env.flowId;
               run.revision = env.revision;
-              push("info", `▶ ${env.scenarioName} (rev ${env.revision})`);
+              push("info", `▶ ${env.flowName} (rev ${env.revision})`);
               break;
             case "stepStarted":
               run.steps[env.stepId] = "running";
@@ -1301,7 +1301,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               if (human?.stepId === env.stepId) human = null;
               run.steps[env.stepId] = env.outcome;
               if (env.error) {
-                push("error", `${errorLine(env.error, findStep(s.scenario?.steps ?? [], env.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, env.stepId);
+                push("error", `${errorLine(env.error, findStep(s.flow?.steps ?? [], env.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, env.stepId);
                 secretFix = secretFixOf(env.error) ?? secretFix;
               }
               break;
@@ -1325,7 +1325,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.evidence = null;
               states[env.stepId] = env.reason === "error" ? "failed" : "paused";
               if (path.length > 0) run.inner = { ...run.inner, [callKey(path)]: states };
-              // The log points at what the open scenario shows: the call step.
+              // The log points at what the open flow shows: the call step.
               const at = path[0] ?? env.stepId;
               push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, at);
               if (path.length === 0) reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
@@ -1371,20 +1371,20 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async loadHistory() {
-        const id = get().scenario?.id;
+        const id = get().flow?.id;
         if (!id) return;
         try {
           const [history] = await Promise.all([api.history(id), get().loadTimeline(id)]);
           set({ histories: { ...get().histories, [id]: history } });
-          // Ignore a late answer for a scenario that is no longer open.
-          if (get().scenario?.id === id) set({ history });
+          // Ignore a late answer for a flow that is no longer open.
+          if (get().flow?.id === id) set({ history });
         } catch {
           // The timeline is secondary; editing keeps working without it.
         }
       },
 
       approve(revision) {
-        const id = get().scenario?.id;
+        const id = get().flow?.id;
         if (!id) return;
         const reviewed = { ...get().reviewed, [id]: [...(get().reviewed[id] ?? []), revision] };
         saveReviewed(reviewed);
@@ -1392,7 +1392,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       markAllReviewed() {
-        const id = get().scenario?.id;
+        const id = get().flow?.id;
         if (!id) return;
         const revisions = pendingReview(get()).map((e) => e.revision);
         const reviewed = { ...get().reviewed, [id]: [...(get().reviewed[id] ?? []), ...revisions] };
@@ -1401,40 +1401,40 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async approveAll() {
-        const scenario = get().scenario;
-        if (!scenario) return;
+        const flow = get().flow;
+        if (!flow) return;
         get().markAllReviewed();
         try {
-          await api.submitReview(scenario.id, { revision: scenario.revision ?? 0, verdict: "approved" });
+          await api.submitReview(flow.id, { revision: flow.revision ?? 0, verdict: "approved" });
           set({ notice: t.approved });
         } catch (e) {
-          // Marked here anyway; Core refuses only when the scenario moved on (REVISION_CONFLICT).
+          // Marked here anyway; Core refuses only when the flow moved on (REVISION_CONFLICT).
           set({ error: message(e) });
         }
-        await get().loadTimeline(scenario.id);
+        await get().loadTimeline(flow.id);
       },
 
       async approveAndPublish() {
-        const scenario = get().scenario;
-        if (!scenario) return;
+        const flow = get().flow;
+        if (!flow) return;
         try {
-          const published = await api.approveAndPublish(scenario.id, scenario.revision ?? 0);
+          const published = await api.approveAndPublish(flow.id, flow.revision ?? 0);
           get().markAllReviewed();
           set({ notice: t.approvedPublished(published.version), published, error: null });
           await get().loadVersions();
         } catch (e) {
           set({ error: publishMessage(e) });
         }
-        await get().loadTimeline(scenario.id);
+        await get().loadTimeline(flow.id);
       },
 
       async publish(version) {
-        const scenario = get().scenario;
-        if (!scenario) return;
+        const flow = get().flow;
+        if (!flow) return;
         try {
-          const published = await api.publishScenario(
-            scenario.id,
-            version == null ? { expectedRevision: scenario.revision ?? 0, note: "" } : { version, note: "" },
+          const published = await api.publishFlow(
+            flow.id,
+            version == null ? { expectedRevision: flow.revision ?? 0, note: "" } : { version, note: "" },
           );
           set({ notice: t.publishDone(published.version), published, error: null });
           await get().loadVersions();
@@ -1444,10 +1444,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async unpublish() {
-        const scenario = get().scenario;
-        if (!scenario) return;
+        const flow = get().flow;
+        if (!flow) return;
         try {
-          await api.unpublishScenario(scenario.id);
+          await api.unpublishFlow(flow.id);
           set({ notice: t.unpublished, published: null, error: null });
         } catch (e) {
           set({ error: message(e) });
@@ -1509,17 +1509,17 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async sendBack(reason, steps) {
-        const scenario = get().scenario;
-        if (!scenario) return false;
+        const flow = get().flow;
+        if (!flow) return false;
         try {
-          await api.submitReview(scenario.id, {
-            revision: scenario.revision ?? 0,
+          await api.submitReview(flow.id, {
+            revision: flow.revision ?? 0,
             verdict: "rejected",
             reason: reason.trim(),
             steps: steps.filter((n) => n.note.trim()).map((n) => ({ ...n, note: n.note.trim() })),
           });
           set({ notice: t.sentBack });
-          await get().loadTimeline(scenario.id);
+          await get().loadTimeline(flow.id);
           return true;
         } catch (e) {
           set({ error: message(e) });
@@ -1587,11 +1587,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setReviewing(on) {
-        set({ reviewing: on, place: on ? "review" : "scenarios", secretsOpen: false });
+        set({ reviewing: on, place: on ? "review" : "flows", secretsOpen: false });
       },
 
       setPaletteOpen(open, at, anchor) {
-        // Steps are added to the open scenario: show it.
+        // Steps are added to the open flow: show it.
         set(
           open
             ? { paletteOpen: true, paletteAt: at ?? null, paletteAnchor: anchor ?? null, dive: [] }
@@ -1600,21 +1600,21 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async loadVersions() {
-        const id = get().scenario?.id;
+        const id = get().flow?.id;
         if (!id) return;
         try {
           const [versions, published] = await Promise.all([api.listVersions(id), api.publishedState(id)]);
-          if (get().scenario?.id === id) set({ versions, published });
+          if (get().flow?.id === id) set({ versions, published });
         } catch {
           // Versions are secondary; editing keeps working without them.
         }
       },
 
       async createVersion(name, note) {
-        const scenario = get().scenario;
-        if (!scenario) return false;
+        const flow = get().flow;
+        if (!flow) return false;
         try {
-          await api.createVersion(scenario.id, scenario.revision ?? 0, { name, note });
+          await api.createVersion(flow.id, flow.revision ?? 0, { name, note });
           await get().loadVersions();
           set({ notice: t.versionSaved, error: null });
           return true;
@@ -1634,11 +1634,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (ok) set({ notice: t.restored, selection: null });
       },
 
-      async exportScenario() {
-        const id = get().scenario?.id;
+      async exportFlow() {
+        const id = get().flow?.id;
         if (!id) return;
         try {
-          const path = await api.exportScenario(id);
+          const path = await api.exportFlow(id);
           set({ notice: `${t.exported}: ${path}`, error: null });
         } catch (e) {
           set({ error: message(e) });
@@ -1647,9 +1647,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       async importFile(contents, onConflict) {
         try {
-          const outcome = await api.importScenario(contents, onConflict);
+          const outcome = await api.importFlow(contents, onConflict);
           applyOutcome(outcome);
-          set({ pendingImport: null, selection: null, history: [], versions: [], notice: `${t.imported}: ${outcome.scenario.name}` });
+          set({ pendingImport: null, selection: null, history: [], versions: [], notice: `${t.imported}: ${outcome.flow.name}` });
           await Promise.all([get().refreshList(), get().loadHistory(), get().loadVersions()]);
           return true;
         } catch (e) {

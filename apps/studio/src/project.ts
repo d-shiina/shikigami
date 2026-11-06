@@ -1,9 +1,9 @@
-// The open scenario's folder: its files on role shelves (input, config,
+// The open flow's folder: its files on role shelves (input, config,
 // templates, output), the work and logs folders, and the file open in a
 // sheet beside the chart (a settings form, a text file, a run log). Files
 // change underneath (a run writes output/, the AI adds input/, Excel saves),
 // so the list is re-read whenever the watcher says the folder changed.
-import type { ConfigFile, ConfigItem, ProjectFile, ProjectFiles, Scenario, Step } from "@shikigami/schema";
+import type { ConfigFile, ConfigItem, ProjectFile, ProjectFiles, Flow, Step } from "@shikigami/schema";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { createContext, useContext } from "react";
@@ -21,7 +21,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   }
 }
 
-// Kept apart from `api` like `agent`: the scenario store never touches files.
+// Kept apart from `api` like `agent`: the flow store never touches files.
 export const projectApi = {
   list: (id: string) => call<ProjectFiles>("project_files", { id }),
   readText: (id: string, path: string) => call<string>("read_project_text", { id, path }),
@@ -38,8 +38,8 @@ export const projectApi = {
   remove: (id: string, path: string) => call<void>("delete_project_file", { id, path }),
   /** With its app (Excel, Notepad), or selected in Explorer with `reveal`. `""` is the folder. */
   open: (id: string, path: string, reveal: boolean) => call<void>("open_project_file", { id, path, reveal }),
-  onChanged: (handler: (scenarioId: string) => void): Promise<UnlistenFn> =>
-    listen<{ scenarioId: string }>("project-files-changed", (e) => handler(e.payload.scenarioId)),
+  onChanged: (handler: (flowId: string) => void): Promise<UnlistenFn> =>
+    listen<{ flowId: string }>("project-files-changed", (e) => handler(e.payload.flowId)),
 };
 
 export type ProjectApi = Omit<typeof projectApi, "onChanged">;
@@ -102,10 +102,10 @@ function* walk(steps: Step[] | undefined): Generator<Step> {
 const norm = (path: string) => path.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 
 /** The steps whose params mention the file (by its relative path). */
-export function usersOf(scenario: Scenario | null, path: string): Step[] {
-  if (!scenario) return [];
+export function usersOf(flow: Flow | null, path: string): Step[] {
+  if (!flow) return [];
   const needle = norm(path);
-  return [...walk(scenario.steps)].filter((step) => norm(JSON.stringify(step.params ?? {})).includes(needle));
+  return [...walk(flow.steps)].filter((step) => norm(JSON.stringify(step.params ?? {})).includes(needle));
 }
 
 /**
@@ -113,10 +113,10 @@ export function usersOf(scenario: Scenario | null, path: string): Step[] {
  * file with `config.read` saved as some variable (`settings`); a step uses an
  * item when it mentions `settings.<name>` or `settings["<name>"]`.
  */
-export function itemUsers(scenario: Scenario | null, path: string, items: ConfigItem[]): Map<string, Step[]> {
+export function itemUsers(flow: Flow | null, path: string, items: ConfigItem[]): Map<string, Step[]> {
   const result = new Map<string, Step[]>(items.map((i) => [i.name, []]));
-  if (!scenario) return result;
-  const steps = [...walk(scenario.steps)];
+  if (!flow) return result;
+  const steps = [...walk(flow.steps)];
   const vars = steps
     .filter((s) => s.type === "config.read" && typeof s.params?.path === "string" && norm(s.params.path) === norm(path) && s.saveAs)
     .map((s) => s.saveAs as string);
@@ -145,7 +145,7 @@ export function logStatus(path: string): "succeeded" | "failed" | "cancelled" | 
 export type Sheet = { path: string; text: string; saved: string; config: ConfigFile | null; raw: boolean } | null;
 
 export type ProjectState = {
-  scenarioId: string | null;
+  flowId: string | null;
   files: ProjectFiles | null;
   panelOpen: boolean;
   sheet: Sheet;
@@ -153,7 +153,7 @@ export type ProjectState = {
   /** Shown for a moment after an action (added 2 files to input/…). */
   notice: string | null;
   setPanelOpen(open: boolean): void;
-  /** Follows the open scenario; null clears. */
+  /** Follows the open flow; null clears. */
   load(id: string | null): Promise<void>;
   onChanged(id: string): Promise<void>;
   openFile(path: string): Promise<void>;
@@ -190,18 +190,18 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
   }
   return createStore<ProjectState>()((set, get) => {
     const refresh = async () => {
-      const id = get().scenarioId;
+      const id = get().flowId;
       if (!id) return;
       try {
         const files = await api.list(id);
-        if (get().scenarioId === id) set({ files });
+        if (get().flowId === id) set({ files });
       } catch (e) {
         set({ error: message(e) });
       }
     };
     const report = (count: number, folder: string) => set({ notice: labels.added(count, folder) });
     return {
-      scenarioId: null,
+      flowId: null,
       files: null,
       panelOpen,
       sheet: null,
@@ -216,12 +216,12 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         }
       },
       async load(id) {
-        if (id === get().scenarioId) return;
-        set({ scenarioId: id, files: null, sheet: null, error: null, notice: null });
+        if (id === get().flowId) return;
+        set({ flowId: id, files: null, sheet: null, error: null, notice: null });
         await refresh();
       },
       async onChanged(id) {
-        if (id !== get().scenarioId) return;
+        if (id !== get().flowId) return;
         await refresh();
         // An unedited sheet follows the file (a run rewrote the log, the AI changed a setting).
         const sheet = get().sheet;
@@ -236,7 +236,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         }
       },
       async openFile(path) {
-        const id = get().scenarioId;
+        const id = get().flowId;
         if (!id) return;
         if (!isText(path)) {
           await get().open(path);
@@ -274,7 +274,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         set({ sheet: { ...sheet, raw, config: raw ? sheet.config : parseConfig(sheet.text) } });
       },
       async saveSheet() {
-        const id = get().scenarioId;
+        const id = get().flowId;
         const sheet = get().sheet;
         if (!id || !sheet) return false;
         try {
@@ -288,7 +288,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         }
       },
       async newSettings() {
-        const id = get().scenarioId;
+        const id = get().flowId;
         if (!id) return;
         const taken = new Set(get().files?.files.map((f) => f.path) ?? []);
         let path = "config/settings.json";
@@ -303,7 +303,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         }
       },
       async copyIn(paths, folder) {
-        const id = get().scenarioId;
+        const id = get().flowId;
         if (!id || paths.length === 0) return;
         const groups = new Map<Role, string[]>();
         for (const p of paths) {
@@ -321,7 +321,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         }
       },
       async upload(files, folder) {
-        const id = get().scenarioId;
+        const id = get().flowId;
         if (!id || files.length === 0) return;
         const shelves = new Set<Role>();
         try {
@@ -337,7 +337,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         await refresh();
       },
       async rename(from, to) {
-        const id = get().scenarioId;
+        const id = get().flowId;
         if (!id || from === to) return;
         try {
           await api.rename(id, from, to);
@@ -348,7 +348,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         await refresh();
       },
       async remove(path) {
-        const id = get().scenarioId;
+        const id = get().flowId;
         if (!id) return;
         try {
           await api.remove(id, path);
@@ -359,7 +359,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         await refresh();
       },
       async open(path, reveal = false) {
-        const id = get().scenarioId;
+        const id = get().flowId;
         if (!id) return;
         try {
           await api.open(id, path, reveal);

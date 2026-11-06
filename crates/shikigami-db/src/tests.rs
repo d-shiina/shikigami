@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 use shikigami_core::secret::{ResolvedSecret, SecretError, SecretProvider, SecretRef};
-use shikigami_core::{Scenario, Step, Validator, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, Validator, VarDirection, VarType, VariableDef};
 use shikigami_runtime::{RunOptions, RunReport, RunStatus, Runtime};
 
 use super::*;
@@ -12,7 +12,7 @@ fn runtime() -> Runtime {
 }
 
 async fn run(runtime: &Runtime, step_type: &str, params: Value) -> RunReport {
-    let mut s = Scenario::new("db");
+    let mut s = Flow::new("db");
     s.variables.push(VariableDef {
         direction: VarDirection::Output,
         ..VariableDef::new("out", VarType::Any)
@@ -302,7 +302,7 @@ fn examples_validate() {
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
-            let mut s = Scenario::new("example");
+            let mut s = Flow::new("example");
             s.variables = ["orders", "rows", "result", "area", "order"]
                 .iter()
                 .map(|n| VariableDef::new(*n, VarType::Any))
