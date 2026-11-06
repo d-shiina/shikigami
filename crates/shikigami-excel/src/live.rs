@@ -132,8 +132,10 @@ fn error_text(code: i32) -> &'static str {
     }
 }
 
-/// A cell's `Value` as the file steps give it.
-fn value(var: &Var) -> Value {
+/// A cell as the file steps give it, from its `Value` (which tells dates
+/// apart) and its `Value2` (numbers at full precision: `Value` turns
+/// currency-formatted numbers into Currency, four decimals only).
+fn value(var: &Var, raw: &Var) -> Value {
     if let Some(code) = var.error_code() {
         return json!(error_text(code));
     }
@@ -148,7 +150,7 @@ fn value(var: &Var) -> Value {
         };
         return date::to_text(serial, kind, false).map_or(Value::Null, Value::String);
     }
-    match var.to_json() {
+    match raw.to_json() {
         Value::String(s) if s.is_empty() => Value::Null,
         other => other,
     }
@@ -198,11 +200,13 @@ fn grid(sheet: &Object, range: Option<Range>) -> Result<Vec<Vec<Value>>, StepErr
     let Some(range) = range else {
         return Ok(Vec::new());
     };
-    let values = cells(sheet, range)?.get("Value")?;
+    let range = cells(sheet, range)?;
+    let values = range.get("Value")?.to_grid();
+    let raw = range.get("Value2")?.to_grid();
     Ok(values
-        .to_grid()
         .iter()
-        .map(|row| row.iter().map(value).collect())
+        .zip(&raw)
+        .map(|(row, raw)| row.iter().zip(raw).map(|(v, r)| value(v, r)).collect())
         .collect())
 }
 
@@ -264,15 +268,30 @@ fn invalid(value: &Value) -> StepError {
         .with_details(json!({ "hint": "A cell value is text, a number, true/false, null (empties the cell), { \"date\": \"2026-10-28\" } or { \"formula\": \"SUM(B2:B9)\" }." }))
 }
 
+/// Fails as `write` would, without touching the workbook.
+fn check_value(value: &Value) -> Result<(), StepError> {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Ok(()),
+        Value::Object(map) if map.len() == 1 => match (map.get("formula"), map.get("date")) {
+            (Some(Value::String(_)), _) => Ok(()),
+            (_, Some(Value::String(text))) => date::from_text(text, false)
+                .map(drop)
+                .ok_or_else(|| {
+                    StepError::permanent("INVALID_DATE", format!("'{text}' is not a date"))
+                        .with_details(json!({ "hint": "Write dates as { \"date\": \"2026-10-28\" } or { \"date\": \"2026-10-28T09:30:00\" }." }))
+                }),
+            _ => Err(invalid(value)),
+        },
+        _ => Err(invalid(value)),
+    }
+}
+
 fn write_all(sheet: &Object, writes: &[(Cell, Value)], session: &Session) -> Result<(), StepError> {
     session.check()?;
-    // Check every value before the first cell changes.
+    // Check every value before the first cell changes: the open workbook
+    // keeps whatever was written before a failure.
     for (_, value) in writes {
-        if let Value::Object(map) = value
-            && !(map.len() == 1 && (map.contains_key("formula") || map.contains_key("date")))
-        {
-            return Err(invalid(value));
-        }
+        check_value(value)?;
     }
     // Dates are serials counted from the workbook's own start (1900 or 1904).
     let date1904 = sheet
@@ -312,7 +331,7 @@ fn step(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
                 "Cells",
                 vec![Var::i32(cell.row as i32), Var::i32(cell.column as i32)],
             )?;
-            Ok(value(&target.get("Value")?))
+            Ok(value(&target.get("Value")?, &target.get("Value2")?))
         }
         Kind::ReadRange => {
             let sheet = sheet(book, sheet_name)?;
