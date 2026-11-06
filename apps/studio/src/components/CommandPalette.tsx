@@ -110,8 +110,9 @@ export function CommandPalette() {
   const choose = (item: PaletteItem | undefined) => {
     if (!item) return;
     setRecent(remember(recent, item.key));
-    setOpen(false);
+    // addStep reads where to add (the "+" it was opened from) before it awaits; closing clears that place.
     void addStep(item.type, item.params, item.name);
+    setOpen(false);
   };
   const pick = (next: string) => {
     setQuery("");

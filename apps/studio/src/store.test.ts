@@ -90,6 +90,19 @@ describe("studio store", () => {
     expect(store.getState().selection).toEqual({ kind: "step", stepId: added.step.id });
   });
 
+  it("adds at the plus button the palette was opened from, even though the palette closes as it adds", async () => {
+    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(scenario(2)));
+    const store = createStudioStore(fakeApi({ edit }));
+    await store.getState().open("scn_a");
+    store.getState().setPaletteOpen(true, { parentId: null, block: null, index: 0 });
+    // As the palette does: add, then close.
+    const adding = store.getState().addStep("log.message");
+    store.getState().setPaletteOpen(false);
+    await adding;
+    expect(edit.mock.calls[0]![2][0]).toMatchObject({ op: "addStep", position: { parentId: null, block: null, index: 0 } });
+    expect(store.getState().paletteAt).toBeNull();
+  });
+
   it("reloads and informs the user on revision conflicts (e.g. an AI edited meanwhile)", async () => {
     let current = scenario(1);
     const api = fakeApi({
