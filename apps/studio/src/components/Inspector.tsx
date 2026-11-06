@@ -570,8 +570,14 @@ function ParamsEditor({
               socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}
               secretCapable={def?.secretParams?.includes(key) ?? false}
               pointer={key === "target" ? pointerOf(step.type) : undefined}
-              // JSON Merge Patch: null removes the key.
-              onChange={(value) => update({ params: { [key]: value } })}
+              // The whole params, not a merge patch: a merge would keep the
+              // fields an object (a target) no longer has. null removes the key.
+              onChange={(value) => {
+                const next = { ...params };
+                if (value === null || value === undefined) delete next[key];
+                else next[key] = value;
+                update({ replaceParams: next });
+              }}
             />
           );
         })
