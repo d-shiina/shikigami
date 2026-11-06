@@ -105,7 +105,7 @@ shikigami/
 │  ├─ shikigami-com/      Office の COM 呼び出し（Excel マクロ・Outlook で共用）
 │  ├─ shikigami-files/    file.*（テキスト・CSV・コピー/移動/削除・zip）
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
-│  ├─ shikigami-pdf/      pdf.readText（PDF の文字を読む）
+│  ├─ shikigami-pdf/      pdf.readText・pdf.merge・extractPages・split（PDF を読む・結合・分割）
 │  └─ shikigami-plugins/  ノードのプラグイン（マニフェストで宣言、別プロセスで実行）
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React（src/ がフロント、src-tauri/ が Rust）

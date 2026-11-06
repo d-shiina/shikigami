@@ -192,7 +192,7 @@
 
 ### 19. 帳票 OCR・PDF の操作
 
-- **今**：`pdf.readText`（テキスト層のみ）、`desktop.readText`（画像の OCR、位置つき）。請求書などの項目を取り出す仕組み、PDF の結合・分割・表の読み取りはない（[uipath-coverage.md](uipath-coverage.md)「PDF」）
+- **今**：`pdf.readText`（テキスト層のみ）、`desktop.readText`（画像の OCR、位置つき）。請求書などの項目を取り出す仕組み、表の読み取りはない。PDF の結合・分割は `pdf.merge` / `pdf.extractPages` / `pdf.split` で済み（[uipath-coverage.md](uipath-coverage.md)「PDF」）
 - **相手**：UiPath Document Understanding。WinActor は AI-OCR 製品との連携が定番
 - **方向**：項目の取り出しは「AI なしで動く」と相性が悪い（毎回 AI に読ませると AI ありになる）。位置で読む定型帳票なら OCR＋式で書ける。非定型はプラグイン（外部の AI-OCR）にする
 
