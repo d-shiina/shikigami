@@ -19,7 +19,9 @@ use shikigami_core::{
     UserConfig, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
-use shikigami_runtime::{LogLevel, RunEvent, RunOptions, RunStatus, Runtime, StepOutcome};
+use shikigami_runtime::{
+    LogLevel, RunEvent, RunOptions, RunOrigin, RunStatus, RunTrigger, Runtime, StepOutcome,
+};
 use shikigami_secrets::{SecretInput, Vault};
 
 #[derive(Parser)]
@@ -508,6 +510,7 @@ fn real_main() -> Result<ExitCode> {
             let status = rt.block_on(run(
                 &runtime,
                 svc.store().local_root(),
+                &Policy::path(svc.store().root()),
                 scenario,
                 RunOptions {
                     inputs,
@@ -515,6 +518,7 @@ fn real_main() -> Result<ExitCode> {
                     subscenarios,
                     project_dir,
                     full_run: true,
+                    origin: RunOrigin::new(RunTrigger::Cli),
                     ..RunOptions::default()
                 },
                 *json,
@@ -1097,6 +1101,7 @@ fn parse_inputs(raw: &[String]) -> Result<Map<String, Value>> {
 async fn run(
     runtime: &Runtime,
     workspace: &Path,
+    policy: &Path,
     scenario: Scenario,
     options: RunOptions,
     json: bool,
@@ -1119,7 +1124,7 @@ async fn run(
         }
     });
 
-    let mut recorder = RunRecorder::create(workspace, &handle.run_id)?;
+    let mut recorder = RunRecorder::create(workspace, &handle.run_id)?.prune_on_finish(policy);
     let report = handle
         .wait_with(|e| {
             if let Err(err) = recorder.write_event(e) {

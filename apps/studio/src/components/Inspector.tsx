@@ -1,13 +1,15 @@
-import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
+import type { Part, Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
-import { Crosshair, ScanSearch } from "lucide-react";
+import { Boxes, Crosshair, ScanSearch } from "lucide-react";
 import { api, type SecretField } from "../lib/api";
 import { locale, stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { stepSummary } from "../lib/palette";
 import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
-import { sentence } from "../lib/sentence";
+import { outline } from "../lib/outline";
+import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../lib/parts";
+import { sentence, targetText } from "../lib/sentence";
 import { findStep, revertBlocker, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
@@ -307,6 +309,229 @@ const BROWSER_ROLES = ["button", "link", "textbox", "checkbox", "radio", "combob
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** An object param with declared items, holding nothing or a plain object (not an expression). */
+/**
+ * The target of a browser or desktop node: its own fields, or a named part
+ * of the scenario (`{ part: "<name>" }`), with "部品にする" to share it.
+ */
+function TargetField({
+  step,
+  schema,
+  value,
+  required,
+  onChange,
+}: {
+  step: Step;
+  schema: JsonSchema;
+  value: unknown;
+  required: boolean;
+  onChange: (value: unknown) => void;
+}) {
+  const scenario = useStudio((s) => s.scenario);
+  const applyOps = useStudio((s) => s.applyOps);
+  const select = useStudio((s) => s.select);
+  const [making, setMaking] = useState(false);
+  const [label, setLabel] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const app = appOf(step.type)!;
+  const all = scenario?.parts ?? {};
+  const choices = Object.entries(all).filter(([, p]) => p.app === app);
+  const ref = partRef(value);
+  const part = ref ? all[ref] : undefined;
+  const pointer = pointerOf(step.type);
+  const title = `${paramLabel("target")}${required ? " *" : ""}`;
+
+  const choose = (name: string) => {
+    setNote(null);
+    if (name === "") {
+      if (part) void applyOps(detachOps(step, part));
+      return;
+    }
+    onChange({ part: name });
+  };
+  const make = async () => {
+    const name = newPartName(value, Object.keys(all));
+    const made = makePartOps(scenario?.steps ?? [], step, name, label || name);
+    if (!made) return;
+    if (await applyOps(made.ops)) {
+      setNote(t.parts.made(made.others));
+      setMaking(false);
+      setLabel("");
+    }
+  };
+
+  return (
+    <div className="py-1">
+      <div className="mb-1 flex flex-wrap items-center gap-1.5 pl-1 text-[11px] text-slate-500" title={schema.description ?? "target"}>
+        {title}
+        {!ref && pointer && <PointTools adapter={pointer} schema={schema} value={value} onChange={onChange} />}
+      </div>
+      {(choices.length > 0 || ref) && (
+        <div className="mb-1 flex items-center gap-1.5">
+          <Boxes size={13} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
+          <select className={inputClass} value={ref ?? ""} onChange={(e) => choose(e.target.value)} aria-label={t.parts.usePart}>
+            <option value="">{ref ? t.parts.direct : t.parts.choose}</option>
+            {choices.map(([name, p]) => (
+              <option key={name} value={name}>
+                {p.label ? `${p.label}（${name}）` : name}
+              </option>
+            ))}
+            {ref && !part && <option value={ref}>{t.parts.missing(ref)}</option>}
+          </select>
+        </div>
+      )}
+      {ref ? (
+        part ? (
+          <div className="rounded-[4px] border border-slate-200 bg-paper px-2.5 py-2 text-[12px]">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate">{targetText(part.target)}</span>
+              <button type="button" className="shrink-0 text-[11px] text-brand-600 hover:underline" onClick={() => select({ kind: "part", name: ref })}>
+                {t.parts.open}
+              </button>
+            </div>
+            <p className="pt-1 text-[11px] text-slate-500">{t.parts.shared(partUses(scenario?.steps ?? [], ref).length)}</p>
+          </div>
+        ) : (
+          <p className="px-1 text-[11px] text-shu-600">{t.parts.missing(ref)}</p>
+        )
+      ) : (
+        <>
+          <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} onChange={onChange} />
+          {isRecord(value) &&
+            (making ? (
+              <div className="mt-1 flex items-center gap-1">
+                <input
+                  autoFocus
+                  className={inputClass}
+                  placeholder={t.parts.makeLabel}
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void make();
+                    if (e.key === "Escape") setMaking(false);
+                  }}
+                />
+                <button type="button" className="shrink-0 rounded-[3px] bg-ink px-2.5 py-1 text-[11px] text-paper" onClick={() => void make()}>
+                  {t.parts.create}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                title={t.parts.makeHint}
+                className="mt-1 inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] text-brand-700 hover:bg-brand-50"
+                onClick={() => setMaking(true)}
+              >
+                <Boxes size={13} strokeWidth={1.75} />
+                {t.parts.make}
+              </button>
+            ))}
+        </>
+      )}
+      {note && (
+        <p role="status" className="px-1 pt-1 text-[11px] text-slate-600">
+          {note}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A named part: its name, its target (pick it again, highlight it) and the nodes that use it. */
+function PartInspector({ name }: { name: string }) {
+  const scenario = useStudio((s) => s.scenario);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const applyOps = useStudio((s) => s.applyOps);
+  const goTo = useStudio((s) => s.goTo);
+  const select = useStudio((s) => s.select);
+  const part = scenario?.parts?.[name];
+  if (!scenario || !part) return <p className="p-4 text-sm text-slate-400">{t.parts.missing(name)}</p>;
+  // The widest target of the app: the one nodes that may point at a place take.
+  const def = stepTypes.find((d) => d.type === (part.app === "desktop" ? "desktop.mouseClick" : "browser.click"));
+  const wide = ((def?.paramsSchema as JsonSchema | undefined)?.properties?.target ?? {}) as JsonSchema;
+  // The usual fields, and the others only when the part has them (a place, a picture…).
+  const has = new Set(["window", "element", "role", "name", "label", "text", "placeholder", ...Object.keys(part.target ?? {})]);
+  const schema: JsonSchema = {
+    ...wide,
+    properties: Object.fromEntries(Object.entries(wide.properties ?? {}).filter(([k]) => part.app === "browser" || has.has(k))),
+  };
+  const uses = partUses(scenario.steps ?? [], name);
+  // The node numbers people see in the status bar ("ノード 3 / 5").
+  const order = outline(scenario.steps ?? [], new Map(stepTypes.map((d) => [d.type, d] as const))).map((i) => i.id);
+  const set = (patch: Partial<Part>) => void applyOps([{ op: "setPart", name, part: { ...part, ...patch } }]);
+  const color = CATEGORY_COLOR[part.app === "desktop" ? "windows" : "browser"] ?? CATEGORY_COLOR.other;
+  const pointer = POINTERS.has(part.app) ? part.app : undefined;
+
+  return (
+    <div className="pb-6">
+      <div className="px-4 pt-4 pb-3">
+        <div className="overflow-hidden rounded-[4px] border border-slate-200">
+          <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
+            <Boxes size={14} strokeWidth={1.75} style={{ color }} aria-hidden="true" />
+            <span className="text-sm font-bold" style={{ color }}>
+              {t.parts.title}
+            </span>
+            <span className="ml-auto font-mono text-[10px] text-slate-400">{name}</span>
+          </div>
+          <div className="space-y-1 px-3 py-2">
+            <div className="text-[13px] leading-snug">{part.label || name}</div>
+            <p className="text-[11px] text-slate-500">{targetText(part.target)}</p>
+          </div>
+        </div>
+      </div>
+      <Section title={t.props.basics}>
+        <div className="space-y-1.5">
+          <label className="grid grid-cols-[76px_1fr] items-center gap-x-2">
+            <span className="text-right text-[11px] text-slate-500">{t.parts.label}</span>
+            <CommitInput value={part.label ?? ""} onCommit={(text) => set({ label: text.trim() || undefined })} />
+          </label>
+          <div className="grid grid-cols-[76px_1fr] items-center gap-x-2" title={t.parts.keyHint}>
+            <span className="text-right text-[11px] text-slate-500">{t.parts.key}</span>
+            <span className="font-mono text-[12px] text-slate-600">{name}</span>
+          </div>
+          <div className="grid grid-cols-[76px_1fr] items-center gap-x-2">
+            <span className="text-right text-[11px] text-slate-500">{t.parts.kind}</span>
+            <span className="text-[12px] text-slate-600">{t.parts.app[part.app] ?? part.app}</span>
+          </div>
+        </div>
+      </Section>
+      <Section title={t.parts.target}>
+        <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+          {uses.length > 1 && <span>{t.parts.shared(uses.length)}</span>}
+          {pointer && <PointTools adapter={pointer} schema={schema} value={part.target} onChange={(target) => target && set({ target: target as Part["target"] })} />}
+        </div>
+        <ObjectFields schema={schema} value={part.target as Record<string, unknown>} onChange={(target) => target && set({ target: target as Part["target"] })} />
+      </Section>
+      <Section title={t.parts.usedBy}>
+        {uses.length === 0 ? (
+          <p className="text-[12px] text-slate-500">{t.parts.unused}</p>
+        ) : (
+          <ul className="space-y-0.5">
+            {uses.map((s) => (
+              <li key={s.id}>
+                <button type="button" className="flex w-full items-center gap-2 rounded-[3px] px-1.5 py-1 text-left text-[12px] hover:bg-slate-100" onClick={() => s.id && goTo(s.id)}>
+                  <span className="w-7 shrink-0 text-right font-mono text-[11px] text-slate-400">{order.indexOf(s.id ?? "") + 1}</span>
+                  <span className="truncate">{s.name || stepLabel(s.type, stepTypes.find((d) => d.type === s.type)?.label)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button
+          type="button"
+          disabled={uses.length > 0}
+          title={uses.length > 0 ? t.parts.removeBlocked(uses.length) : undefined}
+          className="mt-2 rounded-[3px] px-1.5 py-0.5 text-[11px] text-shu-600 hover:bg-shu-50 disabled:text-slate-400 disabled:hover:bg-transparent"
+          onClick={() => {
+            void applyOps([{ op: "removePart", name }]).then((ok) => ok && select(null));
+          }}
+        >
+          {t.parts.remove}
+        </button>
+      </Section>
+    </div>
+  );
+}
+
 /** The adapters whose targets can be picked on screen from Studio. */
 const POINTERS = new Set(["desktop"]);
 const pointerOf = (type: string) => {
@@ -574,6 +799,24 @@ function ParamsEditor({
       ) : (
         Object.entries(props).map(([key, propSchema]) => {
           const ref = referencedVariables(params[key], known)[0];
+          const setParam = (value: unknown) => {
+            const next = { ...params };
+            if (value === null || value === undefined) delete next[key];
+            else next[key] = value;
+            update({ replaceParams: next });
+          };
+          if (key === "target" && appOf(step.type)) {
+            return (
+              <TargetField
+                key={key}
+                step={step}
+                schema={propSchema}
+                value={params[key]}
+                required={schema.required?.includes(key) ?? false}
+                onChange={setParam}
+              />
+            );
+          }
           return (
             <ParamField
               key={key}
@@ -586,12 +829,7 @@ function ParamsEditor({
               pointer={key === "target" ? pointerOf(step.type) : undefined}
               // The whole params, not a merge patch: a merge would keep the
               // fields an object (a target) no longer has. null removes the key.
-              onChange={(value) => {
-                const next = { ...params };
-                if (value === null || value === undefined) delete next[key];
-                else next[key] = value;
-                update({ replaceParams: next });
-              }}
+              onChange={setParam}
             />
           );
         })
@@ -1042,10 +1280,22 @@ export function Inspector() {
   if (!scenario) return null;
   const step = selection?.kind === "step" ? findStep(scenario.steps ?? [], selection.stepId) : undefined;
   const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
+  const partName = selection?.kind === "part" ? selection.name : undefined;
+  const part = partName ? scenario.parts?.[partName] : undefined;
   return (
     <aside className="relative z-[1] flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 px-4 text-[12px]">
-        {step ? (
+        {partName ? (
+          <>
+            <button type="button" onClick={() => select(null)} className="shrink-0 text-slate-500 hover:text-ink hover:underline" title={t.shell.toScenario}>
+              {t.shell.scenario}
+            </button>
+            <span className="text-slate-400">›</span>
+            <span className="text-slate-500">{t.parts.title}</span>
+            <span className="text-slate-400">›</span>
+            <span className="truncate font-semibold">{part?.label || partName}</span>
+          </>
+        ) : step ? (
           <>
             {/* The scenario's name is in the title bar; here it is the way back to its properties. */}
             <button type="button" onClick={() => select(null)} className="shrink-0 text-slate-500 hover:text-ink hover:underline" title={t.shell.toScenario}>
@@ -1058,7 +1308,9 @@ export function Inspector() {
           <span className="font-semibold">{t.shell.scenario}</span>
         )}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">{step ? <StepInspector /> : <ScenarioInspector />}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {partName ? <PartInspector name={partName} /> : step ? <StepInspector /> : <ScenarioInspector />}
+      </div>
     </aside>
   );
 }

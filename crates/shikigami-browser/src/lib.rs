@@ -180,7 +180,10 @@ impl Adapter for BrowserAdapter {
     }
 
     /// The page's accessibility tree (`url` opens a page first; `context`,
-    /// `target` narrow it down).
+    /// `target` narrow it down). `action` asks for something else about the
+    /// open page instead: `"pick"` waits for the person to click an element
+    /// and returns it as a target (`message`, `candidates`, `timeoutMs`),
+    /// `"highlight"` outlines `target` / `targets` for a moment.
     fn inspect<'a>(
         &'a self,
         session: &'a str,
@@ -192,8 +195,14 @@ impl Adapter for BrowserAdapter {
                 _ => Map::new(),
             };
             params.insert("runId".into(), Value::String(session.to_owned()));
+            let method = match params.remove("action") {
+                Some(Value::String(a)) if a == "pick" => "pick",
+                Some(Value::String(a)) if a == "highlight" => "highlight",
+                Some(Value::String(a)) if a == "cancelPick" => "cancelPick",
+                _ => "snapshot",
+            };
             self.client
-                .call("snapshot", Value::Object(params), &CancellationToken::new())
+                .call(method, Value::Object(params), &CancellationToken::new())
                 .await
         })
     }
