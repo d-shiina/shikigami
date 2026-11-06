@@ -460,6 +460,9 @@ pub(crate) struct Executor {
     pub iteration: Option<usize>,
     pub emitter: Emitter,
     pub cancel: CancellationToken,
+    /// Pressed stop a second time: `finally` blocks after a stop end now
+    /// instead of getting their grace period.
+    pub force: CancellationToken,
     pub default_timeout_ms: u64,
     pub default_retry: Option<RetryPolicy>,
     pub default_on_error: OnError,
@@ -536,6 +539,7 @@ impl Executor {
             iteration: self.iteration,
             emitter: self.emitter.clone(),
             cancel,
+            force: self.force.clone(),
             default_timeout_ms: self.default_timeout_ms,
             default_retry: self.default_retry,
             default_on_error: self.default_on_error,
@@ -1057,7 +1061,7 @@ impl Executor {
                 }
                 // After cancellation `finally` still runs (to close what
                 // the `try` opened), for at most FINALLY_GRACE, and the run
-                // ends cancelled whatever it does.
+                // ends cancelled whatever it does. Stopping again ends it at once.
                 if matches!(result, Err(Interrupt::Cancelled)) {
                     if step.block("finally").is_empty() {
                         return result;
@@ -1069,8 +1073,13 @@ impl Executor {
                     );
                     let cleanup = CancellationToken::new();
                     let outer = std::mem::replace(&mut self.cancel, cleanup.clone());
+                    // A second stop ends the clean-up too.
+                    let force = self.force.clone();
                     let timer = tokio::spawn(async move {
-                        tokio::time::sleep(FINALLY_GRACE).await;
+                        tokio::select! {
+                            () = tokio::time::sleep(FINALLY_GRACE) => {}
+                            () = force.cancelled() => {}
+                        }
                         cleanup.cancel();
                     });
                     let _ = self.sub_block(step, "finally").await;
