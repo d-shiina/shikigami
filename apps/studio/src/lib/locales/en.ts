@@ -556,6 +556,8 @@ export const en: Dict = {
     stoppedHere: "Stopped here",
     pausedHere: "Paused here",
     note: "Note",
+    /** The tag on the frame around a loop, if, … and its blocks. */
+    frame: { loop: "Loop", if: "If", try: "Try", parallel: "Parallel", group: "Group" },
   },
   project: {
     title: "Project",

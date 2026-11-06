@@ -555,6 +555,8 @@ export const ja = {
     stoppedHere: "ここで止まっています",
     pausedHere: "ここで一時停止中",
     note: "指摘",
+    /** The tag on the frame around a loop, if, … and its blocks. */
+    frame: { loop: "繰り返し", if: "条件分岐", try: "エラー処理", parallel: "同時に実行", group: "グループ" },
   },
   project: {
     title: "プロジェクト",
