@@ -8,6 +8,7 @@
 
 ### 追加
 
+- 値で分岐（VBA の Select Case）：`control.switch`（`value` / `cases` / `default`）と `control.case`（`values` か `condition`）。上から最初に当たったケースだけを実行し、どれにも当たらなければ `default`。検証コード `NOT_A_CASE` / `CASE_OUTSIDE_SWITCH`。フローの形式は変わりません。Studio ではケースごとの枝と「ケースを追加」を表示
 - Studio に「自動実行」：エージェントの状態（実行中のフロー）と「エージェントを開始」・停止、スケジュールの一覧・追加・編集・有効と無効（次と前回の時刻つき、公開版がないものは警告）。フローのインスペクターに「スケジュール」の節
 - Studio：現場の人が使う実行画面「Shikigami 実行」（別ウィンドウ）。公開されたフローだけが並び、入力変数から作るフォームで入力し、公開版を実行。実行中は一番上の段のノードの進み、終わると出力変数と `output/` に書いたファイル、失敗は日本語のエラー。サイドバーの「実行画面」か、Studio を `--runner` で起動して開く（docs/runner.md）
 - 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
