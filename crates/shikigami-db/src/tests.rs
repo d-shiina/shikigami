@@ -263,8 +263,31 @@ fn connection_strings_are_read_like_odbc() {
         ("driver".into(), "ODBC Driver 18 for SQL Server".into())
     );
     assert_eq!(pairs[3], ("extra".into(), "a;b}c".into()));
+    // A key that is neither an endpoint nor a known option: no login.
+    assert_eq!(
+        sql::server_site(&pairs).unwrap_err().code,
+        "DB_CONNECTION_KEY_NOT_ALLOWED"
+    );
+    let pairs = sql::parse_connection(
+        "Driver={ODBC Driver 18 for SQL Server};Server=DB01\\SQLEXPRESS; Database=受注;Encrypt=yes",
+    )
+    .unwrap();
     assert_eq!(sql::server_site(&pairs).unwrap(), "db:db01\\sqlexpress");
-    let dsn = sql::parse_connection("DSN=基幹;Trusted_Connection=yes").unwrap();
+    // psqlODBC names its server Servername; the database is never the site.
+    let pg = sql::parse_connection("Driver={PostgreSQL Unicode};Servername=attacker;Database=db01")
+        .unwrap();
+    assert_eq!(sql::server_site(&pg).unwrap(), "db:attacker");
+    let none = sql::parse_connection("Driver={PostgreSQL Unicode};Database=db01").unwrap();
+    assert_eq!(
+        sql::server_site(&none).unwrap_err().code,
+        "DB_SERVER_UNKNOWN"
+    );
+    let two = sql::parse_connection("DSN=基幹;Server=evil").unwrap();
+    assert_eq!(
+        sql::server_site(&two).unwrap_err().code,
+        "DB_SERVER_AMBIGUOUS"
+    );
+    let dsn = sql::parse_connection("DSN=基幹").unwrap();
     assert_eq!(sql::server_site(&dsn).unwrap(), "db:基幹");
     assert!(sql::is_login_key("pwd") && sql::is_login_key("user id"));
     assert_eq!(sql::quote_value("pa;ss}word"), "{pa;ss}}word}");

@@ -534,8 +534,20 @@ fn shared_scans() -> Vec<u8> {
         },
         b"q /Im2 Do Q".to_vec(),
     ));
+    // A Type 3 font whose glyph draws an image with the page's resources.
+    let im3 = doc.add_object(image("GLYPH-IMAGE"));
+    let glyph = doc.add_object(Stream::new(Dictionary::new(), b"0 0 d0 /Im3 Do".to_vec()));
+    let type3 = doc.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type3",
+        "FontBBox" => vec![0.into(), 0.into(), 1.into(), 1.into()],
+        "FontMatrix" => vec![1.into(), 0.into(), 0.into(), 1.into(), 0.into(), 0.into()],
+        "CharProcs" => dictionary! { "g" => glyph },
+        "Encoding" => dictionary! { "Differences" => vec![65.into(), Object::Name(b"g".to_vec())] },
+        "FirstChar" => 65, "LastChar" => 65, "Widths" => vec![1.into()],
+    });
     let resources = doc.add_object(dictionary! {
-        "XObject" => dictionary! { "Fm1" => form, "Fm2" => borrowing, "Im1" => im1, "Im2" => im2 },
+        "XObject" => dictionary! { "Fm1" => form, "Fm2" => borrowing, "Im1" => im1, "Im2" => im2, "Im3" => im3 },
+        "Font" => dictionary! { "T3" => type3 },
     });
     let pages_id = doc.new_object_id();
     let mut kids = Vec::new();
@@ -583,6 +595,10 @@ async fn a_page_never_carries_images_only_other_pages_draw() {
         assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
         let bytes = std::fs::read(&to).unwrap();
         assert!(contains(&bytes, kept), "page {pages} lost its own image");
+        assert!(
+            contains(&bytes, "GLYPH-IMAGE"),
+            "page {pages} lost its glyph's image"
+        );
         assert!(
             !contains(&bytes, dropped),
             "page {pages} carries another page's image"

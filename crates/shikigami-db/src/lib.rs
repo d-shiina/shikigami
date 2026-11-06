@@ -135,12 +135,7 @@ fn request(kind: Kind, input: &ActionInput) -> Result<Request, StepError> {
     // Every secret that goes into the connection string must be allowed to
     // go to this server, the user name as much as the password.
     let check_site = |secret: &shikigami_core::secret::ResolvedSecret| -> Result<(), StepError> {
-        let site = sql::server_site(&pairs).ok_or_else(|| {
-            StepError::permanent(
-                "DB_SERVER_UNKNOWN",
-                "the connection string names no server (Server, Data Source, DSN or DBQ)",
-            )
-        })?;
+        let site = sql::server_site(&pairs)?;
         if secret.sites.iter().any(|s| s.eq_ignore_ascii_case(&site)) {
             return Ok(());
         }

@@ -13,7 +13,8 @@
 
 - `connection` は ODBC の接続文字列です：`Driver={ODBC Driver 18 for SQL Server};Server=db01;Database=受注;TrustServerCertificate=yes`、`DSN=基幹システム`（「ODBC データ ソース (64 ビット)」で作ったもの）、`Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:\data\受注.accdb`。
 - パスワードは書きません。`UID` / `PWD` を書くと `DB_LOGIN_IN_CONNECTION`。ログインは登録済みのシークレットで、`user: { "secret": "受注DB", "field": "username" }`、`password: { "secret": "受注DB", "field": "password" }`（`password` はシークレットだけ）。
-- Web API と同じく、シークレットは許した先にだけ送ります。シークレットのサイトに `db:<サーバー>` が要ります。サーバーは接続文字列の `Server`（なければ `Data Source`・`Host`・`DSN`・`DBQ`）で、例 `db:db01`、`db:db01\sqlexpress`。ないと `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` になり、AI は `request_secret` で登録を頼みます。
+- Web API と同じく、シークレットは許した先にだけ送ります。シークレットのサイトに `db:<サーバー>` が要ります。サーバーは接続文字列でサーバーを指すキー（`Server`・`Servername`・`Data Source`・`Host`・`DSN`・`DBQ`、SQLite は `Database` のファイル）で、例 `db:db01`、`db:db01\sqlexpress`。ないと `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH` になり、AI は `request_secret` で登録を頼みます。
+- ログインを送るときは、接続文字列でサーバーを指すのは 1 つだけ（2 つあると `DB_SERVER_AMBIGUOUS`）、ほかは `Driver`・`Database`・`Port`・`Encrypt` などよく知られた設定だけにします（それ以外は `DB_CONNECTION_KEY_NOT_ALLOWED` で、使えるキーの一覧が付きます）。ほかの設定でログインを別の先へ送らせないためです。ほかのドライバー設定は DSN に入れてください。
 - Windows 認証（`Trusted_Connection=yes`、サインイン中の Windows ユーザー）ならシークレットは要りません。
 
 ## SQL と値

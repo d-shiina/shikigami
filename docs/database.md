@@ -13,7 +13,8 @@ Crate `shikigami-db`. Built-in nodes that run SQL through ODBC, so one pair of n
 
 - `connection` is an ODBC connection string: `Driver={ODBC Driver 18 for SQL Server};Server=db01;Database=orders;TrustServerCertificate=yes`, `DSN=core-system` (a data source set up in "ODBC Data Sources (64-bit)"), or `Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:\data\orders.accdb`.
 - A password never goes in it: `UID` / `PWD` there give `DB_LOGIN_IN_CONNECTION`. The login is a registered secret, `user: { "secret": "Orders DB", "field": "username" }` and `password: { "secret": "Orders DB", "field": "password" }` (`password` takes only a secret).
-- Like web APIs, the secret is sent only where it is allowed: its sites must include `db:<server>`, where the server is the `Server` (or `Data Source`, `Host`, `DSN`, `DBQ`) of the connection string, e.g. `db:db01` or `db:db01\sqlexpress`. Otherwise `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH`, and the AI asks for it with `request_secret`.
+- Like web APIs, the secret is sent only where it is allowed: its sites must include `db:<server>`, where the server is the one key of the connection string that names it (`Server`, `Servername`, `Data Source`, `Host`, `DSN`, `DBQ`; the file in `Database` for SQLite), e.g. `db:db01` or `db:db01\sqlexpress`. Otherwise `SECRET_SITE_NOT_SET` / `SECRET_SITE_MISMATCH`, and the AI asks for it with `request_secret`.
+- With a login, the connection string may name the server only once (`DB_SERVER_AMBIGUOUS`) and may hold only well-known options such as `Driver`, `Database`, `Port`, `Encrypt` (`DB_CONNECTION_KEY_NOT_ALLOWED` lists them), so no other setting can send the login elsewhere. Put other driver settings in a DSN.
 - Windows authentication (`Trusted_Connection=yes`, the signed-in Windows user) needs no secret.
 
 ## SQL and values

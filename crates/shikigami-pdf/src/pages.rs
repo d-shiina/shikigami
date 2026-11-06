@@ -116,7 +116,9 @@ pub fn assemble(sources: Vec<Source>) -> Document {
 }
 
 /// The names `Do` draws in a content stream (images and forms), or `None`
-/// when the content cannot be read (then nothing is cut).
+/// when the content cannot be read (then nothing is cut). The name is the
+/// last operand: the parser reads a glyph's `0 0 d0` as `d` with an extra
+/// `0` that it hands to the next operator.
 fn drawn_names(content: &[u8]) -> Option<HashSet<Vec<u8>>> {
     let content = Content::decode(content).ok()?;
     Some(
@@ -124,7 +126,13 @@ fn drawn_names(content: &[u8]) -> Option<HashSet<Vec<u8>>> {
             .operations
             .iter()
             .filter(|op| op.operator == "Do")
-            .filter_map(|op| op.operands.first()?.as_name().ok().map(<[u8]>::to_vec))
+            .filter_map(|op| {
+                op.operands
+                    .iter()
+                    .rev()
+                    .find_map(|o| o.as_name().ok())
+                    .map(<[u8]>::to_vec)
+            })
             .collect(),
     )
 }
@@ -138,13 +146,45 @@ fn dictionary(doc: &Document, object: &Object) -> Option<Dictionary> {
     }
 }
 
-/// `used` plus what forms without resources of their own draw: such a
-/// form uses the resources of whatever draws it (older PDFs write it so).
+/// `used` plus what forms and Type 3 glyphs without resources of their
+/// own draw: they use the resources of whatever draws them (older PDFs
+/// write them so).
 fn with_borrowing_forms(
     doc: &Document,
     resources: &Dictionary,
     mut used: HashSet<Vec<u8>>,
 ) -> Option<HashSet<Vec<u8>>> {
+    // Type 3 glyphs without resources of their own draw with these too.
+    for (_, font) in resources
+        .get(b"Font")
+        .ok()
+        .and_then(|f| dictionary(doc, f))
+        .iter()
+        .flat_map(Dictionary::iter)
+    {
+        let Some(font) = dictionary(doc, font) else {
+            continue;
+        };
+        let is_type3 = matches!(font.get(b"Subtype"), Ok(Object::Name(n)) if n == b"Type3");
+        if !is_type3 || font.has(b"Resources") {
+            continue;
+        }
+        let glyphs = font
+            .get(b"CharProcs")
+            .ok()
+            .and_then(|c| dictionary(doc, c))?;
+        for (_, glyph) in glyphs.iter() {
+            let stream = glyph
+                .as_reference()
+                .ok()
+                .and_then(|id| doc.get_object(id).and_then(Object::as_stream).ok())?;
+            let content = stream
+                .decompressed_content()
+                .unwrap_or_else(|_| stream.content.clone());
+            // A glyph whose drawing cannot be read: nothing is cut.
+            used.extend(drawn_names(&content)?);
+        }
+    }
     let Some(xobjects) = resources
         .get(b"XObject")
         .ok()

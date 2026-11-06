@@ -76,25 +76,100 @@ pub fn is_login_key(key: &str) -> bool {
     )
 }
 
+/// Keys that name where the driver connects. Different drivers use
+/// different ones (psqlODBC: Servername, MySQL: Server, Oracle: DBQ).
+const ENDPOINT_KEYS: [&str; 10] = [
+    "server",
+    "servername",
+    "data source",
+    "host",
+    "hostname",
+    "address",
+    "addr",
+    "network address",
+    "dsn",
+    "dbq",
+];
+
+/// Other keys a connection string may hold when a login is sent with it:
+/// none of them can point the driver somewhere else.
+const OPTION_KEYS: [&str; 22] = [
+    "driver",
+    "database",
+    "initial catalog",
+    "port",
+    "encrypt",
+    "trustservercertificate",
+    "hostnameincertificate",
+    "applicationintent",
+    "multisubnetfailover",
+    "connection timeout",
+    "login timeout",
+    "timeout",
+    "app",
+    "application name",
+    "wsid",
+    "workstation id",
+    "language",
+    "readonly",
+    "charset",
+    "sslmode",
+    "option",
+    "schema",
+];
+
 /// The site a secret must list to be sent with this connection:
-/// `db:<server>`, from the first of Server, Data Source, Host, DSN, DBQ.
-pub fn server_site(pairs: &[(String, String)]) -> Option<String> {
-    [
-        "server",
-        "data source",
-        "host",
-        "hostname",
-        "dsn",
-        "dbq",
-        "database",
-    ]
-    .iter()
-    .find_map(|key| {
-        pairs
-            .iter()
-            .find(|(k, v)| k == key && !v.trim().is_empty())
-            .map(|(_, v)| format!("db:{}", v.trim().to_lowercase()))
-    })
+/// `db:<server>`, from the one key that names where the driver connects.
+/// A connection string a login may not go with (no endpoint, two different
+/// endpoints, or a key that could send the driver elsewhere) is refused,
+/// so a secret only ever goes where its site says.
+pub fn server_site(pairs: &[(String, String)]) -> Result<String, StepError> {
+    if let Some((key, _)) = pairs
+        .iter()
+        .find(|(k, _)| !ENDPOINT_KEYS.contains(&k.as_str()) && !OPTION_KEYS.contains(&k.as_str()))
+    {
+        return Err(StepError::permanent(
+            "DB_CONNECTION_KEY_NOT_ALLOWED",
+            format!("a login is not sent with a connection string that sets {key}"),
+        )
+        .with_details(json!({
+            "key": key,
+            "allowed": ENDPOINT_KEYS.iter().chain(OPTION_KEYS.iter()).collect::<Vec<_>>(),
+            "hint": "With user / password, the connection string may only hold the keys in `allowed`, so the login can only go to the server its secret names. Put other driver settings in an ODBC data source (DSN) and connect with DSN=<name>, or use Windows authentication (Trusted_Connection=yes) without a login.",
+        })));
+    }
+    let mut endpoints: Vec<String> = pairs
+        .iter()
+        .filter(|(k, v)| ENDPOINT_KEYS.contains(&k.as_str()) && !v.trim().is_empty())
+        .map(|(_, v)| v.trim().to_lowercase())
+        .collect();
+    endpoints.dedup();
+    let driver = pairs
+        .iter()
+        .find(|(k, _)| k == "driver")
+        .map(|(_, v)| v.to_lowercase())
+        .unwrap_or_default();
+    if endpoints.is_empty() && driver.contains("sqlite") {
+        // A SQLite database is its file.
+        endpoints.extend(
+            pairs
+                .iter()
+                .filter(|(k, v)| k == "database" && !v.trim().is_empty())
+                .map(|(_, v)| v.trim().to_lowercase()),
+        );
+    }
+    match endpoints.as_slice() {
+        [one] => Ok(format!("db:{one}")),
+        [] => Err(StepError::permanent(
+            "DB_SERVER_UNKNOWN",
+            "the connection string names no server (Server, Data Source, Servername, DSN or DBQ)",
+        )),
+        _ => Err(StepError::permanent(
+            "DB_SERVER_AMBIGUOUS",
+            format!("the connection string names more than one server: {}", endpoints.join(", ")),
+        )
+        .with_details(json!({ "hint": "Name the server once (Server=..., or DSN=... alone) so the login can only go there." }))),
+    }
 }
 
 /// A value as written in a connection string: in braces when it has to be.
