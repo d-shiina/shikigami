@@ -1872,3 +1872,104 @@ async fn the_origin_of_a_run_is_recorded() {
     let old: RunReport = serde_json::from_value(old).unwrap();
     assert!(old.origin.is_empty());
 }
+
+fn click_def() -> StepTypeDef {
+    StepTypeDef {
+        targets: Vec::new(),
+        step_type: "test.click".into(),
+        label: "click".into(),
+        params_schema: json!({ "type": "object" }),
+        has_output: false,
+        resources: vec![ResourceDef::Static(DESKTOP_INPUT.into())],
+        secret_params: vec![],
+        default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
+        ..flaky_def()
+    }
+}
+
+#[tokio::test]
+async fn desktop_input_is_exclusive_across_processes() {
+    let mouse = Arc::new(FakeMouse {
+        active: AtomicU32::new(0),
+        peak: AtomicU32::new(0),
+    });
+    struct Shared(Arc<FakeMouse>);
+    impl ActionHandler for Shared {
+        fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+            self.0.execute(input)
+        }
+    }
+    let locks = tempfile::tempdir().unwrap();
+    // Two Runtimes stand for two processes (Studio and the CLI): they share
+    // nothing but the lock folder.
+    let runtime = || {
+        Runtime::builder()
+            .register(click_def(), Shared(mouse.clone()))
+            .build()
+            .with_pc_locks(locks.path().to_path_buf())
+    };
+    let (a, b) = (runtime(), runtime());
+    let s = || scenario(vec![Step::new("test.click"), Step::new("test.click")]);
+    let (ra, rb) = tokio::join!(run(&a, s(), json!({})), run(&b, s(), json!({})));
+    assert_eq!(ra.0.status, RunStatus::Succeeded);
+    assert_eq!(rb.0.status, RunStatus::Succeeded);
+    assert_eq!(mouse.peak.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn desktop_steps_stop_while_the_screen_is_locked() {
+    let runtime = Runtime::builder()
+        .register(
+            click_def(),
+            FakeMouse {
+                active: AtomicU32::new(0),
+                peak: AtomicU32::new(0),
+            },
+        )
+        .desktop_probe(Arc::new(|| Some("the screen is locked".into())))
+        .build();
+    let (report, _) = run(&runtime, scenario(vec![Step::new("test.click")]), json!({})).await;
+    let error = report.error.unwrap();
+    assert_eq!(error.code, "DESKTOP_UNAVAILABLE");
+    assert_eq!(error.step_id.as_ref().map(|s| s.as_str()), Some("s1"));
+    // Steps without the mouse and keyboard are not affected.
+    let (report, _) = run(&runtime, scenario(vec![log("ok")]), json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+}
+
+#[tokio::test]
+async fn finally_still_runs_when_a_run_is_cancelled() {
+    let s = scenario(vec![
+        Step::new("control.try")
+            .with_block("try", vec![delay(60_000)])
+            .with_block(
+                "finally",
+                vec![log("closing the app"), delay(10), log("closed")],
+            ),
+        log("never"),
+    ]);
+    let mut handle = Runtime::new()
+        .start(s, RunOptions::default())
+        .expect("start");
+    while let Some(e) = handle.next_event().await {
+        if matches!(e.event, RunEvent::StepStarted { .. }) {
+            break;
+        }
+    }
+    handle.cancel();
+    let mut events = Vec::new();
+    let report = tokio::time::timeout(
+        Duration::from_secs(5),
+        handle.wait_with(|e| events.push(e.clone())),
+    )
+    .await
+    .expect("finishes")
+    .unwrap();
+    assert_eq!(report.status, RunStatus::Cancelled);
+    let logs = logs(&events);
+    assert!(logs.contains(&"closing the app".to_string()));
+    assert!(logs.contains(&"closed".to_string()));
+    assert!(!logs.contains(&"never".to_string()));
+}
