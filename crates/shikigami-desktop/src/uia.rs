@@ -1005,10 +1005,12 @@ impl Uia {
                             (ScrollAmount_SmallIncrement, ScrollAmount_SmallDecrement)
                         }
                     };
+                    let percent = || scroll_percent(&scroller, direction.is_vertical());
                     for _ in 0..amount {
                         if scroll_state(&scroller, Some(direction))["atEnd"] == json!(true) {
                             break;
                         }
+                        let before = percent();
                         let (h, v) = match direction {
                             Direction::Down => (ScrollAmount_NoAmount, forward),
                             Direction::Up => (ScrollAmount_NoAmount, backward),
@@ -1016,6 +1018,13 @@ impl Uia {
                             _ => (backward, ScrollAmount_NoAmount),
                         };
                         scroller.Scroll(h, v).map_err(action_error)?;
+                        // A scroll that moved nothing is at its end, whatever
+                        // percentage the app reports there.
+                        if percent() == before {
+                            let mut state = scroll_state(&scroller, Some(direction));
+                            state["atEnd"] = json!(true);
+                            return Ok(state);
+                        }
                     }
                 }
             }
@@ -1213,7 +1222,14 @@ impl Uia {
         let mut roots: Vec<(IUIAutomationElement, bool)> = self
             .windows()?
             .into_iter()
-            .filter(|(_, w, _)| w.pid == found.window.pid && w.handle != found.window.handle)
+            // Only the app's open popup menus (Win32 menus, WinForms and
+            // WPF drop-downs), not its other windows with their own menu
+            // bars.
+            .filter(|(_, w, node)| {
+                w.pid == found.window.pid
+                    && w.handle != found.window.handle
+                    && (node.role == "menu" || matches!(w.class_name.as_str(), "#32768" | "Popup"))
+            })
             .map(|(el, _, _)| (el, true))
             .collect();
         if let Some(parent) = parent {
@@ -1593,27 +1609,31 @@ fn activate_menu_item(
 
 /// Where a scrollable area stands: percents (null when it cannot scroll
 /// that way) and whether it can go no further in `direction`.
-fn scroll_state(p: &IUIAutomationScrollPattern, direction: Option<Direction>) -> Value {
+/// How far a scroller is scrolled (0–100), or None when it does not scroll
+/// that way.
+fn scroll_percent(p: &IUIAutomationScrollPattern, vertical: bool) -> Option<f64> {
     // SAFETY: UIA calls on the UIA thread.
-    let (v, h) = unsafe {
-        let read = |scrollable: windows::core::Result<windows::core::BOOL>,
-                    percent: windows::core::Result<f64>| {
-            match (scrollable, percent) {
-                (Ok(s), Ok(p)) if s.as_bool() && p >= 0.0 => Some(p),
-                _ => None,
-            }
-        };
-        (
-            read(
+    let (scrollable, percent) = unsafe {
+        if vertical {
+            (
                 p.CurrentVerticallyScrollable(),
                 p.CurrentVerticalScrollPercent(),
-            ),
-            read(
+            )
+        } else {
+            (
                 p.CurrentHorizontallyScrollable(),
                 p.CurrentHorizontalScrollPercent(),
-            ),
-        )
+            )
+        }
     };
+    match (scrollable, percent) {
+        (Ok(s), Ok(p)) if s.as_bool() && p >= 0.0 => Some(p),
+        _ => None,
+    }
+}
+
+fn scroll_state(p: &IUIAutomationScrollPattern, direction: Option<Direction>) -> Value {
+    let (v, h) = (scroll_percent(p, true), scroll_percent(p, false));
     let at_end = match direction {
         None => false,
         Some(d) => {
@@ -1621,8 +1641,11 @@ fn scroll_state(p: &IUIAutomationScrollPattern, direction: Option<Direction>) ->
             let forward = matches!(d, Direction::Down | Direction::Bottom | Direction::Right);
             match percent {
                 None => true,
-                Some(p) if forward => p >= 99.9,
-                Some(p) => p <= 0.1,
+                // Only the very end: on a long list the last 0.1% can
+                // still hide rows (a scroll that moves nothing is caught
+                // by the caller).
+                Some(p) if forward => p >= 100.0 - 1e-6,
+                Some(p) => p <= 1e-6,
             }
         }
     };
