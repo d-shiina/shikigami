@@ -238,4 +238,33 @@ describe("agent store", () => {
     expect(store.getState().chats.some((c) => c.sessionId === "sess_old" && c.scenarioId === null)).toBe(true);
     vi.unstubAllGlobals();
   });
+  it("takes a correction while the AI works: stops the turn, then sends it in the same conversation", async () => {
+    let turn = 0;
+    const api = fakeAgent({ send: vi.fn(async () => `turn_${++turn}`) });
+    const store = createAgentStore(api);
+    await store.getState().init();
+    const a = { id: "scn_a", name: "A" };
+    store.getState().focus(a);
+    await store.getState().send("CSVで保存して", a);
+    store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "sess" });
+    const chatId = store.getState().current;
+
+    expect(await store.getState().sendIn(chatId, "やっぱりExcelで", a)).toBe(true);
+    expect(api.stop).toHaveBeenCalledWith("turn_1");
+    expect(api.send).toHaveBeenCalledOnce();
+    // Only one correction at a time.
+    expect(await store.getState().sendIn(chatId, "もう一つ", a)).toBe(false);
+
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: false, message: "止めました", costUsd: null, needsLogin: false });
+    await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
+    const last = vi.mocked(api.send).mock.calls[1]![0];
+    expect(last.sessionId).toBe("sess");
+    expect(last.message).toContain("やっぱりExcelで");
+    expect(last.message).toContain("stopped your previous turn");
+    const items = now(store.getState()).items;
+    expect(items.map((i) => i.role)).toEqual(["person", "ai", "person", "ai"]);
+    expect(items[1]).toMatchObject({ status: "done" });
+    expect(items[2]).toMatchObject({ text: "やっぱりExcelで" });
+    expect(now(store.getState())).toMatchObject({ interrupting: null, turnId: "turn_2" });
+  });
 });

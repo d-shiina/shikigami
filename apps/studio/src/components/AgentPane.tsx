@@ -16,7 +16,7 @@ export function AgentPane({ width }: { width: number }) {
   const setOpen = useAgent((s) => s.setOpen);
   const info = useAgent((s) => s.info);
   const chat = useAgent(currentChat);
-  const blockedElsewhere = useAgent((s) => !isBusy(currentChat(s)) && scenarioBusy(s, currentChat(s).scenarioId));
+  const blockedElsewhere = useAgent((s) => scenarioBusy(s, currentChat(s).scenarioId, s.current));
   const sendIn = useAgent((s) => s.sendIn);
   const stop = useAgent((s) => s.stop);
   const newChat = useAgent((s) => s.newChat);
@@ -122,8 +122,10 @@ export function AgentPane({ width }: { width: number }) {
           className="w-full resize-none rounded-[4px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
-          <span className="min-w-0 truncate text-[10.5px] text-slate-500">{blockedElsewhere ? t.agent.busyElsewhere : t.agent.sendHint}</span>
-          {chat.turnId ? (
+          <span className="min-w-0 truncate text-[10.5px] text-slate-500" title={busy ? t.agent.interruptHint : undefined}>
+            {blockedElsewhere ? t.agent.busyElsewhere : chat.interrupting ? t.agent.interrupting : busy ? t.agent.interruptHint : t.agent.sendHint}
+          </span>
+          {chat.turnId && !chat.interrupting && (
             <button
               type="button"
               onClick={() => void stop(chat.id)}
@@ -131,16 +133,16 @@ export function AgentPane({ width }: { width: number }) {
             >
               {t.stop}
             </button>
-          ) : (
-            <button
-              type="button"
-              disabled={!info?.available || busy || blockedElsewhere || draft.trim() === ""}
-              onClick={() => void submit()}
-              className="ml-auto h-8 shrink-0 rounded-[4px] bg-ink px-4 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400"
-            >
-              {t.agent.send}
-            </button>
           )}
+          <button
+            type="button"
+            disabled={!info?.available || chat.interrupting !== null || blockedElsewhere || draft.trim() === ""}
+            onClick={() => void submit()}
+            title={busy ? t.agent.interruptHint : undefined}
+            className={`${chat.turnId && !chat.interrupting ? "" : "ml-auto "}h-8 shrink-0 rounded-[4px] bg-ink px-4 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400`}
+          >
+            {busy ? t.agent.interrupt : t.agent.send}
+          </button>
         </div>
       </div>
     </aside>
@@ -291,6 +293,7 @@ function Item({ item }: { item: ChatItem }) {
         <Part key={i} part={part} />
       ))}
       {item.status === "running" && <Progress starting={item.turnId === ""} quiet={item.parts.length === 0} />}
+      {item.status === "done" && item.message && <div className="text-[11px] text-slate-500">{item.message}</div>}
       {/* An expired login is explained by the sign-in box below instead. */}
       {item.status === "failed" && !item.needsLogin && (
         <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-2.5 py-1.5 text-[12px] whitespace-pre-wrap text-shu-600">

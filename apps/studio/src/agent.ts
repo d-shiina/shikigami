@@ -25,6 +25,8 @@ export type ChatItem =
       context: string | null;
       /** Kept so the message can be sent again, e.g. after signing in. */
       scenario: AgentRequest["scenario"] | null;
+      /** What the agent is told, when it differs from what the person wrote. */
+      prompt?: string;
     }
   | {
       role: "ai";
@@ -52,6 +54,11 @@ export type Chat = {
   sending: boolean;
   /** Finished while it was not on screen. */
   unread: boolean;
+  /**
+   * A correction sent while the AI was working: the running turn is being
+   * stopped, and this message goes out as soon as it has.
+   */
+  interrupting: Extract<ChatItem, { role: "person" }> | null;
   updatedAt: number;
 };
 
@@ -105,9 +112,16 @@ export function currentChat(s: Pick<AgentState, "chats" | "current">): Chat {
 
 export const anyBusy = (s: Pick<AgentState, "chats">): boolean => s.chats.some(isBusy);
 
-/** The AI is already working on this scenario in some conversation. */
-export const scenarioBusy = (s: Pick<AgentState, "chats">, scenarioId: string | null | undefined): boolean =>
-  !!scenarioId && s.chats.some((c) => c.scenarioId === scenarioId && isBusy(c));
+/** The AI is already working on this scenario in some conversation (other than `except`). */
+export const scenarioBusy = (s: Pick<AgentState, "chats">, scenarioId: string | null | undefined, except?: string): boolean =>
+  !!scenarioId && s.chats.some((c) => c.id !== except && c.scenarioId === scenarioId && isBusy(c));
+
+/**
+ * Put before a correction, so the agent resuming the conversation knows its
+ * last turn was cut short on purpose and what is already done stays done.
+ */
+export const INTERRUPT_NOTE =
+  "[The person stopped your previous turn midway to send this correction. Edits you made before that are already in the scenario; check with get_scenario before redoing anything. Follow this message over the earlier request where they differ.]";
 
 const CHATS_KEY = "shikigami.studio.agentChats";
 /** Before conversations per scenario: one conversation for everything. */
@@ -167,6 +181,7 @@ function blank(scenario: ScenarioLabel | null): Chat {
     turnId: null,
     sending: false,
     unread: false,
+    interrupting: null,
     updatedAt: Date.now(),
   };
 }
@@ -218,13 +233,23 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         update(chatId, (c) => ({ ...c, turnId, sending: false, items: reply(c, { turnId }) }));
         for (const e of early.get(turnId) ?? []) get().onEvent(e);
         early.delete(turnId);
+        // Corrected before the agent had even started.
+        if (chat(chatId)?.interrupting && chat(chatId)?.turnId === turnId) await api.stop(turnId).catch(() => undefined);
         return true;
       } catch (e) {
         update(chatId, (c) => ({ ...c, sending: false, items: reply(c, { status: "failed", message: errorText(e) }) }));
+        void sendInterrupting(chatId);
         return false;
       }
     };
-    const restored: Chat[] = load().map((c) => ({ ...c, items: [], turnId: null, sending: false, unread: false }));
+    /** The turn a correction waited for has ended: send the correction. */
+    const sendInterrupting = (chatId: string) => {
+      const waiting = chat(chatId)?.interrupting;
+      if (!waiting || isBusy(chat(chatId))) return Promise.resolve(false);
+      update(chatId, (c) => ({ ...c, interrupting: null }));
+      return dispatch(chatId, waiting.prompt ?? waiting.text, waiting.scenario);
+    };
+    const restored: Chat[] = load().map((c) => ({ ...c, items: [], turnId: null, sending: false, unread: false, interrupting: null }));
     const first = blank(null);
     return {
       info: null,
@@ -296,7 +321,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
           target = blank(scenario ? { id: scenario.id, name: scenario.name } : null);
           set({ chats: [target, ...get().chats] });
         }
-        if (isBusy(target) || scenarioBusy(get(), id)) return false;
+        if (isBusy(target) || scenarioBusy(get(), id, target.id)) return false;
         show(target.id);
         return get().sendIn(target.id, message, scenario ?? null, context);
       },
@@ -304,7 +329,15 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       async sendIn(chatId, message, scenario, context = null) {
         const text = message.trim();
         const target = chat(chatId);
-        if (!text || !target || isBusy(target) || scenarioBusy(get(), target.scenarioId)) return false;
+        if (!text || !target || target.interrupting || scenarioBusy(get(), target.scenarioId, chatId)) return false;
+        if (isBusy(target)) {
+          // A correction mid-turn: stop the turn, then send this in the same
+          // conversation so the agent keeps what it has done and heard.
+          const person = { role: "person" as const, id: nextId("item"), text, context, scenario, prompt: `${INTERRUPT_NOTE}\n\n${text}` };
+          update(chatId, (c) => ({ ...c, interrupting: person, items: [...c.items, person] }));
+          if (target.turnId) await api.stop(target.turnId).catch(() => undefined);
+          return true;
+        }
         const person: ChatItem = { role: "person", id: nextId("item"), text, context, scenario };
         update(chatId, (c) => ({ ...c, title: c.title || titleOf(text), items: [...c.items, person] }));
         return dispatch(chatId, text, scenario);
@@ -325,7 +358,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         if (!last || last.role !== "person") return false;
         // The same message again: replace the failed reply instead of repeating the message.
         update(chatId, (c) => ({ ...c, items: items.slice(0, index + 1) }));
-        return dispatch(chatId, last.text, last.scenario);
+        return dispatch(chatId, last.prompt ?? last.text, last.scenario);
       },
 
       async startLogin() {
@@ -417,14 +450,16 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
               parts: [...i.parts, { kind: "toolFailed", message: event.message }],
             }));
             return;
-          case "done":
+          case "done": {
+            // Stopped for a correction: not a failure, the conversation goes on.
+            const cut = owner.interrupting !== null && !event.ok;
             updateTurn(event.turnId, (i) => ({
               ...i,
               // Claude Code also says the error as the reply; show it once.
               parts: event.ok ? i.parts : i.parts.filter((p) => !(p.kind === "text" && p.text.trim() === event.message?.trim())),
-              status: event.ok ? "done" : "failed",
-              message: event.message,
-              needsLogin: !event.ok && event.needsLogin,
+              status: event.ok || cut ? "done" : "failed",
+              message: cut ? t.agent.interrupted : event.message,
+              needsLogin: !event.ok && !cut && event.needsLogin,
             }));
             update(owner.id, (c) => ({
               ...c,
@@ -432,7 +467,9 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
               unread: c.unread || get().current !== c.id || !get().open,
               updatedAt: Date.now(),
             }));
+            void sendInterrupting(owner.id);
             return;
+          }
         }
       },
     };
