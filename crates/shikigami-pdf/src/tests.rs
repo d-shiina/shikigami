@@ -276,3 +276,228 @@ async fn the_documented_amount_expression_works() {
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs["amount"], json!(12800));
 }
+
+// -- merge, extract, split ----------------------------------------------------
+
+async fn run_step(step_type: &str, params: Value) -> RunReport {
+    let mut s = Scenario::new("pdf");
+    s.variables.push(VariableDef {
+        direction: VarDirection::Output,
+        ..VariableDef::new("out", VarType::Any)
+    });
+    let mut step = Step::new(step_type);
+    for (k, v) in params.as_object().unwrap() {
+        step = step.with_param(k, v.clone());
+    }
+    step.save_as = Some("out".into());
+    shikigami_core::ops::assign_missing_ids(&mut step);
+    s.steps = vec![step];
+    runtime()
+        .start(s, RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap()
+}
+
+/// The text of each page of the PDF at `path`.
+fn page_texts(path: &std::path::Path) -> Vec<String> {
+    read_pages(&std::fs::read(path).unwrap(), None, "test")
+        .unwrap()
+        .into_iter()
+        .map(|t| t.trim().to_owned())
+        .collect()
+}
+
+/// `contents` with Resources and MediaBox set on the page tree, not on the
+/// pages (they inherit them), as many producers write it.
+fn inherited(contents: &[&str]) -> Vec<u8> {
+    let mut doc = document(contents);
+    let pages_id = doc
+        .catalog()
+        .unwrap()
+        .get(b"Pages")
+        .unwrap()
+        .as_reference()
+        .unwrap();
+    let mut shared = Vec::new();
+    for id in doc.get_pages().into_values() {
+        let page = doc.get_dictionary_mut(id).unwrap();
+        shared = vec![
+            ("Resources", page.remove(b"Resources").unwrap()),
+            ("MediaBox", page.remove(b"MediaBox").unwrap()),
+        ];
+    }
+    let node = doc.get_dictionary_mut(pages_id).unwrap();
+    for (key, value) in shared {
+        node.set(key, value);
+    }
+    save(doc)
+}
+
+fn shown(path: &std::path::Path) -> Value {
+    json!(path.display().to_string())
+}
+
+#[tokio::test]
+async fn merges_pdfs_in_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = dir.path().join("表紙.pdf");
+    let b = dir.path().join("請求書.pdf");
+    std::fs::write(&a, pdf(&["表紙"])).unwrap();
+    std::fs::write(&b, inherited(&["請求書一", "請求書二"])).unwrap();
+    let to = dir.path().join("out").join("一式.pdf");
+    let report = run_step(
+        types::MERGE,
+        json!({ "files": [shown(&a), shown(&b)], "to": shown(&to) }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["pageCount"], json!(3));
+    assert_eq!(page_texts(&to), ["表紙", "請求書一", "請求書二"]);
+
+    // An existing file is kept unless overwrite is set.
+    let report = run_step(
+        types::MERGE,
+        json!({ "files": [shown(&b)], "to": shown(&to) }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "FILE_EXISTS");
+    let report = run_step(
+        types::MERGE,
+        json!({ "files": [shown(&b)], "to": shown(&to), "overwrite": true }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(page_texts(&to), ["請求書一", "請求書二"]);
+}
+
+#[tokio::test]
+async fn extracts_pages_in_the_order_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("束.pdf");
+    std::fs::write(&path, inherited(&["一", "二", "三", "四"])).unwrap();
+    let to = dir.path().join("抜粋.pdf");
+    let report = run_step(
+        types::EXTRACT_PAGES,
+        json!({ "path": shown(&path), "pages": "3-, 1", "to": shown(&to) }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["pageCount"], json!(3));
+    assert_eq!(page_texts(&to), ["三", "四", "一"]);
+
+    let report = run_step(
+        types::EXTRACT_PAGES,
+        json!({ "path": shown(&path), "pages": "5", "to": shown(&dir.path().join("x.pdf")) }),
+    )
+    .await;
+    let error = report.error.unwrap();
+    assert_eq!(error.code, "PDF_PAGE_OUT_OF_RANGE");
+    assert!(error.message.contains("4 pages"), "{}", error.message);
+}
+
+#[test]
+fn page_lists_are_read_strictly() {
+    assert_eq!(pages::parse_pages("1-3,5", 5).unwrap(), [1, 2, 3, 5]);
+    assert_eq!(pages::parse_pages("4-", 5).unwrap(), [4, 5]);
+    assert_eq!(pages::parse_pages(" 2 、1 ", 5).unwrap(), [2, 1]);
+    for bad in ["0", "a", "3-1", "1,1", "1-2,2", ""] {
+        assert_eq!(
+            pages::parse_pages(bad, 5).unwrap_err().code,
+            "INVALID_PARAMS",
+            "{bad}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn splits_into_files_without_the_other_pages() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("請求書.pdf");
+    std::fs::write(&path, pdf(&["顧客A", "顧客B", "顧客C", "顧客D", "顧客E"])).unwrap();
+    let folder = dir.path().join("分割");
+    let report = run_step(
+        types::SPLIT,
+        json!({ "path": shown(&path), "folder": shown(&folder), "pagesPerFile": 2 }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let files: Vec<String> = serde_json::from_value(report.outputs["out"].clone()).unwrap();
+    let names: Vec<String> = files
+        .iter()
+        .map(|f| {
+            std::path::Path::new(f)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(names, ["請求書_01.pdf", "請求書_02.pdf", "請求書_03.pdf"]);
+    assert_eq!(
+        page_texts(std::path::Path::new(&files[0])),
+        ["顧客A", "顧客B"]
+    );
+    assert_eq!(page_texts(std::path::Path::new(&files[2])), ["顧客E"]);
+
+    // The last file holds one page's drawing only, not the others'.
+    let doc = pdf_extract::Document::load(&files[2]).unwrap();
+    let drawings = doc
+        .objects
+        .values()
+        .filter(|o| matches!(o, Object::Stream(s) if s.content.windows(2).any(|w| w == b"Tj")))
+        .count();
+    assert_eq!(drawings, 1);
+
+    // Nothing is written when a file would be replaced.
+    std::fs::remove_file(&files[0]).unwrap();
+    let report = run_step(
+        types::SPLIT,
+        json!({ "path": shown(&path), "folder": shown(&folder), "pagesPerFile": 2 }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "FILE_EXISTS");
+    assert!(!std::path::Path::new(&files[0]).exists());
+}
+
+#[tokio::test]
+async fn splits_a_protected_pdf_with_its_password() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("secret.pdf");
+    std::fs::write(&path, encrypted(&["社外秘一", "社外秘二"], "himitsu")).unwrap();
+    let folder = dir.path().join("out");
+    let report = run_step(
+        types::SPLIT,
+        json!({ "path": shown(&path), "folder": shown(&folder) }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "PDF_PASSWORD_REQUIRED");
+    let report = run_step(
+        types::SPLIT,
+        json!({ "path": shown(&path), "folder": shown(&folder), "password": "himitsu" }),
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(page_texts(&folder.join("secret_02.pdf")), ["社外秘二"]);
+}
+
+#[test]
+fn page_step_examples_validate() {
+    let runtime = runtime();
+    let validator = shikigami_core::Validator::new(runtime.registry().clone());
+    for def in definitions() {
+        for example in &def.examples {
+            let mut step: Step = serde_json::from_value(example.clone()).unwrap();
+            shikigami_core::ops::assign_missing_ids(&mut step);
+            let mut s = Scenario::new("example");
+            s.variables = ["invoice", "pdfPath", "merged", "files"]
+                .iter()
+                .map(|n| VariableDef::new(*n, VarType::Any))
+                .collect();
+            s.steps = vec![step];
+            let report = validator.validate(&s);
+            assert_eq!(report.error_count(), 0, "{example}: {:?}", report.issues);
+        }
+    }
+}
