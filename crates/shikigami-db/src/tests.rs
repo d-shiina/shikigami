@@ -290,3 +290,61 @@ fn examples_validate() {
         }
     }
 }
+
+#[tokio::test]
+async fn a_secret_in_user_is_checked_like_the_password() {
+    // Any field of a secret can be put in `user`; it must still be allowed
+    // to go to this server.
+    let report = run(
+        &runtime().with_secrets(Arc::new(Login(vec!["db:other".into()]))),
+        types::QUERY,
+        json!({
+            "connection": "Driver={ODBC Driver 18 for SQL Server};Server=dbsrv01",
+            "user": { "secret": "受注DB", "field": "password" },
+            "sql": "SELECT 1 AS one",
+        }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "SECRET_SITE_MISMATCH");
+}
+
+#[test]
+fn a_change_given_up_on_is_never_made() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(connection) = sqlite(dir.path()) else {
+        return;
+    };
+    let request = |sql: &str, deadline| Request {
+        kind: Kind::Execute,
+        connection: connection.clone(),
+        sql: sql.into(),
+        params: Vec::new(),
+        max_rows: 10,
+        timeout_secs: 5,
+        deadline,
+    };
+    let later = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let wanted = tokio_util::sync::CancellationToken::new();
+    crate::odbc::run(&request("CREATE TABLE t (n INTEGER)", later), &wanted).unwrap();
+
+    // Stopped: nothing runs.
+    let stopped = tokio_util::sync::CancellationToken::new();
+    stopped.cancel();
+    let e = crate::odbc::run(&request("INSERT INTO t VALUES (1)", later), &stopped).unwrap_err();
+    assert_eq!(e.code, "CANCELLED");
+
+    // Time ran out while the SQL ran: the change is rolled back.
+    let soon = std::time::Instant::now() + std::time::Duration::from_millis(100);
+    let slow = "INSERT INTO t WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 3000000) SELECT x FROM c";
+    let e = crate::odbc::run(&request(slow, soon), &wanted).unwrap_err();
+    assert_eq!(e.code, "DB_TIMEOUT");
+
+    let count = Request {
+        kind: Kind::Query,
+        ..request("SELECT COUNT(*) AS n FROM t", later)
+    };
+    assert_eq!(
+        crate::odbc::run(&count, &wanted).unwrap(),
+        json!([{ "n": 0 }])
+    );
+}

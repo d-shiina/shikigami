@@ -4416,6 +4416,7 @@ dependencies = [
  "shikigami-runtime",
  "tempfile",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

@@ -76,7 +76,11 @@ pub(crate) struct Request {
     pub sql: String,
     pub params: Vec<Value>,
     pub max_rows: usize,
+    /// For the driver: a little less than the step's time, so the database
+    /// gives up (and rolls back) before the Runtime moves on.
     pub timeout_secs: usize,
+    /// When the step's time is up; a change finished after it is rolled back.
+    pub deadline: std::time::Instant,
 }
 
 struct DbStep {
@@ -88,7 +92,8 @@ impl ActionHandler for DbStep {
         let kind = self.kind;
         Box::pin(async move {
             let request = request(kind, &input)?;
-            tokio::task::spawn_blocking(move || odbc::run(&request))
+            let cancel = input.cancel.clone();
+            tokio::task::spawn_blocking(move || odbc::run(&request, &cancel))
                 .await
                 .map_err(|e| StepError::permanent("INTERNAL", e.to_string()))?
         })
@@ -127,10 +132,36 @@ fn request(kind: Kind, input: &ActionInput) -> Result<Request, StepError> {
         })));
     }
     let mut full = connection.trim_end_matches(';').to_owned();
+    // Every secret that goes into the connection string must be allowed to
+    // go to this server, the user name as much as the password.
+    let check_site = |secret: &shikigami_core::secret::ResolvedSecret| -> Result<(), StepError> {
+        let site = sql::server_site(&pairs).ok_or_else(|| {
+            StepError::permanent(
+                "DB_SERVER_UNKNOWN",
+                "the connection string names no server (Server, Data Source, DSN or DBQ)",
+            )
+        })?;
+        if secret.sites.iter().any(|s| s.eq_ignore_ascii_case(&site)) {
+            return Ok(());
+        }
+        Err(StepError::permanent(
+            if secret.sites.is_empty() { "SECRET_SITE_NOT_SET" } else { "SECRET_SITE_MISMATCH" },
+            format!("secret '{}' may not be sent to {site}", secret.name),
+        )
+        .with_details(json!({
+            "secret": secret.name,
+            "sites": secret.sites,
+            "url": site,
+            "hint": format!("Call request_secret with this name and the site {site} so the user can allow it in Studio."),
+        })))
+    };
     let user = match params.get("user").filter(|v| !v.is_null()) {
         None => None,
         Some(value) => Some(match input.resolve_secret(value)? {
-            Some(secret) => secret.value,
+            Some(secret) => {
+                check_site(&secret)?;
+                secret.value
+            }
             None => shikigami_core::expr::to_display(value),
         }),
     };
@@ -144,24 +175,7 @@ fn request(kind: Kind, input: &ActionInput) -> Result<Request, StepError> {
                 json!({ "hint": "password: { \"secret\": \"<name>\", \"field\": \"password\" }" }),
             ));
         };
-        let site = sql::server_site(&pairs).ok_or_else(|| {
-            StepError::permanent(
-                "DB_SERVER_UNKNOWN",
-                "the connection string names no server (Server, Data Source, DSN or DBQ)",
-            )
-        })?;
-        if !secret.sites.iter().any(|s| s.eq_ignore_ascii_case(&site)) {
-            return Err(StepError::permanent(
-                if secret.sites.is_empty() { "SECRET_SITE_NOT_SET" } else { "SECRET_SITE_MISMATCH" },
-                format!("secret '{}' may not be sent to {site}", secret.name),
-            )
-            .with_details(json!({
-                "secret": secret.name,
-                "sites": secret.sites,
-                "url": site,
-                "hint": format!("Call request_secret with this name and the site {site} so the user can allow it in Studio."),
-            })));
-        }
+        check_site(&secret)?;
         full += &format!(";PWD={}", sql::quote_value(&secret.value));
     }
     if let Some(user) = user {
@@ -187,9 +201,11 @@ fn request(kind: Kind, input: &ActionInput) -> Result<Request, StepError> {
             .map_or(MAX_ROWS, |n| {
                 usize::try_from(n).unwrap_or(MAX_ROWS).clamp(1, MAX_ROWS)
             }),
-        timeout_secs: usize::try_from(input.timeout_ms / 1000)
+        timeout_secs: usize::try_from(input.timeout_ms.saturating_sub(2_000) / 1000)
             .unwrap_or(usize::MAX)
             .max(1),
+        deadline: std::time::Instant::now()
+            + std::time::Duration::from_millis(input.timeout_ms.saturating_sub(500)),
     })
 }
 

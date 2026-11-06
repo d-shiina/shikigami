@@ -8,20 +8,73 @@ use odbc_api::{
 };
 use serde_json::{Map, Number, Value, json};
 use shikigami_runtime::StepError;
+use tokio_util::sync::CancellationToken;
 
 use crate::{Kind, LOGIN_TIMEOUT_SECS, Request};
 
-pub fn run(request: &Request) -> Result<Value, StepError> {
+/// Why the step must not go on: stopped, or its time is up.
+fn given_up(request: &Request, cancel: &CancellationToken) -> Option<StepError> {
+    if cancel.is_cancelled() {
+        Some(StepError::new("CANCELLED", "the step was stopped"))
+    } else if std::time::Instant::now() >= request.deadline {
+        Some(StepError::new(
+            "DB_TIMEOUT",
+            "the database did not answer in time",
+        ))
+    } else {
+        None
+    }
+}
+
+/// Runs the SQL. A change (`db.execute`) runs in a transaction that is
+/// committed only while the step is still wanted: when it was stopped or
+/// its time ran out meanwhile, the change is rolled back, so a retry or
+/// the next step never meets half of an attempt that was given up on.
+pub fn run(request: &Request, cancel: &CancellationToken) -> Result<Value, StepError> {
+    if let Some(e) = given_up(request, cancel) {
+        return Err(e);
+    }
     let env = odbc_api::environment().map_err(|e| failure(&e, "the ODBC driver manager"))?;
+    let login_timeout = u32::try_from(request.timeout_secs)
+        .unwrap_or(u32::MAX)
+        .min(LOGIN_TIMEOUT_SECS);
     let connection = env
         .connect_with_connection_string(
             &request.connection,
             ConnectionOptions {
-                login_timeout_sec: Some(LOGIN_TIMEOUT_SECS),
+                login_timeout_sec: Some(login_timeout),
                 ..ConnectionOptions::default()
             },
         )
         .map_err(|e| failure(&e, "connecting"))?;
+    if request.kind == Kind::Execute {
+        connection
+            .set_autocommit(false)
+            .map_err(|e| failure(&e, "starting a transaction"))?;
+    }
+    let result = execute(&connection, request, cancel);
+    if request.kind == Kind::Execute {
+        let outcome = match (&result, given_up(request, cancel)) {
+            (Ok(_), None) => connection.commit().map_err(|e| failure(&e, "committing")),
+            (Ok(_), Some(e)) => {
+                let _ = connection.rollback();
+                Err(e)
+            }
+            (Err(_), _) => {
+                let _ = connection.rollback();
+                Ok(())
+            }
+        };
+        outcome?;
+    }
+    result
+}
+
+fn execute(
+    connection: &odbc_api::Connection<'_>,
+    request: &Request,
+    cancel: &CancellationToken,
+) -> Result<Value, StepError> {
     let params: Vec<Box<dyn InputParameter>> = request.params.iter().map(parameter).collect();
     let mut statement = connection
         .preallocate()
@@ -37,7 +90,8 @@ pub fn run(request: &Request) -> Result<Value, StepError> {
             let Some(mut cursor) = cursor else {
                 return Ok(json!([]));
             };
-            read_rows(&mut cursor, request.max_rows)
+            let rows = read_rows(&mut cursor, request.max_rows)?;
+            given_up(request, cancel).map_or(Ok(rows), Err)
         }
         Kind::Execute => {
             drop(cursor);
