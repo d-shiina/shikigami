@@ -1,7 +1,7 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
-import { AgentContext, createAgentStore, useAgent } from "./agent";
+import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
 import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { BottomPanel } from "./components/BottomPanel";
@@ -32,6 +32,7 @@ import { agent, api, events } from "./lib/api";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
 import { CHART_MIN, DEFAULT_SIZES, type Fit, fit as fitPanels, LIMITS, readSizes, type Sizes } from "./lib/fit";
+import { shouldFollow } from "./lib/followAi";
 import { createProjectStore, ProjectContext, projectApi, useProject } from "./project";
 import { createStudioStore, isActive, type StudioState } from "./store";
 
@@ -450,8 +451,21 @@ export function App() {
 
   useEffect(() => {
     void store.getState().init();
+    // A scenario the AI has just made opens, so its flow chart grows in view.
+    const followChange = async (id: string) => {
+      const known = store.getState().summaries.some((s) => s.id === id);
+      await store.getState().onExternalChange(id);
+      const now = store.getState();
+      const working = activity(agentStore.getState());
+      // The pane and the status bar already say the AI is at work; a notice per edit is noise.
+      if (working && now.notice === t.externalChange) store.setState({ notice: null });
+      if (!shouldFollow(id, known, working, now)) return;
+      await now.open(id);
+      const name = store.getState().scenario?.name;
+      if (store.getState().scenario?.id === id && name) store.setState({ notice: t.openedAiScenario(name) });
+    };
     const unlisten = [
-      events.onScenarioChanged((id) => void store.getState().onExternalChange(id)),
+      events.onScenarioChanged((id) => void followChange(id)),
       events.onRunEvent((e) => store.getState().onRunEvent(e)),
       events.onRunEvidence((e) => store.getState().onRunEvidence(e)),
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),

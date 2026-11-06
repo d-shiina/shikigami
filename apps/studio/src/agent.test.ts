@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAgentStore } from "./agent";
+import { activity, createAgentStore } from "./agent";
 import type { AgentApi, AgentInfo } from "./lib/api";
 
 const ready: AgentInfo = { available: true, name: "Claude Code", command: "claude", problem: null, remembers: true };
@@ -18,6 +18,25 @@ function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
 }
 
 describe("agent store", () => {
+  it("says what the AI is writing before the tool call arrives, and what it works on", async () => {
+    const store = createAgentStore(fakeAgent());
+    await store.getState().init();
+    expect(activity(store.getState())).toBeNull();
+    await store.getState().send("受注を集めるシナリオを作って", { id: "scn_empty", name: "新しいシナリオ", empty: true });
+    expect(activity(store.getState())).toEqual({ scenarioId: "scn_empty", tool: null });
+
+    store.getState().onEvent({ turnId: "turn_1", kind: "preparing", name: "update_scenario" });
+    expect(store.getState().items[1]).toMatchObject({ preparing: "update_scenario", parts: [] });
+    expect(activity(store.getState())?.tool).toBe("update_scenario");
+
+    store.getState().onEvent({ turnId: "turn_1", kind: "tool", name: "update_scenario", detail: "ログインして一覧を開く" });
+    expect(store.getState().items[1]).toMatchObject({ preparing: null });
+    expect(activity(store.getState())?.tool).toBe("update_scenario");
+
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: null, needsLogin: false });
+    expect(activity(store.getState())).toBeNull();
+  });
+
   it("shows the turn as it streams and continues the conversation next time", async () => {
     const api = fakeAgent();
     const store = createAgentStore(api);
