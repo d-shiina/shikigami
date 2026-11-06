@@ -1,14 +1,32 @@
 name: Release
 
-# Pushing a tag such as v0.2.0 builds the signed Windows installers, publishes
-# them as a GitHub Release with latest.json, and installed Studios pick the
-# update up on their next launch. See docs/release.md.
+# Builds the signed Windows installers (NSIS and MSI, with the CLI/MCP server,
+# Node.js, the browser adapter and the PaddleOCR models inside) and publishes
+# them as a GitHub Release with latest.json; installed Studios pick the update
+# up on their next launch. See docs/release.md.
+#
+# - Push a tag such as v0.2.0, or press "Run workflow" on the Actions tab
+#   (that tags the current main with the Cargo.toml version and releases it).
+# - A pull request that changes the release build runs a trial build that
+#   publishes nothing and keeps the installers as a workflow artifact.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - apps/studio/scripts/**
+      - apps/studio/src-tauri/tauri.conf.json
+      - apps/studio/src-tauri/tauri.release.conf.json
+      - scripts/release-notes.mjs
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,14 +38,80 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Tag matches the workspace version
+      - name: Version and tag
+        id: version
         shell: bash
         run: |
           version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
-            exit 1
+          tag="v$version"
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              if [ "$tag" != "$GITHUB_REF_NAME" ]; then
+                echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+                exit 1
+              fi
+              publish=true ;;
+            workflow_dispatch)
+              if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+                echo "::error::Run the release from main (this run is on $GITHUB_REF_NAME)"
+                exit 1
+              fi
+              # A tag left by an earlier failed run on this same commit is reused.
+              existing=$(git ls-remote --tags origin "refs/tags/$tag" | cut -f1)
+              if [ -n "$existing" ] && [ "$existing" != "$GITHUB_SHA" ]; then
+                echo "::error::$tag already exists. Raise version in Cargo.toml (docs/release.md) and run again"
+                exit 1
+              fi
+              [ -z "$existing" ] && echo "create_tag=true" >> "$GITHUB_OUTPUT"
+              publish=true ;;
+            *)
+              publish=false ;;
+          esac
+          case "$version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "publish=$publish"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+      # The updater key pair (pnpm release:setup). A trial build without it
+      # signs with a throwaway key, since it publishes nothing.
+      - name: Updater signing key
+        shell: bash
+        env:
+          PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+          PUBLISH: ${{ steps.version.outputs.publish }}
+        run: |
+          if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBKEY" ]; then
+            if [ "$PUBLISH" = true ]; then
+              echo "::error::The secret TAURI_SIGNING_PRIVATE_KEY or the variable TAURI_UPDATER_PUBKEY is not set. Run pnpm release:setup once (docs/release.md)"
+              exit 1
+            fi
+            echo "::notice::No updater signing key; this trial build signs with a throwaway key"
+            echo "THROWAWAY_KEY=true" >> "$GITHUB_ENV"
+            exit 0
           fi
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY<<SHIKIGAMI_EOF"
+            echo "$PRIVATE_KEY"
+            echo "SHIKIGAMI_EOF"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$PASSWORD"
+            echo "TAURI_UPDATER_PUBKEY=$PUBKEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Release notes from CHANGELOG.md
+        if: steps.version.outputs.publish == 'true'
+        id: notes
+        shell: bash
+        run: |
+          {
+            echo "body<<SHIKIGAMI_EOF"
+            node scripts/release-notes.mjs "${{ steps.version.outputs.version }}"
+            echo "SHIKIGAMI_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -38,30 +122,74 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: Throwaway signing key (trial build)
+        if: env.THROWAWAY_KEY == 'true'
+        shell: bash
+        run: |
+          key="$RUNNER_TEMP/throwaway.key"
+          pnpm --filter @shikigami/studio exec tauri signer generate --ci -w "$key"
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY=$(cat "$key")"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD="
+            echo "TAURI_UPDATER_PUBKEY=$(cat "$key.pub")"
+          } >> "$GITHUB_ENV"
+
       # The installer ships the CLI (MCP server), Node.js and the browser
       # adapter next to Studio, so browser steps work without Node.js.
       - run: pnpm studio:bundle-cli
+      - uses: actions/cache@v4
+        with:
+          path: target/node-dist
+          key: node-dist-${{ hashFiles('apps/studio/scripts/bundle-node.mjs') }}
       - run: pnpm studio:bundle-node
       # The accurate (medium) models must be in the installer.
+      - uses: actions/cache@v4
+        with:
+          path: target/ocr-dist
+          key: ocr-dist-${{ runner.os }}-${{ hashFiles('apps/studio/scripts/bundle-ocr.mjs') }}
       - run: pnpm studio:bundle-ocr
         env:
           SHIKIGAMI_OCR_ACCURATE: required
       - run: node apps/studio/scripts/set-pubkey.mjs
-        env:
-          TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
 
-      - uses: tauri-apps/tauri-action@v1
+      - name: Tag main
+        if: steps.version.outputs.create_tag == 'true'
+        shell: bash
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Build and publish
+        if: steps.version.outputs.publish == 'true'
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/studio
           tauriScript: pnpm tauri
           args: --config src-tauri/tauri.release.gen.json
-          tagName: v__VERSION__
-          releaseName: Shikigami Studio v__VERSION__
-          releaseBody: See the commits since the previous release.
+          tagName: ${{ steps.version.outputs.tag }}
+          releaseName: Shikigami Studio ${{ steps.version.outputs.tag }}
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
           updaterJsonPreferNsis: true
+
+      - name: Build (trial, publishes nothing)
+        if: steps.version.outputs.publish != 'true'
+        uses: tauri-apps/tauri-action@v1
+        with:
+          projectPath: apps/studio
+          tauriScript: pnpm tauri
+          args: --config src-tauri/tauri.release.gen.json
+
+      # Every run keeps the installers for 14 days, so a trial build can be
+      # installed by hand before tagging.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ steps.version.outputs.version }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 14
