@@ -71,7 +71,7 @@ args = ["mcp"]
 |  | `export_flow` | フローと版、呼び出すサブフローを 1 つのバンドルに（機密変数の初期値は除く） |
 |  | `list_project_files` / `read_project_file` | フローのフォルダー（入力・設定・ひな形・出力・作業・ログ）のファイル一覧と、テキストファイルの中身（[files.md](files.md#フローのフォルダー)） |
 |  | `list_secrets` | Studio で登録されたシークレットの名前・サイト・設定済みの項目（値は返さない。[secrets.md](secrets.md)） |
-|  | `get_policy` | ワークスペースの `policy.json`：許可するサイト・アプリ、AI がしてよいこと（allow / ask / deny）。書き換えるツールはない（[policy.md](policy.md)） |
+|  | `get_policy` | ワークスペースの `policy.json`：許可するサイト・アプリ、AI の操作の承認（allow / ask / deny）。書き換えるツールはない（[policy.md](policy.md)） |
 | write | `create_flow` | 新規作成（ノード ID は省略可） |
 |  | `update_flow` | 複数の EditOp を 1 リビジョンとして原子的に適用 |
 |  | `add_step` / `update_step` / `remove_step` / `move_step` | 個別の編集 |
