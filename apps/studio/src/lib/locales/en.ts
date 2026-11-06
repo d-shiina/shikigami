@@ -99,6 +99,7 @@ export const en: Dict = {
   clearLog: "Clear",
   /** Takes the last run's colours off the chart. */
   clearTrail: "Clear chart colours",
+  clearBreakpoints: (n: number) => `Remove all breakpoints (${n})`,
   stepName: "Display name",
   stepType: "Type",
   params: "Parameters",
@@ -536,8 +537,8 @@ export const en: Dict = {
   flow: {
     aiAdded: "Added by AI",
     aiChanged: "Changed by AI",
-    breakpointOff: "Remove breakpoint (F9)",
-    breakpointOn: "Pause here (breakpoint, F9)",
+    breakpointOff: "Breakpoint: runs from Studio pause before this node. Click to remove (F9)",
+    breakpointOn: "Add breakpoint: runs from Studio pause before this node (F9)",
     changeBy: (who: string) => `Change by ${who}`,
     valuesIn: "Values this node read",
     valuesOut: "Values this node wrote",
