@@ -49,6 +49,9 @@ export const errorsJa: Record<string, ErrorText> = {
     todo: "正しいアプリなら、設定の「許可と承認」でアプリを追加してください",
   },
   UNATTENDED_NOT_ALLOWED: { what: "このフローは無人で動かさない決まりです", todo: "設定の「許可と承認」を確かめてください" },
+  NOT_PUBLISHED: { what: "このフローには公開版がありません", todo: "スケジュールや無人実行は公開版を動かします。「確認待ち」か「版」タブで公開してください" },
+  DESKTOP_UNAVAILABLE: { what: "画面がロックされているか、サインイン画面のため、マウスとキーボードを使えませんでした", todo: "画面を使うシナリオは、PC にサインインしたまま・ロックしないで動かしてください" },
+  RUN_INTERRUPTED: { what: "PC の再起動やプロセスの終了で、実行が途中で終わりました", todo: "どこまで進んだかを記録で確かめてから、もう一度実行してください" },
   POLICY_DENIED: { what: "ワークスペースの決まりで、この操作は AI からはできません", todo: "設定の「許可と承認」を確かめてください" },
 
   // Expressions

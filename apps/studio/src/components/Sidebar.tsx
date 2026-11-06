@@ -1,11 +1,11 @@
 // The one column on the left, as in Linear and Notion: the workspace at the
 // top (where the work is stored), then the places: the flow library with
 // the open flow under it, what waits for review, logins, and settings at
-// the foot, apart from the work. Lists live in their places, not here. A new
-// kind of work (run history, schedules) is a new row here. Above the places,
+// the foot, apart from the work. Lists live in their places, not here. Runs
+// (schedules now, run history next) are one row here. Above the places,
 // the AI: its chat opens right beside this column, as Notion AI and Linear's
 // agent do, since it works on whatever place is open.
-import { AppWindow, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, Settings2, Workflow } from "lucide-react";
+import { AppWindow, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, Settings2, Workflow } from "lucide-react";
 import { anyBusy, useAgent } from "../agent";
 import { useStudio, useStudioApi } from "../context";
 import { t } from "../lib/i18n";
@@ -119,6 +119,7 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
         {/* The open flow, under the library it came from: the way back to the editor. */}
         {flow && <Item icon={Workflow} label={flow.name} on={place === "flows"} onClick={go("flows")} indent />}
         <Item icon={Inbox} label={t.awaitingReview} on={place === "review"} onClick={enterReview} count={inbox.length} title={t.bar.reviewTitle} />
+        <Item icon={CalendarClock} label={t.runs.place} on={place === "runs"} onClick={go("runs")} title={t.runs.placeTitle} />
         <Item
           icon={KeyRound}
           label={t.secrets}

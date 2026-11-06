@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { type AppInfo, type UpdateInfo, updates } from "../lib/api";
 import { t } from "../lib/i18n";
+import { SettingsGroup, SettingsRow, settingsPrimary } from "./settingsLayout";
 
 type UpdateState =
   | { kind: "idle" }
@@ -100,48 +101,55 @@ export function AboutSection() {
   };
   if (!info) return null;
   return (
-    <div className="space-y-3 text-sm">
-      <div className="flex items-baseline gap-2">
-        <span className="font-semibold">{t.appName}</span>
-        <span className="text-xs text-slate-500">v{info.version}</span>
-      </div>
-      {!info.updatesEnabled && <p className="text-xs text-slate-500">{t.updatesDisabled}</p>}
-      {info.updatesEnabled && state.kind === "checking" && <p className="text-slate-500">{t.updateChecking}</p>}
-      {info.updatesEnabled && state.kind === "latest" && <p className="text-moegi-500">{t.updateLatest}</p>}
-      {state.kind === "error" && <p className="break-all text-shu-600">{state.message}</p>}
-      {state.kind === "downloading" && (
-        <p className="text-slate-600">
-          v{state.info.version} {t.updateDownloading}
-          {state.percent !== null && ` ${state.percent}%`}
-        </p>
-      )}
+    <SettingsGroup>
+      <SettingsRow label={t.appVersion} hint={!info.updatesEnabled ? t.updatesDisabled : undefined}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>
+            <span className="font-semibold">{t.appName}</span> <span className="text-slate-500">v{info.version}</span>
+          </span>
+          {info.updatesEnabled && state.kind === "checking" && <span className="text-slate-500">{t.updateChecking}</span>}
+          {info.updatesEnabled && state.kind === "latest" && <span className="text-moegi-500">{t.updateLatest}</span>}
+          {state.kind === "downloading" && (
+            <span className="text-slate-600">
+              v{state.info.version} {t.updateDownloading}
+              {state.percent !== null && ` ${state.percent}%`}
+            </span>
+          )}
+          {state.kind === "installing" && <span className="text-slate-600">{t.updateInstalling}</span>}
+          {info.updatesEnabled && (state.kind === "latest" || state.kind === "error") && (
+            <button type="button" onClick={() => void check()} className="text-brand-600 hover:underline">
+              {t.updateCheck}
+            </button>
+          )}
+        </div>
+        {state.kind === "error" && <p className="mt-1 break-all text-shu-600">{state.message}</p>}
+      </SettingsRow>
       {state.kind === "ready" && (
-        <div>
-          <p>
-            v{state.info.version} {t.updateReady}
-          </p>
-          <p className="mt-0.5 text-xs text-slate-500">{t.updateOnClose}</p>
-          {state.info.notes && <p className="mt-1 max-h-32 overflow-y-auto text-xs whitespace-pre-wrap text-slate-600">{state.info.notes}</p>}
-          <button type="button" onClick={() => void install(state.info)} className="mt-2 rounded-[4px] bg-ink px-3 py-1.5 font-medium text-paper hover:bg-slate-700">
+        <SettingsRow label={`v${state.info.version} ${t.updateReady}`} hint={t.updateOnClose} align="start">
+          {state.info.notes && (
+            <p className="mb-2 max-h-32 overflow-y-auto text-xs whitespace-pre-wrap text-slate-600">{state.info.notes}</p>
+          )}
+          <button type="button" onClick={() => void install(state.info)} className={settingsPrimary}>
             {t.updateInstall}
           </button>
-        </div>
-      )}
-      {state.kind === "installing" && <p className="text-slate-600">{t.updateInstalling}</p>}
-      {info.updatesEnabled && (state.kind === "latest" || state.kind === "error") && (
-        <button type="button" onClick={() => void check()} className="text-xs text-brand-600 hover:underline">
-          {t.updateCheck}
-        </button>
+        </SettingsRow>
       )}
       {info.cliPath && (
-        <div className="border-t border-slate-200 pt-3">
-          <p className="text-xs text-slate-500">{t.mcpSetup}</p>
-          <code className="mt-1 block rounded-[3px] bg-slate-100 p-2 font-mono text-[11px] break-all">{mcpCommand(info.cliPath)}</code>
-          <button type="button" onClick={() => void copy(mcpCommand(info.cliPath ?? ""))} className="mt-1 text-xs text-brand-600 hover:underline">
-            {copied ? t.copied : t.copy}
-          </button>
-        </div>
+        <SettingsRow label={t.mcpSetup} hint={t.mcpSetupHint} align="start">
+          <div className="flex items-start gap-2">
+            <code className="block min-w-0 flex-1 rounded-[3px] bg-slate-100 px-2 py-1.5 font-mono text-[11px] break-all">
+              {mcpCommand(info.cliPath)}
+            </code>
+            <button
+              type="button"
+              onClick={() => void copy(mcpCommand(info.cliPath ?? ""))}
+              className="shrink-0 rounded-[3px] border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+            >
+              {copied ? t.copied : t.copy}
+            </button>
+          </div>
+        </SettingsRow>
       )}
-    </div>
+    </SettingsGroup>
   );
 }
