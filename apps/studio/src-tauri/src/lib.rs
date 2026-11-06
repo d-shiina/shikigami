@@ -9,6 +9,8 @@ mod commands;
 mod debug;
 mod picker;
 mod runner;
+mod schedules;
+mod tray;
 mod updater;
 mod watcher;
 
@@ -17,12 +19,11 @@ use std::sync::{Arc, Mutex};
 
 use shikigami_core::FlowId;
 use shikigami_core::{ApprovalStore, FileStore, FlowService, Policy, RunId};
-use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime};
+use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime, Stopper};
 use shikigami_secrets::Vault;
-use tokio_util::sync::CancellationToken;
 
 pub(crate) struct ActiveRun {
-    pub cancel: CancellationToken,
+    pub cancel: Stopper,
     pub snapshot: Arc<Mutex<RunSnapshot>>,
     pub flow_id: FlowId,
     /// Studio runs are interactive: they pause on errors and breakpoints.
@@ -80,9 +81,15 @@ pub fn run() {
         .manage(agent::AgentLogin::default())
         .setup(move |app| {
             fit_to_screen(app);
-            if runner::wants_runner_only() {
+            if let Err(e) = tray::create(app.handle()) {
+                // Only a shortcut: Studio works without it.
+                tracing::warn!(error = %e, "cannot show the tray icon");
+            }
+            if runner::wants_runner_only() || tray::starts_hidden() {
                 use tauri::Manager;
-                runner::show_runner(app.handle())?;
+                if !tray::starts_hidden() {
+                    runner::show_runner(app.handle())?;
+                }
                 if let Some(main) = app.get_webview_window("main") {
                     main.close()?;
                 }
@@ -102,6 +109,19 @@ pub fn run() {
             );
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // Started for running flows, closing the run window leaves
+            // Shikigami in the tray (its menu has Quit).
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                && window.label() == runner::RUNNER_WINDOW
+                && tray::stays_in_tray()
+            {
+                api.prevent_close();
+                if let Err(e) = window.hide() {
+                    tracing::warn!(error = %e, "cannot hide the run window");
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::workspace_info,
             commands::save_ai_guide,
@@ -118,6 +138,12 @@ pub fn run() {
             commands::get_policy,
             commands::save_policy,
             commands::list_approvals,
+            schedules::list_schedules,
+            schedules::save_schedule,
+            schedules::delete_schedule,
+            schedules::agent_status,
+            schedules::start_agent,
+            schedules::stop_agent,
             commands::decide_approval,
             commands::list_pick_requests,
             commands::cancel_pick_request,
@@ -175,13 +201,19 @@ pub fn run() {
             runner::runner_list,
             runner::runner_run,
             runner::open_runner,
+            runner::runner_pick,
+            tray::set_tray_labels,
         ])
         .build(tauri::generate_context!())
         .map(|app| {
-            app.run(|app, event| {
-                if let tauri::RunEvent::Exit = event {
-                    updater::install_on_exit(app);
-                }
+            app.run(|app, event| match event {
+                // In the tray, closing the last window is not quitting
+                // (Quit in the tray menu exits with a code).
+                tauri::RunEvent::ExitRequested {
+                    code: None, api, ..
+                } if tray::stays_in_tray() => api.prevent_exit(),
+                tauri::RunEvent::Exit => updater::install_on_exit(app),
+                _ => {}
             });
         });
     if let Err(e) = result {

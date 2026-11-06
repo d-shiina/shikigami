@@ -241,6 +241,22 @@
         "secret": {
           "description": "Secret values are masked in logs, events and run records.",
           "type": "boolean"
+        },
+        "format": {
+          "description": "What a `string` input holds, so the run window can offer the right\nfield (a file picker, a calendar). Runs do not check it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VarFormat"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "choices": {
+          "description": "The only values an input takes: the run window shows a list to pick\nfrom. Each one must match `type`.",
+          "type": "array",
+          "items": true
         }
       },
       "additionalProperties": false,
@@ -281,6 +297,31 @@
           "description": "Both supplied and returned.",
           "type": "string",
           "const": "inOut"
+        }
+      ]
+    },
+    "VarFormat": {
+      "description": "What a text variable holds ([`VariableDef::format`]).",
+      "oneOf": [
+        {
+          "description": "The full path of an existing file.",
+          "type": "string",
+          "const": "file"
+        },
+        {
+          "description": "The full path of a folder.",
+          "type": "string",
+          "const": "folder"
+        },
+        {
+          "description": "A day, `YYYY-MM-DD`.",
+          "type": "string",
+          "const": "date"
+        },
+        {
+          "description": "A month, `YYYY-MM`.",
+          "type": "string",
+          "const": "month"
         }
       ]
     },

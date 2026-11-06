@@ -33,7 +33,7 @@ pub use error::{CoreError, CoreResult, ErrorPayload};
 pub use ids::{ApprovalId, FlowId, ObservationId, PickId, RunId, StepId};
 pub use model::{
     Flow, FlowSettings, FlowSummary, Metadata, OnError, Part, PartApp, RetryPolicy, SCHEMA_VERSION,
-    Step, VarDirection, VarType, VariableDef, part_ref, takes_part, target_part,
+    Step, VarDirection, VarFormat, VarType, VariableDef, part_ref, takes_part, target_part,
 };
 pub use ops::{EditOp, FlowPatch, Position, StepPatch};
 pub use pick::{PickRequest, PickRequestStore, PickWait};

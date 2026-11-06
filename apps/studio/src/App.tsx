@@ -21,6 +21,7 @@ import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
 import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
+import { RunsPage } from "./components/RunsPage";
 import { SecretsPage } from "./components/SecretsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { FlowsPage } from "./components/FlowsPage";
@@ -369,6 +370,11 @@ function Shell() {
             )}
             {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
             {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+            {place === "runs" && (
+              <div className="min-w-0 flex-1">
+                <RunsPage />
+              </div>
+            )}
             {place === "secrets" && (
               <div className="min-w-0 flex-1">
                 <SecretsPage />

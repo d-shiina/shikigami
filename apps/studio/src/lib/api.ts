@@ -40,6 +40,38 @@ export type AnswerProblem = { path?: string; message: string };
 /** The flow a pasted answer made or changed, or the problems to send back (nothing changed then). */
 export type PasteOutcome = { outcome?: EditOutcome; problems: AnswerProblem[] };
 
+/** When a schedule fires (docs/schedules.md). Times are local, "08:00". */
+export type ScheduleWhen =
+  | { kind: "daily"; at: string; days?: string[] }
+  | { kind: "monthly"; day: number; at: string }
+  | { kind: "every"; minutes: number; from?: string; to?: string; days?: string[] }
+  | { kind: "once"; at: string }
+  | { kind: "fileAdded"; folder: string; pattern: string; input?: string };
+
+/** One schedule of this PC (`schedules.json`). `id` is empty for a new one. */
+export type Schedule = {
+  id: string;
+  name: string;
+  flowId: string;
+  enabled: boolean;
+  when: ScheduleWhen;
+  inputs?: Record<string, unknown>;
+};
+
+export type ScheduleView = Schedule & { flowName: string | null; published: boolean };
+
+export type ScheduleList = { schedules: ScheduleView[]; path: string };
+
+/** The agent of this PC and workspace, which fires the schedules. */
+export type AgentStatus = {
+  pid: number;
+  startedAt: string;
+  workspace: string;
+  running: { runId: string; flowId: string; flowName: string; startedAt: string; scheduleId?: string }[];
+  schedules: { id: string; name: string; flowId: string; enabled: boolean; next?: string; last?: string }[];
+  problem?: string;
+};
+
 /** `accessToken` is obtained by oauth.signIn, not typed by a person. */
 export type SecretField = "username" | "password" | "totp" | "accessToken";
 
@@ -142,6 +174,13 @@ export const api = {
     call<PublishedState>("approve_and_publish", { id, revision, reason }),
   unpublishFlow: (id: string) => call<void>("unpublish_flow", { id }),
   getPolicy: () => call<Policy>("get_policy"),
+  listSchedules: () => call<ScheduleList>("list_schedules"),
+  saveSchedule: (schedule: Schedule) => call<ScheduleList>("save_schedule", { schedule }),
+  deleteSchedule: (id: string) => call<ScheduleList>("delete_schedule", { id }),
+  /** null when the agent is not running: schedules do not fire then. */
+  agentStatus: () => call<AgentStatus | null>("agent_status"),
+  startAgent: () => call<AgentStatus | null>("start_agent"),
+  stopAgent: () => call<void>("stop_agent"),
   savePolicy: (policy: Policy) => call<Policy>("save_policy", { policy }),
   /** Requests from AI clients waiting for the person's approval. */
   listApprovals: () => call<ApprovalRequest[]>("list_approvals"),

@@ -40,7 +40,7 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったフ
 ## フローの書き方
 
 - ステップの `id` は省略すれば Core が採番する。既存ステップを指すときは `get_flow` で得た ID を使う。
-- 制御構文は子を `blocks` に持つ：`control.if`（`then` / `else`）、`control.while` / `control.repeat` / `control.forEach`（`body`）、`control.try`（`try` / `catch` / `finally`）。
+- 制御構文は子を `blocks` に持つ：`control.if`（`then` / `else`）、`control.while` / `control.repeat` / `control.forEach`（`body`）、`control.try`（`try` / `catch` / `finally`）、`control.switch`（`cases` に `control.case` だけを並べ、どれにも当たらないときは `default`）。1 つの値で 3 つ以上に分けるときは `control.if` を入れ子にせず `control.switch` を使う。ケースは `values`（`["A", "B"]` のどれかと等しい）か `condition`（`score >= 80` のような範囲。値そのものを書く）で、上から最初に当たった 1 つだけが動く。
 - 互いに独立した処理は `control.parallel`（`branches` の各ステップが同時に動く）で並行にできる。複数ステップのブランチは `control.group` で包む。2つ以上のブランチが同じ変数に書く（`saveAs`・`variable.set`・`onError: continue` の `lastError` を含む）と検証で `PARALLEL_VARIABLE_CONFLICT` になるので、ブランチごとに別の変数へ結果を入れ、並行ステップの後でまとめる。
 - 書き分けの規則は1つだけ：ステップ型の `expressionParams`（`list_step_types` に載っている。`control.if` の `condition` など）には `{{ }}` なしの式を書く。それ以外の文字列 params はすべてテンプレートで、`"合計 {{ total }} 円"` のように書く。文字列全体が1つの `{{ 式 }}` なら値の型（数値・配列など）がそのまま渡る。回数・待ち時間などの数値 params は `3` か `"{{ retryCount }}"`。
 - 文字列・数値・日付・リスト・JSON の加工はステップではなく**式の関数**で書く（`variable.set` の `expression` や `{{ }}` の中）。一覧と例は `list_step_types` の `functions`（`docs/expressions.md`）。任意コードは実行できない。

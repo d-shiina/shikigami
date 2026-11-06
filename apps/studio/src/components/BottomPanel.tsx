@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { type BottomTab, isActive, trailOf } from "../store";
+import { type BottomTab, isActive, runBreakpoints, trailOf } from "../store";
 import { PERSON_CODES } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { IssuesPanel } from "./IssuesPanel";
@@ -43,6 +43,8 @@ export function BottomPanel() {
     return last !== null && !isActive(last);
   });
   const hideTrail = useStudio((s) => s.hideTrail);
+  const breakpointCount = useStudio((s) => runBreakpoints(s).length);
+  const clearBreakpoints = useStudio((s) => s.clearBreakpoints);
   const todos = useTodos().length;
   // A part to pick is a to-do, counted once, not also as an error.
   const issueCount = useStudio((s) => s.validation?.issues.filter((i) => !PERSON_CODES.has(i.code)).length ?? 0) + todos;
@@ -87,6 +89,11 @@ export function BottomPanel() {
         {tab === "log" && trail && (
           <button type="button" className="rounded-[3px] px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={hideTrail}>
             {t.clearTrail}
+          </button>
+        )}
+        {tab === "log" && breakpointCount > 0 && (
+          <button type="button" className="rounded-[3px] px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clearBreakpoints}>
+            {t.clearBreakpoints(breakpointCount)}
           </button>
         )}
         {tab === "log" && run && (

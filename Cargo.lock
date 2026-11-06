@@ -228,6 +228,56 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "axum"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
+dependencies = [
+ "axum-core",
+ "bytes",
+ "form_urlencoded",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "itoa",
+ "matchit",
+ "memchr",
+ "mime",
+ "percent-encoding",
+ "pin-project-lite",
+ "serde_core",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
+ "sync_wrapper",
+ "tokio",
+ "tower",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "axum-core"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08c78f31d7b1291f7ee735c1c6780ccde7785daae9a9206026862dab7d8792d1"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "http",
+ "http-body",
+ "http-body-util",
+ "mime",
+ "pin-project-lite",
+ "sync_wrapper",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1895,6 +1945,7 @@ dependencies = [
  "http",
  "http-body",
  "httparse",
+ "httpdate",
  "itoa",
  "pin-project-lite",
  "smallvec",
@@ -2644,6 +2695,12 @@ checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
 dependencies = [
  "regex-automata",
 ]
+
+[[package]]
+name = "matchit"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "matrixmultiply"
@@ -4261,6 +4318,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_path_to_error"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
+dependencies = [
+ "itoa",
+ "serde",
+ "serde_core",
+]
+
+[[package]]
 name = "serde_repr"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4287,6 +4355,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7523beb55eece201a2356bee0bbca0d1ab466c14c07703b2e0ee6d42cb0c2c"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "serde_urlencoded"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
+dependencies = [
+ "form_urlencoded",
+ "itoa",
+ "ryu",
+ "serde",
 ]
 
 [[package]]
@@ -4397,7 +4477,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-adapters"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "serde_json",
  "shikigami-browser",
@@ -4415,16 +4495,19 @@ dependencies = [
 
 [[package]]
 name = "shikigami-agent"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
+ "base64 0.22.1",
  "jiff",
  "reqwest",
+ "ring",
  "rustls",
  "schemars 1.2.3",
  "serde",
  "serde_json",
  "shikigami-core",
  "shikigami-runtime",
+ "shikigami-secrets",
  "tempfile",
  "thiserror 2.0.21",
  "time",
@@ -4436,7 +4519,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-browser"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "serde_json",
  "shikigami-core",
@@ -4451,7 +4534,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -4460,6 +4543,7 @@ dependencies = [
  "shikigami-adapters",
  "shikigami-agent",
  "shikigami-core",
+ "shikigami-manager",
  "shikigami-mcp",
  "shikigami-plugins",
  "shikigami-runtime",
@@ -4473,7 +4557,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-com"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "serde_json",
  "shikigami-runtime",
@@ -4483,7 +4567,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -4503,7 +4587,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-db"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "odbc-api",
  "serde_json",
@@ -4516,7 +4600,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-desktop"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "ort",
  "png",
@@ -4534,7 +4618,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-excel"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -4549,7 +4633,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-files"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "csv",
  "encoding_rs",
@@ -4566,7 +4650,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-mail"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "base64 0.22.1",
  "lettre",
@@ -4583,8 +4667,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "shikigami-manager"
+version = "0.1.4"
+dependencies = [
+ "axum",
+ "ring",
+ "serde",
+ "serde_json",
+ "shikigami-agent",
+ "shikigami-core",
+ "shikigami-runtime",
+ "shikigami-secrets",
+ "tempfile",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "shikigami-mcp"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "rmcp",
@@ -4603,7 +4706,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-pdf"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "pdf-extract",
  "serde_json",
@@ -4617,7 +4720,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-plugins"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "dirs",
  "jsonschema",
@@ -4634,7 +4737,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-runtime"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "schemars 1.2.3",
  "serde",
@@ -4650,7 +4753,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-secrets"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -4670,7 +4773,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-studio"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -4679,9 +4782,11 @@ dependencies = [
  "serde",
  "serde_json",
  "shikigami-adapters",
+ "shikigami-agent",
  "shikigami-core",
  "shikigami-runtime",
  "shikigami-secrets",
+ "shikigami-system",
  "tauri",
  "tauri-build",
  "tauri-plugin-updater",
@@ -4695,7 +4800,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-system"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "base64 0.22.1",
  "clipboard-win",
@@ -4720,7 +4825,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-word"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "serde_json",
  "shikigami-core",

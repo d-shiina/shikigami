@@ -344,7 +344,7 @@ fn target_schema() -> Value {
             "css": { "type": "string" },
             "exact": { "type": "boolean", "description": "完全一致（既定は部分一致・大文字小文字無視）" },
             "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号" },
-            "frame": frame_schema(true)
+            "frame": frame_schema(FRAME_DEPTH - 1)
         },
         "additionalProperties": false,
         "anyOf": [
@@ -354,9 +354,13 @@ fn target_schema() -> Value {
     })
 }
 
-/// The iframe (or frameset frame) an element is in; `nested` allows one
-/// more frame around it.
-fn frame_schema(nested: bool) -> Value {
+/// How many frames deep a target may sit (the top page's iframe, a frame
+/// inside it, ...). Picking an element returns its whole frame path.
+const FRAME_DEPTH: u32 = 4;
+
+/// The iframe (or frameset frame) an element is in; `outer` more frames
+/// may sit around it.
+fn frame_schema(outer: u32) -> Value {
     let mut properties = json!({
         "name": { "type": "string", "description": "フレームの name（または id）属性" },
         "title": { "type": "string", "description": "title 属性の一部" },
@@ -364,12 +368,14 @@ fn frame_schema(nested: bool) -> Value {
         "css": { "type": "string" },
         "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号" }
     });
-    if nested && let Some(map) = properties.as_object_mut() {
-        map.insert("frame".into(), frame_schema(false));
+    if outer > 0
+        && let Some(map) = properties.as_object_mut()
+    {
+        map.insert("frame".into(), frame_schema(outer - 1));
     }
     json!({
         "type": "object",
-        "description": if nested {
+        "description": if outer == FRAME_DEPTH - 1 {
             "要素が入っている iframe（フレームセットのフレームも）。inspect_page の frames に出る name / title / src で指定する"
         } else {
             "そのフレームを囲むフレーム（フレームの中のフレーム）"

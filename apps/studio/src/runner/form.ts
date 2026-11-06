@@ -4,7 +4,7 @@
 import type { Flow, Step, VariableDef } from "@shikigami/schema";
 import { t } from "../lib/i18n";
 
-export type FieldKind = "text" | "password" | "number" | "checkbox" | "lines" | "json";
+export type FieldKind = "text" | "password" | "number" | "checkbox" | "lines" | "json" | "file" | "folder" | "date" | "month" | "select";
 
 export interface Field {
   name: string;
@@ -12,8 +12,10 @@ export interface Field {
   kind: FieldKind;
   /** No default: the run cannot start without it. */
   required: boolean;
-  /** What the field starts with, as the person sees it. */
+  /** What the field starts with, as the person sees it (for `select`, the index of the choice). */
   initial: string | boolean;
+  /** For `select`: the values to pick from, in the flow's order. */
+  choices?: unknown[];
 }
 
 export const isInput = (v: VariableDef) => v.direction === "input" || v.direction === "inOut";
@@ -21,6 +23,9 @@ export const isOutput = (v: VariableDef) => v.direction === "output" || v.direct
 
 function kindOf(v: VariableDef): FieldKind {
   if (v.secret) return "password";
+  if ((v.choices ?? []).length > 0) return "select";
+  // `format` marks what a text holds (validation keeps it on texts).
+  if (v.format && (v.type === "string" || v.type === undefined || v.type === "any")) return v.format;
   switch (v.type) {
     case "number":
       return "number";
@@ -55,9 +60,18 @@ export function labelOf(v: VariableDef): string {
 export function fieldsOf(flow: Flow): Field[] {
   return (flow.variables ?? []).filter(isInput).map((v) => {
     const kind = kindOf(v);
-    return { name: v.name, label: labelOf(v), kind, required: v.default === undefined, initial: shown(kind, v.default) };
+    const required = v.default === undefined;
+    if (kind === "select") {
+      const choices = v.choices ?? [];
+      const at = required ? -1 : choices.findIndex((c) => JSON.stringify(c) === JSON.stringify(v.default));
+      return { name: v.name, label: labelOf(v), kind, required, initial: at < 0 ? "" : String(at), choices };
+    }
+    return { name: v.name, label: labelOf(v), kind, required, initial: shown(kind, v.default) };
   });
 }
+
+/** A choice as the list shows it. */
+export const choiceLabel = (value: unknown): string => (typeof value === "string" ? value : formatValue(value));
 
 export type Values = Record<string, string | boolean>;
 
@@ -105,6 +119,13 @@ export function collect(fields: Field[], values: Values): { inputs: Record<strin
           .map((line) => line.trim())
           .filter(Boolean);
         break;
+      case "select": {
+        const choices = f.choices ?? [];
+        const at = Number(text);
+        if (Number.isInteger(at) && at >= 0 && at < choices.length) inputs[f.name] = choices[at];
+        else if (f.required) errors[f.name] = t.runner.required;
+        break;
+      }
       case "json":
         try {
           inputs[f.name] = JSON.parse(text);

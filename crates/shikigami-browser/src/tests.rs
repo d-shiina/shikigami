@@ -121,6 +121,29 @@ fn every_example_is_a_valid_step() {
     assert!(!validator.validate(&s).valid);
 }
 
+#[test]
+fn targets_reach_frames_four_deep() {
+    let runtime = Runtime::builder()
+        .adapter(&BrowserAdapter::new(sidecar_config("node".into(), None)))
+        .build();
+    let validator = Validator::new(runtime.registry().clone());
+    let in_frames = |depth: usize| {
+        let mut frame = json!({ "name": "f0" });
+        for i in 1..depth {
+            frame = json!({ "src": format!("/f{i}"), "nth": 1, "frame": frame });
+        }
+        let mut s = Flow::new("frames");
+        s.steps = vec![Step::new(types::CLICK).with_id("c").with_param(
+            "target",
+            json!({ "role": "button", "name": "送信", "frame": frame }),
+        )];
+        validator.validate(&s).valid
+    };
+    assert!(in_frames(1));
+    assert!(in_frames(4));
+    assert!(!in_frames(5));
+}
+
 #[tokio::test]
 async fn steps_forward_rendered_params_with_the_run_id() {
     let f = fake();

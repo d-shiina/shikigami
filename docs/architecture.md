@@ -182,6 +182,7 @@ The canonical format is JSON (`schemas/flow.schema.json`). Example: [examples/in
 | type | Contents |
 |---|---|
 | `control.if` | `condition` / blocks: `then`, `else` |
+| `control.switch` / `control.case` | `value` (expression) / blocks: `cases` (only `control.case`), `default`. The first case whose `values` holds an equal value, or whose `condition` is true, runs its `body`; otherwise `default` (like VBA `Select Case`) |
 | `control.while` | `condition`, `maxIterations` (default 1000) / `body` |
 | `control.repeat` | `count`, `indexVar` / `body` |
 | `control.forEach` | `items` (expression), `itemVar`, `indexVar`, `collect` (expression; each iteration's value is returned in `saveAs` as a list), `concurrency` (how many run at once) / `body` |
@@ -534,7 +535,7 @@ The first product milestone: **create a web flow from an MCP client in natural l
 
 - Undo/Redo is **one stack per flow shared by all clients** (AI changes can be undone from Studio, but it is not per user).
 - Variable scope is flat (loop variables are one per flow too), like most RPA products.
-- When a run is cancelled, `control.try`'s `finally` still runs (for at most 60 seconds) and the run ends `cancelled`.
+- When a run is cancelled, `control.try`'s `finally` still runs (for at most 60 seconds; cancelling again cuts it short) and the run ends `cancelled`. An adapter that does not answer when the run closes cannot keep it open (at most 15 seconds each).
 - Runs cannot resume midway (after a process restart). A run whose process ended first (crash, shutdown, killed) is closed as `failed` with `RUN_INTERRUPTED` the next time any Shikigami process starts a run; start it again.
 - Studio's flowchart is an automatic display layout; node positions are not saved.
 - During development, Studio was started on Linux under Xvfb to check editing, running and live updates (Linux is not a product target). **Starting Studio on a real Windows machine is unconfirmed** (CI confirms build and tests only).

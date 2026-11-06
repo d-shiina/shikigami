@@ -45,6 +45,10 @@ const MIGRATIONS: &[Migration] = &[
         from: 4,
         apply: v4_to_v5,
     },
+    Migration {
+        from: 5,
+        apply: v5_to_v6,
+    },
 ];
 
 /// Parses flow JSON text, applying migrations when needed.
@@ -155,6 +159,10 @@ fn v4_to_v5(value: &mut Value) {
         }
     });
 }
+
+/// 5 → 6: adds `format` and `choices` to variables (how the run window
+/// asks for an input). Nothing to rewrite.
+fn v5_to_v6(_value: &mut Value) {}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

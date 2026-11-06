@@ -269,6 +269,20 @@
               },
               "secret": {
                 "type": "boolean"
+              },
+              "format": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/VarFormat"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "choices": {
+                "type": "array",
+                "items": true
               }
             },
             "additionalProperties": false,
@@ -306,6 +320,26 @@
               {
                 "type": "string",
                 "const": "inOut"
+              }
+            ]
+          },
+          "VarFormat": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "file"
+              },
+              {
+                "type": "string",
+                "const": "folder"
+              },
+              {
+                "type": "string",
+                "const": "date"
+              },
+              {
+                "type": "string",
+                "const": "month"
               }
             ]
           },
@@ -2232,6 +2266,20 @@
               },
               "secret": {
                 "type": "boolean"
+              },
+              "format": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/VarFormat"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "choices": {
+                "type": "array",
+                "items": true
               }
             },
             "additionalProperties": false,
@@ -2269,6 +2317,26 @@
               {
                 "type": "string",
                 "const": "inOut"
+              }
+            ]
+          },
+          "VarFormat": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "file"
+              },
+              {
+                "type": "string",
+                "const": "folder"
+              },
+              {
+                "type": "string",
+                "const": "date"
+              },
+              {
+                "type": "string",
+                "const": "month"
               }
             ]
           },
@@ -2615,6 +2683,20 @@
               },
               "secret": {
                 "type": "boolean"
+              },
+              "format": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/VarFormat"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "choices": {
+                "type": "array",
+                "items": true
               }
             },
             "additionalProperties": false,
@@ -2652,6 +2734,26 @@
               {
                 "type": "string",
                 "const": "inOut"
+              }
+            ]
+          },
+          "VarFormat": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "file"
+              },
+              {
+                "type": "string",
+                "const": "folder"
+              },
+              {
+                "type": "string",
+                "const": "date"
+              },
+              {
+                "type": "string",
+                "const": "month"
               }
             ]
           },

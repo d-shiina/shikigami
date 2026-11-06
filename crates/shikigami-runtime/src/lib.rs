@@ -9,6 +9,7 @@
 #![allow(clippy::result_large_err)]
 
 pub mod adapter;
+pub mod audit;
 pub mod builtin;
 pub mod debug;
 pub mod event;
@@ -22,7 +23,7 @@ pub mod sidecar;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
 use shikigami_core::policy::{Policy, TargetDef};
@@ -120,6 +121,15 @@ impl Runtime {
         self
     }
 
+    /// Whether the screen can be used now (signed in, not locked): `None`
+    /// when this runtime has no way to tell (no desktop adapter).
+    pub fn desktop_available(&self) -> Option<bool> {
+        self.resources
+            .desktop_probe
+            .as_ref()
+            .map(|probe| probe().is_none())
+    }
+
     /// Where steps look up registered secrets (`{ "secret": .., "field": .. }`
     /// params) and saved browser logins: the workspace vault.
     pub fn with_secrets(mut self, secrets: Arc<dyn SecretProvider>) -> Self {
@@ -212,6 +222,7 @@ impl Runtime {
                 Vec::new()
             };
         let cancel = CancellationToken::new();
+        let force = CancellationToken::new();
         let debugger = options.debug.map(|debug| {
             Arc::new(debug::Debugger::new(
                 debug,
@@ -241,6 +252,7 @@ impl Runtime {
                 iteration: None,
                 emitter: emitter.clone(),
                 cancel: cancel.clone(),
+                force: force.clone(),
                 default_timeout_ms: exec::DEFAULT_TIMEOUT_MS,
                 default_retry: None,
                 default_on_error: OnError::Fail,
@@ -336,13 +348,16 @@ impl Runtime {
                 })
                 .collect();
 
-            // Release per-run adapter state (browser contexts, ...).
+            // Release per-run adapter state (browser contexts, ...). An
+            // adapter that does not answer must not keep a stopped run open.
             for hook in hooks.iter() {
-                hook(RunEnd {
+                let end = hook(RunEnd {
                     run_id: task_run_id.clone(),
                     secrets: secrets.clone(),
-                })
-                .await;
+                });
+                if tokio::time::timeout(RUN_END_HOOK_LIMIT, end).await.is_err() {
+                    tracing::warn!("an adapter did not finish closing the run in time");
+                }
             }
 
             let duration_ms = u64::try_from(clock.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -375,7 +390,7 @@ impl Runtime {
 
         Ok(RunHandle {
             run_id,
-            cancel,
+            stopper: Stopper { cancel, force },
             events: rx,
             debug: debugger.map(|inner| DebugControl {
                 inner,
@@ -399,6 +414,9 @@ pub fn default_pc_lock_dir() -> PathBuf {
 }
 
 /// Called once when a run ends (after its last step, before `RunFinished`).
+/// How long one adapter may take to close what a finished run left open.
+const RUN_END_HOOK_LIMIT: Duration = Duration::from_secs(15);
+
 pub type RunFinishedHook = Arc<dyn Fn(RunEnd) -> BoxFuture<'static, ()> + Send + Sync>;
 
 /// What a [`RunFinishedHook`] gets.
@@ -568,10 +586,33 @@ pub(crate) fn init_variables(
     Ok(())
 }
 
+/// Stops a run: the first `stop` cancels it (a `finally` block still
+/// gets up to a minute to clean up), a second one also ends that clean-up.
+#[derive(Clone)]
+pub struct Stopper {
+    cancel: CancellationToken,
+    force: CancellationToken,
+}
+
+impl Stopper {
+    pub fn stop(&self) {
+        if self.cancel.is_cancelled() {
+            self.force.cancel();
+        } else {
+            self.cancel.cancel();
+        }
+    }
+
+    /// Whether a stop was asked for.
+    pub fn is_stopped(&self) -> bool {
+        self.cancel.is_cancelled()
+    }
+}
+
 /// Handle to a running flow.
 pub struct RunHandle {
     pub run_id: RunId,
-    cancel: CancellationToken,
+    stopper: Stopper,
     events: mpsc::UnboundedReceiver<RunEventEnvelope>,
     debug: Option<DebugControl>,
     snapshot: Arc<Mutex<RunSnapshot>>,
@@ -580,14 +621,20 @@ pub struct RunHandle {
 
 impl RunHandle {
     /// Requests cancellation. The current step is interrupted and the run
-    /// finishes with status `cancelled`.
+    /// finishes with status `cancelled`. Calling it again also cuts short
+    /// the `finally` blocks that run after a stop.
     pub fn cancel(&self) {
-        self.cancel.cancel();
+        self.stopper.stop();
     }
 
-    /// A token that cancels this run when triggered (for stop buttons, MCP `stop_flow`).
+    /// A token that cancels this run when triggered.
     pub fn cancel_token(&self) -> CancellationToken {
-        self.cancel.clone()
+        self.stopper.cancel.clone()
+    }
+
+    /// What stop buttons and MCP `stop_flow` hold (see [`Stopper`]).
+    pub fn stopper(&self) -> Stopper {
+        self.stopper.clone()
     }
 
     /// Pause / step / resume controls; `None` unless started with

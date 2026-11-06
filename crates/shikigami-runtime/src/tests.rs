@@ -212,6 +212,86 @@ async fn loops_with_break_and_continue() {
 }
 
 #[tokio::test]
+async fn switch_runs_the_first_matching_case_or_default() {
+    let case = |values: Option<Value>, condition: Option<&str>, message: &str| {
+        let mut step = Step::new("control.case").with_block("body", vec![log(message)]);
+        if let Some(values) = values {
+            step = step.with_param("values", values);
+        }
+        if let Some(condition) = condition {
+            step = step.with_param("condition", condition);
+        }
+        step
+    };
+    let switch = || {
+        Step::new("control.switch")
+            .with_param("value", "kind")
+            .with_block(
+                "cases",
+                vec![
+                    case(Some(json!(["A", "B"])), None, "AB"),
+                    case(Some(json!(["{{ special }}"])), None, "special"),
+                    case(Some(json!([1])), None, "one"),
+                    // Like `Case Is >= 10`; the earlier cases win when both match.
+                    case(None, Some("kind >= 10"), "big"),
+                    {
+                        let mut off = case(Some(json!([5])), None, "disabled");
+                        off.disabled = true;
+                        off
+                    },
+                ],
+            )
+            .with_block("default", vec![log("default: {{ kind }}")])
+    };
+    for (kind, expected) in [
+        (json!("B"), "AB"),
+        (json!("S"), "special"),
+        (json!(1.0), "one"),
+        (json!(25), "big"),
+        (json!(5), "default: 5"),
+        (json!(3), "default: 3"),
+    ] {
+        let mut s = flow(vec![switch()]);
+        s.variables
+            .push(var("kind", VarType::Any, VarDirection::Input, None));
+        s.variables.push(var(
+            "special",
+            VarType::String,
+            VarDirection::Local,
+            Some(json!("S")),
+        ));
+        let (report, events) = run(&Runtime::new(), s, json!({ "kind": kind })).await;
+        assert_eq!(
+            report.status,
+            RunStatus::Succeeded,
+            "{kind}: {:?}",
+            report.error
+        );
+        assert_eq!(logs(&events), [expected], "{kind}");
+    }
+
+    // The case that ran is reported as a step of its own; the others are not.
+    let mut s = flow(vec![switch()]);
+    s.variables
+        .push(var("kind", VarType::Any, VarDirection::Input, None));
+    s.variables.push(var(
+        "special",
+        VarType::String,
+        VarDirection::Local,
+        Some(json!("S")),
+    ));
+    let (_, events) = run(&Runtime::new(), s, json!({ "kind": 1 })).await;
+    let started: Vec<String> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::StepStarted { step_type, .. } => Some(step_type.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(started, ["control.switch", "control.case", "log.message"]);
+}
+
+#[tokio::test]
 async fn infinite_loops_are_bounded() {
     let s = flow(vec![
         Step::new("control.while")
@@ -1600,6 +1680,48 @@ async fn swaps_that_lose_the_paused_position_are_refused() {
 }
 
 #[tokio::test]
+async fn a_fix_inside_a_switch_case_is_taken_while_paused() {
+    // s1 switch { cases: [s2 case { s3 fail }] }, s4
+    let switch = |message: &str| {
+        flow(vec![
+            Step::new("control.switch")
+                .with_param("value", "'A'")
+                .with_block(
+                    "cases",
+                    vec![
+                        Step::new("control.case")
+                            .with_param("values", json!(["A"]))
+                            .with_block("body", vec![fail(message)]),
+                    ],
+                ),
+            log("after"),
+        ])
+    };
+    let s = switch("boom");
+    let mut fixed = s.clone();
+    fixed.revision += 1;
+    fixed.steps[0].blocks.get_mut("cases").expect("cases")[0]
+        .blocks
+        .get_mut("body")
+        .expect("body")[0] = log("fixed").with_id("s3");
+    let mut handle = Runtime::new().start(s, debug_options(&[])).expect("start");
+    let control = handle.debug_control().expect("control");
+    let mut events = Vec::new();
+    while let Some(event) = handle.next_event().await {
+        if matches!(event.event, RunEvent::Paused { .. }) {
+            assert!(control.update_flow(fixed.clone()).expect("taken"));
+            control.send(DebugCommand::Retry).expect("retry");
+        }
+        events.push(event);
+    }
+    assert_eq!(
+        handle.wait().await.expect("wait").status,
+        RunStatus::Succeeded
+    );
+    assert_eq!(logs(&events), ["fixed", "after"]);
+}
+
+#[tokio::test]
 async fn resuming_commands_need_a_pause_and_cancel_ends_a_paused_run() {
     let s = flow(vec![log("a")]);
     let mut options = debug_options(&[]);
@@ -1995,4 +2117,64 @@ async fn a_nested_finally_does_not_extend_the_cleanup_deadline() {
     // One grace period for all the cleanup, not one per nested `try`.
     assert!(started.elapsed() <= crate::exec::FINALLY_GRACE + Duration::from_secs(2));
     assert!(!logs(&events).contains(&"inner done".to_string()));
+}
+
+#[tokio::test]
+async fn stopping_again_ends_the_finally_at_once() {
+    let s = flow(vec![
+        Step::new("control.try")
+            .with_block("try", vec![delay(600_000)])
+            .with_block(
+                "finally",
+                vec![log("closing"), delay(600_000), log("closed")],
+            ),
+    ]);
+    let mut handle = Runtime::new()
+        .start(s, RunOptions::default())
+        .expect("start");
+    while let Some(e) = handle.next_event().await {
+        if matches!(e.event, RunEvent::StepStarted { .. }) {
+            break;
+        }
+    }
+    handle.cancel();
+    let mut events = Vec::new();
+    while let Some(e) = handle.next_event().await {
+        let closing = matches!(&e.event, RunEvent::Log { message, .. } if message == "closing");
+        events.push(e);
+        if closing {
+            break;
+        }
+    }
+    // The clean-up waits; the second press does not.
+    handle.cancel();
+    let report = tokio::time::timeout(
+        Duration::from_secs(5),
+        handle.wait_with(|e| events.push(e.clone())),
+    )
+    .await
+    .expect("the second stop ends the finally")
+    .unwrap();
+    assert_eq!(report.status, RunStatus::Cancelled);
+    assert!(!logs(&events).contains(&"closed".to_string()));
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_adapter_that_never_closes_does_not_hold_a_stopped_run() {
+    let runtime = Runtime::builder()
+        .on_run_finished(Arc::new(|_| Box::pin(std::future::pending())))
+        .build();
+    let mut handle = runtime
+        .start(flow(vec![delay(600_000)]), RunOptions::default())
+        .expect("start");
+    while let Some(e) = handle.next_event().await {
+        if matches!(e.event, RunEvent::StepStarted { .. }) {
+            break;
+        }
+    }
+    handle.cancel();
+    let started = tokio::time::Instant::now();
+    let report = handle.wait().await.unwrap();
+    assert_eq!(report.status, RunStatus::Cancelled);
+    assert!(started.elapsed() <= Duration::from_secs(20));
 }

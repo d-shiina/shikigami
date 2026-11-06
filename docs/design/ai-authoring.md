@@ -45,6 +45,31 @@
 - 上限はノード共通の `timeoutMs`。専用 timeout は作らない。超えたら `WAIT_TIMEOUT`（`details: { elapsedMs, polls }`）。
 - `retry` 付きは `REDUNDANT_RETRY` warning。
 
+## E. `control.switch`（値で分岐、VBA の Select Case）
+
+1 つの値で 3 つ以上に分けるとき、`control.if` の入れ子は AI も人も読み違えやすいので専用の形を置く。新しい仕組みは増やさず、`control.parallel` と `control.group` と同じ「ブロックに専用の子ノードを並べる」形にした（フローの形式は変わらないので schemaVersion は上げない）。
+
+```json
+{ "type": "control.switch", "params": { "value": "order.kind" }, "blocks": {
+  "cases": [
+    { "type": "control.case", "params": { "values": ["A", "B"] }, "blocks": { "body": [ … ] } },
+    { "type": "control.case", "params": { "condition": "order.amount >= 100000" }, "blocks": { "body": [ … ] } }
+  ],
+  "default": [ … ]
+} }
+```
+
+- `value` は式で、1 回だけ評価する。
+- `control.case` は `values`（`Case "A", "B"`。数値は値で比べる、文字列は `{{ }}` 可）か `condition`（`Case Is >= 80` / `Case 1 To 5`。比べる値を書いた式）、または両方（どちらかで当たり）。
+- 上から見て最初に当たった 1 つだけが動く（次のケースへ落ちない）。どれにも当たらなければ `default`。無効にしたケースは飛ばす。
+- 実行中は当たったケースが 1 つのノードとして `stepStarted` / `stepFinished` を出す（Studio の実行の跡で通った枝が分かる）。
+
+| 検証コード | 条件 |
+|---|---|
+| `NOT_A_CASE` (error) | `cases` に `control.case` 以外がある |
+| `CASE_OUTSIDE_SWITCH` (error) | `control.case` が `control.switch` の `cases` の外にある |
+| `INVALID_PARAMS` (error) | `control.case` に `values` も `condition` もない |
+
 ## D. 現仕様の見直し（優先度順）
 
 1. **[高] 式とテンプレートの規則を一本化**：`expressionParams` に挙げた param は「`{{ }}` なしの式」、それ以外の文字列はテンプレート。`control.repeat.count` と `flow.delay.ms` は「整数、または `{{ 式 }}`」に統一する（現状 `count` の文字列は式、`ms` の文字列はテンプレートで食い違う）。

@@ -196,11 +196,11 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
           <button
             type="button"
             onClick={() => stopRun()}
-            title={`${t.stop} (Shift+F5)`}
+            title={run?.stopping ? t.stopAgainTitle : `${t.stop} (Shift+F5)`}
             className="flex h-full items-center gap-1.5 border-l border-slate-300 px-3 font-semibold text-shu-600 hover:bg-shu-50"
           >
-            <span className="h-2.5 w-2.5 rounded-[2px] bg-shu-500" />
-            {t.stop}
+            <span className={`h-2.5 w-2.5 rounded-[2px] bg-shu-500 ${run?.stopping ? "animate-pulse" : ""}`} />
+            {run?.stopping ? t.stopping : t.stop}
           </button>
         </div>
       ) : (

@@ -51,6 +51,33 @@ function code(value: unknown): Part {
   return { code: typeof value === "string" ? readable(value) : JSON.stringify(value) };
 }
 
+/** The values a case compares to, as literals: 「A」「B」 / "A", "B". */
+function caseValues(values: unknown, sep: string): Part[] {
+  const list = Array.isArray(values) ? values : [];
+  return list.flatMap((v, i) => {
+    const text = typeof v === "string" ? v : JSON.stringify(v);
+    const quoted = locale === "ja" ? `「${text}」` : `"${text}"`;
+    return [...(i > 0 ? [w(sep)] : []), ...(typeof v === "string" && v.includes("{{") ? template(v) : [w(quoted)])];
+  });
+}
+
+/** A case: the values it matches, or its condition, or both. */
+function caseParts(p: Record<string, unknown>): Part[] {
+  const ja = locale === "ja";
+  const values = Array.isArray(p.values) && p.values.length > 0 ? caseValues(p.values, ja ? "・" : ", ") : [];
+  const condition = typeof p.condition === "string" && p.condition !== "" ? [code(p.condition)] : [];
+  if (ja) {
+    if (values.length > 0 && condition.length > 0) return [...values, w(" か "), ...condition, w(" のとき")];
+    if (values.length > 0) return [w("値が "), ...values, w(" のとき")];
+    if (condition.length > 0) return [...condition, w(" のとき")];
+    return [w("（値が未設定）")];
+  }
+  if (values.length > 0 && condition.length > 0) return [w("Case "), ...values, w(" or "), ...condition];
+  if (values.length > 0) return [w("Case "), ...values];
+  if (condition.length > 0) return [w("Case "), ...condition];
+  return [w("Case (no value set)")];
+}
+
 /** A literal with `{{ expr }}` holes: the words stay words, the holes become chips. */
 function template(value: unknown): Part[] {
   if (typeof value !== "string" || !value.includes("{{")) return [code(value)];
@@ -211,6 +238,8 @@ const BUILDERS: Record<string, Builder> = {
   "log.message": (p) => [w("「"), ...template(p.message), w(`」と${p.level === "warn" ? "警告を" : p.level === "error" ? "エラーを" : "ログに"}書く`)],
   "variable.set": (p) => [code(p.name), w(" に "), code(p.expression ?? p.value), w(" を入れる")],
   "control.if": (p) => [w("もし "), code(p.condition), w(" なら")],
+  "control.switch": (p) => [code(p.value), w(" の値で分ける")],
+  "control.case": (p) => caseParts(p),
   "control.while": (p) => [code(p.condition), w(" の間、繰り返す")],
   "control.repeat": (p) => [code(p.count), w(" 回繰り返す")],
   "control.forEach": (p) => [code(p.items), w(" を1件ずつ "), code(p.itemVar ?? "item"), w(" として繰り返す")],
@@ -276,6 +305,8 @@ const BUILDERS_EN: Record<string, Builder> = {
   "log.message": (p) => [w(p.level === "warn" ? "Warn " : p.level === "error" ? "Log error " : "Log "), w("\""), ...template(p.message), w("\"")],
   "variable.set": (p) => [w("Set "), code(p.name), w(" to "), code(p.expression ?? p.value)],
   "control.if": (p) => [w("If "), code(p.condition)],
+  "control.switch": (p) => [w("Switch on "), code(p.value)],
+  "control.case": (p) => caseParts(p),
   "control.while": (p) => [w("Repeat while "), code(p.condition)],
   "control.repeat": (p) => [w("Repeat "), code(p.count), w(" times")],
   "control.forEach": (p) => [w("For each "), code(p.itemVar ?? "item"), w(" in "), code(p.items)],

@@ -406,6 +406,16 @@ Exits the innermost loop.
 Params: none.
 Example: `{"type":"control.break"}`
 
+#### control.case (ケース)
+
+One branch of `control.switch` (only allowed in its `cases` block). Runs `body` when the switch's value equals one of `values` (like `Case "A", "B"`; numbers compare by value, a string may be a `{{ expression }}` template), or when `condition` is truthy (like `Case Is >= 80` / `Case 1 To 5`: write the comparison in full, e.g. `score >= 80`). Give `values`, `condition`, or both (either one matching is enough).
+
+Params:
+- `values`: list of text or number or true | false or null — 当てはまる値の一覧（例: ["A", "B"] / [1, 2]）
+- `condition`: text [expression] — 式。{{ }} は付けない (例: count > 3 && status == 'OK')
+Blocks: `body` (該当するとき)
+Example: `{"type":"control.case","params":{"values":["東京","大阪"]},"blocks":{"body":[{"type":"log.message","params":{"message":"支店あり"}}]}}`
+
 #### control.continue (次の繰り返しへ)
 
 Skips to the next iteration of the innermost loop.
@@ -472,6 +482,15 @@ Params:
 - `indexVar`: text [variable name]
 Blocks: `body` (繰り返す処理)
 Example: `{"type":"control.repeat","name":"3回試す","params":{"count":3,"indexVar":"i"},"blocks":{"body":[{"type":"log.message","params":{"message":"{{ i + 1 }} 回目"}}]}}`
+
+#### control.switch (値で分岐)
+
+Picks one of several branches by a value, like VBA `Select Case`. `value` is an expression evaluated once. `cases` holds only `control.case` steps, checked top to bottom: the first case whose `values` contains a value equal to it (or whose `condition` is truthy) runs its `body`, and no other case runs (no fall-through). When none matches, `default` runs. Use it instead of a chain of nested `control.if` when one value decides among three or more branches.
+
+Params:
+- `value`*: text [expression] — 式。{{ }} は付けない (例: count > 3 && status == 'OK')
+Blocks: `cases` (ケース), `default` (どれにも該当しないとき)
+Example: `{"type":"control.switch","name":"区分で振り分ける","params":{"value":"order.kind"},"blocks":{"cases":[{"type":"control.case","params":{"values":["A","B"]},"blocks":{"body":[{"type":"log.message","params":{"message":"通常品: {{ order.no }}"}}]}},{"type":"control.case","params":{"values":["C"]},"blocks":{"body":[{"type":"log.message","params":{"message":"取り寄せ: {{ order.no }}"}}]}},{"type":"control.case","name":"10 万円以上","params":{"condition":"order.amount >= 100000"},"blocks":{"body":[{"type":"log.message","params":{"message":"高額: {{ order.no }}"}}]}}],"default":[{"type":"log.message","params":{"level":"warn","message":"不明な区分: {{ order.kind }}"}}]}}`
 
 #### control.try (例外処理)
 

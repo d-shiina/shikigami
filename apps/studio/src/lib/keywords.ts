@@ -6,6 +6,8 @@ import { blockName, locale } from "./i18n";
 
 export const KEYWORD: Record<string, string> = {
   "control.if": "if",
+  "control.switch": "switch",
+  "control.case": "case",
   "control.while": "while",
   "control.repeat": "repeat",
   "control.forEach": "forEach",
@@ -46,6 +48,12 @@ function blockLabelEn(step: Step, block: string, label: string): string {
       const at = p.concurrency && Number(p.concurrency) > 1 ? `, ${p.concurrency} at a time` : "";
       return `forEach: each of ${text(p.items)} → ${p.itemVar ?? "item"}${at}`;
     }
+    case "control.switch:cases":
+      return "case";
+    case "control.switch:default":
+      return "default: when none match";
+    case "control.case:body":
+      return "";
     case "control.try:try":
       return "try: run first";
     case "control.try:catch":
@@ -74,6 +82,12 @@ function blockLabelJa(step: Step, block: string, label: string): string {
       const at = p.concurrency && Number(p.concurrency) > 1 ? `・${p.concurrency} 件ずつ同時` : "";
       return `forEach：${text(p.items)} の 1 件ずつ → ${p.itemVar ?? "item"}${at}`;
     }
+    case "control.switch:cases":
+      return "case";
+    case "control.switch:default":
+      return "default：どれにも該当しないとき";
+    case "control.case:body":
+      return "";
     case "control.try:try":
       return "try：まず実行";
     case "control.try:catch":

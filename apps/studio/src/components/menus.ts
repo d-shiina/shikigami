@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
-import { isActive, trailOf } from "../store";
+import { isActive, runBreakpoints, trailOf } from "../store";
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 import { handOffText } from "../lib/todos";
@@ -112,6 +112,7 @@ export function usePaneMenu() {
     // A run that has ended leaves its way on the chart until it is cleared.
     const trail = trailOf(s);
     const ended = trail !== null && !isActive(trail);
+    const breakpoints = runBreakpoints(s).length;
     return [
       { label: t.addStep, icon: Plus, shortcut: t.shortcut, run: () => store.getState().setPaletteOpen(true) },
       "-",
@@ -123,6 +124,7 @@ export function usePaneMenu() {
       { label: t.paste.menu, icon: ClipboardPaste, run: () => store.getState().setPasteOpen("into") },
       s.flow && { label: t.paste.copyFlow, icon: ClipboardCopy, run: () => copyText(handOffText(store.getState().flow!)) },
       ended && { label: t.clearTrail, icon: Eraser, run: () => store.getState().hideTrail() },
+      breakpoints > 0 && { label: t.clearBreakpoints(breakpoints), icon: CircleDot, run: () => store.getState().clearBreakpoints() },
       {
         label: s.outlineOpen ? t.menu.outlineClose : t.menu.outlineOpen,
         icon: TableOfContents,

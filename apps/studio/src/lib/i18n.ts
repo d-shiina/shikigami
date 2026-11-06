@@ -58,6 +58,12 @@ export function setLocale(next: LocaleChoice, remember = true) {
   apply();
 }
 
+/** Calls `listener` after every language switch; returns the unsubscribe. */
+export function onLocaleChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 export function useLocale(): { choice: LocaleChoice; locale: Locale } {
   const value = useSyncExternalStore(
     (l) => {

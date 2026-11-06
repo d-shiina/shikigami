@@ -182,6 +182,7 @@ shikigami/
 | type | 内容 |
 |---|---|
 | `control.if` | `condition` / blocks: `then`, `else` |
+| `control.switch` / `control.case` | `value`（式）/ blocks: `cases`（`control.case` だけ）, `default`。上から見て、`values` に等しい値がある・または `condition` が真の最初のケースの `body` を実行し、どれにも当たらなければ `default`（VBA の `Select Case`） |
 | `control.while` | `condition`, `maxIterations`（既定1000）/ `body` |
 | `control.repeat` | `count`, `indexVar` / `body` |
 | `control.forEach` | `items`（式）, `itemVar`, `indexVar`, `collect`（式。各回の値を `saveAs` に配列で返す）, `concurrency`（同時に回す数）/ `body` |
@@ -534,7 +535,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 - Undo/Redo はフロー単位で **全クライアント共通の 1 本のスタック**（AI の変更を Studio から戻せる反面、ユーザーごとの Undo ではない）。
 - 変数スコープはフラット（ループ変数もフロー全体で 1 つ）。多くの RPA 製品と同じ挙動。
-- 実行を取り消しても `control.try` の `finally` は実行する（最長 60 秒）。実行は `cancelled` で終わる。
+- 実行を取り消しても `control.try` の `finally` は実行する（最長 60 秒。もう一度取り消すとすぐ打ち切る）。実行は `cancelled` で終わる。後片付けに応答しないアダプターも実行を終わらせない（1 つあたり最長 15 秒）。
 - 実行の途中再開（プロセス再起動後のレジューム）は未対応。プロセスが先に終わった実行（クラッシュ・シャットダウン・強制終了）は、次にどれかの Shikigami が実行を始めたときに `failed`・`RUN_INTERRUPTED` で閉じる。もう一度実行する。
 - Studio のフローチャートは表示用の自動レイアウトで、ノード位置は保存しない。
 - 開発中の確認として Linux 上で Studio を Xvfb 起動し、編集・実行・外部変更の反映を確認済み（Linux は製品対象外）。**Windows 実機での Studio 起動は未確認**（CI でビルドとテストのみ確認）。
