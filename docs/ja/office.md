@@ -83,7 +83,7 @@ AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange`
 - インターネットから取得してブロックされたブック（ファイルのプロパティで「許可する」が未チェック）はマクロが動かず `MACRO_FAILED` になります
 - 任意のコードが動くので、ノードのリスクは `Dangerous` です
 
-## Excel 本体で行うこと：開いているブック・再計算・並べ替え・PDF（実装済み）
+## Excel 本体で行うこと：開いているブック・再計算・並べ替え・書式・フィルター・ピボット・PDF（実装済み）
 
 Excel 本体（COM）が要る操作です。Windows と デスクトップ版 Excel が必要です（ほかは `PLATFORM_UNSUPPORTED`、Excel がなければ `EXCEL_NOT_INSTALLED`）。
 
@@ -98,10 +98,16 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 |---|---|---|
 | `excel.recalculate` | `path` | –（全部の数式を計算し直して保存） |
 | `excel.sort` | `path`, `sheet`, `headerRow`, `by`（`[{ "column": "金額", "order": "desc" }]`、先頭が優先） | 並べ替えた行数 `{ count }` |
+| `excel.format` | `path`, `sheet`, `range`（`A1:F1`）と変えたいものだけ：`bold`, `italic`, `fontColor` / `fillColor`（`"#DDEBF7"`、`fillColor: null` で塗りつぶしなし）, `numberFormat`（`"#,##0"`、`"yyyy/mm/dd"`）, `align`（`left` / `center` / `right`）, `wrapText`, `borders`（各セルに細い罫線、`false` で罫線なし）, `columnWidth`, `autoFit` | – |
+| `excel.filter` | `path`, `sheet`, `headerRow`, `filters`（`[{ "column": "状態", "values": ["未処理", "保留"] }]`、すべてを満たす行を残す）か `clear: true` | 表示されている行数 `{ visible }` |
+| `excel.pivot` | `path`, `sheet`（元の表）, `headerRow`, `toSheet`（新しいシート）, `rows` / `columns`（まとめる見出し）, `values`（`[{ "column": "金額", "function": "sum" }]`、`sum` `count` `average` `max` `min`） | `{ sheet }` |
 | `excel.exportPdf` | `path`, `sheet`（省略でブック全体）, `to`, `overwrite` | `{ path }` |
 
 - ブックが開いていればそれを使い、開いていなければ `excel.runMacro` と同じく**見えない別の Excel** でファイルを開いて（`excel.exportPdf` は読み取り専用）、終わったら終了させます
 - `excel.sort` の列は見出しの文字で指定（違えば `UNKNOWN_COLUMN` に見出しの一覧）。Excel 自身の並べ替えなので書式も行と一緒に動きます
+- `excel.format` はブックに触る前に params をすべて確かめます。色は `#RRGGBB`、`numberFormat` は Excel の「セルの書式設定 > ユーザー定義」と同じ書き方（Excel が受け付けなければ `INVALID_NUMBER_FORMAT`）
+- `excel.filter` はシートの（テーブルとして書式設定した表ならそのテーブルの）フィルターを `filters` で置き換えます。値は Excel の表示どおりに比べます（桁区切りで表示している数値なら `"1,200"`）。行はブックに残るので、`excel.readRows` はすべての行を読みます
+- `excel.pivot` は新しいシートに作ります（`toSheet` がすでにあれば `SHEET_EXISTS`）。作れなかったときはシートを残しません（`PIVOT_FAILED`）。集計結果は `toSheet` を `excel.readRange` で読みます
 - `excel.exportPdf` は Excel で印刷したときと同じページ割り（印刷範囲・ページ設定）。`to` があると `FILE_EXISTS`（`overwrite: true` で上書き）
 - 既定のタイムアウトは 5 分。時間切れのときは自分で起動した Excel を保存せずに終了させます（`EXCEL_TIMEOUT`）
 - ファイルは変えますがブックのコードは動かさないので、リスクは `Interactive` です
@@ -162,6 +168,5 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 
 ## 次の段階（予定）
 
-1. **Excel の書式・フィルター・ピボットテーブル**：`excel.sort` と同じく Excel 本体で
-2. **Word の PDF 出力**：COM（Excel のマクロと同じ仕組み）
-3. **Outlook なしで読む**：`mail.list` / `mail.saveAttachments` を Microsoft 365・IMAP でも
+1. **Word の PDF 出力**：COM（Excel のマクロと同じ仕組み）
+2. **Outlook なしで読む**：`mail.list` / `mail.saveAttachments` を Microsoft 365・IMAP でも

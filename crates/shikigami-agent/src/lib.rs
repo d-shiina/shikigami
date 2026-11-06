@@ -12,6 +12,7 @@
 
 pub mod agent;
 pub mod ipc;
+pub mod notify;
 pub mod schedule;
 
 pub use agent::{Agent, AgentStatus, RunRequest, RunningRun, ScheduleStatus};

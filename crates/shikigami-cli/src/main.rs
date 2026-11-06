@@ -1201,6 +1201,8 @@ async fn run(
         })
         .await?;
     recorder.finish(&report)?;
+    // `notify` in policy.json: Task Scheduler and batch runs are unattended.
+    shikigami_agent::notify::notify(policy, &report).await;
     if !json {
         if !report.outputs.is_empty() {
             println!("outputs: {}", serde_json::to_string(&report.outputs)?);

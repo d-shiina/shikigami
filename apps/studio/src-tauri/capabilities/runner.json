@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "runner",
+  "description": "The run window (Shikigami 実行): core events and the caption buttons of its own title bar. Runs go through Shikigami commands.",
+  "windows": ["runner"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-set-title"
+  ]
+}

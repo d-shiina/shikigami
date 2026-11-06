@@ -45,7 +45,7 @@
 
 ## 2. `policy.json`
 
-ワークスペースのフォルダ直下に置きます（共有部分）。ファイルがなければ下の既定値です。Studio の「許可と承認」で編集できます。CLI は `shikigami policy show`（今効いている内容）、`shikigami policy check`（書き間違いの確認）、`shikigami policy init`（既定値で作る）。
+ワークスペースのフォルダ直下に置きます（共有部分）。ファイルがなければ下の既定値です。Studio の設定「実行の許可」で編集できます。CLI は `shikigami policy show`（今効いている内容）、`shikigami policy check`（書き間違いの確認）、`shikigami policy init`（既定値で作る）。
 
 ```json
 {
@@ -78,8 +78,9 @@
 | `remote.manager` | なし | 管理サーバーの URL。`https://`（`http://` は `localhost` だけ） |
 | `remote.flows` | 空（なし） | 管理サーバーが始めてよいフローの ID。`"*"` ですべて。`flows.<id>.unattended: false` のものはここで許しても動かない |
 | `remote.acceptBundles` | false | このワークスペースの公開版だけでなく、管理サーバーがバンドルで送るフローも動かすか |
+| `notify` | 空 | 無人実行（エージェントのスケジュールと `shikigami run`）の終わりを知らせる先：`{ "webhook", "on", "format", "flows" }` の並び。[schedules.md](schedules.md#通知) |
 
-`allow`＝そのまま、`ask`＝人が Studio で承認してから、`deny`＝させない。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
+`allow`＝承認なしで許可、`ask`＝承認が必要（人が Studio で承認してから実行）、`deny`＝禁止。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
 
 壊れた `policy.json`（JSON の誤り、知らない項目、オリジンでない `sites`）は「全部許可」にはせず、実行を `POLICY_INVALID` で止めます。設定は実行の開始時に読むので、変更は次の実行から効きます。
 
