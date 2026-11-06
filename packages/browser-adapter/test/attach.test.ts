@@ -24,6 +24,12 @@ beforeAll(async () => {
   const file = join(profile, "DevToolsActivePort");
   for (let i = 0; i < 100 && !existsSync(file); i++) await new Promise((r) => setTimeout(r, 100));
   port = Number(readFileSync(file, "utf8").split("\n")[0]);
+  // As a person's browser would be: up, with its page shown.
+  for (let i = 0; i < 100; i++) {
+    const tabs = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json() as Promise<{ title: string }[]>).catch(() => []);
+    if (tabs.some((t) => t.title === "社内ポータル")) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
 });
 
 afterAll(() => {
