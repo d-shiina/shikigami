@@ -97,6 +97,9 @@ enum Command {
     /// minutes, once, or when a file appears.
     #[command(subcommand)]
     Schedule(agent_cmd::ScheduleCmd),
+    /// A small reference management server for agents (protocol v1).
+    #[command(subcommand)]
+    Manager(agent_cmd::ManagerCmd),
     /// Serve MCP over stdio for AI clients (Claude Code, Codex, Cursor, ...).
     Mcp {
         /// Tool classes to expose, comma separated: read, write, run.
@@ -368,6 +371,7 @@ fn real_main() -> Result<ExitCode> {
         Command::Schedule(cmd) => {
             return agent_cmd::schedule_cmd(&open_service()?, cmd, parse_inputs);
         }
+        Command::Manager(cmd) => return agent_cmd::manager_cmd(cmd),
         Command::Flow(cmd) => {
             let svc = open_service()?;
             flow_cmd(&svc, cmd)?;

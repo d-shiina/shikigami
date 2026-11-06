@@ -19,6 +19,8 @@ use shikigami_runtime::{
 };
 
 mod desktop;
+/// The file dialog of `dialog.selectFile`, for Studio's run window.
+pub use desktop::select_file;
 mod http;
 pub mod oauth;
 /// The HTTP client and the site check of `http.request`, for other steps that

@@ -13,7 +13,8 @@
 pub mod agent;
 pub mod ipc;
 pub mod notify;
+pub mod remote;
 pub mod schedule;
 
-pub use agent::{Agent, AgentStatus, RunRequest, RunningRun, ScheduleStatus};
+pub use agent::{Agent, AgentStatus, RemoteStatus, RunRequest, RunningRun, ScheduleStatus};
 pub use schedule::{Schedule, ScheduleState, Schedules, When};

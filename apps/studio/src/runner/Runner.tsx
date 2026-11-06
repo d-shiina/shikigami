@@ -12,7 +12,7 @@ import { t } from "../lib/i18n";
 import { plain, sentence } from "../lib/sentence";
 import { findStep } from "../store";
 import { type RunnerApi, type RunnerItem, runnerApi } from "./api";
-import { collect, type Field, fieldsOf, formatValue, initialValues, isOutput, labelOf, type Values } from "./form";
+import { choiceLabel, collect, type Field, fieldsOf, formatValue, initialValues, isOutput, labelOf, type Values } from "./form";
 import { progress, type TopState } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -86,7 +86,19 @@ function List({ items, selected, onSelect, locked }: { items: RunnerItem[]; sele
 
 const INPUT = "w-full rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[13px] focus:border-brand-500 focus:outline-none";
 
-function FieldRow({ field, value, error, onChange }: { field: Field; value: string | boolean; error?: string; onChange: (v: string | boolean) => void }) {
+function FieldRow({
+  field,
+  value,
+  error,
+  onChange,
+  onPick,
+}: {
+  field: Field;
+  value: string | boolean;
+  error?: string;
+  onChange: (v: string | boolean) => void;
+  onPick: (kind: "file" | "folder", start: string) => Promise<string | null>;
+}) {
   const id = `in-${field.name}`;
   if (field.kind === "checkbox") {
     return (
@@ -96,29 +108,71 @@ function FieldRow({ field, value, error, onChange }: { field: Field; value: stri
       </label>
     );
   }
-  const multi = field.kind === "lines" || field.kind === "json";
+  const text = String(value);
+  const kind = field.kind;
+  let control: React.ReactNode;
+  if (kind === "lines" || kind === "json") {
+    control = <textarea id={id} value={text} rows={4} onChange={(e) => onChange(e.target.value)} className={`${INPUT} py-1.5 font-mono text-[12.5px]`} />;
+  } else if (kind === "select") {
+    control = (
+      <select id={id} value={text} onChange={(e) => onChange(e.target.value)} className={`${INPUT} h-8 max-w-[360px]`}>
+        {text === "" && (
+          <option value="" disabled>
+            {t.runner.choose}
+          </option>
+        )}
+        {(field.choices ?? []).map((c, i) => (
+          <option key={JSON.stringify(c)} value={String(i)}>
+            {choiceLabel(c)}
+          </option>
+        ))}
+      </select>
+    );
+  } else if (kind === "date" || kind === "month") {
+    control = <input id={id} type={kind} value={text} onChange={(e) => onChange(e.target.value)} className={`${INPUT} h-8 max-w-[200px]`} />;
+  } else if (kind === "file" || kind === "folder") {
+    control = (
+      <div className="flex gap-2">
+        <input id={id} type="text" value={text} onChange={(e) => onChange(e.target.value)} spellCheck={false} className={`${INPUT} h-8 min-w-0 flex-1`} />
+        <button
+          type="button"
+          title={kind === "file" ? t.runner.browseFile : t.runner.browseFolder}
+          onClick={() =>
+            void onPick(kind, text).then(
+              (path) => path && onChange(path),
+              () => {},
+            )
+          }
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-3 text-[12.5px] font-semibold hover:bg-slate-50"
+        >
+          {kind === "file" ? <FileText size={14} aria-hidden="true" /> : <FolderOpen size={14} aria-hidden="true" />}
+          {t.runner.browse}
+        </button>
+      </div>
+    );
+  } else {
+    control = (
+      <input
+        id={id}
+        type={kind === "password" ? "password" : "text"}
+        inputMode={kind === "number" ? "decimal" : undefined}
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${INPUT} h-8 ${kind === "number" ? "max-w-[200px] text-right" : ""}`}
+      />
+    );
+  }
   return (
     <div>
       <label htmlFor={id} className="mb-1 block text-[12.5px] font-semibold">
         {field.label}
         {field.required && <span className="ml-1 text-shu-600">*</span>}
       </label>
-      {multi ? (
-        <textarea id={id} value={String(value)} rows={4} onChange={(e) => onChange(e.target.value)} className={`${INPUT} py-1.5 font-mono text-[12.5px]`} />
-      ) : (
-        <input
-          id={id}
-          type={field.kind === "password" ? "password" : "text"}
-          inputMode={field.kind === "number" ? "decimal" : undefined}
-          value={String(value)}
-          onChange={(e) => onChange(e.target.value)}
-          className={`${INPUT} h-8 ${field.kind === "number" ? "max-w-[200px] text-right" : ""}`}
-        />
-      )}
+      {control}
       {error ? (
         <div className="mt-1 text-[11.5px] text-shu-600">{error}</div>
       ) : (
-        field.kind === "lines" && <div className="mt-1 text-[11.5px] text-slate-500">{t.runner.linesHint}</div>
+        kind === "lines" && <div className="mt-1 text-[11.5px] text-slate-500">{t.runner.linesHint}</div>
       )}
     </div>
   );
@@ -190,6 +244,23 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   const mine = run?.runId ? events.filter((e) => e.runId === run.runId) : [];
   const state = item && run ? progress(item.flow, mine) : null;
   const finished = state?.finished ?? null;
+
+  // Closed to the tray, the window keeps its page: read the list again
+  // when it comes back (a flow may have been published meanwhile), but not
+  // while a run goes, whose progress follows the version it started with.
+  const busy = useRef(false);
+  busy.current = !!run && !finished;
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState === "visible" && !busy.current) void reload();
+    };
+    window.addEventListener("focus", again);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      window.removeEventListener("focus", again);
+      document.removeEventListener("visibilitychange", again);
+    };
+  }, []);
   const now = useTick(!!run && !finished);
 
   // When it ends: the outputs from the report, the files it wrote to output/.
@@ -304,7 +375,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                 >
                   {fields.length === 0 && <p className="text-[12.5px] text-slate-500">{t.runner.noInputs}</p>}
                   {fields.map((f) => (
-                    <FieldRow key={f.name} field={f} value={values[f.name] ?? f.initial} error={errors[f.name]} onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))} />
+                    <FieldRow key={f.name} field={f} value={values[f.name] ?? f.initial} error={errors[f.name]} onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))} onPick={backend.pick} />
                   ))}
                 </form>
               )}

@@ -15,7 +15,24 @@ type Line = { id: string; source: string; target: string; loop?: boolean };
  * that failed: the line into the block keeps the colour of a way that went on,
  * and only the line into the step where it stopped turns red.
  */
-export function trailLines(lines: readonly Line[], states: Readonly<Record<string, StepRunState>>): Map<string, LineTrail> {
+export function trailLines(
+  lines: readonly Line[],
+  stepStates: Readonly<Record<string, StepRunState>>,
+  through: ReadonlySet<string> = new Set(),
+  continues: ReadonlySet<string> = new Set(),
+): Map<string, LineTrail> {
+  // A point the line only passes through (the "+" at the end of a block) was
+  // passed when a line into it came from a step the run got past: one that
+  // succeeded, or failed and was set to continue on errors (`continues`).
+  const states: Record<string, StepRunState> = { ...stepStates };
+  const passed = (id: string, seen: Set<string>): boolean =>
+    lines.some((l) => {
+      if (l.target !== id || seen.has(l.source)) return false;
+      if (through.has(l.source)) return passed(l.source, new Set([...seen, l.source]));
+      const state = stepStates[l.source];
+      return state === "succeeded" || (state === "failed" && continues.has(l.source));
+    });
+  for (const id of through) if (passed(id, new Set([id]))) states[id] = "succeeded";
   const reached = (id: string) => {
     const state = states[id];
     return state !== undefined && REACHED.has(state);

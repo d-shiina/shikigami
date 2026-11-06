@@ -545,6 +545,7 @@ export const ja = {
     fixNow: (agent: string) => `${agent} に今すぐ修正を依頼`,
   },
   flow: {
+    addAtBlockEnd: (block: string) => `「${block}」の最後にノードを追加`,
     aiAdded: "AIが追加",
     aiChanged: "AIが変更",
     breakpointOff: "ブレークポイント：Studio で実行すると、このノードの前で一時停止します。クリックで外す (F9)",
@@ -945,6 +946,12 @@ export const ja = {
       "web-orders": { name: "Web の受注システムで未処理の注文を出荷する", uses: "ブラウザ・ログイン" },
     } as Record<string, { name: string; uses: string }>,
   },
+  tray: {
+    tooltip: "Shikigami",
+    openRunner: "実行画面を開く",
+    openStudio: "Studio を開く",
+    quit: "終了",
+  },
   runner: {
     title: "Shikigami 実行",
     open: "実行画面",
@@ -962,6 +969,10 @@ export const ja = {
     notNumber: "数を入れてください",
     notJson: "形が正しくありません（JSON）",
     linesHint: "1 行に 1 つ",
+    choose: "選択してください",
+    browse: "参照…",
+    browseFile: "ファイルを選択",
+    browseFolder: "フォルダーを選択",
     run: "実行",
     runNote: (version: number) => `押すと公開版 ${version} が動きます。終わるまで PC を操作しないでください`,
     stop: "中止",
