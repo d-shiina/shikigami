@@ -2,6 +2,7 @@
 // strings live here. en.ts must have the same shape (checked by `Dict`).
 import { errorsJa } from "./errors.ja";
 import { functionHelpJa } from "./functionHelp.ja";
+import { paramsJa } from "./params.ja";
 import { stepHelpJa } from "./stepHelp.ja";
 import { transformsJa } from "./transforms.ja";
 
@@ -1076,39 +1077,7 @@ export const ja = {
     details: "型・向き・機密の設定",
   },
   askCopied: "AI への依頼文をコピーしました。Claude Code などの AI に貼り付けてください。修正内容を確認すると、ここから再開できます。",
-  paramLabels: {
-    message: "メッセージ",
-    values: "該当する値",
-    level: "レベル",
-    name: "変数",
-    value: "値",
-    expression: "式",
-    condition: "条件",
-    items: "リスト",
-    itemVar: "要素",
-    indexVar: "番号",
-    count: "回数",
-    ms: "待ち(ms)",
-    url: "URL",
-    target: "対象",
-    key: "キー",
-    path: "保存先",
-    state: "状態",
-    headless: "画面なし",
-    all: "すべて",
-    fullPage: "ページ全体",
-    secret: "シークレット",
-    authorizeUrl: "認可ページの URL",
-    tokenUrl: "トークンの URL",
-    redirectUrl: "リダイレクト URL",
-    scope: "スコープ",
-    authorizeParams: "認可ページの追加パラメータ",
-    pkce: "PKCE",
-    file: "ファイル",
-    language: "言語",
-    engine: "OCR エンジン",
-    accurate: "高精度（手書き向け・遅い）",
-  },
+  paramNames: paramsJa,
   outputLabels: { writes: "書き込む", item: "要素", index: "番号", result: "結果" },
   verbs: {
     add: "追加",

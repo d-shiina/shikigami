@@ -2,6 +2,7 @@
 import type { Dict } from "./ja";
 import { errorsEn } from "./errors.en";
 import { functionHelpEn } from "./functionHelp.en";
+import { paramsEn } from "./params.en";
 import { stepHelpEn } from "./stepHelp.en";
 import { transformsEn } from "./transforms.en";
 
@@ -1077,39 +1078,7 @@ export const en: Dict = {
     details: "Type, direction and secrecy",
   },
   askCopied: "Copied the request for the AI. Paste it into an AI such as Claude Code. Once you have reviewed the fix, resume from here.",
-  paramLabels: {
-    message: "Message",
-    values: "Matches",
-    level: "Level",
-    name: "Variable",
-    value: "Value",
-    expression: "Expression",
-    condition: "Condition",
-    items: "List",
-    itemVar: "Item",
-    indexVar: "Index",
-    count: "Count",
-    ms: "Wait (ms)",
-    url: "URL",
-    target: "Target",
-    key: "Key",
-    path: "Path",
-    state: "State",
-    headless: "Headless",
-    all: "All",
-    fullPage: "Full page",
-    secret: "Secret",
-    authorizeUrl: "Authorization URL",
-    tokenUrl: "Token URL",
-    redirectUrl: "Redirect URL",
-    scope: "Scope",
-    authorizeParams: "Extra authorization params",
-    pkce: "PKCE",
-    file: "File",
-    language: "Language",
-    engine: "OCR engine",
-    accurate: "Accurate (handwriting, slower)",
-  },
+  paramNames: paramsEn,
   outputLabels: { writes: "Writes", item: "Item", index: "Index", result: "Result" },
   verbs: {
     add: "Added",

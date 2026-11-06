@@ -6,7 +6,7 @@ import { api, type SecretField } from "../lib/api";
 import { locale, stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { stepSummary } from "../lib/palette";
-import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
+import { CALL, callMap, choiceLabel, knownVariables, outputs, paramLabel, plainHint, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { outline } from "../lib/outline";
 import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../lib/parts";
 import { runScope } from "../lib/runScope";
@@ -213,6 +213,7 @@ function isScalarList(schema: JsonSchema, value: unknown): boolean {
 
 function ParamField({
   name,
+  stepType,
   schema,
   value,
   required,
@@ -222,6 +223,7 @@ function ParamField({
   onChange,
 }: {
   name: string;
+  stepType: string;
   schema: JsonSchema;
   value: unknown;
   required: boolean;
@@ -231,11 +233,11 @@ function ParamField({
   pointer?: string;
   onChange: (value: unknown) => void;
 }) {
-  const label = `${paramLabel(name)}${required ? " *" : ""}`;
+  const label = `${paramLabel(name, stepType)}${required ? " *" : ""}`;
   if (secretCapable) {
     return <TextOrSecretField label={label} schema={schema} value={value} onChange={onChange} />;
   }
-  let hint = schema.description;
+  let hint = plainHint(schema.description);
   let editor: React.ReactNode;
   // A choice that can also be written out in full (a dialog's answer): the
   // choice, unless the value is already the long form.
@@ -246,7 +248,7 @@ function ParamField({
         <option value="">{t.props.unset}</option>
         {choices.map((v) => (
           <option key={String(v)} value={String(v)}>
-            {String(v)}
+            {choiceLabel(name, v)}
           </option>
         ))}
       </select>
@@ -257,7 +259,7 @@ function ParamField({
         <option value="">{t.props.unset}</option>
         {schema.enum.map((v) => (
           <option key={String(v)} value={String(v)}>
-            {String(v)}
+            {choiceLabel(name, v)}
           </option>
         ))}
       </select>
@@ -322,7 +324,7 @@ function ParamField({
     );
   }
   return (
-    <Row label={label} title={name} socket={socket} hint={hint}>
+    <Row label={label} title={schema.description ? `${schema.description}（${name}）` : name} socket={socket} hint={hint}>
       {editor}
     </Row>
   );
@@ -733,7 +735,7 @@ function ObjectFields({
               <option value="">{t.props.unset}</option>
               {sub.enum.map((option) => (
                 <option key={String(option)} value={String(option)}>
-                  {key === "role" ? roleLabel(String(option)) : String(option)}
+                  {key === "role" ? roleLabel(String(option)) : choiceLabel(key, option)}
                 </option>
               ))}
             </select>
@@ -883,13 +885,13 @@ function ParamsEditor({
           if (expressionParams.has(key) && (params[key] === undefined || typeof params[key] === "string")) {
             const required = schema.required?.includes(key) ?? false;
             return (
-              <Row key={key} label={`${paramLabel(key)}${required ? " *" : ""}`} title={key} socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}>
+              <Row key={key} label={`${paramLabel(key, step.type)}${required ? " *" : ""}`} title={key} socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}>
                 <ExpressionField
                   value={typeof params[key] === "string" ? params[key] : ""}
                   onCommit={(text) => setParam(text.trim() === "" ? null : text)}
                   types={vars}
                   scope={scope}
-                  label={paramLabel(key)}
+                  label={paramLabel(key, step.type)}
                 />
               </Row>
             );
@@ -910,6 +912,7 @@ function ParamsEditor({
             <ParamField
               key={key}
               name={key}
+              stepType={step.type}
               schema={propSchema}
               value={params[key]}
               required={schema.required?.includes(key) ?? false}

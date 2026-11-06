@@ -5,14 +5,31 @@ import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
 import { formatValue } from "./changes";
 import { listToText } from "./listText";
 import { readable, targetText } from "./sentence";
-import { t } from "./i18n";
+import { locale, t } from "./i18n";
 
 export const NODE_HEAD_H = 58;
 export const ROW_H = 26;
 export const NODE_PAD_B = 8;
 export const MAX_PARAM_ROWS = 5;
 
-export const paramLabel = (key: string) => (t.paramLabels as Record<string, string>)[key] ?? key;
+/** A node setting's name for people; `type` picks the node's own name for it (a `path` saved to or read from). */
+export const paramLabel = (key: string, type?: string) => (type ? t.paramNames.for[type]?.[key] : undefined) ?? t.paramNames.labels[key] ?? key;
+
+/** A choice of a setting in words (`visible` → 表示されている); unknown values stay as they are. */
+export const choiceLabel = (key: string, value: unknown) => {
+  const text = String(value);
+  return t.paramNames.choices[key]?.[text] ?? text;
+};
+
+/**
+ * The registry's descriptions are written for the AI, in Japanese, and often
+ * show the stored form (`{ "secret": … }`, `true`, `{{ }}`). Under a field only
+ * a plain sentence helps a person; the full text stays in the tooltip.
+ */
+export function plainHint(description: string | undefined): string | undefined {
+  if (!description || locale !== "ja") return undefined;
+  return /[{}"`]|\btrue\b|\bfalse\b|\bnull\b|&&|==|既定 \w/.test(description) ? undefined : description;
+}
 
 export type Row =
   | {
@@ -55,6 +72,7 @@ export function referencedVariables(value: unknown, known: ReadonlySet<string>):
 const EXPRESSION_KEYS = new Set(["condition", "expression", "items", "count"]);
 
 function display(key: string, value: unknown): string {
+  if (typeof value === "string" && t.paramNames.choices[key]?.[value]) return choiceLabel(key, value);
   if (key === "target" || key === "to") return targetText(value);
   // A case's values read as a list, the way they are typed in.
   if (key === "values" && Array.isArray(value)) return truncate(listToText(value));
@@ -142,7 +160,7 @@ export function nodeRows(step: Step, def: StepTypeDef | undefined, known: Readon
   const rows: Row[] = params.slice(0, MAX_PARAM_ROWS).map((key) => ({
     kind: "param",
     key,
-    label: paramLabel(key),
+    label: paramLabel(key, step.type),
     value: display(key, step.params?.[key]),
     refs: referencedVariables(step.params?.[key], known),
     ...(projectFile(key, step.params?.[key], def) ? { file: projectFile(key, step.params?.[key], def) } : {}),
