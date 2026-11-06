@@ -244,6 +244,23 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   const mine = run?.runId ? events.filter((e) => e.runId === run.runId) : [];
   const state = item && run ? progress(item.flow, mine) : null;
   const finished = state?.finished ?? null;
+
+  // Closed to the tray, the window keeps its page: read the list again
+  // when it comes back (a flow may have been published meanwhile), but not
+  // while a run goes, whose progress follows the version it started with.
+  const busy = useRef(false);
+  busy.current = !!run && !finished;
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState === "visible" && !busy.current) void reload();
+    };
+    window.addEventListener("focus", again);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      window.removeEventListener("focus", again);
+      document.removeEventListener("visibilitychange", again);
+    };
+  }, []);
   const now = useTick(!!run && !finished);
 
   // When it ends: the outputs from the report, the files it wrote to output/.
