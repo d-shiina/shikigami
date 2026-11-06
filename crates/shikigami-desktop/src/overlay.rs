@@ -322,7 +322,11 @@ fn run(picking: bool, rx: &mpsc::Receiver<Cmd>, ready: &mpsc::Sender<Result<(), 
             }
             std::thread::sleep(Duration::from_millis(8));
         }
-        CAPTURING.store(false, Ordering::SeqCst);
+        // Only the picker owns the hooks: a highlight that ends while a
+        // picker runs must not stop it from taking the click.
+        if picking {
+            CAPTURING.store(false, Ordering::SeqCst);
+        }
         for hook in hooks {
             let _ = UnhookWindowsHookEx(hook);
         }
