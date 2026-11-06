@@ -281,10 +281,44 @@ pub fn collect(store: &FileStore, q: &AuditQuery) -> Vec<AuditEntry> {
     out
 }
 
+/// Takes the lock that every writer of an append-only log (`log`) holds
+/// while it appends, and that [`prune_mcp_log`] holds for the whole
+/// read–rewrite–replace, so no line written meanwhile is lost. The lock is
+/// on a sibling `<log>.lock` file (not the log itself, which the pruner
+/// replaces) and covers other processes too: the MCP server and a run
+/// finishing are separate processes. It is released when the file drops.
+///
+/// # Errors
+/// The lock file could not be created or locked.
+pub fn lock_log(log: &Path) -> std::io::Result<fs::File> {
+    if let Some(dir) = log.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let mut name = log.as_os_str().to_owned();
+    name.push(".lock");
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(std::path::PathBuf::from(name))?;
+    file.lock()?;
+    Ok(file)
+}
+
 /// Drops MCP calls older than `keep_days` from `audit/mcp.jsonl`. Returns
 /// how many lines went; failures are logged and change nothing.
 pub fn prune_mcp_log(local_root: &Path, keep_days: u32) -> usize {
     let path = mcp_log(local_root);
+    if !path.exists() {
+        return 0;
+    }
+    let _lock = match lock_log(&path) {
+        Ok(lock) => lock,
+        Err(e) => {
+            tracing::warn!(error = %e, "could not lock the MCP audit log");
+            return 0;
+        }
+    };
     let Ok(text) = fs::read_to_string(&path) else {
         return 0;
     };
@@ -305,7 +339,8 @@ pub fn prune_mcp_log(local_root: &Path, keep_days: u32) -> usize {
     if removed == 0 {
         return 0;
     }
-    let tmp = path.with_extension("jsonl.tmp");
+    // Unique per process; the lock already keeps two pruners apart.
+    let tmp = path.with_extension(format!("jsonl.{}.tmp", std::process::id()));
     let write = || -> std::io::Result<()> {
         let mut f = fs::File::create(&tmp)?;
         for line in &kept {
