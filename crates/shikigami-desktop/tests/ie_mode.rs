@@ -16,7 +16,6 @@ use shikigami_core::{Scenario, Step};
 use shikigami_desktop::{DesktopAdapter, types};
 use shikigami_runtime::{Adapter, RunOptions, Runtime};
 
-const TITLE: &str = "IE mode check";
 const PAGE: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\"><title>IE mode check</title></head><body>\
 <h1>Order entry</h1><label for=\"q\">Customer</label><input id=\"q\" type=\"text\">\
 <button id=\"b\" onclick=\"document.getElementById('r').innerText = 'Pressed ' + document.getElementById('q').value\">Register</button>\
@@ -98,7 +97,9 @@ async fn edge_ie_mode_page_through_ui_automation() {
         .expect("start Edge");
 
     let adapter = DesktopAdapter::new();
-    let window = json!({ "title": TITLE });
+    // The first run found the window titled "Untitled - Profile 1 - Microsoft
+    // Edge", so find it by its program and read the title from the tree.
+    let window = json!({ "process": "msedge.exe" });
     let started = Instant::now();
     let mut snapshot = String::new();
     while started.elapsed() < Duration::from_secs(90) {
@@ -116,6 +117,21 @@ async fn edge_ie_mode_page_through_ui_automation() {
     let windows = adapter.inspect("ie", json!({})).await.unwrap_or_default();
     report("notice", "IE mode: windows", &windows.to_string());
     report("notice", "IE mode: tree of the Edge window", &snapshot);
+    // A picture of the window, uploaded by CI, shows what Edge displayed.
+    if let Ok(dir) = std::env::var("SHIKIGAMI_IE_SHOTS") {
+        let _ = std::fs::create_dir_all(&dir);
+        let path = std::path::Path::new(&dir).join("edge.png");
+        let runtime = Runtime::builder().adapter(&adapter).build();
+        let shot = run(
+            &runtime,
+            vec![step(
+                types::SCREENSHOT,
+                json!({ "target": { "window": window }, "path": path.display().to_string() }),
+            )],
+        )
+        .await;
+        report("notice", "IE mode: screenshot", &shot);
+    }
     let engine = if snapshot.contains("engine IE") {
         "IE"
     } else if snapshot.contains("engine Chromium") {
@@ -125,7 +141,7 @@ async fn edge_ie_mode_page_through_ui_automation() {
     };
 
     let runtime = Runtime::builder().adapter(&adapter).build();
-    let field = json!({ "window": window, "element": { "name": "Customer" } });
+    let field = json!({ "window": window, "element": { "role": "textbox", "name": "Customer" } });
     let button = json!({ "window": window, "element": { "role": "button", "name": "Register" } });
     let set = run(
         &runtime,

@@ -20,6 +20,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 
 | Document | Contents |
 |---|---|
+| [docs/tutorials/](docs/tutorials/README.md) | Tutorials: one piece of office work from the request to the AI to a monthly run (sales CSVs into Excel, invoices from an order list, a web order system) |
 | [docs/architecture.md](docs/architecture.md) | System layout, scenario format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
 | [docs/policy.md](docs/policy.md) | Unattended runs use only an approved, published version; allowed sites and apps; approving AI operations (`policy.json`) |

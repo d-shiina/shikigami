@@ -8771,6 +8771,178 @@
       "deprecated": null
     },
     {
+      "type": "mail.send",
+      "params": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "bcc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string"
+          },
+          "html": {
+            "type": "boolean"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365",
+              "smtp"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "server": {
+            "type": "string",
+            "minLength": 1
+          },
+          "security": {
+            "enum": [
+              "starttls",
+              "tls",
+              "none"
+            ]
+          },
+          "from": {
+            "type": "string",
+            "minLength": 3
+          },
+          "user": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "password": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "to",
+          "subject"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "account",
+        "user",
+        "password"
+      ],
+      "deprecated": null
+    },
+    {
       "type": "oauth.signIn",
       "params": {
         "type": "object",
@@ -9091,6 +9263,173 @@
       "blocks": [],
       "hasOutput": true,
       "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "sap.runTransaction",
+      "params": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "process": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "title"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "process"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              },
+              "element": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "enum": [
+                      "button",
+                      "calendar",
+                      "checkbox",
+                      "combobox",
+                      "textbox",
+                      "link",
+                      "image",
+                      "listitem",
+                      "list",
+                      "menu",
+                      "menubar",
+                      "menuitem",
+                      "progressbar",
+                      "radio",
+                      "scrollbar",
+                      "slider",
+                      "spinbutton",
+                      "status",
+                      "tablist",
+                      "tab",
+                      "text",
+                      "toolbar",
+                      "tooltip",
+                      "tree",
+                      "treeitem",
+                      "custom",
+                      "group",
+                      "thumb",
+                      "grid",
+                      "row",
+                      "document",
+                      "splitbutton",
+                      "window",
+                      "pane",
+                      "header",
+                      "columnheader",
+                      "table",
+                      "titlebar",
+                      "separator",
+                      "semanticzoom",
+                      "appbar"
+                    ]
+                  },
+                  "className": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "exact": {
+                    "type": "boolean"
+                  },
+                  "nth": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "id"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "role"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "className"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "window"
+            ],
+            "additionalProperties": false
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "target",
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
       "expressionParams": [],
       "bindsVariables": [],
       "secretParams": [],

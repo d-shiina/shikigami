@@ -63,6 +63,14 @@ jobs:
           SHIKIGAMI_SNAPSHOT_DIR: ${{ runner.temp }}/dialogs
           # The db.* tests run SQL through the SQLite ODBC driver installed above.
           SHIKIGAMI_REQUIRE_ODBC: ${{ runner.os == 'Linux' && '1' || '' }}
+      - name: Tutorial examples run, and their bundles are current
+        shell: bash
+        run: |
+          node examples/build-tutorials.mjs
+          git diff --exit-code -- examples/tutorials
+          for t in examples/tutorials/*.shikigami.json; do
+            cargo run -q -p shikigami-cli -- run "$t"
+          done
       # An experiment, not a gate: does an Edge IE mode page show its
       # elements to UI Automation? The test reports what it saw as annotations.
       - name: Edge IE mode through UI Automation (experiment)
@@ -70,6 +78,14 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          # Windows Server turns on IE Enhanced Security Configuration,
+          # which blocks pages on the IE engine; a desktop PC has it off.
+          foreach ($id in '{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}', '{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}') {
+            $esc = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\$id"
+            if (Test-Path $esc) { Set-ItemProperty $esc IsInstalled 0 -Type DWord }
+          }
+          Get-Process iexplore, msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+          $env:SHIKIGAMI_IE_SHOTS = Join-Path $env:RUNNER_TEMP 'ie-mode'
           $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
           New-Item -Path $key -Force | Out-Null
           $sites = Join-Path $env:RUNNER_TEMP 'ie-sites.xml'
@@ -85,6 +101,12 @@ jobs:
         with:
           name: dialogs
           path: ${{ runner.temp }}/dialogs
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows' && always()
+        with:
+          name: ie-mode
+          path: ${{ runner.temp }}/ie-mode
           if-no-files-found: ignore
 
   frontend:

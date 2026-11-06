@@ -8,8 +8,17 @@
 
 ### 追加
 
+- 業務別のチュートリアル 3 本（`docs/ja/tutorials/`、英語は `docs/tutorials/`）：支店の売上 CSV を 1 つの Excel に、受注一覧から取引先ごとの Word 請求書、Web の受注システムで出荷。見本のファイルと完成形のシナリオ（`examples/tutorials/*.shikigami.json`、「ファイルから読み込む」で開ける）付き
+- SAP GUI for Windows：SAP GUI Scripting が有効なら、同じ `desktop.*` のノードがスクリプトの仕組みを通して動きます（`inspect_ui` は SAP の部品 id と役割を一覧に、クリック・入力・読み取り・コンボボックス・ファンクションキー・メニューバー・`desktop.getTable` でテーブルコントロールと ALV グリッドの全行）。新しいノード `sap.runTransaction`（トランザクションを開き、ステータスバーを返す）。無効なときに SAP の部品 id を書くと `SAP_SCRIPTING_OFF`（有効にする手順つき）。実際の SAP ではまだ確認していません（docs/desktop.md「SAP GUI」）
+- Java アプリ（Swing・AWT）：Java Access Bridge（`jabswitch -enable`）が有効なら、同じ `desktop.*` のノードがそれを通して動きます（`inspect_ui` は役割と名前で一覧に、クリック・入力・読み取り・一覧の選択・メニューバー・`desktop.getTable` で `JTable`）。無効なときは `JAVA_BRIDGE_OFF`（有効にする手順つき）（docs/desktop.md「Java アプリ」）
+- 操作の記録（デスクトップ）：フロー図のドックの「記録」で、クリック（押した部品の対象つき）・入力欄の最終的な文字・Enter や Ctrl+S などのキーを書き留め、「そのままノードにする」か「AI に整えてもらう」を選べます。パスワード欄の文字は記録しません。元データはシナリオの `logs/recordings/` に残ります。デスクトップアダプターの inspect に `action: "record"`（docs/desktop.md）
 - `desktop.getTable`：アプリの表・グリッド・一覧をまとめて読み、`browser.getTable` と同じ「列見出しをキーにしたオブジェクトのリスト」で返します。対応しているグリッドは画面外の行も読みます。10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE`
+- メールの送信 `mail.send`（dangerous、承認の対象）。`via` で送り方を選びます：`outlook`（既定、この PC の Outlook）、`microsoft365`（Microsoft Graph、`oauth.signIn` でサインインしたシークレットの `accessToken`、サイトに `https://graph.microsoft.com`）、`smtp`（`server`・`from`、ログインはシークレットでサイトに `smtp:<サーバー>`、パスワードは TLS なしでは送らない）。シークレットのサイトの書き方 `smtp:<サーバー>` を追加（docs/office.md）
 - スケジュールとエージェント：`shikigami agent install` で PC ごとのエージェントがサインイン時に起動し、`schedules.json` のスケジュール（毎日・曜日・毎月・n 分ごと・1 回）と、フォルダーにファイルが置かれたときに公開版を実行します。`shikigami agent status / stop / run / uninstall`、`shikigami schedule list / add / remove / enable / disable`（docs/schedules.md）
+
+### 変更
+
+- Studio：実行エラーの言い換えを 2 つ直しました。`INVALID_ADDRESS` は CC・BCC の形の誤りも含めて、`SECRET_DECRYPT_FAILED` はそのシークレットを登録し直す案内にしました
 
 ## [0.1.2] - 2026-11-06
 
