@@ -5,6 +5,9 @@
 export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "browser.open": { summary: "Web ページを開く。ログインは保存して次から使い回す", words: "URL サイト ページ アクセス chrome edge 起動" },
   "browser.click": { summary: "ページのボタンやリンクをクリック", words: "押す ボタン リンク 選ぶ" },
+  "browser.download": { summary: "ボタンを押してファイルをダウンロードし、保存する", words: "ダウンロード 保存 CSV 出力 落とす ファイル" },
+  "browser.upload": { summary: "ページのフォームにファイルを添付する", words: "アップロード 添付 ファイル 送る 参照" },
+  "browser.attach": { summary: "人が開いている Edge・Chrome をそのまま使う（ログイン・証明書・拡張機能ごと）", words: "接続 既存 開いている ブラウザ アタッチ SSO 証明書 拡張機能" },
   "browser.hover": { summary: "部品にマウスを乗せる（乗せると開くメニューなど）", words: "ホバー マウスオーバー 乗せる メニュー ツールチップ" },
   "browser.scroll": { summary: "ページや一覧をスクロールする（下まで・部品が見えるまで）", words: "スクロール 下 上 続きを読み込む 無限" },
   "browser.getAttribute": { summary: "部品の属性（リンク先の URL・画像のアドレスなど）を読む", words: "属性 href リンク先 URL src 取得" },
