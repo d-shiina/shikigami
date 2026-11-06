@@ -504,6 +504,15 @@ export interface ScenarioSummary {
   stepCount: number;
   tags: string[];
   updatedAt?: string | null;
+  /**
+   * Input variables (`input` and `inOut`), in declared order: what a
+   * `scenario.call` to it can pass in.
+   */
+  inputs?: string[];
+  /**
+   * Output variables (`output` and `inOut`): what a call can receive.
+   */
+  outputs?: string[];
 }
 /**
  * Input for creating a scenario.
