@@ -14,6 +14,46 @@ pub enum MouseButton {
     Right,
 }
 
+/// Which way to scroll (`Top` / `Bottom` go all the way).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+impl Direction {
+    pub fn parse(name: &str) -> Result<Self, StepError> {
+        Ok(match name {
+            "up" => Self::Up,
+            "down" => Self::Down,
+            "left" => Self::Left,
+            "right" => Self::Right,
+            "top" => Self::Top,
+            "bottom" => Self::Bottom,
+            other => {
+                return Err(StepError::invalid_params(format!(
+                    "unknown direction '{other}' (use up, down, left, right, top or bottom)"
+                )));
+            }
+        })
+    }
+
+    pub fn is_vertical(self) -> bool {
+        matches!(self, Self::Up | Self::Down | Self::Top | Self::Bottom)
+    }
+}
+
+/// How far one scroll goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScrollUnit {
+    Line,
+    Page,
+}
+
 /// Text to enter, with the apps a secret may be typed into (`None` for
 /// plain text).
 #[derive(Clone, PartialEq)]
@@ -79,6 +119,74 @@ pub enum Op {
     },
     CloseWindow {
         target: Target,
+    },
+    /// Scrolls without the mouse. `None` brings the target element into
+    /// view; otherwise its scrollable area (or the nearest one around it)
+    /// moves `amount` units. Output `{ verticalPercent, horizontalPercent,
+    /// atEnd }`.
+    Scroll {
+        target: Target,
+        direction: Option<Direction>,
+        amount: u32,
+        unit: ScrollUnit,
+    },
+    /// Turns the real mouse wheel `notches` times over the target.
+    Wheel {
+        target: Target,
+        direction: Direction,
+        notches: u32,
+    },
+    /// Holds the left button down on `from` and lets go on `to`.
+    Drag {
+        from: Target,
+        to: Box<Target>,
+    },
+    /// Moves the real mouse onto the target.
+    Hover {
+        target: Target,
+    },
+    /// Reads a grid, list or table (`target.element`, or the first one in
+    /// the window): a [`crate::table::Grid`] as JSON, at most `max_rows`
+    /// rows (`truncated` when there were more).
+    GetTable {
+        target: Target,
+        max_rows: usize,
+    },
+    /// Starts a SAP transaction in the SAP GUI window of `target`.
+    /// Output: the status bar `{ type, text }`.
+    SapTransaction {
+        target: Target,
+        code: String,
+    },
+    /// Opens the context menu of `target.element` (or uses the open menu /
+    /// the menu bar of `target.window`) and picks `path` item by item.
+    Menu {
+        target: Target,
+        path: Vec<String>,
+    },
+    /// Lets the user point at an element on screen: follows the mouse with
+    /// a frame, takes the next click (the app never gets it) and answers
+    /// `{ target, how, rect, window }` (see `target::picked_target`), or
+    /// `{ cancelled: true }` on Esc or after `timeout_ms`.
+    Pick {
+        message: Option<String>,
+        timeout_ms: u64,
+    },
+    /// Records what the user does until the banner is clicked or
+    /// `timeout_ms` passes: each click (with the target of what was
+    /// clicked, as `Pick` builds it), each text field's final text, and
+    /// each command key. Answers `{ status: "stopped" | "timedOut",
+    /// actions: [...] }`. `title` is the banner's first line, with `{n}`
+    /// replaced by the number of actions so far.
+    Record {
+        title: String,
+        hint: String,
+        timeout_ms: u64,
+    },
+    /// Frames the target on screen for `ms`: `{ found, rect? }`.
+    Highlight {
+        target: Target,
+        ms: u64,
     },
 }
 

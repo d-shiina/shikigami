@@ -1,4 +1,4 @@
-import type { Step, StepTypeDef } from "@shikigami/schema";
+import type { FlowSummary, Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
 import { insertPlace } from "../store";
 import { setLocale, t } from "./i18n";
@@ -65,6 +65,27 @@ describe("node palette", () => {
     expect(view.recent.map((i) => i.key)).toEqual(["flow.delay", "browser.open"]);
     expect(view.common.map((i) => i.key)).not.toContain("browser.open");
     expect(view.common.map((i) => i.key)).toContain("browser.click");
+  });
+
+  it("lists reusable flows as nodes that call them, found by name", () => {
+    const flow = (id: string, name: string, more: Partial<FlowSummary> = {}): FlowSummary =>
+      ({ id, name, description: "", revision: 1, stepCount: 3, tags: [], ...more }) as FlowSummary;
+    const flows = [
+      flow("scn_open", "開いているフロー", { inputs: ["x"] }),
+      flow("scn_invoice", "請求書を登録する", { inputs: ["invoice"], outputs: ["no"] }),
+      flow("scn_login", "社内システムにログイン", { description: "ID とパスワードで入る。続き。", outputs: ["ok"] }),
+      flow("scn_job", "月次の締め処理"),
+    ];
+    const items = paletteItems(DEFS, flows, "scn_open");
+    const listed = items.filter((i) => i.group === "subflow");
+    // Not the open flow (it would call itself), not whole jobs with no inputs or outputs.
+    expect(listed.map((i) => i.key)).toEqual(["flow:scn_invoice", "flow:scn_login"]);
+    expect(listed[0]).toMatchObject({ type: "flow.call", params: { flow: "scn_invoice" }, summary: t.palette.flowShape(["invoice"], ["no"]) });
+    expect(listed[1]!.summary).toBe("ID とパスワードで入る。");
+    expect(search(items, "せいきゅうしょ").map((i) => i.key)[0]).toBe("flow:scn_invoice");
+    // Listed with the flow's own nodes, after control.
+    const order = groups(items).map(([g]) => g);
+    expect(order.indexOf("subflow")).toBe(order.indexOf("control") + 1);
   });
 
   it("explains every built-in node that has an English name", () => {

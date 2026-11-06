@@ -19,7 +19,9 @@ use shikigami_core::{
     WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
-use shikigami_runtime::{LogLevel, RunEvent, RunOptions, RunStatus, Runtime, StepOutcome};
+use shikigami_runtime::{
+    LogLevel, RunEvent, RunOptions, RunOrigin, RunStatus, RunTrigger, Runtime, StepOutcome,
+};
 use shikigami_secrets::{SecretInput, Vault};
 
 #[derive(Parser)]
@@ -35,7 +37,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Manage flows in the workspace.
-    // `scenario` is the name from before flows were renamed (up to 0.1.1).
+    // `scenario` is the name from before flows were renamed (up to 0.1.2).
     #[command(subcommand, alias = "scenario")]
     Flow(FlowCmd),
     /// Named versions of a flow: save, list, compare, restore.
@@ -509,6 +511,7 @@ fn real_main() -> Result<ExitCode> {
             let status = rt.block_on(run(
                 &runtime,
                 svc.store().local_root(),
+                &Policy::path(svc.store().root()),
                 flow,
                 RunOptions {
                     inputs,
@@ -516,6 +519,7 @@ fn real_main() -> Result<ExitCode> {
                     subflows,
                     project_dir,
                     full_run: true,
+                    origin: RunOrigin::new(RunTrigger::Cli),
                     ..RunOptions::default()
                 },
                 *json,
@@ -988,7 +992,7 @@ fn load_file(path: &Path) -> Result<(Flow, Vec<Flow>)> {
     let mut bundled = Vec::new();
     if shikigami_core::version::is_bundle(&value) {
         // `scenario` / `subscenarios`: bundles from before flows were
-        // renamed (up to 0.1.1).
+        // renamed (up to 0.1.2).
         let mut take =
             |keys: [&str; 2]| keys.iter().find_map(|k| value.get_mut(*k).map(Value::take));
         if let Some(Value::Array(subs)) = take(["subflows", "subscenarios"]) {
@@ -1093,6 +1097,7 @@ fn parse_inputs(raw: &[String]) -> Result<Map<String, Value>> {
 async fn run(
     runtime: &Runtime,
     workspace: &Path,
+    policy: &Path,
     flow: Flow,
     options: RunOptions,
     json: bool,
@@ -1115,7 +1120,7 @@ async fn run(
         }
     });
 
-    let mut recorder = RunRecorder::create(workspace, &handle.run_id)?;
+    let mut recorder = RunRecorder::create(workspace, &handle.run_id)?.prune_on_finish(policy);
     let report = handle
         .wait_with(|e| {
             if let Err(err) = recorder.write_event(e) {

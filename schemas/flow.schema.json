@@ -47,6 +47,13 @@
         "$ref": "#/$defs/VariableDef"
       }
     },
+    "parts": {
+      "description": "Named screen parts (a button, a field…): a node's `target` can be\n`{ \"part\": \"<name>\" }` instead of the whole target, so a part that\nchanges is fixed in one place. Keys are like variable names.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Part"
+      }
+    },
     "steps": {
       "description": "Top-level steps, executed in order.",
       "type": "array",
@@ -138,6 +145,35 @@
           "type": "string",
           "const": "inOut"
         }
+      ]
+    },
+    "Part": {
+      "description": "A named screen part: what a node finds on screen, kept in one place.",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "What people call it (保存ボタン). The key is for nodes and AI.",
+          "type": "string"
+        },
+        "app": {
+          "description": "The kind of node that can use it.",
+          "$ref": "#/$defs/PartApp"
+        },
+        "target": {
+          "description": "The target, exactly as the nodes of `app` take it."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "target"
+      ]
+    },
+    "PartApp": {
+      "type": "string",
+      "enum": [
+        "browser",
+        "desktop"
       ]
     },
     "Step": {

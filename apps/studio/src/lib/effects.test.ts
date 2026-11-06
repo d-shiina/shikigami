@@ -18,6 +18,8 @@ const defs = new Map(
     def("file.delete", "dangerous", ["path"]),
     def("browser.open", "interactive"),
     def("browser.click", "interactive"),
+    def("browser.download", "dangerous", ["path", "folder"]),
+    def("browser.upload", "dangerous", ["path"]),
     def("log.message", "safe"),
   ].map((d) => [d.type, d] as const),
 );
@@ -38,6 +40,19 @@ describe("effects", () => {
       ["added", "file.writeText", "output/b.txt"],
       ["same", "browser.open", "https://orders.example.com"],
       ["same", "file.readCsv", "input/a.csv"],
+    ]);
+  });
+
+  it("counts browser downloads and uploads as files outside", () => {
+    const steps: Step[] = [
+      { id: "d", type: "browser.download", params: { target: { text: "CSV" }, folder: "input" } },
+      { id: "u", type: "browser.upload", params: { target: { label: "添付" }, path: ["output/a.pdf", "output/b.pdf"] } },
+      { id: "b", type: "browser.click", params: { target: { text: "送信" } } },
+    ];
+    const list = effects(steps, new Map(), [], defs);
+    expect(list.map((e) => [e.stepId, e.target])).toEqual([
+      ["d", "input"],
+      ["u", "output/a.pdf, output/b.pdf"],
     ]);
   });
 

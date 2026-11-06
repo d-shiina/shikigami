@@ -22,7 +22,7 @@ use crate::ids::{FlowId, StepId};
 /// Current flow schema version. Bump on every change to the file shape
 /// (readers reject unknown fields, so new optional fields count too) and add
 /// a migration in [`crate::migrate`]. See docs/compatibility.md.
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// A flow: the unit that AI clients, Studio and the Runtime share.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -50,6 +50,11 @@ pub struct Flow {
     /// Declared variables (inputs, outputs and locals).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variables: Vec<VariableDef>,
+    /// Named screen parts (a button, a field…): a node's `target` can be
+    /// `{ "part": "<name>" }` instead of the whole target, so a part that
+    /// changes is fixed in one place. Keys are like variable names.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub parts: BTreeMap<String, Part>,
     /// Top-level steps, executed in order.
     #[serde(default)]
     pub steps: Vec<Step>,
@@ -73,6 +78,7 @@ impl Flow {
             requires: BTreeMap::new(),
             revision: 0,
             variables: Vec::new(),
+            parts: BTreeMap::new(),
             steps: Vec::new(),
             settings: FlowSettings::default(),
             metadata: Metadata {
@@ -93,7 +99,37 @@ impl Flow {
             step_count: self.walk().count(),
             tags: self.metadata.tags.clone(),
             updated_at: self.metadata.updated_at,
+            inputs: self.names_of(VarDirection::is_input),
+            outputs: self.names_of(VarDirection::is_output),
         }
+    }
+
+    fn names_of(&self, keep: impl Fn(VarDirection) -> bool) -> Vec<String> {
+        self.variables
+            .iter()
+            .filter(|v| keep(v.direction))
+            .map(|v| v.name.clone())
+            .collect()
+    }
+
+    /// Replaces every `{ "part": "<name>" }` param with that part's target,
+    /// as the Runtime runs it. Unknown names are left as they are
+    /// (validation reports them).
+    pub fn inline_parts(&mut self) {
+        if self.parts.is_empty() {
+            return;
+        }
+        fn visit(steps: &mut [Step], parts: &BTreeMap<String, Part>) {
+            for step in steps {
+                if let Some(part) = target_part(step).and_then(|name| parts.get(name)) {
+                    step.params.insert("target".to_owned(), part.target.clone());
+                }
+                for children in step.blocks.values_mut() {
+                    visit(children, parts);
+                }
+            }
+        }
+        visit(&mut self.steps, &self.parts);
     }
 
     /// Depth-first iterator over every step (including nested ones).
@@ -267,6 +303,60 @@ impl FlowSettings {
     }
 }
 
+/// A named screen part: what a node finds on screen, kept in one place.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Part {
+    /// What people call it (保存ボタン). The key is for nodes and AI.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+    /// The kind of node that can use it.
+    pub app: PartApp,
+    /// The target, exactly as the nodes of `app` take it.
+    pub target: Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum PartApp {
+    Browser,
+    Desktop,
+}
+
+impl PartApp {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Browser => "browser",
+            Self::Desktop => "desktop",
+        }
+    }
+}
+
+/// Whether the `key` param of a `step_type` step may name a part: only the
+/// screen target of browser and desktop steps, so other object params
+/// (an HTTP body, say) can have a `part` field of their own.
+pub fn takes_part(step_type: &str, key: &str) -> bool {
+    key == "target" && matches!(step_type.split('.').next(), Some("browser" | "desktop"))
+}
+
+/// The part the step's target names, if it names one.
+pub fn target_part(step: &Step) -> Option<&str> {
+    if !takes_part(&step.step_type, "target") {
+        return None;
+    }
+    part_ref(step.params.get("target")?)
+}
+
+/// The part name when `value` is a reference to one (`{ "part": "<name>" }`
+/// and nothing else).
+pub fn part_ref(value: &Value) -> Option<&str> {
+    let obj = value.as_object()?;
+    if obj.len() != 1 {
+        return None;
+    }
+    obj.get("part")?.as_str()
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VariableDef {
@@ -383,6 +473,13 @@ pub struct FlowSummary {
     #[serde(default, with = "time::serde::rfc3339::option")]
     #[schemars(with = "Option<String>")]
     pub updated_at: Option<OffsetDateTime>,
+    /// Input variables (`input` and `inOut`), in declared order: what a
+    /// `flow.call` to it can pass in.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<String>,
+    /// Output variables (`output` and `inOut`): what a call can receive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
 }
 
 pub(crate) fn now() -> OffsetDateTime {
@@ -415,6 +512,27 @@ mod tests {
         let ids: Vec<_> = flow.walk().map(|s| s.id.as_str()).collect();
         // Blocks are stored in a BTreeMap, so "else" sorts before "then".
         assert_eq!(ids, ["a", "b", "d", "c", "e"]);
+    }
+
+    #[test]
+    fn summary_names_what_a_call_can_pass_in_and_receive() {
+        let mut flow = Flow::new("t");
+        let var = |name: &str, direction| VariableDef {
+            direction,
+            ..VariableDef::new(name, VarType::Any)
+        };
+        flow.variables = vec![
+            var("invoice", VarDirection::Input),
+            var("tmp", VarDirection::Local),
+            var("count", VarDirection::InOut),
+            var("no", VarDirection::Output),
+        ];
+        let summary = flow.summary();
+        assert_eq!(summary.inputs, ["invoice", "count"]);
+        assert_eq!(summary.outputs, ["count", "no"]);
+        // Nothing to pass: the listing stays as before.
+        let plain = serde_json::to_value(Flow::new("u").summary()).unwrap();
+        assert!(plain.get("inputs").is_none() && plain.get("outputs").is_none());
     }
 
     #[test]

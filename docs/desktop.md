@@ -19,6 +19,22 @@ Flows drive Windows apps (business systems, Notepad, the Excel window, SAP GUI�
 
 When several elements match, Shikigami does not pick "one of them": it fails with `ELEMENT_AMBIGUOUS` and the candidates, so a run never presses a different element each time.
 
+### Picking on screen and named parts
+
+- In Studio, a desktop node's target has **Pick on screen** (Studio steps aside; the element under the mouse is framed; click it, Esc or right-click to cancel; the click never reaches the app) and **Highlight** (frames the target on the screen now). The target is built the sturdy way: an `id` unique in the window, else `role` + `name` (exact), else `nth`, else a `point` in the window. The same is `inspect_ui`-free for AI clients: the adapter's inspect takes `action: "pick"` / `"highlight"`.
+- **Named parts**: a flow can keep targets under `parts` (`"parts": { "saveButton": { "label": "保存ボタン", "app": "desktop", "target": { … } } }`) and a node writes `"target": { "part": "saveButton" }` (nothing else beside it). When the screen changes, fix the part once. Studio lists them in the project panel (Parts) and turns a node's target into a part with **Make a part**; AI clients use the `setPart` / `removePart` edit ops. Browser nodes use parts the same way (`"app": "browser"`).
+
+### Recording
+
+**Record** on the canvas dock hides Studio and writes down what you do in desktop apps until you click the banner at the top of the screen:
+
+- **Clicks**, with the target of what was clicked, built as **Pick on screen** builds it. Each click is held back for a moment while the screen is read (so the target is the button, not the menu it opens), then passed on to the app. A double click stays a double click.
+- **Typing**: the field's final text when you leave it, as one `desktop.setValue` (Japanese input through the IME works the same: its conversion keys F6–F10, Escape and the Enter that confirms a conversion count as typing). A password field's text is never recorded: the node asks you to choose a secret.
+- **Keys**: Enter, Tab, Escape, F1–F24 and shortcuts with Ctrl / Alt / Windows (`Control+S`) become `desktop.press`. Copy, paste, undo and select-all inside a field are part of the typing.
+- Not recorded: drags, the mouse wheel, Studio itself, and browsers (yet).
+
+When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one node per action where a new node would go (a target used twice or more becomes a named part). **Have the AI tidy up** hands the recording to the AI pane (or the clipboard) with what to do: waits where the screen changes, loops for repeated work, input variables for values that differ each time. The raw recording stays in the flow's `logs/recordings/`. The adapter's inspect takes `action: "record"` for the same.
+
 ## Nodes
 
 | type | Main params | Output | Mouse / keyboard |
@@ -36,9 +52,18 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
 | `desktop.press` | `target`, `key` (`Enter` `Control+S` `Alt+F4`…, written as for the browser) | – | **used** |
 | `desktop.readText` | `target` (window, `element` or `region`) or `file` (an image file) | `{ text, lines }` (OCR) | not used |
 | `desktop.screenshot` | `target` (window, `element` or `region`), `path` | the saved path | not used |
+| `desktop.getTable` | `target` (a grid, table or list; the window for its first one), `maxRows` | list of objects keyed by the column headers (as `browser.getTable`) | not used |
+| `desktop.selectMenu` | `target` (window: its menu bar or the open menu; element: its right-click menu), `path` (names from the top, e.g. `["File", "Save As"]`) | – | not used |
+| `desktop.scroll` | `target`; without `direction` the element is brought into view, with `direction` (`up` `down` `left` `right` `top` `bottom`), `amount`, `unit` (`page` / `line`) its list or pane scrolls | `{ verticalPercent, horizontalPercent, atEnd }` | not used |
+| `desktop.mouseScroll` | `target`, `direction` (`up` `down` `left` `right`), `amount` (wheel notches, default 3) | – | **used** |
+| `desktop.drag` | `target` (from), `to` (a target, may be another window) | – | **used** |
+| `desktop.hover` | `target` | – | **used** |
 
 - **No waits to write**: every node keeps looking until the window or element appears (and is enabled). The limit is the node's `timeoutMs` (default 30 s). Use `desktop.waitFor` with `state: "hidden"` only to wait for something to go away
 - **Mouse-free first**: `desktop.click` presses buttons, toggles checkboxes, selects items and expands trees without moving the mouse. It works on windows in the background and alongside other work. Only for apps that do not respond, use `desktop.mouseClick` / `desktop.type`
+- **Menus by their names**: `desktop.selectMenu` matches each name as shown, without access keys (`(F)`, `&`), a trailing `...` or the shortcut, and waits for each submenu to open. When an element's right-click menu does not open without the mouse (`NOT_SUPPORTED`), open it with `desktop.mouseClick` (`button: "right"`) and give `desktop.selectMenu` only the window
+- **Tables at once**: `desktop.getTable` reads grids that support it (WPF, many WinForms and Win32 grids) whole, including rows scrolled out of view; other lists give the rows the app has created. Empty cells are `""` (WinForms' `(null)` too), rows with no text are left out, and over 10000 rows it stops with `TABLE_TOO_LARGE` unless `maxRows` is set
+- **Reading a long list page by page**: `desktop.scroll` with `direction: "down"` returns `atEnd`, so a `control.while` loop can read, scroll and stop at the end
 - **One mouse and keyboard**: nodes marked "used" take the screen (`desktop.input`) automatically before acting, so they never run at the same time, even in parallel branches. Nodes on the same app (same `process`) also run one at a time. Flows never declare locks
 
 ## How the AI inspects screens (MCP)
@@ -83,7 +108,7 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 - `offset`: moves the place from the centre of what was found (e.g. the field to the right of a label)
 - `region`: looks only in part of the window (pixels from its top-left). A visible `element` narrows the search too
 - When several places match, none is picked: `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` (with the places). Choose with `nth` (0-based, top to bottom, then left to right) or `region`
-- Nodes that take them: `desktop.mouseClick`, `desktop.type` (clicks the place, then types), `desktop.waitFor`, `desktop.isVisible`. All wait until the place appears
+- Nodes that take them: `desktop.mouseClick`, `desktop.mouseScroll`, `desktop.drag` (both ends), `desktop.hover`, `desktop.type` (clicks the place, then types), `desktop.waitFor`, `desktop.isVisible`. All wait until the place appears
 - The window draws its own picture, so it can be read even when other windows cover it; only apps that cannot are brought to the front and copied from the screen
 
 ### OCR engines
@@ -105,10 +130,31 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 | App | Visible today | Planned |
 |---|---|---|
 | Win32 / WinForms / WPF / UWP, Office windows | Elements are visible through UI Automation | – |
-| SAP GUI for Windows | UI Automation often shows only part of it (`inspect_ui` notes this) | SAP GUI Scripting as another way in. Nodes stay `desktop.*`; only SAP-specific actions (transaction codes…) get their own types. Scripting must be enabled with `sapgui/user_scripting` on the SAP server and in the SAP GUI options |
-| Java (Swing…) | Often only the frame (noted) | Java Access Bridge (enable with `jabswitch -enable`) |
+| SAP GUI for Windows | Through SAP GUI Scripting when it is enabled (see "SAP GUI" below); otherwise only part of it through UI Automation (`inspect_ui` notes this) | – |
+| Java (Swing, AWT…) | Through the Java Access Bridge when it is on (see "Java apps" below); otherwise only the frame (noted) | – |
 | Inside Citrix / Remote Desktop | No elements visible; places are found by picture (`image`) and text (`ocr`) | – |
 | Excel data | – | `excel.*`, reading and writing xlsx directly ([adapters.md](adapters.md)) |
+
+## SAP GUI
+
+When the target window belongs to SAP GUI for Windows and SAP GUI Scripting is enabled, the same `desktop.*` nodes act through scripting instead of UI Automation, which misses many SAP fields and tables.
+
+- **Enable scripting** (once, by the SAP administrator and on each PC): on the SAP server, transaction RZ11 sets `sapgui/user_scripting` to `TRUE`; in SAP GUI, Options > Accessibility & Scripting > Scripting: "Enable scripting" on, and the two "Notify when a script…" boxes off (otherwise SAP GUI asks at every step)
+- `inspect_ui` lists SAP components with their ids (`wnd[0]/usr/txtRSYST-BNAME`) and the same roles as other apps (`textbox`, `button`, `checkbox`, `combobox`, `tab`, `table`, `grid` for ALV grids…). Copy them as `element.id`. Ids from a recorded SAP GUI script (`/app/con[0]/ses[0]/wnd[0]/…`) and ids inside the target window (`usr/…`) work too
+- What each node does there: `desktop.click` presses buttons, toggles checkboxes, selects radio buttons, tabs and menus (on labels and fields: F2, as a double click); `desktop.setValue` / `desktop.getValue` set and read fields; `desktop.select` picks a combo box entry by its text or key; `desktop.press` sends SAP's function keys (Enter, F1–F12 with Shift / Ctrl, Ctrl+S, Esc, PageUp / PageDown) without the real keyboard; `desktop.selectMenu` walks the menu bar; `desktop.getTable` reads table controls and ALV grids whole, scrolling through them; `desktop.type`, `desktop.mouseClick` and the other mouse nodes focus the component or use its place on the screen
+- `sap.runTransaction` starts a transaction (`code`: `VA03`) and returns the status bar `{ type, text }` (`S` success, `W` warning, `E` error…), so a flow can check it with `control.if`
+- When scripting is off, targets with a SAP component id stop with `SAP_SCRIPTING_OFF` (with the steps to enable it); the window itself, OCR and images still work through UI Automation
+- **Not yet verified on a real SAP system**: this was written against SAP's scripting API documentation; CI has no SAP GUI
+
+## Java apps
+
+Java apps (Swing, AWT, and apps built on them, such as many in-house systems) show only their frame to UI Automation. When the Java Access Bridge is on, the same `desktop.*` nodes act through it instead.
+
+- **Switch the bridge on** (once per PC and user): run `jabswitch -enable` from the `bin` folder of the Java the app uses, then restart the app. Shikigami loads `WindowsAccessBridge-64.dll` from Windows, from the folder of the app's `java.exe`, or from `JAVA_HOME\bin`
+- `inspect_ui` lists Java components with the same roles as other apps (`textbox`, `button`, `checkbox`, `combobox`, `table`, `menuitem`…). Java components have no id: target them with `role` + `name` (and `nth` when names repeat)
+- What each node does there: `desktop.click` runs the component's action (press, toggle, select); `desktop.setValue` / `desktop.getValue` write and read text fields (password fields can only be written); `desktop.select` picks a list or combo box entry; `desktop.selectMenu` walks the menu bar; `desktop.getTable` reads a `JTable` whole with its column headers; `desktop.type`, `desktop.press` and the mouse nodes focus the component or use its place on the screen
+- When the bridge is off, targets with an element stop with `JAVA_BRIDGE_OFF` (with the steps to switch it on); the window itself, OCR and images still work through UI Automation
+- CI runs a small Swing window through the bridge; real business Java apps (Oracle Forms, Java Web Start…) are not yet verified
 
 ## How it works
 
@@ -117,7 +163,7 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 - Classic Win32 buttons are clicked by posting the click, so a dialog opened by the button does not block
 - Apps running as administrator cannot be driven from Shikigami running with normal rights (a Windows restriction). This is reported as `ELEVATION_REQUIRED`
 - Requests whose node timed out or was stopped while waiting in the queue are dropped without running (no double clicks or typing after a stop or retry)
-- Before using the mouse or keyboard the window is brought to the front. When Windows refuses (e.g. the screen is locked) the node stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`
+- Before using the mouse or keyboard the window is brought to the front. While the screen is locked, the sign-in screen or an elevation prompt has the input, or a remote session is disconnected or minimized, such nodes stop with `DESKTOP_UNAVAILABLE` before they start (nodes without the mouse and keyboard still run). When Windows refuses for another reason the node stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`. The mouse and keyboard go to one node at a time across Studio, the CLI and the MCP server
 - The thread is Per-Monitor DPI aware so coordinates stay right on high-DPI screens
 
 ## Main errors
@@ -136,12 +182,18 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 | `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | Found several times (with the places). Choose with `nth` or `region` |
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | No such image file / an image of one flat colour (it would match anywhere) |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` but PaddleOCR is not installed / Windows OCR lacks that language |
+| `SAP_SCRIPTING_OFF` | A SAP component id, but SAP GUI Scripting cannot reach the window. Enable it (see "SAP GUI") |
+| `JAVA_BRIDGE_OFF` | A Java window, but the Java Access Bridge is off or missing. Switch it on (see "Java apps") |
+| `JAVA_NOT_READY` | The Java app is still starting; retried until the step's wait runs out |
+| `NOT_SAP_WINDOW` | `sap.runTransaction` on a window that is not SAP GUI |
+| `TABLE_TOO_LARGE` | More than 10000 rows. Set `maxRows`, or narrow the list in the app first |
+| `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | No shown menu item has that name (with the items shown) / several do. Write the names from the first menu down |
 | `PLATFORM_UNSUPPORTED` | Run on something other than Windows |
 
 ## Verified and limits
 
-- **Verified**: node definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI starts Notepad and types and reads text through UI Automation. Image search, and PaddleOCR reading a picture of a Japanese business screen (12 px text), are tested on Linux and Windows CI. Windows CI also pictures Notepad, reads it with OCR and finds a cut-out part again
-- **Not yet verified**: real business apps, SAP GUI, Java apps and Citrix; mouse and keyboard actions (CI does not test screen input); high DPI and multiple monitors
+- **Verified**: node definitions, validation, automatic waiting, locking and secret checks are tested automatically against a fake backend (Linux / Windows CI). Windows CI opens a WinForms window (drawn by PowerShell) and, through UI Automation, picks an item from its menu bar, writes and reads text, scrolls it to the end, and reads its DataGridView and list view with `desktop.getTable`. (The Notepad test is skipped where Notepad has no classic Edit control, as on the CI runners.) Image search, and PaddleOCR reading a picture of a Japanese business screen (12 px text), are tested on Linux and Windows CI. Windows CI also pictures Notepad, reads it with OCR and finds a cut-out part again
+- **Not yet verified**: real business apps, SAP GUI, business Java apps and Citrix; mouse and keyboard actions (CI does not test screen input); high DPI and multiple monitors
 - Image search takes 0.2–0.5 s per look on a Full HD window, PaddleOCR about 0.3 s on a small screen (4 CPU cores). OCR of a whole large window can take over a second: `region` makes it faster
 - Mouse and keyboard exclusion **across processes** (Studio, CLI, MCP server) is not implemented (within one process only)
-- Reading a whole grid at once and walking through menus are not implemented. Rotated or scaled images are not found
+- Rotated or scaled images are not found

@@ -58,6 +58,15 @@ export type EditOp =
       name: string;
     }
   | {
+      op: "setPart";
+      name: string;
+      part: Part;
+    }
+  | {
+      op: "removePart";
+      name: string;
+    }
+  | {
       op: "replaceSteps";
       steps: Step[];
     };
@@ -80,7 +89,8 @@ export type Severity = "error" | "warning";
 export type StepCategory =
   | ("control" | "variable" | "log" | "flow" | "browser" | "windows" | "office" | "file" | "other")
   | "network"
-  | "system";
+  | "system"
+  | "database";
 /**
  * Risk level used by the permission layer (MCP approval, allow-lists).
  *
@@ -247,6 +257,11 @@ export type VarType = "string" | "number" | "boolean" | "object" | "array" | "an
 export type VarDirection = "local" | "input" | "output" | "inOut";
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PartApp".
+ */
+export type PartApp = "browser" | "desktop";
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ConfigType".
  */
 export type ConfigType = ("text" | "number" | "boolean") | "date" | "list";
@@ -324,6 +339,14 @@ export interface Flow {
    */
   variables?: VariableDef[];
   /**
+   * Named screen parts (a button, a field…): a node's `target` can be
+   * `{ "part": "<name>" }` instead of the whole target, so a part that
+   * changes is fixed in one place. Keys are like variable names.
+   */
+  parts?: {
+    [k: string]: Part;
+  };
+  /**
    * Top-level steps, executed in order.
    */
   steps?: Step[];
@@ -347,6 +370,28 @@ export interface VariableDef {
    * Secret values are masked in logs, events and run records.
    */
   secret?: boolean;
+}
+/**
+ * A named screen part: what a node finds on screen, kept in one place.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "Part".
+ */
+export interface Part {
+  /**
+   * What people call it (保存ボタン). The key is for nodes and AI.
+   */
+  label?: string;
+  /**
+   * The kind of node that can use it.
+   */
+  app: "browser" | "desktop";
+  /**
+   * The target, exactly as the nodes of `app` take it.
+   */
+  target: {
+    [k: string]: unknown;
+  };
 }
 /**
  * A single step. Control-flow and action steps share this shape.
@@ -460,6 +505,15 @@ export interface FlowSummary {
   stepCount: number;
   tags: string[];
   updatedAt?: string | null;
+  /**
+   * Input variables (`input` and `inOut`), in declared order: what a
+   * `flow.call` to it can pass in.
+   */
+  inputs?: string[];
+  /**
+   * Output variables (`output` and `inOut`): what a call can receive.
+   */
+  outputs?: string[];
 }
 /**
  * Input for creating a flow.
@@ -904,7 +958,9 @@ export interface FlowDiff {
    */
   identical: boolean;
   /**
-   * Flow-level fields: name, description, tags, settings.
+   * Flow-level fields: name, description, tags, settings, and each
+   * named part (`parts.<name>`; `before` / `after` is absent when it was
+   * added / removed).
    */
   flow: FieldChange[];
   variables: VariableChange[];
@@ -1351,6 +1407,8 @@ export interface Policy {
   flows?: {
     [k: string]: FlowPolicy;
   };
+  records?: RecordsPolicy;
+  remote?: RemotePolicy;
 }
 /**
  * What an AI client (MCP) may do. Studio and the CLI are people and are not
@@ -1417,6 +1475,42 @@ export interface FlowPolicy {
    * runs from Studio. Default `true`.
    */
   unattended?: boolean | null;
+}
+/**
+ * How long this PC keeps run records (`runs/`).
+ */
+export interface RecordsPolicy {
+  /**
+   * Delete run records older than this many days.
+   */
+  keepDays?: number | null;
+  /**
+   * Keep at most this many run records (the newest).
+   */
+  keepRuns?: number | null;
+}
+/**
+ * Runs asked for by a management server (see
+ * docs/design/remote-runs.md). Off unless enabled here.
+ */
+export interface RemotePolicy {
+  /**
+   * Connect to the management server at all.
+   */
+  enabled?: boolean;
+  /**
+   * The management server's URL (`https://…`).
+   */
+  manager?: string | null;
+  /**
+   * Flow IDs it may start (`"*"` for every flow). Empty: none.
+   */
+  flows?: string[];
+  /**
+   * Run flows the server sends as bundles (not only the published
+   * versions in this workspace).
+   */
+  acceptBundles?: boolean;
 }
 /**
  * One request, `approvals/<id>.json`.
@@ -1562,6 +1656,49 @@ export interface ByRisk2 {
    */
   dangerous?: ("allow" | "deny") | "ask";
 }
+/**
+ * How long run records are kept. Each PC applies it to its own records;
+ * without a limit they are kept until deleted by hand.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "RecordsPolicy".
+ */
+export interface RecordsPolicy1 {
+  /**
+   * Delete run records older than this many days.
+   */
+  keepDays?: number | null;
+  /**
+   * Keep at most this many run records (the newest).
+   */
+  keepRuns?: number | null;
+}
+/**
+ * Runs a management server may ask this PC for. Everything is closed by
+ * default; `flows.<id>.unattended: false` still refuses a flow.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "RemotePolicy".
+ */
+export interface RemotePolicy1 {
+  /**
+   * Connect to the management server at all.
+   */
+  enabled?: boolean;
+  /**
+   * The management server's URL (`https://…`).
+   */
+  manager?: string | null;
+  /**
+   * Flow IDs it may start (`"*"` for every flow). Empty: none.
+   */
+  flows?: string[];
+  /**
+   * Run flows the server sends as bundles (not only the published
+   * versions in this workspace).
+   */
+  acceptBundles?: boolean;
+}
 
 /**
  * A run event with ordering and timing metadata.
@@ -1589,6 +1726,7 @@ export type RunEventEnvelope1 =
       flowId: FlowId;
       flowName: string;
       revision: number;
+      origin?: RunOrigin;
     }
   | {
       type: "stepStarted";
@@ -1658,6 +1796,13 @@ export type RunEventEnvelope1 =
       error?: RunError | null;
       durationMs: number;
     };
+/**
+ * How a run was started.
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "RunTrigger".
+ */
+export type RunTrigger = "studio" | "mcp" | "cli" | "schedule" | "remote";
 /**
  * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
  * via the `definition` "StepOutcome".
@@ -1731,6 +1876,26 @@ export interface ShikigamiRunApi {
   debug_command: DebugCommand;
 }
 /**
+ * Who asked for the run, from where, on which PC.
+ */
+export interface RunOrigin {
+  trigger?: RunTrigger | null;
+  /**
+   * The person, AI client, schedule or manager that asked, in its own
+   * words (e.g. "claude-code", a schedule's name).
+   */
+  requestedBy?: string | null;
+  /**
+   * The job of a schedule or management server this run carries out.
+   */
+  jobId?: string | null;
+  /**
+   * The PC the run happened on (its computer name). Filled in by the
+   * Runtime when not given.
+   */
+  machine?: string | null;
+}
+/**
  * Structured failure information, kept for AI-assisted diagnosis.
  *
  * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
@@ -1782,6 +1947,7 @@ export interface RunReport {
    * run started.
    */
   subflows?: SubflowRef[];
+  origin?: RunOrigin1;
 }
 /**
  * A called flow's content as used by a run.
@@ -1799,6 +1965,26 @@ export interface SubflowRef {
   version?: number | null;
 }
 /**
+ * Who asked for the run, from where, on which PC.
+ */
+export interface RunOrigin1 {
+  trigger?: RunTrigger | null;
+  /**
+   * The person, AI client, schedule or manager that asked, in its own
+   * words (e.g. "claude-code", a schedule's name).
+   */
+  requestedBy?: string | null;
+  /**
+   * The job of a schedule or management server this run carries out.
+   */
+  jobId?: string | null;
+  /**
+   * The PC the run happened on (its computer name). Filled in by the
+   * Runtime when not given.
+   */
+  machine?: string | null;
+}
+/**
  * Live state of a run, for `get_run_status` while it is executing.
  *
  * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
@@ -1810,4 +1996,29 @@ export interface RunSnapshot {
   status: RunStatus;
   currentStep?: StepId | null;
   stepsExecuted: number;
+}
+/**
+ * Who asked for a run, from where, and on which PC. Recorded in
+ * `runStarted` and the report so that runs can be told apart later (and
+ * collected from many PCs).
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "RunOrigin".
+ */
+export interface RunOrigin2 {
+  trigger?: RunTrigger | null;
+  /**
+   * The person, AI client, schedule or manager that asked, in its own
+   * words (e.g. "claude-code", a schedule's name).
+   */
+  requestedBy?: string | null;
+  /**
+   * The job of a schedule or management server this run carries out.
+   */
+  jobId?: string | null;
+  /**
+   * The PC the run happened on (its computer name). Filled in by the
+   * Runtime when not given.
+   */
+  machine?: string | null;
 }

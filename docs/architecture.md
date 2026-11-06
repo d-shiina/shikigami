@@ -105,7 +105,8 @@ shikigami/
 │  ├─ shikigami-com/      Office COM calls (shared by Excel macros and Outlook)
 │  ├─ shikigami-files/    file.* (text, CSV, copy/move/delete, zip)
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
-│  ├─ shikigami-pdf/      pdf.readText (reads the text of PDFs)
+│  ├─ shikigami-pdf/      pdf.readText, pdf.merge / extractPages / split
+│  ├─ shikigami-db/       db.query / db.execute (SQL through ODBC)
 │  └─ shikigami-plugins/  node plugins (declared in a manifest, run in a separate process)
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React (src/ is the frontend, src-tauri/ the Rust side)
@@ -426,7 +427,7 @@ Running several things at once is meant to be a feature of the product. There ar
 | Between flows | Several flows (including several runs of the same one) at once. Each run is an independent async task with its own variables, cancellation and records | **Implemented** (call the Runtime / MCP `run_flow` several times) |
 | Within a flow | `control.parallel` (runs each node of `branches` at once and waits for all; if one fails the rest are cancelled; `maxConcurrency` limits how many). Wrap multi-step branches in `control.group` | **Implemented** |
 | Within a flow (loops) | `control.forEach`'s `concurrency` ("100 items, 5 at a time"). Each iteration works on a copy of the variables; only the `collect` value comes out (in `saveAs`, as a list in the order of `items`). Aggregate after the loop, e.g. `sum(results)`. The first failure cancels the rest, with the item number in the error's `details.index` | **Implemented** |
-| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing flows never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths resolve from the flow's folder, and paths leaving it give the `PATH_OUTSIDE_PROJECT` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented (within one process)**. Exclusion between processes (Studio, CLI, MCP server) comes in Phase 4 with Windows named mutexes |
+| Resource arbitration | Node type definitions (`StepTypeDef.resources`) declare which params point at resources. The Runtime builds resource keys (`desktop.input`, `file:c:\data\book.xlsx`, `window:…`, `browser:…`) from the params after template expansion and never runs nodes with the same key at once. People and AI writing flows never write lock names. File paths are normalized (case, `/`, `.`/`..`, `\\?\`) to the same key; relative paths resolve from the flow's folder, and paths leaving it give the `PATH_OUTSIDE_PROJECT` warning. `desktop.input` is exclusive, browsers are parallel per context, data processing is unlimited | **Implemented**. `desktop.input` is also exclusive between processes of the same Windows user (Studio, CLI, MCP server): they share a lock file in `%TEMP%\shikigami-locks\`. Before taking it, a node checks that the desktop takes input (not locked, not a disconnected remote session) and otherwise stops with `DESKTOP_UNAVAILABLE` |
 
 - **Desktop operations are physically one set**: Windows has only one mouse/keyboard input (SendInput) and one foreground window, so nodes using them take the `desktop.input` right before running (time spent waiting for it does not count toward the timeout). Many UI Automation pattern operations (Invoke / Value / SelectionItem…) need no focus, so each type declares whether it can run in parallel without the right (implemented: `desktop.click` / `setValue` etc. do not take it; `desktop.mouseClick` / `type` / `press` do; all go one at a time to the same app, `window:<process>`).
 - **Browsers suit parallel work**: Playwright browser contexts are independent, and many can run at once headless (Phase 3).
@@ -533,7 +534,7 @@ The first product milestone: **create a web flow from an MCP client in natural l
 
 - Undo/Redo is **one stack per flow shared by all clients** (AI changes can be undone from Studio, but it is not per user).
 - Variable scope is flat (loop variables are one per flow too), like most RPA products.
-- `control.try`'s `finally` does not run on cancellation.
-- Runs cannot resume midway (after a process restart).
+- When a run is cancelled, `control.try`'s `finally` still runs (for at most 60 seconds) and the run ends `cancelled`.
+- Runs cannot resume midway (after a process restart). A run whose process ended first (crash, shutdown, killed) is closed as `failed` with `RUN_INTERRUPTED` the next time any Shikigami process starts a run; start it again.
 - Studio's flowchart is an automatic display layout; node positions are not saved.
 - During development, Studio was started on Linux under Xvfb to check editing, running and live updates (Linux is not a product target). **Starting Studio on a real Windows machine is unconfirmed** (CI confirms build and tests only).

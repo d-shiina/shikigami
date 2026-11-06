@@ -41,6 +41,10 @@ const MIGRATIONS: &[Migration] = &[
         from: 3,
         apply: v3_to_v4,
     },
+    Migration {
+        from: 4,
+        apply: v4_to_v5,
+    },
 ];
 
 /// Parses flow JSON text, applying migrations when needed.
@@ -132,9 +136,13 @@ fn v1_to_v2(_value: &mut Value) {}
 /// is nothing to rewrite.
 fn v2_to_v3(_value: &mut Value) {}
 
-/// 3 → 4: scenarios were renamed to flows. The call step
+/// 3 → 4: adds `parts` (named screen parts that a node's target can name
+/// with `{ "part": … }`). Nothing to rewrite.
+fn v3_to_v4(_value: &mut Value) {}
+
+/// 4 → 5: scenarios were renamed to flows. The call step
 /// `scenario.call { scenario }` becomes `flow.call { flow }`.
-fn v3_to_v4(value: &mut Value) {
+fn v4_to_v5(value: &mut Value) {
     for_each_step(value, &mut |step| {
         if step.get("type").and_then(Value::as_str) != Some("scenario.call") {
             return;

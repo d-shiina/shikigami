@@ -2,10 +2,9 @@
 //!
 //! Flows never say how a window is reached: the Runtime looks at the
 //! window and picks the backend. Today every window is driven through UI
-//! Automation; SAP GUI (SAP GUI Scripting) and Java (Java Access Bridge)
-//! windows are recognised so inspect_ui can say that UIA may show only part
-//! of them, and get their own backends later behind the same `desktop.*`
-//! steps.
+//! Automation, except SAP GUI windows that SAP GUI Scripting can reach
+//! (see `sap`) and Java windows the Java Access Bridge reaches (see `jab`).
+//! When neither works, inspect_ui says that UIA may show only part of them.
 
 use crate::target::{WindowInfo, process_key};
 
@@ -33,10 +32,10 @@ impl Engine {
         match self {
             Self::Uia => None,
             Self::SapGui => Some(
-                "SAP GUI window: shown through UI Automation, which may miss fields and tables. SAP GUI Scripting support is planned; it needs scripting enabled on the SAP server (sapgui/user_scripting) and in SAP GUI options.",
+                "SAP GUI window, shown through UI Automation because SAP GUI Scripting could not reach it: fields and tables may be missing. Ask the user to enable scripting on the SAP server (transaction RZ11, sapgui/user_scripting = TRUE) and in SAP GUI Options > Accessibility & Scripting > Scripting (enable, without notifications), then inspect again.",
             ),
             Self::Java => Some(
-                "Java window: shown through UI Automation, which usually sees only the frame. Java Access Bridge support is planned (enable it with `jabswitch -enable`).",
+                "Java window, shown through UI Automation because the Java Access Bridge could not reach it: usually only the frame is visible. Ask the user to run `jabswitch -enable` (in the bin folder of the Java the app uses) and restart the app, then inspect again.",
             ),
         }
     }

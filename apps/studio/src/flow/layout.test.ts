@@ -107,4 +107,61 @@ describe("layoutFlow", () => {
     expect(pos.t!.x).toBeLessThan(pos.e!.x);
     expect(pos.after!.y).toBeGreaterThan(pos.t!.y);
   });
+
+  it("frames a loop with everything inside it, apart from what comes after", () => {
+    const steps: Step[] = [
+      log("before"),
+      { id: "outer", type: "control.repeat", blocks: { body: [log("x"), { id: "inner", type: "control.repeat", blocks: { body: [log("y")] } }] } },
+      log("after"),
+    ];
+    const layout = layoutFlow(steps, defs);
+    const box = (id: string) => {
+      const n = layout.nodes.find((node) => node.id === id)!;
+      return { x: n.position.x, y: n.position.y, right: n.position.x + NODE_W, bottom: n.position.y + 40 };
+    };
+    const frame = (id: string) => {
+      const f = layout.frames.find((fr) => fr.id === id)!;
+      return { ...f, right: f.x + f.width, bottom: f.y + f.height };
+    };
+    const contains = (f: ReturnType<typeof frame>, b: ReturnType<typeof box>) =>
+      f.x < b.x && f.right > b.right && f.y < b.y && f.bottom > b.bottom;
+    const outer = frame("outer");
+    const inner = frame("inner");
+    expect([outer.kind, outer.depth, inner.kind, inner.depth]).toEqual(["loop", 0, "loop", 1]);
+    for (const id of ["outer", "x", "inner", "y"]) expect(contains(outer, box(id))).toBe(true);
+    expect(contains(inner, box("y"))).toBe(true);
+    expect(contains(inner, box("x"))).toBe(false);
+    expect(contains(outer, box("before"))).toBe(false);
+    expect(contains(outer, box("after"))).toBe(false);
+    // The inner frame sits inside the outer one and ends above its bottom.
+    expect(inner.x).toBeGreaterThan(outer.x);
+    expect(inner.right).toBeLessThan(outer.right);
+    expect(inner.bottom).toBeLessThan(outer.bottom);
+    // The lines around a loop's body run inside its frame, outside the inner one.
+    const back = layout.edges.find((e) => e.source === "inner" && e.target === "outer")!;
+    expect(back.detourX).toBeGreaterThan(inner.right);
+    expect(back.detourX).toBeLessThan(outer.right);
+    const exit = layout.edges.find((e) => e.source === "outer" && e.target === "after")!;
+    expect(exit.detourX).toBeGreaterThan(outer.x);
+  });
+
+  it("frames branches too, and keeps side-by-side frames apart", () => {
+    const steps: Step[] = [
+      {
+        id: "if",
+        type: "control.if",
+        blocks: {
+          then: [{ id: "l1", type: "control.repeat", blocks: { body: [log("a")] } }],
+          else: [{ id: "l2", type: "control.repeat", blocks: { body: [log("b")] } }],
+        },
+      },
+    ];
+    const layout = layoutFlow(steps, defs);
+    const f = Object.fromEntries(layout.frames.map((fr) => [fr.id, fr]));
+    expect(f.if!.kind).toBe("if");
+    expect(f.l1!.x + f.l1!.width).toBeLessThan(f.l2!.x);
+    expect(f.l1!.x).toBeGreaterThan(f.if!.x);
+    expect(f.l2!.x + f.l2!.width).toBeLessThan(f.if!.x + f.if!.width);
+    expect(layoutFlow([log("a")], defs).frames).toEqual([]);
+  });
 });

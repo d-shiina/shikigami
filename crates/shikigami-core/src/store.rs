@@ -847,7 +847,7 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> CoreResult<()> {
 pub fn read_json(path: &Path) -> CoreResult<Value> {
     Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
-/// Flows were called scenarios up to 0.1.1: `scenarios/<id>/scenario.json`
+/// Flows were called scenarios up to 0.1.2: `scenarios/<id>/scenario.json`
 /// becomes `flows/<id>/flow.json` (deleted ones in `trash/` too). Runs
 /// before the folders are created, so an untouched old workspace is moved
 /// as a whole. Whatever cannot be moved is left alone and logged.

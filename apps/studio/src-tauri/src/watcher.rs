@@ -178,7 +178,29 @@ pub(crate) fn spawn_approvals(app: AppHandle, dir: PathBuf) {
     }
 }
 
+pub(crate) const PICK_REQUESTS_CHANGED: &str = "pick-requests-changed";
+
+/// Tells the frontend when an AI client asks the person to point at
+/// something in the browser (ask_user_to_pick), or stops waiting.
+pub(crate) fn spawn_pick_requests(app: AppHandle, dir: PathBuf) {
+    let spawned = std::thread::Builder::new()
+        .name("pick-request-watcher".into())
+        .spawn(move || {
+            if let Err(e) = watch_json_dir(&app, &dir, PICK_REQUESTS_CHANGED) {
+                tracing::error!(error = %e, dir = %dir.display(), "pick request watcher stopped");
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::error!(error = %e, "failed to start pick request watcher");
+    }
+}
+
 fn watch_approvals(app: &AppHandle, dir: &Path) -> notify::Result<()> {
+    watch_json_dir(app, dir, APPROVALS_CHANGED)
+}
+
+/// Emits `event` (debounced) whenever a `.json` file in `dir` changes.
+fn watch_json_dir(app: &AppHandle, dir: &Path, event_name: &str) -> notify::Result<()> {
     std::fs::create_dir_all(dir)?;
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(tx)?;
@@ -205,8 +227,8 @@ fn watch_approvals(app: &AppHandle, dir: &Path) -> notify::Result<()> {
         }
         if pending.is_some_and(|at| at.elapsed() >= DEBOUNCE) {
             pending = None;
-            if let Err(e) = app.emit(APPROVALS_CHANGED, ()) {
-                tracing::warn!(error = %e, "failed to emit approval change");
+            if let Err(e) = app.emit(event_name, ()) {
+                tracing::warn!(error = %e, event = event_name, "failed to emit change");
             }
         }
     }

@@ -32,7 +32,7 @@ async fn notepad_round_trip() {
 
     let runtime = Runtime::builder().adapter(&adapter).build();
     let mut s = Flow::new("notepad");
-    for name in ["pid", "text"] {
+    for name in ["pid", "text", "scrolled"] {
         s.variables.push(VariableDef {
             direction: VarDirection::Output,
             ..VariableDef::new(name, VarType::Any)
@@ -86,6 +86,61 @@ async fn notepad_round_trip() {
         .unwrap();
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs["text"], json!("日本語 smoke test"));
+
+    // Scrolling without the mouse: a long text, then to its end and back.
+    let long: String = (1..=300).map(|i| format!("line {i}\r\n")).collect();
+    s.steps = vec![
+        step(
+            types::SET_VALUE,
+            json!({ "target": edit, "value": long }),
+            None,
+        ),
+        step(
+            types::SCROLL,
+            json!({ "target": edit, "direction": "bottom" }),
+            Some("text"),
+        ),
+        step(
+            types::SCROLL,
+            json!({ "target": edit, "direction": "up", "amount": 2 }),
+            Some("scrolled"),
+        ),
+    ];
+    let report = runtime
+        .start(s.clone(), RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    eprintln!("scroll: {:?} {:?}", report.outputs, report.error);
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["text"]["atEnd"], json!(true));
+    assert!(
+        report.outputs["scrolled"]["verticalPercent"]
+            .as_f64()
+            .unwrap()
+            < 100.0
+    );
+
+    // The menu bar: Help > About Notepad opens a dialog (a modal one: the
+    // step must not wait for it to close).
+    let about = json!({ "window": { "process": "notepad.exe", "title": "About" } });
+    s.steps = vec![
+        step(
+            types::SELECT_MENU,
+            json!({ "target": { "window": window }, "path": ["Help", "About Notepad"] }),
+            None,
+        ),
+        step(types::WAIT_FOR, json!({ "target": about }), None),
+        step(types::CLOSE_WINDOW, json!({ "target": about }), None),
+    ];
+    let report = runtime
+        .start(s.clone(), RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
 
     // The picture of the window, and OCR on it where an OCR pack is
     // installed (the result is printed; CI images differ in languages).
@@ -156,4 +211,119 @@ fn kill(pid: u64) {
     let _ = std::process::Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/F"])
         .status();
+}
+
+/// A WinForms window drawn by PowerShell (every Windows has it, and the
+/// CI's Notepad has no classic Edit): a menu bar, a long text to scroll,
+/// a DataGridView and a list view read with desktop.getTable.
+#[tokio::test]
+async fn winforms_menus_scrolling_and_tables() {
+    let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.Form
+$f.Text = 'Shikigami Grid Test'
+$f.Width = 600; $f.Height = 500
+$g = New-Object System.Windows.Forms.DataGridView
+$g.Name = 'grid'; $g.Dock = 'Top'; $g.Height = 200
+[void]$g.Columns.Add('no', '番号')
+[void]$g.Columns.Add('amount', '金額')
+[void]$g.Rows.Add('A-1', '1,200')
+[void]$g.Rows.Add('A-2', '300')
+$l = New-Object System.Windows.Forms.ListView
+$l.Name = 'files'; $l.View = 'Details'; $l.Dock = 'Bottom'; $l.Height = 200
+[void]$l.Columns.Add('名前', 100)
+[void]$l.Columns.Add('サイズ', 100)
+$i = New-Object System.Windows.Forms.ListViewItem('a.txt')
+[void]$i.SubItems.Add('1 KB')
+[void]$l.Items.Add($i)
+$t = New-Object System.Windows.Forms.TextBox
+$t.Name = 'memo'; $t.Multiline = $true; $t.ScrollBars = 'Vertical'; $t.Dock = 'Fill'
+$m = New-Object System.Windows.Forms.MenuStrip
+$file = New-Object System.Windows.Forms.ToolStripMenuItem('ファイル(&F)')
+$write = New-Object System.Windows.Forms.ToolStripMenuItem('メモを書く(&W)...')
+$write.add_Click({ $t.Text = 'menu ok' })
+[void]$file.DropDownItems.Add($write)
+[void]$m.Items.Add($file)
+$f.Controls.Add($t); $f.Controls.Add($g); $f.Controls.Add($l); $f.Controls.Add($m)
+$f.MainMenuStrip = $m
+[System.Windows.Forms.Application]::Run($f)
+"#;
+    let path = std::env::temp_dir().join("shikigami-grid-test.ps1");
+    let mut bytes = b"\xEF\xBB\xBF".to_vec();
+    bytes.extend_from_slice(script.as_bytes());
+    std::fs::write(&path, bytes).unwrap();
+
+    let long: String = (1..=300).map(|i| format!("line {i}\r\n")).collect();
+    let adapter = DesktopAdapter::new();
+    let runtime = Runtime::builder().adapter(&adapter).build();
+    let mut s = Flow::new("grids");
+    for name in ["pid", "grid", "files", "memo", "scrolled"] {
+        s.variables.push(VariableDef {
+            direction: VarDirection::Output,
+            ..VariableDef::new(name, VarType::Any)
+        });
+    }
+    let window = json!({ "title": "Shikigami Grid Test" });
+    s.steps = vec![
+        step(
+            types::LAUNCH,
+            json!({ "path": "powershell.exe", "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.display().to_string()] }),
+            Some("pid"),
+        ),
+        step(
+            types::GET_TABLE,
+            json!({ "target": { "window": window } }),
+            Some("grid"),
+        ),
+        step(
+            types::GET_TABLE,
+            json!({ "target": { "window": window, "element": { "id": "files" } } }),
+            Some("files"),
+        ),
+        step(
+            types::SELECT_MENU,
+            json!({ "target": { "window": window }, "path": ["ファイル", "メモを書く"] }),
+            None,
+        ),
+        step(
+            types::GET_VALUE,
+            json!({ "target": { "window": window, "element": { "id": "memo" } } }),
+            Some("memo"),
+        ),
+        step(
+            types::SET_VALUE,
+            json!({ "target": { "window": window, "element": { "id": "memo" } }, "value": long }),
+            None,
+        ),
+        step(
+            types::SCROLL,
+            json!({ "target": { "window": window, "element": { "id": "memo" } }, "direction": "bottom" }),
+            Some("scrolled"),
+        ),
+    ];
+    let report = runtime
+        .start(s, RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    let tree = adapter
+        .inspect("smoke", json!({ "window": window }))
+        .await
+        .map(|t| t["snapshot"].as_str().unwrap_or_default().to_owned());
+    eprintln!("{tree:?}\n{:?}\n{:?}", report.outputs, report.error);
+    if let Some(pid) = report.outputs["pid"]["pid"].as_u64() {
+        kill(pid);
+    }
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(
+        report.outputs["grid"],
+        json!([{ "番号": "A-1", "金額": "1,200" }, { "番号": "A-2", "金額": "300" }])
+    );
+    assert_eq!(
+        report.outputs["files"],
+        json!([{ "名前": "a.txt", "サイズ": "1 KB" }])
+    );
+    assert_eq!(report.outputs["memo"], json!("menu ok"));
+    assert_eq!(report.outputs["scrolled"]["atEnd"], json!(true));
 }

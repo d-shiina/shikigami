@@ -173,6 +173,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "async-trait"
+version = "0.1.92"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82f6aeea286b8eb4dd3431a1be1b59d290ace00f5bfd8e2a159bc2a05e2c1667"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
 name = "atk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -193,6 +204,15 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
+]
+
+[[package]]
+name = "atoi"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d12c37257553c19e9aee6cba77814fdc9e07844abfc8b3a2c377cd920ee5a993"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -1095,6 +1115,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "email-encoding"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "420b9da095f052ea597503e39073b5b3c522f7db933fbac202d91d24492693fd"
+dependencies = [
+ "base64 0.23.1",
+ "memchr",
+]
+
+[[package]]
 name = "email_address"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1770,6 +1800,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hostname"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "617aaa3557aef3810a6369d0a99fac8a080891b68bd9f9812a1eeda0c0730cbd"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "windows-link 0.2.1",
+]
+
+[[package]]
 name = "html5ever"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1826,6 +1867,12 @@ name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
+
+[[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hybrid-array"
@@ -2427,6 +2474,34 @@ name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
+
+[[package]]
+name = "lettre"
+version = "0.11.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2c646bd5cc763b1087b15493e29a64be6147ba8f19342004fa52048ee596eae"
+dependencies = [
+ "async-trait",
+ "base64 0.23.1",
+ "email-encoding",
+ "email_address",
+ "fastrand",
+ "futures-io",
+ "futures-util",
+ "hostname",
+ "httpdate",
+ "idna",
+ "mime",
+ "nom",
+ "percent-encoding",
+ "quoted_printable",
+ "rustls",
+ "rustls-platform-verifier",
+ "socket2",
+ "tokio",
+ "tokio-rustls",
+ "url",
+]
 
 [[package]]
 name = "libappindicator"
@@ -3136,6 +3211,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "odbc-api"
+version = "29.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6b1b0916a031befcc283779c63622db4d718a397a85e6f3cdfd009dd96fe381"
+dependencies = [
+ "atoi",
+ "log",
+ "odbc-sys",
+ "thiserror 2.0.21",
+ "widestring",
+]
+
+[[package]]
+name = "odbc-sys"
+version = "0.31.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38467959ef8ec6b76e0d98a7da6a270b65b7ab4f22b2209ef81c8a9260633a50"
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3566,6 +3660,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "quoted_printable"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "478e0585659a122aa407eb7e3c0e1fa51b1d8a870038bd29f0cf4a8551eea972"
+
+[[package]]
 name = "r-efi"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3860,6 +3960,7 @@ version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -4296,10 +4397,11 @@ dependencies = [
 
 [[package]]
 name = "shikigami-adapters"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde_json",
  "shikigami-browser",
+ "shikigami-db",
  "shikigami-desktop",
  "shikigami-excel",
  "shikigami-files",
@@ -4313,7 +4415,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-browser"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde_json",
  "shikigami-core",
@@ -4328,7 +4430,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -4349,7 +4451,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-com"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde_json",
  "shikigami-runtime",
@@ -4359,7 +4461,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -4378,13 +4480,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "shikigami-db"
+version = "0.1.2"
+dependencies = [
+ "odbc-api",
+ "serde_json",
+ "shikigami-core",
+ "shikigami-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "shikigami-desktop"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ort",
  "png",
  "serde",
  "serde_json",
+ "shikigami-com",
  "shikigami-core",
  "shikigami-runtime",
  "tempfile",
@@ -4396,7 +4512,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-excel"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -4411,7 +4527,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-files"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "csv",
  "encoding_rs",
@@ -4428,12 +4544,17 @@ dependencies = [
 
 [[package]]
 name = "shikigami-mail"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
+ "base64 0.22.1",
+ "lettre",
+ "reqwest",
+ "rustls",
  "serde_json",
  "shikigami-com",
  "shikigami-core",
  "shikigami-runtime",
+ "shikigami-system",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -4441,7 +4562,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-mcp"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "rmcp",
@@ -4460,7 +4581,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-pdf"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "pdf-extract",
  "serde_json",
@@ -4469,11 +4590,12 @@ dependencies = [
  "shikigami-runtime",
  "tempfile",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
 name = "shikigami-plugins"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "dirs",
  "jsonschema",
@@ -4490,7 +4612,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-runtime"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "schemars 1.2.3",
  "serde",
@@ -4506,7 +4628,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-secrets"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -4526,11 +4648,12 @@ dependencies = [
 
 [[package]]
 name = "shikigami-studio"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "dirs",
  "notify",
+ "semver",
  "serde",
  "serde_json",
  "shikigami-adapters",
@@ -4549,7 +4672,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-system"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "clipboard-win",
@@ -4574,7 +4697,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-word"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde_json",
  "shikigami-core",
@@ -6091,6 +6214,12 @@ name = "weezl"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
+
+[[package]]
+name = "widestring"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
 
 [[package]]
 name = "win32job"

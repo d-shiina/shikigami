@@ -8,7 +8,7 @@ import { stepLabel, t } from "./i18n";
 export type FieldDiff = { field: string; before: unknown; after: unknown };
 
 export type ChangeLine = {
-  verb: "add" | "update" | "remove" | "move" | "flow" | "variable" | "replace";
+  verb: "add" | "update" | "remove" | "move" | "flow" | "variable" | "replace" | "part";
   stepId?: string;
   subject: string;
   diffs: FieldDiff[];
@@ -99,6 +99,10 @@ export function describe(
         };
       case "removeVariable":
         return { verb: "remove", subject: `${t.variables} ${op.name}`, diffs: [] };
+      case "setPart":
+        return { verb: "part", subject: op.part.label || op.name, diffs: [{ field: t.parts.target, before: undefined, after: op.part.target }] };
+      case "removePart":
+        return { verb: "remove", subject: `${t.parts.title} ${op.name}`, diffs: [] };
       case "replaceSteps":
         return { verb: "replace", subject: t.flow.stepCount(op.steps.length), diffs: [] };
     }

@@ -91,6 +91,12 @@ define_id!(
     "apr"
 );
 
+define_id!(
+    /// Identifier of an AI's request for the person to point at something on screen.
+    PickId,
+    "pck"
+);
+
 fn is_well_formed(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128

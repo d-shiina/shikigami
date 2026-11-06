@@ -34,7 +34,7 @@
       "pubkey": "",
       "endpoints": ["https://github.com/d-shiina/shikigami/releases/latest/download/latest.json"],
       "windows": {
-        "installMode": "passive"
+        "installMode": "quiet"
       }
     }
   }

@@ -26,6 +26,28 @@ describe("sentence", () => {
     expect(targetText({ text: "次へ", nth: 1 })).toBe("「次へ」の2番目");
   });
 
+  it("says which frame, tab and dialog a browser step is about", () => {
+    expect(targetText({ label: "備考", frame: { name: "main" } })).toBe("「備考」欄（フレーム「main」の中）");
+    expect(plain(sentence({ type: "browser.click", params: { target: { role: "button", name: "削除" }, dialog: "accept" } }, undefined))).toBe(
+      "「削除」ボタンを押して、確認に OK で答える",
+    );
+    expect(plain(sentence({ type: "browser.click", params: { target: { role: "button", name: "削除" } } }, undefined))).toBe("「削除」ボタンを押す");
+    expect(plain(sentence({ type: "browser.switchTab", params: { title: "受注詳細" } }, undefined))).toBe("「受注詳細」のタブに移る");
+    expect(plain(sentence({ type: "browser.scroll", params: { to: "bottom" } }, undefined))).toBe("ページを一番下までスクロールする");
+    expect(plain(sentence({ type: "browser.getAttribute", params: { target: { role: "link", name: "請求書" }, name: "href" }, saveAs: "url" }, undefined))).toBe(
+      "「請求書」リンクの href 属性を読む（→ url）",
+    );
+  });
+
+  it("reads downloads and uploads with their files", () => {
+    expect(plain(sentence({ type: "browser.download", params: { target: { role: "button", name: "CSV出力" }, path: "input/受注.csv" } }, undefined))).toBe(
+      "「CSV出力」ボタンを押してダウンロードし、input/受注.csv に保存する",
+    );
+    expect(plain(sentence({ type: "browser.upload", params: { target: { label: "添付" }, path: "output/a.pdf" } }, undefined))).toBe(
+      "「添付」欄に output/a.pdf を添付する",
+    );
+  });
+
   it("describes desktop targets with their window", () => {
     const win = { title: "Citrix" };
     expect(targetText({ window: win })).toBe("「Citrix」ウィンドウ");

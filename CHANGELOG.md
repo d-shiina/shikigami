@@ -10,20 +10,65 @@
 
 - 「シナリオ」を「フロー / Flow」に改名しました（サブシナリオは「サブフロー / Subflow」）。Studio・ドキュメント・MCP・CLI・保存形式のすべてが対象です。製品名 Shikigami は変わりません
 - 保存先：`scenarios/<id>/scenario.json` は `flows/<id>/flow.json` になりました。古いワークスペースは開いたときに自動で移します（ごみ箱の中も）
-- フロー形式 `schemaVersion` 4：呼び出しノード `scenario.call { scenario }` は `flow.call { flow }` になりました。古いファイル・版・バンドルは読み込み時に自動で書き換えます
-- バンドルの `format` は `shikigami.flowBundle`、中身は `flow` / `subflows` です。0.1.1 までの `shikigami.scenarioBundle` も読めます
+- フロー形式 `schemaVersion` 5：呼び出しノード `scenario.call { scenario }` は `flow.call { flow }` になりました。古いファイル・版・バンドルは読み込み時に自動で書き換えます
+- バンドルの `format` は `shikigami.flowBundle`、中身は `flow` / `subflows` です。0.1.2 までの `shikigami.scenarioBundle` も読めます
 - MCP ツール：`list_flows` / `get_flow` / `validate_flow` / `export_flow` / `create_flow` / `update_flow` / `delete_flow` / `import_flow` / `extract_subflow` / `run_flow` / `stop_flow`、引数は `flowId`。旧名（`create_scenario` など）と `scenarioId` も当面は受け付けます（一覧には出しません）
 - CLI：`shikigami flow …`（`shikigami scenario …` も当面は動きます）
 - policy.json：`flows`、`ai.runFlow` / `ai.deleteFlow`（旧名 `scenarios` / `runScenario` / `deleteScenario` も読めます）
 - **互換性のない変更**：出力側の名前は新しい名前だけになります。エラーコード `SCENARIO_*` は `FLOW_*`（`SUBSCENARIO_NOT_PUBLISHED` は `SUBFLOW_NOT_PUBLISHED`）、`run --json` と MCP の結果の `scenarioId` / `scenarioName` / `scenario` は `flowId` / `flowName` / `flow` です
 
+### 追加
+
+- 業務別のチュートリアル 3 本（`docs/ja/tutorials/`、英語は `docs/tutorials/`）：支店の売上 CSV を 1 つの Excel に、受注一覧から取引先ごとの Word 請求書、Web の受注システムで出荷。見本のファイルと完成形のシナリオ（`examples/tutorials/*.shikigami.json`、「ファイルから読み込む」で開ける）付き
+- SAP GUI for Windows：SAP GUI Scripting が有効なら、同じ `desktop.*` のノードがスクリプトの仕組みを通して動きます（`inspect_ui` は SAP の部品 id と役割を一覧に、クリック・入力・読み取り・コンボボックス・ファンクションキー・メニューバー・`desktop.getTable` でテーブルコントロールと ALV グリッドの全行）。新しいノード `sap.runTransaction`（トランザクションを開き、ステータスバーを返す）。無効なときに SAP の部品 id を書くと `SAP_SCRIPTING_OFF`（有効にする手順つき）。実際の SAP ではまだ確認していません（docs/desktop.md「SAP GUI」）
+- Java アプリ（Swing・AWT）：Java Access Bridge（`jabswitch -enable`）が有効なら、同じ `desktop.*` のノードがそれを通して動きます（`inspect_ui` は役割と名前で一覧に、クリック・入力・読み取り・一覧の選択・メニューバー・`desktop.getTable` で `JTable`）。無効なときは `JAVA_BRIDGE_OFF`（有効にする手順つき）（docs/desktop.md「Java アプリ」）
+- 操作の記録（デスクトップ）：フロー図のドックの「記録」で、クリック（押した部品の対象つき）・入力欄の最終的な文字・Enter や Ctrl+S などのキーを書き留め、「そのままノードにする」か「AI に整えてもらう」を選べます。パスワード欄の文字は記録しません。元データはシナリオの `logs/recordings/` に残ります。デスクトップアダプターの inspect に `action: "record"`（docs/desktop.md）
+- `desktop.getTable`：アプリの表・グリッド・一覧をまとめて読み、`browser.getTable` と同じ「列見出しをキーにしたオブジェクトのリスト」で返します。対応しているグリッドは画面外の行も読みます。10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE`
+- メールの送信 `mail.send`（dangerous、承認の対象）。`via` で送り方を選びます：`outlook`（既定、この PC の Outlook）、`microsoft365`（Microsoft Graph、`oauth.signIn` でサインインしたシークレットの `accessToken`、サイトに `https://graph.microsoft.com`）、`smtp`（`server`・`from`、ログインはシークレットでサイトに `smtp:<サーバー>`、パスワードは TLS なしでは送らない）。シークレットのサイトの書き方 `smtp:<サーバー>` を追加（docs/office.md）
+
+### 変更
+
+- Studio：実行エラーの言い換えを 2 つ直しました。`INVALID_ADDRESS` は CC・BCC の形の誤りも含めて、`SECRET_DECRYPT_FAILED` はそのシークレットを登録し直す案内にしました
+
+## [0.1.2] - 2026-11-06
+
+### 追加
+
+- デスクトップのノード `desktop.selectMenu`（メニューバー・右クリックメニューの項目を上から名前でたどって選ぶ。アクセスキー `(F)`・`...`・ショートカットは省いてよい）、`desktop.scroll`（マウスを使わずに一覧や枠をスクロール、部品が見えるまで動かす。`atEnd` で最後まで来たかがわかる）、`desktop.mouseScroll`（マウスのホイール）、`desktop.drag`（マウスでドラッグ。別のウィンドウへも）、`desktop.hover`（マウスを重ねる）。マウスのノードは `target.ocr` / `target.image` / `target.point` も使えます（docs/desktop.md）
+- 実行記録（`runStarted` イベントと `report.json`）に `origin`：どこから始めたか（`trigger`：`studio` / `mcp` / `cli` / `schedule` / `remote`）、頼んだもの（`requestedBy`）、ジョブ（`jobId`）、PC の名前（`machine`）。以前の記録はそのまま読めます
+- `policy.json` に `records`（`keepDays`・`keepRuns`：各 PC が実行記録を残す日数と数。既定は消さない）と、管理サーバーからの実行の枠 `remote`（`enabled`・`manager`・`scenarios`・`acceptBundles`。既定は閉じる。まだ接続はしません）（docs/policy.md、docs/design/remote-runs.md）
+- データベース：`db.query`（SELECT を 1 つ実行して列名をキーにしたレコードの配列に）と `db.execute`（INSERT・UPDATE・DELETE などを 1 つ実行して `{ rowsAffected }`）。ODBC 経由なので SQL Server・Oracle・Access・PostgreSQL などに使えます。値は `params` で SQL の `?` に入れます。接続文字列にパスワードは書かず、ログインはシークレット（`user` / `password`）で、シークレットのサイトに `db:<サーバー>` が要ります（Windows 認証なら不要）。ステップの分類 `database` と、シークレットのサイトの書き方 `db:<サーバー>` を追加（docs/database.md）
+- PDF の結合・分割：`pdf.merge`（いくつかの PDF を 1 つに）、`pdf.extractPages`（`"1-3,5"`・`"2-"` で選んだページを新しい PDF に）、`pdf.split`（数ページずつのファイルに分けてパスの一覧を返す）。Acrobat は不要。新しいファイルには選んだページと、そのページが描くものだけを入れ、しおり・フォーム・ほかのページへのリンク、ほかのページだけが描く画像（共有の画像一覧に入っているもの）は引き継ぎません（docs/pdf.md）
+- Studio のノードパレット：入力か出力を持つフローを「サブフロー」の分類にノードとして並べます。名前で探して選ぶと、そのフローの呼び出し（`scenario.call`）が足されます。開いているフロー自身と、入力も出力もないフローは並べません
+- `list_scenarios` の各行に `inputs` / `outputs`（入力・出力の変数名。どちらもなければ省略）を足しました。呼び出せる形が一覧で分かります
+- MCP ツール `ask_user_to_pick`：どのボタンかわからない（行ごとの「編集」、名前のないアイコンなど）とき、AI は推測せず人に指してもらいます。ブラウザに AI の言葉の帯が出て、迷っている候補には番号付きの枠が付き、人がクリックした部品を（ページには押させずに）`target` で受け取ります。同じ部品が並ぶときは `nth` と表の行の文字 `row` も返します。Studio にも「AI がブラウザの画面で指してほしいと言っています」と出て、そこから断れます。ブラウザアダプターに `pick` / `highlight` / `cancelPick`（`shikigami-browser` の inspect の `action`）、Studio が人の手で対象を選ぶときにも使えます
+- Studio のブラウザのノードでも「画面から選ぶ」「光らせる」が使えます（実行中・止めているときに、そのブラウザで選ぶ）
+- `test_step` は browser ノードを動かす前に、対象をブラウザ上で少しのあいだ枠で光らせます（「ここを押します」）
+- `inspect_page` の `image: true`：スクリーンショットを AI にも渡します（ツリーだけでは見分けにくいページ向け）
+
+### 変更
+
+- AI への指示（MCP の説明・スキル）に「どれかわからなければ `nth` を当てずっぽうで選ばず、`ask_user_to_pick` で指してもらう」を加えました。`ELEMENT_AMBIGUOUS` のヒントも同じことを言います
+- オンラインアップデートを VS Code と同じ流れに：新しい版は裏でダウンロードし、インストーラーの画面を出さずに入れます。設定の「再起動して更新」で数秒後に新しい版が開き直すか、Studio を閉じたときに入ります（この版から。0.1.1 からこの版への更新は従来どおり画面が出ます）
+
+### 変更
+
+- 無人実行の土台：マウス・キーボードを使うノード（`desktop.input`）は Studio・CLI・MCP サーバーをまたいで一度に一つだけ動きます（同じ Windows ユーザーのプロセスでロックファイルを共有）。画面ロック中・リモートセッションの切断中などは、そうしたノードが始める前に `DESKTOP_UNAVAILABLE` で止まります。実行を取り消しても `control.try` の `finally` を実行します（最長 60 秒）。プロセスが途中で終わった実行は、次の実行の開始時に `failed`・`RUN_INTERRUPTED` で閉じます
+
 ## [0.1.1] - 2026-11-06
 
 ### 追加
 
+- ブラウザ：`browser.attach`。人が `--remote-debugging-port` 付きで開いた Edge・Chrome を、ログイン・証明書・拡張機能ごと使います（127.0.0.1 のみ、終わっても閉じない、`dangerous`）。Edge の IE モードのページはデスクトップのノードで扱う方針を docs/browser.md に（UI Automation で見えるかは未確認）
+
+- ブラウザ：`browser.download`（押してダウンロードしたファイルを `path` か `folder` に保存）と `browser.upload`（ファイルの入力欄、またはファイル選択を開くボタンに添付）。パスはシナリオのフォルダーから。どちらも `dangerous` で、確認パネルの「外への影響」に出ます（docs/browser.md）
+
+- ブラウザ：別のタブ・ポップアップへ移る `browser.switchTab` と閉じて戻る `browser.closeTab`、JS のダイアログ（alert・confirm・prompt）に答える `dialog`（`browser.click` / `browser.press` / `browser.open`。ダイアログの文を出力）、iframe・フレームセットの中の部品を指す `target.frame`、`browser.hover`・`browser.scroll`・`browser.getAttribute`。`inspect_page` と `ELEMENT_NOT_FOUND` の `details` にフレームとタブの一覧、閉じたダイアログ（docs/browser.md）
 - Studio の AI ペイン：会話をシナリオごとに持ち、複数のシナリオで AI に並行して作業してもらえます。ペインは開いているシナリオの会話に切り替わり、見出しから会話を選べます（作業中・終わった印）。「新しいシナリオを作る」会話は、AI が作ったシナリオの会話になります。同じシナリオで同時に動く会話は一つだけです
 - Studio の AI ペイン：AI の作業中でも「割り込む」で訂正を送れます。今の作業を止め、同じ会話でその訂正を続けます
 - Studio：実行が終わったあとも、フロー図に通った道筋（ノードの枠と線の色、変数の値）を残します。線は緑＝通った、朱＝止まったノードへ、橙＝実行中。シナリオを編集したとき・次の実行・別のシナリオを開いたときに消え、実行ログの「図の色を消す」（右クリックにも）で手で消せます
+- Studio：デスクトップのノードの「対象」に「画面から選ぶ」と「光らせる」を足しました。「画面から選ぶ」は Studio をしまい、マウスの下の部品を枠で囲んで追いかけ、クリックした部品の対象（ID、なければ種類と名前、それもなければウィンドウの中の位置）を入れます。クリックはアプリに渡しません。Esc か右クリックでやめます。「光らせる」は今の画面で対象を探し、見つかったら 2 秒枠で囲みます
+- 名前付きの部品（`parts`）：画面のボタンや入力欄に名前を付けてシナリオに置き、ノードの対象を `{ "part": "saveButton" }` と書けます。画面が変わったら部品を 1 か所直せば、使っているノードすべてに効きます。Studio ではプロジェクトの「部品」に並び、ノードの対象の「部品にする」で作れます（同じ対象のノードもまとめて置き換え）。AI は編集の `setPart` / `removePart` を使います。シナリオの形式は `schemaVersion` 4 になります（古いファイルはそのまま読めます）
 
 ### 変更
 

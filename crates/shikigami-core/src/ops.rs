@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 
 use crate::error::{CoreError, CoreResult};
 use crate::ids::StepId;
-use crate::model::{Flow, FlowSettings, Metadata, OnError, RetryPolicy, Step, VariableDef};
+use crate::model::{Flow, FlowSettings, Metadata, OnError, Part, RetryPolicy, Step, VariableDef};
 
 /// Where a step lives (or should be inserted).
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -154,6 +154,15 @@ pub enum EditOp {
     RemoveVariable {
         name: String,
     },
+    /// Adds or replaces (by name) a named screen part. Nodes use it as
+    /// `"target": { "part": "<name>" }`.
+    SetPart {
+        name: String,
+        part: Part,
+    },
+    RemovePart {
+        name: String,
+    },
     /// Replaces the whole step tree (bulk edits by AI, imports).
     ReplaceSteps {
         steps: Vec<Step>,
@@ -171,6 +180,8 @@ impl EditOp {
             Self::UpdateFlow { .. } => "update flow".into(),
             Self::SetVariable { variable, .. } => format!("set variable {}", variable.name),
             Self::RemoveVariable { name } => format!("remove variable {name}"),
+            Self::SetPart { name, .. } => format!("set part {name}"),
+            Self::RemovePart { name } => format!("remove part {name}"),
             Self::ReplaceSteps { .. } => "replace steps".into(),
         }
     }
@@ -297,6 +308,24 @@ fn apply_inner(flow: &mut Flow, op: EditOp) -> CoreResult<EditOp> {
                 variable,
                 index: Some(pos),
             })
+        }
+        EditOp::SetPart { name, part } => {
+            if !crate::registry::is_identifier(&name) {
+                return Err(CoreError::InvalidEdit(format!(
+                    "part name '{name}' must be letters, digits and _ (not starting with a digit), like a variable"
+                )));
+            }
+            Ok(match flow.parts.insert(name.clone(), part) {
+                Some(old) => EditOp::SetPart { name, part: old },
+                None => EditOp::RemovePart { name },
+            })
+        }
+        EditOp::RemovePart { name } => {
+            let part = flow
+                .parts
+                .remove(&name)
+                .ok_or_else(|| CoreError::InvalidEdit(format!("part '{name}' does not exist")))?;
+            Ok(EditOp::SetPart { name, part })
         }
         EditOp::ReplaceSteps { mut steps } => {
             steps.iter_mut().for_each(assign_missing_ids);
@@ -532,6 +561,43 @@ mod tests {
         }]);
         assert_eq!(edited.walk().count(), 6);
         assert!(edited.walk().all(|s| !s.id.is_empty()));
+    }
+
+    #[test]
+    fn parts_are_set_and_removed_with_undo() {
+        let part = |process: &str| Part {
+            label: "保存".into(),
+            app: crate::model::PartApp::Desktop,
+            target: serde_json::json!({ "window": { "process": process } }),
+        };
+        let edited = assert_round_trip(vec![
+            EditOp::SetPart {
+                name: "save".into(),
+                part: part("a.exe"),
+            },
+            EditOp::SetPart {
+                name: "save".into(),
+                part: part("b.exe"),
+            },
+        ]);
+        assert_eq!(edited.parts["save"], part("b.exe"));
+        let bad = apply_all(
+            &sample(),
+            vec![EditOp::SetPart {
+                name: "保存".into(),
+                part: part("a.exe"),
+            }],
+        );
+        assert!(bad.is_err());
+        assert!(
+            apply_all(
+                &sample(),
+                vec![EditOp::RemovePart {
+                    name: "none".into()
+                }]
+            )
+            .is_err()
+        );
     }
 
     #[test]

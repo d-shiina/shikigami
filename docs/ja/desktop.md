@@ -19,6 +19,22 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 
 部品が複数当たったときは「どれか」を選ばずにエラー（`ELEMENT_AMBIGUOUS`、候補つき）にします。実行のたびに違う部品を押すことがないようにするためです。
 
+### 画面から選ぶ・名前付きの部品
+
+- Studio では、デスクトップのノードの対象に **画面から選ぶ**（Studio をしまい、マウスの下の部品を枠で囲む。クリックで選ぶ、Esc か右クリックでやめる。クリックはアプリに渡らない）と **光らせる**（今の画面で対象を探して枠で囲む）があります。対象は壊れにくい順に組みます：ウィンドウの中で一つに決まる `id`、なければ `role` + `name`（完全一致）、次に `nth`、最後にウィンドウの中の `point`。AI からはアダプターの inspect に `action: "pick"` / `"highlight"` を渡すと同じことができます。
+- **名前付きの部品**：フローの `parts` に対象を置き（`"parts": { "saveButton": { "label": "保存ボタン", "app": "desktop", "target": { … } } }`）、ノードは `"target": { "part": "saveButton" }` と書きます（ほかの項目は並べない）。画面が変わったら部品を 1 か所直せば済みます。Studio ではプロジェクトの「部品」に並び、ノードの対象の「部品にする」で作れます。AI は編集の `setPart` / `removePart` を使います。ブラウザのノードも同じ形で使えます（`"app": "browser"`）。
+
+### 記録
+
+フロー図の下のドックの **記録** を押すと、Studio をしまい、デスクトップアプリでの操作を書き留めます。画面上の帯をクリックすると止まります。
+
+- **クリック**：押した部品の対象を、**画面から選ぶ** と同じ組み立てで残します。クリックは画面を読むあいだだけ止めてからアプリに渡します（メニューが開く前のボタンを捕まえるため）。ダブルクリックはダブルクリックのまま残ります。
+- **入力**：入力欄を離れたときの最終的な文字を 1 つの `desktop.setValue` にします（IME での日本語入力も同じ。変換の F6〜F10・Esc と、変換を確定する Enter は入力の一部として扱います）。パスワード欄の文字は記録しません。ノードでシークレットを選んでもらいます。
+- **キー**：Enter・Tab・Esc・F1〜F24 と、Ctrl / Alt / Windows との組み合わせ（`Control+S`）は `desktop.press` にします。入力欄の中のコピー・貼り付け・元に戻す・すべて選択は入力の一部として扱います。
+- 記録しないもの：ドラッグ、ホイール、Studio 自身の操作、ブラウザ（これから）。
+
+止めると **記録した操作** にノードの一覧が出ます。**そのままノードにする** は、新しいノードが入る場所に 1 操作 1 ノードで足します（2 か所以上で使う対象は名前付きの部品にします）。**AI に整えてもらう** は、記録を AI のペイン（使えないときはクリップボード）に渡し、画面が変わるところの待ち、繰り返しのループ、毎回変わる値の入力変数などを頼みます。記録の元データはフローの `logs/recordings/` に残ります。アダプターの inspect に `action: "record"` を渡しても同じことができます。
+
 ## ノード
 
 | type | 主な params | 出力 | マウス・キーボード |
@@ -36,9 +52,18 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 | `desktop.press` | `target`, `key`（`Enter` `Control+S` `Alt+F4` など。ブラウザと同じ書き方） | – | **使う** |
 | `desktop.readText` | `target`（ウィンドウ・`element`・`region`）または `file`（画像ファイル） | `{ text, lines }`（OCR） | 使わない |
 | `desktop.screenshot` | `target`（ウィンドウ・`element`・`region`）, `path` | 保存したパス | 使わない |
+| `desktop.getTable` | `target`（表・グリッド・一覧。ウィンドウだけなら最初の 1 つ）, `maxRows` | 列見出しをキーにしたオブジェクトのリスト（`browser.getTable` と同じ形） | 使わない |
+| `desktop.selectMenu` | `target`（ウィンドウならメニューバーか開いているメニュー、部品ならその右クリックメニュー）, `path`（上から順の名前。例 `["ファイル", "名前を付けて保存"]`） | – | 使わない |
+| `desktop.scroll` | `target`。`direction` なしならその部品が見えるまで、`direction`（`up` `down` `left` `right` `top` `bottom`）・`amount`・`unit`（`page` / `line`）ありなら一覧や枠をスクロール | `{ verticalPercent, horizontalPercent, atEnd }` | 使わない |
+| `desktop.mouseScroll` | `target`, `direction`（`up` `down` `left` `right`）, `amount`（ホイールの刻み、既定 3） | – | **使う** |
+| `desktop.drag` | `target`（つかむ所）, `to`（離す所。別のウィンドウでもよい） | – | **使う** |
+| `desktop.hover` | `target` | – | **使う** |
 
 - **待ち時間を書かなくてよい**：どのノードも、ウィンドウや部品が現れる（無効なら有効になる）まで自動で探し直します。上限はノードの `timeoutMs`（既定 30 秒）。消えるのを待つときだけ `desktop.waitFor` の `state: "hidden"` を使います
 - **まずマウスを使わない操作**：`desktop.click` はボタンを押す・チェックを切り替える・項目を選ぶ・ツリーを開く操作を、マウスを動かさずに行います。ウィンドウが裏にあっても動き、ほかの作業と並行できます。反応しないアプリだけ `desktop.mouseClick` / `desktop.type` を使います
+- **メニューは名前で**：`desktop.selectMenu` は名前を画面の表示どおりに、アクセスキー（`(F)`・`&`）・末尾の `...`・ショートカットを除いて照らし合わせ、サブメニューが開くのを待ちます。部品の右クリックメニューがマウスなしで開かない（`NOT_SUPPORTED`）ときは、`desktop.mouseClick`（`button: "right"`）で開いてから、`desktop.selectMenu` にウィンドウだけを渡します
+- **表はまとめて**：`desktop.getTable` は、対応しているグリッド（WPF、多くの WinForms・Win32 のもの）なら画面外の行も含めて全部読みます。そうでない一覧は、アプリが作ってある行だけです。空のセルは `""`（WinForms の `(null)` も）、文字のない行は除き、10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE` で止まります
+- **長い一覧をページごとに読む**：`desktop.scroll` に `direction: "down"` を付けると `atEnd` が返るので、`control.while` で「読む→スクロール」を最後まで繰り返せます
 - **マウス・キーボードは 1 組だけ**：「使う」のノードは画面の使用権（`desktop.input`）を自動で取ってから動くので、並行ブランチの中でも同時には動きません。同じアプリ（`process` が同じ）へのノードも 1 つずつ動きます。フローにロックは書きません
 
 ## AI が画面を調べる（MCP）
@@ -83,7 +108,7 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 - `offset`：見つけた場所の中心からずらします（ラベルの右の入力欄など）
 - `region`：探す範囲をウィンドウの一部（ウィンドウ左上からの px）に絞ります。`element` が見えるならそれでも絞れます
 - 複数見つかったときは選ばずに `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS`（候補の位置つき）にします。`nth`（上から、同じ行は左から数えて 0 始まり）か `region` で決めます
-- 使えるノード：`desktop.mouseClick`・`desktop.type`（その場所をクリックしてから入力）・`desktop.waitFor`・`desktop.isVisible`。どれも見つかるまで自動で待ちます
+- 使えるノード：`desktop.mouseClick`・`desktop.mouseScroll`・`desktop.drag`（両端とも）・`desktop.hover`・`desktop.type`（その場所をクリックしてから入力）・`desktop.waitFor`・`desktop.isVisible`。どれも見つかるまで自動で待ちます
 - 画面の絵はウィンドウ自身に描かせるので、ほかのウィンドウに隠れていても読めます。描けないアプリだけ前面に出して画面から写します
 
 ### OCR エンジン
@@ -107,10 +132,31 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 | アプリ | いまの見え方 | 予定 |
 |---|---|---|
 | Win32 / WinForms / WPF / UWP、Office の画面 | UI Automation で部品が見える | – |
-| SAP GUI for Windows | UI Automation では一部しか見えないことが多い（`inspect_ui` に注記） | SAP GUI Scripting を別の掴み方として追加。ノードは同じ `desktop.*`、SAP 固有の操作（トランザクションコードなど）だけ専用の型を足す。SAP サーバー側の `sapgui/user_scripting` と SAP GUI のオプションでスクリプトを有効にする必要がある |
-| Java（Swing など） | 枠しか見えないことが多い（注記） | Java Access Bridge（`jabswitch -enable` で有効化） |
+| SAP GUI for Windows | SAP GUI Scripting が有効なら、それを通して見える（下の「SAP GUI」）。無効なら UI Automation で一部だけ（`inspect_ui` に注記） | – |
+| Java（Swing・AWT など） | Java Access Bridge が有効なら、それを通して見える（下の「Java アプリ」）。無効なら枠だけ（注記） | – |
 | Citrix / リモートデスクトップの中 | 部品は見えない。画像（`image`）と文字（`ocr`）で場所を指す | – |
 | Excel のデータ | – | xlsx を直接読み書きする `excel.*`（[adapters.md](adapters.md)） |
+
+## SAP GUI
+
+対象のウィンドウが SAP GUI for Windows で、SAP GUI Scripting が有効なら、同じ `desktop.*` のノードが UI Automation の代わりにスクリプトの仕組みを通して動きます（UI Automation では SAP の項目や表の多くが見えないため）。
+
+- **スクリプトを有効にする**（SAP の管理者が一度、各 PC でも一度）：SAP サーバーでトランザクション RZ11 から `sapgui/user_scripting` を `TRUE` に。SAP GUI の［オプション］>［アクセシビリティとスクリプト］>［スクリプト］で「スクリプトを有効にする」をオンにし、「スクリプトが接続したときに通知」などの 2 つはオフに（オンのままだと操作のたびに確認が出ます）
+- `inspect_ui` は SAP の部品を id（`wnd[0]/usr/txtRSYST-BNAME`）とほかのアプリと同じ役割（`textbox`・`button`・`checkbox`・`combobox`・`tab`・`table`、ALV グリッドは `grid` など）で一覧にします。`element.id` にそのまま写します。SAP GUI で記録したスクリプトの id（`/app/con[0]/ses[0]/wnd[0]/…`）や、対象ウィンドウの中の id（`usr/…`）でも動きます
+- 各ノードの動き：`desktop.click` はボタンを押す・チェックの切り替え・ラジオボタン・タブ・メニューの選択（ラベルや入力欄では F2 ＝ダブルクリックと同じ）。`desktop.setValue` / `desktop.getValue` は入力欄の書き込みと読み取り。`desktop.select` はコンボボックスの項目を表示名かキーで選ぶ。`desktop.press` は SAP のファンクションキー（Enter、Shift / Ctrl 付きの F1〜F12、Ctrl+S、Esc、PageUp / PageDown）を実際のキーボードを使わずに送る。`desktop.selectMenu` はメニューバーをたどる。`desktop.getTable` はテーブルコントロールと ALV グリッドをスクロールしながら全部読む。`desktop.type`・`desktop.mouseClick` などマウスのノードは、その部品にフォーカスを移すか、画面上の位置を使う
+- `sap.runTransaction` はトランザクションを開始し（`code`：`VA03`）、そのあとのステータスバー `{ type, text }`（`S` 成功、`W` 警告、`E` エラーなど）を返すので、`control.if` で確かめられます
+- スクリプトが無効なときに SAP の部品 id を書いた対象は `SAP_SCRIPTING_OFF`（有効にする手順つき）で止まります。ウィンドウそのもの・OCR・画像は UI Automation で動きます
+- **実際の SAP ではまだ確認していません**：SAP のスクリプト API の資料をもとに書いています。CI には SAP GUI がありません
+
+## Java アプリ
+
+Java のアプリ（Swing・AWT と、それで作られた多くの社内システム）は、UI Automation には枠しか見えません。Java Access Bridge が有効なら、同じ `desktop.*` のノードがその仕組みを通して動きます。
+
+- **Java Access Bridge を有効にする**（PC・ユーザーごとに一度）：アプリが使う Java の `bin` フォルダーで `jabswitch -enable` を実行し、アプリを起動し直します。Shikigami は `WindowsAccessBridge-64.dll` を Windows、アプリの `java.exe` のフォルダー、`JAVA_HOME\bin` の順に探します
+- `inspect_ui` は Java の部品をほかのアプリと同じ役割（`textbox`・`button`・`checkbox`・`combobox`・`table`・`menuitem` など）で一覧にします。Java の部品には id がないので、`role` ＋ `name`（同じ名前が並ぶときは `nth`）で指定します
+- 各ノードの動き：`desktop.click` は部品の動作（押す・切り替え・選ぶ）を実行。`desktop.setValue` / `desktop.getValue` は入力欄の書き込みと読み取り（パスワード欄は書き込みだけ）。`desktop.select` は一覧やコンボボックスの項目を選ぶ。`desktop.selectMenu` はメニューバーをたどる。`desktop.getTable` は `JTable` を列見出しつきで全部読む。`desktop.type`・`desktop.press`・マウスのノードは、その部品にフォーカスを移すか、画面上の位置を使う
+- 無効なときに部品を指定した対象は `JAVA_BRIDGE_OFF`（有効にする手順つき）で止まります。ウィンドウそのもの・OCR・画像は UI Automation で動きます
+- CI では小さな Swing の画面で確認しています。実際の業務用 Java アプリ（Oracle Forms、Java Web Start など）ではまだ確認していません
 
 ## しくみ
 
@@ -119,7 +165,7 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 - 昔ながらの Win32 のボタンはクリックを投げるだけにして、押した先でダイアログが開いても待たされないようにしています
 - 管理者として動いているアプリは、通常の権限の Shikigami から操作できません（Windows の制限）。`ELEVATION_REQUIRED` で知らせます
 - 実行キューで待っている間にノードが時間切れ・停止になった要求は、実行せずに捨てます（停止後や再試行で二重にクリック・入力しないため）
-- マウス・キーボードを使う前にウィンドウを前面に出します。Windows が許さなかったとき（画面ロック中など）は `FOREGROUND_DENIED` / `INPUT_BLOCKED` で止めます
+- マウス・キーボードを使う前にウィンドウを前面に出します。画面ロック中・サインイン画面や昇格の確認が入力を持っているとき・リモートセッションが切断または最小化されているときは、そうしたノードは始める前に `DESKTOP_UNAVAILABLE` で止めます（マウス・キーボードを使わないノードは動きます）。それ以外で Windows が許さなかったときは `FOREGROUND_DENIED` / `INPUT_BLOCKED` で止めます。マウス・キーボードは Studio・CLI・MCP サーバーをまたいで一度に一つのノードだけが使います
 - 座標は高 DPI でもずれないよう、スレッドを Per-Monitor DPI 対応にしています
 
 ## 主なエラー
@@ -138,12 +184,18 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 | `IMAGE_AMBIGUOUS` / `TEXT_AMBIGUOUS` | 複数見つかった（候補の位置つき）。`nth` か `region` で決める |
 | `IMAGE_FILE_NOT_FOUND` / `IMAGE_FLAT` | 画像ファイルがない／一色だけの画像（どこにでも当たる） |
 | `OCR_ENGINE_MISSING` / `OCR_LANGUAGE_MISSING` | `engine: "paddle"` なのに PaddleOCR が入っていない／Windows OCR にその言語がない |
+| `SAP_SCRIPTING_OFF` | SAP の部品 id を書いたが、SAP GUI Scripting がそのウィンドウに届かない。有効にする（「SAP GUI」） |
+| `JAVA_BRIDGE_OFF` | Java のウィンドウだが、Java Access Bridge が無効か見つからない。有効にする（「Java アプリ」） |
+| `JAVA_NOT_READY` | Java アプリがまだ起動中。ノードの待ち時間のあいだ再試行する |
+| `NOT_SAP_WINDOW` | SAP GUI でないウィンドウに `sap.runTransaction` |
+| `TABLE_TOO_LARGE` | 10000 行を超えた。`maxRows` を書くか、アプリで絞り込んでから読む |
+| `MENU_ITEM_NOT_FOUND` / `MENU_ITEM_AMBIGUOUS` | その名前のメニュー項目が出ていない（出ている項目つき）／複数ある。上のメニューから順に書く |
 | `PLATFORM_UNSUPPORTED` | Windows 以外で実行した |
 
 ## 確認済みの事項と制約
 
-- **確認済み**：ノード定義・検証・自動待ち・ロック・シークレットの照合を、偽のバックエンドで自動テスト（Linux / Windows の CI）。Windows の CI でメモ帳を起動し、文字の入力と読み取りを UI Automation で行うテスト。画像検索と、日本語の業務画面の絵（12px の文字）を PaddleOCR で読むテスト（Linux / Windows の CI）。Windows の CI でメモ帳の絵を撮って OCR し、切り出した画像をもう一度見つけるテスト
-- **未確認**：実際の業務アプリ・SAP GUI・Java アプリ・Citrix での動作、マウス・キーボード操作（CI では画面操作をテストしていない）、高 DPI・複数モニター
+- **確認済み**：ノード定義・検証・自動待ち・ロック・シークレットの照合を、偽のバックエンドで自動テスト（Linux / Windows の CI）。Windows の CI で PowerShell が出す WinForms の画面を使い、メニューバーからの選択、文字の入力と読み取り、最後までのスクロール、DataGridView と一覧の `desktop.getTable` を UI Automation で行うテスト（メモ帳のテストは、CI のランナーのように古い Edit のないメモ帳では飛ばされます）。画像検索と、日本語の業務画面の絵（12px の文字）を PaddleOCR で読むテスト（Linux / Windows の CI）。Windows の CI でメモ帳の絵を撮って OCR し、切り出した画像をもう一度見つけるテスト
+- **未確認**：実際の業務アプリ・SAP GUI・業務用 Java アプリ・Citrix での動作、マウス・キーボード操作（CI では画面操作をテストしていない）、高 DPI・複数モニター
 - 画像検索はフル HD のウィンドウで 1 回 0.2〜0.5 秒、PaddleOCR は小さい画面で 0.3 秒ほど（CPU 4 コア）です。大きなウィンドウ全体の OCR は 1 秒を超えることがあるので、`region` で絞ると速くなります
 - Studio・CLI・MCP サーバーなど **別プロセス間** のマウス・キーボードの排他は未実装です（同じプロセス内のみ）
-- 表（グリッド）の一括読み取り、メニューを順にたどる書き方は未実装です。回転・拡大縮小した画像は探せません
+- 回転・拡大縮小した画像は探せません

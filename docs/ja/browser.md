@@ -38,20 +38,110 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 
 | type | 主な params | 出力 |
 |---|---|---|
-| `browser.open` | `url`, `headless`, `session`（ログイン状態を保存・再利用する名前） | `{ url, title }` |
-| `browser.click` | `target` | – |
+| `browser.open` | `url`, `headless`, `session`（ログイン状態を保存・再利用する名前）, `dialog` | `{ url, title }` |
+| `browser.attach` | `port`（既定 9222）, `title` / `url`（使うタブ） | `{ url, title }` |
+| `browser.click` | `target`, `dialog`（クリックで出る JS のダイアログへの答え） | ダイアログの文 / `null` |
+| `browser.download` | `target`（押すもの）, `path`（保存するファイル）か `folder`（サイトの名前のまま） | `{ path, fileName }` |
+| `browser.upload` | `target`（ファイルの入力欄、またはファイル選択を開くボタン）, `path`（ファイル 1 つか配列） | – |
+| `browser.hover` | `target` | – |
+| `browser.scroll` | `target`（見えるところまで）と `to`（`top` / `bottom`）のどちらか、または両方 | – |
 | `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`） | – |
 | `browser.select` | `target`, `value`（表示名、または配列） | – |
-| `browser.press` | `key`（`Enter` など）, `target`（省略時はページ） | – |
+| `browser.press` | `key`（`Enter` など）, `target`（省略時はページ）, `dialog` | ダイアログの文 / `null` |
 | `browser.getText` | `target`, `all`（`true` で全一致の配列） | 文字列 / 配列 |
 | `browser.getTable` | `target`（省略時は最初の表） | 見出しをキーにしたオブジェクトの配列 |
+| `browser.getAttribute` | `target`, `name`（`href`・`src`・`value`・`data-id` など）, `all` | 文字列 / `null` / 配列（`href`・`src` は完全なアドレス） |
+| `browser.switchTab` | `title` / `url`（一部でよい）か `index`（0 が最初のタブ） | `{ url, title, index }` |
+| `browser.closeTab` | – | 戻った先のタブの `{ url, title }` |
 | `browser.waitFor` | `target`, `state`（`visible` / `hidden` / `attached` / `detached`） | – |
 | `browser.screenshot` | `path`（絶対パス）, `fullPage` | 保存先 |
 | `browser.isVisible` | `target`, `waitMs`（既定 2000） | `true` / `false`（見つからなくても失敗しない） |
 | `browser.waitForHuman` | `message`, `until`（人の操作が終わると出る要素） | – |
 | `browser.close` | – | – |
 
-すべてのノードに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、**同じ `context` のノードは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、フローにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
+すべてのノードに `context`（既定 `default`）があります。`context` ごとに Cookie もタブも別で、ノードはその **今のタブ** を操作します。**同じ `context` のノードは 1 つずつ、別の `context` は同時に** 動きます（排他は Runtime が `context` から自動で決めるので、フローにロックを書く必要はありません）。実行が終わると、その実行で開いた `context` は自動で閉じます。
+
+### タブとポップアップ
+
+`target="_blank"` のリンクやウィンドウを開くボタンを押すと、その `context` にタブが増えますが、ノードは `browser.switchTab` で移るまで今のタブのままです。クリックのすぐ後に置きます：タブが開くのを待ち、タイトルに `title` を含む（アドレスに `url` を含む）いちばん新しいタブに移ります。`browser.closeTab` は今のタブを閉じて前のタブに戻ります。自分で閉じるポップアップ（`window.close()`）のときは自動で前のタブに戻ります。
+
+```jsonc
+{ "type": "browser.click", "params": { "target": { "role": "button", "name": "詳細" } } },
+{ "type": "browser.switchTab", "params": { "title": "受注詳細" } },
+{ "type": "browser.getText", "params": { "target": { "role": "heading" } }, "saveAs": "title" },
+{ "type": "browser.closeTab" }
+```
+
+### 人が開いたブラウザを使う（`browser.attach`）
+
+PC のサインインでの SSO、クライアント証明書、必須の拡張機能など、人のブラウザでしか開けないサイトがあります。`browser.attach` は新しくブラウザを起動する代わりに、もう開いている Edge・Chrome を使い、同じ `context` の後のノードはその中で動きます。つなぐ先は `127.0.0.1` だけで、実行が終わるとブラウザは閉じずに手を離します。
+
+ブラウザはデバッグ用のポートを付けて起動しておきます。Chrome 136 以降はふだんのプロファイルではこのポートを無視し（[Chrome の告知](https://developer.chrome.com/blog/remote-debugging-port)）、Edge も同じになる見込みなので、専用のプロファイルのフォルダーを付け、そこで一度サインインしておきます（この引数のショートカットを作るのが簡単です）：
+
+```powershell
+& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Shikigami\edge-profile"
+```
+
+```jsonc
+{ "type": "browser.attach", "params": { "title": "勤怠" } }
+```
+
+注意：
+
+- ポートで待っている間は、この PC のどのプログラムからもそのブラウザを操作できます。必要な作業のときだけこの開き方をします
+- ワークスペースの許可したサイト（ポリシー）は `browser.open` で確かめます。人がもう開いていたタブは確かめません
+- 無人実行には使えません（ブラウザを起動する人がいない）。無人では `browser.open` の `session` を使います
+- つないでいる間、そのブラウザの JS のダイアログには実行が答えます
+- **Windows の PC の Edge ではまだ試していません**（Chromium で確認）
+
+### Edge の IE モード
+
+Edge が IE モードで表示するページは古い Internet Explorer のエンジンで動くため、Playwright（つまり `browser.*`）からは届きません。そこではデスクトップのノードを使います。IE モードのページは Edge のウィンドウの一部なので、`{ "window": { "process": "msedge.exe", "title": "<ページのタイトルの一部>" }, "element": { … } }` で指し、`inspect_ui` で中を見ます。Windows の CI（Windows Server、IE 強化セキュリティは切った状態）では、ページの見出し・ラベル・入力欄・ボタンが HTML の `id` 付きで UI Automation に出て、入力欄への `desktop.setValue` とボタンの `desktop.click` も効きました（`crates/shikigami-desktop/tests/ie_mode.rs`）。ラベルと入力欄は同じ名前になるので、部品は `role` も付けて指します。**実機の Edge ではまだ試していません**（[desktop.md](desktop.md)）。Windows Server では IE 強化セキュリティが入っているとページが空のままになります（ふつうの PC では切れています）。
+
+### ダウンロードとアップロード
+
+`browser.download` はリンクやボタンを押して、ダウンロードされたファイルを保存します。パスはフローのフォルダーからの相対で、`"path": "input/受注.csv"` とすれば次の `file.readCsv` / `excel.readRows` がそのまま読めます。`path` の代わりに `folder` を書くと、サイトが付けた名前のまま保存します（出力の `fileName`）。`browser.upload` はフォームにファイルを添付します。ファイルの入力欄そのものでも、ファイル選択を開くボタンでも使えます（選択の画面は出ません）。添付するだけなので、続けて送信ボタンを押します。
+
+どちらも `dangerous`（ダウンロードはファイルを書き、アップロードは外に送る）なので、確認パネルの「外への影響」に出ます。
+
+### JS のダイアログ（alert・confirm・prompt）
+
+ダイアログを出す操作のノードに `dialog` を付けて答えます：`"accept"`（OK）、`"dismiss"`（キャンセル）、prompt に文字を入れるなら `{ "action": "accept", "promptText": "…" }`。ノードはダイアログを待ち（サーバーの返事の後に出る「登録しました」のように、クリックから少し遅れて出るものも）、その文を出力するので、alert に出る受付番号を `saveAs` で残せます。ノードの制限時間内に出なければ `DIALOG_NOT_SHOWN` で失敗します。
+
+`dialog` がないときは、人のいないブラウザと同じように閉じ（alert は OK、confirm・prompt はキャンセル）、次に失敗したノードの `details.dismissedDialog` に出します。ページが自分で描くダイアログは普通の部品なので、そのボタンを `browser.click` で押します。
+
+### 何ページにも分かれた表
+
+表の下の「次へ」で何ページにも分かれた一覧は、上のノードのくり返しで読みます（専用のノードはありません）。ページを読んで行に足し、「次へ」がある間はそれを押します：
+
+```jsonc
+{ "type": "variable.set", "params": { "name": "rows", "expression": "[]" } },
+{ "type": "variable.set", "params": { "name": "more", "expression": "true" } },
+{ "type": "variable.set", "params": { "name": "pageNo", "expression": "1" } },
+{ "type": "control.while", "params": { "condition": "more", "maxIterations": 200 }, "blocks": { "body": [
+  { "type": "browser.getTable", "params": { "target": { "css": "#orders" } }, "saveAs": "page" },
+  { "type": "variable.set", "params": { "name": "rows", "expression": "rows + page" } },
+  { "type": "browser.isVisible", "params": { "target": { "role": "link", "name": "次へ" } }, "saveAs": "more" },
+  { "type": "control.if", "params": { "condition": "more" }, "blocks": { "then": [
+    { "type": "browser.click", "params": { "target": { "role": "link", "name": "次へ" } } },
+    { "type": "variable.set", "params": { "name": "pageNo", "expression": "pageNo + 1" } },
+    { "type": "browser.waitFor", "params": { "target": { "text": "{{ pageNo }} ページ" } } }
+  ] } }
+] } }
+```
+
+押したあとは次のページにしか出ないもの（ここではページ番号）を待ちます。待たないと `getTable` が前の表をもう一度読むことがあります。最後のページにも灰色の「次へ」が残るサイトでは、押せるリンクだけにあるもので `target` を書きます（例 `css: "a.next:not(.disabled)"`）。
+
+### フレーム
+
+iframe の中や、古いフレームセットのページの `<frame>` の中の部品は、`target` に `frame` を付けます：フレームの `name`（または `id`）属性、`title` や `src` の一部、または `css`。フレームの中のフレームは、外側を `frame.frame` に書きます。
+
+```jsonc
+{ "label": "備考", "frame": { "name": "main" } }
+{ "role": "button", "name": "検索", "frame": { "name": "body", "frame": { "name": "main" } } }
+```
+
+`inspect_page` はページのフレームを `frames` に並べ、`target: { "css": "body", "frame": { "name": "main" } }` を付けて呼ぶとその中を見せます。失敗したノードの `details.frames` にも出ます。
 
 ログイン・パスワード・MFA の扱いは [secrets.md](secrets.md) を見てください。ブラウザで OAuth のサインインをする Web API（`oauth.signIn`）は [oauth.md](oauth.md) です。
 
@@ -64,10 +154,12 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 { "label": "ユーザー名" }                        // 入力欄
 { "text": "A-1001 を出荷しました" }              // 表示されている文字
 { "placeholder": "例：青葉商店" } / { "testId": "submit" } / { "css": "#q" }
-// 共通：exact（完全一致）, nth（複数一致したときの 0 始まりの番号）
+// 共通：exact（完全一致）, nth（複数一致したときの 0 始まりの番号）, frame（入っている iframe）
 ```
 
 待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。待つ上限はノードの `timeoutMs`（既定 30 秒）で、アダプター側の操作もその直前で止まるため、タイムアウトしたクリックが再試行の後で遅れて実行されることはありません。
+
+Studio では、フローを実行しているあいだ（ノードで止めているときも）、ブラウザのノードの対象に **画面から選ぶ** と **光らせる** が使えます。Studio をしまい、実行中のブラウザで部品をクリックします（Esc でやめる。ページにはクリックが渡りません）。実行する前は選ぶブラウザがないので押せません。iframe の中はまだ選べません。
 
 ### エラー
 
@@ -76,6 +168,15 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 | `ELEMENT_NOT_FOUND` | 要素が見つからない。`details.page` にそのときのページ（アクセシビリティツリー）と直し方のヒント | する |
 | `OPTION_NOT_FOUND` | `browser.select` の値が選択肢の表示名にも値にもない。`details.options` に選択肢 | しない |
 | `ELEMENT_AMBIGUOUS` | 複数の要素に一致。`exact` / `nth` で絞る | しない |
+| `TAB_NOT_FOUND` | `browser.switchTab` に合うタブがない。`details.tabs` にタブの一覧 | する |
+| `LAST_TAB` | タブが 1 つだけのときの `browser.closeTab`（`browser.close` を使う） | しない |
+| `DIALOG_NOT_SHOWN` | `dialog` を付けたのに JS のダイアログが出なかった | しない |
+| `BROWSER_NOT_RUNNING` | `browser.attach` で `port` にブラウザがない。`details.hint` に起動のしかた | する |
+| `CONTEXT_IN_USE` | `browser.open` が使っている `context` に `browser.attach` | しない |
+| `DOWNLOAD_NOT_STARTED` | `browser.download` で押したがダウンロードが始まらない | しない |
+| `DOWNLOAD_FAILED` | ダウンロードが途中で切れた | する |
+| `FILE_NOT_FOUND` | `browser.upload` のファイルがない | しない |
+| `FILE_CHOOSER_NOT_SHOWN` | `browser.upload` の対象がファイルの入力欄でも、ファイル選択を開くものでもない | しない |
 | `BROWSER_NOT_OPEN` | 同じ `context` の `browser.open` がない | しない |
 | `NAVIGATION_FAILED` | ページを開けない | する |
 | `BROWSER_LAUNCH_FAILED` | ブラウザを起動できない | しない |
@@ -84,10 +185,11 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 
 ## AI からフローを作る（MCP）
 
-MCP サーバーに 2 つのツールがあります（権限区分は `run`）。
+MCP サーバーに 3 つのツールがあります（権限区分は `run`）。
 
-- `inspect_page`：ページを開いて（または開いているページの）アクセシビリティツリーを返す。`- button "ログイン"` と出ていれば `{ "role": "button", "name": "ログイン" }` がそのまま `target` になる
-- `test_step`：ノードを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのノードでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。フローは変更しない
+- `inspect_page`：ページを開いて（または開いているページの）アクセシビリティツリーを返す。`- button "ログイン"` と出ていれば `{ "role": "button", "name": "ログイン" }` がそのまま `target` になる。`image: true` でスクリーンショットも AI に渡す（名前のないアイコンなど、ツリーでは見分けられないページ向け）
+- `test_step`：ノードを 1 つその場で実行して、出力と実行後のページを返す（どのアダプターのノードでも使える）。ログインしてから次の画面を調べる、といった下調べに使う。フローは変更しない。browser ノードは実行の前に、対象をブラウザ上で少しのあいだ枠で光らせる（「ここを押します」）ので、見ている人に AI が何を触るのかがわかる
+- `ask_user_to_pick`：どの部品かわからないとき（行ごとの「編集」ボタン、名前のないアイコンなど）、AI は推測せず人に指してもらう。ブラウザのウィンドウが前に出て AI の `message` が帯で出て、迷っている `candidates` には番号付きの枠が付く。人のクリックはページに届く前に受け止めるので、ボタンは押されない。指した部品は `target` で返る（同じものが複数あれば `nth` と、その表の行の文字 `row` も）。同時に Studio に「AI がブラウザの画面で指してほしいと言っています」と出て、そこから断れる。ブラウザの「わからない」か Esc でも断れる（`status: "cancelled"`）。ウィンドウのあるブラウザが必要
 
 AI はこれでサイトを確かめながらノードを組み、`validate_flow` → `run_flow` で AI なしの実行を確認します。
 

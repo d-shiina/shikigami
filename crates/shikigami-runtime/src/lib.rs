@@ -37,9 +37,10 @@ use tokio_util::sync::CancellationToken;
 pub use adapter::Adapter;
 pub use debug::{DebugCommand, DebugControl, DebugOptions, PauseReason, ResumeAction};
 pub use event::{
-    LogLevel, RunError, RunEvent, RunEventEnvelope, RunReport, RunSnapshot, RunStatus, StepOutcome,
-    SubflowRef,
+    LogLevel, RunError, RunEvent, RunEventEnvelope, RunOrigin, RunReport, RunSnapshot, RunStatus,
+    RunTrigger, StepOutcome, SubflowRef,
 };
+pub use exec::DesktopProbe;
 pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 pub use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef, ResourceKind};
 
@@ -74,6 +75,8 @@ pub struct RunOptions {
     /// it starts with each flow's `work/` folder emptied (unless its
     /// settings say `keepWork`) and writes a readable log to `logs/`.
     pub full_run: bool,
+    /// Who asked for the run, from where (recorded; `machine` is filled in).
+    pub origin: RunOrigin,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -104,6 +107,19 @@ impl Runtime {
         RuntimeBuilder::new()
     }
 
+    /// Makes [`DESKTOP_INPUT`] exclusive across every process on this PC that
+    /// uses the same `dir` for its lock files (Studio, the MCP server, the
+    /// CLI and the agent use [`default_pc_lock_dir`]). Call before starting
+    /// runs.
+    pub fn with_pc_locks(mut self, dir: PathBuf) -> Self {
+        self.resources = Arc::new(exec::ResourceLocks {
+            pc_lock_dir: Some(dir),
+            desktop_probe: self.resources.desktop_probe.clone(),
+            ..exec::ResourceLocks::default()
+        });
+        self
+    }
+
     /// Where steps look up registered secrets (`{ "secret": .., "field": .. }`
     /// params) and saved browser logins: the workspace vault.
     pub fn with_secrets(mut self, secrets: Arc<dyn SecretProvider>) -> Self {
@@ -130,7 +146,11 @@ impl Runtime {
         let library: HashMap<FlowId, Arc<Flow>> = options
             .subflows
             .iter()
-            .map(|s| (s.flow.id.clone(), Arc::new(s.flow.clone())))
+            .map(|s| {
+                let mut called = s.flow.clone();
+                called.inline_parts();
+                (s.flow.id.clone(), Arc::new(called))
+            })
             .collect();
         let project_dirs: HashMap<FlowId, PathBuf> = options
             .subflows
@@ -146,6 +166,9 @@ impl Runtime {
                 ..RunError::new("VALIDATION_FAILED", "the flow has validation errors")
             });
         }
+        // Nodes that name a part run with its target.
+        let mut flow = flow;
+        flow.inline_parts();
 
         let policy = match &self.policy_path {
             Some(path) => Policy::load(path).map_err(|e| RunError {
@@ -244,6 +267,10 @@ impl Runtime {
 
         let task_run_id = run_id.clone();
         let version = options.version;
+        let mut origin = options.origin;
+        if origin.machine.is_none() {
+            origin.machine = event::machine_name();
+        }
         let secrets = self.secrets.clone();
         let hooks = if options.keep_adapter_state {
             Arc::new(Vec::new())
@@ -258,6 +285,7 @@ impl Runtime {
                 flow_id: flow.id.clone(),
                 flow_name: flow.name.clone(),
                 revision: flow.revision,
+                origin: origin.clone(),
             });
 
             let (_lease, busy) = WorkLease::take(&fresh_work);
@@ -341,6 +369,7 @@ impl Runtime {
                 error,
                 outputs,
                 subflows,
+                origin,
             }
         });
 
@@ -364,6 +393,11 @@ impl Default for Runtime {
     }
 }
 
+/// The lock folder shared by every Shikigami process of this Windows user.
+pub fn default_pc_lock_dir() -> PathBuf {
+    std::env::temp_dir().join("shikigami-locks")
+}
+
 /// Called once when a run ends (after its last step, before `RunFinished`).
 pub type RunFinishedHook = Arc<dyn Fn(RunEnd) -> BoxFuture<'static, ()> + Send + Sync>;
 
@@ -378,14 +412,24 @@ pub struct RuntimeBuilder {
     registry: StepRegistry,
     handlers: HashMap<String, Arc<dyn ActionHandler>>,
     run_finished_hooks: Vec<RunFinishedHook>,
+    desktop_probe: Option<exec::DesktopProbe>,
 }
 
 impl RuntimeBuilder {
+    /// How steps that take [`DESKTOP_INPUT`] find out whether the desktop
+    /// can take input now (installed by the desktop adapter). Without it they
+    /// just try.
+    pub fn desktop_probe(mut self, probe: DesktopProbe) -> Self {
+        self.desktop_probe = Some(probe);
+        self
+    }
+
     pub fn new() -> Self {
         let mut builder = Self {
             registry: StepRegistry::with_builtins(),
             handlers: HashMap::new(),
             run_finished_hooks: Vec::new(),
+            desktop_probe: None,
         };
         builder.handlers.insert(
             builtin_types::LOG_MESSAGE.into(),
@@ -435,7 +479,10 @@ impl RuntimeBuilder {
                     .map(|def| (def.step_type.clone(), def.path_params.clone()))
                     .collect(),
             ),
-            resources: Arc::default(),
+            resources: Arc::new(exec::ResourceLocks {
+                desktop_probe: self.desktop_probe,
+                ..exec::ResourceLocks::default()
+            }),
             default_timeouts: Arc::new(
                 self.registry
                     .iter()

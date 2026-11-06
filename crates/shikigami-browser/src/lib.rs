@@ -42,7 +42,15 @@ pub const BUNDLED_ADAPTER_SCRIPT: &str = "browser-adapter/src/main.ts";
 
 pub mod types {
     pub const OPEN: &str = "browser.open";
+    pub const ATTACH: &str = "browser.attach";
     pub const CLICK: &str = "browser.click";
+    pub const HOVER: &str = "browser.hover";
+    pub const SCROLL: &str = "browser.scroll";
+    pub const GET_ATTRIBUTE: &str = "browser.getAttribute";
+    pub const SWITCH_TAB: &str = "browser.switchTab";
+    pub const CLOSE_TAB: &str = "browser.closeTab";
+    pub const DOWNLOAD: &str = "browser.download";
+    pub const UPLOAD: &str = "browser.upload";
     pub const FILL: &str = "browser.fill";
     pub const SELECT: &str = "browser.select";
     pub const PRESS: &str = "browser.press";
@@ -175,7 +183,10 @@ impl Adapter for BrowserAdapter {
     }
 
     /// The page's accessibility tree (`url` opens a page first; `context`,
-    /// `target` narrow it down).
+    /// `target` narrow it down). `action` asks for something else about the
+    /// open page instead: `"pick"` waits for the person to click an element
+    /// and returns it as a target (`message`, `candidates`, `timeoutMs`),
+    /// `"highlight"` outlines `target` / `targets` for a moment.
     fn inspect<'a>(
         &'a self,
         session: &'a str,
@@ -187,8 +198,14 @@ impl Adapter for BrowserAdapter {
                 _ => Map::new(),
             };
             params.insert("runId".into(), Value::String(session.to_owned()));
+            let method = match params.remove("action") {
+                Some(Value::String(a)) if a == "pick" => "pick",
+                Some(Value::String(a)) if a == "highlight" => "highlight",
+                Some(Value::String(a)) if a == "cancelPick" => "cancelPick",
+                _ => "snapshot",
+            };
             self.client
-                .call("snapshot", Value::Object(params), &CancellationToken::new())
+                .call(method, Value::Object(params), &CancellationToken::new())
                 .await
         })
     }
@@ -326,12 +343,60 @@ fn target_schema() -> Value {
             "testId": { "type": "string" },
             "css": { "type": "string" },
             "exact": { "type": "boolean", "description": "完全一致（既定は部分一致・大文字小文字無視）" },
-            "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号" }
+            "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号" },
+            "frame": frame_schema(true)
         },
         "additionalProperties": false,
         "anyOf": [
             { "required": ["role"] }, { "required": ["label"] }, { "required": ["placeholder"] },
             { "required": ["text"] }, { "required": ["testId"] }, { "required": ["css"] }
+        ]
+    })
+}
+
+/// The iframe (or frameset frame) an element is in; `nested` allows one
+/// more frame around it.
+fn frame_schema(nested: bool) -> Value {
+    let mut properties = json!({
+        "name": { "type": "string", "description": "フレームの name（または id）属性" },
+        "title": { "type": "string", "description": "title 属性の一部" },
+        "src": { "type": "string", "description": "フレームのアドレス（src）の一部" },
+        "css": { "type": "string" },
+        "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号" }
+    });
+    if nested && let Some(map) = properties.as_object_mut() {
+        map.insert("frame".into(), frame_schema(false));
+    }
+    json!({
+        "type": "object",
+        "description": if nested {
+            "要素が入っている iframe（フレームセットのフレームも）。inspect_page の frames に出る name / title / src で指定する"
+        } else {
+            "そのフレームを囲むフレーム（フレームの中のフレーム）"
+        },
+        "properties": properties,
+        "additionalProperties": false,
+        "anyOf": [
+            { "required": ["name"] }, { "required": ["title"] }, { "required": ["src"] }, { "required": ["css"] }
+        ]
+    })
+}
+
+/// How a step answers the JS dialog (alert / confirm / prompt) it causes.
+fn dialog_schema() -> Value {
+    json!({
+        "description": "この操作で出る JS のダイアログ（alert・confirm・prompt）への答え。accept = OK、dismiss = キャンセル。prompt に入れる文字は { \"action\": \"accept\", \"promptText\": \"…\" }",
+        "oneOf": [
+            { "enum": ["accept", "dismiss"] },
+            {
+                "type": "object",
+                "properties": {
+                    "action": { "enum": ["accept", "dismiss"] },
+                    "promptText": { "type": "string" }
+                },
+                "required": ["action"],
+                "additionalProperties": false
+            }
         ]
     })
 }
@@ -400,11 +465,12 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             step_type: OPEN,
             method: "open",
             label: "ブラウザで開く",
-            description: "Opens `url` in the browser context `context` (started on first use; reused afterwards). Output: { url, title }. Every other browser step needs a browser.open on the same context first. `headless: true` runs without a window. `session: \"<name>\"` keeps the login: the context starts with the cookies saved under that name and saves them again when it closes, so later runs skip the login page (check with browser.isVisible whether the login form is shown).",
+            description: "Opens `url` in the browser context `context` (started on first use; reused afterwards). Output: { url, title }. Every other browser step needs a browser.open on the same context first; it opens in the current tab. `dialog` answers a JS dialog the page shows while loading (output then has `dialog`: its message). `headless: true` runs without a window. `session: \"<name>\"` keeps the login: the context starts with the cookies saved under that name and saves them again when it closes, so later runs skip the login page (check with browser.isVisible whether the login form is shown).",
             params: json!({
                 "url": { "type": "string", "minLength": 1 },
                 "headless": { "type": "boolean" },
-                "session": { "type": "string", "minLength": 1, "maxLength": 64, "description": "保存したログイン状態の名前（例：受注システム）。次回はログイン済みで開く" }
+                "session": { "type": "string", "minLength": 1, "maxLength": 64, "description": "保存したログイン状態の名前（例：受注システム）。次回はログイン済みで開く" },
+                "dialog": dialog_schema()
             }),
             required: &["url"],
             has_output: true,
@@ -415,16 +481,141 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             ..Def::default()
         },
         Def {
+            step_type: ATTACH,
+            method: "attach",
+            label: "開いているブラウザを使う",
+            description: "Uses a browser the person started on this PC instead of opening a new one: its tabs, logins, client certificates and extensions (for sites only reachable from the person's browser, e.g. with SSO). The browser must be started with a debugging port and its own profile folder, e.g. msedge.exe --remote-debugging-port=9222 --user-data-dir=\"%LOCALAPPDATA%\\Shikigami\\edge-profile\" (Edge and Chrome ignore the port on their everyday profile; sign in there once). Only 127.0.0.1 is reached. Later steps on the same `context` work in it; `title` / `url` pick a tab as in browser.switchTab (default: the first tab). The browser is never closed: the run lets go of it when it ends. Output: { url, title }. Fails with BROWSER_NOT_RUNNING when nothing listens on `port`. Not for unattended runs: use browser.open with `session` there.",
+            params: json!({
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "ブラウザを起動したときの --remote-debugging-port（既定 9222）" },
+                "title": { "type": "string", "minLength": 1, "description": "使うタブのタイトルの一部" },
+                "url": { "type": "string", "minLength": 1, "description": "使うタブのアドレスの一部" }
+            }),
+            required: &[],
+            has_output: true,
+            examples: vec![
+                json!({ "type": ATTACH, "name": "開いている Edge の勤怠システムを使う", "params": { "title": "勤怠" } }),
+            ],
+            ..Def::default()
+        },
+        Def {
             step_type: CLICK,
             method: "click",
             label: "クリック",
-            description: "Clicks the element `target` (waits until it is visible and enabled).",
+            description: "Clicks the element `target` (waits until it is visible and enabled). When the click shows a JS dialog (alert / confirm / prompt), set `dialog`: \"accept\" (OK) or \"dismiss\" (Cancel), or { \"action\": \"accept\", \"promptText\": \"…\" } for a prompt; the step then waits for the dialog, answers it and outputs its message (saveAs to read e.g. a receipt number). Without `dialog`, dialogs are dismissed (a confirm is cancelled). A dialog drawn by the page itself is not a JS dialog: click its button. A link or button that opens a new tab or window: follow with browser.switchTab. An element inside an iframe: add `frame` to the target.",
+            params: json!({ "target": target, "dialog": dialog_schema() }),
+            required: &["target"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": CLICK, "name": "ログインする", "params": { "target": { "role": "button", "name": "ログイン" } } }),
+                json!({ "type": CLICK, "name": "削除して確認に OK", "params": { "target": { "role": "button", "name": "削除" }, "dialog": "accept" } }),
+                json!({ "type": CLICK, "name": "フレームの中の検索", "params": { "target": { "role": "button", "name": "検索", "frame": { "name": "main" } } } }),
+            ],
+            ..Def::default()
+        },
+        Def {
+            step_type: DOWNLOAD,
+            method: "download",
+            label: "ダウンロード",
+            description: "Clicks `target` (the link or button that downloads a file, e.g. CSV出力) and saves the file: to `path`, or into `folder` under the name the site gives it (one of the two). Paths are relative to the flow folder, e.g. \"input/受注.csv\" to read it next with file.readCsv or excel.readRows; an existing file is replaced. Output: { path, fileName } (fileName: the site's name). Fails with DOWNLOAD_NOT_STARTED when the click starts no download.",
+            params: json!({
+                "target": target,
+                "path": { "type": "string", "minLength": 1, "description": "保存するファイル（フローのフォルダーからの相対パス可）" },
+                "folder": { "type": "string", "minLength": 1, "description": "保存するフォルダー。名前はサイトが付けたもの" }
+            }),
+            required: &["target"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": DOWNLOAD, "name": "受注の CSV を落とす", "params": { "target": { "role": "button", "name": "CSV出力" }, "path": "input/受注.csv" }, "saveAs": "csv" }),
+                json!({ "type": DOWNLOAD, "name": "請求書を落とす（サイトの名前のまま）", "params": { "target": { "role": "link", "name": "請求書" }, "folder": "output" } }),
+            ],
+            ..Def::default()
+        },
+        Def {
+            step_type: UPLOAD,
+            method: "upload",
+            label: "ファイルを添付",
+            description: "Attaches the file `path` (or a list of files) to the file input `target`, or to the button that opens the file picker (the picker is answered without a window). Paths are relative to the flow folder. It only fills the form: click the send button next. Fails with FILE_NOT_FOUND when a file is missing.",
+            params: json!({
+                "target": target,
+                "path": { "oneOf": [
+                    { "type": "string", "minLength": 1 },
+                    { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+                ], "description": "添付するファイル（複数なら配列）" }
+            }),
+            required: &["target", "path"],
+            has_output: false,
+            examples: vec![
+                json!({ "type": UPLOAD, "name": "請求書を添付", "params": { "target": { "label": "添付ファイル" }, "path": "output/請求書.pdf" } }),
+            ],
+            ..Def::default()
+        },
+        Def {
+            step_type: HOVER,
+            method: "hover",
+            label: "マウスを乗せる",
+            description: "Moves the mouse over `target`, e.g. to open a menu that appears on hover or show a tooltip. Follow with browser.click on the item that appears.",
             params: json!({ "target": target }),
             required: &["target"],
             has_output: false,
             examples: vec![
-                json!({ "type": CLICK, "name": "ログインする", "params": { "target": { "role": "button", "name": "ログイン" } } }),
+                json!({ "type": HOVER, "name": "レポートのメニューを開く", "params": { "target": { "role": "menuitem", "name": "レポート" } } }),
             ],
+            ..Def::default()
+        },
+        Def {
+            step_type: SCROLL,
+            method: "scroll",
+            label: "スクロール",
+            description: "Scrolls. `target` alone: brings it into view (clicks and other steps already do this; use it for lists that load more rows when their end is shown). `to: \"bottom\"` / \"top\" alone: the page. Both: scrolls inside `target` (a box that scrolls by itself). To read a list that grows as it scrolls, repeat scroll + browser.waitFor in control.while.",
+            params: json!({ "target": target, "to": { "enum": ["top", "bottom"], "description": "一番上・一番下まで" } }),
+            required: &[],
+            has_output: false,
+            examples: vec![
+                json!({ "type": SCROLL, "name": "ページの下まで", "params": { "to": "bottom" } }),
+                json!({ "type": SCROLL, "name": "一覧の最後の行を出す", "params": { "target": { "role": "row", "nth": 49 } } }),
+            ],
+            ..Def::default()
+        },
+        Def {
+            step_type: GET_ATTRIBUTE,
+            method: "getAttribute",
+            label: "属性を取得",
+            description: "Reads the attribute `name` of `target` (e.g. href of a link, src of an image, value, data-id). href / src / action come as full addresses. Output: the text, or null when the element has no such attribute. With `all: true`, an array for every matching element. For the text a person sees use browser.getText.",
+            params: json!({ "target": target, "name": { "type": "string", "minLength": 1, "description": "属性の名前（href・src・value・data-id など）" }, "all": { "type": "boolean" } }),
+            required: &["target", "name"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": GET_ATTRIBUTE, "name": "請求書のリンク先", "params": { "target": { "role": "link", "name": "請求書" }, "name": "href" }, "saveAs": "invoiceUrl" }),
+            ],
+            ..Def::default()
+        },
+        Def {
+            step_type: SWITCH_TAB,
+            method: "switchTab",
+            label: "タブを切り替える",
+            description: "Makes another tab or popup window of the browser context current; every later step on this context works on it. Picks the newest tab whose title contains `title` and/or whose address contains `url`, or the `index`-th tab in opening order (0 = the first). Waits for it to open, so put it right after the click that opens a new tab or window. Output: { url, title, index }. Go back with browser.closeTab, or browser.switchTab { index: 0 }; when a popup closes itself, steps return to the tab before it by themselves.",
+            params: json!({
+                "title": { "type": "string", "minLength": 1, "description": "タブのタイトルの一部" },
+                "url": { "type": "string", "minLength": 1, "description": "タブのアドレスの一部" },
+                "index": { "type": "integer", "minimum": 0, "description": "開いた順の番号（0 が最初のタブ）" }
+            }),
+            required: &[],
+            has_output: true,
+            examples: vec![
+                json!({ "type": SWITCH_TAB, "name": "詳細のウィンドウへ", "params": { "title": "受注詳細" } }),
+                json!({ "type": SWITCH_TAB, "name": "最初のタブに戻る", "params": { "index": 0 } }),
+            ],
+            ..Def::default()
+        },
+        Def {
+            step_type: CLOSE_TAB,
+            method: "closeTab",
+            label: "タブを閉じる",
+            description: "Closes the current tab (a popup or a tab opened by a link) and goes back to the tab that was current before it. Output: { url, title } of that tab. The last tab cannot be closed this way (use browser.close).",
+            params: json!({}),
+            required: &[],
+            has_output: true,
+            examples: vec![json!({ "type": CLOSE_TAB, "name": "詳細を閉じて一覧に戻る" })],
             ..Def::default()
         },
         Def {
@@ -460,10 +651,10 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             step_type: PRESS,
             method: "press",
             label: "キー入力",
-            description: "Presses `key` (e.g. Enter, Tab, Control+A) on `target`, or on the page when `target` is omitted.",
-            params: json!({ "key": { "type": "string", "minLength": 1 }, "target": target }),
+            description: "Presses `key` (e.g. Enter, Tab, Control+A) on `target`, or on the page when `target` is omitted. `dialog` answers a JS dialog the key causes, as in browser.click (output: its message).",
+            params: json!({ "key": { "type": "string", "minLength": 1 }, "target": target, "dialog": dialog_schema() }),
             required: &["key"],
-            has_output: false,
+            has_output: true,
             examples: vec![
                 json!({ "type": PRESS, "params": { "target": { "label": "検索" }, "key": "Enter" } }),
             ],
@@ -595,8 +786,13 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
     defs.into_iter()
         .map(|d| {
             let mut resources = vec![ResourceDef::browser_context("context")];
-            if d.step_type == SCREENSHOT {
-                resources.push(ResourceDef::file("path"));
+            match d.step_type {
+                SCREENSHOT | UPLOAD => resources.push(ResourceDef::file("path")),
+                DOWNLOAD => {
+                    resources.push(ResourceDef::file("path"));
+                    resources.push(ResourceDef::file("folder"));
+                }
+                _ => {}
             }
             let oauth = d.step_type == OAUTH_SIGN_IN;
             let targets = if d.step_type == OPEN {
@@ -621,7 +817,9 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 has_output: d.has_output,
                 expression_params: vec![],
                 binds_variables: vec![],
-                risk: if oauth {
+                // Downloads write files; uploads send them out.
+                // Attaching reaches the person's own logins.
+                risk: if oauth || [DOWNLOAD, UPLOAD, ATTACH].contains(&d.step_type) {
                     RiskLevel::Dangerous
                 } else {
                     RiskLevel::Interactive

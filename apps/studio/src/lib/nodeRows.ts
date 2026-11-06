@@ -54,7 +54,7 @@ export function referencedVariables(value: unknown, known: ReadonlySet<string>):
 const EXPRESSION_KEYS = new Set(["condition", "expression", "items", "count"]);
 
 function display(key: string, value: unknown): string {
-  if (key === "target") return targetText(value);
+  if (key === "target" || key === "to") return targetText(value);
   const text =
     typeof value !== "string"
       ? formatValue(value)

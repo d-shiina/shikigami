@@ -15,6 +15,7 @@
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Mutex, mpsc};
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use shikigami_runtime::{BoxFuture, StepError};
@@ -34,27 +35,40 @@ use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
 };
+use windows::Win32::UI::Input::Ime::ImmGetDefaultIMEWnd;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT,
+    GetDoubleClickTime, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT,
     KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSE_EVENT_FLAGS,
-    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
-    MOUSEEVENTF_RIGHTUP, MOUSEINPUT, SendInput, VIRTUAL_KEY,
+    MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE,
+    MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
+    VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    BM_CLICK, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, PostMessageW, SW_RESTORE,
-    SetCursorPos, SetForegroundWindow, ShowWindow, WM_CLOSE,
+    BM_CLICK, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId,
+    IsIconic, PostMessageW, SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_RESTORE, SendMessageTimeoutW,
+    SetCursorPos, SetForegroundWindow, ShowWindow, WM_CLOSE, WM_IME_CONTROL,
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
-use crate::backend::{Backend, Capture, MouseButton, OcrEngine, OcrOptions, Op, Text};
+use crate::backend::{
+    Backend, Capture, Direction, MouseButton, OcrEngine, OcrOptions, Op, ScrollUnit, Text,
+};
 use crate::bitmap::{Bitmap, Rect};
+use crate::bridge::AppBridge;
 use crate::capture;
 use crate::engine::Engine;
+use crate::jab::JavaWindow;
+use crate::keys;
 use crate::keys::{Chord, Key};
+use crate::menu;
+use crate::overlay::{Input, Overlay, Raw, held_now};
 use crate::roles;
+use crate::sap::SapWindow;
+use crate::sapgui;
+use crate::table::{self, GRID_ROLES, Grid};
 use crate::target::{
-    ElementQuery, NodeInfo, Target, WindowInfo, WindowQuery, app_allowed, pick_element,
-    pick_window, render_tree,
+    ElementQuery, NodeInfo, Point, Target, WindowInfo, WindowQuery, app_allowed, describe,
+    pick_element, pick_window, picked_target, render_tree,
 };
 use crate::vision::OcrLine;
 
@@ -315,6 +329,10 @@ impl Uia {
     }
 
     fn run(&self, op: Op) -> Result<Value, StepError> {
+        let op = match self.via_app(op)? {
+            Routed::Done(result) => return Ok(result),
+            Routed::Uia(op) => *op,
+        };
         match op {
             Op::ListWindows => self.list_windows(),
             Op::Inspect {
@@ -335,7 +353,236 @@ impl Uia {
             Op::Type { target, text } => self.type_text(&target, &text),
             Op::Press { target, chord } => self.press(&target, &chord),
             Op::CloseWindow { target } => self.close_window(&target),
+            Op::Scroll {
+                target,
+                direction,
+                amount,
+                unit,
+            } => self.scroll(&target, direction, amount, unit),
+            Op::Wheel {
+                target,
+                direction,
+                notches,
+            } => self.wheel(&target, direction, notches),
+            Op::Drag { from, to } => self.drag(&from, &to),
+            Op::Hover { target } => self.hover(&target),
+            Op::Menu { target, path } => self.menu(&target, &path),
+            Op::Pick {
+                message,
+                timeout_ms,
+            } => self.pick(message, timeout_ms),
+            Op::Highlight { target, ms } => self.highlight(&target, ms),
+            Op::Record {
+                title,
+                hint,
+                timeout_ms,
+            } => self.record(&title, hint, timeout_ms),
+            Op::GetTable { target, max_rows } => self.get_table(&target, max_rows),
+            Op::SapTransaction { target, .. } => {
+                let (_, window, _) = self.find_window(&target.window)?;
+                Err(match Engine::of(&window) {
+                    Engine::SapGui => sap_scripting_off(),
+                    _ => StepError::permanent(
+                        "NOT_SAP_WINDOW",
+                        format!("'{}' is not a SAP GUI window", window.title),
+                    )
+                    .with_details(json!({ "hint": "Target the SAP GUI window (inspect_ui lists it with app sapgui)." })),
+                })
+            }
         }
+    }
+
+    // -- SAP GUI and Java ---------------------------------------------------------
+
+    /// How the window `query` names is reached: through SAP GUI Scripting
+    /// or Java Access Bridge when it belongs to such an app and the way in
+    /// works, otherwise through UI Automation.
+    fn reach(&self, query: &WindowQuery) -> Reach {
+        let Ok((el, window, _)) = self.find_window(query) else {
+            return Reach::Uia;
+        };
+        match Engine::of(&window) {
+            Engine::Uia => Reach::Uia,
+            Engine::SapGui => match SapWindow::attach(window.handle) {
+                Some(sap) => Reach::Bridge(Box::new(sap), window, el),
+                None => Reach::Unreachable(sap_scripting_off()),
+            },
+            Engine::Java => match JavaWindow::attach(&window) {
+                Ok(java) => Reach::Bridge(Box::new(java), window, el),
+                Err(e) => Reach::Unreachable(e),
+            },
+        }
+    }
+
+    /// Carries out `op` through SAP GUI Scripting or Java Access Bridge
+    /// when its window is such an app, or hands it (perhaps changed: an
+    /// element turned into its place on the screen) back to UI Automation.
+    fn via_app(&self, op: Op) -> Result<Routed, StepError> {
+        let window = match &op {
+            Op::ListWindows | Op::Pick { .. } | Op::Highlight { .. } | Op::Record { .. } => {
+                return Ok(Routed::Uia(Box::new(op)));
+            }
+            Op::Inspect { window, .. } => window,
+            Op::Drag { from, .. } => &from.window,
+            Op::Probe { target }
+            | Op::Click { target }
+            | Op::SetValue { target, .. }
+            | Op::GetValue { target }
+            | Op::Select { target, .. }
+            | Op::MouseClick { target, .. }
+            | Op::Type { target, .. }
+            | Op::Press { target, .. }
+            | Op::CloseWindow { target }
+            | Op::Scroll { target, .. }
+            | Op::Wheel { target, .. }
+            | Op::Hover { target }
+            | Op::Menu { target, .. }
+            | Op::GetTable { target, .. }
+            | Op::SapTransaction { target, .. } => &target.window,
+        };
+        let (app, info, window_el) = match self.reach(window) {
+            Reach::Uia => return Ok(Routed::Uia(Box::new(op))),
+            Reach::Unreachable(e) => {
+                // Elements only the way in could see: say how to open it.
+                // The window itself, pictures and inspect_ui (with a note)
+                // still work through UI Automation.
+                let named = op_target(&op).and_then(|t| t.element.as_ref());
+                let blocked = match e.code.as_str() {
+                    "SAP_SCRIPTING_OFF" => named
+                        .and_then(|e| e.id.as_deref())
+                        .is_some_and(sapgui::looks_like_component_id),
+                    _ => named.is_some() && !matches!(op, Op::Probe { .. }),
+                };
+                if blocked {
+                    return Err(e);
+                }
+                return Ok(Routed::Uia(Box::new(op)));
+            }
+            Reach::Bridge(app, info, el) => (app, info, el),
+        };
+        let app = app.as_ref();
+        let done = Routed::Done;
+        Ok(match op {
+            Op::Inspect {
+                element, max_nodes, ..
+            } => {
+                let mut result = app.inspect(max_nodes, element.as_ref())?;
+                result["app"] = json!(app.app());
+                result["window"] = json!({ "title": info.title, "process": info.process, "className": info.class_name });
+                done(result)
+            }
+            Op::SapTransaction { code, .. } => done(app.transaction(&code)?),
+            Op::GetTable { target, max_rows } => {
+                done(app.table(target.element.as_ref(), max_rows)?)
+            }
+            Op::Menu { target, path } => {
+                if target.element.is_some() {
+                    return Err(StepError::permanent(
+                        "NOT_SUPPORTED",
+                        "in SAP GUI and Java apps desktop.selectMenu walks the menu bar only",
+                    )
+                    .with_details(json!({ "hint": "Open it with desktop.mouseClick (button: right), then click its item with desktop.mouseClick and target.ocr, or use the menu bar path." })));
+                }
+                done(app.menu(&path)?)
+            }
+            op => {
+                let Some(element) = op_target(&op).and_then(|t| t.element.clone()) else {
+                    // The window itself: UI Automation acts on it.
+                    return Ok(Routed::Uia(Box::new(op)));
+                };
+                match op {
+                    Op::Probe { .. } => done(app.probe(&element)),
+                    Op::Click { .. } => done(app.click(&element)?),
+                    Op::SetValue { text, .. } => {
+                        check_app(&text, &info)?;
+                        done(app.set_value(&element, &text)?)
+                    }
+                    Op::GetValue { .. } => done(app.get_value(&element)?),
+                    Op::Select { option, .. } => done(app.select(&element, &option)?),
+                    Op::Press { target, chord } => {
+                        app.focus(&element)?;
+                        match app.press(&chord) {
+                            Some(result) => done(result?),
+                            None => Routed::Uia(Box::new(Op::Press {
+                                target: target.window_part_only(),
+                                chord,
+                            })),
+                        }
+                    }
+                    Op::Type { target, text } => {
+                        check_app(&text, &info)?;
+                        app.focus(&element)?;
+                        Routed::Uia(Box::new(Op::Type {
+                            target: target.window_part_only(),
+                            text,
+                        }))
+                    }
+                    Op::Scroll {
+                        direction: None, ..
+                    } => {
+                        app.focus(&element)?;
+                        done(
+                            json!({ "verticalPercent": null, "horizontalPercent": null, "atEnd": false }),
+                        )
+                    }
+                    Op::Scroll { .. } => {
+                        return Err(StepError::permanent(
+                            "NOT_SUPPORTED",
+                            "SAP GUI and Java tables are not scrolled by desktop.scroll",
+                        )
+                        .with_details(json!({ "hint": "desktop.getTable reads a whole SAP table, ALV grid or Java table; otherwise use desktop.mouseScroll or desktop.press with PageDown." })));
+                    }
+                    Op::MouseClick {
+                        target,
+                        button,
+                        double,
+                    } => Routed::Uia(Box::new(Op::MouseClick {
+                        target: self.app_point(app, &target, &window_el)?,
+                        button,
+                        double,
+                    })),
+                    Op::Wheel {
+                        target,
+                        direction,
+                        notches,
+                    } => Routed::Uia(Box::new(Op::Wheel {
+                        target: self.app_point(app, &target, &window_el)?,
+                        direction,
+                        notches,
+                    })),
+                    Op::Hover { target } => Routed::Uia(Box::new(Op::Hover {
+                        target: self.app_point(app, &target, &window_el)?,
+                    })),
+                    Op::Drag { from, to } => Routed::Uia(Box::new(Op::Drag {
+                        from: self.app_point(app, &from, &window_el)?,
+                        to,
+                    })),
+                    op => Routed::Uia(Box::new(op)),
+                }
+            }
+        })
+    }
+
+    /// A target naming an element of a SAP GUI or Java window, as the
+    /// place at its centre.
+    fn app_point(
+        &self,
+        app: &dyn AppBridge,
+        target: &Target,
+        window_el: &IUIAutomationElement,
+    ) -> Result<Target, StepError> {
+        let Some(element) = &target.element else {
+            return Ok(target.clone());
+        };
+        let (left, top, width, height) = app.screen_rect(element)?;
+        // SAFETY: UIA calls on the UIA thread.
+        let rect = unsafe { window_el.CurrentBoundingRectangle() }.or_fail()?;
+        let mut at = target.window_part_only();
+        at.point = Some(crate::target::Point {
+            x: left + width / 2 - rect.left,
+            y: top + height / 2 - rect.top,
+        });
+        Ok(at)
     }
 
     // -- finding ----------------------------------------------------------------
@@ -516,6 +763,480 @@ impl Uia {
             }
             Err(e) => Err(e),
         }
+    }
+
+    // -- pointing on screen ----------------------------------------------------------
+
+    /// Lets the user point at an element (see `Op::Pick`).
+    fn pick(&self, message: Option<String>, timeout_ms: u64) -> Result<Value, StepError> {
+        let message = message.unwrap_or_else(|| "Click the part to pick (Esc to cancel)".into());
+        let overlay = Overlay::pick(message)?;
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        // SAFETY: plain Win32 call.
+        let own = unsafe { GetCurrentProcessId() };
+        let mut shown: Option<(i32, i32, i32, i32)> = None;
+        let clicked = loop {
+            match overlay.take_input() {
+                Some(Input::Clicked(pt)) => break pt,
+                Some(Input::Cancelled) => return Ok(json!({ "cancelled": true })),
+                None => {}
+            }
+            if Instant::now() >= deadline {
+                return Ok(json!({ "cancelled": true, "timedOut": true }));
+            }
+            let mut pt = POINT::default();
+            // SAFETY: UIA / Win32 calls on the UIA thread.
+            let under = unsafe {
+                GetCursorPos(&mut pt)
+                    .ok()
+                    .and_then(|()| self.automation.ElementFromPoint(pt).ok())
+            };
+            if let Some(el) = under {
+                // SAFETY: reading the element's current properties.
+                let (pid, rect) = unsafe {
+                    (
+                        el.CurrentProcessId().unwrap_or(0) as u32,
+                        el.CurrentBoundingRectangle().ok(),
+                    )
+                };
+                if let Some(rect) = rect.filter(|_| pid != own) {
+                    let key = (rect.left, rect.top, rect.right, rect.bottom);
+                    if shown != Some(key) {
+                        shown = Some(key);
+                        overlay.frame(Some(rect));
+                        overlay.detail(self.describe_live(&el));
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        };
+        // The frame must not be under the click when it is looked up.
+        drop(overlay);
+        self.picked_at(clicked)
+    }
+
+    /// `button "保存"` for the banner, without building a cache.
+    fn describe_live(&self, el: &IUIAutomationElement) -> String {
+        // SAFETY: reading the element's current properties on the UIA thread.
+        unsafe {
+            let role = roles::of_control_type(el.CurrentControlType().map(|t| t.0).unwrap_or(0));
+            let name = el.CurrentName().map(|b| b.to_string()).unwrap_or_default();
+            let id = el
+                .CurrentAutomationId()
+                .map(|b| b.to_string())
+                .unwrap_or_default();
+            let mut line = role.to_owned();
+            if !name.trim().is_empty() {
+                line.push_str(&format!(" \u{300c}{}\u{300d}", name.trim()));
+            }
+            if !id.is_empty() {
+                line.push_str(&format!(" id={id}"));
+            }
+            line
+        }
+    }
+
+    /// The target for the element at `pt` on screen.
+    fn picked_at(&self, pt: POINT) -> Result<Value, StepError> {
+        // SAFETY: UIA call on the UIA thread.
+        let el = unsafe { self.automation.ElementFromPoint(pt).or_fail()? };
+        self.picked(&el, pt)
+    }
+
+    /// The target for `el`; `pt` (on screen) is where to point when it has
+    /// nothing better.
+    fn picked(&self, el: &IUIAutomationElement, pt: POINT) -> Result<Value, StepError> {
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            let root = self.automation.GetRootElement().or_fail()?;
+            let walker = self.automation.ControlViewWalker().or_fail()?;
+            // The top-level window: the last element before the desktop.
+            let mut top = el.clone();
+            let mut chain = vec![el.clone()];
+            for _ in 0..200 {
+                let Ok(parent) = walker.GetParentElement(&top) else {
+                    break;
+                };
+                if self
+                    .automation
+                    .CompareElements(&parent, &root)
+                    .map(|b| b.as_bool())
+                    .unwrap_or(true)
+                {
+                    break;
+                }
+                chain.push(parent.clone());
+                top = parent;
+            }
+            let windows = self.windows()?;
+            let same = |a: &IUIAutomationElement, b: &IUIAutomationElement| {
+                self.automation
+                    .CompareElements(a, b)
+                    .map(|b| b.as_bool())
+                    .unwrap_or(false)
+            };
+            let Some(window) = windows.iter().position(|(w, _, _)| same(w, &top)) else {
+                return Err(StepError::new(
+                    "WINDOW_NOT_FOUND",
+                    "the place clicked is not in an app window",
+                ));
+            };
+            let (window_el, info, _) = &windows[window];
+            if !self.elevated && is_elevated(info.pid) == Some(true) {
+                return Err(elevation_error());
+            }
+            let tree = self.tree(window_el, FIND_LIMIT)?;
+            // The element itself, else its nearest ancestor in the tree.
+            let element = chain
+                .iter()
+                .find_map(|link| tree.iter().position(|(t, _)| same(t, link)))
+                .filter(|&i| i > 0);
+            let window_rect = window_el.CurrentBoundingRectangle().or_fail()?;
+            let point = Point {
+                x: pt.x - window_rect.left,
+                y: pt.y - window_rect.top,
+            };
+            let infos: Vec<WindowInfo> = windows.iter().map(|(_, w, _)| w.clone()).collect();
+            let nodes: Vec<NodeInfo> = tree.iter().map(|(_, n)| n.clone()).collect();
+            let picked = picked_target(&infos, window, &nodes, element, point);
+            let rect = match element {
+                Some(i) => tree[i].0.CurrentBoundingRectangle().unwrap_or(window_rect),
+                None => window_rect,
+            };
+            let label = element.map_or_else(|| info.title.clone(), |i| describe(&nodes[i]));
+            let mut result = json!({
+                "target": picked.target,
+                "how": picked.how,
+                "label": label,
+                "window": { "title": info.title, "process": info.process },
+                "rect": { "x": rect.left, "y": rect.top, "width": rect.right - rect.left, "height": rect.bottom - rect.top },
+            });
+            if picked.how == "point" {
+                result["note"] = json!(
+                    "The part has no id or name, so it is pointed at by its place in the window: it breaks if the layout changes."
+                );
+            }
+            Ok(result)
+        }
+    }
+
+    /// Records what the user does (see `Op::Record`). Each click and
+    /// command key is held back by the hooks until the screen is read (so
+    /// the target is the thing clicked, not what the click opened), then
+    /// sent on to the app.
+    fn record(&self, title: &str, hint: String, timeout_ms: u64) -> Result<Value, StepError> {
+        let life = Duration::from_millis(timeout_ms);
+        let titled = |n: usize| title.replace("{n}", &n.to_string());
+        let overlay = Overlay::record(titled(0), hint, life + Duration::from_secs(60))?;
+        let deadline = Instant::now() + life;
+        // SAFETY: plain Win32 calls.
+        let (own, double_ms, slop) = unsafe {
+            (
+                GetCurrentProcessId(),
+                GetDoubleClickTime(),
+                (GetSystemMetrics(SM_CXDOUBLECLK) / 2).max(2),
+            )
+        };
+        let mut rec = Recorder {
+            actions: Vec::new(),
+            field: None,
+            last_click: None,
+        };
+        let mut timed_out = false;
+        loop {
+            // The last held-back event has been sent on.
+            overlay.processing(false);
+            overlay.beat();
+            if overlay.typed() {
+                self.note_typing(&mut rec, own);
+            }
+            let Some(raw) = overlay.next_raw() else {
+                if Instant::now() >= deadline {
+                    timed_out = true;
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(8));
+                continue;
+            };
+            let before = rec.actions.len();
+            overlay.processing(matches!(raw, Raw::Down { .. } | Raw::Key { .. }));
+            match raw {
+                Raw::Stop => break,
+                Raw::Up { .. } => {}
+                Raw::Pass {
+                    vk,
+                    scan,
+                    extended,
+                    up,
+                } => {
+                    replay_raw_key(vk, scan, extended, up);
+                    if !up && !keys::is_modifier(vk) {
+                        self.note_typing(&mut rec, own);
+                    }
+                }
+                Raw::Down { button, at, time } => {
+                    let up = loop {
+                        if let Some(up) = overlay.take_up(button) {
+                            break up;
+                        }
+                        overlay.beat();
+                        if Instant::now() >= deadline + Duration::from_secs(30) {
+                            break at;
+                        }
+                        std::thread::sleep(Duration::from_millis(4));
+                    };
+                    // The second click of a double click: sent on at once,
+                    // so the app sees a double click.
+                    if let Some(last) = rec.last_click.take()
+                        && last.button == button
+                        && time.wrapping_sub(last.time) <= double_ms
+                        && (at.x - last.at.x).abs() <= slop
+                        && (at.y - last.at.y).abs() <= slop
+                    {
+                        replay_click(button, at, up);
+                        if let Some(action) = last.action.and_then(|i| rec.actions.get_mut(i)) {
+                            action["double"] = json!(true);
+                        }
+                        continue;
+                    }
+                    self.flush_field(&mut rec);
+                    let action = self.clicked(own, button, at, up, slop);
+                    replay_click(button, at, up);
+                    let index = action.map(|a| {
+                        rec.actions.push(a);
+                        rec.actions.len() - 1
+                    });
+                    rec.last_click = Some(LastClick {
+                        button,
+                        at,
+                        time,
+                        action: index,
+                    });
+                }
+                Raw::Key { vk, extended, held } => {
+                    // SAFETY: UIA call on the UIA thread.
+                    let focused = unsafe { self.automation.GetFocusedElement().ok() };
+                    let theirs = focused.as_ref().filter(|el| element_pid(el) != own);
+                    let field = theirs.filter(|el| editable(el));
+                    let typing_here = field
+                        .is_some_and(|el| rec.field.as_ref().is_some_and(|f| self.same(f, el)));
+                    if let Some(el) = field
+                        && (keys::is_text_edit(vk, held)
+                            || (typing_here && keys::is_ime_key(vk, held, ime_open())))
+                    {
+                        // Paste, undo, kana conversion…: part of the typing,
+                        // whose text is read when it ends.
+                        replay_key(vk, extended, held);
+                        self.keep_field(&mut rec, el.clone());
+                        continue;
+                    }
+                    if let Some(el) = field
+                        && typing_here
+                        && vk == 0x0D
+                        && held == keys::Held::default()
+                    {
+                        // Enter while typing: confirming the IME's conversion
+                        // changes the text (still typing); otherwise it is
+                        // the Enter key, after the text typed so far.
+                        let typed = self.field_action(el);
+                        let mut press = self.element_action(el);
+                        let ime = ime_open();
+                        replay_key(vk, extended, held);
+                        std::thread::sleep(Duration::from_millis(80));
+                        // Confirming adds the converted text to what was
+                        // there; a submit that clears or closes the field
+                        // does not.
+                        let grew = match (typed["value"].as_str(), value_of(el)) {
+                            (Some(before), Some(after)) => {
+                                after.chars().count() > before.chars().count()
+                            }
+                            _ => false,
+                        };
+                        if ime && grew {
+                            continue;
+                        }
+                        rec.field = None;
+                        push_field(&mut rec, typed);
+                        press["kind"] = json!("press");
+                        press["key"] = json!("Enter");
+                        rec.actions.push(press);
+                        overlay.title(titled(rec.actions.len()));
+                        continue;
+                    }
+                    self.flush_field(&mut rec);
+                    if let (Some(el), Some(name)) = (theirs, keys::name(vk, held)) {
+                        let mut action = self.element_action(el);
+                        action["kind"] = json!("press");
+                        action["key"] = json!(name);
+                        rec.actions.push(action);
+                    }
+                    replay_key(vk, extended, held);
+                }
+            }
+            if rec.actions.len() != before {
+                overlay.title(titled(rec.actions.len()));
+            }
+        }
+        self.flush_field(&mut rec);
+        drop(overlay);
+        Ok(json!({
+            "status": if timed_out { "timedOut" } else { "stopped" },
+            "actions": rec.actions,
+        }))
+    }
+
+    /// What a click at `at` (released at `up`) was, before the app sees it:
+    /// `None` for a click on Studio itself.
+    fn clicked(
+        &self,
+        own: u32,
+        button: MouseButton,
+        at: POINT,
+        up: POINT,
+        slop: i32,
+    ) -> Option<Value> {
+        // SAFETY: UIA call on the UIA thread.
+        let el = unsafe { self.automation.ElementFromPoint(at).ok()? };
+        if element_pid(&el) == own {
+            return None;
+        }
+        let button = match button {
+            MouseButton::Left => "left",
+            MouseButton::Right => "right",
+        };
+        if (up.x - at.x).abs() > slop * 2 || (up.y - at.y).abs() > slop * 2 {
+            return Some(json!({
+                "kind": "drag",
+                "button": button,
+                "from": { "x": at.x, "y": at.y },
+                "to": { "x": up.x, "y": up.y },
+            }));
+        }
+        let mut action = match self.picked(&el, at) {
+            Ok(picked) => picked,
+            Err(e) => json!({ "failed": { "code": e.code, "message": e.message } }),
+        };
+        action["kind"] = json!("click");
+        action["button"] = json!(button);
+        action["double"] = json!(false);
+        if editable(&el) {
+            action["editable"] = json!(true);
+        }
+        Some(action)
+    }
+
+    /// `{ target, how, label, window, rect }` for an element (a field, the
+    /// focus when a key was pressed).
+    fn element_action(&self, el: &IUIAutomationElement) -> Value {
+        // SAFETY: UIA call on the UIA thread.
+        let rect = unsafe { el.CurrentBoundingRectangle().ok() };
+        let pt = rect.and_then(|r| center(r).ok()).unwrap_or_default();
+        self.picked(el, pt)
+            .unwrap_or_else(|e| json!({ "failed": { "code": e.code, "message": e.message } }))
+    }
+
+    /// A typing key went down: the focused field is the one being typed in.
+    fn note_typing(&self, rec: &mut Recorder, own: u32) {
+        // SAFETY: UIA call on the UIA thread.
+        let Some(el) = (unsafe { self.automation.GetFocusedElement().ok() }) else {
+            return;
+        };
+        if element_pid(&el) != own {
+            self.keep_field(rec, el);
+        }
+    }
+
+    fn keep_field(&self, rec: &mut Recorder, el: IUIAutomationElement) {
+        let same = rec.field.as_ref().is_some_and(|f| self.same(f, &el));
+        if !same {
+            self.flush_field(rec);
+            rec.field = Some(el);
+        }
+    }
+
+    /// The text typed into the field so far, as one `setValue`.
+    fn flush_field(&self, rec: &mut Recorder) {
+        let Some(el) = rec.field.take() else {
+            return;
+        };
+        let action = self.field_action(&el);
+        push_field(rec, action);
+    }
+
+    /// `setValue` with the field's text now (never a password's).
+    fn field_action(&self, el: &IUIAutomationElement) -> Value {
+        let mut action = self.element_action(el);
+        // SAFETY: UIA call on the UIA thread.
+        let password = unsafe { el.CurrentIsPassword().map(|b| b.as_bool()).unwrap_or(false) };
+        if password {
+            action["password"] = json!(true);
+        } else {
+            match value_of(el) {
+                Some(value) => action["value"] = json!(value),
+                None => action["unread"] = json!(true),
+            }
+        }
+        action["kind"] = json!("setValue");
+        action
+    }
+
+    fn same(&self, a: &IUIAutomationElement, b: &IUIAutomationElement) -> bool {
+        // SAFETY: UIA call on the UIA thread.
+        unsafe {
+            self.automation
+                .CompareElements(a, b)
+                .map(|b| b.as_bool())
+                .unwrap_or(false)
+        }
+    }
+
+    /// Frames the target on screen (see `Op::Highlight`).
+    fn highlight(&self, target: &Target, ms: u64) -> Result<Value, StepError> {
+        let found = match self.resolve(&target.window_part()) {
+            Ok(found) => found,
+            Err(e)
+                if matches!(
+                    e.code.as_str(),
+                    "WINDOW_NOT_FOUND" | "ELEMENT_NOT_FOUND" | "ELEMENT_GONE"
+                ) =>
+            {
+                return Ok(json!({ "found": false, "code": e.code, "message": e.message }));
+            }
+            Err(e) => return Err(e),
+        };
+        // SAFETY: UIA calls on the UIA thread.
+        let rect = unsafe {
+            let window = found.window_el.CurrentBoundingRectangle().or_fail()?;
+            if let Some(p) = target.point {
+                const HALF: i32 = 12;
+                let (x, y) = (window.left + p.x, window.top + p.y);
+                RECT {
+                    left: x - HALF,
+                    top: y - HALF,
+                    right: x + HALF,
+                    bottom: y + HALF,
+                }
+            } else if let Some(r) = &target.region {
+                let (x, y) = (window.left + r.x, window.top + r.y);
+                RECT {
+                    left: x,
+                    top: y,
+                    right: x + r.width as i32,
+                    bottom: y + r.height as i32,
+                }
+            } else {
+                found.el.CurrentBoundingRectangle().or_fail()?
+            }
+        };
+        if rect.right <= rect.left || rect.bottom <= rect.top {
+            return Ok(json!({ "found": true, "visible": false }));
+        }
+        Overlay::flash(rect, Duration::from_millis(ms))?;
+        Ok(json!({
+            "found": true,
+            "visible": true,
+            "rect": { "x": rect.left, "y": rect.top, "width": rect.right - rect.left, "height": rect.bottom - rect.top },
+        }))
     }
 
     // -- acting without the mouse -------------------------------------------------
@@ -708,6 +1429,343 @@ impl Uia {
         Ok(Value::Null)
     }
 
+    // -- scrolling and menus --------------------------------------------------------
+
+    fn scroll(
+        &self,
+        target: &Target,
+        direction: Option<Direction>,
+        amount: u32,
+        unit: ScrollUnit,
+    ) -> Result<Value, StepError> {
+        let found = self.resolve(target)?;
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            let Some(direction) = direction else {
+                if !found.is_element {
+                    return Err(StepError::invalid_params(
+                        "without direction, target.element names what to bring into view; add direction (up, down, top, bottom, ...) to scroll the window",
+                    ));
+                }
+                let p = pattern::<IUIAutomationScrollItemPattern>(
+                    &found.el,
+                    UIA_ScrollItemPatternId,
+                )
+                .map_err(|_| {
+                    StepError::permanent(
+                        "NOT_SUPPORTED",
+                        format!("the {} cannot be scrolled into view", found.node.role),
+                    )
+                    .with_details(json!({
+                        "hint": "Scroll its list or pane instead: target that and add direction (e.g. down), or use desktop.mouseScroll."
+                    }))
+                })?;
+                p.ScrollIntoView().map_err(action_error)?;
+                return Ok(match self.scroller(&found.el) {
+                    Some(s) => scroll_state(&s, None),
+                    None => {
+                        json!({ "verticalPercent": null, "horizontalPercent": null, "atEnd": false })
+                    }
+                });
+            };
+            let scroller = self.scroller(&found.el).ok_or_else(|| {
+                StepError::permanent(
+                    "NOT_SUPPORTED",
+                    format!("the {} has nothing to scroll", found.node.role),
+                )
+                .with_details(json!({
+                    "hint": "Target the list, table or pane that scrolls (inspect_ui), or use desktop.mouseScroll or desktop.press with PageDown."
+                }))
+            })?;
+            match direction {
+                Direction::Top | Direction::Bottom => {
+                    if scroller
+                        .CurrentVerticallyScrollable()
+                        .is_ok_and(|b| b.as_bool())
+                    {
+                        let to = if direction == Direction::Top {
+                            0.0
+                        } else {
+                            100.0
+                        };
+                        scroller
+                            .SetScrollPercent(UIA_ScrollPatternNoScroll, to)
+                            .map_err(action_error)?;
+                    }
+                }
+                _ => {
+                    let (forward, backward) = match unit {
+                        ScrollUnit::Page => {
+                            (ScrollAmount_LargeIncrement, ScrollAmount_LargeDecrement)
+                        }
+                        ScrollUnit::Line => {
+                            (ScrollAmount_SmallIncrement, ScrollAmount_SmallDecrement)
+                        }
+                    };
+                    let percent = || scroll_percent(&scroller, direction.is_vertical());
+                    for _ in 0..amount {
+                        if scroll_state(&scroller, Some(direction))["atEnd"] == json!(true) {
+                            break;
+                        }
+                        let before = percent();
+                        let (h, v) = match direction {
+                            Direction::Down => (ScrollAmount_NoAmount, forward),
+                            Direction::Up => (ScrollAmount_NoAmount, backward),
+                            Direction::Right => (forward, ScrollAmount_NoAmount),
+                            _ => (backward, ScrollAmount_NoAmount),
+                        };
+                        scroller.Scroll(h, v).map_err(action_error)?;
+                        // A scroll that moved nothing is at its end, whatever
+                        // percentage the app reports there.
+                        if percent() == before {
+                            let mut state = scroll_state(&scroller, Some(direction));
+                            state["atEnd"] = json!(true);
+                            return Ok(state);
+                        }
+                    }
+                }
+            }
+            Ok(scroll_state(&scroller, Some(direction)))
+        }
+    }
+
+    // -- tables -----------------------------------------------------------------------
+
+    /// Reads a grid cell by cell where it supports the Grid pattern (all
+    /// rows, also those scrolled out of view), otherwise from its element
+    /// tree.
+    fn get_table(&self, target: &Target, max_rows: usize) -> Result<Value, StepError> {
+        let found = self.resolve(target)?;
+        let el = self.find_grid(&found)?;
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            if let Ok(grid) = pattern::<IUIAutomationGridPattern>(&el, UIA_GridPatternId) {
+                let rows = grid.CurrentRowCount().or_fail()?.max(0) as usize;
+                let cols = grid.CurrentColumnCount().or_fail()?.max(0) as usize;
+                if cols > 0 {
+                    let take = rows.min(max_rows);
+                    let mut cells = Vec::with_capacity(take);
+                    for r in 0..take {
+                        let row: Vec<String> = (0..cols)
+                            .map(|c| {
+                                grid.GetItem(r as i32, c as i32)
+                                    .map(|cell| cell_text(&cell))
+                                    .unwrap_or_default()
+                            })
+                            .collect();
+                        cells.push(row);
+                    }
+                    let mut grid = Grid {
+                        headers: self.column_headers(&el, cols)?,
+                        rows: cells,
+                        truncated: rows > max_rows,
+                    };
+                    grid.drop_blank_columns();
+                    return Ok(grid.to_json());
+                }
+            }
+        }
+        let nodes: Vec<NodeInfo> = self
+            .tree(&el, FIND_LIMIT)?
+            .into_iter()
+            .map(|(_, n)| n)
+            .collect();
+        let mut grid = table::grid_from_nodes(&nodes, max_rows);
+        if nodes.len() >= FIND_LIMIT && !grid.truncated {
+            // The walk stopped before the table's end: the last row may be
+            // cut short, and more rows were left out.
+            grid.rows.pop();
+            grid.truncated = true;
+        }
+        Ok(grid.to_json())
+    }
+
+    /// The grid the target names, or the first one in it (tables and grids
+    /// before lists).
+    fn find_grid(&self, found: &Found) -> Result<IUIAutomationElement, StepError> {
+        if found.is_element && GRID_ROLES.contains(&found.node.role) {
+            return Ok(found.el.clone());
+        }
+        let tree = self.tree(&found.el, FIND_LIMIT)?;
+        let first = |roles: &[&str]| {
+            tree.iter()
+                .find(|(_, n)| roles.contains(&n.role) && !n.offscreen)
+                .map(|(el, _)| el.clone())
+        };
+        first(&["table", "grid"])
+            .or_else(|| first(&["list"]))
+            .ok_or_else(|| {
+                StepError::new("ELEMENT_NOT_FOUND", "no table, grid or list is shown there")
+                    .with_details(json!({
+                        "hint": "Check inspect_ui for an element with role table, grid or list and target it with element. Grids drawn by the app itself can only be read with desktop.readText."
+                    }))
+            })
+    }
+
+    /// Column names from the Table pattern, or the header items in the
+    /// grid's tree.
+    fn column_headers(
+        &self,
+        el: &IUIAutomationElement,
+        cols: usize,
+    ) -> Result<Vec<String>, StepError> {
+        // SAFETY: UIA calls on the UIA thread.
+        let from_pattern: Vec<String> = unsafe {
+            pattern::<IUIAutomationTablePattern>(el, UIA_TablePatternId)
+                .and_then(|t| t.GetCurrentColumnHeaders())
+                .map(|headers| {
+                    (0..headers.Length().unwrap_or(0))
+                        .filter_map(|i| headers.GetElement(i).ok())
+                        .map(|h| h.CurrentName().map(|n| n.to_string()).unwrap_or_default())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        if from_pattern.iter().any(|h| !h.trim().is_empty()) {
+            return Ok(from_pattern);
+        }
+        let headers: Vec<String> = self
+            .tree(el, FIND_LIMIT)?
+            .into_iter()
+            .filter(|(_, n)| n.role == "columnheader")
+            .map(|(_, n)| n.name)
+            .take(cols)
+            .collect();
+        Ok(headers)
+    }
+
+    /// The scroll pattern of `el` or of the nearest element around it that
+    /// can scroll.
+    fn scroller(&self, el: &IUIAutomationElement) -> Option<IUIAutomationScrollPattern> {
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            let walker = self.automation.ControlViewWalker().ok()?;
+            let mut current = el.clone();
+            for _ in 0..32 {
+                if let Ok(p) = pattern::<IUIAutomationScrollPattern>(&current, UIA_ScrollPatternId)
+                    && (p.CurrentVerticallyScrollable().is_ok_and(|b| b.as_bool())
+                        || p.CurrentHorizontallyScrollable().is_ok_and(|b| b.as_bool()))
+                {
+                    return Some(p);
+                }
+                current = walker.GetParentElement(&current).ok()?;
+            }
+            None
+        }
+    }
+
+    fn menu(&self, target: &Target, path: &[String]) -> Result<Value, StepError> {
+        let found = self.resolve_enabled(target)?;
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            if found.is_element {
+                let opened = found
+                    .el
+                    .cast::<IUIAutomationElement3>()
+                    .and_then(|el| el.ShowContextMenu());
+                if opened.is_err() {
+                    return Err(StepError::permanent(
+                        "NOT_SUPPORTED",
+                        format!("the {} does not open its context menu without the mouse", found.node.role),
+                    )
+                    .with_details(json!({
+                        "hint": "Open it with desktop.mouseClick (button: right) on the same target, then desktop.selectMenu with only target.window and the same path."
+                    })));
+                }
+            }
+            let mut parent: Option<IUIAutomationElement> = None;
+            for (i, name) in path.iter().enumerate() {
+                let (item, info) = self.wait_menu_item(&found, name, parent.as_ref())?;
+                let last = i + 1 == path.len();
+                activate_menu_item(&item, &info, last)?;
+                parent = Some(item);
+            }
+        }
+        Ok(Value::Null)
+    }
+
+    /// The shown menu item `name`, waiting a little for its menu to open.
+    fn wait_menu_item(
+        &self,
+        found: &Found,
+        name: &str,
+        parent: Option<&IUIAutomationElement>,
+    ) -> Result<(IUIAutomationElement, NodeInfo), StepError> {
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let mut items = self.menu_items(found, parent)?;
+            let infos: Vec<menu::Item> = items.iter().map(|(_, _, item)| item.clone()).collect();
+            match menu::pick(name, &infos) {
+                Ok(i) if !items[i].2.enabled => {
+                    return Err(StepError::permanent(
+                        "ELEMENT_DISABLED",
+                        format!("the menu item '{}' is greyed out", items[i].2.name),
+                    )
+                    .with_details(json!({ "hint": "The app does not allow it on this screen now; check the state before this step." })));
+                }
+                Ok(i) => {
+                    let (el, node, _) = items.swap_remove(i);
+                    return Ok((el, node));
+                }
+                Err(e) if e.code == "MENU_ITEM_NOT_FOUND" && std::time::Instant::now() < until => {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// The menu items shown now: in menus that popped up (other top-level
+    /// windows of the app, and under the item just opened) and in the
+    /// window itself (its menu bar), without duplicates.
+    fn menu_items(
+        &self,
+        found: &Found,
+        parent: Option<&IUIAutomationElement>,
+    ) -> Result<Vec<(IUIAutomationElement, NodeInfo, menu::Item)>, StepError> {
+        let mut roots: Vec<(IUIAutomationElement, bool)> = self
+            .windows()?
+            .into_iter()
+            // Only the app's open popup menus (Win32 menus, WinForms and
+            // WPF drop-downs), not its other windows with their own menu
+            // bars.
+            .filter(|(_, w, node)| {
+                w.pid == found.window.pid
+                    && w.handle != found.window.handle
+                    && (node.role == "menu" || matches!(w.class_name.as_str(), "#32768" | "Popup"))
+            })
+            .map(|(el, _, _)| (el, true))
+            .collect();
+        if let Some(parent) = parent {
+            roots.push((parent.clone(), true));
+        }
+        roots.push((found.window_el.clone(), false));
+        let mut out: Vec<(IUIAutomationElement, NodeInfo, menu::Item)> = Vec::new();
+        for (root, popup) in roots {
+            for (el, node) in self.tree(&root, FIND_LIMIT)? {
+                if node.role != "menuitem" || node.offscreen || node.name.trim().is_empty() {
+                    continue;
+                }
+                // SAFETY: UIA calls on the UIA thread.
+                let seen = out.iter().any(|(other, _, _)| unsafe {
+                    self.automation
+                        .CompareElements(other, &el)
+                        .is_ok_and(|same| same.as_bool())
+                });
+                if seen {
+                    continue;
+                }
+                let item = menu::Item {
+                    name: node.name.clone(),
+                    popup,
+                    enabled: node.enabled,
+                };
+                out.push((el, node, item));
+            }
+        }
+        Ok(out)
+    }
+
     // -- pictures -------------------------------------------------------------------
 
     /// A picture of the target's window, from the top-left of its UI
@@ -715,6 +1773,21 @@ impl Uia {
     /// window itself where it can, so it may stay behind others; otherwise
     /// it is brought to the front and copied from the screen.
     fn capture(&self, target: &Target) -> Result<Capture, StepError> {
+        if let Some(element) = &target.element
+            && let Reach::Bridge(app, _, window_el) = self.reach(&target.window)
+        {
+            let (left, top, width, height) = app.screen_rect(element)?;
+            let mut capture = self.capture(&target.window_part_only())?;
+            // SAFETY: UIA calls on the UIA thread.
+            let rect = unsafe { window_el.CurrentBoundingRectangle() }.or_fail()?;
+            capture.element = Some(Rect {
+                x: left - rect.left,
+                y: top - rect.top,
+                width: width.max(1) as u32,
+                height: height.max(1) as u32,
+            });
+            return Ok(capture);
+        }
         let found = self.resolve(target)?;
         let window = hwnd(found.window.handle);
         // SAFETY: Win32 / UIA calls on the UIA thread.
@@ -835,9 +1908,29 @@ impl Uia {
     ) -> Result<Value, StepError> {
         let found = self.resolve_enabled(target)?;
         self.bring_to_front(&found, false)?;
-        // SAFETY: Win32 / UIA calls on the UIA thread.
+        let at = self.mouse_point(&found, target)?;
+        // SAFETY: Win32 calls on the UIA thread.
         unsafe {
-            let at = match target.point {
+            SetCursorPos(at.x, at.y).or_fail()?;
+            let (down, up) = match button {
+                MouseButton::Left => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
+                MouseButton::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
+            };
+            let mut inputs = vec![mouse(down), mouse(up)];
+            if double {
+                inputs.extend([mouse(down), mouse(up)]);
+            }
+            send(&inputs)?;
+        }
+        Ok(Value::Null)
+    }
+
+    /// Where on the screen the mouse goes for `target`: its `point` from
+    /// the window's top-left, or the element's clickable point (centre).
+    fn mouse_point(&self, found: &Found, target: &Target) -> Result<POINT, StepError> {
+        // SAFETY: UIA calls on the UIA thread.
+        unsafe {
+            Ok(match target.point {
                 Some(p) => {
                     let rect = found.window_el.CurrentBoundingRectangle().or_fail()?;
                     POINT {
@@ -852,18 +1945,70 @@ impl Uia {
                         _ => center(found.el.CurrentBoundingRectangle().or_fail()?)?,
                     }
                 }
-            };
-            SetCursorPos(at.x, at.y).or_fail()?;
-            let (down, up) = match button {
-                MouseButton::Left => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
-                MouseButton::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
-            };
-            let mut inputs = vec![mouse(down), mouse(up)];
-            if double {
-                inputs.extend([mouse(down), mouse(up)]);
-            }
-            send(&inputs)?;
+            })
         }
+    }
+
+    fn hover(&self, target: &Target) -> Result<Value, StepError> {
+        let found = self.resolve(target)?;
+        self.bring_to_front(&found, false)?;
+        let at = self.mouse_point(&found, target)?;
+        move_to(at)?;
+        Ok(Value::Null)
+    }
+
+    fn wheel(
+        &self,
+        target: &Target,
+        direction: Direction,
+        notches: u32,
+    ) -> Result<Value, StepError> {
+        let found = self.resolve(target)?;
+        self.bring_to_front(&found, false)?;
+        move_to(self.mouse_point(&found, target)?)?;
+        // One notch is WHEEL_DELTA (120); positive is up / right.
+        let (flag, delta) = match direction {
+            Direction::Up | Direction::Top => (MOUSEEVENTF_WHEEL, 120),
+            Direction::Down | Direction::Bottom => (MOUSEEVENTF_WHEEL, -120),
+            Direction::Left => (MOUSEEVENTF_HWHEEL, -120),
+            Direction::Right => (MOUSEEVENTF_HWHEEL, 120),
+        };
+        for _ in 0..notches {
+            let mut input = mouse(flag);
+            input.Anonymous.mi.mouseData = delta as _;
+            send(&[input])?;
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        Ok(Value::Null)
+    }
+
+    /// Presses the left button on `from`, moves in small steps (so the app
+    /// sees a drag, not a jump) and lets go on `to`. The button is always
+    /// released, even when a step in between fails.
+    fn drag(&self, from: &Target, to: &Target) -> Result<Value, StepError> {
+        let source = self.resolve_enabled(from)?;
+        let goal = self.resolve(to)?;
+        self.bring_to_front(&source, false)?;
+        let a = self.mouse_point(&source, from)?;
+        let b = self.mouse_point(&goal, to)?;
+        move_to(a)?;
+        send(&[mouse(MOUSEEVENTF_LEFTDOWN)])?;
+        let pause = |ms| std::thread::sleep(std::time::Duration::from_millis(ms));
+        let moved = (|| {
+            pause(120);
+            const STEPS: i32 = 24;
+            for i in 1..=STEPS {
+                move_to(POINT {
+                    x: a.x + (b.x - a.x) * i / STEPS,
+                    y: a.y + (b.y - a.y) * i / STEPS,
+                })?;
+                pause(15);
+            }
+            pause(150);
+            Ok(())
+        })();
+        let released = send(&[mouse(MOUSEEVENTF_LEFTUP)]);
+        moved.and(released)?;
         Ok(Value::Null)
     }
 
@@ -913,6 +2058,173 @@ impl Uia {
         send(&inputs)?;
         Ok(Value::Null)
     }
+}
+
+/// A cell's text: its value where it has one, otherwise its name.
+fn cell_text(cell: &IUIAutomationElement) -> String {
+    // SAFETY: UIA calls on the UIA thread.
+    unsafe {
+        let value = pattern::<IUIAutomationValuePattern>(cell, UIA_ValuePatternId)
+            .and_then(|p| p.CurrentValue())
+            .map(|v| v.to_string())
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| {
+                pattern::<IUIAutomationLegacyIAccessiblePattern>(
+                    cell,
+                    UIA_LegacyIAccessiblePatternId,
+                )
+                .and_then(|p| p.CurrentValue())
+                .map(|v| v.to_string())
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+            });
+        let text = value.unwrap_or_else(|| {
+            cell.CurrentName()
+                .map(|n| n.to_string())
+                .unwrap_or_default()
+        });
+        table::clean_cell(&text)
+    }
+}
+
+/// Opens a menu item that leads to a submenu, or carries out the last one.
+fn activate_menu_item(
+    item: &IUIAutomationElement,
+    node: &NodeInfo,
+    last: bool,
+) -> Result<(), StepError> {
+    // SAFETY: UIA calls on the UIA thread.
+    unsafe {
+        if !last
+            && let Ok(p) =
+                pattern::<IUIAutomationExpandCollapsePattern>(item, UIA_ExpandCollapsePatternId)
+        {
+            return p.Expand().map_err(action_error);
+        }
+        let acted = if let Ok(p) = pattern::<IUIAutomationInvokePattern>(item, UIA_InvokePatternId)
+        {
+            p.Invoke()
+        } else if let Ok(p) = pattern::<IUIAutomationTogglePattern>(item, UIA_TogglePatternId) {
+            p.Toggle()
+        } else if let Ok(p) =
+            pattern::<IUIAutomationExpandCollapsePattern>(item, UIA_ExpandCollapsePatternId)
+        {
+            p.Expand()
+        } else if let Ok(p) =
+            pattern::<IUIAutomationLegacyIAccessiblePattern>(item, UIA_LegacyIAccessiblePatternId)
+        {
+            p.DoDefaultAction()
+        } else {
+            return Err(StepError::permanent(
+                "NOT_CLICKABLE",
+                format!("the menu item '{}' cannot be chosen without the mouse", node.name),
+            )
+            .with_details(json!({ "hint": "Open the menu and click the item with desktop.mouseClick (target its role menuitem and name)." })));
+        };
+        acted.map_err(action_error)
+    }
+}
+
+/// Where a scrollable area stands: percents (null when it cannot scroll
+/// that way) and whether it can go no further in `direction`.
+/// How far a scroller is scrolled (0–100), or None when it does not scroll
+/// that way.
+fn scroll_percent(p: &IUIAutomationScrollPattern, vertical: bool) -> Option<f64> {
+    // SAFETY: UIA calls on the UIA thread.
+    let (scrollable, percent) = unsafe {
+        if vertical {
+            (
+                p.CurrentVerticallyScrollable(),
+                p.CurrentVerticalScrollPercent(),
+            )
+        } else {
+            (
+                p.CurrentHorizontallyScrollable(),
+                p.CurrentHorizontalScrollPercent(),
+            )
+        }
+    };
+    match (scrollable, percent) {
+        (Ok(s), Ok(p)) if s.as_bool() && p >= 0.0 => Some(p),
+        _ => None,
+    }
+}
+
+fn scroll_state(p: &IUIAutomationScrollPattern, direction: Option<Direction>) -> Value {
+    let (v, h) = (scroll_percent(p, true), scroll_percent(p, false));
+    let at_end = match direction {
+        None => false,
+        Some(d) => {
+            let percent = if d.is_vertical() { v } else { h };
+            let forward = matches!(d, Direction::Down | Direction::Bottom | Direction::Right);
+            match percent {
+                None => true,
+                // Only the very end: on a long list the last 0.1% can
+                // still hide rows (a scroll that moves nothing is caught
+                // by the caller).
+                Some(p) if forward => p >= 100.0 - 1e-6,
+                Some(p) => p <= 1e-6,
+            }
+        }
+    };
+    let round = |p: Option<f64>| p.map(|p| (p * 10.0).round() / 10.0);
+    json!({ "verticalPercent": round(v), "horizontalPercent": round(h), "atEnd": at_end })
+}
+
+/// Moves the cursor and tells the app under it that the mouse moved.
+fn move_to(at: POINT) -> Result<(), StepError> {
+    // SAFETY: plain Win32 calls.
+    unsafe { SetCursorPos(at.x, at.y) }.or_fail()?;
+    send(&[mouse(MOUSEEVENTF_MOVE)])
+}
+
+/// How a window is reached.
+enum Reach {
+    Uia,
+    Bridge(Box<dyn AppBridge>, WindowInfo, IUIAutomationElement),
+    /// SAP GUI or Java, but its way in does not work (why).
+    Unreachable(StepError),
+}
+
+/// Where an op goes after the SAP GUI / Java check.
+enum Routed {
+    Done(Value),
+    Uia(Box<Op>),
+}
+
+/// The target an op acts on (the start of a drag).
+fn op_target(op: &Op) -> Option<&Target> {
+    match op {
+        Op::ListWindows | Op::Inspect { .. } | Op::Pick { .. } | Op::Record { .. } => None,
+        Op::Drag { from, .. } => Some(from),
+        Op::Highlight { target, .. } => Some(target),
+        Op::Probe { target }
+        | Op::Click { target }
+        | Op::SetValue { target, .. }
+        | Op::GetValue { target }
+        | Op::Select { target, .. }
+        | Op::MouseClick { target, .. }
+        | Op::Type { target, .. }
+        | Op::Press { target, .. }
+        | Op::CloseWindow { target }
+        | Op::Scroll { target, .. }
+        | Op::Wheel { target, .. }
+        | Op::Hover { target }
+        | Op::Menu { target, .. }
+        | Op::GetTable { target, .. }
+        | Op::SapTransaction { target, .. } => Some(target),
+    }
+}
+
+fn sap_scripting_off() -> StepError {
+    StepError::permanent(
+        "SAP_SCRIPTING_OFF",
+        "SAP GUI Scripting cannot reach this SAP GUI window",
+    )
+    .with_details(json!({
+        "hint": "Ask the user to enable scripting on the SAP server (transaction RZ11: sapgui/user_scripting = TRUE) and in SAP GUI Options > Accessibility & Scripting > Scripting (enable, turn off the notifications), then try again. Without it only the window itself, OCR and images work."
+    }))
 }
 
 /// A pattern of `el`, or an error when it does not support it.
@@ -1011,6 +2323,144 @@ fn node_info(el: &IUIAutomationElement, depth: usize) -> NodeInfo {
     }
 }
 
+/// What the recorder has seen so far.
+struct Recorder {
+    actions: Vec<Value>,
+    /// The text field being typed in (read when the typing ends).
+    field: Option<IUIAutomationElement>,
+    last_click: Option<LastClick>,
+}
+
+struct LastClick {
+    button: MouseButton,
+    at: POINT,
+    time: u32,
+    /// Its place in `actions` (`None` when it was not written down).
+    action: Option<usize>,
+}
+
+fn element_pid(el: &IUIAutomationElement) -> u32 {
+    // SAFETY: UIA call on the UIA thread.
+    unsafe { el.CurrentProcessId().unwrap_or(0) as u32 }
+}
+
+/// A text field the user can type in.
+fn editable(el: &IUIAutomationElement) -> bool {
+    // SAFETY: UIA calls on the UIA thread.
+    unsafe {
+        pattern::<IUIAutomationValuePattern>(el, UIA_ValuePatternId)
+            .and_then(|p| p.CurrentIsReadOnly())
+            .is_ok_and(|read_only| !read_only.as_bool())
+    }
+}
+
+/// Adds a field's `setValue`. A click into the field just before is part
+/// of typing into it, so it goes.
+fn push_field(rec: &mut Recorder, action: Value) {
+    if let Some(last) = rec.actions.last()
+        && last["kind"] == "click"
+        && last["button"] == "left"
+        && last["double"] == false
+        && last["target"] == action["target"]
+    {
+        rec.actions.pop();
+        if let Some(click) = rec.last_click.as_mut() {
+            click.action = None;
+        }
+    }
+    rec.actions.push(action);
+}
+
+/// A field's text now.
+fn value_of(el: &IUIAutomationElement) -> Option<String> {
+    // SAFETY: UIA calls on the UIA thread.
+    unsafe {
+        pattern::<IUIAutomationValuePattern>(el, UIA_ValuePatternId)
+            .and_then(|p| p.CurrentValue())
+            .map(|v| v.to_string())
+            .ok()
+    }
+}
+
+/// Whether the IME of the window in front is on (Japanese input mode).
+fn ime_open() -> bool {
+    const IMC_GETOPENSTATUS: usize = 5;
+    // SAFETY: plain Win32 calls; the answer is a number.
+    unsafe {
+        let ime = ImmGetDefaultIMEWnd(GetForegroundWindow());
+        if ime.is_invalid() {
+            return false;
+        }
+        let mut open = 0usize;
+        let sent = SendMessageTimeoutW(
+            ime,
+            WM_IME_CONTROL,
+            WPARAM(IMC_GETOPENSTATUS),
+            LPARAM(0),
+            SMTO_ABORTIFHUNG,
+            100,
+            Some(&mut open),
+        );
+        sent.0 != 0 && open != 0
+    }
+}
+
+/// Sends on a key that waited in line, as it was.
+fn replay_raw_key(vk: u16, scan: u16, extended: bool, up: bool) {
+    let mut flags = KEYBD_EVENT_FLAGS(0);
+    if extended {
+        flags |= KEYEVENTF_EXTENDEDKEY;
+    }
+    if up {
+        flags |= KEYEVENTF_KEYUP;
+    }
+    let _ = send(&[keyboard(vk, scan, flags)]);
+}
+
+/// Sends a held-back click on to the app: pressed at `at`, released at `up`.
+fn replay_click(button: MouseButton, at: POINT, up: POINT) {
+    let (down_flag, up_flag) = match button {
+        MouseButton::Left => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
+        MouseButton::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
+    };
+    // SAFETY: plain Win32 calls.
+    unsafe {
+        let mut back = POINT::default();
+        let _ = GetCursorPos(&mut back);
+        let _ = SetCursorPos(at.x, at.y);
+        let _ = send(&[mouse(down_flag)]);
+        let _ = SetCursorPos(up.x, up.y);
+        let _ = send(&[mouse(up_flag)]);
+        // The user may have moved on while the screen was read.
+        let _ = SetCursorPos(back.x, back.y);
+    }
+}
+
+/// Sends a held-back key on to the app. The modifiers are normally still
+/// held by the user; any already let go are pressed around the key.
+fn replay_key(vk: u16, extended: bool, held: keys::Held) {
+    let now = held_now();
+    let mut missing = Vec::new();
+    for (was, is, vk) in [
+        (held.ctrl, now.ctrl, 0x11),
+        (held.alt, now.alt, 0x12),
+        (held.shift, now.shift, 0x10),
+        (held.win, now.win, 0x5B),
+    ] {
+        if was && !is {
+            missing.push(Key {
+                vk,
+                extended: vk == 0x5B,
+            });
+        }
+    }
+    let key = Key { vk, extended };
+    let mut inputs: Vec<INPUT> = missing.iter().map(|k| key_event(*k, false)).collect();
+    tap(&mut inputs, key);
+    inputs.extend(missing.iter().rev().map(|k| key_event(*k, true)));
+    let _ = send(&inputs);
+}
+
 fn hwnd(handle: isize) -> HWND {
     HWND(handle as *mut core::ffi::c_void)
 }
@@ -1099,6 +2549,12 @@ fn send(inputs: &[INPUT]) -> Result<(), StepError> {
 
 /// The executable name of a process (`billing.exe`).
 fn process_name(pid: u32) -> Option<String> {
+    let path = process_path(pid)?;
+    path.rsplit(['\\', '/']).next().map(str::to_owned)
+}
+
+/// The full path of a process's executable.
+pub(crate) fn process_path(pid: u32) -> Option<String> {
     // SAFETY: the handle is closed before returning.
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
@@ -1112,8 +2568,7 @@ fn process_name(pid: u32) -> Option<String> {
         );
         let _ = CloseHandle(handle);
         ok.ok()?;
-        let path = String::from_utf16_lossy(&buffer[..len as usize]);
-        path.rsplit(['\\', '/']).next().map(str::to_owned)
+        Some(String::from_utf16_lossy(&buffer[..len as usize]))
     }
 }
 

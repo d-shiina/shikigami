@@ -399,15 +399,17 @@ impl Debugger {
                 "the run belongs to another flow",
             ));
         }
-        if flow.revision == state.flow.revision && flow == *state.flow {
-            return Ok(false);
-        }
         let report = self.validator.validate(&flow);
         if !report.valid {
             return Err(RunError {
                 details: serde_json::to_value(&report).ok(),
                 ..RunError::new("VALIDATION_FAILED", "the flow has validation errors")
             });
+        }
+        let mut flow = flow;
+        flow.inline_parts();
+        if flow.revision == state.flow.revision && flow == *state.flow {
+            return Ok(false);
         }
         check_position(&state.flow, &flow, &state.frames)?;
         state.flow = Arc::new(flow);
