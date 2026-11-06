@@ -1,7 +1,7 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code by default) with Shikigami's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { Check, ChevronDown, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ClipboardPaste, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { agent } from "../lib/api";
@@ -22,6 +22,7 @@ export function AgentPane({ width }: { width: number }) {
   const newChat = useAgent((s) => s.newChat);
   const flow = useStudio((s) => s.flow);
   const openFlow = useStudio((s) => s.open);
+  const setPasteOpen = useStudio((s) => s.setPasteOpen);
   const selection = useStudio((s) => s.selection);
   // One draft per conversation, so switching does not carry text to another flow.
   const setDraft = useAgent((s) => s.setDraft);
@@ -65,6 +66,15 @@ export function AgentPane({ width }: { width: number }) {
         </button>
         <button
           type="button"
+          onClick={() => setPasteOpen(flow ? "into" : "new")}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+          title={t.paste.title}
+          aria-label={t.paste.title}
+        >
+          <ClipboardPaste size={15} />
+        </button>
+        <button
+          type="button"
           onClick={() => setOpen(false)}
           className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink"
           aria-label={t.close}
@@ -74,7 +84,20 @@ export function AgentPane({ width }: { width: number }) {
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {info && !info.available && (
-          <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
+          <>
+            <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
+            <div className="rounded-[4px] border border-slate-200 bg-paper px-3 py-2 text-[12px] leading-relaxed text-slate-700">
+              {t.paste.other}
+              <button
+                type="button"
+                onClick={() => setPasteOpen(flow ? "into" : "new")}
+                className="mt-1.5 flex h-7 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
+              >
+                <ClipboardPaste size={14} strokeWidth={1.75} aria-hidden="true" />
+                {t.paste.title}
+              </button>
+            </div>
+          </>
         )}
         {items.length === 0 && info?.available && (
           <div className="grid h-full place-items-center">

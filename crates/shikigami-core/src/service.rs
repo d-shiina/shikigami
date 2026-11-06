@@ -363,6 +363,68 @@ impl FlowService {
         self.insert_new(flow, actor, "import flow", Remarks::default())
     }
 
+    /// Takes in an answer an AI wrote in a chat window without MCP (see
+    /// [`crate::chat`]), pasted by a person: a new flow, or, with `into`,
+    /// the new content of that flow as one undoable edit. The AI's summary
+    /// and checks go to the journal, so the review desk shows the change
+    /// like an MCP edit. Step IDs the AI made up are replaced.
+    pub fn apply_answer(
+        &self,
+        answer: crate::chat::ChatAnswer,
+        into: Option<&FlowId>,
+        expected_revision: Option<u64>,
+        actor: Actor,
+    ) -> CoreResult<EditOutcome> {
+        let note = ChangeNote {
+            summary: answer.summary,
+            checks: answer.checks,
+            observations: Vec::new(),
+        };
+        let mut flow = answer.flow;
+        let mut seen = std::collections::HashSet::new();
+        fn fix_ids(steps: &mut [Step], seen: &mut std::collections::HashSet<StepId>) {
+            for step in steps {
+                if !step.id.is_well_formed() || !seen.insert(step.id.clone()) {
+                    step.id = StepId::generate();
+                    seen.insert(step.id.clone());
+                }
+                for block in step.blocks.values_mut() {
+                    fix_ids(block, seen);
+                }
+            }
+        }
+        fix_ids(&mut flow.steps, &mut seen);
+        match into {
+            Some(id) => {
+                let current = self.get(id)?;
+                flow.id = current.id.clone();
+                if flow.name.trim().is_empty() {
+                    flow.name = current.name.clone();
+                }
+                // What the AI does not see stays as it is.
+                flow.metadata = current.metadata.clone();
+                flow.requires = current.requires.clone();
+                crate::requires::sync(&mut flow, self.registry());
+                let label = "paste AI answer".to_owned();
+                self.match_content(id, &flow, expected_revision, actor, label, note.remarks())
+            }
+            None => {
+                flow.id = FlowId::generate();
+                if flow.name.trim().is_empty() {
+                    flow.name = "AI が作成したフロー".into();
+                }
+                flow.revision = 0;
+                let now = now();
+                flow.metadata = crate::model::Metadata {
+                    created_at: Some(now),
+                    updated_at: Some(now),
+                    ..crate::model::Metadata::default()
+                };
+                self.insert_new(flow, actor, "paste AI answer", note.remarks())
+            }
+        }
+    }
+
     pub fn duplicate(
         &self,
         id: &FlowId,
@@ -712,7 +774,14 @@ impl FlowService {
     ) -> CoreResult<EditOutcome> {
         let target = self.get_version(id, number)?;
         let label = format!("restore version {number} ({})", target.name);
-        self.match_content(id, &target.flow, expected_revision, actor, label)
+        self.match_content(
+            id,
+            &target.flow,
+            expected_revision,
+            actor,
+            label,
+            Remarks::default(),
+        )
     }
 
     fn match_content(
@@ -722,6 +791,7 @@ impl FlowService {
         expected_revision: Option<u64>,
         actor: Actor,
         label: String,
+        remarks: Remarks,
     ) -> CoreResult<EditOutcome> {
         let current = self.get(id)?;
         check_revision(expected_revision, current.revision)?;
@@ -734,7 +804,7 @@ impl FlowService {
             expected_revision.or(Some(current.revision)),
             actor,
             ChangeKind::Edit,
-            Remarks::default(),
+            remarks,
             |_, current| {
                 let (next, inverse) = ops::apply_all(current, ops.clone())?;
                 Ok(Commit {
@@ -1575,7 +1645,7 @@ impl FlowService {
                 SubflowImport::Created
             } else if on_conflict == Some(ImportConflict::Update) {
                 let label = "import update".to_owned();
-                self.match_content(&id, &sub, None, actor.clone(), label)?;
+                self.match_content(&id, &sub, None, actor.clone(), label, Remarks::default())?;
                 SubflowImport::Updated
             } else {
                 SubflowImport::Kept
@@ -1601,7 +1671,7 @@ impl FlowService {
                 let label = "import update".to_owned();
                 (
                     ImportMode::Updated,
-                    self.match_content(&id, &flow, None, actor, label)?,
+                    self.match_content(&id, &flow, None, actor, label, Remarks::default())?,
                 )
             }
             (true, Some(ImportConflict::Copy)) => {
@@ -1830,7 +1900,7 @@ fn parse_bundle(value: serde_json::Value) -> CoreResult<FlowBundle> {
 /// Publishing is a person's decision: an AI client may prepare a version
 /// but never make it the one that runs unattended.
 fn ensure_person(actor: &Actor, what: &str) -> CoreResult<()> {
-    if actor.kind == ActorKind::Mcp {
+    if matches!(actor.kind, ActorKind::Mcp | ActorKind::Chat) {
         return Err(CoreError::Rejected {
             code: "PUBLISH_NOT_ALLOWED",
             message: format!("only a person can {what}"),
@@ -1873,6 +1943,54 @@ mod tests {
 
     fn studio() -> Actor {
         Actor::new(ActorKind::Studio)
+    }
+
+    #[test]
+    fn a_pasted_answer_is_reviewed_like_an_ai_edit() {
+        let (_dir, svc) = service();
+        let chat = Actor::named(ActorKind::Chat, "Copilot");
+        let answer = crate::chat::read_answer(
+            r#"```json
+{ "format": "shikigami.answer", "summary": "挨拶する", "checks": ["宛名はこれでよいですか？"],
+  "flow": { "name": "挨拶", "steps": [
+    { "id": "step1", "type": "log.message", "params": { "message": "a" } },
+    { "type": "log.message", "params": { "message": "b" } } ] } }
+```"#,
+        )
+        .unwrap();
+        let made = svc.apply_answer(answer, None, None, chat.clone()).unwrap();
+        let flow = made.flow;
+        assert!(flow.id.is_well_formed());
+        // Made-up IDs are replaced, missing ones assigned.
+        assert!(flow.steps.iter().all(|s| s.id.is_well_formed()));
+        let history = svc.history(&flow.id, 5).unwrap();
+        assert_eq!(history[0].actor.kind, ActorKind::Chat);
+        assert_eq!(history[0].summary.as_deref(), Some("挨拶する"));
+        assert_eq!(history[0].checks, vec!["宛名はこれでよいですか？"]);
+
+        // Pasting into the open flow keeps its ID and the IDs the AI kept.
+        let kept = flow.steps[0].id.clone();
+        let text = format!(
+            r#"{{ "summary": "締めの挨拶を追加", "flow": {{ "name": "挨拶", "steps": [
+                {{ "id": "{kept}", "type": "log.message", "params": {{ "message": "a" }} }},
+                {{ "type": "log.message", "params": {{ "message": "c" }} }} ] }} }}"#
+        );
+        let answer = crate::chat::read_answer(&text).unwrap();
+        let edited = svc
+            .apply_answer(answer, Some(&flow.id), Some(flow.revision), chat.clone())
+            .unwrap();
+        assert_eq!(edited.flow.id, flow.id);
+        assert_eq!(edited.flow.steps[0].id, kept);
+        assert_eq!(edited.flow.steps[1].params["message"], "c");
+        assert!(edited.can_undo);
+        let history = svc.history(&flow.id, 5).unwrap();
+        let last = history.iter().max_by_key(|e| e.revision).unwrap();
+        assert_eq!(last.summary.as_deref(), Some("締めの挨拶を追加"));
+        assert_eq!(last.actor.kind, ActorKind::Chat);
+
+        // Only a person publishes.
+        let publish = svc.publish(&flow.id, PublishInput::default(), chat);
+        assert!(publish.is_err());
     }
 
     #[test]

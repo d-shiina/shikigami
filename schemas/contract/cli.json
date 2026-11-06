@@ -570,6 +570,31 @@
       ]
     },
     {
+      "name": "ai-guide",
+      "args": [
+        {
+          "id": "dir",
+          "required": false,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "long": "dir"
+        },
+        {
+          "id": "builtin",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "builtin",
+          "values": [
+            "true",
+            "false"
+          ]
+        }
+      ]
+    },
+    {
       "name": "plugin",
       "subcommands": [
         {

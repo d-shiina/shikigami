@@ -338,13 +338,12 @@
           "$ref": "#/$defs/PartApp"
         },
         "target": {
-          "description": "The target, exactly as the nodes of `app` take it."
+          "description": "The target, exactly as the nodes of `app` take it. Left out (null)\nwhen the author could not see the screen (an AI in a chat window):\na person picks it in Studio, and until then the nodes that use the\npart do not validate (`PART_NOT_PICKED`)."
         }
       },
       "additionalProperties": false,
       "required": [
-        "app",
-        "target"
+        "app"
       ]
     },
     "PartApp": {
@@ -1450,12 +1449,21 @@
       ]
     },
     "ActorKind": {
-      "type": "string",
-      "enum": [
-        "studio",
-        "mcp",
-        "cli",
-        "system"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "studio",
+            "mcp",
+            "cli",
+            "system"
+          ]
+        },
+        {
+          "description": "An AI in a chat window without MCP (Microsoft Copilot, ...): a\nperson pasted its answer into Studio. Reviewed like an MCP edit.",
+          "type": "string",
+          "const": "chat"
+        }
       ]
     },
     "ChangeEvent": {

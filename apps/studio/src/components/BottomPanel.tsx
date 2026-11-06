@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { type BottomTab, isActive, runBreakpoints, trailOf } from "../store";
+import { PERSON_CODES } from "../lib/todos";
+import { useTodos } from "../lib/useTodos";
 import { IssuesPanel } from "./IssuesPanel";
 import { Resizer } from "./Resizer";
 
@@ -43,7 +45,9 @@ export function BottomPanel() {
   const hideTrail = useStudio((s) => s.hideTrail);
   const breakpointCount = useStudio((s) => runBreakpoints(s).length);
   const clearBreakpoints = useStudio((s) => s.clearBreakpoints);
-  const issueCount = useStudio((s) => s.validation?.issues.length ?? 0);
+  const todos = useTodos().length;
+  // A part to pick is a to-do, counted once, not also as an error.
+  const issueCount = useStudio((s) => s.validation?.issues.filter((i) => !PERSON_CODES.has(i.code)).length ?? 0) + todos;
   const [height, setHeight] = useState(readHeight);
   if (!tab) return null;
   const resize = (next: number) => {

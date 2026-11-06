@@ -260,7 +260,7 @@ impl ApprovalStore {
         approve: bool,
         actor: Actor,
     ) -> CoreResult<ApprovalRequest> {
-        if actor.kind == ActorKind::Mcp {
+        if matches!(actor.kind, ActorKind::Mcp | ActorKind::Chat) {
             return Err(CoreError::Rejected {
                 code: "APPROVAL_NOT_ALLOWED",
                 message: "only a person can answer an approval request".into(),
