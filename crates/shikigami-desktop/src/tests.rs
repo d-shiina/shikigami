@@ -498,6 +498,44 @@ fn elements_match_and_render_as_inspect_shows_them() {
 }
 
 #[test]
+fn recorded_keys_are_named_as_press_reads_them() {
+    use keys::Held;
+    let ctrl = Held {
+        ctrl: true,
+        ..Held::default()
+    };
+    let ctrl_shift = Held {
+        shift: true,
+        ..ctrl
+    };
+    assert_eq!(
+        keys::name(0x53, ctrl_shift).as_deref(),
+        Some("Control+Shift+S")
+    );
+    assert_eq!(keys::name(0x0D, Held::default()).as_deref(), Some("Enter"));
+    assert_eq!(keys::name(0x1B, Held::default()).as_deref(), Some("Escape"));
+    assert_eq!(keys::name(0x74, Held::default()).as_deref(), Some("F5"));
+    assert_eq!(keys::name(0x28, ctrl).as_deref(), Some("Control+ArrowDown"));
+    assert_eq!(keys::name(0xE5, Held::default()), None);
+    for vk in [0x53, 0x0D, 0x1B, 0x74, 0x28, 0x31] {
+        let name = keys::name(vk, ctrl_shift).unwrap();
+        assert_eq!(keys::parse(&name).unwrap().key.vk, vk, "{name}");
+    }
+    // Typing is read from the field; commands are written down.
+    assert!(!keys::is_command(0x41, Held::default()));
+    assert!(!keys::is_command(0x11, ctrl));
+    assert!(keys::is_command(0x0D, Held::default()));
+    assert!(keys::is_command(0x53, ctrl));
+    assert!(keys::is_text_edit(0x56, ctrl));
+    assert!(!keys::is_text_edit(0x53, ctrl));
+    // Kana conversion and cancelling it belong to the typing.
+    assert!(keys::is_ime_key(0x76, Held::default(), false));
+    assert!(keys::is_ime_key(0x1B, Held::default(), true));
+    assert!(!keys::is_ime_key(0x1B, Held::default(), false));
+    assert!(!keys::is_ime_key(0x74, Held::default(), true));
+}
+
+#[test]
 fn keys_use_browser_names() {
     let chord = keys::parse("Shift+ArrowDown").unwrap();
     assert_eq!(chord.modifiers[0].vk, 0x10);

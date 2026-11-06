@@ -24,6 +24,17 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
 - In Studio, a desktop node's target has **Pick on screen** (Studio steps aside; the element under the mouse is framed; click it, Esc or right-click to cancel; the click never reaches the app) and **Highlight** (frames the target on the screen now). The target is built the sturdy way: an `id` unique in the window, else `role` + `name` (exact), else `nth`, else a `point` in the window. The same is `inspect_ui`-free for AI clients: the adapter's inspect takes `action: "pick"` / `"highlight"`.
 - **Named parts**: a scenario can keep targets under `parts` (`"parts": { "saveButton": { "label": "保存ボタン", "app": "desktop", "target": { … } } }`) and a node writes `"target": { "part": "saveButton" }` (nothing else beside it). When the screen changes, fix the part once. Studio lists them in the project panel (Parts) and turns a node's target into a part with **Make a part**; AI clients use the `setPart` / `removePart` edit ops. Browser nodes use parts the same way (`"app": "browser"`).
 
+### Recording
+
+**Record** on the canvas dock hides Studio and writes down what you do in desktop apps until you click the banner at the top of the screen:
+
+- **Clicks**, with the target of what was clicked, built as **Pick on screen** builds it. Each click is held back for a moment while the screen is read (so the target is the button, not the menu it opens), then passed on to the app. A double click stays a double click.
+- **Typing**: the field's final text when you leave it, as one `desktop.setValue` (Japanese input through the IME works the same: its conversion keys F6–F10, Escape and the Enter that confirms a conversion count as typing). A password field's text is never recorded: the node asks you to choose a secret.
+- **Keys**: Enter, Tab, Escape, F1–F24 and shortcuts with Ctrl / Alt / Windows (`Control+S`) become `desktop.press`. Copy, paste, undo and select-all inside a field are part of the typing.
+- Not recorded: drags, the mouse wheel, Studio itself, and browsers (yet).
+
+When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one node per action where a new node would go (a target used twice or more becomes a named part). **Have the AI tidy up** hands the recording to the AI pane (or the clipboard) with what to do: waits where the screen changes, loops for repeated work, input variables for values that differ each time. The raw recording stays in the scenario's `logs/recordings/`. The adapter's inspect takes `action: "record"` for the same.
+
 ## Nodes
 
 | type | Main params | Output | Mouse / keyboard |

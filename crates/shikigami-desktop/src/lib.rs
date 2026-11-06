@@ -97,6 +97,8 @@ const POLL: Duration = Duration::from_millis(250);
 const DEFAULT_MAX_NODES: usize = 1500;
 /// How long the picker waits for a click.
 const PICK_TIMEOUT_MS: u64 = 60_000;
+/// How long a recording runs at most unless asked otherwise.
+const RECORD_TIMEOUT_MS: u64 = 30 * 60 * 1000;
 /// How long a highlight stays on screen.
 const HIGHLIGHT_MS: u64 = 2_000;
 
@@ -159,7 +161,9 @@ impl Adapter for DesktopAdapter {
     /// Without `window`: the open windows. With it: that window's element
     /// tree (`element` narrows it to one part, `maxNodes` caps its size).
     /// `action: "pick"` lets the user point at an element on screen and
-    /// returns its target; `action: "highlight"` frames `target` on screen.
+    /// returns its target; `action: "highlight"` frames `target` on screen;
+    /// `action: "record"` writes down what the user does until they click
+    /// the banner (`Op::Record`).
     fn inspect<'a>(
         &'a self,
         _session: &'a str,
@@ -181,6 +185,27 @@ impl Adapter for DesktopAdapter {
                         .backend
                         .call(Op::Pick {
                             message,
+                            timeout_ms,
+                        })
+                        .await;
+                }
+                Some("record") => {
+                    let text = |key: &str, default: &str| {
+                        params
+                            .get(key)
+                            .and_then(Value::as_str)
+                            .unwrap_or(default)
+                            .to_owned()
+                    };
+                    let timeout_ms = params
+                        .get("timeoutMs")
+                        .and_then(Value::as_u64)
+                        .map_or(RECORD_TIMEOUT_MS, |ms| ms.clamp(10_000, 4 * 60 * 60 * 1000));
+                    return self
+                        .backend
+                        .call(Op::Record {
+                            title: text("title", "Recording ({n}) - click here to stop"),
+                            hint: text("hint", "Clicks, typed text and keys are written down"),
                             timeout_ms,
                         })
                         .await;
