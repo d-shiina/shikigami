@@ -167,6 +167,30 @@ describe("studio store", () => {
     expect(store.getState().human).toBeNull();
   });
 
+  it("shows a stop in progress and ends a run whose last event never came", async () => {
+    const stopRun = vi.fn(async () => {});
+    const store = createStudioStore(fakeApi({ stopRun }));
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
+    await store.getState().stopRun();
+    expect(stopRun).toHaveBeenCalledWith("run_1");
+    expect(store.getState().run?.stopping).toBe(true);
+    store.getState().onRunEvent({ ...base, seq: 1, type: "runFinished", status: "cancelled", durationMs: 5 });
+    expect(store.getState().run).toMatchObject({ status: "cancelled", stopping: false });
+
+    const gone = createStudioStore(
+      fakeApi({
+        stopRun: vi.fn(async () => {
+          throw new ApiError({ code: "RUN_NOT_FOUND", message: "no active run" });
+        }),
+      }),
+    );
+    gone.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
+    await gone.getState().stopRun();
+    expect(gone.getState().run).toMatchObject({ status: "cancelled", stopping: false });
+    expect(gone.getState().error).toBeNull();
+  });
+
   it("registers secrets without keeping their values", async () => {
     const listed = { name: "受注", username: "tanaka", sites: ["https://x.example"], fields: ["username", "password"], updatedAt: "" };
     const setSecret = vi.fn(async () => listed as never);

@@ -87,6 +87,8 @@ export const en: Dict = {
   validate: "Validate",
   run: "Run",
   stop: "Stop",
+  stopping: "Stopping…",
+  stopAgainTitle: "Press again to stop without waiting for the clean-up (finally)",
   addStep: "Add node",
   moveUp: "Move up",
   moveDown: "Move down",

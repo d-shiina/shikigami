@@ -2118,3 +2118,63 @@ async fn a_nested_finally_does_not_extend_the_cleanup_deadline() {
     assert!(started.elapsed() <= crate::exec::FINALLY_GRACE + Duration::from_secs(2));
     assert!(!logs(&events).contains(&"inner done".to_string()));
 }
+
+#[tokio::test]
+async fn stopping_again_ends_the_finally_at_once() {
+    let s = flow(vec![
+        Step::new("control.try")
+            .with_block("try", vec![delay(600_000)])
+            .with_block(
+                "finally",
+                vec![log("closing"), delay(600_000), log("closed")],
+            ),
+    ]);
+    let mut handle = Runtime::new()
+        .start(s, RunOptions::default())
+        .expect("start");
+    while let Some(e) = handle.next_event().await {
+        if matches!(e.event, RunEvent::StepStarted { .. }) {
+            break;
+        }
+    }
+    handle.cancel();
+    let mut events = Vec::new();
+    while let Some(e) = handle.next_event().await {
+        let closing = matches!(&e.event, RunEvent::Log { message, .. } if message == "closing");
+        events.push(e);
+        if closing {
+            break;
+        }
+    }
+    // The clean-up waits; the second press does not.
+    handle.cancel();
+    let report = tokio::time::timeout(
+        Duration::from_secs(5),
+        handle.wait_with(|e| events.push(e.clone())),
+    )
+    .await
+    .expect("the second stop ends the finally")
+    .unwrap();
+    assert_eq!(report.status, RunStatus::Cancelled);
+    assert!(!logs(&events).contains(&"closed".to_string()));
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_adapter_that_never_closes_does_not_hold_a_stopped_run() {
+    let runtime = Runtime::builder()
+        .on_run_finished(Arc::new(|_| Box::pin(std::future::pending())))
+        .build();
+    let mut handle = runtime
+        .start(flow(vec![delay(600_000)]), RunOptions::default())
+        .expect("start");
+    while let Some(e) = handle.next_event().await {
+        if matches!(e.event, RunEvent::StepStarted { .. }) {
+            break;
+        }
+    }
+    handle.cancel();
+    let started = tokio::time::Instant::now();
+    let report = handle.wait().await.unwrap();
+    assert_eq!(report.status, RunStatus::Cancelled);
+    assert!(started.elapsed() <= Duration::from_secs(20));
+}

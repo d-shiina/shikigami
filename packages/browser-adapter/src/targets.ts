@@ -54,7 +54,7 @@ export class AdapterError extends Error {
 }
 
 /** CSS for a frame described by its attributes. */
-function frameSelector(frame: Frame): string {
+export function frameSelector(frame: Frame): string {
   const tags = ["iframe", "frame"];
   const quote = (v: string) => JSON.stringify(v);
   if (frame.css !== undefined) return frame.css;

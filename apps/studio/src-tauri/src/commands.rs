@@ -646,7 +646,7 @@ pub(crate) fn track_run(
         runs.insert(
             run_id.clone(),
             ActiveRun {
-                cancel: handle.cancel_token(),
+                cancel: handle.stopper(),
                 snapshot: handle.snapshot_cell(),
                 flow_id: id.clone(),
                 debug: handle.debug_control(),
@@ -712,7 +712,7 @@ pub fn stop_run(state: State<'_, AppState>, run_id: RunId) -> CmdResult<()> {
     let run = runs
         .get(&run_id)
         .ok_or_else(|| err("RUN_NOT_FOUND", format!("no active run {run_id}")))?;
-    run.cancel.cancel();
+    run.cancel.stop();
     Ok(())
 }
 

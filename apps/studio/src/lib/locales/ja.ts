@@ -86,6 +86,8 @@ export const ja = {
   validate: "検証",
   run: "実行",
   stop: "停止",
+  stopping: "中止しています…",
+  stopAgainTitle: "もう一度押すと、後片付け（finally）を待たずに中止します",
   addStep: "ノード追加",
   moveUp: "上へ",
   moveDown: "下へ",

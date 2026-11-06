@@ -75,7 +75,7 @@ pub type FinishedHook = Arc<dyn Fn(&RunReport) + Send + Sync>;
 
 struct Active {
     info: RunningRun,
-    cancel: CancellationToken,
+    cancel: shikigami_runtime::Stopper,
 }
 
 /// What the schedule loop remembers between ticks.
@@ -198,7 +198,7 @@ impl Agent {
                     started_at: now_text(),
                     schedule_id,
                 },
-                cancel: handle.cancel_token(),
+                cancel: handle.stopper(),
             },
         );
         let agent = Arc::clone(self);
@@ -232,7 +232,7 @@ impl Agent {
     pub fn cancel(&self, run_id: &RunId) -> bool {
         match lock(&self.active).get(run_id) {
             Some(active) => {
-                active.cancel.cancel();
+                active.cancel.stop();
                 true
             }
             None => false,
@@ -300,12 +300,12 @@ impl Agent {
             n += 1;
         }
         ipc.abort();
-        let running: Vec<CancellationToken> = lock(&self.active)
+        let running: Vec<shikigami_runtime::Stopper> = lock(&self.active)
             .values()
             .map(|a| a.cancel.clone())
             .collect();
         for cancel in running {
-            cancel.cancel();
+            cancel.stop();
         }
         // Give `finally` blocks and records a moment.
         for _ in 0..100 {
