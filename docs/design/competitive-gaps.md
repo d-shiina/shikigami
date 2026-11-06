@@ -110,6 +110,7 @@
 - **相手**：WinActor は日本語が母語。UiPath・PAD も日本語のメッセージを出す
 - **影響**：止まったときに一番読む文が英語。日本語で売るときに真っ先に気になる
 - **方向**：`code` は契約で固定（[compatibility.md](../compatibility.md) §6）なので、Studio 側で `code` と `details` から日本語の説明を組む（`message` は AI 向けの英語のまま残す）
+- **対応**：Studio の `apps/studio/src/lib/errorText.ts` と `locales/errors.{ja,en}.ts` で、約 150 の `code` を「何が起きたか・どうすればよいか」に言い換える。一時停止パネルと実行ログで使い、英語の原文は折りたたみで残す。残り：検証結果（問題の一覧）の `message` / `hint` はまだ英語
 
 ### 8. 管理サーバーがない（重なり：#77）
 

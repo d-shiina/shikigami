@@ -1,5 +1,6 @@
 // The English dictionary. Same shape as ja.ts; keep labels short nouns.
 import type { Dict } from "./ja";
+import { errorsEn } from "./errors.en";
 import { stepHelpEn } from "./stepHelp.en";
 
 export const en: Dict = {
@@ -333,6 +334,24 @@ export const en: Dict = {
       test_step: "Test node",
     },
     newChat: "New chat",
+    newChatAbout: (name: string) => `New chat on "${name}"`,
+    newScenarioChat: "Create a new scenario",
+    untitled: "New scenario",
+    earlier: "Earlier chat",
+    chats: "Chats",
+    continued: "You can pick up where this chat left off",
+    openScenario: "Open this scenario",
+    busyElsewhere: "Another chat is working on this scenario",
+    removeChat: "Close chat",
+    chatWorking: "Working",
+    chatDone: "Finished",
+    chatFailed: "Stopped",
+    otherWorking: (n: number) => `${n} more working`,
+    otherDone: (n: number) => `${n} finished`,
+    interrupt: "Interrupt",
+    interruptHint: "Sending stops the current work and cuts in",
+    interrupting: "Sends as soon as it stops",
+    interrupted: "Stopped here to take the next message",
     selectedStep: "Selected node",
     placeholderEdit: "e.g. After logging in, save the order list as CSV",
     placeholderNew: "e.g. Make a scenario that collects unshipped orders from the order system",
@@ -798,6 +817,7 @@ export const en: Dict = {
     review: "Review",
     capturing: "Capturing the screen…",
     captureFailed: "Could not capture the screen",
+    original: "Original message",
     variablesNow: "Variables at this point",
   },
   list: {
@@ -1005,6 +1025,7 @@ export const en: Dict = {
     open: "Open",
     confirmDelete: "Press again to delete",
   },
+  runErrors: errorsEn,
   stepHelp: stepHelpEn,
   stepTypes: {
     "browser.click": "Click",
