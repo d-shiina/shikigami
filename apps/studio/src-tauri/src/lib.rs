@@ -8,6 +8,7 @@ mod agent;
 mod commands;
 mod debug;
 mod picker;
+mod runner;
 mod schedules;
 mod updater;
 mod watcher;
@@ -80,6 +81,13 @@ pub fn run() {
         .manage(agent::AgentLogin::default())
         .setup(move |app| {
             fit_to_screen(app);
+            if runner::wants_runner_only() {
+                use tauri::Manager;
+                runner::show_runner(app.handle())?;
+                if let Some(main) = app.get_webview_window("main") {
+                    main.close()?;
+                }
+            }
             watcher::spawn(app.handle().clone(), service.store().flows_dir());
             watcher::spawn_secret_requests(
                 app.handle().clone(),
@@ -169,6 +177,9 @@ pub fn run() {
             agent::agent_login_code,
             agent::agent_login_cancel,
             agent::agent_open_url,
+            runner::runner_list,
+            runner::runner_run,
+            runner::open_runner,
         ])
         .build(tauri::generate_context!())
         .map(|app| {

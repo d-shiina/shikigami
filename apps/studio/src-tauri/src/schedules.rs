@@ -1,4 +1,4 @@
-//! The 「実行」 place: this PC's schedules (`schedules.json` in the per-PC
+//! The 「自動実行」 place: this PC's schedules (`schedules.json` in the per-PC
 //! area) and the agent that fires them. Studio edits the file the agent
 //! reads (it picks changes up within a second) and talks to the agent over
 //! its local pipe, as `shikigami schedule` and `shikigami agent` do.

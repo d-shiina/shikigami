@@ -1,4 +1,4 @@
-// The 「実行」 place (ui-principles.md): what runs on this PC by itself. Its
+// The 「自動実行」 place (ui-principles.md): what runs on this PC by itself. Its
 // first tab is the schedules, with the agent that fires them; past runs will
 // be the next tab. Studio edits `schedules.json` and the agent, a separate
 // process, picks the change up (docs/schedules.md).

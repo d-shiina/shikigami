@@ -1268,7 +1268,7 @@ function StepInspector() {
   );
 }
 
-/** When this flow runs by itself on this PC; they are edited in 「実行」. */
+/** When this flow runs by itself on this PC; they are edited in 「自動実行」. */
 function SchedulesSection({ flowId }: { flowId: string }) {
   const schedules = useSchedulesOf(flowId);
   const setPlace = useStudio((s) => s.setPlace);
