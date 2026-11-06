@@ -128,7 +128,7 @@ AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange`
 | `smtp` | `server`・`from`、たいてい `user` / `password` | `server` は `smtp.example.co.jp`（587 番で STARTTLS）か `smtp.example.co.jp:465`（TLS）。ログインはシークレットで、サイトに `smtp:<サーバー>` が要ります（ないと `SECRET_SITE_*`）。`security: "none"` はログインなしで受け付ける社内の中継サーバー向けで、パスワードは TLS なしでは送りません（`MAIL_INSECURE_LOGIN`） |
 
 - 選んだ送り方に関係ない params（`outlook` なのに `server` など）は `INVALID_PARAMS`。書いてある送り方と違う方法で送られることはありません
-- エラー：`MAIL_SEND_FAILED`（断られた。サーバーが一時的と言えば再試行）、`MAIL_SERVER_UNREACHABLE`（何も送っていない。再試行）、`MAIL_DELIVERY_UNKNOWN`（渡した後に返事が途切れ、送れたかどうか分からない。二重に送らないよう再試行しない。送信済みアイテムを確かめる）、`MAIL_PERMISSION_DENIED`（Graph で Mail.Send がない）、`OAUTH_SIGN_IN_REQUIRED`
+- エラー：`MAIL_SEND_FAILED`（断られた。サーバーが一時的と言えば再試行）、`MAIL_SERVER_UNREACHABLE`（何も送っていない。再試行）、`MAIL_DELIVERY_UNKNOWN`（渡した後に返事が途切れたか時間内に来ず、送れたかどうか分からない。二重に送らないよう再試行しない。送信済みアイテムを確かめる）、`MAIL_PERMISSION_DENIED`（Graph で Mail.Send がない）、`OAUTH_SIGN_IN_REQUIRED`
 
 ```json
 { "type": "mail.send", "params": {

@@ -342,9 +342,19 @@ pub async fn graph_send(url: &str, token: &str, body: &Value) -> Result<(), Step
     Err(error.with_details(json!({ "status": status.as_u16(), "response": text, "hint": hint })))
 }
 
+/// How long a Graph or SMTP send may take: less than the step's time, so
+/// it ends here (as possibly sent) before the Runtime's timeout.
+pub fn send_limit_ms(timeout_ms: u64) -> u64 {
+    if timeout_ms > 2_000 {
+        timeout_ms - 1_000
+    } else {
+        timeout_ms / 2
+    }
+}
+
 /// The message may or may not have gone out: never retried, so a retry
 /// cannot send it twice.
-fn delivery_unknown(message: String) -> StepError {
+pub fn delivery_unknown(message: String) -> StepError {
     StepError::permanent("MAIL_DELIVERY_UNKNOWN", message).with_details(json!({
         "hint": "The message may have been sent. Look in Sent Items (or ask a recipient) before running the step again."
     }))
@@ -411,7 +421,7 @@ pub async fn smtp_send(
     let mut builder = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&smtp.host)
         .port(smtp.port)
         .timeout(Some(std::time::Duration::from_millis(
-            timeout_ms.clamp(5_000, 600_000),
+            send_limit_ms(timeout_ms).min(600_000),
         )))
         .tls(match smtp.security {
             Security::Tls => Tls::Wrapper(tls()?),

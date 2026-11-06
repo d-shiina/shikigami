@@ -24,6 +24,9 @@ pub fn run(
     timeout: Duration,
     cancel: &CancellationToken,
 ) -> Result<Value, StepError> {
+    // A send that runs out of time may still go out when Outlook gets to
+    // it, so it is never retried (it could be sent twice).
+    let sending = matches!(request, Request::Send(_));
     run_on_sta(
         "shikigami-outlook-com",
         timeout,
@@ -47,6 +50,8 @@ pub fn run(
         |gave_up| {
             match gave_up.reason {
             GaveUp::Cancelled => StepError::new("CANCELLED", "the step was stopped"),
+            GaveUp::TimedOut if sending => StepError::permanent("MAIL_DELIVERY_UNKNOWN", "Outlook did not answer in time; the message may still be sent")
+                .with_details(json!({ "hint": "Outlook may be showing a dialog (a security prompt that a program is sending mail, or a sign-in). Ask the user to check the Outlook window and the Outbox / Sent Items before running the step again." })),
             GaveUp::TimedOut => StepError::new("OUTLOOK_TIMEOUT", "Outlook did not answer in time")
                 .with_details(json!({ "hint": "Outlook may be showing a dialog (a security prompt that a program is accessing mail, or a sign-in). Ask the user to check the Outlook window, then run again." })),
         }

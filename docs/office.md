@@ -128,7 +128,7 @@ A message that has gone cannot be taken back, so `mail.send` is `dangerous`: it 
 | `smtp` | `server`, `from`, and usually `user` / `password` | `server` is `smtp.example.co.jp` (STARTTLS on 587) or `smtp.example.co.jp:465` (TLS). The login is a secret whose sites include `smtp:<server>`; otherwise `SECRET_SITE_*`. `security: "none"` is only for a company relay that takes mail without a login: a password is never sent without TLS (`MAIL_INSECURE_LOGIN`) |
 
 - Params that do not belong to the chosen way (`server` with `outlook`, …) give `INVALID_PARAMS`, so a scenario never looks like it sends one way and sends another
-- Errors: `MAIL_SEND_FAILED` (refused; retried when the server says it is temporary), `MAIL_SERVER_UNREACHABLE` (nothing was sent; retried), `MAIL_DELIVERY_UNKNOWN` (the answer was lost after the message was handed over, so it may have gone out; never retried, so it is not sent twice: look in Sent Items), `MAIL_PERMISSION_DENIED` (Graph without Mail.Send), `OAUTH_SIGN_IN_REQUIRED`
+- Errors: `MAIL_SEND_FAILED` (refused; retried when the server says it is temporary), `MAIL_SERVER_UNREACHABLE` (nothing was sent; retried), `MAIL_DELIVERY_UNKNOWN` (the answer was lost or did not come within the step's time after the message was handed over, so it may have gone out; never retried, so it is not sent twice: look in Sent Items), `MAIL_PERMISSION_DENIED` (Graph without Mail.Send), `OAUTH_SIGN_IN_REQUIRED`
 
 ```json
 { "type": "mail.send", "params": {

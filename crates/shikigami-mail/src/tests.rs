@@ -473,3 +473,69 @@ async fn a_secret_in_user_is_checked_like_the_password() {
     .await;
     assert_eq!(report.error.unwrap().code, "SECRET_SITE_MISMATCH");
 }
+
+#[tokio::test]
+async fn a_send_cut_off_by_the_step_time_is_never_sent_twice() {
+    // A server that takes the whole message and then never says "queued".
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let connections = Arc::new(Mutex::new(0u32));
+    let count = connections.clone();
+    tokio::spawn(async move {
+        while let Ok((socket, _)) = listener.accept().await {
+            *count.lock().unwrap() += 1;
+            tokio::spawn(async move {
+                let (read, mut write) = socket.into_split();
+                let mut lines = BufReader::new(read).lines();
+                write.write_all(b"220 test ESMTP\r\n").await.unwrap();
+                let mut in_data = false;
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if in_data {
+                        continue;
+                    }
+                    let command = line.to_uppercase();
+                    let reply: &[u8] = if command.starts_with("EHLO") {
+                        b"250-test\r\n250 8BITMIME\r\n"
+                    } else if command.starts_with("DATA") {
+                        in_data = true;
+                        b"354 go\r\n"
+                    } else {
+                        b"250 ok\r\n"
+                    };
+                    write.write_all(reply).await.unwrap();
+                }
+            });
+        }
+    });
+    let mut s = Scenario::new("mail");
+    let mut step = Step::new(types::SEND);
+    let params = json!({
+        "via": "smtp", "server": format!("127.0.0.1:{port}"), "security": "none",
+        "from": "robot@example.co.jp", "to": ["keiri@example.co.jp"], "subject": "日次",
+    });
+    for (k, v) in params.as_object().unwrap() {
+        step = step.with_param(k, v.clone());
+    }
+    step.timeout_ms = Some(3_000);
+    step.retry = Some(shikigami_core::model::RetryPolicy {
+        max_attempts: 3,
+        backoff_ms: 10,
+        backoff_multiplier: 1.0,
+    });
+    shikigami_core::ops::assign_missing_ids(&mut step);
+    s.steps = vec![step];
+    let report = runtime()
+        .start(s, RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    assert_eq!(report.error.unwrap().code, "MAIL_DELIVERY_UNKNOWN");
+    assert_eq!(*connections.lock().unwrap(), 1);
+}
+
+#[test]
+fn a_send_ends_before_the_step_time() {
+    assert_eq!(send::send_limit_ms(60_000), 59_000);
+    assert_eq!(send::send_limit_ms(1_000), 500);
+}

@@ -128,7 +128,21 @@ impl ActionHandler for MailStep {
             let request = match request {
                 Request::Send(draft) => match send::Via::parse(&input.params)? {
                     send::Via::Outlook => Request::Send(draft),
-                    via => return send::send(&input, via, draft).await,
+                    // Give up a little before the Runtime does, so a send
+                    // whose answer never came is reported as possibly sent
+                    // (never retried) instead of a retryable STEP_TIMEOUT.
+                    via => {
+                        let limit = Duration::from_millis(send::send_limit_ms(input.timeout_ms));
+                        return match tokio::time::timeout(limit, send::send(&input, via, draft))
+                            .await
+                        {
+                            Ok(result) => result,
+                            Err(_) => Err(send::delivery_unknown(format!(
+                                "no answer within {} ms",
+                                limit.as_millis()
+                            ))),
+                        };
+                    }
                 },
                 other => other,
             };
