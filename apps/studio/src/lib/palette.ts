@@ -29,7 +29,7 @@ export type PaletteItem = {
  * building an automation), then the flow's own nodes, then data handling.
  */
 export const SECTIONS: { id: string; groups: string[] }[] = [
-  { id: "apps", groups: ["browser", "excel", "word", "outlook", "office", "file", "windows", "network", "system"] },
+  { id: "apps", groups: ["browser", "excel", "word", "outlook", "office", "file", "windows", "network", "database", "system"] },
   { id: "flow", groups: ["control", "variable", "flow", "log"] },
   { id: "data", groups: ["text", "number", "date", "list"] },
 ];

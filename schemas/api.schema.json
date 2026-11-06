@@ -1113,6 +1113,11 @@
           "description": "Programs, the clipboard and dialogs (`process.*`, `clipboard.*`, `dialog.*`).",
           "type": "string",
           "const": "system"
+        },
+        {
+          "description": "Databases through ODBC (`db.*`).",
+          "type": "string",
+          "const": "database"
         }
       ]
     },

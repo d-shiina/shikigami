@@ -46,6 +46,8 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "pdf.readText": { summary: "Read the text of a PDF", words: "read extract" },
   "pdf.merge": { summary: "Join PDFs into one PDF", words: "combine join concatenate" },
   "pdf.extractPages": { summary: "Make a new PDF from some pages of a PDF", words: "pages range cut" },
+  "db.query": { summary: "Read rows from a database with SQL (SQL Server, Oracle, Access, … through ODBC)", words: "sql select odbc sqlserver oracle access query table" },
+  "db.execute": { summary: "Change data in a database with SQL (INSERT, UPDATE, DELETE)", words: "sql insert update delete odbc sqlserver oracle access" },
   "pdf.split": { summary: "Split a PDF into one file per page (or every few pages)", words: "separate pages divide" },
   "config.read": { summary: "Read the scenario's settings file (config/)", words: "settings json" },
   "desktop.launch": { summary: "Start an app", words: "open start run exe program" },

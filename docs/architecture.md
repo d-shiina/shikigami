@@ -106,6 +106,7 @@ shikigami/
 │  ├─ shikigami-files/    file.* (text, CSV, copy/move/delete, zip)
 │  ├─ shikigami-system/   http.* / process.* / clipboard.* / dialog.*
 │  ├─ shikigami-pdf/      pdf.readText, pdf.merge / extractPages / split
+│  ├─ shikigami-db/       db.query / db.execute (SQL through ODBC)
 │  └─ shikigami-plugins/  node plugins (declared in a manifest, run in a separate process)
 ├─ apps/
 │  └─ studio/                 Tauri 2 + React (src/ is the frontend, src-tauri/ the Rust side)

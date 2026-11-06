@@ -8,6 +8,7 @@
 
 ### 追加
 
+- データベース：`db.query`（SELECT を 1 つ実行して列名をキーにしたレコードの配列に）と `db.execute`（INSERT・UPDATE・DELETE などを 1 つ実行して `{ rowsAffected }`）。ODBC 経由なので SQL Server・Oracle・Access・PostgreSQL などに使えます。値は `params` で SQL の `?` に入れます。接続文字列にパスワードは書かず、ログインはシークレット（`user` / `password`）で、シークレットのサイトに `db:<サーバー>` が要ります（Windows 認証なら不要）。ステップの分類 `database` と、シークレットのサイトの書き方 `db:<サーバー>` を追加（docs/database.md）
 - PDF の結合・分割：`pdf.merge`（いくつかの PDF を 1 つに）、`pdf.extractPages`（`"1-3,5"`・`"2-"` で選んだページを新しい PDF に）、`pdf.split`（数ページずつのファイルに分けてパスの一覧を返す）。Acrobat は不要。新しいファイルには選んだページと、そのページが描くものだけを入れ、しおり・フォーム・ほかのページへのリンクは引き継ぎません（docs/pdf.md）
 
 ## [0.1.1] - 2026-11-06

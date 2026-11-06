@@ -2773,6 +2773,211 @@
       "deprecated": null
     },
     {
+      "type": "db.execute",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string",
+            "minLength": 1
+          },
+          "user": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "password": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "required": [
+          "connection",
+          "sql"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "user",
+        "password"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "db.query",
+      "params": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": "string",
+            "minLength": 1
+          },
+          "user": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "password": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "username",
+                      "password",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "maxRows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "connection",
+          "sql"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "user",
+        "password"
+      ],
+      "deprecated": null
+    },
+    {
       "type": "desktop.click",
       "params": {
         "type": "object",
