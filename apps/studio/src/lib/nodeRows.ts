@@ -26,11 +26,27 @@ export type Row =
   | { kind: "more"; count: number }
   | { kind: "output"; label: string; variable: string };
 
-/** Variable names a value mentions, among the ones we know about. */
+/**
+ * Variable names a value mentions, among the ones we know about. A string is
+ * an expression, or text whose `{{ }}` holes are; inside an object or list
+ * (a click target, headers…) only the holes count, so "billing.exe" in a
+ * target is not the variable `billing`.
+ */
 export function referencedVariables(value: unknown, known: ReadonlySet<string>): string[] {
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
   const found = new Set<string>();
-  for (const word of text.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []) if (known.has(word)) found.add(word);
+  const scan = (text: string) => {
+    for (const word of text.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []) if (known.has(word)) found.add(word);
+  };
+  const holes = (text: string) => {
+    for (const [, expr] of text.matchAll(/\{\{(.*?)\}\}/g)) scan(expr ?? "");
+  };
+  const walk = (v: unknown) => {
+    if (typeof v === "string") holes(v);
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") Object.values(v).forEach(walk);
+  };
+  if (typeof value === "string") (value.includes("{{") ? holes : scan)(value);
+  else walk(value);
   return [...found];
 }
 

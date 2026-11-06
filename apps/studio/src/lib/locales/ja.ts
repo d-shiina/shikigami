@@ -611,6 +611,7 @@ export const ja = {
     id: "ID",
     more: "詳しく指定",
     less: "たたむ",
+    otherRole: "その他（直接入力）",
   } as Record<string, string>,
   roles: {
     button: "ボタン",

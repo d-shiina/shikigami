@@ -207,7 +207,7 @@ const BUILDERS: Record<string, Builder> = {
   "desktop.press": (p) => [w(p.target ? `${targetText(p.target)}で ` : ""), code(p.key), w(" キーを押す")],
   "desktop.select": (p) => [w(`${targetText(p.target)}で `), code(p.value), w(" を選ぶ")],
   "desktop.getValue": (p, s) => [w(`${targetText(p.target)}の値を読む`), ...saveAs(s)],
-  "desktop.readText": (p, s) => [w(`${targetText(p.target)}の文字を OCR で読む`), ...saveAs(s)],
+  "desktop.readText": (p, s) => [...(p.file !== undefined && p.target === undefined ? [...template(p.file), w(" の画像の文字を OCR で読む")] : [w(`${targetText(p.target)}の文字を OCR で読む`)]), ...saveAs(s)],
   "desktop.waitFor": (p) => [w(`${targetText(p.target)}が${p.state === "hidden" ? "消える" : "出る"}まで待つ`)],
   "desktop.closeWindow": (p) => [w(`${targetText(p.target)}を閉じる`)],
 };
@@ -248,7 +248,7 @@ const BUILDERS_EN: Record<string, Builder> = {
   "desktop.press": (p) => [w("Press "), code(p.key), w(p.target ? ` on ${targetText(p.target)}` : "")],
   "desktop.select": (p) => [w("Select "), code(p.value), w(` in ${targetText(p.target)}`)],
   "desktop.getValue": (p, s) => [w(`Read the value of ${targetText(p.target)}`), ...saveAs(s)],
-  "desktop.readText": (p, s) => [w(`Read the text of ${targetText(p.target)} with OCR`), ...saveAs(s)],
+  "desktop.readText": (p, s) => [...(p.file !== undefined && p.target === undefined ? [w("Read the text in the image "), ...template(p.file), w(" with OCR")] : [w(`Read the text of ${targetText(p.target)} with OCR`)]), ...saveAs(s)],
   "desktop.waitFor": (p) => [w(`Wait until ${targetText(p.target)} ${p.state === "hidden" ? "disappears" : "appears"}`)],
   "desktop.closeWindow": (p) => [w(`Close ${targetText(p.target)}`)],
 };

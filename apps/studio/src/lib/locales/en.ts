@@ -612,6 +612,7 @@ export const en: Dict = {
     id: "ID",
     more: "More fields",
     less: "Fewer fields",
+    otherRole: "Other (type it)",
   },
   roles: {
     button: "Button",

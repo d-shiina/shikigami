@@ -361,17 +361,7 @@ function ObjectFields({
             />
           );
         } else if (key === "role") {
-          // The browser's role is free text: offer the common ones, in words.
-          editor = (
-            <select className={inputClass} value={String(v ?? "")} onChange={(e) => set(key, e.target.value || null)}>
-              <option value="">{t.props.unset}</option>
-              {[...BROWSER_ROLES, ...(typeof v === "string" && v && !BROWSER_ROLES.includes(v) ? [v] : [])].map((role) => (
-                <option key={role} value={role}>
-                  {roleLabel(role)}
-                </option>
-              ))}
-            </select>
-          );
+          editor = <RoleField value={typeof v === "string" ? v : ""} onChange={(role) => set(key, role || null)} />;
         } else {
           editor = <CommitInput mono={key === "css"} value={typeof v === "string" ? v : v === undefined ? "" : JSON.stringify(v)} onCommit={(text) => set(key, text)} />;
         }
@@ -390,6 +380,42 @@ function ObjectFields({
     </div>
   );
 }
+
+/**
+ * The browser's role is free text: offer the common ones in words, and let
+ * any other role (dialog, slider…) be typed in.
+ */
+function RoleField({ value, onChange }: { value: string; onChange: (role: string) => void }) {
+  const [typing, setTyping] = useState(false);
+  const custom = typing || (value !== "" && !BROWSER_ROLES.includes(value));
+  return (
+    <div className={custom ? "grid min-w-0 grid-cols-2 gap-1" : "min-w-0"}>
+      <select
+        className={inputClass}
+        value={custom ? OTHER_ROLE : value}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (next === OTHER_ROLE) {
+            setTyping(true);
+            return;
+          }
+          setTyping(false);
+          onChange(next);
+        }}
+      >
+        <option value="">{t.props.unset}</option>
+        {BROWSER_ROLES.map((role) => (
+          <option key={role} value={role}>
+            {roleLabel(role)}
+          </option>
+        ))}
+        <option value={OTHER_ROLE}>{t.targetFields.otherRole}</option>
+      </select>
+      {custom && <CommitInput mono value={BROWSER_ROLES.includes(value) ? "" : value} onCommit={(text) => onChange(text.trim())} />}
+    </div>
+  );
+}
+const OTHER_ROLE = "\u0000other";
 
 function ParamsEditor({
   step,
