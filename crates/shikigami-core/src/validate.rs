@@ -741,6 +741,9 @@ impl Cx<'_> {
         let mut broken = false;
         let app = step.step_type.split('.').next().unwrap_or_default();
         for (key, value) in &mut params {
+            if !crate::model::takes_part(&step.step_type, key) {
+                continue;
+            }
             let param_path = format!("{path}/params/{key}");
             if let Some(obj) = value.as_object()
                 && obj.contains_key("part")
@@ -1662,5 +1665,19 @@ mod tests {
             s.steps[0].params["target"],
             json!({ "window": { "process": "billing.exe" } })
         );
+
+        // Only a browser or desktop target names a part: other params may
+        // carry their own `part` field (an HTTP body, say).
+        assert!(crate::model::takes_part("browser.click", "target"));
+        assert!(!crate::model::takes_part("http.request", "json"));
+        assert!(!crate::model::takes_part("desktop.poke", "json"));
+        let body = json!({ "part": "saveButton" });
+        s.steps = vec![
+            Step::new("http.request")
+                .with_id("e")
+                .with_param("json", body.clone()),
+        ];
+        s.inline_parts();
+        assert_eq!(s.steps[0].params["json"], body);
     }
 }

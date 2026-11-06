@@ -30,7 +30,7 @@ function* walk(steps: readonly Step[]): Generator<Step> {
 
 /** The nodes whose target names the part. */
 export function partUses(steps: readonly Step[], name: string): Step[] {
-  return [...walk(steps)].filter((s) => partRef(s.params?.target) === name);
+  return [...walk(steps)].filter((s) => appOf(s.type) && partRef(s.params?.target) === name);
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));

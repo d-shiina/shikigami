@@ -111,10 +111,8 @@ impl Scenario {
         }
         fn visit(steps: &mut [Step], parts: &BTreeMap<String, Part>) {
             for step in steps {
-                for value in step.params.values_mut() {
-                    if let Some(part) = part_ref(value).and_then(|name| parts.get(name)) {
-                        *value = part.target.clone();
-                    }
+                if let Some(part) = target_part(step).and_then(|name| parts.get(name)) {
+                    step.params.insert("target".to_owned(), part.target.clone());
                 }
                 for children in step.blocks.values_mut() {
                     visit(children, parts);
@@ -322,6 +320,21 @@ impl PartApp {
             Self::Desktop => "desktop",
         }
     }
+}
+
+/// Whether the `key` param of a `step_type` step may name a part: only the
+/// screen target of browser and desktop steps, so other object params
+/// (an HTTP body, say) can have a `part` field of their own.
+pub fn takes_part(step_type: &str, key: &str) -> bool {
+    key == "target" && matches!(step_type.split('.').next(), Some("browser" | "desktop"))
+}
+
+/// The part the step's target names, if it names one.
+pub fn target_part(step: &Step) -> Option<&str> {
+    if !takes_part(&step.step_type, "target") {
+        return None;
+    }
+    part_ref(step.params.get("target")?)
 }
 
 /// The part name when `value` is a reference to one (`{ "part": "<name>" }`
