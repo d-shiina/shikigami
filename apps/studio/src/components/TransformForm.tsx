@@ -60,7 +60,7 @@ function Commit({ value, onCommit, placeholder, list, mono }: { value: string; o
       placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
-      onKeyDown={(e) => e.key === "Enter" && commit()}
+      onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && commit()}
     />
   );
 }

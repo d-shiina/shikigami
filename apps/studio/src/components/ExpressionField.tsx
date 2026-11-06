@@ -166,6 +166,8 @@ export function ExpressionField({
             commit();
           }}
           onKeyDown={(e) => {
+            // Enter while converting with an IME confirms the conversion.
+            if (e.nativeEvent.isComposing) return;
             if (e.key === " " && e.ctrlKey) {
               e.preventDefault();
               setOpen(true);

@@ -7,6 +7,8 @@ describe("runScope", () => {
     expect(leadingElements('[{"a":1},{"a":2},{"a":"3…')).toEqual([{ a: 1 }, { a: 2 }]);
     expect(leadingElements('[{"a":"x,y"}]')).toEqual([{ a: "x,y" }]);
     expect(leadingElements('{"a":1')).toBeNull();
+    expect(leadingElements("[INFO] started")).toBeNull();
+    expect(leadingElements("[INFO] a, b, c…")).toBeNull();
   });
 
   it("keeps each variable's last value and marks shortened ones", () => {

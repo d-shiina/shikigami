@@ -31,7 +31,14 @@ export function leadingElements(preview: string): unknown[] | null {
     else if (c === "[" || c === "{") depth++;
     else if (c === "]" || c === "}") {
       depth--;
-      if (depth === 0) return JSON.parse(preview.slice(0, i + 1)) as unknown[];
+      if (depth === 0) {
+        // Text that only looks like a list (`[INFO] …`) is not one.
+        try {
+          return JSON.parse(preview.slice(0, i + 1)) as unknown[];
+        } catch {
+          return null;
+        }
+      }
     } else if (c === "," && depth === 1) lastEnd = i;
   }
   if (lastEnd < 0) return [];
