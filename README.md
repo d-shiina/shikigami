@@ -28,6 +28,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/expressions.md](docs/expressions.md) | Functions available in flow expressions |
 | [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md), [docs/database.md](docs/database.md) | Built-in nodes: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF, databases |
 | [docs/schedules.md](docs/schedules.md) | Schedules and file triggers; the agent that runs them on each PC |
+| [docs/audit.md](docs/audit.md) | One audit trail: who changed, published and ran which flow (`shikigami audit`), and how long it is kept |
 | [docs/remote.md](docs/remote.md) | Management server: enroll PCs, hand jobs to whichever is free, protocol v1 and a reference server |
 | [docs/secrets.md](docs/secrets.md) | Logins: secrets the AI refers to by name only |
 | [docs/oauth.md](docs/oauth.md) | Web APIs that need an OAuth sign-in (Box and others), with any fixed redirect URL |

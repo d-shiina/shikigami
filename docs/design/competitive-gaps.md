@@ -237,6 +237,7 @@
 - **今**：人が読む実行ログは新しい 100 件（CHANGELOG 0.1.0）。MCP の操作は `audit/mcp.jsonl`。Studio・CLI・MCP をまたいだ監査の一本化と、保管期間の設定はない
 - **相手**：UiPath（Orchestrator の監査ログ・保持期間）
 - **方向**：#77 の管理ツールに集める前提で、PC 側の保管期間の設定を先に
+- **対応（2026-11-06）**：`shikigami audit` で、変更の記録・公開の記録・MCP の呼び出し・実行記録を 1 つの一覧（時刻順、`--since` / `--until` / `--flow` / `--json`）で読む（[docs/ja/audit.md](../ja/audit.md)）。新しく二重に書く記録は作らない。`policy.json` の `records.keepDays` で実行記録と MCP の呼び出しを期限で削除。管理サーバーはジョブ・イベント・レポートを全 PC 分保存（[docs/ja/remote.md](../ja/remote.md)）
 
 ### 26. 有償サポート・販売パートナー・研修と認定
 

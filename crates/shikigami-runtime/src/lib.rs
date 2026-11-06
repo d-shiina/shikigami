@@ -9,6 +9,7 @@
 #![allow(clippy::result_large_err)]
 
 pub mod adapter;
+pub mod audit;
 pub mod builtin;
 pub mod debug;
 pub mod event;

@@ -1060,6 +1060,47 @@
       ]
     },
     {
+      "name": "audit",
+      "args": [
+        {
+          "id": "since",
+          "required": false,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "long": "since"
+        },
+        {
+          "id": "until",
+          "required": false,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "long": "until"
+        },
+        {
+          "id": "flow",
+          "required": false,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "long": "flow"
+        },
+        {
+          "id": "json",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "json",
+          "values": [
+            "true",
+            "false"
+          ]
+        }
+      ]
+    },
+    {
       "name": "mcp",
       "args": [
         {
