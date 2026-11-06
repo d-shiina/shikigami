@@ -18,6 +18,7 @@ shikigami-plugins.workspace = true
 shikigami-mcp.workspace = true
 shikigami-secrets.workspace = true
 shikigami-agent.workspace = true
+shikigami-manager.workspace = true
 rpassword = "7.5.4"
 anyhow.workspace = true
 clap.workspace = true
