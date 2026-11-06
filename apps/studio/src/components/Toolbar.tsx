@@ -242,7 +242,7 @@ export function CanvasDock() {
     <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-[4px] whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-raised backdrop-blur">
       <button
         type="button"
-        onClick={() => setPaletteOpen(true)}
+        onClick={(e) => setPaletteOpen(true, null, e.currentTarget.getBoundingClientRect())}
         className="flex items-center gap-2 rounded-[3px] bg-ink py-1.5 pr-2 pl-3 text-sm font-medium text-paper hover:bg-slate-700"
       >
         ＋ <span className="@max-[560px]:hidden">{t.addStep}</span>

@@ -12,6 +12,8 @@ export const NODE_W = 290;
 export const SLOT_H = 40;
 /** Room above a step for the flow edge, its label and the review toolbar. */
 const GAP_Y = 56;
+/** Between the last node and the "+" under it. */
+const END_GAP = 24;
 /**
  * Room beside a step for its variable chips: the ones it reads sit off its
  * left edge, the ones it writes off its right.
@@ -42,6 +44,8 @@ export type SlotNodeData = {
   parentId: string | null;
   block: string | null;
   label: string;
+  /** The faint "+" under the scenario's last node, to keep adding at the end. */
+  end?: boolean;
 };
 
 export type LayoutNode = {
@@ -230,5 +234,14 @@ export function layoutScenario(steps: Step[], defs: Defs, extra: Extra = NO_EXTR
   const builder = new Builder(defs, extra);
   const size = measureList(steps, defs, extra);
   builder.list(steps, 0, 0, size.w, null, null, "");
-  return { nodes: builder.nodes, edges: builder.edges, width: size.w, height: size.h };
+  if (steps.length === 0) return { nodes: builder.nodes, edges: builder.edges, width: size.w, height: size.h };
+  // Under the last node: a faint "+" to add the next one at the end.
+  const y = size.h + END_GAP;
+  builder.nodes.push({
+    id: "slot:end",
+    type: "slot",
+    position: { x: (size.w - SLOT.w) / 2, y },
+    data: { kind: "slot", parentId: null, block: null, label: "", end: true },
+  });
+  return { nodes: builder.nodes, edges: builder.edges, width: size.w, height: y + SLOT.h };
 }

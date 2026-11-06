@@ -110,7 +110,6 @@ export const en: Dict = {
   apply: "Apply",
   invalidJson: "Not valid JSON",
   selectStep: "Select a node to edit its properties",
-  emptyScenario: "No nodes yet (click to add one)",
   revision: "Revision",
   reloadedByConflict: "Another client (such as the AI) changed this scenario; loaded the latest version.",
   externalChange: "Applied a change made outside Studio (MCP / CLI).",
@@ -444,7 +443,7 @@ export const en: Dict = {
     other: "Other",
   },
   palette: {
-    placeholder: "Find a node (e.g. excel read, click, loop)",
+    placeholder: "Find a node…",
     empty: (query: string) => `No node matches "${query}"`,
     frequent: "Frequent",
     recent: "Recent",
@@ -458,6 +457,7 @@ export const en: Dict = {
     choose: "choose",
     add: "add",
     group: "group",
+    back: "Back",
   },
   evidence: {
     goneStep: "(node no longer exists)",
@@ -524,7 +524,6 @@ export const en: Dict = {
     stoppedHere: "Stopped here",
     pausedHere: "Paused here",
     note: "Note",
-    emptySlot: "Empty (click to add a node)",
   },
   project: {
     title: "Project",

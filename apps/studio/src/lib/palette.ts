@@ -36,7 +36,6 @@ export const SECTIONS: { id: string; groups: string[] }[] = [
 const ORDER = SECTIONS.flatMap((s) => s.groups);
 
 /** The opening view: recently added nodes, then these. */
-export const FREQUENT = "frequent";
 const COMMON = [
   "browser.open",
   "browser.click",

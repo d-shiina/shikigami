@@ -109,7 +109,6 @@ export const ja = {
   apply: "適用",
   invalidJson: "JSONとして解析できません",
   selectStep: "ノードを選択するとプロパティを編集できます",
-  emptyScenario: "ノードがありません（クリックしてノードを追加）",
   revision: "リビジョン",
   reloadedByConflict: "他のクライアント（AIなど）が更新したため、最新の内容を読み込みました。",
   externalChange: "外部（MCP / CLI）での変更を反映しました。",
@@ -443,7 +442,7 @@ export const ja = {
     other: "その他",
   },
   palette: {
-    placeholder: "ノードを探す（例：Excel 読む、クリック、繰り返し）",
+    placeholder: "ノードを探す…",
     empty: (query: string) => `「${query}」に合うノードがありません`,
     frequent: "よく使う",
     recent: "最近使った",
@@ -457,6 +456,7 @@ export const ja = {
     choose: "選ぶ",
     add: "追加",
     group: "分類",
+    back: "戻る",
   },
   evidence: {
     goneStep: "（いまは無いノード）",
@@ -523,7 +523,6 @@ export const ja = {
     stoppedHere: "ここで止まっています",
     pausedHere: "ここで一時停止中",
     note: "指摘",
-    emptySlot: "空（クリックしてノードを追加）",
   },
   project: {
     title: "プロジェクト",

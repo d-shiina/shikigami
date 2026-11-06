@@ -231,7 +231,7 @@ function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: Bl
       onMouseLeave={() => data.hover?.(null)}
       onClick={(e) => {
         e.stopPropagation();
-        setPaletteOpen(true, at);
+        setPaletteOpen(true, at, e.currentTarget.getBoundingClientRect());
       }}
       style={inline ? undefined : { transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
       className={`nodrag nopan pointer-events-auto flex h-[18px] w-[18px] items-center justify-center rounded-[3px] border border-slate-300 bg-sheet text-slate-600 shadow-raised hover:border-ink hover:bg-ink hover:text-white ${
@@ -715,16 +715,22 @@ function StepNode({ data }: StepNodeProps) {
 }
 
 function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
+  // An empty block, an empty scenario, or the faint "+" under the last node: each adds a node there.
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
-      className={`flex items-center justify-center rounded-[4px] border border-dashed text-xs ${
-        data.selected ? "border-brand-500 bg-brand-50 text-brand-600" : "border-slate-300 text-slate-400"
+      title={t.addStep}
+      className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-[4px] border border-dashed text-[13px] ${
+        data.selected
+          ? "border-brand-500 bg-brand-50 text-brand-600"
+          : data.end
+            ? "border-slate-300 text-slate-500 opacity-75 hover:border-slate-500 hover:bg-sheet hover:text-ink hover:opacity-100"
+            : "border-slate-400 bg-sheet/60 text-slate-600 hover:border-ink hover:bg-sheet hover:text-ink"
       }`}
     >
-      <FlowHandles />
-      {/* The edge into the slot already carries the block's label. */}
-      {data.parentId ? t.flow.emptySlot : t.emptyScenario}
+      {!data.end && <FlowHandles />}
+      <Plus size={14} strokeWidth={2} aria-hidden="true" />
+      {t.addStep}
     </div>
   );
 }
@@ -1111,14 +1117,15 @@ export function FlowCanvas() {
 
       }}
       minZoom={0.2}
-      onNodeClick={(_, node) => {
+      onNodeClick={(event, node) => {
         if (inside) return;
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
         else {
           // An empty block is there to be filled: clicking it opens the palette for it.
           select({ kind: "slot", parentId: data.parentId, block: data.block });
-          setPaletteOpen(true);
+          const box = (event.target as Element).closest(".react-flow__node")?.getBoundingClientRect();
+          setPaletteOpen(true, null, box);
         }
       }}
       onPaneClick={() => select(null)}

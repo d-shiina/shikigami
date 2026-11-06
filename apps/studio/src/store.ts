@@ -50,6 +50,9 @@ export type Selection =
 /** A place between nodes (the "+" on a line of the flow chart): a new node goes at `index` of the block. */
 export type InsertAt = { parentId: string | null; block: string | null; index: number };
 
+/** Where on screen the palette was opened from (the "+", the node, the dock), so it opens beside it. */
+export type PaletteAnchor = { left: number; top: number; right: number; bottom: number };
+
 /**
  * The places in the sidebar; each fills the window right of it. "library" is
  * the page of all scenarios, "scenarios" the editor of the open one.
@@ -228,6 +231,7 @@ export type StudioState = {
   paletteOpen: boolean;
   /** Where the palette adds, when it was opened from a "+" between nodes; otherwise after the selection. */
   paletteAt: InsertAt | null;
+  paletteAnchor: PaletteAnchor | null;
   place: Place;
   /** The panel under the chart (run log, issues); null when closed. */
   bottom: BottomTab | null;
@@ -348,7 +352,7 @@ export type StudioState = {
   loadInbox(): Promise<void>;
   setReviewing(on: boolean): void;
   /** Opens the node palette, adding at `at` (or after the selection) when a node is picked. */
-  setPaletteOpen(open: boolean, at?: InsertAt): void;
+  setPaletteOpen(open: boolean, at?: InsertAt | null, anchor?: PaletteAnchor | null): void;
   loadVersions(): Promise<void>;
   createVersion(name: string, note: string): Promise<boolean>;
   restoreVersion(number: number): Promise<void>;
@@ -718,6 +722,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
       paletteAt: null,
+      paletteAnchor: null,
       place: "library",
       bottom: null,
       historyOpen: false,
@@ -1531,9 +1536,13 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ reviewing: on, place: on ? "review" : "scenarios", secretsOpen: false });
       },
 
-      setPaletteOpen(open, at) {
+      setPaletteOpen(open, at, anchor) {
         // Steps are added to the open scenario: show it.
-        set(open ? { paletteOpen: true, paletteAt: at ?? null, dive: [] } : { paletteOpen: false, paletteAt: null });
+        set(
+          open
+            ? { paletteOpen: true, paletteAt: at ?? null, paletteAnchor: anchor ?? null, dive: [] }
+            : { paletteOpen: false, paletteAt: null, paletteAnchor: null },
+        );
       },
 
       async loadVersions() {
