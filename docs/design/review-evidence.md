@@ -6,10 +6,10 @@
 
 | 種類 | いつ記録されるか | 置き場所 |
 |---|---|---|
-| 変更の説明（`summary`）、人に確かめてほしいこと（`checks`）と触ったノード（`stepIds`） | 編集ツールの呼び出しごと | `history/<scenario-id>/journal.jsonl`（従来のジャーナルに欄を追加） |
-| テスト実行（`testRun`） | MCP の `run_scenario` が終わったとき | `history/<scenario-id>/evidence.jsonl` |
+| 変更の説明（`summary`）、人に確かめてほしいこと（`checks`）と触ったノード（`stepIds`） | 編集ツールの呼び出しごと | `history/<flow-id>/journal.jsonl`（従来のジャーナルに欄を追加） |
+| テスト実行（`testRun`） | MCP の `run_flow` が終わったとき | `history/<flow-id>/evidence.jsonl` |
 | 画面の証跡（`observation`） | `inspect_page` / `inspect_ui`（ウィンドウ指定時）/ `test_step` のたびに保存し、編集が `observations` で名指ししたときにその版と手順に紐づける | 本体：`observations/<obs-id>/`（`observation.json`・`tree.txt`・`screenshot.jpg`）。紐づけ：`evidence.jsonl` |
-| レビュー（`review`） | Studio で承認・差し戻ししたとき | `history/<scenario-id>/evidence.jsonl` |
+| レビュー（`review`） | Studio で承認・差し戻ししたとき | `history/<flow-id>/evidence.jsonl` |
 
 - すべて PC ごとの部分（[sharing-versioning.md](sharing-versioning.md)）に置く。ジャーナル・実行記録と同じ扱いで、共有ワークスペースでも同期されない。
 - 各レコードは `revision`（どのリビジョンに対するものか）・`at`・`actor`（Studio / MCP クライアント名）を持つ。
@@ -46,7 +46,7 @@
   "request": { "type": "browser.click", "params": {…} }, "status": "succeeded", "output": null,
   "treeFile": "tree.txt", "screenshotFile": "screenshot.jpg",
   "notes": ["UI tree cut at 256 KB"],
-  "linked": [{ "scenarioId": "scn_…", "revision": 5 }] }
+  "linked": [{ "flowId": "scn_…", "revision": 5 }] }
 ```
 
 ## 読み出し
@@ -55,7 +55,7 @@
 
 - `sinceRevision` より後の `changes`（ジャーナルから ops を除いたもの）と `evidence`。既定の `since` は最後に承認されたリビジョン（なければ 0）なので、「まだレビューしていない分」がそのまま出る。
 - `lastApproval`：最後の承認。`openFeedback`：最新のレビューが差し戻しなら、それ（承認されると消える）。
-- MCP の `get_scenario` は `openFeedback` があるとき `feedback` として付ける。AI は読み直すたびに差し戻しに気づける。
+- MCP の `get_flow` は `openFeedback` があるとき `feedback` として付ける。AI は読み直すたびに差し戻しに気づける。
 
 Studio 用の Tauri コマンド：`review_timeline(id, since?)`、`submit_review(id, input: NewReview)`、`get_observation(id)`（ツリー本文と、スクリーンショットを data URL で返す）。型は `@shikigami/schema` の `ReviewTimeline` / `Evidence` / `NewReview` / `ObservationContent`。
 
@@ -83,7 +83,7 @@ Studio 用の Tauri コマンド：`review_timeline(id, since?)`、`submit_revie
 | --- | --- | --- |
 | 見出し | 何のための変更か。いちばん古い未確認の編集の `summary` の 1 行目（なければ「2ノード追加・1ノード変更」） | ジャーナル |
 | 1 変わること | ノードごとのカード。前と後をフロー図・手順書と同じ文で並べ、増えた語・消えた語に色を付ける。式や項目名は「項目の値」に畳む。AI の説明はカードの中。カードやフロー図で選ぶと「見た」になり、「3件中 2件を見た」と数える | ops と inverse（前の姿は inverse の `updateStep` を新しい順に当てて作る） |
-| 2 外への影響 | シナリオが外に触れるもの（サイトを開く、ファイルを読む・書く・消す、メール、コマンド、アプリ）。今回「新しく」「変わった」「なくなる」ものを上に、危険度 `dangerous` は朱。変わらないものは畳む | ノードの種類の `risk`・`pathParams` と `url` などの項目（`lib/effects.ts`） |
+| 2 外への影響 | フローが外に触れるもの（サイトを開く、ファイルを読む・書く・消す、メール、コマンド、アプリ）。今回「新しく」「変わった」「なくなる」ものを上に、危険度 `dangerous` は朱。変わらないものは畳む | ノードの種類の `risk`・`pathParams` と `url` などの項目（`lib/effects.ts`） |
 | 3 試しの結果 | 最新の AI の試し実行が今の内容か、変えたノードを何個通ったか、出力の値とログ。古い版で試した・通っていないノードがあるときは橙で知らせる。AI が見た画面もここ | `testRun` 証跡と `run_record(runId)`（`runs/<id>/` の report と events） |
 | 4 確かめてほしいこと | AI の `checks`。「よい／違う…」で答え、「違う…」は質問を引用した差し戻しのフォームを開く。答えはこの画面の間だけ覚える（記録しない） | ジャーナル |
 

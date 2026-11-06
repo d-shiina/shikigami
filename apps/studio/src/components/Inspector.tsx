@@ -113,7 +113,7 @@ const isSecretRef = (v: unknown): v is SecretRef =>
 
 /**
  * Text, or a registered secret picked by name. The value itself is never
- * shown or stored in the scenario: only `{ secret, field }`.
+ * shown or stored in the flow: only `{ secret, field }`.
  */
 function TextOrSecretField({
   label,
@@ -311,7 +311,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 /** An object param with declared items, holding nothing or a plain object (not an expression). */
 /**
  * The target of a browser or desktop node: its own fields, or a named part
- * of the scenario (`{ part: "<name>" }`), with "部品にする" to share it.
+ * of the flow (`{ part: "<name>" }`), with "部品にする" to share it.
  */
 function TargetField({
   step,
@@ -326,14 +326,14 @@ function TargetField({
   required: boolean;
   onChange: (value: unknown) => void;
 }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const applyOps = useStudio((s) => s.applyOps);
   const select = useStudio((s) => s.select);
   const [making, setMaking] = useState(false);
   const [label, setLabel] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const app = appOf(step.type)!;
-  const all = scenario?.parts ?? {};
+  const all = flow?.parts ?? {};
   const choices = Object.entries(all).filter(([, p]) => p.app === app);
   const ref = partRef(value);
   const part = ref ? all[ref] : undefined;
@@ -350,7 +350,7 @@ function TargetField({
   };
   const make = async () => {
     const name = newPartName(value, Object.keys(all));
-    const made = makePartOps(scenario?.steps ?? [], step, name, label || name);
+    const made = makePartOps(flow?.steps ?? [], step, name, label || name);
     if (!made) return;
     if (await applyOps(made.ops)) {
       setNote(t.parts.made(made.others));
@@ -396,7 +396,7 @@ function TargetField({
                 {t.parts.open}
               </button>
             </div>
-            <p className="pt-1 text-[11px] text-slate-500">{t.parts.shared(partUses(scenario?.steps ?? [], ref).length)}</p>
+            <p className="pt-1 text-[11px] text-slate-500">{t.parts.shared(partUses(flow?.steps ?? [], ref).length)}</p>
           </div>
         ) : (
           <p className="px-1 text-[11px] text-shu-600">{t.parts.missing(ref)}</p>
@@ -446,13 +446,13 @@ function TargetField({
 
 /** A named part: its name, its target (pick it again, highlight it) and the nodes that use it. */
 function PartInspector({ name }: { name: string }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const applyOps = useStudio((s) => s.applyOps);
   const goTo = useStudio((s) => s.goTo);
   const select = useStudio((s) => s.select);
-  const part = scenario?.parts?.[name];
-  if (!scenario || !part) return <p className="p-4 text-sm text-slate-400">{t.parts.missing(name)}</p>;
+  const part = flow?.parts?.[name];
+  if (!flow || !part) return <p className="p-4 text-sm text-slate-400">{t.parts.missing(name)}</p>;
   // The widest target of the app: the one nodes that may point at a place take.
   const def = stepTypes.find((d) => d.type === (part.app === "desktop" ? "desktop.mouseClick" : "browser.click"));
   const wide = ((def?.paramsSchema as JsonSchema | undefined)?.properties?.target ?? {}) as JsonSchema;
@@ -462,9 +462,9 @@ function PartInspector({ name }: { name: string }) {
     ...wide,
     properties: Object.fromEntries(Object.entries(wide.properties ?? {}).filter(([k]) => part.app === "browser" || has.has(k))),
   };
-  const uses = partUses(scenario.steps ?? [], name);
+  const uses = partUses(flow.steps ?? [], name);
   // The node numbers people see in the status bar ("ノード 3 / 5").
-  const order = outline(scenario.steps ?? [], new Map(stepTypes.map((d) => [d.type, d] as const))).map((i) => i.id);
+  const order = outline(flow.steps ?? [], new Map(stepTypes.map((d) => [d.type, d] as const))).map((i) => i.id);
   const set = (patch: Partial<Part>) => void applyOps([{ op: "setPart", name, part: { ...part, ...patch } }]);
   const color = CATEGORY_COLOR[part.app === "desktop" ? "windows" : "browser"] ?? CATEGORY_COLOR.other;
   const pointer = POINTERS.has(part.app) ? part.app : undefined;
@@ -582,7 +582,7 @@ function PointTools({
   const [note, setNote] = useState<{ text: string; warn?: boolean } | null>(null);
   const canPoint = Boolean(schema.properties?.point);
   // A browser part is picked in the browser a run opened: there is none
-  // until the scenario runs (or is paused at a node).
+  // until the flow runs (or is paused at a node).
   const browser = adapter === "browser";
   const session = browser && run && isActive(run) ? run.runId : undefined;
   const unavailable = browser && !session;
@@ -882,15 +882,15 @@ function ParamsEditor({
 
 /** Where this step's variables come from and go to, matching the links on the chart. */
 function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[]; vars: Map<string, string | undefined> }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const goTo = useStudio((s) => s.goTo);
   const incoming = links.filter((l) => l.to === stepId);
   const outgoing = links.filter((l) => l.from === stepId);
   if (incoming.length === 0 && outgoing.length === 0) return null;
   const nameOf = (id: string) => {
-    if (id === INPUT_NODE) return t.props.scenarioInput;
-    if (id === OUTPUT_NODE) return t.props.scenarioOutput;
-    const s = findStep(scenario?.steps ?? [], id);
+    if (id === INPUT_NODE) return t.props.flowInput;
+    if (id === OUTPUT_NODE) return t.props.flowOutput;
+    const s = findStep(flow?.steps ?? [], id);
     return s?.name || s?.type || id;
   };
   const item = (l: DataLink, other: string, arrow: string) => (
@@ -925,7 +925,7 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
   );
 }
 
-/** Which scenario a call runs, what it passes in and where its outputs go. */
+/** Which flow a call runs, what it passes in and where its outputs go. */
 function CallEditor({
   step,
   vars,
@@ -935,16 +935,16 @@ function CallEditor({
   vars: Map<string, string | undefined>;
   update: (p: StepPatch) => void;
 }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const summaries = useStudio((s) => s.summaries);
   const called = useStudio((s) => s.called);
   const open = useStudio((s) => s.open);
-  const target = typeof step.params?.scenario === "string" ? step.params.scenario : "";
+  const target = typeof step.params?.flow === "string" ? step.params.flow : "";
   const callee = called[target];
   const inputs = callMap(step, "inputs");
   const outs = callMap(step, "outputs");
   const known = new Set(vars.keys());
-  const choices = summaries.filter((s) => s.id !== scenario?.id);
+  const choices = summaries.filter((s) => s.id !== flow?.id);
   const calleeVars = callee?.variables ?? [];
   const ins = calleeVars.filter((v) => v.direction === "input" || v.direction === "inOut");
   const results = calleeVars.filter((v) => v.direction === "output" || v.direction === "inOut");
@@ -967,12 +967,12 @@ function CallEditor({
           )
         }
       >
-        <Row label={`${t.props.scenario} *`} hint={target !== "" && !callee ? t.props.notInWorkspace : undefined}>
+        <Row label={`${t.props.flow} *`} hint={target !== "" && !callee ? t.props.notInWorkspace : undefined}>
           <select
             className={inputClass}
             value={target}
             // Inputs and outputs belong to the old target: start over.
-            onChange={(e) => update({ replaceParams: { scenario: e.target.value } })}
+            onChange={(e) => update({ replaceParams: { flow: e.target.value } })}
           >
             <option value="">{t.props.choose}</option>
             {target !== "" && !choices.some((c) => c.id === target) && <option value={target}>{target}</option>}
@@ -1056,12 +1056,12 @@ function siblingsFrom(steps: Step[], id: string): Step[] | null {
   return null;
 }
 
-/** Moves this step (and the next few) into a new scenario called from here. */
-/** Moves the selected step (and the ones after it) into a new sub-scenario. Opened from the step's tools. */
+/** Moves this step (and the next few) into a new flow called from here. */
+/** Moves the selected step (and the ones after it) into a new sub-flow. Opened from the step's tools. */
 export function ExtractForm({ step }: { step: Step }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const extract = useStudio((s) => s.extract);
-  const after = useMemo(() => siblingsFrom(scenario?.steps ?? [], step.id ?? "") ?? [step], [scenario, step]);
+  const after = useMemo(() => siblingsFrom(flow?.steps ?? [], step.id ?? "") ?? [step], [flow, step]);
   const [count, setCount] = useState(1);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1111,7 +1111,7 @@ export function ExtractForm({ step }: { step: Step }) {
 }
 
 function StepInspector() {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const selection = useStudio((s) => s.selection);
   const stepTypes = useStudio((s) => s.stepTypes);
   const validation = useStudio((s) => s.validation);
@@ -1120,15 +1120,15 @@ function StepInspector() {
   const revert = useStudio((s) => s.revert);
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
-  const vars = useMemo(() => knownVariables(scenario?.variables, scenario?.steps ?? []), [scenario]);
+  const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
   const links = useMemo(() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
-    return dataLinks(scenario?.steps ?? [], scenario?.variables, defs, new Set(vars.keys()));
-  }, [scenario, stepTypes, vars]);
+    return dataLinks(flow?.steps ?? [], flow?.variables, defs, new Set(vars.keys()));
+  }, [flow, stepTypes, vars]);
 
-  if (!scenario) return null;
-  if (selection?.kind !== "step") return <ScenarioInspector />;
-  const step = findStep(scenario.steps ?? [], selection.stepId);
+  if (!flow) return null;
+  if (selection?.kind !== "step") return <FlowInspector />;
+  const step = findStep(flow.steps ?? [], selection.stepId);
   if (!step?.id) return <p className="p-4 text-sm text-slate-400">{t.selectStep}</p>;
   const id = step.id;
   const def = stepTypes.find((d) => d.type === step.type);
@@ -1253,7 +1253,7 @@ function StepInspector() {
               value={step.onError ?? ""}
               onChange={(e) => update({ onError: (e.target.value || null) as StepPatch["onError"] })}
             >
-              <option value="">{t.props.followScenario}</option>
+              <option value="">{t.props.followFlow}</option>
               <option value="fail">{t.onErrorFail}</option>
               <option value="continue">{t.onErrorContinue}</option>
             </select>
@@ -1266,21 +1266,21 @@ function StepInspector() {
   );
 }
 
-/** With nothing selected, the inspector shows the scenario itself: what it is, its variables, how it runs. */
-function ScenarioInspector() {
-  const scenario = useStudio((s) => s.scenario);
-  const updateScenario = useStudio((s) => s.updateScenario);
-  if (!scenario) return null;
-  const settings = scenario.settings ?? {};
-  const setSettings = (patch: Partial<typeof settings>) => updateScenario({ settings: { ...settings, ...patch } });
+/** With nothing selected, the inspector shows the flow itself: what it is, its variables, how it runs. */
+function FlowInspector() {
+  const flow = useStudio((s) => s.flow);
+  const updateFlow = useStudio((s) => s.updateFlow);
+  if (!flow) return null;
+  const settings = flow.settings ?? {};
+  const setSettings = (patch: Partial<typeof settings>) => updateFlow({ settings: { ...settings, ...patch } });
   return (
     <div className="pb-6">
       <Section title={t.props.basics}>
         <Row label={t.shell.name}>
-          <CommitInput value={scenario.name} onCommit={(name) => name.trim() && updateScenario({ name: name.trim() })} />
+          <CommitInput value={flow.name} onCommit={(name) => name.trim() && updateFlow({ name: name.trim() })} />
         </Row>
         <Row label={t.shell.description}>
-          <CommitInput multiline value={scenario.description ?? ""} placeholder={t.shell.descriptionPlaceholder} onCommit={(description) => updateScenario({ description })} />
+          <CommitInput multiline value={flow.description ?? ""} placeholder={t.shell.descriptionPlaceholder} onCommit={(description) => updateFlow({ description })} />
         </Row>
       </Section>
       <Section title={t.variables}>
@@ -1304,33 +1304,33 @@ function ScenarioInspector() {
           </select>
         </Row>
       </Section>
-      <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{scenario.id}</p>
+      <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{flow.id}</p>
     </div>
   );
 }
 
 /**
  * The inspector: the properties of what is selected, and nothing else. A
- * step when one is selected, otherwise the scenario. The path at the top says
- * which, and steps back up to the scenario.
+ * step when one is selected, otherwise the flow. The path at the top says
+ * which, and steps back up to the flow.
  */
 export function Inspector() {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const selection = useStudio((s) => s.selection);
   const stepTypes = useStudio((s) => s.stepTypes);
   const select = useStudio((s) => s.select);
-  if (!scenario) return null;
-  const step = selection?.kind === "step" ? findStep(scenario.steps ?? [], selection.stepId) : undefined;
+  if (!flow) return null;
+  const step = selection?.kind === "step" ? findStep(flow.steps ?? [], selection.stepId) : undefined;
   const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
   const partName = selection?.kind === "part" ? selection.name : undefined;
-  const part = partName ? scenario.parts?.[partName] : undefined;
+  const part = partName ? flow.parts?.[partName] : undefined;
   return (
     <aside className="relative z-[1] flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 px-4 text-[12px]">
         {partName ? (
           <>
-            <button type="button" onClick={() => select(null)} className="shrink-0 text-slate-500 hover:text-ink hover:underline" title={t.shell.toScenario}>
-              {t.shell.scenario}
+            <button type="button" onClick={() => select(null)} className="shrink-0 text-slate-500 hover:text-ink hover:underline" title={t.shell.toFlow}>
+              {t.shell.flow}
             </button>
             <span className="text-slate-400">›</span>
             <span className="text-slate-500">{t.parts.title}</span>
@@ -1339,19 +1339,19 @@ export function Inspector() {
           </>
         ) : step ? (
           <>
-            {/* The scenario's name is in the title bar; here it is the way back to its properties. */}
-            <button type="button" onClick={() => select(null)} className="shrink-0 text-slate-500 hover:text-ink hover:underline" title={t.shell.toScenario}>
-              {t.shell.scenario}
+            {/* The flow's name is in the title bar; here it is the way back to its properties. */}
+            <button type="button" onClick={() => select(null)} className="shrink-0 text-slate-500 hover:text-ink hover:underline" title={t.shell.toFlow}>
+              {t.shell.flow}
             </button>
             <span className="text-slate-400">›</span>
             <span className="truncate font-semibold">{step.name || stepLabel(step.type, def?.label)}</span>
           </>
         ) : (
-          <span className="font-semibold">{t.shell.scenario}</span>
+          <span className="font-semibold">{t.shell.flow}</span>
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {partName ? <PartInspector name={partName} /> : step ? <StepInspector /> : <ScenarioInspector />}
+        {partName ? <PartInspector name={partName} /> : step ? <StepInspector /> : <FlowInspector />}
       </div>
     </aside>
   );

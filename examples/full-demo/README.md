@@ -1,16 +1,16 @@
 # フル機能デモ（full-demo）
 
-今ある機能をできるだけ使った 1 本のデモシナリオです。「月次の受注処理」を題材に、
+今ある機能をできるだけ使った 1 本のデモフローです。「月次の受注処理」を題材に、
 設定の読み込みから Excel・Word・CSV の作成、ブラウザ出荷、実環境（Windows）機能まで
 をひと通りなぞります。
 
-このフォルダーは**シナリオ＝プロジェクトフォルダー**の形になっています。
+このフォルダーは**フロー＝プロジェクトフォルダー**の形になっています。
 
 ```
 full-demo/
-  scenario.json            メインシナリオ（scn_demo_full）
-  subscenarios/
-    shipping.json          ブラウザ出荷のサブシナリオ（scn_demo_shipping）
+  flow.json            メインフロー（scn_demo_full）
+  subflows/
+    shipping.json          ブラウザ出荷のサブフロー（scn_demo_shipping）
   config/設定.json          外だし設定（消費税率・しきい値・送信先・実環境フラグ）
   input/受注.csv            入力データ
   templates/請求書.docx     Word 差し込みテンプレート（{{ 顧客 }} など）
@@ -33,7 +33,7 @@ pnpm demo:full
 Studio で動かす（ワークスペースに取り込むとプロジェクトフォルダーとして展開されます）:
 
 ```bash
-shikigami scenario import examples/full-demo.shikigami.json
+shikigami flow import examples/full-demo.shikigami.json
 ```
 
 入力 `siteUrl` を空のまま実行すると、同梱のデモサイト（`input/web/`）をファイル
@@ -72,7 +72,7 @@ node examples/build-full-demo.mjs
 6. `file.writeCsv` で一覧を出力、`groupBy` で顧客別にまとめ、`word.fillTemplate`
    で顧客ごとに請求書 docx を作成（テーブル行の繰り返し差し込み）
 7. `file.list` ＋ `file.zip` で `output/` を ZIP 化
-8. `scenario.call` でブラウザ出荷のサブシナリオを呼ぶ（シークレットでログイン、
+8. `flow.call` でブラウザ出荷のサブフローを呼ぶ（シークレットでログイン、
    できなければ `browser.waitForHuman`。`session` で次回はログイン省略）
 9. `wait.until` のポーリング
 10. 画面・アプリを使う節（`実環境を使う` = true のとき。各 `control.try` で包んで

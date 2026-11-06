@@ -18,14 +18,14 @@
 | `file.zip` / `file.unzip` | zip に圧縮 / 展開 | zip のパス / 展開したファイルの配列 |
 | `config.read` | 設定ファイル（下記）を読み、`{ 名前: 値 }` で返す。普通の JSON のオブジェクトはそのまま返す | レコード |
 
-## シナリオのフォルダー
+## フローのフォルダー
 
-シナリオは保存先の中の 1 つのフォルダーで、関係するファイルを隣に置きます。
+フローは保存先の中の 1 つのフォルダーで、関係するファイルを隣に置きます。
 
 ```text
-scenarios/<id>/
-  scenario.json   シナリオ
-  input/          シナリオが読むファイル（Excel、CSV など）
+flows/<id>/
+  flow.json   フロー
+  input/          フローが読むファイル（Excel、CSV など）
   config/         フローを変えずに人が書き換える設定ファイル
   templates/      出力のひな形（Excel、Word）
   output/         実行で作るもの
@@ -33,12 +33,12 @@ scenarios/<id>/
   logs/           実行ごとの読めるログ：20261029-140512_failed.log（新しい 100 件を残す）
 ```
 
-- ノードのファイルの項目に書いた相対パス（`input/受注一覧.xlsx`）は、シナリオのフォルダーから解決します。保存先を移しても共有しても動きます。サブシナリオは自分のフォルダーから解決します。フォルダーの外（`..`）を指すと `PATH_OUTSIDE_PROJECT` の警告。絶対パスは従来どおり使えます。
-- `work/` は実行のはじめに空にします。残したいときはシナリオの `settings.keepWork: true`。1 ノードだけ試す（`test_step`）ときは空にせず、ログも書きません。
-- バンドル（`export_scenario`）と複製はファイルも持っていきます（`output/`・`work/`・`logs/` を除く）。
+- ノードのファイルの項目に書いた相対パス（`input/受注一覧.xlsx`）は、フローのフォルダーから解決します。保存先を移しても共有しても動きます。サブフローは自分のフォルダーから解決します。フォルダーの外（`..`）を指すと `PATH_OUTSIDE_PROJECT` の警告。絶対パスは従来どおり使えます。
+- `work/` は実行のはじめに空にします。残したいときはフローの `settings.keepWork: true`。1 ノードだけ試す（`test_step`）ときは空にせず、ログも書きません。
+- バンドル（`export_flow`）と複製はファイルも持っていきます（`output/`・`work/`・`logs/` を除く）。
 - バンドルのファイルを `shikigami run 受注.shikigami.json` で直接実行すると、ファイルを隣の `受注.files/<id>/` に展開してそこで実行します。実行後も `output/` と `logs/` が残ります。
-- 従来の `scenarios/<id>.json` は、保存先を開いたときにフォルダーへ移します。
-- ファイルは Studio、AI（`write_project_file`）、`shikigami scenario add-file <id> <ファイル> --to input` で追加できます。
+- 従来の `flows/<id>.json` は、保存先を開いたときにフォルダーへ移します。
+- ファイルは Studio、AI（`write_project_file`）、`shikigami flow add-file <id> <ファイル> --to input` で追加できます。
 
 ### 設定ファイル
 

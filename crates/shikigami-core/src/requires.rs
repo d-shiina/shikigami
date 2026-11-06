@@ -1,18 +1,18 @@
-//! `requires`: the plugins a scenario's steps need, and which versions.
+//! `requires`: the plugins a flow's steps need, and which versions.
 //!
-//! A scenario that uses `kintone.addRecord` records
+//! A flow that uses `kintone.addRecord` records
 //! `"plugin:kintone": "^0.3.1"` (the version installed when the step was
 //! added). Another PC can then say "install the kintone plugin 0.3.1 or a
 //! compatible later version" instead of "unknown step type", and a plugin
 //! update that breaks its params (a new major version) is caught before the
-//! scenario runs. Core keeps the map in sync with the steps on every edit;
+//! flow runs. Core keeps the map in sync with the steps on every edit;
 //! authors only touch it to loosen or tighten a range.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use semver::{Version, VersionReq};
 
-use crate::model::Scenario;
+use crate::model::Flow;
 use crate::registry::StepRegistry;
 
 /// Key prefix of a plugin requirement: `plugin:<name>`.
@@ -29,24 +29,23 @@ pub fn default_requirement(version: &str) -> String {
     format!("^{version}")
 }
 
-/// Brings `scenario.requires` in line with its steps: adds plugins used by
+/// Brings `flow.requires` in line with its steps: adds plugins used by
 /// steps but not listed (at the installed version) and drops plugins no step
 /// uses any more. Listed plugins keep their range, also when the plugin is
 /// not installed here. Keys that are not `plugin:` entries are left for
 /// validation to report.
-pub fn sync(scenario: &mut Scenario, registry: &StepRegistry) {
-    let used: BTreeSet<String> = scenario
+pub fn sync(flow: &mut Flow, registry: &StepRegistry) {
+    let used: BTreeSet<String> = flow
         .walk()
         .map(|step| namespace(&step.step_type).to_owned())
         .collect();
-    scenario
-        .requires
+    flow.requires
         .retain(|key, _| match key.strip_prefix(PLUGIN_PREFIX) {
             Some(name) => used.contains(name),
             None => true,
         });
     let mut added = BTreeMap::new();
-    for step in scenario.walk() {
+    for step in flow.walk() {
         let Some(plugin) = registry
             .get(&step.step_type)
             .and_then(|def| def.plugin.as_ref())
@@ -54,13 +53,13 @@ pub fn sync(scenario: &mut Scenario, registry: &StepRegistry) {
             continue;
         };
         let key = format!("{PLUGIN_PREFIX}{}", plugin.name);
-        if !scenario.requires.contains_key(&key) {
+        if !flow.requires.contains_key(&key) {
             added
                 .entry(key)
                 .or_insert_with(|| default_requirement(&plugin.version));
         }
     }
-    scenario.requires.extend(added);
+    flow.requires.extend(added);
 }
 
 /// Checks one `requires` entry against what is installed.
@@ -119,7 +118,7 @@ mod tests {
     #[test]
     fn sync_adds_used_and_drops_unused_plugins() {
         let registry = registry_with("hello", "0.3.1");
-        let mut s = Scenario::new("x");
+        let mut s = Flow::new("x");
         s.steps = vec![Step::new("hello.greet"), Step::new("log.message")];
         s.requires.insert("plugin:old".into(), "^1".into());
         sync(&mut s, &registry);
@@ -132,7 +131,7 @@ mod tests {
     #[test]
     fn sync_keeps_ranges_of_plugins_not_installed() {
         let registry = StepRegistry::with_builtins();
-        let mut s = Scenario::new("x");
+        let mut s = Flow::new("x");
         s.steps = vec![Step::new("kintone.addRecord")];
         s.requires
             .insert("plugin:kintone".into(), ">=0.2, <2".into());

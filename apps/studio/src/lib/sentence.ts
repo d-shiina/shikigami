@@ -12,7 +12,7 @@ export type Part = { text: string } | { code: string };
 const w = (text: string): Part => ({ text });
 
 const PATH = String.raw`([A-Za-z_][\w.]*(?:\[\d+\])?)`;
-/** Built-in functions that read better as words. The scenario keeps the expression as written. */
+/** Built-in functions that read better as words. The flow keeps the expression as written. */
 const fn = (name: string) => new RegExp(String.raw`\b${name}\(${PATH}\)`, "g");
 const SYMBOLS: [RegExp, string][] = [
   [/\s*>=\s*/g, " ≥ "],
@@ -124,7 +124,7 @@ function desktopEn(t: Record<string, unknown>): string {
   return `${targetEn(el)} in ${name}`;
 }
 
-/** The open scenario's parts, for `{ part: "<name>" }` targets (set by the store). */
+/** The open flow's parts, for `{ part: "<name>" }` targets (set by the store). */
 let partLookup: (name: string) => { label?: string } | undefined = () => undefined;
 export function setPartLookup(lookup: typeof partLookup) {
   partLookup = lookup;
@@ -190,19 +190,19 @@ const ROLE: Record<string, string> = {
 };
 
 /**
- * Names of the workspace's scenarios by id, so a call reads as the scenario
- * it runs. Studio keeps it in step with the scenario list.
+ * Names of the workspace's flows by id, so a call reads as the flow
+ * it runs. Studio keeps it in step with the flow list.
  */
-let scenarioNames: ReadonlyMap<string, string> = new Map();
+let flowNames: ReadonlyMap<string, string> = new Map();
 
-export function setScenarioNames(names: ReadonlyMap<string, string>) {
-  scenarioNames = names;
+export function setFlowNames(names: ReadonlyMap<string, string>) {
+  flowNames = names;
 }
 
 /** What a call's target reads as: its name, or its id when it is not in this workspace. */
 export function calledName(id: unknown): string | null {
   if (typeof id !== "string" || id === "") return null;
-  return scenarioNames.get(id) ?? id;
+  return flowNames.get(id) ?? id;
 }
 
 type Builder = (p: Record<string, unknown>, step: Step) => Part[];
@@ -219,9 +219,9 @@ const BUILDERS: Record<string, Builder> = {
   "control.continue": () => [w("次の繰り返しへ進む")],
   "control.fail": (p) => [w("「"), ...template(p.message), w("」として失敗させる")],
   "flow.delay": (p) => [code(p.ms), w(" ミリ秒待つ")],
-  "scenario.call": (p) => {
-    const name = calledName(p.scenario);
-    return name ? [w(`サブシナリオ「${name}」を呼ぶ`)] : [w("サブシナリオを呼ぶ（呼ぶシナリオが未設定）")];
+  "flow.call": (p) => {
+    const name = calledName(p.flow);
+    return name ? [w(`サブフロー「${name}」を呼ぶ`)] : [w("サブフローを呼ぶ（呼ぶフローが未設定）")];
   },
   "browser.open": (p) => [...template(p.url), w(" をブラウザで開く")],
   "browser.click": (p, s) => [w(`${targetText(p.target)}を押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`), ...saveAs(s)],
@@ -284,9 +284,9 @@ const BUILDERS_EN: Record<string, Builder> = {
   "control.continue": () => [w("Go to the next iteration")],
   "control.fail": (p) => [w("Fail with \""), ...template(p.message), w("\"")],
   "flow.delay": (p) => [w("Wait "), code(p.ms), w(" ms")],
-  "scenario.call": (p) => {
-    const name = calledName(p.scenario);
-    return name ? [w(`Call the subscenario "${name}"`)] : [w("Call a subscenario (none chosen)")];
+  "flow.call": (p) => {
+    const name = calledName(p.flow);
+    return name ? [w(`Call the subflow "${name}"`)] : [w("Call a subflow (none chosen)")];
   },
   "browser.open": (p) => [w("Open "), ...template(p.url), w(" in the browser")],
   "browser.click": (p, s) => [w(`Click ${targetText(p.target)}${dialogText(p.dialog)}`), ...saveAs(s)],

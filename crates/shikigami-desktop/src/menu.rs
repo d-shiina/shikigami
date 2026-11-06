@@ -1,6 +1,6 @@
 //! Picking menu items by the words a person sees.
 //!
-//! Menu items carry decorations a scenario should not have to copy: the
+//! Menu items carry decorations a flow should not have to copy: the
 //! access key (`ファイル(&F)`, `&File`), a trailing ellipsis (`名前を付けて
 //! 保存...`) and the shortcut after a tab (`保存\tCtrl+S`). Names are
 //! compared without them.

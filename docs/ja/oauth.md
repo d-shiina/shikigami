@@ -32,7 +32,7 @@ Web API の多く（Box・Google・Microsoft 365・Salesforce など）は固定
    | サイト | Client secret とトークンを送ってよい先：トークン URL のサイトと API のサイト（Box は `https://api.box.com`） |
 
    AI からは `request_secret` に `name: "Box"`、`sites: ["https://api.box.com"]`、理由に「ユーザー名に Client ID、パスワードに Client secret を」と書いて頼みます。
-3. シナリオ：
+3. フロー：
 
 ```jsonc
 { "type": "oauth.signIn", "params": {
@@ -71,7 +71,7 @@ Web API の多く（Box・Google・Microsoft 365・Salesforce など）は固定
 - ワークスペースに暗号化して保存します（`secrets/oauth/`。鍵はシークレットと同じ。[secrets.md](secrets.md)）。出力・ログ・MCP の結果には出ず、アクセストークンはパスワードと同じく伏せ字になります。
 - `http.request` は、アクセストークンの残りが 2 分を切っていれば更新してから使います（更新できないトークンは本当に切れるまで使います）。更新は同じワークスペースの Studio・CLI・MCP サーバーをまたいで 1 つずつ行うので、更新のたびにリフレッシュトークンが変わるプロバイダ（Box など）でも失いません。
 - 保存したトークンを使い回すのは、Client ID・`tokenUrl` が同じで、`scope` が許可済みの範囲に収まるときだけです。スコープを増やすともう一度サインインします。
-- リフレッシュトークンが受け付けられなくなると、`http.request` は `OAUTH_SIGN_IN_REQUIRED` で止まり、次の `oauth.signIn` で人がもう一度サインインします。シナリオの最初に `oauth.signIn` を置いておけば、そこでサインインできます。
+- リフレッシュトークンが受け付けられなくなると、`http.request` は `OAUTH_SIGN_IN_REQUIRED` で止まり、次の `oauth.signIn` で人がもう一度サインインします。フローの最初に `oauth.signIn` を置いておけば、そこでサインインできます。
 - Studio のシークレットに「OAuth サインイン済み」と「サインアウト」が出ます。CLI は `shikigami secret logout <名前>`。Client ID を変えると古いトークンは使われず、シークレットを削除するとトークンも消えます。
 - `list_secrets` では、トークンが保存されているシークレットに `signedIn: true` が付きます。
 

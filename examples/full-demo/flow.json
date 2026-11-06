@@ -1,9 +1,9 @@
 {
-  "$schema": "../../schemas/scenario.schema.json",
+  "$schema": "../../schemas/flow.schema.json",
   "schemaVersion": 1,
   "id": "scn_demo_full",
   "name": "フル機能デモ：受注から請求書作成まで",
-  "description": "今ある機能をできるだけ使ったデモ。開始ダイアログ→設定(config)→CSV読込→Excel書込/読戻し→税込計算(ループ/条件/try)→CSV出力→Word請求書差し込み→ZIP化→ブラウザで出荷(サブシナリオ・画面に表示)→ポーリング(wait.until)→ダイアログ・Excelマクロ・クリップボード・メモ帳操作/OCR・外部コマンド・OAuth/HTTP・Outlook下書き→出力フォルダーを開いて結果をダイアログで表示。使えないアプリの節は try で捕捉して先へ進む。無人実行や CI では設定『実環境を使う』を false にする。",
+  "description": "今ある機能をできるだけ使ったデモ。開始ダイアログ→設定(config)→CSV読込→Excel書込/読戻し→税込計算(ループ/条件/try)→CSV出力→Word請求書差し込み→ZIP化→ブラウザで出荷(サブフロー・画面に表示)→ポーリング(wait.until)→ダイアログ・Excelマクロ・クリップボード・メモ帳操作/OCR・外部コマンド・OAuth/HTTP・Outlook下書き→出力フォルダーを開いて結果をダイアログで表示。使えないアプリの節は try で捕捉して先へ進む。無人実行や CI では設定『実環境を使う』を false にする。",
   "revision": 1,
   "settings": {
     "defaultTimeoutMs": 30000,
@@ -558,7 +558,7 @@
     {
       "id": "stp_047_try",
       "type": "control.try",
-      "name": "出荷サブシナリオを呼ぶ（ブラウザを画面に表示）",
+      "name": "出荷サブフローを呼ぶ（ブラウザを画面に表示）",
       "params": {
         "errorVar": "err"
       },
@@ -605,10 +605,10 @@
           },
           {
             "id": "stp_045_call",
-            "type": "scenario.call",
+            "type": "flow.call",
             "name": "受注システムで出荷",
             "params": {
-              "scenario": "scn_demo_shipping",
+              "flow": "scn_demo_shipping",
               "inputs": {
                 "siteUrl": "{{ siteUrl }}",
                 "askHuman": "{{ settings['実環境を使う'] }}"

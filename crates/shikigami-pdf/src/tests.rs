@@ -1,6 +1,6 @@
 use pdf_extract::{Dictionary, Object, Stream, dictionary};
 use serde_json::{Value, json};
-use shikigami_core::{Scenario, Step, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, VarDirection, VarType, VariableDef};
 use shikigami_runtime::{RunOptions, RunReport, RunStatus, Runtime};
 
 use super::*;
@@ -10,7 +10,7 @@ fn runtime() -> Runtime {
 }
 
 async fn read(params: Value) -> RunReport {
-    let mut s = Scenario::new("pdf");
+    let mut s = Flow::new("pdf");
     s.variables.push(VariableDef {
         direction: VarDirection::Output,
         ..VariableDef::new("out", VarType::Any)
@@ -231,7 +231,7 @@ fn examples_validate() {
     for example in &read_text_def().examples {
         let mut step: Step = serde_json::from_value(example.clone()).unwrap();
         shikigami_core::ops::assign_missing_ids(&mut step);
-        let mut s = Scenario::new("example");
+        let mut s = Flow::new("example");
         s.variables = ["invoice", "pdfPath"]
             .iter()
             .map(|n| VariableDef::new(*n, VarType::Any))
@@ -255,7 +255,7 @@ async fn the_documented_amount_expression_works() {
         ]"#,
         serde_json::to_string(&path.display().to_string()).unwrap()
     );
-    let mut s = Scenario::new("pdf");
+    let mut s = Flow::new("pdf");
     s.variables = vec![
         VariableDef::new("invoice", VarType::Any),
         VariableDef {
@@ -280,7 +280,7 @@ async fn the_documented_amount_expression_works() {
 // -- merge, extract, split ----------------------------------------------------
 
 async fn run_step(step_type: &str, params: Value) -> RunReport {
-    let mut s = Scenario::new("pdf");
+    let mut s = Flow::new("pdf");
     s.variables.push(VariableDef {
         direction: VarDirection::Output,
         ..VariableDef::new("out", VarType::Any)
@@ -490,7 +490,7 @@ fn page_step_examples_validate() {
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
-            let mut s = Scenario::new("example");
+            let mut s = Flow::new("example");
             s.variables = ["invoice", "pdfPath", "merged", "files"]
                 .iter()
                 .map(|n| VariableDef::new(*n, VarType::Any))

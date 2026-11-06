@@ -9,11 +9,11 @@ import { isExternal, pendingReview, revertBlocker } from "../store";
 export function usePendingReview(): HistoryEntry[] {
   const history = useStudio((s) => s.history);
   const reviewed = useStudio((s) => s.reviewed);
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const timelines = useStudio((s) => s.timelines);
   return useMemo(
-    () => pendingReview({ history, reviewed, scenario, timelines }),
-    [history, reviewed, scenario, timelines],
+    () => pendingReview({ history, reviewed, flow, timelines }),
+    [history, reviewed, flow, timelines],
   );
 }
 
@@ -53,7 +53,7 @@ const VERB_STYLE: Record<ChangeLine["verb"], string> = {
   update: "bg-brand-50 text-brand-600",
   remove: "bg-shu-50 text-shu-600",
   move: "bg-slate-100 text-slate-600",
-  scenario: "bg-slate-100 text-slate-600",
+  flow: "bg-slate-100 text-slate-600",
   variable: "bg-mizu-100 text-mizu-500",
   replace: "bg-shu-50 text-shu-600",
   part: "bg-mizu-100 text-mizu-500",
@@ -95,13 +95,13 @@ export function Lines({ lines, detailed }: { lines: ChangeLine[]; detailed: bool
 }
 
 function ReviewCard({ entry }: { entry: HistoryEntry }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const approve = useStudio((s) => s.approve);
   const revert = useStudio((s) => s.revert);
   const history = useStudio((s) => s.history);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
-  const lines = describe(entry, scenario, defs);
+  const lines = describe(entry, flow, defs);
   const blocker = revertBlocker(entry, history);
   return (
     <li className="rounded-[4px] border border-shu-100 bg-sheet p-3 shadow-sheet">
@@ -136,12 +136,12 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
 }
 
 function Entry({ entry, pending }: { entry: HistoryEntry; pending: boolean }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const revert = useStudio((s) => s.revert);
   const history = useStudio((s) => s.history);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
-  const lines = describe(entry, scenario, defs);
+  const lines = describe(entry, flow, defs);
   return (
     <li className="group relative flex gap-3 pb-4 pl-1">
       <span className="absolute top-6 bottom-0 left-[16px] w-px bg-slate-200 group-last:hidden" />
@@ -155,7 +155,7 @@ function Entry({ entry, pending }: { entry: HistoryEntry; pending: boolean }) {
         </div>
         <div className="mt-1">
           {lines.length > 0 ? <Lines lines={lines} detailed={false} /> : <span className="text-sm text-slate-500">
-              {entry.kind === "create" ? t.scenarioCreated : entry.kind === "delete" ? t.scenarioDeleted : entry.label}
+              {entry.kind === "create" ? t.flowCreated : entry.kind === "delete" ? t.flowDeleted : entry.label}
             </span>}
         </div>
         {revertBlocker(entry, history) === null && (

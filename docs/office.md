@@ -49,13 +49,13 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 | Empty | `null` | `null` (clears the value, keeps the formatting) |
 
 - Dates are recognized by the cell's number format (`yyyy/mm/dd`, `ggge年m月d日`…). When writing a date to a cell without a date format, `yyyy/mm/dd` is applied
-- Results of formulas you write are calculated the next time the workbook is opened in Excel (Shikigami does not calculate). If you need the result right away, use the COM recalculation node (planned)
+- Results of formulas you write are calculated the next time the workbook is opened in Excel (Shikigami does not calculate). If you need the result right away, use `excel.recalculate`
 
 ### Locking and saving
 
-- Every node uses `path` as a resource, so nodes on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Scenarios never declare locks
+- Every node uses `path` as a resource, so nodes on the same workbook run one at a time and different workbooks run in parallel (the `file:` key; [ai-authoring.md](design/ai-authoring.md) B, Japanese). Flows never declare locks
 - Each writing node saves before it finishes. It writes to a temporary file in the same folder and then replaces the original, so a failure never corrupts it. There are no "open / save / close workbook" nodes (so no way of linking distant nodes by name is needed)
-- While the workbook is open in Excel (a `~$name` file exists), writes fail with `FILE_IN_USE` (retryable). Reading still works
+- While the workbook is open in Excel on this PC, nodes work on the open workbook ([below](#excel-itself-the-open-workbook-recalculation-sorting-pdf-implemented)). When it is open elsewhere (a `~$name` file exists but this PC's Excel does not have it), writes fail with `FILE_IN_USE` (retryable). Reading still works
 
 ### Limits
 
@@ -82,6 +82,29 @@ Only "run a workbook's VBA macro", which files alone cannot do, goes through Exc
 - It waits its turn automatically with other `excel.*` nodes on the same workbook. `FILE_IN_USE` while the person has the workbook open in Excel
 - Workbooks downloaded from the internet and blocked ("Unblock" not checked in the file's properties) cannot run macros and give `MACRO_FAILED`
 - Any code can run, so the node's risk is `Dangerous`
+
+## Excel itself: the open workbook, recalculation, sorting, PDF (implemented)
+
+Some work needs Excel itself (COM). It needs Windows and desktop Excel (`PLATFORM_UNSUPPORTED` elsewhere, `EXCEL_NOT_INSTALLED` without Excel).
+
+**The workbook open on the screen.** When the workbook `path` is open in Excel on this PC, every `excel.*` node above works on the open workbook instead of the file:
+
+- Reads see what is on the screen, unsaved changes and recalculated formulas included
+- Writes go into the open workbook (same value rules as above) and the workbook is saved. The person's Excel stays open
+- If Excel is busy (a cell being edited, a dialog open) the node fails with `EXCEL_BUSY` or `EXCEL_TIMEOUT` and the hint asks the person to finish it. Excel is never closed
+- When the workbook is open somewhere this PC's Excel cannot reach (another person on a shared folder), writes still give `FILE_IN_USE`
+
+| type | Main params | Output |
+|---|---|---|
+| `excel.recalculate` | `path` | – (recalculates every formula and saves) |
+| `excel.sort` | `path`, `sheet`, `headerRow`, `by` (`[{ "column": "Amount", "order": "desc" }]`, first is the main key) | `{ count }` rows sorted |
+| `excel.exportPdf` | `path`, `sheet` (the whole workbook when omitted), `to`, `overwrite` | `{ path }` |
+
+- They use the open workbook when it is open, otherwise they open the file in **their own hidden Excel** like `excel.runMacro` (read-only for `excel.exportPdf`) and quit it afterwards
+- `excel.sort` names columns by header text (`UNKNOWN_COLUMN` lists them) and uses Excel's own sort, so formatting moves with the rows
+- `excel.exportPdf` lays out the pages as Excel prints them (print area, page setup). `FILE_EXISTS` when `to` exists unless `overwrite: true`
+- The default timeout is 5 minutes; on timeout their own Excel is quit without saving (`EXCEL_TIMEOUT`)
+- They change files but run no code of the workbook, so their risk is `Interactive`
 
 ## Word (`word.*`, implemented)
 
@@ -127,7 +150,7 @@ A message that has gone cannot be taken back, so `mail.send` is `dangerous`: it 
 | `microsoft365` | `account: { "secret": "<name>", "field": "accessToken" }` | Microsoft Graph as the signed-in user. Register the Microsoft Entra app as a secret (client ID and secret; sites `https://login.microsoftonline.com` and `https://graph.microsoft.com`) and sign in once with `oauth.signIn` (scope `Mail.Send offline_access`, [oauth.md](oauth.md)). Attachments up to about 3 MB in all: the whole message must fit in Graph's 4 MB request (`MAIL_ATTACHMENT_TOO_LARGE`) |
 | `smtp` | `server`, `from`, and usually `user` / `password` | `server` is `smtp.example.co.jp` (STARTTLS on 587) or `smtp.example.co.jp:465` (TLS). The login is a secret whose sites include `smtp:<server>`; otherwise `SECRET_SITE_*`. `security: "none"` is only for a company relay that takes mail without a login: a password is never sent without TLS (`MAIL_INSECURE_LOGIN`) |
 
-- Params that do not belong to the chosen way (`server` with `outlook`, …) give `INVALID_PARAMS`, so a scenario never looks like it sends one way and sends another
+- Params that do not belong to the chosen way (`server` with `outlook`, …) give `INVALID_PARAMS`, so a flow never looks like it sends one way and sends another
 - Errors: `MAIL_SEND_FAILED` (refused; retried when the server says it is temporary), `MAIL_SERVER_UNREACHABLE` (nothing was sent; retried), `MAIL_DELIVERY_UNKNOWN` (the answer was lost or did not come within the step's time after the message was handed over, so it may have gone out; never retried, so it is not sent twice: look in Sent Items), `MAIL_PERMISSION_DENIED` (Graph without Mail.Send), `OAUTH_SIGN_IN_REQUIRED`
 
 ```json
@@ -139,6 +162,6 @@ A message that has gone cannot be taken back, so `mail.send` is `dangerous`: it 
 
 ## Next (planned)
 
-1. **Excel recalculation and PDF export**: added the same way as `excel.runMacro`
+1. **Excel formatting, filters and pivot tables**: through Excel itself, like `excel.sort`
 2. **Word PDF export**: through COM (the same way as Excel macros)
 3. **Reading mail without Outlook**: `mail.list` / `mail.saveAttachments` through Microsoft 365 and IMAP

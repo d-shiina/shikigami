@@ -31,17 +31,15 @@ pub mod control {
     pub const WAIT_UNTIL: &str = "wait.until";
 }
 
-/// Running another scenario as one step (a sub-scenario).
-pub mod scenario {
-    /// Runs another scenario, mapping `inputs` and `outputs` explicitly.
-    pub const CALL: &str = "scenario.call";
+/// Running another flow as one step (a sub-flow).
+pub mod flow {
+    /// Runs another flow, mapping `inputs` and `outputs` explicitly.
+    pub const CALL: &str = "flow.call";
 }
 
 /// Whether the Runtime interprets the step itself (no adapter handler).
 pub fn is_control_type(step_type: &str) -> bool {
-    step_type.starts_with("control.")
-        || step_type == control::WAIT_UNTIL
-        || step_type == scenario::CALL
+    step_type.starts_with("control.") || step_type == control::WAIT_UNTIL || step_type == flow::CALL
 }
 
 /// Built-in action step types that need no external adapter.
@@ -125,7 +123,7 @@ pub struct StepTypeDef {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub examples: Vec<Value>,
     /// Exclusive resources, derived from params at run time. Internal to the
-    /// Runtime: scenario authors never name locks.
+    /// Runtime: flow authors never name locks.
     #[serde(skip)]
     #[schemars(skip)]
     pub resources: Vec<ResourceDef>,
@@ -140,12 +138,12 @@ pub struct StepTypeDef {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secret_params: Vec<String>,
     /// Params that name a file or folder (a string, or a list of strings).
-    /// A relative path there is resolved from the scenario's folder
+    /// A relative path there is resolved from the flow's folder
     /// (`input/orders.xlsx`). File resources are included automatically.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub path_params: Vec<String>,
     /// Timeout when the step sets none (takes precedence over the
-    /// scenario's default), for steps that wait on people (manual login).
+    /// flow's default), for steps that wait on people (manual login).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_timeout_ms: Option<u64>,
     /// Set when the type should no longer be used in new steps. It keeps
@@ -605,16 +603,16 @@ fn builtin_defs() -> Vec<StepTypeDef> {
         },
         StepTypeDef {
             targets: Vec::new(),
-            step_type: scenario::CALL.into(),
+            step_type: flow::CALL.into(),
             category: StepCategory::Control,
-            label: "サブシナリオを呼ぶ".into(),
-            description: "Runs another scenario (by its id from list_scenarios) as one step. `inputs` maps each input variable of the called scenario to a value (templates allowed: \"{{ invoice }}\" keeps the type). `outputs` maps each output variable of the called scenario to the variable of this scenario that receives it. Both maps are keyed by the called scenario's variable names. The called scenario has its own variables: nothing else goes in or out, and `saveAs` / `retry` are not used. It always runs the called scenario's current content. `timeoutMs` (optional) limits the whole call. Use extract_subscenario to turn existing steps into a sub-scenario.".into(),
+            label: "サブフローを呼ぶ".into(),
+            description: "Runs another flow (by its id from list_flows) as one step. `inputs` maps each input variable of the called flow to a value (templates allowed: \"{{ invoice }}\" keeps the type). `outputs` maps each output variable of the called flow to the variable of this flow that receives it. Both maps are keyed by the called flow's variable names. The called flow has its own variables: nothing else goes in or out, and `saveAs` / `retry` are not used. It always runs the called flow's current content. `timeoutMs` (optional) limits the whole call. Use extract_subflow to turn existing steps into a sub-flow.".into(),
             params_schema: object_schema(
                 json!({
-                    "scenario": {
+                    "flow": {
                         "type": "string",
                         "pattern": "^[A-Za-z0-9_-]{1,128}$",
-                        "description": "呼び出すシナリオの ID（list_scenarios の id）",
+                        "description": "呼び出すフローの ID（list_flows の id）",
                     },
                     "inputs": {
                         "type": "object",
@@ -625,10 +623,10 @@ fn builtin_defs() -> Vec<StepTypeDef> {
                         "type": "object",
                         "propertyNames": { "pattern": IDENT_PATTERN },
                         "additionalProperties": ident,
-                        "description": "呼ばれる側の出力変数 → 受け取るこのシナリオの変数",
+                        "description": "呼ばれる側の出力変数 → 受け取るこのフローの変数",
                     },
                 }),
-                &["scenario"],
+                &["flow"],
             ),
             blocks: vec![],
             has_output: false,
@@ -772,11 +770,11 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
             ] }
         })],
         builtin::FLOW_DELAY => vec![json!({ "type": "flow.delay", "params": { "ms": 1000 } })],
-        scenario::CALL => vec![json!({
-            "type": "scenario.call",
+        flow::CALL => vec![json!({
+            "type": "flow.call",
             "name": "請求書を 1 件登録する",
             "params": {
-                "scenario": "scn_01a1814aaad57038862e86f745a5310a",
+                "flow": "scn_01a1814aaad57038862e86f745a5310a",
                 "inputs": { "invoice": "{{ invoice }}", "dryRun": false },
                 "outputs": { "registeredNo": "invoiceNo" }
             }

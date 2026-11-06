@@ -40,7 +40,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 | Element Exists 待ち / Check App State | `wait.until`、`browser.waitFor`、`desktop.waitFor` | ✅ |
 | Log Message / Write Line | `log.message` | ✅ |
 | Sequence / Flowchart | `control.group`（フロー図は Studio の表示） | ✅ |
-| Invoke Workflow File | サブシナリオ（別スレッドで実装中） | 🔜 |
+| Invoke Workflow File | サブフロー（別スレッドで実装中） | 🔜 |
 | Comment | ノードの `name`・メモ | ✅ |
 | Get Credential / Get Asset | シークレット（`{ "secret": … }`） | ✅ |
 | Invoke Code / Invoke VBA / Invoke PowerShell | 任意コードは実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro`（Office スレッド） | ✅ / 🔜 |
@@ -120,6 +120,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 | Read Range / Write Range / Read Cell / Write Cell / Append Range | `excel.readRows` / `readRange` / `readCell` / `writeCell` / `writeRange` / `appendRows` | 🔜（PR #25） |
 | Get Workbook Sheets / Add Sheet | `excel.listSheets` / `excel.addSheet` | 🔜（PR #25） |
 | Execute Macro | `excel.runMacro`（COM） | 🔜（Office） |
+| Use Excel File（開いているブック）/ Sort Range / Refresh / Save Excel File as PDF | `excel.*` が開いているブックを自動で使う / `excel.sort` / `excel.recalculate` / `excel.exportPdf` | ✅ |
 | Word Replace Text / Read Text | `word.*` | 🔜（Office） |
 | Send SMTP / Outlook Mail、Get Mail、Save Attachments | `mail.*`（Outlook から） | 🔜（Office） |
 

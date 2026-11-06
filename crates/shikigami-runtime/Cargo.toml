@@ -1,6 +1,6 @@
 [package]
 name = "shikigami-runtime"
-description = "Shikigami RPA Runtime: headless, AI-free scenario execution"
+description = "Shikigami RPA Runtime: headless, AI-free flow execution"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

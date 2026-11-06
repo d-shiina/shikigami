@@ -1,5 +1,5 @@
 //! Telling people how unattended runs ended: `notify` in `policy.json`
-//! posts to Teams, Slack or any webhook (docs/schedules.md). Scenarios do
+//! posts to Teams, Slack or any webhook (docs/schedules.md). Flows do
 //! not have to send mail in a `catch` themselves.
 
 use std::path::Path;
@@ -42,7 +42,7 @@ fn title(report: &RunReport) -> String {
         RunStatus::Cancelled => "取り消し",
         _ => "終了",
     };
-    format!("【{what}】{}", report.scenario_name)
+    format!("【{what}】{}", report.flow_name)
 }
 
 fn trigger_text(report: &RunReport) -> String {
@@ -76,7 +76,7 @@ fn facts(report: &RunReport) -> Vec<(&'static str, String)> {
             t.second()
         )
     };
-    let mut out = vec![("シナリオ", report.scenario_name.clone())];
+    let mut out = vec![("フロー", report.flow_name.clone())];
     if let Some(error) = &report.error {
         out.push(("エラー", format!("{}: {}", error.code, error.message)));
         if let Some(step) = &error.step_id {
@@ -135,8 +135,8 @@ pub fn message(report: &RunReport, format: NotifyFormat) -> Value {
         NotifyFormat::Json => json!({
             "event": "runFinished",
             "runId": report.run_id,
-            "scenarioId": report.scenario_id,
-            "scenarioName": report.scenario_name,
+            "flowId": report.flow_id,
+            "flowName": report.flow_name,
             "status": report.status,
             "version": report.version,
             "error": report.error.as_ref().map(|e| json!({
@@ -158,7 +158,7 @@ pub fn rules_for<'a>(policy: &'a Policy, report: &RunReport) -> Vec<&'a NotifyRu
     policy
         .notify
         .iter()
-        .filter(|r| r.applies(outcome, report.scenario_id.as_str()))
+        .filter(|r| r.applies(outcome, report.flow_id.as_str()))
         .collect()
 }
 
@@ -201,7 +201,7 @@ mod tests {
 
     fn report(status: &str) -> RunReport {
         serde_json::from_value(json!({
-            "runId": "run_1", "scenarioId": "scn_a", "scenarioName": "受注取り込み",
+            "runId": "run_1", "flowId": "scn_a", "flowName": "受注取り込み",
             "revision": 1, "version": 2, "status": status,
             "startedAt": "2026-11-06T00:00:00Z", "finishedAt": "2026-11-06T00:01:00Z",
             "error": { "code": "ELEMENT_NOT_FOUND", "message": "no button", "stepId": "s3" },
@@ -216,7 +216,7 @@ mod tests {
         let policy: Policy = serde_json::from_value(json!({
             "notify": [
                 { "webhook": "https://a.example/x" },
-                { "webhook": "https://b.example/x", "on": ["succeeded", "failed"], "scenarios": ["scn_b"], "format": "slack" }
+                { "webhook": "https://b.example/x", "on": ["succeeded", "failed"], "flows": ["scn_b"], "format": "slack" }
             ]
         }))
         .unwrap();

@@ -8,8 +8,8 @@ use serde_json::{Map, json};
 use shikigami_agent::ipc::{self, Request};
 use shikigami_agent::{Agent, RunRequest, Schedule, Schedules, When};
 use shikigami_core::{
-    Actor, ActorKind, FileStore, NewScenario, PublishInput, ScenarioId, ScenarioService, Step,
-    VarDirection, VarType, VariableDef,
+    Actor, ActorKind, FileStore, FlowId, FlowService, NewFlow, PublishInput, Step, VarDirection,
+    VarType, VariableDef,
 };
 use shikigami_runtime::{RunReport, RunStatus, RunTrigger, Runtime, record};
 
@@ -22,7 +22,7 @@ struct Harness {
 fn harness() -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let runtime = Runtime::new();
-    let svc = Arc::new(ScenarioService::new(
+    let svc = Arc::new(FlowService::new(
         FileStore::open(dir.path()).unwrap(),
         runtime.registry().clone(),
     ));
@@ -43,8 +43,8 @@ fn person() -> Actor {
     Actor::new(ActorKind::Studio)
 }
 
-/// A scenario with an input `file` that it copies to the output `got`.
-fn scenario(h: &Harness, publish: bool) -> ScenarioId {
+/// A flow with an input `file` that it copies to the output `got`.
+fn flow(h: &Harness, publish: bool) -> FlowId {
     let mut file = VariableDef::new("file", VarType::String);
     file.direction = VarDirection::Input;
     file.default = Some(json!(""));
@@ -54,7 +54,7 @@ fn scenario(h: &Harness, publish: bool) -> ScenarioId {
         .agent
         .service()
         .create(
-            NewScenario {
+            NewFlow {
                 name: "受注取り込み".into(),
                 variables: vec![file, got],
                 steps: vec![
@@ -63,12 +63,12 @@ fn scenario(h: &Harness, publish: bool) -> ScenarioId {
                         .with_param("expression", "file")
                         .with_id("s1"),
                 ],
-                ..NewScenario::default()
+                ..NewFlow::default()
             },
             person(),
         )
         .unwrap();
-    let id = out.scenario.id;
+    let id = out.flow.id;
     if publish {
         h.agent
             .service()
@@ -101,7 +101,7 @@ fn save(h: &Harness, schedules: Vec<Schedule>) {
 #[tokio::test]
 async fn a_schedule_runs_the_published_version_when_due() {
     let h = harness();
-    let id = scenario(&h, true);
+    let id = flow(&h, true);
     let now = Zoned::now();
     let at = now.checked_add(1.minute()).unwrap();
     save(
@@ -109,7 +109,7 @@ async fn a_schedule_runs_the_published_version_when_due() {
         vec![Schedule {
             id: "sch_morning".into(),
             name: "毎朝".into(),
-            scenario_id: id.clone(),
+            flow_id: id.clone(),
             enabled: true,
             when: When::Daily {
                 at: at.strftime("%H:%M").to_string(),
@@ -145,14 +145,14 @@ async fn a_schedule_runs_the_published_version_when_due() {
 }
 
 #[tokio::test]
-async fn an_unpublished_scenario_is_reported_as_failed() {
+async fn an_unpublished_flow_is_reported_as_failed() {
     let h = harness();
-    let id = scenario(&h, false);
+    let id = flow(&h, false);
     let err = h
         .agent
         .start(
             RunRequest {
-                scenario_id: id.clone(),
+                flow_id: id.clone(),
                 inputs: Map::new(),
                 origin: Default::default(),
             },
@@ -167,7 +167,7 @@ async fn an_unpublished_scenario_is_reported_as_failed() {
         vec![Schedule {
             id: "sch_x".into(),
             name: "x".into(),
-            scenario_id: id,
+            flow_id: id,
             enabled: true,
             when: When::Every {
                 minutes: 1,
@@ -188,7 +188,7 @@ async fn an_unpublished_scenario_is_reported_as_failed() {
 #[tokio::test]
 async fn a_new_file_starts_one_run_with_its_path() {
     let h = harness();
-    let id = scenario(&h, true);
+    let id = flow(&h, true);
     let input = h.agent.service().project_dir(&id).unwrap().join("input");
     std::fs::create_dir_all(&input).unwrap();
     std::fs::write(input.join("old.csv"), "a").unwrap();
@@ -197,7 +197,7 @@ async fn a_new_file_starts_one_run_with_its_path() {
         vec![Schedule {
             id: "sch_file".into(),
             name: "受注ファイル".into(),
-            scenario_id: id,
+            flow_id: id,
             enabled: true,
             when: When::FileAdded {
                 folder: "input".into(),
@@ -235,13 +235,13 @@ async fn a_new_file_starts_one_run_with_its_path() {
 #[tokio::test]
 async fn a_broken_schedules_file_stops_every_schedule() {
     let h = harness();
-    let id = scenario(&h, true);
+    let id = flow(&h, true);
     save(
         &h,
         vec![Schedule {
             id: "sch_x".into(),
             name: "x".into(),
-            scenario_id: id,
+            flow_id: id,
             enabled: true,
             when: When::Every {
                 minutes: 1,
@@ -269,7 +269,7 @@ async fn a_broken_schedules_file_stops_every_schedule() {
 #[tokio::test]
 async fn other_processes_talk_to_it_over_the_pipe() {
     let h = harness();
-    let id = scenario(&h, true);
+    let id = flow(&h, true);
     let root = h.agent.local_root().to_path_buf();
     // No agent yet.
     let e = ipc::call(&root, &Request::Status).await.unwrap_err();
@@ -296,7 +296,7 @@ async fn other_processes_talk_to_it_over_the_pipe() {
         &root,
         &Request::Run {
             request: RunRequest {
-                scenario_id: id,
+                flow_id: id,
                 inputs: [("file".to_owned(), json!("x.csv"))].into_iter().collect(),
                 origin: shikigami_runtime::RunOrigin::new(RunTrigger::Cli),
             },

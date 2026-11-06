@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../schemas/scenario.schema.json",
+  "$schema": "../../../schemas/flow.schema.json",
   "schemaVersion": 1,
   "id": "scn_tutorial_invoices",
   "name": "受注一覧から取引先ごとの請求書を作る",

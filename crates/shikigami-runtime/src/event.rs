@@ -4,7 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use shikigami_core::{RunId, ScenarioId, StepId};
+use shikigami_core::{FlowId, RunId, StepId};
 use time::OffsetDateTime;
 
 use crate::debug::{PauseReason, ResumeAction};
@@ -81,7 +81,7 @@ impl RunError {
         self
     }
 
-    /// Representation bound to `errorVar` / `lastError` inside scenarios.
+    /// Representation bound to `errorVar` / `lastError` inside flows.
     pub fn to_value(&self) -> Value {
         serde_json::to_value(self).unwrap_or(Value::Null)
     }
@@ -95,8 +95,10 @@ impl RunError {
 )]
 pub enum RunEvent {
     RunStarted {
-        scenario_id: ScenarioId,
-        scenario_name: String,
+        #[serde(alias = "scenarioId")]
+        flow_id: FlowId,
+        #[serde(alias = "scenarioName")]
+        flow_name: String,
         revision: u64,
         /// Who asked for the run, from where, on which PC.
         #[serde(default, skip_serializing_if = "RunOrigin::is_empty")]
@@ -159,7 +161,7 @@ pub enum RunEvent {
     /// `error`). Nothing runs until it is resumed.
     ///
     /// `variables` holds every variable's value at that point, masked and
-    /// cut like `variableChanged` values. `revision` is the scenario
+    /// cut like `variableChanged` values. `revision` is the flow
     /// revision the run is executing.
     Paused {
         step_id: StepId,
@@ -171,7 +173,7 @@ pub enum RunEvent {
         revision: u64,
     },
     /// The run goes on after `paused`. `revision` is set when a newer
-    /// revision of the scenario was swapped in while it was paused.
+    /// revision of the flow was swapped in while it was paused.
     Resumed {
         action: ResumeAction,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -199,9 +201,9 @@ pub struct RunEventEnvelope {
     #[serde(with = "time::serde::rfc3339")]
     #[schemars(with = "String")]
     pub at: OffsetDateTime,
-    /// The `scenario.call` steps (outermost first) the event happened
-    /// inside; empty for the scenario that was started. Step IDs in the
-    /// event belong to the innermost called scenario.
+    /// The `flow.call` steps (outermost first) the event happened
+    /// inside; empty for the flow that was started. Step IDs in the
+    /// event belong to the innermost called flow.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub call_path: Vec<StepId>,
     #[serde(flatten)]
@@ -213,8 +215,10 @@ pub struct RunEventEnvelope {
 #[serde(rename_all = "camelCase")]
 pub struct RunReport {
     pub run_id: RunId,
-    pub scenario_id: ScenarioId,
-    pub scenario_name: String,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: FlowId,
+    #[serde(alias = "scenarioName")]
+    pub flow_name: String,
     pub revision: u64,
     /// Named version whose content was run, when it matches one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -230,10 +234,11 @@ pub struct RunReport {
     pub error: Option<RunError>,
     /// Values of output variables (secret outputs are masked when recorded).
     pub outputs: Map<String, Value>,
-    /// The scenarios `scenario.call` steps could run, as they were when the
+    /// The flows `flow.call` steps could run, as they were when the
     /// run started.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub subscenarios: Vec<SubscenarioRef>,
+    #[serde(alias = "subscenarios")]
+    pub subflows: Vec<SubflowRef>,
     /// Who asked for the run, from where, on which PC.
     #[serde(default, skip_serializing_if = "RunOrigin::is_empty")]
     pub origin: RunOrigin,
@@ -245,7 +250,7 @@ pub struct RunReport {
 pub enum RunTrigger {
     /// "Run" in Studio (a person watching).
     Studio,
-    /// An AI client's `run_scenario` / `test_step`.
+    /// An AI client's `run_flow` / `test_step`.
     Mcp,
     /// `shikigami run` (a person, a batch file or Task Scheduler).
     Cli,
@@ -309,12 +314,14 @@ pub fn machine_name() -> Option<String> {
         })
 }
 
-/// A called scenario's content as used by a run.
+/// A called flow's content as used by a run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct SubscenarioRef {
-    pub scenario_id: ScenarioId,
-    pub scenario_name: String,
+pub struct SubflowRef {
+    #[serde(alias = "scenarioId")]
+    pub flow_id: FlowId,
+    #[serde(alias = "scenarioName")]
+    pub flow_name: String,
     pub revision: u64,
     /// Named version its content matches, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -326,9 +333,33 @@ pub struct SubscenarioRef {
 #[serde(rename_all = "camelCase")]
 pub struct RunSnapshot {
     pub run_id: RunId,
-    pub scenario_id: ScenarioId,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: FlowId,
     pub status: RunStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_step: Option<StepId>,
     pub steps_executed: u64,
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// Runs recorded before flows were renamed (up to 0.1.2) still read.
+    #[test]
+    fn reads_run_started_events_from_0_1() {
+        let event: RunEvent = serde_json::from_value(serde_json::json!({
+            "type": "runStarted", "scenarioId": "scn_x", "scenarioName": "x", "revision": 3
+        }))
+        .unwrap();
+        let RunEvent::RunStarted {
+            flow_id, flow_name, ..
+        } = event
+        else {
+            panic!("not runStarted");
+        };
+        assert_eq!(flow_id.as_str(), "scn_x");
+        assert_eq!(flow_name, "x");
+    }
 }

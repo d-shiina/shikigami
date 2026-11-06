@@ -1,7 +1,7 @@
-// The third way to look at a scenario, beside the flow chart and the
+// The third way to look at a flow, beside the flow chart and the
 // procedure: every variable in one table, with where it starts, which steps
 // write it and which read it, and what it held after the last run. Editing a
-// variable stays in the inspector (the scenario's properties); a step here
+// variable stays in the inspector (the flow's properties); a step here
 // opens it on the chart.
 import { menuFor } from "../lib/contextMenu";
 import { useVariableMenu } from "./menus";
@@ -56,14 +56,14 @@ const DIRECTION_TONE: Record<VariableUsage["direction"], string> = {
 };
 
 export function VariablesView({ onView }: { onView: (view: View) => void }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const changes = useStudio((s) => s.run?.changes);
   const goTo = useStudio((s) => s.goTo);
   const variableMenu = useVariableMenu();
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
-  const rows = useMemo(() => (scenario ? variableUsage(scenario.steps ?? [], scenario.variables) : []), [scenario]);
-  if (!scenario) return null;
+  const rows = useMemo(() => (flow ? variableUsage(flow.steps ?? [], flow.variables) : []), [flow]);
+  if (!flow) return null;
   const open = (id: string) => {
     onView("flow");
     goTo(id);
@@ -133,10 +133,10 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <StepChips ids={u.writers} steps={scenario.steps ?? []} defs={defs} onOpen={open} />
+                        <StepChips ids={u.writers} steps={flow.steps ?? []} defs={defs} onOpen={open} />
                       </td>
                       <td className="px-3 py-2">
-                        <StepChips ids={u.readers} steps={scenario.steps ?? []} defs={defs} onOpen={open} />
+                        <StepChips ids={u.readers} steps={flow.steps ?? []} defs={defs} onOpen={open} />
                       </td>
                       {changes && (
                         <td className="max-w-[200px] px-3 py-2">

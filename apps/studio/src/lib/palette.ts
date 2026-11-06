@@ -2,7 +2,7 @@
 // groups by what they work on, a "frequent" view to start from, and a search
 // that ranks by how well the name matches and forgives the ways Japanese can
 // be written (katakana / hiragana, full / half width).
-import type { ScenarioSummary, StepTypeDef } from "@shikigami/schema";
+import type { FlowSummary, StepTypeDef } from "@shikigami/schema";
 import { stepLabel, t } from "./i18n";
 import { KEYWORD } from "./keywords";
 import { presets } from "./presets";
@@ -25,7 +25,7 @@ export type PaletteItem = {
 
 /**
  * The groups, in the order the palette lists them, under three headings:
- * what the scenario works on first (that is what people look for when
+ * what the flow works on first (that is what people look for when
  * building an automation), then the flow's own nodes, then data handling.
  */
 export const SECTIONS: { id: string; groups: string[] }[] = [
@@ -146,11 +146,11 @@ function presetItems(): PaletteItem[] {
 
 /**
  * The flows that take inputs or give outputs, as nodes of their own: adding
- * one adds a `scenario.call` to it, so a flow made to be reused is found by
+ * one adds a `flow.call` to it, so a flow made to be reused is found by
  * its name like any other node instead of through "call a flow" and a list.
  * Flows with neither are left out: they are usually whole jobs, not parts.
  */
-function flowItems(flows: readonly ScenarioSummary[], openId: string | undefined): PaletteItem[] {
+function flowItems(flows: readonly FlowSummary[], openId: string | undefined): PaletteItem[] {
   return flows
     .filter((f) => f.id !== openId && ((f.inputs?.length ?? 0) > 0 || (f.outputs?.length ?? 0) > 0))
     .map((f) => {
@@ -160,8 +160,8 @@ function flowItems(flows: readonly ScenarioSummary[], openId: string | undefined
         group: "subflow",
         label: f.name,
         summary: f.description.trim() ? firstSentence(f.description.trim()) : shape,
-        type: "scenario.call",
-        params: { scenario: f.id },
+        type: "flow.call",
+        params: { flow: f.id },
         find: {
           // The name is all a flow has to go by, so its kana reading counts as the name.
           label: normalize(`${f.name} ${readings(f.name)}`),
@@ -173,7 +173,7 @@ function flowItems(flows: readonly ScenarioSummary[], openId: string | undefined
 }
 
 /** Every line the palette can show. `flows` and `openId` add the reusable flows (not the open one). */
-export function paletteItems(defs: readonly StepTypeDef[], flows: readonly ScenarioSummary[] = [], openId?: string): PaletteItem[] {
+export function paletteItems(defs: readonly StepTypeDef[], flows: readonly FlowSummary[] = [], openId?: string): PaletteItem[] {
   return [...defs.map(stepItem), ...flowItems(flows, openId), ...presetItems()];
 }
 

@@ -18,14 +18,14 @@ Crate `shikigami-files`. Works without installing anything and is tested off Win
 | `file.zip` / `file.unzip` | Compress into a zip / extract | the zip path / list of extracted files |
 | `config.read` | Reads a settings file (see below) into `{ name: value }`. A plain JSON object comes back as it is | record |
 
-## The scenario's folder
+## The flow's folder
 
-Each scenario is a folder in the workspace, and its files live next to it:
+Each flow is a folder in the workspace, and its files live next to it:
 
 ```text
-scenarios/<id>/
-  scenario.json   the scenario
-  input/          files the scenario reads (Excel, CSV…)
+flows/<id>/
+  flow.json   the flow
+  input/          files the flow reads (Excel, CSV…)
   config/         settings files people change without touching the flow
   templates/      layouts the output is made from (Excel, Word)
   output/         what runs produce
@@ -33,12 +33,12 @@ scenarios/<id>/
   logs/           a readable log per run: 20261029-140512_failed.log (the newest 100 are kept)
 ```
 
-- Relative paths in a node's file params (`input/orders.xlsx`) resolve from the scenario's folder, so the scenario keeps working when the workspace moves or is shared. A subscenario resolves from its own folder. Paths that leave the folder (`..`) get the `PATH_OUTSIDE_PROJECT` warning; absolute paths work as before.
-- `work/` is emptied when a run starts. Set `settings.keepWork: true` on the scenario to keep it. Trying one node (`test_step`) neither empties `work/` nor writes a log.
-- Bundles (`export_scenario`) and duplicates take the files along, except `output/`, `work/` and `logs/`.
+- Relative paths in a node's file params (`input/orders.xlsx`) resolve from the flow's folder, so the flow keeps working when the workspace moves or is shared. A subflow resolves from its own folder. Paths that leave the folder (`..`) get the `PATH_OUTSIDE_PROJECT` warning; absolute paths work as before.
+- `work/` is emptied when a run starts. Set `settings.keepWork: true` on the flow to keep it. Trying one node (`test_step`) neither empties `work/` nor writes a log.
+- Bundles (`export_flow`) and duplicates take the files along, except `output/`, `work/` and `logs/`.
 - `shikigami run orders.shikigami.json` (a bundle file) unpacks its files into `orders.files/<id>/` next to it and runs there, so `output/` and `logs/` stay after the run.
-- Older workspaces with `scenarios/<id>.json` are moved into folders when the workspace is opened.
-- Add files from Studio, from the AI (`write_project_file`), or with `shikigami scenario add-file <id> <file> --to input`.
+- Older workspaces with `flows/<id>.json` are moved into folders when the workspace is opened.
+- Add files from Studio, from the AI (`write_project_file`), or with `shikigami flow add-file <id> <file> --to input`.
 
 ### Settings files
 

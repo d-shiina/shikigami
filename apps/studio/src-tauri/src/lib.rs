@@ -1,7 +1,7 @@
 //! Shikigami Studio backend.
 //!
-//! Every command is a thin wrapper over `ScenarioService` (editing) or
-//! `Runtime` (execution). Studio owns no scenario logic of its own, so what
+//! Every command is a thin wrapper over `FlowService` (editing) or
+//! `Runtime` (execution). Studio owns no flow logic of its own, so what
 //! the GUI does is exactly what MCP clients and the CLI can do.
 
 mod agent;
@@ -14,8 +14,8 @@ mod watcher;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use shikigami_core::ScenarioId;
-use shikigami_core::{ApprovalStore, FileStore, Policy, RunId, ScenarioService};
+use shikigami_core::FlowId;
+use shikigami_core::{ApprovalStore, FileStore, FlowService, Policy, RunId};
 use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime};
 use shikigami_secrets::Vault;
 use tokio_util::sync::CancellationToken;
@@ -23,13 +23,13 @@ use tokio_util::sync::CancellationToken;
 pub(crate) struct ActiveRun {
     pub cancel: CancellationToken,
     pub snapshot: Arc<Mutex<RunSnapshot>>,
-    pub scenario_id: ScenarioId,
+    pub flow_id: FlowId,
     /// Studio runs are interactive: they pause on errors and breakpoints.
     pub debug: Option<DebugControl>,
 }
 
 pub(crate) struct AppState {
-    pub service: Arc<ScenarioService>,
+    pub service: Arc<FlowService>,
     pub runtime: Runtime,
     pub runs: Mutex<HashMap<RunId, ActiveRun>>,
     pub vault: Arc<Vault>,
@@ -58,7 +58,7 @@ pub fn run() {
             std::process::exit(1);
         }
     };
-    let service = Arc::new(ScenarioService::new(store, runtime.registry().clone()));
+    let service = Arc::new(FlowService::new(store, runtime.registry().clone()));
     let vault = Arc::new(Vault::open(service.store().root()));
     let state = AppState {
         service: service.clone(),
@@ -79,7 +79,7 @@ pub fn run() {
         .manage(agent::AgentLogin::default())
         .setup(move |app| {
             fit_to_screen(app);
-            watcher::spawn(app.handle().clone(), service.store().scenarios_dir());
+            watcher::spawn(app.handle().clone(), service.store().flows_dir());
             watcher::spawn_secret_requests(
                 app.handle().clone(),
                 service.store().root().join("secrets"),
@@ -102,18 +102,18 @@ pub fn run() {
             commands::diff_versions,
             commands::restore_version,
             commands::published_state,
-            commands::publish_scenario,
+            commands::publish_flow,
             commands::approve_and_publish,
-            commands::unpublish_scenario,
+            commands::unpublish_flow,
             commands::get_policy,
             commands::save_policy,
             commands::list_approvals,
             commands::decide_approval,
             commands::list_pick_requests,
             commands::cancel_pick_request,
-            commands::export_scenario,
-            commands::import_scenario,
-            commands::list_scenarios,
+            commands::export_flow,
+            commands::import_flow,
+            commands::list_flows,
             commands::project_files,
             commands::read_project_text,
             commands::write_project_text,
@@ -123,23 +123,23 @@ pub fn run() {
             commands::rename_project_file,
             commands::delete_project_file,
             commands::open_project_file,
-            commands::get_scenario,
-            commands::create_scenario,
-            commands::duplicate_scenario,
-            commands::delete_scenario,
-            commands::edit_scenario,
-            commands::extract_subscenario,
+            commands::get_flow,
+            commands::create_flow,
+            commands::duplicate_flow,
+            commands::delete_flow,
+            commands::edit_flow,
+            commands::extract_subflow,
             commands::undo,
             commands::redo,
             commands::undo_state,
-            commands::validate_scenario,
+            commands::validate_flow,
             commands::list_step_types,
-            commands::scenario_history,
+            commands::flow_history,
             commands::review_timeline,
             commands::submit_review,
             commands::get_observation,
             commands::run_record,
-            commands::run_scenario,
+            commands::run_flow,
             commands::stop_run,
             commands::run_status,
             debug::debug_run,

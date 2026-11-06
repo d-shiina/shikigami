@@ -1,9 +1,9 @@
 //! The agent: one process per PC (and Windows user, and workspace) that
-//! runs scenarios unattended, so that nobody has to set up Windows Task
+//! runs flows unattended, so that nobody has to set up Windows Task
 //! Scheduler (docs/design/remote-runs.md, docs/schedules.md).
 //!
 //! - Schedules and file triggers in `schedules.json` start the published
-//!   version of a scenario ([`schedule`]).
+//!   version of a flow ([`schedule`]).
 //! - Other processes talk to it over a local pipe ([`ipc`]): `shikigami
 //!   agent status`, starting and stopping runs.
 //! - Runs it starts are recorded like any other (`origin.trigger`

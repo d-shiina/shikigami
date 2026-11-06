@@ -5,14 +5,14 @@ export type * from "./generated";
 
 import type { ErrorPayload } from "./generated";
 
-/** Current scenario file format version (`shikigami_core::SCHEMA_VERSION`). */
+/** Current flow file format version (`shikigami_core::SCHEMA_VERSION`). */
 export const SCHEMA_VERSION = 2;
 
 /** Stable error codes shared by Core, Runtime, MCP tools and Studio. */
 export type CoreErrorCode =
-  | "SCENARIO_NOT_FOUND"
-  | "SCENARIO_ALREADY_EXISTS"
-  | "INVALID_SCENARIO_ID"
+  | "FLOW_NOT_FOUND"
+  | "FLOW_ALREADY_EXISTS"
+  | "INVALID_FLOW_ID"
   | "STEP_NOT_FOUND"
   | "DUPLICATE_STEP_ID"
   | "REVISION_CONFLICT"

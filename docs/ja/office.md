@@ -49,13 +49,13 @@ AI が覚える書き方を増やさないため、同じ操作を 2 通りで�
 | 空 | `null` | `null`（書式は残して値を消す） |
 
 - 日付はセルの表示形式（`yyyy/mm/dd`、`ggge年m月d日` など）で判断します。書くときは、セルが日付の表示形式でなければ `yyyy/mm/dd` を付けます
-- 書いた数式の結果は、次に Excel で開いたときに計算されます（Shikigami は計算しない）。その場で結果が要るときは COM の再計算ノード（予定）を使います
+- 書いた数式の結果は、次に Excel で開いたときに計算されます（Shikigami は計算しない）。その場で結果が要るときは `excel.recalculate` を使います
 
 ### 排他と保存
 
-- どのノードも `path` を資源にするので、同じブックへのノードは自動で 1 つずつ、別のブックは並行に動きます（`file:` キー、[ai-authoring.md](../design/ai-authoring.md) B）。シナリオにロックは書きません
+- どのノードも `path` を資源にするので、同じブックへのノードは自動で 1 つずつ、別のブックは並行に動きます（`file:` キー、[ai-authoring.md](../design/ai-authoring.md) B）。フローにロックは書きません
 - 書き込みはノードごとに保存まで終えます。保存は同じフォルダーの一時ファイルに書いてから置き換えるので、失敗しても元のファイルは壊れません。「ブックを開く / 保存する / 閉じる」のノードはありません（離れたノードを名前でつなぐ書き方を作らないため）
-- Excel でそのブックを開いているとき（`~$ブック名` があるとき）は書き込まずに `FILE_IN_USE`（再試行可）。読み込みはできます
+- この PC の Excel でそのブックを開いているときは、開いているブックを操作します（[下記](#excel-本体で行うこと開いているブック再計算並べ替えpdf実装済み)）。ほかの場所で開かれているとき（`~$ブック名` はあるがこの PC の Excel にはない）は書き込まずに `FILE_IN_USE`（再試行可）。読み込みはできます
 
 ### 制約
 
@@ -82,6 +82,29 @@ AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange`
 - 同じブックへのほかの `excel.*` とは自動で順番待ち。ユーザーがそのブックを Excel で開いていると `FILE_IN_USE`
 - インターネットから取得してブロックされたブック（ファイルのプロパティで「許可する」が未チェック）はマクロが動かず `MACRO_FAILED` になります
 - 任意のコードが動くので、ノードのリスクは `Dangerous` です
+
+## Excel 本体で行うこと：開いているブック・再計算・並べ替え・PDF（実装済み）
+
+Excel 本体（COM）が要る操作です。Windows と デスクトップ版 Excel が必要です（ほかは `PLATFORM_UNSUPPORTED`、Excel がなければ `EXCEL_NOT_INSTALLED`）。
+
+**画面で開いているブック。** `path` のブックがこの PC の Excel で開いているときは、上の `excel.*` ノードはファイルではなく開いているブックを操作します：
+
+- 読み込みは画面に出ている内容（保存前の変更・再計算後の数式の結果も含む）
+- 書き込みは開いているブックに入れ（値の決まりは上と同じ）、ブックを保存します。ユーザーの Excel は開いたまま
+- Excel が手を離せないとき（セルを編集中、ダイアログが開いている）は `EXCEL_BUSY` か `EXCEL_TIMEOUT` で止まり、ヒントで「終わらせてから再実行」を案内します。Excel を閉じることはありません
+- この PC の Excel から届かない場所で開かれているとき（共有フォルダーで別の人が開いている）は、これまでどおり書き込みは `FILE_IN_USE`
+
+| type | 主な params | 出力 |
+|---|---|---|
+| `excel.recalculate` | `path` | –（全部の数式を計算し直して保存） |
+| `excel.sort` | `path`, `sheet`, `headerRow`, `by`（`[{ "column": "金額", "order": "desc" }]`、先頭が優先） | 並べ替えた行数 `{ count }` |
+| `excel.exportPdf` | `path`, `sheet`（省略でブック全体）, `to`, `overwrite` | `{ path }` |
+
+- ブックが開いていればそれを使い、開いていなければ `excel.runMacro` と同じく**見えない別の Excel** でファイルを開いて（`excel.exportPdf` は読み取り専用）、終わったら終了させます
+- `excel.sort` の列は見出しの文字で指定（違えば `UNKNOWN_COLUMN` に見出しの一覧）。Excel 自身の並べ替えなので書式も行と一緒に動きます
+- `excel.exportPdf` は Excel で印刷したときと同じページ割り（印刷範囲・ページ設定）。`to` があると `FILE_EXISTS`（`overwrite: true` で上書き）
+- 既定のタイムアウトは 5 分。時間切れのときは自分で起動した Excel を保存せずに終了させます（`EXCEL_TIMEOUT`）
+- ファイルは変えますがブックのコードは動かさないので、リスクは `Interactive` です
 
 ## Word（`word.*`、実装済み）
 
@@ -139,6 +162,6 @@ AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange`
 
 ## 次の段階（予定）
 
-1. **Excel の再計算・PDF 出力**：`excel.runMacro` と同じ仕組みで足す
+1. **Excel の書式・フィルター・ピボットテーブル**：`excel.sort` と同じく Excel 本体で
 2. **Word の PDF 出力**：COM（Excel のマクロと同じ仕組み）
 3. **Outlook なしで読む**：`mail.list` / `mail.saveAttachments` を Microsoft 365・IMAP でも

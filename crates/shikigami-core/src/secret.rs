@@ -1,11 +1,11 @@
-//! Secrets (passwords and other login data) referenced from scenarios.
+//! Secrets (passwords and other login data) referenced from flows.
 //!
 //! A human registers a secret under a name in Studio or the CLI (e.g.
 //! 「受注システム」 with a user name, a password and the sites it may be
-//! typed into). Scenarios and AI clients only ever see that name: an input
+//! typed into). Flows and AI clients only ever see that name: an input
 //! step writes `{ "secret": "受注システム", "field": "password" }` as its
 //! value and the Runtime looks the value up while the step runs. Values
-//! never appear in scenario files, MCP results, logs or screenshots.
+//! never appear in flow files, MCP results, logs or screenshots.
 //!
 //! This module holds the reference format and the provider interface; the
 //! encrypted store lives in `shikigami-secrets`.

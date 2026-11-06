@@ -32,7 +32,7 @@ The provider sends the browser back to the **redirect URL registered for the app
    | Sites | where the client secret and the tokens may be sent: the token URL's site and the API's site (Box: `https://api.box.com`) |
 
    From an AI: `request_secret` with `name: "Box"`, `sites: ["https://api.box.com"]` and a reason such as "the client ID as the username and the client secret as the password".
-3. In the scenario:
+3. In the flow:
 
 ```jsonc
 { "type": "oauth.signIn", "params": {
@@ -71,7 +71,7 @@ It waits for the person for 5 minutes by default (`timeoutMs`). The client secre
 - Saved encrypted in the workspace (`secrets/oauth/`), with the same key as the secrets ([secrets.md](secrets.md)). They never appear in outputs, logs or MCP results; the access token is masked like a password.
 - `http.request` refreshes the access token when it has less than 2 minutes left (a token that cannot be refreshed is used until it really expires). Refreshes are one at a time, also across Studio, the CLI and the MCP server on the same workspace, so a provider that replaces the refresh token on every refresh (Box does) never loses it.
 - Saved tokens are reused only for the same client ID, `tokenUrl` and a `scope` they cover; asking for more scopes signs in again.
-- When the provider no longer accepts the refresh token, `http.request` fails with `OAUTH_SIGN_IN_REQUIRED` and the next `oauth.signIn` lets the person sign in again. Put `oauth.signIn` at the start of the scenario so it happens there.
+- When the provider no longer accepts the refresh token, `http.request` fails with `OAUTH_SIGN_IN_REQUIRED` and the next `oauth.signIn` lets the person sign in again. Put `oauth.signIn` at the start of the flow so it happens there.
 - Studio shows "Signed in (OAuth)" on the secret, with Sign out. The CLI: `shikigami secret logout <name>`. Changing the client ID makes the old tokens unusable; removing the secret removes them.
 - `list_secrets` shows `signedIn: true` for secrets with saved tokens.
 

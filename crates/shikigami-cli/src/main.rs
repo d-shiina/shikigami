@@ -1,7 +1,7 @@
-//! `shikigami` — headless command line for scenarios.
+//! `shikigami` — headless command line for flows.
 //!
-//! Uses exactly the same Scenario Core and Runtime as Studio and the MCP
-//! server; it is the reference for running scenarios without GUI or AI.
+//! Uses exactly the same Flow Core and Runtime as Studio and the MCP
+//! server; it is the reference for running flows without GUI or AI.
 
 mod agent_cmd;
 mod contract;
@@ -15,9 +15,9 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use serde_json::{Map, Value};
 use shikigami_core::{
-    Actor, ActorKind, ApprovalId, ApprovalStore, DiffKind, FileStore, ImportConflict, NewScenario,
-    NewVersion, Policy, PublishInput, Scenario, ScenarioDiff, ScenarioId, ScenarioService,
-    UserConfig, WorkspaceManifest,
+    Actor, ActorKind, ApprovalId, ApprovalStore, DiffKind, FileStore, Flow, FlowDiff, FlowId,
+    FlowService, ImportConflict, NewFlow, NewVersion, Policy, PublishInput, UserConfig,
+    WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{
@@ -37,19 +37,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Manage scenarios in the workspace.
-    #[command(subcommand)]
-    Scenario(ScenarioCmd),
-    /// Named versions of a scenario: save, list, compare, restore.
+    /// Manage flows in the workspace.
+    // `scenario` is the name from before flows were renamed (up to 0.1.2).
+    #[command(subcommand, alias = "scenario")]
+    Flow(FlowCmd),
+    /// Named versions of a flow: save, list, compare, restore.
     #[command(subcommand)]
     Version(VersionCmd),
     /// Workspace location and sharing.
     #[command(subcommand)]
     Workspace(WorkspaceCmd),
-    /// Run a scenario (by ID or JSON file) without GUI or AI. A scenario in
+    /// Run a flow (by ID or JSON file) without GUI or AI. A flow in
     /// the workspace runs its published version (see `version publish`).
     Run {
-        /// Scenario ID in the workspace, or a path to a scenario JSON file.
+        /// Flow ID in the workspace, or a path to a flow JSON file.
         target: String,
         /// Run the working content instead of the published version.
         #[arg(long)]
@@ -64,7 +65,7 @@ enum Command {
         #[arg(long)]
         vars: bool,
     },
-    /// Validate a scenario (by ID or JSON file).
+    /// Validate a flow (by ID or JSON file).
     Validate { target: String },
     /// List available step types.
     StepTypes {
@@ -77,7 +78,7 @@ enum Command {
     /// JSON Schema utilities.
     #[command(subcommand)]
     Schema(SchemaCmd),
-    /// Manage secrets (logins) that scenarios type by name. Values are
+    /// Manage secrets (logins) that flows type by name. Values are
     /// encrypted in the workspace; the key is kept by Windows Credential Manager.
     #[command(subcommand)]
     Secret(SecretCmd),
@@ -88,11 +89,11 @@ enum Command {
     /// Requests from AI clients waiting for a person's approval.
     #[command(subcommand)]
     Approval(ApprovalCmd),
-    /// The agent: runs scenarios unattended on this PC (schedules, file
+    /// The agent: runs flows unattended on this PC (schedules, file
     /// triggers) so Task Scheduler is not needed.
     #[command(subcommand)]
     Agent(agent_cmd::AgentCmd),
-    /// When the agent starts scenarios by itself: daily, monthly, every few
+    /// When the agent starts flows by itself: daily, monthly, every few
     /// minutes, once, or when a file appears.
     #[command(subcommand)]
     Schedule(agent_cmd::ScheduleCmd),
@@ -105,7 +106,7 @@ enum Command {
 }
 
 #[derive(Subcommand)]
-enum ScenarioCmd {
+enum FlowCmd {
     List,
     Show {
         id: String,
@@ -113,15 +114,15 @@ enum ScenarioCmd {
     Create {
         name: String,
     },
-    /// Import a bundle (`*.shikigami.json`) or a scenario JSON file.
+    /// Import a bundle (`*.shikigami.json`) or a flow JSON file.
     Import {
         file: PathBuf,
-        /// When the scenario ID already exists: `update` it (undoable) or
+        /// When the flow ID already exists: `update` it (undoable) or
         /// import a `copy` under a new ID.
         #[arg(long, value_enum)]
         on_conflict: Option<OnConflict>,
     },
-    /// Write a bundle (scenario + versions) for another workspace or person.
+    /// Write a bundle (flow + versions) for another workspace or person.
     Export {
         id: String,
         /// Output file (default: stdout).
@@ -134,7 +135,7 @@ enum ScenarioCmd {
     Delete {
         id: String,
     },
-    /// Apply edit operations (a JSON array of EditOp) to a scenario.
+    /// Apply edit operations (a JSON array of EditOp) to a flow.
     Edit {
         id: String,
         /// File containing the JSON array, or `-` for stdin.
@@ -154,11 +155,11 @@ enum ScenarioCmd {
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
-    /// List the files in the scenario's folder (input/, config/, …).
+    /// List the files in the flow's folder (input/, config/, …).
     Files {
         id: String,
     },
-    /// Copy a file into the scenario's folder.
+    /// Copy a file into the flow's folder.
     AddFile {
         id: String,
         file: PathBuf,
@@ -189,7 +190,7 @@ enum VersionCmd {
     List {
         id: String,
     },
-    /// Print one version (including the scenario snapshot) as JSON.
+    /// Print one version (including the flow snapshot) as JSON.
     Show {
         id: String,
         number: u32,
@@ -353,11 +354,11 @@ fn real_main() -> Result<ExitCode> {
             .clone()
             .unwrap_or_else(FileStore::default_root)
     };
-    let open_service = || -> Result<ScenarioService> {
+    let open_service = || -> Result<FlowService> {
         let root = workspace();
         let store = FileStore::open(&root)
             .with_context(|| format!("opening workspace {}", root.display()))?;
-        Ok(ScenarioService::new(store, runtime.registry().clone()))
+        Ok(FlowService::new(store, runtime.registry().clone()))
     };
 
     match &cli.command {
@@ -367,9 +368,9 @@ fn real_main() -> Result<ExitCode> {
         Command::Schedule(cmd) => {
             return agent_cmd::schedule_cmd(&open_service()?, cmd, parse_inputs);
         }
-        Command::Scenario(cmd) => {
+        Command::Flow(cmd) => {
             let svc = open_service()?;
-            scenario_cmd(&svc, cmd)?;
+            flow_cmd(&svc, cmd)?;
         }
         Command::Version(cmd) => {
             let svc = open_service()?;
@@ -430,8 +431,8 @@ fn real_main() -> Result<ExitCode> {
         }
         Command::Validate { target } => {
             let svc = open_service()?;
-            let (scenario, bundled) = resolve(&svc, target)?;
-            let report = svc.validate_bundled(&scenario, &bundled);
+            let (flow, bundled) = resolve(&svc, target)?;
+            let report = svc.validate_bundled(&flow, &bundled);
             println!("{}", serde_json::to_string_pretty(&report)?);
             if !report.valid {
                 return Ok(ExitCode::from(1));
@@ -512,8 +513,8 @@ fn real_main() -> Result<ExitCode> {
             vars,
         } => {
             let svc = open_service()?;
-            let (scenario, version, mut subscenarios) = runnable(&svc, target, *draft)?;
-            let project_dir = project_dirs(&svc, target, &scenario, &mut subscenarios)?;
+            let (flow, version, mut subflows) = runnable(&svc, target, *draft)?;
+            let project_dir = project_dirs(&svc, target, &flow, &mut subflows)?;
             let inputs = parse_inputs(inputs)?;
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -526,11 +527,11 @@ fn real_main() -> Result<ExitCode> {
                 &runtime,
                 svc.store().local_root(),
                 &Policy::path(svc.store().root()),
-                scenario,
+                flow,
                 RunOptions {
                     inputs,
                     version,
-                    subscenarios,
+                    subflows,
                     project_dir,
                     full_run: true,
                     origin: RunOrigin::new(RunTrigger::Cli),
@@ -630,9 +631,9 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
     Ok(())
 }
 
-fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
+fn flow_cmd(svc: &FlowService, cmd: &FlowCmd) -> Result<()> {
     match cmd {
-        ScenarioCmd::List => {
+        FlowCmd::List => {
             for s in svc.list()? {
                 println!(
                     "{}\trev {}\t{} step(s)\t{}",
@@ -640,23 +641,23 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
                 );
             }
         }
-        ScenarioCmd::Show { id } => {
+        FlowCmd::Show { id } => {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&svc.get(&ScenarioId::new(id.as_str()))?)?
+                serde_json::to_string_pretty(&svc.get(&FlowId::new(id.as_str()))?)?
             );
         }
-        ScenarioCmd::Create { name } => {
+        FlowCmd::Create { name } => {
             let out = svc.create(
-                NewScenario {
+                NewFlow {
                     name: name.clone(),
                     ..Default::default()
                 },
                 actor(),
             )?;
-            println!("{}", out.scenario.id);
+            println!("{}", out.flow.id);
         }
-        ScenarioCmd::Import { file, on_conflict } => {
+        FlowCmd::Import { file, on_conflict } => {
             let text = std::fs::read_to_string(file)
                 .with_context(|| format!("reading {}", file.display()))?;
             let value: Value = serde_json::from_str(&text).context("parsing JSON")?;
@@ -665,7 +666,7 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
                 OnConflict::Copy => ImportConflict::Copy,
             });
             let out = svc.import_bundle(value, on_conflict, actor())?;
-            println!("{}", out.outcome.scenario.id);
+            println!("{}", out.outcome.flow.id);
             eprintln!("{:?}, {} version(s) added", out.mode, out.versions_added);
             for issue in &out.outcome.validation.issues {
                 eprintln!(
@@ -674,12 +675,12 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
                 );
             }
         }
-        ScenarioCmd::Export {
+        FlowCmd::Export {
             id,
             output,
             no_versions,
         } => {
-            let bundle = svc.export(&ScenarioId::new(id.as_str()), !no_versions)?;
+            let bundle = svc.export(&FlowId::new(id.as_str()), !no_versions)?;
             let json = serde_json::to_string_pretty(&bundle)? + "\n";
             match output {
                 Some(path) => {
@@ -694,14 +695,14 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
                 None => print!("{json}"),
             }
         }
-        ScenarioCmd::Files { id } => {
-            let files = svc.project_files(&ScenarioId::new(id.as_str()))?;
+        FlowCmd::Files { id } => {
+            let files = svc.project_files(&FlowId::new(id.as_str()))?;
             println!("{}", files.dir);
             for file in files.files {
                 println!("  {:<48} {:>10}", file.path, file.size);
             }
         }
-        ScenarioCmd::AddFile {
+        FlowCmd::AddFile {
             id,
             file,
             to,
@@ -716,15 +717,14 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
                         .unwrap_or_default()
                 ),
             };
-            let added =
-                svc.copy_into_project(&ScenarioId::new(id.as_str()), file, &to, *overwrite)?;
+            let added = svc.copy_into_project(&FlowId::new(id.as_str()), file, &to, *overwrite)?;
             println!("added {}", added.path);
         }
-        ScenarioCmd::Delete { id } => {
-            svc.delete(&ScenarioId::new(id.as_str()), None, actor())?;
+        FlowCmd::Delete { id } => {
+            svc.delete(&FlowId::new(id.as_str()), None, actor())?;
             println!("moved {id} to trash");
         }
-        ScenarioCmd::Edit {
+        FlowCmd::Edit {
             id,
             ops,
             expected_revision,
@@ -737,22 +737,17 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
             };
             let ops: Vec<shikigami_core::EditOp> =
                 serde_json::from_str(&text).context("parsing edit operations")?;
-            let out = svc.edit(
-                &ScenarioId::new(id.as_str()),
-                *expected_revision,
-                ops,
-                actor(),
-            )?;
+            let out = svc.edit(&FlowId::new(id.as_str()), *expected_revision, ops, actor())?;
             print_outcome(&out);
         }
-        ScenarioCmd::Undo { id } => {
-            print_outcome(&svc.undo(&ScenarioId::new(id.as_str()), None, actor())?)
+        FlowCmd::Undo { id } => {
+            print_outcome(&svc.undo(&FlowId::new(id.as_str()), None, actor())?)
         }
-        ScenarioCmd::Redo { id } => {
-            print_outcome(&svc.redo(&ScenarioId::new(id.as_str()), None, actor())?)
+        FlowCmd::Redo { id } => {
+            print_outcome(&svc.redo(&FlowId::new(id.as_str()), None, actor())?)
         }
-        ScenarioCmd::History { id, limit } => {
-            for entry in svc.history(&ScenarioId::new(id.as_str()), *limit)? {
+        FlowCmd::History { id, limit } => {
+            for entry in svc.history(&FlowId::new(id.as_str()), *limit)? {
                 let who = entry.actor.name.as_deref().unwrap_or("");
                 println!(
                     "rev {}\t{:?}\t{:?} {}\t{}",
@@ -764,11 +759,11 @@ fn scenario_cmd(svc: &ScenarioService, cmd: &ScenarioCmd) -> Result<()> {
     Ok(())
 }
 
-fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> shikigami_core::CoreResult<()> {
+fn version_cmd(svc: &FlowService, cmd: &VersionCmd) -> shikigami_core::CoreResult<()> {
     match cmd {
         VersionCmd::Create { id, name, note } => {
             let v = svc.create_version(
-                &ScenarioId::new(id.as_str()),
+                &FlowId::new(id.as_str()),
                 NewVersion {
                     name: name.clone(),
                     note: note.clone(),
@@ -779,7 +774,7 @@ fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> shikigami_core::CoreR
             println!("v{} {} (rev {})", v.number, v.name, v.revision);
         }
         VersionCmd::List { id } => {
-            let id = ScenarioId::new(id.as_str());
+            let id = FlowId::new(id.as_str());
             let published = svc.published(&id)?.map(|p| p.version);
             for v in svc.list_versions(&id)? {
                 let mark = if published == Some(v.number) {
@@ -804,11 +799,11 @@ fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> shikigami_core::CoreR
             }
         }
         VersionCmd::Show { id, number } => {
-            let v = svc.get_version(&ScenarioId::new(id.as_str()), *number)?;
+            let v = svc.get_version(&FlowId::new(id.as_str()), *number)?;
             println!("{}", serde_json::to_string_pretty(&v)?);
         }
         VersionCmd::Diff { id, from, to, json } => {
-            let id = ScenarioId::new(id.as_str());
+            let id = FlowId::new(id.as_str());
             let from = match from {
                 Some(n) => Some(*n),
                 None => svc.latest_version(&id)?,
@@ -822,7 +817,7 @@ fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> shikigami_core::CoreR
         }
         VersionCmd::Restore { id, number } => {
             print_outcome(&svc.restore_version(
-                &ScenarioId::new(id.as_str()),
+                &FlowId::new(id.as_str()),
                 *number,
                 None,
                 actor(),
@@ -835,7 +830,7 @@ fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> shikigami_core::CoreR
             note,
         } => {
             let p = svc.publish(
-                &ScenarioId::new(id.as_str()),
+                &FlowId::new(id.as_str()),
                 PublishInput {
                     version: *number,
                     name: name.clone(),
@@ -850,7 +845,7 @@ fn version_cmd(svc: &ScenarioService, cmd: &VersionCmd) -> shikigami_core::CoreR
             }
         }
         VersionCmd::Unpublish { id, note } => {
-            svc.unpublish(&ScenarioId::new(id.as_str()), note.clone(), actor())?;
+            svc.unpublish(&FlowId::new(id.as_str()), note.clone(), actor())?;
             println!(
                 "unpublished {id}: `shikigami run {id}` now refuses until a version is published"
             );
@@ -873,7 +868,7 @@ fn approval_cmd(store: &ApprovalStore, cmd: &ApprovalCmd) -> shikigami_core::Cor
                     r.id,
                     r.action.as_str(),
                     r.risk,
-                    r.scenario_name.as_deref().unwrap_or("-"),
+                    r.flow_name.as_deref().unwrap_or("-"),
                     r.step_types.join(",")
                 );
                 println!("  {}", r.subject);
@@ -906,23 +901,23 @@ fn core_err(e: shikigami_core::CoreError) -> anyhow::Error {
 }
 
 /// What `shikigami run` executes, with the version recorded in the report.
-/// A file runs as written. A workspace scenario runs its published version
+/// A file runs as written. A workspace flow runs its published version
 /// (and the published versions of what it calls) unless `draft`; the
-/// policy can keep a scenario from running unattended at all.
+/// policy can keep a flow from running unattended at all.
 fn runnable(
-    svc: &ScenarioService,
+    svc: &FlowService,
     target: &str,
     draft: bool,
-) -> Result<(Scenario, Option<u32>, Vec<shikigami_core::Subscenario>)> {
+) -> Result<(Flow, Option<u32>, Vec<shikigami_core::Subflow>)> {
     if is_file(target) {
-        let (scenario, bundled) = resolve(svc, target)?;
-        let version = svc.matching_version(&scenario).ok().flatten();
-        let subscenarios = subscenarios(svc, &scenario, bundled)?;
-        return Ok((scenario, version, subscenarios));
+        let (flow, bundled) = resolve(svc, target)?;
+        let version = svc.matching_version(&flow).ok().flatten();
+        let subflows = subflows(svc, &flow, bundled)?;
+        return Ok((flow, version, subflows));
     }
-    let id = ScenarioId::new(target);
+    let id = FlowId::new(target);
     let policy = Policy::load(&Policy::path(svc.store().root())).map_err(core_err)?;
-    let unattended = |id: &ScenarioId| -> Result<()> {
+    let unattended = |id: &FlowId| -> Result<()> {
         if policy.allows_unattended(id.as_str()) {
             return Ok(());
         }
@@ -935,30 +930,30 @@ fn runnable(
         }))
     };
     unattended(&id)?;
-    let (scenario, version, subscenarios) = if draft {
-        let scenario = svc.get(&id).map_err(core_err)?;
-        let version = svc.matching_version(&scenario).ok().flatten();
-        let subscenarios = subscenarios(svc, &scenario, Vec::new())?;
-        (scenario, version, subscenarios)
+    let (flow, version, subflows) = if draft {
+        let flow = svc.get(&id).map_err(core_err)?;
+        let version = svc.matching_version(&flow).ok().flatten();
+        let subflows = subflows(svc, &flow, Vec::new())?;
+        (flow, version, subflows)
     } else {
         let run = svc.published_run(&id).map_err(core_err)?;
-        (run.scenario, Some(run.version), run.subscenarios)
+        (run.flow, Some(run.version), run.subflows)
     };
-    // A called scenario kept from unattended runs stops its callers too.
-    for sub in &subscenarios {
-        unattended(&sub.scenario.id)?;
+    // A called flow kept from unattended runs stops its callers too.
+    for sub in &subflows {
+        unattended(&sub.flow.id)?;
     }
-    Ok((scenario, version, subscenarios))
+    Ok((flow, version, subflows))
 }
 
-fn print_diff(diff: &ScenarioDiff) {
+fn print_diff(diff: &FlowDiff) {
     println!("{} -> {}", diff.from.label, diff.to.label);
     if diff.identical {
         println!("no differences");
         return;
     }
-    for f in &diff.scenario {
-        println!("~ scenario.{}", f.field);
+    for f in &diff.flow {
+        println!("~ flow.{}", f.field);
     }
     for v in &diff.variables {
         println!("{} variable {}", diff_mark(v.kind), v.name);
@@ -992,7 +987,7 @@ fn diff_mark(kind: DiffKind) -> &'static str {
 fn print_outcome(out: &shikigami_core::EditOutcome) {
     println!(
         "rev {} ({} issue(s))",
-        out.scenario.revision,
+        out.flow.revision,
         out.validation.issues.len()
     );
     for issue in &out.validation.issues {
@@ -1003,23 +998,24 @@ fn print_outcome(out: &shikigami_core::EditOutcome) {
     }
 }
 
-/// Reads a scenario JSON file or the scenario inside a bundle.
-/// A scenario file or bundle, with the sub-scenarios a bundle carries.
-fn load_file(path: &Path) -> Result<(Scenario, Vec<Scenario>)> {
+/// Reads a flow JSON file or the flow inside a bundle.
+/// A flow file or bundle, with the sub-flows a bundle carries.
+fn load_file(path: &Path) -> Result<(Flow, Vec<Flow>)> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let mut value: Value = serde_json::from_str(&text).context("parsing JSON")?;
     let mut bundled = Vec::new();
     if shikigami_core::version::is_bundle(&value) {
-        if let Some(Value::Array(subs)) = value.get_mut("subscenarios").map(Value::take) {
+        // `scenario` / `subscenarios`: bundles from before flows were
+        // renamed (up to 0.1.2).
+        let mut take =
+            |keys: [&str; 2]| keys.iter().find_map(|k| value.get_mut(*k).map(Value::take));
+        if let Some(Value::Array(subs)) = take(["subflows", "subscenarios"]) {
             for sub in subs {
                 bundled.push(shikigami_core::migrate::from_value(sub)?);
             }
         }
-        value = value
-            .get_mut("scenario")
-            .map(Value::take)
-            .unwrap_or_default();
+        value = take(["flow", "scenario"]).unwrap_or_default();
     }
     Ok((shikigami_core::migrate::from_value(value)?, bundled))
 }
@@ -1029,35 +1025,35 @@ fn is_file(target: &str) -> bool {
     target.ends_with(".json") || Path::new(target).is_file()
 }
 
-fn resolve(svc: &ScenarioService, target: &str) -> Result<(Scenario, Vec<Scenario>)> {
+fn resolve(svc: &FlowService, target: &str) -> Result<(Flow, Vec<Flow>)> {
     if is_file(target) {
         load_file(Path::new(target))
     } else {
-        Ok((svc.get(&ScenarioId::new(target))?, Vec::new()))
+        Ok((svc.get(&FlowId::new(target))?, Vec::new()))
     }
 }
 
-/// Where the run's relative paths point. A scenario in the workspace uses its
-/// folder; a `scenario.json` file the folder it is in (a copied scenario
-/// folder); a bundle's scenarios get their files unpacked next to it, into
+/// Where the run's relative paths point. A flow in the workspace uses its
+/// folder; a `flow.json` file the folder it is in (a copied flow
+/// folder); a bundle's flows get their files unpacked next to it, into
 /// `<bundle>.files/<id>/`, which stays after the run so its output/ and logs/
 /// can be read. Any other JSON file runs from the folder it is in.
 fn project_dirs(
-    svc: &ScenarioService,
+    svc: &FlowService,
     target: &str,
-    scenario: &Scenario,
-    subscenarios: &mut [shikigami_core::Subscenario],
+    flow: &Flow,
+    subflows: &mut [shikigami_core::Subflow],
 ) -> Result<Option<PathBuf>> {
     let path = Path::new(target);
     if !(target.ends_with(".json") || path.is_file()) {
-        return Ok(Some(svc.project_dir(&scenario.id)?));
+        return Ok(Some(svc.project_dir(&flow.id)?));
     }
     let value: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
     let file = std::path::absolute(path)?;
     if !shikigami_core::version::is_bundle(&value) {
         return Ok(file.parent().map(Path::to_path_buf));
     }
-    let bundle: shikigami_core::ScenarioBundle = serde_json::from_value(value)?;
+    let bundle: shikigami_core::FlowBundle = serde_json::from_value(value)?;
     let name = file
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -1071,34 +1067,34 @@ fn project_dirs(
         .parent()
         .unwrap_or(Path::new("."))
         .join(format!("{base}.files"));
-    let unpack = |id: &ScenarioId| -> Result<PathBuf> {
+    let unpack = |id: &FlowId| -> Result<PathBuf> {
         // The ID comes from the file: never let it name a folder elsewhere.
         if !id.is_well_formed() {
-            bail!("the bundle has an invalid scenario ID: {}", id.as_str());
+            bail!("the bundle has an invalid flow ID: {}", id.as_str());
         }
         let dir = root.join(id.as_str());
         std::fs::create_dir_all(&dir)?;
         shikigami_core::project::unpack(&bundle.files, id, &dir)?;
         Ok(dir)
     };
-    let main = unpack(&scenario.id)?;
-    for sub in subscenarios.iter_mut() {
+    let main = unpack(&flow.id)?;
+    for sub in subflows.iter_mut() {
         if sub.project_dir.is_none() {
-            sub.project_dir = Some(unpack(&sub.scenario.id)?);
+            sub.project_dir = Some(unpack(&sub.flow.id)?);
         }
     }
     eprintln!("files: {}", main.display());
     Ok(Some(main))
 }
 
-/// What the run's calls may use: a bundle's own sub-scenarios first, then
+/// What the run's calls may use: a bundle's own sub-flows first, then
 /// the workspace for any others (also those the bundled ones call).
-fn subscenarios(
-    svc: &ScenarioService,
-    scenario: &Scenario,
-    bundled: Vec<Scenario>,
-) -> Result<Vec<shikigami_core::Subscenario>> {
-    Ok(svc.subscenarios_bundled(scenario, &bundled)?)
+fn subflows(
+    svc: &FlowService,
+    flow: &Flow,
+    bundled: Vec<Flow>,
+) -> Result<Vec<shikigami_core::Subflow>> {
+    Ok(svc.subflows_bundled(flow, &bundled)?)
 }
 
 fn parse_inputs(raw: &[String]) -> Result<Map<String, Value>> {
@@ -1117,12 +1113,12 @@ async fn run(
     runtime: &Runtime,
     workspace: &Path,
     policy: &Path,
-    scenario: Scenario,
+    flow: Flow,
     options: RunOptions,
     json: bool,
     vars: bool,
 ) -> Result<RunStatus> {
-    let handle = runtime.start(scenario, options).map_err(|e| {
+    let handle = runtime.start(flow, options).map_err(|e| {
         anyhow::anyhow!(
             "{e}\n{}",
             e.details
@@ -1153,11 +1149,11 @@ async fn run(
             }
             match &e.event {
                 RunEvent::RunStarted {
-                    scenario_name,
+                    flow_name,
                     revision,
                     ..
                 } => {
-                    println!("▶ {scenario_name} (rev {revision}) run {}", e.run_id);
+                    println!("▶ {flow_name} (rev {revision}) run {}", e.run_id);
                 }
                 RunEvent::Log { level, message, .. } => {
                     let tag = match level {
@@ -1221,4 +1217,32 @@ async fn run(
         }
     }
     Ok(report.status)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod load_file_tests {
+    use super::*;
+
+    #[test]
+    fn reads_scenario_bundles_from_0_1() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.shikigami.json");
+        let bundle = serde_json::json!({
+            "format": "shikigami.scenarioBundle",
+            "formatVersion": 2,
+            "exportedAt": "2026-11-01T00:00:00Z",
+            "scenario": {
+                "schemaVersion": 3, "id": "scn_main", "name": "main",
+                "steps": [{ "id": "c", "type": "scenario.call", "params": { "scenario": "scn_sub" } }]
+            },
+            "subscenarios": [{ "schemaVersion": 3, "id": "scn_sub", "name": "sub" }]
+        });
+        std::fs::write(&path, bundle.to_string()).unwrap();
+        let (flow, subs) = load_file(&path).unwrap();
+        assert_eq!(flow.name, "main");
+        assert_eq!(flow.steps[0].step_type, "flow.call");
+        assert_eq!(subs.len(), 1);
+        assert_eq!(subs[0].name, "sub");
+    }
 }

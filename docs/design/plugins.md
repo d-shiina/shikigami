@@ -65,7 +65,7 @@ hello/
 |---|---|---|
 | `manifestVersion` | ○ | いまは `1` |
 | `name` | ○ | ノード型の接頭辞（`hello` → `hello.greet`）。英小文字で始まる英小文字・数字（`^[a-z][a-z0-9]*$`、32 文字まで） |
-| `version` | ○ | プラグインのバージョン（semver、`0.1.0` の形）。シナリオの `requires` に記録される。params を互換でない形に変えたらメジャー版（0.x ならマイナー版）を上げる |
+| `version` | ○ | プラグインのバージョン（semver、`0.1.0` の形）。フローの `requires` に記録される。params を互換でない形に変えたらメジャー版（0.x ならマイナー版）を上げる |
 | `label` / `description` | ○ / - | 表示名と説明 |
 | `command.program` | ○ | 起動するプログラム。`./` や `bin\` のように区切りを含むときはプラグインのフォルダからの相対、それ以外は PATH から探す。`node` はインストーラーに同梱の Node.js を優先するので、利用者の PC に Node.js がなくても動く |
 | `command.args` | - | 引数。作業フォルダはプラグインのフォルダ |
@@ -89,7 +89,7 @@ hello/
 - プラグインのノードも組込と同じく `list_step_types` / `get_step_schema` に出る。AI はプラグインかどうかを区別しない
 - 記述例は必須で、読み込み時に検証する（原則 4）
 - 式として扱う param（`expressionParams`）はプラグインには持たせない。文字列はすべてテンプレート（原則 1）
-- 排他は `resources` で宣言し、シナリオには書かせない（原則 3）
+- 排他は `resources` で宣言し、フローには書かせない（原則 3）
 
 ## 4. 排他（`resources`）
 
@@ -109,9 +109,9 @@ hello/
 - **params の検証**：マニフェストの JSON Schema で検証し、エラーには直し方のヒントを付ける
 - **タイムアウト・リトライ・キャンセル・`onError`**：Runtime が処理する。プラグインには `timeoutMs`（ノードの制限より 0.5 秒短い値）を渡すので、それまでに処理を止める
 - **シークレット**：`secretParams` に挙げた param だけが `{ "secret": "<名前>", "field": "password" }` を受け取れる（それ以外は検証エラー）。本体が値を取り出し、シークレットの「使ってよい先」に `plugin:<name>`（例 `plugin:hello`）が登録されているときだけ、文字列にしてプラグインに渡す。登録がなければ `SECRET_PLUGIN_NOT_ALLOWED`。渡した値はログ・エラー・結果、プラグインの標準エラー出力から自動で伏せ字になる
-- **許可レベル**：`risk` を MCP の承認（`policy.json` の `ai.runScenario` / `ai.testStep`）に使う。`targets` の param は `sites` / `apps` で検査する
+- **許可レベル**：`risk` を MCP の承認（`policy.json` の `ai.runFlow` / `ai.testStep`）に使う。`targets` の param は `sites` / `apps` で検査する
 
-プラグイン自身はシナリオの変数を読み書きできない。データは params で入り、戻り値（`saveAs`）で出る。
+プラグイン自身はフローの変数を読み書きできない。データは params で入り、戻り値（`saveAs`）で出る。
 
 ## 6. 通信の約束（プロトコル）
 
@@ -144,11 +144,11 @@ hello/
 1. 環境変数 `SHIKIGAMI_PLUGINS`（`;` 区切り）：プラグインのフォルダ、またはプラグインのフォルダを並べたフォルダ
 2. `%LOCALAPPDATA%\Shikigami\plugins\<名前>\`
 
-ワークスペースのフォルダからは読み込まない。共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動くのを避けるため。代わりに、シナリオは使っているプラグインと版を `requires`（`{ "plugin:hello": "^0.1.0" }`）に記録し、入っていない PC では `PLUGIN_NOT_INSTALLED`、版が合わなければ `PLUGIN_VERSION_MISMATCH` で実行前に止まる（[compatibility.md](../ja/compatibility.md) §4）。
+ワークスペースのフォルダからは読み込まない。共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動くのを避けるため。代わりに、フローは使っているプラグインと版を `requires`（`{ "plugin:hello": "^0.1.0" }`）に記録し、入っていない PC では `PLUGIN_NOT_INSTALLED`、版が合わなければ `PLUGIN_VERSION_MISMATCH` で実行前に止まる（[compatibility.md](../ja/compatibility.md) §4）。
 
 読み込めなかったプラグイン（マニフェストの誤り、組込や他のプラグインと名前が重なる、記述例が通らない）は飛ばして、理由を残す。`shikigami plugin list` で読み込んだものと問題を、`shikigami plugin check <フォルダ>` で作成中のプラグインの検査ができる。
 
-予約済みの名前（プラグインに使えない）：`control` `variable` `log` `flow` `scenario` `wait` `browser` `desktop` `excel` `word` `outlook` `office` `file` `sap` `shikigami`、および組込アダプターの名前。
+予約済みの名前（プラグインに使えない）：`control` `variable` `log` `flow` `flow` `wait` `browser` `desktop` `excel` `word` `outlook` `office` `file` `sap` `shikigami`、および組込アダプターの名前。
 
 ## 8. まだやらないこと（順に検討）
 

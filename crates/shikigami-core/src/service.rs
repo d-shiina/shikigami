@@ -1,5 +1,5 @@
-//! `ScenarioService`: the single API through which every client reads and
-//! changes scenarios. Studio (Tauri commands), the MCP server and the CLI are
+//! `FlowService`: the single API through which every client reads and
+//! changes flows. Studio (Tauri commands), the MCP server and the CLI are
 //! thin adapters over this type; none of them manipulate documents directly.
 
 use std::path::{Path, PathBuf};
@@ -8,11 +8,11 @@ use std::sync::{Arc, Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::call::{self, Subscenario};
+use crate::call::{self, Subflow};
 use crate::error::{CoreError, CoreResult};
-use crate::ids::{ObservationId, ScenarioId, StepId};
-use crate::model::{Scenario, ScenarioSummary, Step, VariableDef, now};
-use crate::ops::{self, EditOp, ScenarioPatch};
+use crate::ids::{FlowId, ObservationId, StepId};
+use crate::model::{Flow, FlowSummary, Step, VariableDef, now};
+use crate::ops::{self, EditOp, FlowPatch};
 use crate::project::{self, BundledFile, ProjectFile, ProjectFiles};
 use crate::registry::{RiskLevel, StepRegistry};
 use crate::review::{
@@ -22,15 +22,15 @@ use crate::review::{
 use crate::store::{Actor, ActorKind, ChangeKind, FileStore, HistoryEntry, UNDO_LIMIT, UndoState};
 use crate::validate::{ValidationReport, Validator};
 use crate::version::{
-    self, BUNDLE_FORMAT, BUNDLE_FORMAT_VERSION, ImportConflict, ImportMode, NewVersion,
-    PublishInput, PublishRecord, PublishedState, ScenarioBundle, ScenarioDiff, ScenarioVersion,
-    SubscenarioImport, VersionSummary,
+    self, BUNDLE_FORMAT, BUNDLE_FORMAT_VERSION, FlowBundle, FlowDiff, FlowVersion, ImportConflict,
+    ImportMode, NewVersion, PublishInput, PublishRecord, PublishedState, SubflowImport,
+    VersionSummary,
 };
 
-/// Input for creating a scenario.
+/// Input for creating a flow.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct NewScenario {
+pub struct NewFlow {
     pub name: String,
     #[serde(default)]
     pub description: String,
@@ -80,9 +80,10 @@ struct Remarks {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct EditOutcome {
-    pub scenario: Scenario,
+    #[serde(alias = "scenario")]
+    pub flow: Flow,
     /// Full validation of the new revision. Drafts may contain errors;
-    /// they must be fixed before the scenario can run.
+    /// they must be fixed before the flow can run.
     pub validation: ValidationReport,
     pub can_undo: bool,
     pub can_redo: bool,
@@ -92,64 +93,67 @@ pub struct EditOutcome {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangeEvent {
-    pub scenario_id: ScenarioId,
+    #[serde(alias = "scenarioId")]
+    pub flow_id: FlowId,
     pub kind: ChangeKind,
     pub revision: u64,
     pub actor: Actor,
 }
 
-/// One sub-scenario of an imported bundle.
+/// One sub-flow of an imported bundle.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportedSubscenario {
-    pub id: ScenarioId,
+pub struct ImportedSubflow {
+    pub id: FlowId,
     pub name: String,
-    pub mode: SubscenarioImport,
+    pub mode: SubflowImport,
 }
 
-/// Result of importing a bundle or scenario file.
+/// Result of importing a bundle or flow file.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportOutcome {
     pub mode: ImportMode,
     /// Versions from the bundle that were added (already present ones are skipped).
     pub versions_added: usize,
-    /// The bundle's sub-scenarios and what happened to each.
+    /// The bundle's sub-flows and what happened to each.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub subscenarios: Vec<ImportedSubscenario>,
+    #[serde(alias = "subscenarios")]
+    pub subflows: Vec<ImportedSubflow>,
     #[serde(flatten)]
     pub outcome: EditOutcome,
 }
 
-/// What an unattended run executes (see [`ScenarioService::published_run`]).
+/// What an unattended run executes (see [`FlowService::published_run`]).
 #[derive(Debug, Clone)]
 pub struct PublishedRun {
-    pub scenario: Scenario,
+    pub flow: Flow,
     pub version: u32,
-    pub subscenarios: Vec<Subscenario>,
+    pub subflows: Vec<Subflow>,
 }
 
-/// Result of moving steps into a new sub-scenario.
+/// Result of moving steps into a new sub-flow.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtractOutcome {
-    /// The new scenario holding the steps.
-    pub subscenario: EditOutcome,
-    /// The calling scenario, with the steps replaced by one `scenario.call`.
+    /// The new flow holding the steps.
+    #[serde(alias = "subscenario")]
+    pub subflow: EditOutcome,
+    /// The calling flow, with the steps replaced by one `flow.call`.
     pub caller: EditOutcome,
-    /// ID of the new `scenario.call` step.
+    /// ID of the new `flow.call` step.
     pub call_step_id: StepId,
 }
 
 type Listener = Arc<dyn Fn(&ChangeEvent) + Send + Sync>;
 
-pub struct ScenarioService {
+pub struct FlowService {
     store: FileStore,
     validator: Validator,
     listeners: Mutex<Vec<Listener>>,
 }
 
-impl ScenarioService {
+impl FlowService {
     pub fn new(store: FileStore, registry: StepRegistry) -> Self {
         Self {
             store,
@@ -168,7 +172,7 @@ impl ScenarioService {
 
     /// Registers a listener for changes made through *this* service instance.
     /// Changes by other processes are observed by watching
-    /// [`FileStore::scenarios_dir`].
+    /// [`FileStore::flows_dir`].
     pub fn subscribe(&self, listener: impl Fn(&ChangeEvent) + Send + Sync + 'static) {
         if let Ok(mut listeners) = self.listeners.lock() {
             listeners.push(Arc::new(listener));
@@ -187,29 +191,24 @@ impl ScenarioService {
 
     // -- queries ----------------------------------------------------------
 
-    pub fn list(&self) -> CoreResult<Vec<ScenarioSummary>> {
-        Ok(self
-            .store
-            .load_all()?
-            .iter()
-            .map(Scenario::summary)
-            .collect())
+    pub fn list(&self) -> CoreResult<Vec<FlowSummary>> {
+        Ok(self.store.load_all()?.iter().map(Flow::summary).collect())
     }
 
-    pub fn get(&self, id: &ScenarioId) -> CoreResult<Scenario> {
+    pub fn get(&self, id: &FlowId) -> CoreResult<Flow> {
         self.store.load(id)
     }
 
-    /// Full validation, including the scenarios it calls.
-    pub fn validate(&self, scenario: &Scenario) -> ValidationReport {
+    /// Full validation, including the flows it calls.
+    pub fn validate(&self, flow: &Flow) -> ValidationReport {
         self.validator
-            .validate_with_calls(scenario, &|id| self.store.load(id).ok())
+            .validate_with_calls(flow, &|id| self.store.load(id).ok())
     }
 
-    /// [`Self::validate`] for a document from a bundle: its sub-scenarios
+    /// [`Self::validate`] for a document from a bundle: its sub-flows
     /// are looked up in `bundled` before the workspace.
-    pub fn validate_bundled(&self, scenario: &Scenario, bundled: &[Scenario]) -> ValidationReport {
-        self.validator.validate_with_calls(scenario, &|id| {
+    pub fn validate_bundled(&self, flow: &Flow, bundled: &[Flow]) -> ValidationReport {
+        self.validator.validate_with_calls(flow, &|id| {
             bundled
                 .iter()
                 .find(|s| &s.id == id)
@@ -218,30 +217,26 @@ impl ScenarioService {
         })
     }
 
-    /// Every scenario `scenario` calls, directly or through others (each
+    /// Every flow `flow` calls, directly or through others (each
     /// once, missing ones left out), with the version each one matches.
     /// Pass them to the Runtime with the run.
-    pub fn subscenarios(&self, scenario: &Scenario) -> CoreResult<Vec<Subscenario>> {
-        self.subscenarios_bundled(scenario, &[])
+    pub fn subflows(&self, flow: &Flow) -> CoreResult<Vec<Subflow>> {
+        self.subflows_bundled(flow, &[])
     }
 
-    /// Like [`Self::subscenarios`] for a bundle: its own sub-scenarios win
+    /// Like [`Self::subflows`] for a bundle: its own sub-flows win
     /// over the workspace's, the same lookup [`Self::validate_bundled`] uses.
-    pub fn subscenarios_bundled(
-        &self,
-        scenario: &Scenario,
-        bundled: &[Scenario],
-    ) -> CoreResult<Vec<Subscenario>> {
+    pub fn subflows_bundled(&self, flow: &Flow, bundled: &[Flow]) -> CoreResult<Vec<Subflow>> {
         Ok(self
-            .called_scenarios(scenario, bundled)
+            .called_flows(flow, bundled)
             .into_iter()
             .map(|s| {
                 let version = self.matching_version(&s).ok().flatten();
-                // A bundle's own sub-scenarios have no folder here.
+                // A bundle's own sub-flows have no folder here.
                 let project_dir =
                     (!bundled.iter().any(|b| b.id == s.id)).then(|| self.store.project_dir(&s.id));
-                Subscenario {
-                    scenario: s,
+                Subflow {
+                    flow: s,
                     version,
                     project_dir,
                 }
@@ -249,11 +244,11 @@ impl ScenarioService {
             .collect())
     }
 
-    fn called_scenarios(&self, scenario: &Scenario, bundled: &[Scenario]) -> Vec<Scenario> {
-        let mut found: Vec<Scenario> = Vec::new();
-        let mut queue: Vec<ScenarioId> = call::called_ids(scenario).into_iter().collect();
+    fn called_flows(&self, flow: &Flow, bundled: &[Flow]) -> Vec<Flow> {
+        let mut found: Vec<Flow> = Vec::new();
+        let mut queue: Vec<FlowId> = call::called_ids(flow).into_iter().collect();
         while let Some(id) = queue.pop() {
-            if id == scenario.id || found.iter().any(|s| s.id == id) {
+            if id == flow.id || found.iter().any(|s| s.id == id) {
                 continue;
             }
             let next = match bundled.iter().find(|s| s.id == id) {
@@ -269,20 +264,20 @@ impl ScenarioService {
         found
     }
 
-    /// The riskiest step `scenarios` contain (unknown step types count as
+    /// The riskiest step `flows` contain (unknown step types count as
     /// dangerous) and the step types at that level, for the policy's
     /// per-risk rules. Control flow and calls themselves are safe.
     pub fn risk_of<'a>(
         &self,
-        scenarios: impl IntoIterator<Item = &'a Scenario>,
+        flows: impl IntoIterator<Item = &'a Flow>,
     ) -> (RiskLevel, Vec<String>) {
         let mut level = RiskLevel::Safe;
         let mut types: Vec<String> = Vec::new();
-        for scenario in scenarios {
+        for flow in flows {
             // A call is as risky as what it calls, which is counted itself.
-            for step in scenario
+            for step in flow
                 .walk()
-                .filter(|s| s.step_type != crate::registry::scenario::CALL)
+                .filter(|s| s.step_type != crate::registry::flow::CALL)
             {
                 let risk = self
                     .registry()
@@ -300,31 +295,31 @@ impl ScenarioService {
         (level, types)
     }
 
-    /// Scenarios that call `id` directly.    /// Scenarios that call `id` directly.
-    pub fn callers(&self, id: &ScenarioId) -> CoreResult<Vec<ScenarioSummary>> {
+    /// Flows that call `id` directly.    /// Flows that call `id` directly.
+    pub fn callers(&self, id: &FlowId) -> CoreResult<Vec<FlowSummary>> {
         Ok(self
             .store
             .load_all()?
             .iter()
             .filter(|s| &s.id != id && call::called_ids(s).contains(id))
-            .map(Scenario::summary)
+            .map(Flow::summary)
             .collect())
     }
 
-    pub fn validate_stored(&self, id: &ScenarioId) -> CoreResult<ValidationReport> {
+    pub fn validate_stored(&self, id: &FlowId) -> CoreResult<ValidationReport> {
         Ok(self.validate(&self.get(id)?))
     }
 
-    pub fn history(&self, id: &ScenarioId, limit: usize) -> CoreResult<Vec<HistoryEntry>> {
+    pub fn history(&self, id: &FlowId, limit: usize) -> CoreResult<Vec<HistoryEntry>> {
         self.store.read_journal(id, limit)
     }
 
-    /// Loads a scenario and fails with `VALIDATION_FAILED` unless it is runnable.
-    pub fn get_runnable(&self, id: &ScenarioId) -> CoreResult<Scenario> {
-        let scenario = self.get(id)?;
-        let report = self.validate(&scenario);
+    /// Loads a flow and fails with `VALIDATION_FAILED` unless it is runnable.
+    pub fn get_runnable(&self, id: &FlowId) -> CoreResult<Flow> {
+        let flow = self.get(id)?;
+        let report = self.validate(&flow);
         if report.valid {
-            Ok(scenario)
+            Ok(flow)
         } else {
             Err(CoreError::ValidationFailed(report))
         }
@@ -332,93 +327,90 @@ impl ScenarioService {
 
     // -- lifecycle --------------------------------------------------------
 
-    pub fn create(&self, input: NewScenario, actor: Actor) -> CoreResult<EditOutcome> {
+    pub fn create(&self, input: NewFlow, actor: Actor) -> CoreResult<EditOutcome> {
         self.create_noted(input, actor, ChangeNote::default())
     }
 
     /// [`Self::create`] with the author's summary and observations.
     pub fn create_noted(
         &self,
-        input: NewScenario,
+        input: NewFlow,
         actor: Actor,
         note: ChangeNote,
     ) -> CoreResult<EditOutcome> {
         self.check_observations(&note.observations)?;
-        let mut scenario = Scenario::new(input.name);
-        scenario.description = input.description;
-        scenario.variables = input.variables;
-        scenario.steps = input.steps;
-        scenario.metadata.tags = input.tags;
-        let outcome =
-            self.insert_new(scenario, actor.clone(), "create scenario", note.remarks())?;
-        let steps: Vec<_> = outcome.scenario.walk().map(|s| s.id.clone()).collect();
-        self.link_observations(&outcome.scenario, &steps, &actor, &note.observations);
+        let mut flow = Flow::new(input.name);
+        flow.description = input.description;
+        flow.variables = input.variables;
+        flow.steps = input.steps;
+        flow.metadata.tags = input.tags;
+        let outcome = self.insert_new(flow, actor.clone(), "create flow", note.remarks())?;
+        let steps: Vec<_> = outcome.flow.walk().map(|s| s.id.clone()).collect();
+        self.link_observations(&outcome.flow, &steps, &actor, &note.observations);
         Ok(outcome)
     }
 
     /// Imports a complete document (e.g. from a file). Keeps its ID unless it
     /// is missing or already taken.
-    pub fn import(&self, mut scenario: Scenario, actor: Actor) -> CoreResult<EditOutcome> {
-        if scenario.id.is_empty() || self.store.exists(&scenario.id) {
-            scenario.id = ScenarioId::generate();
+    pub fn import(&self, mut flow: Flow, actor: Actor) -> CoreResult<EditOutcome> {
+        if flow.id.is_empty() || self.store.exists(&flow.id) {
+            flow.id = FlowId::generate();
         }
-        scenario.revision = 0;
+        flow.revision = 0;
         let now = now();
-        scenario.metadata.created_at.get_or_insert(now);
-        scenario.metadata.updated_at = Some(now);
-        self.insert_new(scenario, actor, "import scenario", Remarks::default())
+        flow.metadata.created_at.get_or_insert(now);
+        flow.metadata.updated_at = Some(now);
+        self.insert_new(flow, actor, "import flow", Remarks::default())
     }
 
     pub fn duplicate(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         name: Option<String>,
         actor: Actor,
     ) -> CoreResult<EditOutcome> {
         let source = self.get(id)?;
-        let mut copy = Scenario::new(name.unwrap_or_else(|| format!("{} のコピー", source.name)));
+        let mut copy = Flow::new(name.unwrap_or_else(|| format!("{} のコピー", source.name)));
         copy.description = source.description;
         copy.variables = source.variables;
         copy.steps = source.steps;
         copy.settings = source.settings;
         copy.requires = source.requires;
         copy.metadata.tags = source.metadata.tags;
-        let outcome = self.insert_new(copy, actor, "duplicate scenario", Remarks::default())?;
+        let outcome = self.insert_new(copy, actor, "duplicate flow", Remarks::default())?;
         // The copy brings the files it works with, not what runs made.
         let files = self.bundled_files(id)?;
-        self.write_bundled_files(id, &outcome.scenario.id, &files)?;
+        self.write_bundled_files(id, &outcome.flow.id, &files)?;
         Ok(outcome)
     }
 
     fn insert_new(
         &self,
-        mut scenario: Scenario,
+        mut flow: Flow,
         actor: Actor,
         label: &str,
         remarks: Remarks,
     ) -> CoreResult<EditOutcome> {
-        if !scenario.id.is_well_formed() {
-            return Err(CoreError::InvalidScenarioId(scenario.id.to_string()));
+        if !flow.id.is_well_formed() {
+            return Err(CoreError::InvalidFlowId(flow.id.to_string()));
         }
-        if scenario.name.trim().is_empty() {
-            return Err(CoreError::InvalidEdit(
-                "scenario name must not be empty".into(),
-            ));
+        if flow.name.trim().is_empty() {
+            return Err(CoreError::InvalidEdit("flow name must not be empty".into()));
         }
-        scenario.steps.iter_mut().for_each(ops::assign_missing_ids);
-        self.reject_structural_errors(&scenario)?;
-        crate::requires::sync(&mut scenario, self.registry());
-        scenario.revision = 1;
+        flow.steps.iter_mut().for_each(ops::assign_missing_ids);
+        self.reject_structural_errors(&flow)?;
+        crate::requires::sync(&mut flow, self.registry());
+        flow.revision = 1;
 
         let _lock = self.store.lock()?;
-        if self.store.exists(&scenario.id) {
-            return Err(CoreError::ScenarioAlreadyExists(scenario.id));
+        if self.store.exists(&flow.id) {
+            return Err(CoreError::FlowAlreadyExists(flow.id));
         }
-        self.store.save(&scenario)?;
-        self.store.remove_undo(&scenario.id)?;
+        self.store.save(&flow)?;
+        self.store.remove_undo(&flow.id)?;
         let entry = HistoryEntry {
             kind: ChangeKind::Create,
-            revision: scenario.revision,
+            revision: flow.revision,
             actor: actor.clone(),
             at: now(),
             label: label.to_owned(),
@@ -428,35 +420,35 @@ impl ScenarioService {
             ops: Vec::new(),
             inverse: Vec::new(),
         };
-        self.store.append_journal(&scenario.id, &entry)?;
+        self.store.append_journal(&flow.id, &entry)?;
         drop(_lock);
 
         self.notify(ChangeEvent {
-            scenario_id: scenario.id.clone(),
+            flow_id: flow.id.clone(),
             kind: ChangeKind::Create,
-            revision: scenario.revision,
+            revision: flow.revision,
             actor,
         });
-        let validation = self.validate(&scenario);
+        let validation = self.validate(&flow);
         Ok(EditOutcome {
-            scenario,
+            flow,
             validation,
             can_undo: false,
             can_redo: false,
         })
     }
 
-    /// Moves the scenario to the workspace trash (recoverable).
+    /// Moves the flow to the workspace trash (recoverable).
     pub fn delete(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         expected_revision: Option<u64>,
         actor: Actor,
     ) -> CoreResult<()> {
         let callers = self.callers(id)?;
         if !callers.is_empty() {
-            return Err(CoreError::ScenarioInUse {
-                scenario_id: id.clone(),
+            return Err(CoreError::FlowInUse {
+                flow_id: id.clone(),
                 callers: callers.into_iter().map(|c| (c.id, c.name)).collect(),
             });
         }
@@ -465,7 +457,7 @@ impl ScenarioService {
         check_revision(expected_revision, current.revision)?;
         self.store.trash(id)?;
         self.store.remove_undo(id)?;
-        // A scenario in the trash no longer runs unattended.
+        // A flow in the trash no longer runs unattended.
         if self.published_entry(id).ok().flatten().is_some() {
             self.store.append_publish(
                 id,
@@ -483,7 +475,7 @@ impl ScenarioService {
             revision: current.revision,
             actor: actor.clone(),
             at: now(),
-            label: "delete scenario".into(),
+            label: "delete flow".into(),
             summary: None,
             checks: Vec::new(),
             step_ids: Vec::new(),
@@ -493,7 +485,7 @@ impl ScenarioService {
         self.store.append_journal(id, &entry)?;
         drop(_lock);
         self.notify(ChangeEvent {
-            scenario_id: id.clone(),
+            flow_id: id.clone(),
             kind: ChangeKind::Delete,
             revision: current.revision,
             actor,
@@ -510,7 +502,7 @@ impl ScenarioService {
     /// returned so the client can reload and retry.
     pub fn edit(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         expected_revision: Option<u64>,
         ops: Vec<EditOp>,
         actor: Actor,
@@ -522,7 +514,7 @@ impl ScenarioService {
     /// change is based on (linked to the new revision and touched steps).
     pub fn edit_noted(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         expected_revision: Option<u64>,
         ops: Vec<EditOp>,
         actor: Actor,
@@ -555,13 +547,13 @@ impl ScenarioService {
                 })
             },
         )?;
-        self.link_observations(&outcome.scenario, &step_ids, &actor, &note.observations);
+        self.link_observations(&outcome.flow, &step_ids, &actor, &note.observations);
         Ok(outcome)
     }
 
     pub fn undo(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         expected_revision: Option<u64>,
         actor: Actor,
     ) -> CoreResult<EditOutcome> {
@@ -586,7 +578,7 @@ impl ScenarioService {
 
     pub fn redo(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         expected_revision: Option<u64>,
         actor: Actor,
     ) -> CoreResult<EditOutcome> {
@@ -613,10 +605,10 @@ impl ScenarioService {
         )
     }
 
-    pub fn undo_state(&self, id: &ScenarioId) -> CoreResult<(bool, bool)> {
-        let scenario = self.get(id)?;
+    pub fn undo_state(&self, id: &FlowId) -> CoreResult<(bool, bool)> {
+        let flow = self.get(id)?;
         let state = self.store.load_undo(id)?;
-        if state.head_revision != scenario.revision {
+        if state.head_revision != flow.revision {
             return Ok((false, false));
         }
         Ok((!state.undo.is_empty(), !state.redo.is_empty()))
@@ -627,7 +619,7 @@ impl ScenarioService {
     /// Saves the current content as a new named version.
     pub fn create_version(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         input: NewVersion,
         expected_revision: Option<u64>,
         actor: Actor,
@@ -642,51 +634,51 @@ impl ScenarioService {
         let current = self.store.load(id)?;
         check_revision(expected_revision, current.revision)?;
         let number = self.next_version_number(id)?;
-        let mut scenario = current;
-        scenario.schema_ref = None;
-        let version = ScenarioVersion {
+        let mut flow = current;
+        flow.schema_ref = None;
+        let version = FlowVersion {
             number,
             uid: uuid::Uuid::now_v7().simple().to_string(),
             name: name.to_owned(),
             note: input.note.trim().to_owned(),
             created_at: now(),
             created_by: actor,
-            revision: scenario.revision,
-            scenario,
+            revision: flow.revision,
+            flow,
         };
         self.store.save_version(&version)?;
         Ok(version.summary())
     }
 
-    /// Versions of a scenario, newest first.
-    pub fn list_versions(&self, id: &ScenarioId) -> CoreResult<Vec<VersionSummary>> {
+    /// Versions of a flow, newest first.
+    pub fn list_versions(&self, id: &FlowId) -> CoreResult<Vec<VersionSummary>> {
         let mut versions: Vec<_> = self
             .store
             .load_versions(id)?
             .iter()
-            .map(ScenarioVersion::summary)
+            .map(FlowVersion::summary)
             .collect();
         versions.reverse();
         Ok(versions)
     }
 
-    pub fn get_version(&self, id: &ScenarioId, number: u32) -> CoreResult<ScenarioVersion> {
+    pub fn get_version(&self, id: &FlowId, number: u32) -> CoreResult<FlowVersion> {
         self.store.load_version(id, number)
     }
 
     /// Number of the newest version, if any.
-    pub fn latest_version(&self, id: &ScenarioId) -> CoreResult<Option<u32>> {
+    pub fn latest_version(&self, id: &FlowId) -> CoreResult<Option<u32>> {
         Ok(self.store.load_versions(id)?.last().map(|v| v.number))
     }
 
-    /// Newest version whose content equals `scenario` (e.g. to label a run).
-    pub fn matching_version(&self, scenario: &Scenario) -> CoreResult<Option<u32>> {
+    /// Newest version whose content equals `flow` (e.g. to label a run).
+    pub fn matching_version(&self, flow: &Flow) -> CoreResult<Option<u32>> {
         Ok(self
             .store
-            .load_versions(&scenario.id)?
+            .load_versions(&flow.id)?
             .iter()
             .rev()
-            .find(|v| version::same_content(&v.scenario, scenario))
+            .find(|v| version::same_content(&v.flow, flow))
             .map(|v| v.number))
     }
 
@@ -694,15 +686,15 @@ impl ScenarioService {
     /// current content.
     pub fn diff_versions(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         from: Option<u32>,
         to: Option<u32>,
-    ) -> CoreResult<ScenarioDiff> {
+    ) -> CoreResult<FlowDiff> {
         let current = self.get(id)?;
         let load = |n: Option<u32>| n.map(|n| self.get_version(id, n)).transpose();
         let (from_v, to_v) = (load(from)?, load(to)?);
-        let from_s = from_v.as_ref().map_or(&current, |v| &v.scenario);
-        let to_s = to_v.as_ref().map_or(&current, |v| &v.scenario);
+        let from_s = from_v.as_ref().map_or(&current, |v| &v.flow);
+        let to_s = to_v.as_ref().map_or(&current, |v| &v.flow);
         Ok(version::diff(
             (from_s, version::side(from_v.as_ref(), &current)),
             (to_s, version::side(to_v.as_ref(), &current)),
@@ -713,20 +705,20 @@ impl ScenarioService {
     /// Does nothing (and returns the current state) when it already matches.
     pub fn restore_version(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         number: u32,
         expected_revision: Option<u64>,
         actor: Actor,
     ) -> CoreResult<EditOutcome> {
         let target = self.get_version(id, number)?;
         let label = format!("restore version {number} ({})", target.name);
-        self.match_content(id, &target.scenario, expected_revision, actor, label)
+        self.match_content(id, &target.flow, expected_revision, actor, label)
     }
 
     fn match_content(
         &self,
-        id: &ScenarioId,
-        target: &Scenario,
+        id: &FlowId,
+        target: &Flow,
         expected_revision: Option<u64>,
         actor: Actor,
         label: String,
@@ -755,18 +747,18 @@ impl ScenarioService {
         )
     }
 
-    fn current_outcome(&self, scenario: Scenario) -> CoreResult<EditOutcome> {
-        let (can_undo, can_redo) = self.undo_state(&scenario.id)?;
-        let validation = self.validate(&scenario);
+    fn current_outcome(&self, flow: Flow) -> CoreResult<EditOutcome> {
+        let (can_undo, can_redo) = self.undo_state(&flow.id)?;
+        let validation = self.validate(&flow);
         Ok(EditOutcome {
-            scenario,
+            flow,
             validation,
             can_undo,
             can_redo,
         })
     }
 
-    fn next_version_number(&self, id: &ScenarioId) -> CoreResult<u32> {
+    fn next_version_number(&self, id: &FlowId) -> CoreResult<u32> {
         Ok(self
             .store
             .load_versions(id)?
@@ -777,14 +769,14 @@ impl ScenarioService {
     // -- publishing -------------------------------------------------------
 
     /// The version unattended runs execute, if one is published.
-    pub fn published(&self, id: &ScenarioId) -> CoreResult<Option<PublishedState>> {
+    pub fn published(&self, id: &FlowId) -> CoreResult<Option<PublishedState>> {
         let Some((record, version)) = self.published_entry(id)? else {
             return Ok(None);
         };
         let matches_current = self
             .store
             .load(id)
-            .is_ok_and(|current| version::same_content(&version.scenario, &current));
+            .is_ok_and(|current| version::same_content(&version.flow, &current));
         Ok(Some(PublishedState {
             version: version.number,
             name: version.name,
@@ -797,14 +789,11 @@ impl ScenarioService {
     }
 
     /// Snapshot of the published version.
-    pub fn published_version(&self, id: &ScenarioId) -> CoreResult<Option<ScenarioVersion>> {
+    pub fn published_version(&self, id: &FlowId) -> CoreResult<Option<FlowVersion>> {
         Ok(self.published_entry(id)?.map(|(_, v)| v))
     }
 
-    fn published_entry(
-        &self,
-        id: &ScenarioId,
-    ) -> CoreResult<Option<(PublishRecord, ScenarioVersion)>> {
+    fn published_entry(&self, id: &FlowId) -> CoreResult<Option<(PublishRecord, FlowVersion)>> {
         let Some(record) = self.store.read_publish_log(id)?.pop() else {
             return Ok(None);
         };
@@ -814,7 +803,7 @@ impl ScenarioService {
         match self.store.load_version(id, number) {
             Ok(v) if record.uid.as_ref().is_none_or(|uid| *uid == v.uid) => Ok(Some((record, v))),
             Ok(_) | Err(CoreError::VersionNotFound { .. }) => {
-                tracing::warn!(scenario = %id, number, "published version is missing");
+                tracing::warn!(flow = %id, number, "published version is missing");
                 Ok(None)
             }
             Err(e) => Err(e),
@@ -825,14 +814,14 @@ impl ScenarioService {
     /// (Studio, the CLI): an AI client gets `PUBLISH_NOT_ALLOWED`. Without
     /// `input.version` the current content is published, saved as a new
     /// version first unless one already matches it. The version must
-    /// validate, and every scenario it calls must be published already.
+    /// validate, and every flow it calls must be published already.
     pub fn publish(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         input: PublishInput,
         actor: Actor,
     ) -> CoreResult<PublishedState> {
-        ensure_person(&actor, "publish a scenario")?;
+        ensure_person(&actor, "publish a flow")?;
         let version = match input.version {
             Some(number) => self.get_version(id, number)?,
             None => {
@@ -843,7 +832,7 @@ impl ScenarioService {
                     .load_versions(id)?
                     .into_iter()
                     .rev()
-                    .find(|v| version::same_content(&v.scenario, &current));
+                    .find(|v| version::same_content(&v.flow, &current));
                 match existing {
                     Some(v) => v,
                     None => {
@@ -872,7 +861,7 @@ impl ScenarioService {
                 }
             }
         };
-        self.check_publishable(&version.scenario)?;
+        self.check_publishable(&version.flow)?;
         {
             let _lock = self.store.lock()?;
             self.store.append_publish(
@@ -896,13 +885,13 @@ impl ScenarioService {
     /// fails.
     pub fn approve_and_publish(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         revision: u64,
         reason: String,
         input: PublishInput,
         actor: Actor,
     ) -> CoreResult<PublishedState> {
-        ensure_person(&actor, "approve and publish a scenario")?;
+        ensure_person(&actor, "approve and publish a flow")?;
         let published = self.publish(
             id,
             PublishInput {
@@ -925,10 +914,10 @@ impl ScenarioService {
         Ok(published)
     }
 
-    /// Stops unattended runs of a scenario until a version is published
+    /// Stops unattended runs of a flow until a version is published
     /// again. People only, like [`Self::publish`].
-    pub fn unpublish(&self, id: &ScenarioId, note: String, actor: Actor) -> CoreResult<()> {
-        ensure_person(&actor, "withdraw a published scenario")?;
+    pub fn unpublish(&self, id: &FlowId, note: String, actor: Actor) -> CoreResult<()> {
+        ensure_person(&actor, "withdraw a published flow")?;
         if self.published_entry(id)?.is_none() {
             return Ok(());
         }
@@ -946,21 +935,21 @@ impl ScenarioService {
     }
 
     /// Who published what, oldest first.
-    pub fn publish_log(&self, id: &ScenarioId) -> CoreResult<Vec<PublishRecord>> {
+    pub fn publish_log(&self, id: &FlowId) -> CoreResult<Vec<PublishRecord>> {
         self.store.read_publish_log(id)
     }
 
     /// What an unattended run of `id` executes: the published version and
-    /// the published versions of every scenario it calls. Fails with
-    /// `NOT_PUBLISHED` / `SUBSCENARIO_NOT_PUBLISHED` rather than falling
+    /// the published versions of every flow it calls. Fails with
+    /// `NOT_PUBLISHED` / `SUBFLOW_NOT_PUBLISHED` rather than falling
     /// back to working content nobody approved.
     /// What an unattended run of `id` (`shikigami run`, a schedule, a
     /// management server) executes: the published versions, once the
-    /// workspace policy allows the scenario and everything it calls to run
+    /// workspace policy allows the flow and everything it calls to run
     /// unattended (`UNATTENDED_NOT_ALLOWED` otherwise).
-    pub fn unattended_run(&self, id: &ScenarioId) -> CoreResult<PublishedRun> {
+    pub fn unattended_run(&self, id: &FlowId) -> CoreResult<PublishedRun> {
         let policy = crate::Policy::load(&crate::Policy::path(self.store.root()))?;
-        let refuse = |id: &ScenarioId| -> CoreResult<()> {
+        let refuse = |id: &FlowId| -> CoreResult<()> {
             if policy.allows_unattended(id.as_str()) {
                 return Ok(());
             }
@@ -974,53 +963,51 @@ impl ScenarioService {
         };
         refuse(id)?;
         let run = self.published_run(id)?;
-        for sub in &run.subscenarios {
-            refuse(&sub.scenario.id)?;
+        for sub in &run.subflows {
+            refuse(&sub.flow.id)?;
         }
         Ok(run)
     }
 
-    pub fn published_run(&self, id: &ScenarioId) -> CoreResult<PublishedRun> {
+    pub fn published_run(&self, id: &FlowId) -> CoreResult<PublishedRun> {
         let Some(version) = self.published_version(id)? else {
             if !self.store.exists(id) {
-                return Err(CoreError::ScenarioNotFound(id.clone()));
+                return Err(CoreError::FlowNotFound(id.clone()));
             }
             return Err(CoreError::Rejected {
                 code: "NOT_PUBLISHED",
-                message: format!("scenario {id} has no published version"),
+                message: format!("flow {id} has no published version"),
                 hint: Some(
                     "Unattended runs execute the published version only. A person approves and publishes it in Studio (レビュー台 → 確認して公開) or with `shikigami version publish <id>`; `shikigami run <id> --draft` runs the working content instead."
                         .into(),
                 ),
             });
         };
-        let subscenarios = self.check_publishable(&version.scenario)?;
+        let subflows = self.check_publishable(&version.flow)?;
         Ok(PublishedRun {
             version: version.number,
-            scenario: version.scenario,
-            subscenarios,
+            flow: version.flow,
+            subflows,
         })
     }
 
-    /// The published versions of everything `scenario` calls, once it is
+    /// The published versions of everything `flow` calls, once it is
     /// known to validate against them.
-    fn check_publishable(&self, scenario: &Scenario) -> CoreResult<Vec<Subscenario>> {
-        let mut found: Vec<Subscenario> = Vec::new();
-        let mut missing: Vec<ScenarioId> = Vec::new();
-        let mut queue: Vec<ScenarioId> = call::called_ids(scenario).into_iter().collect();
+    fn check_publishable(&self, flow: &Flow) -> CoreResult<Vec<Subflow>> {
+        let mut found: Vec<Subflow> = Vec::new();
+        let mut missing: Vec<FlowId> = Vec::new();
+        let mut queue: Vec<FlowId> = call::called_ids(flow).into_iter().collect();
         while let Some(next) = queue.pop() {
-            if next == scenario.id
-                || missing.contains(&next)
-                || found.iter().any(|s| s.scenario.id == next)
+            if next == flow.id || missing.contains(&next) || found.iter().any(|s| s.flow.id == next)
             {
                 continue;
             }
             match self.published_version(&next)? {
                 Some(v) => {
-                    queue.extend(call::called_ids(&v.scenario));
-                    found.push(Subscenario {
+                    queue.extend(call::called_ids(&v.flow));
+                    found.push(Subflow {
                         project_dir: Some(self.store.project_dir(&next)),
-                        scenario: v.scenario,
+                        flow: v.flow,
                         version: Some(v.number),
                     });
                 }
@@ -1029,22 +1016,22 @@ impl ScenarioService {
         }
         if !missing.is_empty() {
             missing.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-            let list: Vec<&str> = missing.iter().map(ScenarioId::as_str).collect();
+            let list: Vec<&str> = missing.iter().map(FlowId::as_str).collect();
             return Err(CoreError::Rejected {
-                code: "SUBSCENARIO_NOT_PUBLISHED",
+                code: "SUBFLOW_NOT_PUBLISHED",
                 message: format!(
-                    "called scenario(s) have no published version: {}",
+                    "called flow(s) have no published version: {}",
                     list.join(", ")
                 ),
-                hint: Some("Publish the called scenarios first.".into()),
+                hint: Some("Publish the called flows first.".into()),
             });
         }
-        found.sort_by(|a, b| a.scenario.id.as_str().cmp(b.scenario.id.as_str()));
-        let report = self.validator.validate_with_calls(scenario, &|id| {
+        found.sort_by(|a, b| a.flow.id.as_str().cmp(b.flow.id.as_str()));
+        let report = self.validator.validate_with_calls(flow, &|id| {
             found
                 .iter()
-                .find(|s| &s.scenario.id == id)
-                .map(|s| s.scenario.clone())
+                .find(|s| &s.flow.id == id)
+                .map(|s| s.flow.clone())
         });
         if !report.valid {
             return Err(CoreError::ValidationFailed(report));
@@ -1145,7 +1132,7 @@ impl ScenarioService {
     /// Records a run an AI started to check a revision.
     pub fn record_test_run(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         revision: u64,
         run: TestRun,
         actor: Actor,
@@ -1160,12 +1147,12 @@ impl ScenarioService {
         Ok(evidence)
     }
 
-    /// Records a human's verdict on the current revision. Sending a scenario
+    /// Records a human's verdict on the current revision. Sending a flow
     /// back (`rejected`) needs a reason or at least one step note; the AI
-    /// reads it with get_review / get_scenario.
+    /// reads it with get_review / get_flow.
     pub fn submit_review(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         input: NewReview,
         actor: Actor,
     ) -> CoreResult<Evidence> {
@@ -1180,7 +1167,7 @@ impl ScenarioService {
         }
         if input.verdict == ReviewVerdict::Rejected && reason.is_empty() && steps.is_empty() {
             return Err(CoreError::InvalidEdit(
-                "sending a scenario back needs a reason or a note on a step".into(),
+                "sending a flow back needs a reason or a note on a step".into(),
             ));
         }
         let _lock = self.store.lock()?;
@@ -1208,25 +1195,21 @@ impl ScenarioService {
 
     /// Changes and evidence after `since` (default: the last approved
     /// revision), for reviewing what an AI did.
-    pub fn review_timeline(
-        &self,
-        id: &ScenarioId,
-        since: Option<u64>,
-    ) -> CoreResult<ReviewTimeline> {
-        let scenario = self.get(id)?;
+    pub fn review_timeline(&self, id: &FlowId, since: Option<u64>) -> CoreResult<ReviewTimeline> {
+        let flow = self.get(id)?;
         let journal = self.store.read_journal(id, usize::MAX)?;
         let evidence = self.store.read_evidence(id)?;
         Ok(review::timeline(
-            scenario.id,
-            scenario.revision,
+            flow.id,
+            flow.revision,
             since,
             &journal,
             evidence,
         ))
     }
 
-    /// The latest review when it sent the scenario back.
-    pub fn open_feedback(&self, id: &ScenarioId) -> CoreResult<Option<Evidence>> {
+    /// The latest review when it sent the flow back.
+    pub fn open_feedback(&self, id: &FlowId) -> CoreResult<Option<Evidence>> {
         Ok(review::open_feedback(&self.store.read_evidence(id)?))
     }
 
@@ -1241,7 +1224,7 @@ impl ScenarioService {
     /// happened, so failures are logged rather than returned.
     fn link_observations(
         &self,
-        scenario: &Scenario,
+        flow: &Flow,
         step_ids: &[crate::ids::StepId],
         actor: &Actor,
         observations: &[ObservationId],
@@ -1249,14 +1232,14 @@ impl ScenarioService {
         for id in observations {
             let result = self.store.load_observation(id).and_then(|mut o| {
                 o.linked.push(ObservationLink {
-                    scenario_id: scenario.id.clone(),
-                    revision: scenario.revision,
+                    flow_id: flow.id.clone(),
+                    revision: flow.revision,
                 });
                 self.store.write_observation(&o)?;
                 self.store.append_evidence(
-                    &scenario.id,
+                    &flow.id,
                     &Evidence {
-                        revision: scenario.revision,
+                        revision: flow.revision,
                         at: now(),
                         actor: actor.clone(),
                         detail: EvidenceDetail::Observation {
@@ -1275,15 +1258,15 @@ impl ScenarioService {
         }
     }
 
-    // -- sub-scenarios ----------------------------------------------------
+    // -- sub-flows ----------------------------------------------------
 
     /// Moves `step_ids` (next to each other in one block) into a new
-    /// scenario named `name` and puts one `scenario.call` in their place
+    /// flow named `name` and puts one `flow.call` in their place
     /// that reads and writes the same variables. Two changes: the new
-    /// scenario is created, then the caller is edited once (undoable).
-    pub fn extract_subscenario(
+    /// flow is created, then the caller is edited once (undoable).
+    pub fn extract_subflow(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         expected_revision: Option<u64>,
         step_ids: &[StepId],
         name: &str,
@@ -1293,10 +1276,10 @@ impl ScenarioService {
         let caller = self.get(id)?;
         check_revision(expected_revision, caller.revision)?;
         let plan = call::extract(&caller, step_ids, name, self.registry())?;
-        let subscenario = self.insert_new(
-            plan.subscenario,
+        let subflow = self.insert_new(
+            plan.subflow,
             actor.clone(),
-            "extract subscenario",
+            "extract subflow",
             note.remarks(),
         )?;
         let mut call_step = plan.call;
@@ -1323,12 +1306,12 @@ impl ScenarioService {
             Ok(outcome) => outcome,
             Err(e) => {
                 // The caller changed in between: do not leave the copy behind.
-                let _ = self.delete(&subscenario.scenario.id, None, actor);
+                let _ = self.delete(&subflow.flow.id, None, actor);
                 return Err(e);
             }
         };
         Ok(ExtractOutcome {
-            subscenario,
+            subflow,
             caller,
             call_step_id,
         })
@@ -1336,30 +1319,30 @@ impl ScenarioService {
 
     // -- project files ----------------------------------------------------
 
-    /// The scenario's folder, where relative paths in its steps point.
-    pub fn project_dir(&self, id: &ScenarioId) -> CoreResult<PathBuf> {
+    /// The flow's folder, where relative paths in its steps point.
+    pub fn project_dir(&self, id: &FlowId) -> CoreResult<PathBuf> {
         if !self.store.exists(id) {
-            return Err(CoreError::ScenarioNotFound(id.clone()));
+            return Err(CoreError::FlowNotFound(id.clone()));
         }
         Ok(self.store.project_dir(id))
     }
 
-    /// The folders and files of the scenario's folder.
-    pub fn project_files(&self, id: &ScenarioId) -> CoreResult<ProjectFiles> {
+    /// The folders and files of the flow's folder.
+    pub fn project_files(&self, id: &FlowId) -> CoreResult<ProjectFiles> {
         project::list(id, &self.project_dir(id)?)
     }
 
-    /// Absolute path of a file (or folder) in the scenario's folder; it need
+    /// Absolute path of a file (or folder) in the flow's folder; it need
     /// not exist.
-    pub fn project_path(&self, id: &ScenarioId, path: &str) -> CoreResult<PathBuf> {
+    pub fn project_path(&self, id: &FlowId, path: &str) -> CoreResult<PathBuf> {
         Ok(self.project_dir(id)?.join(project::relative_path(path)?))
     }
 
-    /// Writes a file into the scenario's folder (creating its folders).
+    /// Writes a file into the flow's folder (creating its folders).
     /// Refuses to replace an existing file unless `overwrite`.
     pub fn write_project_file(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         path: &str,
         contents: &[u8],
         overwrite: bool,
@@ -1378,10 +1361,10 @@ impl ScenarioService {
         self.project_file_info(id, path)
     }
 
-    /// Copies a file from anywhere on the PC into the scenario's folder.
+    /// Copies a file from anywhere on the PC into the flow's folder.
     pub fn copy_into_project(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         from: &Path,
         path: &str,
         overwrite: bool,
@@ -1407,8 +1390,8 @@ impl ScenarioService {
         self.project_file_info(id, path)
     }
 
-    /// Reads a file of the scenario's folder.
-    pub fn read_project_file(&self, id: &ScenarioId, path: &str) -> CoreResult<Vec<u8>> {
+    /// Reads a file of the flow's folder.
+    pub fn read_project_file(&self, id: &FlowId, path: &str) -> CoreResult<Vec<u8>> {
         let target = self.project_path(id, path)?;
         match std::fs::read(&target) {
             Ok(bytes) => Ok(bytes),
@@ -1424,8 +1407,8 @@ impl ScenarioService {
         }
     }
 
-    /// Creates a folder in the scenario's folder (an existing one is fine).
-    pub fn create_project_folder(&self, id: &ScenarioId, path: &str) -> CoreResult<()> {
+    /// Creates a folder in the flow's folder (an existing one is fine).
+    pub fn create_project_folder(&self, id: &FlowId, path: &str) -> CoreResult<()> {
         let target = self.project_path(id, path)?;
         if target.is_file() {
             return Err(CoreError::ProjectFileExists { path: path.into() });
@@ -1433,10 +1416,10 @@ impl ScenarioService {
         Ok(std::fs::create_dir_all(target)?)
     }
 
-    /// Moves a file or folder of the scenario's folder to the workspace
+    /// Moves a file or folder of the flow's folder to the workspace
     /// trash (`trash/<id>.files.<unix-ts>/<path>`). A standard folder
     /// (`input/`, …) is emptied instead of removed.
-    pub fn delete_project_file(&self, id: &ScenarioId, path: &str) -> CoreResult<()> {
+    pub fn delete_project_file(&self, id: &FlowId, path: &str) -> CoreResult<()> {
         let rel = project::relative_path(path)?;
         let target = self.project_dir(id)?.join(&rel);
         if !target.exists() {
@@ -1466,10 +1449,10 @@ impl ScenarioService {
         Ok(())
     }
 
-    /// Renames (moves) a file or folder within the scenario's folder.
+    /// Renames (moves) a file or folder within the flow's folder.
     pub fn rename_project_file(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         from: &str,
         to: &str,
     ) -> CoreResult<ProjectFile> {
@@ -1488,7 +1471,7 @@ impl ScenarioService {
         self.project_file_info(id, to)
     }
 
-    fn project_file_info(&self, id: &ScenarioId, path: &str) -> CoreResult<ProjectFile> {
+    fn project_file_info(&self, id: &FlowId, path: &str) -> CoreResult<ProjectFile> {
         let rel = project::relative_path(path)?;
         let meta = std::fs::metadata(self.project_dir(id)?.join(&rel))?;
         Ok(ProjectFile {
@@ -1499,8 +1482,8 @@ impl ScenarioService {
         })
     }
 
-    /// The files of a scenario's folder that travel in a bundle.
-    fn bundled_files(&self, id: &ScenarioId) -> CoreResult<Vec<BundledFile>> {
+    /// The files of a flow's folder that travel in a bundle.
+    fn bundled_files(&self, id: &FlowId) -> CoreResult<Vec<BundledFile>> {
         use base64::Engine as _;
         let dir = self.store.project_dir(id);
         let mut out = Vec::new();
@@ -1510,7 +1493,7 @@ impl ScenarioService {
             }
             let bytes = std::fs::read(dir.join(project::relative_path(&file.path)?))?;
             out.push(BundledFile {
-                scenario_id: id.clone(),
+                flow_id: id.clone(),
                 path: file.path,
                 data: base64::engine::general_purpose::STANDARD.encode(bytes),
             });
@@ -1518,12 +1501,12 @@ impl ScenarioService {
         Ok(out)
     }
 
-    /// Writes the bundle's files of scenario `from` into the folder of `to`
-    /// (the same scenario, or its copy), replacing files of the same name.
+    /// Writes the bundle's files of flow `from` into the folder of `to`
+    /// (the same flow, or its copy), replacing files of the same name.
     fn write_bundled_files(
         &self,
-        from: &ScenarioId,
-        to: &ScenarioId,
+        from: &FlowId,
+        to: &FlowId,
         files: &[BundledFile],
     ) -> CoreResult<()> {
         project::unpack(files, from, &self.project_dir(to)?)
@@ -1531,27 +1514,27 @@ impl ScenarioService {
 
     // -- sharing ----------------------------------------------------------
 
-    /// Packs a scenario (and optionally its versions) into a bundle for
+    /// Packs a flow (and optionally its versions) into a bundle for
     /// another workspace. Secret variable defaults are removed.
-    pub fn export(&self, id: &ScenarioId, include_versions: bool) -> CoreResult<ScenarioBundle> {
-        let mut scenario = self.get(id)?;
-        version::strip_secrets(&mut scenario);
+    pub fn export(&self, id: &FlowId, include_versions: bool) -> CoreResult<FlowBundle> {
+        let mut flow = self.get(id)?;
+        version::strip_secrets(&mut flow);
         let versions = if include_versions {
             let mut versions = self.store.load_versions(id)?;
             for v in &mut versions {
-                version::strip_secrets(&mut v.scenario);
+                version::strip_secrets(&mut v.flow);
             }
             versions
         } else {
             Vec::new()
         };
-        let mut subscenarios = self.called_scenarios(&scenario, &[]);
-        subscenarios.iter_mut().for_each(version::strip_secrets);
-        let mut files = self.bundled_files(&scenario.id)?;
-        for sub in &subscenarios {
+        let mut subflows = self.called_flows(&flow, &[]);
+        subflows.iter_mut().for_each(version::strip_secrets);
+        let mut files = self.bundled_files(&flow.id)?;
+        for sub in &subflows {
             files.extend(self.bundled_files(&sub.id)?);
         }
-        Ok(ScenarioBundle {
+        Ok(FlowBundle {
             format: BUNDLE_FORMAT.into(),
             // An older build would drop the files without a word.
             format_version: if files.is_empty() {
@@ -1560,14 +1543,14 @@ impl ScenarioService {
                 BUNDLE_FORMAT_VERSION
             },
             exported_at: now(),
-            scenario,
+            flow,
             versions,
-            subscenarios,
+            subflows,
             files,
         })
     }
 
-    /// Imports a bundle or a bare scenario document.
+    /// Imports a bundle or a bare flow document.
     ///
     /// A new ID is created as is. When the ID already exists, `on_conflict`
     /// decides; without it the import fails with `IMPORT_CONFLICT` so the
@@ -1580,88 +1563,84 @@ impl ScenarioService {
     ) -> CoreResult<ImportOutcome> {
         let bundle = parse_bundle(value)?;
         let files = bundle.files;
-        // Sub-scenarios first, so the scenario validates against them.
-        let mut subscenarios = Vec::with_capacity(bundle.subscenarios.len());
-        for sub in bundle.subscenarios {
-            if sub.id == bundle.scenario.id || !sub.id.is_well_formed() {
+        // Sub-flows first, so the flow validates against them.
+        let mut subflows = Vec::with_capacity(bundle.subflows.len());
+        for sub in bundle.subflows {
+            if sub.id == bundle.flow.id || !sub.id.is_well_formed() {
                 continue;
             }
             let (id, name) = (sub.id.clone(), sub.name.clone());
             let mode = if !self.store.exists(&sub.id) {
                 self.insert_imported(sub, actor.clone())?;
-                SubscenarioImport::Created
+                SubflowImport::Created
             } else if on_conflict == Some(ImportConflict::Update) {
                 let label = "import update".to_owned();
                 self.match_content(&id, &sub, None, actor.clone(), label)?;
-                SubscenarioImport::Updated
+                SubflowImport::Updated
             } else {
-                SubscenarioImport::Kept
+                SubflowImport::Kept
             };
-            if mode != SubscenarioImport::Kept {
+            if mode != SubflowImport::Kept {
                 self.write_bundled_files(&id, &id, &files)?;
             }
-            subscenarios.push(ImportedSubscenario { id, name, mode });
+            subflows.push(ImportedSubflow { id, name, mode });
         }
-        let mut scenario = bundle.scenario;
-        let original_id = scenario.id.clone();
-        let exists = scenario.id.is_well_formed() && self.store.exists(&scenario.id);
+        let mut flow = bundle.flow;
+        let original_id = flow.id.clone();
+        let exists = flow.id.is_well_formed() && self.store.exists(&flow.id);
         let (mode, outcome) = match (exists, on_conflict) {
             (true, None) => {
-                let existing = self.get(&scenario.id)?;
+                let existing = self.get(&flow.id)?;
                 return Err(CoreError::ImportConflict {
-                    scenario_id: existing.id,
+                    flow_id: existing.id,
                     name: existing.name,
                 });
             }
             (true, Some(ImportConflict::Update)) => {
-                let id = scenario.id.clone();
+                let id = flow.id.clone();
                 let label = "import update".to_owned();
                 (
                     ImportMode::Updated,
-                    self.match_content(&id, &scenario, None, actor, label)?,
+                    self.match_content(&id, &flow, None, actor, label)?,
                 )
             }
             (true, Some(ImportConflict::Copy)) => {
-                scenario.id = ScenarioId::generate();
-                (ImportMode::Copied, self.insert_imported(scenario, actor)?)
+                flow.id = FlowId::generate();
+                (ImportMode::Copied, self.insert_imported(flow, actor)?)
             }
             (false, _) => {
-                if !scenario.id.is_well_formed() {
-                    scenario.id = ScenarioId::generate();
+                if !flow.id.is_well_formed() {
+                    flow.id = FlowId::generate();
                 }
-                (ImportMode::Created, self.insert_imported(scenario, actor)?)
+                (ImportMode::Created, self.insert_imported(flow, actor)?)
             }
         };
-        self.write_bundled_files(&original_id, &outcome.scenario.id, &files)?;
-        let versions_added = self.add_versions(&outcome.scenario.id, bundle.versions)?;
-        // Validated before the sub-scenarios existed when it was created.
+        self.write_bundled_files(&original_id, &outcome.flow.id, &files)?;
+        let versions_added = self.add_versions(&outcome.flow.id, bundle.versions)?;
+        // Validated before the sub-flows existed when it was created.
         let outcome = EditOutcome {
-            validation: self.validate(&outcome.scenario),
+            validation: self.validate(&outcome.flow),
             ..outcome
         };
         Ok(ImportOutcome {
             mode,
             versions_added,
-            subscenarios,
+            subflows,
             outcome,
         })
     }
 
-    fn insert_imported(&self, mut scenario: Scenario, actor: Actor) -> CoreResult<EditOutcome> {
-        scenario.revision = 0;
+    fn insert_imported(&self, mut flow: Flow, actor: Actor) -> CoreResult<EditOutcome> {
+        flow.revision = 0;
         let now = now();
-        scenario.metadata.created_at.get_or_insert(now);
-        scenario.metadata.updated_at = Some(now);
-        self.insert_new(scenario, actor, "import scenario", Remarks::default())
+        flow.metadata.created_at.get_or_insert(now);
+        flow.metadata.updated_at = Some(now);
+        self.insert_new(flow, actor, "import flow", Remarks::default())
     }
 
     /// Adds versions whose `uid` is not present yet, renumbered after the
     /// existing ones in their original order.
-    fn add_versions(
-        &self,
-        id: &ScenarioId,
-        mut incoming: Vec<ScenarioVersion>,
-    ) -> CoreResult<usize> {
+    fn add_versions(&self, id: &FlowId, mut incoming: Vec<FlowVersion>) -> CoreResult<usize> {
         if incoming.is_empty() {
             return Ok(0);
         }
@@ -1675,7 +1654,7 @@ impl ScenarioService {
                 continue;
             }
             v.number = next;
-            v.scenario.id = id.clone();
+            v.flow.id = id.clone();
             self.store.save_version(&v)?;
             next += 1;
             added += 1;
@@ -1683,8 +1662,8 @@ impl ScenarioService {
         Ok(added)
     }
 
-    fn reject_structural_errors(&self, scenario: &Scenario) -> CoreResult<()> {
-        let issues = self.validator.structural_errors(scenario);
+    fn reject_structural_errors(&self, flow: &Flow) -> CoreResult<()> {
+        let issues = self.validator.structural_errors(flow);
         if issues.is_empty() {
             Ok(())
         } else {
@@ -1697,12 +1676,12 @@ impl ScenarioService {
 
     fn commit(
         &self,
-        id: &ScenarioId,
+        id: &FlowId,
         expected_revision: Option<u64>,
         actor: Actor,
         kind: ChangeKind,
         remarks: Remarks,
-        change: impl FnOnce(&mut UndoState, &Scenario) -> CoreResult<Commit>,
+        change: impl FnOnce(&mut UndoState, &Flow) -> CoreResult<Commit>,
     ) -> CoreResult<EditOutcome> {
         let lock = self.store.lock()?;
         let current = self.store.load(id)?;
@@ -1719,7 +1698,8 @@ impl ScenarioService {
             if had_history && matches!(kind, ChangeKind::Undo | ChangeKind::Redo) {
                 self.store.save_undo(id, &undo)?;
                 return Err(CoreError::InvalidEdit(
-                    "undo history no longer matches the scenario (it was changed outside Shikigami)".into(),
+                    "undo history no longer matches the flow (it was changed outside Shikigami)"
+                        .into(),
                 ));
             }
         }
@@ -1736,10 +1716,10 @@ impl ScenarioService {
         if next.requires != before_sync {
             // Core's own change to `requires` is part of the edit, so undo and
             // redo restore the exact ranges (a hand-set one included).
-            let patch = |requires| EditOp::UpdateScenario {
-                patch: ScenarioPatch {
+            let patch = |requires| EditOp::UpdateFlow {
+                patch: FlowPatch {
                     requires: Some(requires),
-                    ..ScenarioPatch::default()
+                    ..FlowPatch::default()
                 },
             };
             applied.push(patch(next.requires.clone()));
@@ -1781,7 +1761,7 @@ impl ScenarioService {
         drop(lock);
 
         self.notify(ChangeEvent {
-            scenario_id: id.clone(),
+            flow_id: id.clone(),
             kind,
             revision: next.revision,
             actor,
@@ -1790,28 +1770,28 @@ impl ScenarioService {
         Ok(EditOutcome {
             can_undo: !undo.undo.is_empty(),
             can_redo: !undo.redo.is_empty(),
-            scenario: next,
+            flow: next,
             validation,
         })
     }
 }
 
 struct Commit {
-    next: Scenario,
+    next: Flow,
     applied: Vec<EditOp>,
     inverse: Vec<EditOp>,
     label: String,
 }
 
-fn parse_bundle(value: serde_json::Value) -> CoreResult<ScenarioBundle> {
+fn parse_bundle(value: serde_json::Value) -> CoreResult<FlowBundle> {
     if !version::is_bundle(&value) {
-        return Ok(ScenarioBundle {
+        return Ok(FlowBundle {
             format: BUNDLE_FORMAT.into(),
             format_version: BUNDLE_FORMAT_VERSION,
             exported_at: now(),
-            scenario: crate::migrate::from_value(value)?,
+            flow: crate::migrate::from_value(value)?,
             versions: Vec::new(),
-            subscenarios: Vec::new(),
+            subflows: Vec::new(),
             files: Vec::new(),
         });
     }
@@ -1824,7 +1804,7 @@ fn parse_bundle(value: serde_json::Value) -> CoreResult<ScenarioBundle> {
             "bundle format version {found} is newer than this build supports ({BUNDLE_FORMAT_VERSION})"
         )));
     }
-    // The scenario documents inside (and in its versions) go through the
+    // The flow documents inside (and in its versions) go through the
     // same migrations as files (`migrate::deserialize`); check their format
     // versions first so a newer one reports UNSUPPORTED_SCHEMA_VERSION.
     let items = |key: &str| {
@@ -1834,11 +1814,13 @@ fn parse_bundle(value: serde_json::Value) -> CoreResult<ScenarioBundle> {
             .into_iter()
             .flatten()
     };
-    let documents = value
-        .get("scenario")
+    // `scenario` / `subscenarios`: bundles from before flows were renamed.
+    let documents = ["flow", "scenario"]
         .into_iter()
+        .filter_map(|key| value.get(key))
+        .chain(items("subflows"))
         .chain(items("subscenarios"))
-        .chain(items("versions").filter_map(|v| v.get("scenario")));
+        .chain(items("versions").filter_map(|v| v.get("flow").or_else(|| v.get("scenario"))));
     for document in documents {
         crate::migrate::check_supported(document)?;
     }
@@ -1879,13 +1861,10 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    fn service() -> (tempfile::TempDir, ScenarioService) {
+    fn service() -> (tempfile::TempDir, FlowService) {
         let dir = tempfile::tempdir().expect("tempdir");
         let store = FileStore::open(dir.path()).expect("store");
-        (
-            dir,
-            ScenarioService::new(store, StepRegistry::with_builtins()),
-        )
+        (dir, FlowService::new(store, StepRegistry::with_builtins()))
     }
 
     fn mcp() -> Actor {
@@ -1901,39 +1880,39 @@ mod tests {
         let (_dir, svc) = service();
         let sub = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "部品".into(),
                     steps: vec![Step::new("log.message").with_param("message", "sub")],
-                    ..NewScenario::default()
+                    ..NewFlow::default()
                 },
                 studio(),
             )
             .unwrap()
-            .scenario;
+            .flow;
         let main = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "本体".into(),
                     steps: vec![
                         Step::new("log.message").with_param("message", "one"),
-                        Step::new("scenario.call").with_param("scenario", sub.id.as_str()),
+                        Step::new("flow.call").with_param("flow", sub.id.as_str()),
                     ],
-                    ..NewScenario::default()
+                    ..NewFlow::default()
                 },
                 studio(),
             )
             .unwrap()
-            .scenario;
+            .flow;
 
         assert_eq!(
             svc.published_run(&main.id).unwrap_err().code(),
             "NOT_PUBLISHED"
         );
         assert_eq!(
-            svc.published_run(&ScenarioId::new("scn_missing"))
+            svc.published_run(&FlowId::new("scn_missing"))
                 .unwrap_err()
                 .code(),
-            "SCENARIO_NOT_FOUND"
+            "FLOW_NOT_FOUND"
         );
         // An AI may prepare versions but never publish.
         assert_eq!(
@@ -1942,12 +1921,12 @@ mod tests {
                 .code(),
             "PUBLISH_NOT_ALLOWED"
         );
-        // The called scenario has to be published first; nothing is saved meanwhile.
+        // The called flow has to be published first; nothing is saved meanwhile.
         assert_eq!(
             svc.publish(&main.id, PublishInput::default(), studio())
                 .unwrap_err()
                 .code(),
-            "SUBSCENARIO_NOT_PUBLISHED"
+            "SUBFLOW_NOT_PUBLISHED"
         );
         assert!(svc.list_versions(&main.id).unwrap().is_empty());
 
@@ -1974,10 +1953,10 @@ mod tests {
             .unwrap();
         assert!(!svc.published(&main.id).unwrap().unwrap().matches_current);
         let run = svc.published_run(&main.id).unwrap();
-        assert_eq!((run.version, run.scenario.steps.len()), (1, 2));
-        assert_eq!(run.subscenarios.len(), 1);
-        assert_eq!(run.subscenarios[0].scenario.steps.len(), 1);
-        assert_eq!(run.subscenarios[0].version, Some(1));
+        assert_eq!((run.version, run.flow.steps.len()), (1, 2));
+        assert_eq!(run.subflows.len(), 1);
+        assert_eq!(run.subflows[0].flow.steps.len(), 1);
+        assert_eq!(run.subflows[0].version, Some(1));
 
         // Approving in review publishes the reviewed revision in one step.
         let current = svc.get(&main.id).unwrap();
@@ -2042,7 +2021,7 @@ mod tests {
             vec![Some(1), Some(2), Some(2), Some(1), None]
         );
 
-        // A scenario moved to the trash stops running unattended.
+        // A flow moved to the trash stops running unattended.
         let sub_rev = svc.get(&sub.id).unwrap().revision;
         svc.edit(
             &main.id,
@@ -2060,7 +2039,7 @@ mod tests {
     #[test]
     fn risk_counts_the_riskiest_step() {
         let (_dir, svc) = service();
-        let mut s = Scenario::new("r");
+        let mut s = Flow::new("r");
         s.steps = vec![Step::new("log.message"), Step::new("unknown.thing")];
         assert_eq!(
             svc.risk_of([&s]),
@@ -2088,10 +2067,10 @@ mod tests {
             version: "0.3.1".into(),
         });
         registry.register(def);
-        let svc = ScenarioService::new(FileStore::open(dir.path()).expect("store"), registry);
+        let svc = FlowService::new(FileStore::open(dir.path()).expect("store"), registry);
         let created = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "plugin".into(),
                     description: String::new(),
                     variables: vec![],
@@ -2101,43 +2080,43 @@ mod tests {
                 mcp(),
             )
             .expect("create");
-        let id = created.scenario.id.clone();
-        assert_eq!(created.scenario.requires["plugin:hello"], "^0.3.1");
+        let id = created.flow.id.clone();
+        assert_eq!(created.flow.requires["plugin:hello"], "^0.3.1");
 
         // A hand-set range is kept while the plugin is used.
-        let patch = ScenarioPatch {
+        let patch = FlowPatch {
             requires: Some(BTreeMap::from([(
                 "plugin:hello".into(),
                 ">=0.3, <2".into(),
             )])),
-            ..ScenarioPatch::default()
+            ..FlowPatch::default()
         };
         let loosened = svc
-            .edit(&id, None, vec![EditOp::UpdateScenario { patch }], mcp())
+            .edit(&id, None, vec![EditOp::UpdateFlow { patch }], mcp())
             .expect("patch");
-        assert_eq!(loosened.scenario.requires["plugin:hello"], ">=0.3, <2");
+        assert_eq!(loosened.flow.requires["plugin:hello"], ">=0.3, <2");
         assert!(loosened.validation.valid, "{:?}", loosened.validation);
 
-        let step = created.scenario.steps[0].id.clone();
+        let step = created.flow.steps[0].id.clone();
         let removed = svc
             .edit(&id, None, vec![EditOp::RemoveStep { step_id: step }], mcp())
             .expect("remove");
-        assert!(removed.scenario.requires.is_empty());
+        assert!(removed.flow.requires.is_empty());
         // Undo brings back the hand-set range, not the installed default.
         let undone = svc.undo(&id, None, mcp()).expect("undo");
-        assert_eq!(undone.scenario.requires["plugin:hello"], ">=0.3, <2");
+        assert_eq!(undone.flow.requires["plugin:hello"], ">=0.3, <2");
         let redone = svc.redo(&id, None, mcp()).expect("redo");
-        assert!(redone.scenario.requires.is_empty());
+        assert!(redone.flow.requires.is_empty());
     }
 
     #[test]
-    fn bundles_with_newer_scenarios_are_refused() {
+    fn bundles_with_newer_flows_are_refused() {
         let (_dir, svc) = service();
         let value = serde_json::json!({
             "format": BUNDLE_FORMAT,
             "formatVersion": 1,
             "exportedAt": "2026-10-28T00:00:00Z",
-            "scenario": { "schemaVersion": 99, "id": "scn_new", "name": "x" },
+            "flow": { "schemaVersion": 99, "id": "scn_new", "name": "x" },
         });
         let err = svc.import_bundle(value, None, mcp()).expect_err("newer");
         assert_eq!(err.code(), "UNSUPPORTED_SCHEMA_VERSION");
@@ -2148,21 +2127,21 @@ mod tests {
         let (_dir, svc) = service();
         let created = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "請求書処理".into(),
                     ..Default::default()
                 },
                 mcp(),
             )
             .expect("create");
-        assert_eq!(created.scenario.revision, 1);
+        assert_eq!(created.flow.revision, 1);
         let list = svc.list().expect("list");
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "請求書処理");
-        let id = created.scenario.id;
+        let id = created.flow.id;
         assert_eq!(svc.get(&id).expect("get").name, "請求書処理");
         svc.delete(&id, Some(1), studio()).expect("delete");
-        assert_eq!(svc.get(&id).expect_err("gone").code(), "SCENARIO_NOT_FOUND");
+        assert_eq!(svc.get(&id).expect_err("gone").code(), "FLOW_NOT_FOUND");
         assert!(svc.list().expect("list").is_empty());
     }
 
@@ -2171,21 +2150,21 @@ mod tests {
         let (_dir, svc) = service();
         let id = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "s".into(),
                     ..Default::default()
                 },
                 mcp(),
             )
             .expect("create")
-            .scenario
+            .flow
             .id;
 
         // MCP edits based on revision 1.
         let after_mcp = svc
             .edit(&id, Some(1), vec![add_log("from ai")], mcp())
             .expect("mcp edit");
-        assert_eq!(after_mcp.scenario.revision, 2);
+        assert_eq!(after_mcp.flow.revision, 2);
 
         // Studio still thinks it is at revision 1: conflict, nothing applied.
         let err = svc
@@ -2211,19 +2190,19 @@ mod tests {
         let (_dir, svc) = service();
         let id = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "s".into(),
                     ..Default::default()
                 },
                 mcp(),
             )
             .expect("create")
-            .scenario
+            .flow
             .id;
         let edited = svc
             .edit(&id, None, vec![add_log("a"), add_log("b")], mcp())
             .expect("edit");
-        let step_id = edited.scenario.steps[0].id.clone();
+        let step_id = edited.flow.steps[0].id.clone();
         svc.edit(
             &id,
             None,
@@ -2239,23 +2218,23 @@ mod tests {
         .expect("rename");
 
         let undone = svc.undo(&id, None, studio()).expect("undo 1");
-        assert_eq!(undone.scenario.steps[0].name, "");
+        assert_eq!(undone.flow.steps[0].name, "");
         assert!(undone.can_redo);
         let undone = svc.undo(&id, None, studio()).expect("undo 2");
-        assert!(undone.scenario.steps.is_empty());
+        assert!(undone.flow.steps.is_empty());
         assert_eq!(
             svc.undo(&id, None, studio()).expect_err("empty").code(),
             "NOTHING_TO_UNDO_OR_REDO"
         );
 
         let redone = svc.redo(&id, None, studio()).expect("redo");
-        assert_eq!(redone.scenario.steps.len(), 2);
+        assert_eq!(redone.flow.steps.len(), 2);
         assert_eq!(
-            redone.scenario.steps[0].id, step_id,
+            redone.flow.steps[0].id, step_id,
             "step ids survive undo/redo"
         );
         let redone = svc.redo(&id, None, studio()).expect("redo 2");
-        assert_eq!(redone.scenario.steps[0].name, "最初");
+        assert_eq!(redone.flow.steps[0].name, "最初");
 
         // A new edit clears the redo stack.
         svc.undo(&id, None, studio()).expect("undo");
@@ -2279,14 +2258,14 @@ mod tests {
         let (_dir, svc) = service();
         let id = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "s".into(),
                     ..Default::default()
                 },
                 mcp(),
             )
             .expect("create")
-            .scenario
+            .flow
             .id;
         svc.edit(&id, None, vec![add_log("a")], mcp())
             .expect("edit");
@@ -2306,14 +2285,14 @@ mod tests {
         let (_dir, svc) = service();
         let id = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "s".into(),
                     ..Default::default()
                 },
                 mcp(),
             )
             .expect("create")
-            .scenario
+            .flow
             .id;
         // An `if` without its condition is a valid draft (reported, not rejected).
         let outcome = svc
@@ -2358,23 +2337,23 @@ mod tests {
         });
         let id = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "s".into(),
                     ..Default::default()
                 },
                 mcp(),
             )
             .expect("create")
-            .scenario
+            .flow
             .id;
         svc.edit(&id, None, vec![add_log("x")], mcp())
             .expect("edit");
         assert_eq!(count.load(Ordering::SeqCst), 2);
         assert_eq!(
-            svc.get(&ScenarioId::new("../../etc/passwd"))
+            svc.get(&FlowId::new("../../etc/passwd"))
                 .expect_err("bad id")
                 .code(),
-            "INVALID_SCENARIO_ID"
+            "INVALID_FLOW_ID"
         );
     }
 
@@ -2416,7 +2395,7 @@ mod tests {
         // An old observation no edit used is deleted; a linked one stays.
         let id = svc
             .create_noted(
-                NewScenario {
+                NewFlow {
                     name: "s".into(),
                     ..Default::default()
                 },
@@ -2427,7 +2406,7 @@ mod tests {
                 },
             )
             .expect("create")
-            .scenario
+            .flow
             .id;
         for o in [&big, &small] {
             let mut old = svc.store().load_observation(&o.id).expect("load");
@@ -2445,7 +2424,7 @@ mod tests {
             "OBSERVATION_NOT_FOUND"
         );
         let kept = svc.get_observation(&small.id).expect("kept").observation;
-        assert_eq!(kept.linked[0].scenario_id, id);
+        assert_eq!(kept.linked[0].flow_id, id);
         assert_eq!(kept.linked[0].revision, 1);
     }
 
@@ -2454,7 +2433,7 @@ mod tests {
         let (_dir, svc) = service();
         let src = svc
             .create(
-                NewScenario {
+                NewFlow {
                     name: "元".into(),
                     steps: vec![Step::new("log.message").with_param("message", "x")],
                     ..Default::default()
@@ -2462,17 +2441,14 @@ mod tests {
                 mcp(),
             )
             .expect("create")
-            .scenario;
-        let copy = svc
-            .duplicate(&src.id, None, studio())
-            .expect("dup")
-            .scenario;
+            .flow;
+        let copy = svc.duplicate(&src.id, None, studio()).expect("dup").flow;
         assert_ne!(copy.id, src.id);
         assert_eq!(copy.name, "元 のコピー");
         assert_eq!(copy.steps, src.steps);
 
         // Importing a document whose id already exists gets a fresh id.
-        let imported = svc.import(src.clone(), studio()).expect("import").scenario;
+        let imported = svc.import(src.clone(), studio()).expect("import").flow;
         assert_ne!(imported.id, src.id);
         assert_eq!(svc.list().expect("list").len(), 3);
     }

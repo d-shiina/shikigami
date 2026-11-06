@@ -47,7 +47,7 @@ function RiskRow({ label, value, onChange }: { label: string; value: ByRisk; onC
 }
 
 /**
- * The workspace policy (policy.json): which sites and programs scenarios may
+ * The workspace policy (policy.json): which sites and programs flows may
  * reach, and what an AI may do without the person's approval. A section of
  * the settings place. Only people edit it (here or in the file); AI clients
  * can read it but never write it.
@@ -56,7 +56,7 @@ export function PolicySection() {
   const policy = useStudio((s) => s.policy);
   const setOpen = useStudio((s) => s.setPolicyOpen);
   const save = useStudio((s) => s.savePolicy);
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const [draft, setDraft] = useState<Policy | null>(null);
   const [sites, setSites] = useState("");
   const [apps, setApps] = useState("");
@@ -76,18 +76,18 @@ export function PolicySection() {
 
   if (!draft) return null;
   const ai = draft.ai ?? {};
-  const own = scenario ? (draft.scenarios?.[scenario.id] ?? {}) : null;
+  const own = flow ? (draft.flows?.[flow.id] ?? {}) : null;
 
   const setOwn = (patch: { aiRun?: Decision | null; unattended?: boolean | null }) => {
-    if (!scenario) return;
-    const next = { ...(draft.scenarios?.[scenario.id] ?? {}), ...patch };
+    if (!flow) return;
+    const next = { ...(draft.flows?.[flow.id] ?? {}), ...patch };
     // Leave out what is back to the default, so the file stays short.
     if (next.aiRun == null) delete next.aiRun;
     if (next.unattended == null || next.unattended) delete next.unattended;
-    const scenarios = { ...(draft.scenarios ?? {}) };
-    if (Object.keys(next).length === 0) delete scenarios[scenario.id];
-    else scenarios[scenario.id] = next;
-    setDraft({ ...draft, scenarios });
+    const flows = { ...(draft.flows ?? {}) };
+    if (Object.keys(next).length === 0) delete flows[flow.id];
+    else flows[flow.id] = next;
+    setDraft({ ...draft, flows });
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -125,8 +125,8 @@ export function PolicySection() {
           <tbody>
             <RiskRow
               label={t.policyAiRun}
-              value={ai.runScenario ?? { safe: "allow", interactive: "allow", dangerous: "ask" }}
-              onChange={(runScenario) => setDraft({ ...draft, ai: { ...ai, runScenario } })}
+              value={ai.runFlow ?? { safe: "allow", interactive: "allow", dangerous: "ask" }}
+              onChange={(runFlow) => setDraft({ ...draft, ai: { ...ai, runFlow } })}
             />
             <RiskRow
               label={t.policyAiTest}
@@ -138,8 +138,8 @@ export function PolicySection() {
               <td className="py-1">
                 <DecisionSelect
                   label={t.policyAiDelete}
-                  value={ai.deleteScenario ?? "ask"}
-                  onChange={(deleteScenario) => setDraft({ ...draft, ai: { ...ai, deleteScenario } })}
+                  value={ai.deleteFlow ?? "ask"}
+                  onChange={(deleteFlow) => setDraft({ ...draft, ai: { ...ai, deleteFlow } })}
                 />
               </td>
             </tr>
@@ -147,17 +147,17 @@ export function PolicySection() {
         </table>
       </section>
 
-      {scenario && own && (
+      {flow && own && (
         <section className="space-y-1.5">
-          <h3 className="text-xs font-bold text-slate-600">{t.policyScenario(scenario.name)}</h3>
+          <h3 className="text-xs font-bold text-slate-600">{t.policyFlow(flow.name)}</h3>
           <label className="flex items-center gap-2 text-xs">
-            <span className="text-slate-600">{t.policyScenarioAi}</span>
+            <span className="text-slate-600">{t.policyFlowAi}</span>
             <select
               className={selectClass}
               value={own.aiRun ?? ""}
               onChange={(e) => setOwn({ aiRun: (e.target.value || null) as Decision | null })}
             >
-              <option value="">{t.policyScenarioAiInherit}</option>
+              <option value="">{t.policyFlowAiInherit}</option>
               {DECISIONS.map((d) => (
                 <option key={d} value={d}>
                   {t.policyDecision[d]}

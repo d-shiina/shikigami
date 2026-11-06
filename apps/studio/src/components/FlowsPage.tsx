@@ -1,13 +1,15 @@
-// The scenario library: a page of its own (the "シナリオ" place), not a list
+// The flow library: a page of its own (the "フロー" place), not a list
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
-import type { ScenarioSummary } from "@shikigami/schema";
-import { Copy, FolderOpen, Search, Trash2, Upload, Workflow } from "lucide-react";
+import type { FlowSummary } from "@shikigami/schema";
+import { BookOpen, Copy, ExternalLink, FolderOpen, Search, Trash2, Upload, Workflow } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useStudio } from "../context";
+import { useStudio, useStudioApi } from "../context";
 import { relativeTime } from "../lib/changes";
 import { copyText, menuFor } from "../lib/contextMenu";
+import { agent } from "../lib/api";
 import { t } from "../lib/i18n";
+import { SAMPLES, type Sample, tutorialUrl } from "../lib/samples";
 
 const SORT_KEY = "shikigami.studio.sort";
 
@@ -30,7 +32,7 @@ function save(key: string, value: unknown) {
   }
 }
 
-/** A small square with the name's first letter, so scenarios are told apart at a glance. */
+/** A small square with the name's first letter, so flows are told apart at a glance. */
 export function Monogram({ name, active }: { name: string; active: boolean }) {
   return (
     <span
@@ -56,17 +58,17 @@ function Marked({ text, query }: { text: string; query: string }) {
   );
 }
 
-/** Opens a scenario in the editor: what the library makes or picks is shown there. */
+/** Opens a flow in the editor: what the library makes or picks is shown there. */
 function useOpen() {
   const open = useStudio((s) => s.open);
   const setPlace = useStudio((s) => s.setPlace);
   return (id: string) => {
-    setPlace("scenarios");
+    setPlace("flows");
     void open(id);
   };
 }
 
-/** Asks what to do when an imported scenario already exists. */
+/** Asks what to do when an imported flow already exists. */
 function ImportConflict() {
   const importFile = useStudio((s) => s.importFile);
   const setPlace = useStudio((s) => s.setPlace);
@@ -74,7 +76,7 @@ function ImportConflict() {
   const cancelImport = useStudio((s) => s.cancelImport);
   if (!pending) return null;
   const resolve = async (mode: "update" | "copy") => {
-    if (await importFile(pending.contents, mode)) setPlace("scenarios");
+    if (await importFile(pending.contents, mode)) setPlace("flows");
   };
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[4px] border border-accent-100 bg-accent-50 px-3 py-2 text-[13px]">
@@ -95,7 +97,77 @@ function ImportConflict() {
   );
 }
 
-function Row({ summary, query }: { summary: ScenarioSummary; query: string }) {
+/** Opens a tutorial's page in the browser; a failure is said in the status line. */
+function useReadTutorial() {
+  const store = useStudioApi();
+  return (id?: Sample["id"]) =>
+    void agent.openUrl(tutorialUrl(id)).catch((e: unknown) => store.setState({ error: e instanceof Error ? e.message : String(e) }));
+}
+
+/** The tutorials, under the list: read the steps, or open the finished flow with its files. */
+function Samples() {
+  const importFile = useStudio((s) => s.importFile);
+  const setPlace = useStudio((s) => s.setPlace);
+  const read = useReadTutorial();
+  const [busy, setBusy] = useState<string | null>(null);
+  const open = async (sample: Sample) => {
+    if (!sample.bundle || busy) return;
+    setBusy(sample.id);
+    try {
+      // Opened before, it asks here whether to update it or keep a copy.
+      if (await importFile(await sample.bundle())) setPlace("flows");
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <section className="mt-6" aria-labelledby="samples-title">
+      <div className="mb-1 flex items-baseline gap-2">
+        <h2 id="samples-title" className="text-[13px] font-semibold text-ink">
+          {t.samples.title}
+        </h2>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-slate-500">{t.samples.lead}</span>
+        <button type="button" onClick={() => read()} className="flex shrink-0 items-center gap-1 text-[12px] text-brand-600 hover:underline">
+          {t.samples.all}
+          <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      </div>
+      <ul className="overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-sheet">
+        {SAMPLES.map((sample) => {
+          const item = t.samples.items[sample.id] ?? { name: sample.id, uses: "" };
+          return (
+            <li key={sample.id} className="flex items-center gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0">
+              <BookOpen size={16} strokeWidth={1.75} className="shrink-0 text-brand-600" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] text-ink">{item.name}</div>
+                <div className="truncate text-[12px] text-slate-500">
+                  {item.uses}
+                  {!sample.bundle && t.paren(t.samples.needsSite)}
+                </div>
+              </div>
+              <button type="button" onClick={() => read(sample.id)} className="flex h-7 shrink-0 items-center gap-1 px-2 text-[12px] text-slate-600 hover:text-ink">
+                {t.samples.read}
+                <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+              {sample.bundle && (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void open(sample)}
+                  className="h-7 shrink-0 rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {t.samples.open}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function Row({ summary, query }: { summary: FlowSummary; query: string }) {
   const open = useOpen();
   const duplicate = useStudio((s) => s.duplicate);
   const remove = useStudio((s) => s.remove);
@@ -112,7 +184,7 @@ function Row({ summary, query }: { summary: ScenarioSummary; query: string }) {
           label: t.duplicate,
           icon: Copy,
           run: () => {
-            setPlace("scenarios");
+            setPlace("flows");
             void duplicate(summary.id);
           },
         },
@@ -150,7 +222,7 @@ function Row({ summary, query }: { summary: ScenarioSummary; query: string }) {
             className="grid h-7 w-7 place-items-center rounded-[3px] text-slate-500 hover:bg-slate-200 hover:text-ink"
             onClick={(e) => {
               e.stopPropagation();
-              setPlace("scenarios");
+              setPlace("flows");
               void duplicate(summary.id);
             }}
           >
@@ -176,7 +248,7 @@ function Row({ summary, query }: { summary: ScenarioSummary; query: string }) {
   );
 }
 
-export function ScenariosPage() {
+export function FlowsPage() {
   const summaries = useStudio((s) => s.summaries);
   const create = useStudio((s) => s.create);
   const importFile = useStudio((s) => s.importFile);
@@ -207,8 +279,8 @@ export function ScenariosPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPlace("scenarios");
-    await create(name.trim() || t.defaultScenarioName);
+    setPlace("flows");
+    await create(name.trim() || t.defaultFlowName);
     setName("");
     setCreating(false);
   };
@@ -217,7 +289,7 @@ export function ScenariosPage() {
     e.target.value = "";
     if (!file) return;
     // A conflict is answered on this page, so only move to the editor once it is in.
-    if (await importFile(await file.text())) setPlace("scenarios");
+    if (await importFile(await file.text())) setPlace("flows");
   };
 
   return (
@@ -255,10 +327,10 @@ export function ScenariosPage() {
             className="flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
           >
             <Upload size={14} strokeWidth={1.75} aria-hidden="true" />
-            {t.importScenario}
+            {t.importFlow}
           </button>
           <button type="button" onClick={() => setCreating(true)} className="flex h-8 items-center gap-1 rounded-[4px] bg-ink px-3 text-[13px] font-semibold text-paper hover:bg-brand-700">
-            ＋ {t.newScenario}
+            ＋ {t.newFlow}
           </button>
         </div>
         {tags.length > 0 && (
@@ -286,7 +358,7 @@ export function ScenariosPage() {
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setCreating(false)}
               onBlur={() => !name && setCreating(false)}
-              placeholder={t.newScenarioPrompt}
+              placeholder={t.newFlowPrompt}
               className="h-8 w-80 rounded-[4px] border border-brand-500 bg-sheet px-2 text-[13px] focus:outline-none"
             />
             <button type="submit" className="h-8 rounded-[4px] bg-ink px-3 text-[13px] text-paper">
@@ -296,7 +368,7 @@ export function ScenariosPage() {
         )}
         {summaries.length === 0 ? (
           <p className="rounded-[4px] border border-dashed border-slate-300 px-4 py-10 text-center text-[13px] text-slate-400">
-            {t.noScenarios}
+            {t.noFlows}
             <br />
             {t.list.askAiHint}
           </p>
@@ -333,6 +405,7 @@ export function ScenariosPage() {
             </table>
           </div>
         )}
+        <Samples />
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 use shikigami_core::secret::{ResolvedSecret, SecretError, SecretProvider, SecretRef};
-use shikigami_core::{Scenario, Step, Validator, VarDirection, VarType, VariableDef};
+use shikigami_core::{Flow, Step, Validator, VarDirection, VarType, VariableDef};
 use shikigami_runtime::{RunOptions, RunReport, RunStatus, Runtime};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -16,7 +16,7 @@ fn runtime() -> Runtime {
 }
 
 async fn run(runtime: &Runtime, step_type: &str, params: Value) -> RunReport {
-    let mut s = Scenario::new("system");
+    let mut s = Flow::new("system");
     s.variables.push(VariableDef {
         direction: VarDirection::Output,
         ..VariableDef::new("out", VarType::Any)
@@ -48,7 +48,7 @@ fn examples_validate() {
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
-            let mut s = Scenario::new("example");
+            let mut s = Flow::new("example");
             s.variables = [
                 "count", "rows", "res", "copied", "answer", "month", "csvPath",
             ]
@@ -369,7 +369,7 @@ async fn process_streams_large_stdin_through_a_filter() {
 async fn a_timed_out_process_takes_its_children_with_it() {
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("target.txt");
-    let mut s = Scenario::new("system");
+    let mut s = Flow::new("system");
     let mut step = Step::new(types::PROCESS_RUN)
         .with_param("program", json!("sh"))
         .with_param(

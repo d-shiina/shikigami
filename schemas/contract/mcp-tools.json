@@ -157,7 +157,7 @@
         },
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -195,7 +195,7 @@
           }
         },
         "required": [
-          "scenarioId",
+          "flowId",
           "step"
         ]
       },
@@ -240,7 +240,7 @@
       "class": "run"
     },
     {
-      "name": "create_scenario",
+      "name": "create_flow",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -490,12 +490,12 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId",
+          "flowId",
           "name"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "name": {
@@ -518,7 +518,7 @@
       "class": "write"
     },
     {
-      "name": "delete_project_file",
+      "name": "delete_flow",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
@@ -527,36 +527,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId",
-          "path"
-        ],
-        "type": "object",
-        "properties": {
-          "scenarioId": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          }
-        }
-      },
-      "class": "write"
-    },
-    {
-      "name": "delete_scenario",
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": true,
-        "openWorldHint": false
-      },
-      "inputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "required": [
-          "scenarioId",
+          "flowId",
           "expectedRevision"
         ],
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -590,6 +565,31 @@
       "class": "write"
     },
     {
+      "name": "delete_project_file",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "flowId",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "flowId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "write"
+    },
+    {
       "name": "diff_versions",
       "annotations": {
         "readOnlyHint": true,
@@ -598,11 +598,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "from": {
@@ -626,7 +626,7 @@
       "class": "read"
     },
     {
-      "name": "export_scenario",
+      "name": "export_flow",
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false
@@ -634,11 +634,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "includeVersions": {
@@ -652,7 +652,7 @@
       "class": "read"
     },
     {
-      "name": "extract_subscenario",
+      "name": "extract_subflow",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -661,13 +661,13 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId",
+          "flowId",
           "stepIds",
           "name"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -704,6 +704,26 @@
       "class": "write"
     },
     {
+      "name": "get_flow",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "flowId"
+        ],
+        "type": "object",
+        "properties": {
+          "flowId": {
+            "type": "string"
+          }
+        }
+      },
+      "class": "read"
+    },
+    {
       "name": "get_history",
       "annotations": {
         "readOnlyHint": true,
@@ -712,11 +732,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "limit": {
@@ -752,11 +772,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "sinceRevision": {
@@ -834,26 +854,6 @@
       "class": "read"
     },
     {
-      "name": "get_scenario",
-      "annotations": {
-        "readOnlyHint": true,
-        "openWorldHint": false
-      },
-      "inputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "required": [
-          "scenarioId"
-        ],
-        "type": "object",
-        "properties": {
-          "scenarioId": {
-            "type": "string"
-          }
-        }
-      },
-      "class": "read"
-    },
-    {
       "name": "get_step_schema",
       "annotations": {
         "readOnlyHint": true,
@@ -882,12 +882,12 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId",
+          "flowId",
           "number"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "number": {
@@ -900,7 +900,7 @@
       "class": "read"
     },
     {
-      "name": "import_scenario",
+      "name": "import_flow",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -1030,6 +1030,18 @@
       "class": "run"
     },
     {
+      "name": "list_flows",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "class": "read"
+    },
+    {
       "name": "list_project_files",
       "annotations": {
         "readOnlyHint": true,
@@ -1038,11 +1050,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           }
         }
@@ -1058,7 +1070,7 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": [
               "string",
               "null"
@@ -1074,18 +1086,6 @@
           }
         },
         "type": "object"
-      },
-      "class": "read"
-    },
-    {
-      "name": "list_scenarios",
-      "annotations": {
-        "readOnlyHint": true,
-        "openWorldHint": false
-      },
-      "inputSchema": {
-        "type": "object",
-        "properties": {}
       },
       "class": "read"
     },
@@ -1122,11 +1122,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           }
         }
@@ -1178,7 +1178,7 @@
         },
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -1215,7 +1215,7 @@
           }
         },
         "required": [
-          "scenarioId",
+          "flowId",
           "stepId",
           "position"
         ]
@@ -1231,12 +1231,12 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId",
+          "flowId",
           "path"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "path": {
@@ -1256,11 +1256,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -1285,12 +1285,12 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId",
+          "flowId",
           "stepId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -1406,12 +1406,12 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId",
+          "flowId",
           "number"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "number": {
@@ -1432,7 +1432,7 @@
       "class": "write"
     },
     {
-      "name": "run_scenario",
+      "name": "run_flow",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -1441,10 +1441,10 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "inputs": {
@@ -1492,7 +1492,7 @@
       "class": "run"
     },
     {
-      "name": "stop_scenario",
+      "name": "stop_flow",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -1666,7 +1666,7 @@
               "null"
             ]
           },
-          "scenarioId": {
+          "flowId": {
             "type": [
               "string",
               "null"
@@ -1686,11 +1686,11 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId"
+          "flowId"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -1706,7 +1706,7 @@
       "class": "write"
     },
     {
-      "name": "update_scenario",
+      "name": "update_flow",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -1798,10 +1798,10 @@
                 "properties": {
                   "op": {
                     "type": "string",
-                    "const": "updateScenario"
+                    "const": "updateFlow"
                   },
                   "patch": {
-                    "$ref": "#/$defs/ScenarioPatch"
+                    "$ref": "#/$defs/FlowPatch"
                   }
                 },
                 "required": [
@@ -2129,7 +2129,7 @@
             },
             "additionalProperties": false
           },
-          "ScenarioPatch": {
+          "FlowPatch": {
             "type": "object",
             "properties": {
               "name": {
@@ -2147,7 +2147,7 @@
               "settings": {
                 "anyOf": [
                   {
-                    "$ref": "#/$defs/ScenarioSettings"
+                    "$ref": "#/$defs/FlowSettings"
                   },
                   {
                     "type": "null"
@@ -2175,7 +2175,7 @@
             },
             "additionalProperties": false
           },
-          "ScenarioSettings": {
+          "FlowSettings": {
             "type": "object",
             "properties": {
               "defaultTimeoutMs": {
@@ -2299,7 +2299,7 @@
         },
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -2336,7 +2336,7 @@
           }
         },
         "required": [
-          "scenarioId",
+          "flowId",
           "ops"
         ]
       },
@@ -2471,7 +2471,7 @@
         },
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "expectedRevision": {
@@ -2508,7 +2508,7 @@
           }
         },
         "required": [
-          "scenarioId",
+          "flowId",
           "stepId",
           "patch"
         ]
@@ -2516,7 +2516,7 @@
       "class": "write"
     },
     {
-      "name": "validate_scenario",
+      "name": "validate_flow",
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false
@@ -2524,7 +2524,7 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$defs": {
-          "Scenario": {
+          "Flow": {
             "type": "object",
             "properties": {
               "$schema": {
@@ -2539,7 +2539,7 @@
                 "minimum": 0
               },
               "id": {
-                "$ref": "#/$defs/ScenarioId"
+                "$ref": "#/$defs/FlowId"
               },
               "name": {
                 "type": "string"
@@ -2579,7 +2579,7 @@
                 "default": []
               },
               "settings": {
-                "$ref": "#/$defs/ScenarioSettings"
+                "$ref": "#/$defs/FlowSettings"
               },
               "metadata": {
                 "$ref": "#/$defs/Metadata",
@@ -2593,7 +2593,7 @@
               "name"
             ]
           },
-          "ScenarioId": {
+          "FlowId": {
             "type": "string"
           },
           "VariableDef": {
@@ -2795,7 +2795,7 @@
               }
             ]
           },
-          "ScenarioSettings": {
+          "FlowSettings": {
             "type": "object",
             "properties": {
               "defaultTimeoutMs": {
@@ -2859,16 +2859,16 @@
         },
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": [
               "string",
               "null"
             ]
           },
-          "scenario": {
+          "flow": {
             "anyOf": [
               {
-                "$ref": "#/$defs/Scenario"
+                "$ref": "#/$defs/Flow"
               },
               {
                 "type": "null"
@@ -2889,12 +2889,12 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "required": [
-          "scenarioId",
+          "flowId",
           "path"
         ],
         "type": "object",
         "properties": {
-          "scenarioId": {
+          "flowId": {
             "type": "string"
           },
           "path": {

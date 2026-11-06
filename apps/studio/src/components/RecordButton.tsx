@@ -1,7 +1,7 @@
 // "記録" on the canvas dock: Studio steps aside while the person works in a
 // desktop app, then shows what was recorded. It becomes nodes as it is
 // (where a new node would go), or goes to the AI to be tidied up; either
-// way the raw recording stays in the scenario's logs/recordings/.
+// way the raw recording stays in the flow's logs/recordings/.
 import type { Step } from "@shikigami/schema";
 import { Circle } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -24,13 +24,13 @@ const stamp = () => {
 };
 
 export function RecordButton() {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ recording: Recording; path: string | null } | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   const record = async () => {
-    if (!scenario) return;
+    if (!flow) return;
     setBusy(true);
     setNote(null);
     try {
@@ -41,7 +41,7 @@ export function RecordButton() {
       })) as unknown as Recording;
       let path: string | null = `logs/recordings/${stamp()}.json`;
       try {
-        await projectApi.writeText(scenario.id, path, JSON.stringify(recording, null, 2), false);
+        await projectApi.writeText(flow.id, path, JSON.stringify(recording, null, 2), false);
       } catch {
         path = null;
       }
@@ -71,7 +71,7 @@ export function RecordButton() {
 }
 
 function RecordingDialog({ recording, path, onClose }: { recording: Recording; path: string | null; onClose: () => void }) {
-  const scenario = useStudio((s) => s.scenario);
+  const flow = useStudio((s) => s.flow);
   const selection = useStudio((s) => s.selection);
   const stepTypes = useStudio((s) => s.stepTypes);
   const applyOps = useStudio((s) => s.applyOps);
@@ -83,8 +83,8 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
   const [working, setWorking] = useState(false);
   const { steps, skipped } = useMemo(() => recordedSteps(recording.actions, newStepId), [recording]);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d])), [stepTypes]);
-  if (!scenario) return null;
-  const place = insertPlace(scenario.steps ?? [], selection, null);
+  if (!flow) return null;
+  const place = insertPlace(flow.steps ?? [], selection, null);
   const rows: ({ step: Step } | { skipped: string })[] = [];
   {
     let next = 0;
@@ -97,7 +97,7 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
 
   const asNodes = async () => {
     setWorking(true);
-    const ops = recordingOps(steps, scenario.parts ?? {}, place.position);
+    const ops = recordingOps(steps, flow.parts ?? {}, place.position);
     const ok = await applyOps(ops);
     setWorking(false);
     if (ok) {
@@ -110,9 +110,9 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
     try {
       const after = place.after;
       const where = after ? t.recording.askWhereAfter(after.name || plain(sentence(after, defs.get(after.type)))) : t.recording.askWhereEnd;
-      const text = tidyRequest(recording, scenario.name, path, where);
+      const text = tidyRequest(recording, flow.name, path, where);
       if (agentAvailable) {
-        const sent = await askAgent(text, { id: scenario.id, name: scenario.name, stepId: after?.id ?? null }, `${scenario.name} ・ ${t.recording.title}`);
+        const sent = await askAgent(text, { id: flow.id, name: flow.name, stepId: after?.id ?? null }, `${flow.name} ・ ${t.recording.title}`);
         if (sent) return onClose();
         setTold(t.recording.notSent(agentName));
       } else {

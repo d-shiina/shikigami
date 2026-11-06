@@ -6,12 +6,12 @@
  */
 
 /**
- * Identifier of a scenario. Also used as its file name in the store.
+ * Identifier of a flow. Also used as its file name in the store.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ScenarioId".
+ * via the `definition` "FlowId".
  */
-export type ScenarioId = string;
+export type FlowId = string;
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "OnError".
@@ -42,8 +42,8 @@ export type EditOp =
       position: Position1;
     }
   | {
-      op: "updateScenario";
-      patch: ScenarioPatch;
+      op: "updateFlow";
+      patch: FlowPatch;
     }
   | {
       op: "setVariable";
@@ -71,7 +71,7 @@ export type EditOp =
       steps: Step[];
     };
 /**
- * Identifier of a step. Unique within a scenario and stable across edits.
+ * Identifier of a step. Unique within a flow and stable across edits.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "StepId".
@@ -126,14 +126,14 @@ export type DiffKind = "added" | "removed" | "changed" | "moved";
  */
 export type ImportMode = "created" | "updated" | "copied";
 /**
- * What importing a bundle did with one of its sub-scenarios.
+ * What importing a bundle did with one of its sub-flows.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "SubscenarioImport".
+ * via the `definition` "SubflowImport".
  */
-export type SubscenarioImport = "created" | "updated" | "kept";
+export type SubflowImport = "created" | "updated" | "kept";
 /**
- * What to do when an imported scenario's ID already exists.
+ * What to do when an imported flow's ID already exists.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ImportConflict".
@@ -147,7 +147,7 @@ export type ImportConflict = "update" | "copy";
  */
 export type ObservationId = string;
 /**
- * One line of `history/<scenario-id>/evidence.jsonl`.
+ * One line of `history/<flow-id>/evidence.jsonl`.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "Evidence".
@@ -199,7 +199,7 @@ export type Evidence1 =
       steps?: StepNote[];
     };
 /**
- * Identifier of a single scenario execution.
+ * Identifier of a single flow execution.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "RunId".
@@ -246,7 +246,7 @@ export type ApprovalId = string;
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "AiAction".
  */
-export type AiAction = "runScenario" | "testStep" | "deleteScenario";
+export type AiAction = "runFlow" | "testStep" | "deleteFlow";
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ApprovalStatus".
@@ -284,9 +284,9 @@ export type ConfigType = ("text" | "number" | "boolean") | "date" | "list";
  * Bundle of the IPC/API payload types used by Studio and MCP tools.
  */
 export interface ShikigamiApi {
-  scenario: Scenario;
-  scenario_summary: ScenarioSummary;
-  new_scenario: NewScenario;
+  flow: Flow;
+  flow_summary: FlowSummary;
+  new_flow: NewFlow;
   edit_op: EditOp;
   edit_outcome: EditOutcome;
   validation_report: ValidationReport1;
@@ -295,10 +295,10 @@ export interface ShikigamiApi {
   change_event: ChangeEvent;
   error_payload: ErrorPayload;
   new_version: NewVersion;
-  scenario_version: ScenarioVersion;
+  flow_version: FlowVersion;
   version_summary: VersionSummary;
-  scenario_diff: ScenarioDiff;
-  scenario_bundle: ScenarioBundle;
+  flow_diff: FlowDiff;
+  flow_bundle: FlowBundle;
   import_outcome: ImportOutcome;
   extract_outcome: ExtractOutcome;
   import_conflict: ImportConflict;
@@ -318,21 +318,21 @@ export interface ShikigamiApi {
   config_file: ConfigFile;
 }
 /**
- * A scenario: the unit that AI clients, Studio and the Runtime share.
+ * A flow: the unit that AI clients, Studio and the Runtime share.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "Scenario".
+ * via the `definition` "Flow".
  */
-export interface Scenario {
+export interface Flow {
   /**
    * Optional JSON Schema reference for editors. Ignored by Shikigami.
    */
   $schema?: string | null;
   /**
-   * Version of the scenario file format.
+   * Version of the flow file format.
    */
   schemaVersion: number;
-  id: ScenarioId;
+  id: FlowId;
   name: string;
   description?: string;
   /**
@@ -364,7 +364,7 @@ export interface Scenario {
    * Top-level steps, executed in order.
    */
   steps?: Step[];
-  settings?: ScenarioSettings;
+  settings?: FlowSettings;
   metadata?: Metadata;
 }
 /**
@@ -441,7 +441,7 @@ export interface Step {
     [k: string]: Step[];
   };
   /**
-   * Disabled steps are skipped by the Runtime but kept in the scenario.
+   * Disabled steps are skipped by the Runtime but kept in the flow.
    */
   disabled?: boolean;
   /**
@@ -484,9 +484,9 @@ export interface RetryPolicy {
   backoffMultiplier?: number;
 }
 /**
- * Scenario-wide defaults for error handling, timeouts and retries.
+ * Flow-wide defaults for error handling, timeouts and retries.
  */
-export interface ScenarioSettings {
+export interface FlowSettings {
   /**
    * Default per-step timeout in milliseconds (30 s when omitted).
    */
@@ -494,7 +494,7 @@ export interface ScenarioSettings {
   defaultRetry?: RetryPolicy | null;
   onError?: OnError | null;
   /**
-   * Leave the files in the scenario's `work/` folder when a run starts.
+   * Leave the files in the flow's `work/` folder when a run starts.
    * By default a run starts with `work/` emptied.
    */
   keepWork?: boolean;
@@ -506,13 +506,13 @@ export interface Metadata {
   [k: string]: unknown;
 }
 /**
- * Listing entry returned by `list_scenarios`.
+ * Listing entry returned by `list_flows`.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ScenarioSummary".
+ * via the `definition` "FlowSummary".
  */
-export interface ScenarioSummary {
-  id: ScenarioId;
+export interface FlowSummary {
+  id: FlowId;
   name: string;
   description: string;
   revision: number;
@@ -521,7 +521,7 @@ export interface ScenarioSummary {
   updatedAt?: string | null;
   /**
    * Input variables (`input` and `inOut`), in declared order: what a
-   * `scenario.call` to it can pass in.
+   * `flow.call` to it can pass in.
    */
   inputs?: string[];
   /**
@@ -530,12 +530,12 @@ export interface ScenarioSummary {
   outputs?: string[];
 }
 /**
- * Input for creating a scenario.
+ * Input for creating a flow.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "NewScenario".
+ * via the `definition` "NewFlow".
  */
-export interface NewScenario {
+export interface NewFlow {
   name: string;
   description?: string;
   variables?: VariableDef[];
@@ -614,15 +614,15 @@ export interface Position1 {
   index?: number | null;
 }
 /**
- * Partial update of scenario-level fields.
+ * Partial update of flow-level fields.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ScenarioPatch".
+ * via the `definition` "FlowPatch".
  */
-export interface ScenarioPatch {
+export interface FlowPatch {
   name?: string | null;
   description?: string | null;
-  settings?: ScenarioSettings1 | null;
+  settings?: FlowSettings1 | null;
   tags?: string[] | null;
   /**
    * Replaces `requires` (plugin version ranges). Core still adds plugins
@@ -634,9 +634,9 @@ export interface ScenarioPatch {
 }
 /**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ScenarioSettings".
+ * via the `definition` "FlowSettings".
  */
-export interface ScenarioSettings1 {
+export interface FlowSettings1 {
   /**
    * Default per-step timeout in milliseconds (30 s when omitted).
    */
@@ -644,7 +644,7 @@ export interface ScenarioSettings1 {
   defaultRetry?: RetryPolicy | null;
   onError?: OnError | null;
   /**
-   * Leave the files in the scenario's `work/` folder when a run starts.
+   * Leave the files in the flow's `work/` folder when a run starts.
    * By default a run starts with `work/` emptied.
    */
   keepWork?: boolean;
@@ -656,14 +656,14 @@ export interface ScenarioSettings1 {
  * via the `definition` "EditOutcome".
  */
 export interface EditOutcome {
-  scenario: Scenario;
+  flow: Flow;
   validation: ValidationReport;
   canUndo: boolean;
   canRedo: boolean;
 }
 /**
  * Full validation of the new revision. Drafts may contain errors;
- * they must be fixed before the scenario can run.
+ * they must be fixed before the flow can run.
  */
 export interface ValidationReport {
   valid: boolean;
@@ -681,7 +681,7 @@ export interface ValidationIssue {
   code: string;
   message: string;
   /**
-   * JSON Pointer into the scenario document.
+   * JSON Pointer into the flow document.
    */
   path: string;
   stepId?: StepId | null;
@@ -758,13 +758,13 @@ export interface StepTypeDef {
   secretParams?: string[];
   /**
    * Params that name a file or folder (a string, or a list of strings).
-   * A relative path there is resolved from the scenario's folder
+   * A relative path there is resolved from the flow's folder
    * (`input/orders.xlsx`). File resources are included automatically.
    */
   pathParams?: string[];
   /**
    * Timeout when the step sets none (takes precedence over the
-   * scenario's default), for steps that wait on people (manual login).
+   * flow's default), for steps that wait on people (manual login).
    */
   defaultTimeoutMs?: number | null;
   /**
@@ -839,7 +839,7 @@ export interface PluginInfo {
 export interface HistoryEntry {
   kind: ChangeKind;
   /**
-   * Revision of the scenario after this change.
+   * Revision of the flow after this change.
    */
   revision: number;
   actor: Actor;
@@ -886,7 +886,7 @@ export interface Actor {
  * via the `definition` "ChangeEvent".
  */
 export interface ChangeEvent {
-  scenarioId: ScenarioId;
+  flowId: FlowId;
   kind: ChangeKind;
   revision: number;
   actor: Actor;
@@ -919,14 +919,14 @@ export interface NewVersion {
   note?: string;
 }
 /**
- * One named snapshot of a scenario.
+ * One named snapshot of a flow.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ScenarioVersion".
+ * via the `definition` "FlowVersion".
  */
-export interface ScenarioVersion {
+export interface FlowVersion {
   /**
-   * Per-scenario sequence number (1, 2, …). This is how versions are referenced.
+   * Per-flow sequence number (1, 2, …). This is how versions are referenced.
    */
   number: number;
   /**
@@ -938,13 +938,13 @@ export interface ScenarioVersion {
   createdAt: string;
   createdBy: Actor;
   /**
-   * Scenario revision the snapshot was taken from.
+   * Flow revision the snapshot was taken from.
    */
   revision: number;
-  scenario: Scenario;
+  flow: Flow;
 }
 /**
- * Listing entry for versions (no scenario body).
+ * Listing entry for versions (no flow body).
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "VersionSummary".
@@ -962,9 +962,9 @@ export interface VersionSummary {
  * Differences from `from` to `to`.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ScenarioDiff".
+ * via the `definition` "FlowDiff".
  */
-export interface ScenarioDiff {
+export interface FlowDiff {
   from: DiffSide;
   to: DiffSide;
   /**
@@ -972,11 +972,11 @@ export interface ScenarioDiff {
    */
   identical: boolean;
   /**
-   * Scenario-level fields: name, description, tags, settings, and each
+   * Flow-level fields: name, description, tags, settings, and each
    * named part (`parts.<name>`; `before` / `after` is absent when it was
    * added / removed).
    */
-  scenario: FieldChange[];
+  flow: FieldChange[];
   variables: VariableChange[];
   steps: StepChange[];
 }
@@ -1055,27 +1055,27 @@ export interface StepLocation {
   index: number;
 }
 /**
- * File format for moving a scenario (and its versions) between workspaces.
+ * File format for moving a flow (and its versions) between workspaces.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ScenarioBundle".
+ * via the `definition` "FlowBundle".
  */
-export interface ScenarioBundle {
+export interface FlowBundle {
   /**
-   * Always `shikigami.scenarioBundle`.
+   * Always `shikigami.flowBundle`.
    */
   format: string;
   formatVersion: number;
   exportedAt: string;
-  scenario: Scenario;
-  versions?: ScenarioVersion[];
+  flow: Flow;
+  versions?: FlowVersion[];
   /**
-   * Every scenario `scenario` calls (directly or through others), without
+   * Every flow `flow` calls (directly or through others), without
    * versions, so the bundle runs on its own.
    */
-  subscenarios?: Scenario[];
+  subflows?: Flow[];
   /**
-   * Files of the scenarios' folders (`input/`, `config/`, `templates/`
+   * Files of the flows' folders (`input/`, `config/`, `templates/`
    * and the author's own; not `output/`, `work/` or `logs/`).
    */
   files?: BundledFile[];
@@ -1088,9 +1088,9 @@ export interface ScenarioBundle {
  */
 export interface BundledFile {
   /**
-   * Identifier of a scenario. Also used as its file name in the store.
+   * Identifier of a flow. Also used as its file name in the store.
    */
-  scenarioId: string;
+  flowId: string;
   /**
    * Relative to that folder, `/`-separated.
    */
@@ -1101,7 +1101,7 @@ export interface BundledFile {
   data: string;
 }
 /**
- * Result of importing a bundle or scenario file.
+ * Result of importing a bundle or flow file.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ImportOutcome".
@@ -1113,44 +1113,44 @@ export interface ImportOutcome {
    */
   versionsAdded: number;
   /**
-   * The bundle's sub-scenarios and what happened to each.
+   * The bundle's sub-flows and what happened to each.
    */
-  subscenarios?: ImportedSubscenario[];
-  scenario: Scenario;
+  subflows?: ImportedSubflow[];
+  flow: Flow;
   validation: ValidationReport2;
   canUndo: boolean;
   canRedo: boolean;
 }
 /**
- * One sub-scenario of an imported bundle.
+ * One sub-flow of an imported bundle.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ImportedSubscenario".
+ * via the `definition` "ImportedSubflow".
  */
-export interface ImportedSubscenario {
-  id: ScenarioId;
+export interface ImportedSubflow {
+  id: FlowId;
   name: string;
-  mode: SubscenarioImport;
+  mode: SubflowImport;
 }
 /**
  * Full validation of the new revision. Drafts may contain errors;
- * they must be fixed before the scenario can run.
+ * they must be fixed before the flow can run.
  */
 export interface ValidationReport2 {
   valid: boolean;
   issues: ValidationIssue[];
 }
 /**
- * Result of moving steps into a new sub-scenario.
+ * Result of moving steps into a new sub-flow.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ExtractOutcome".
  */
 export interface ExtractOutcome {
-  subscenario: EditOutcome1;
+  subflow: EditOutcome1;
   caller: EditOutcome2;
   /**
-   * Identifier of a step. Unique within a scenario and stable across edits.
+   * Identifier of a step. Unique within a flow and stable across edits.
    */
   callStepId: string;
 }
@@ -1158,7 +1158,7 @@ export interface ExtractOutcome {
  * Result of a committed change.
  */
 export interface EditOutcome1 {
-  scenario: Scenario;
+  flow: Flow;
   validation: ValidationReport;
   canUndo: boolean;
   canRedo: boolean;
@@ -1167,7 +1167,7 @@ export interface EditOutcome1 {
  * Result of a committed change.
  */
 export interface EditOutcome2 {
-  scenario: Scenario;
+  flow: Flow;
   validation: ValidationReport;
   canUndo: boolean;
   canRedo: boolean;
@@ -1215,9 +1215,9 @@ export interface ChangeNote {
  * via the `definition` "ReviewTimeline".
  */
 export interface ReviewTimeline {
-  scenarioId: ScenarioId;
+  flowId: FlowId;
   /**
-   * Current revision of the scenario.
+   * Current revision of the flow.
    */
   revision: number;
   /**
@@ -1227,7 +1227,7 @@ export interface ReviewTimeline {
   sinceRevision: number;
   lastApproval?: Evidence | null;
   /**
-   * The latest review when it sent the scenario back and nobody approved
+   * The latest review when it sent the flow back and nobody approved
    * it since: what the AI still has to address.
    */
   openFeedback?: Evidence | null;
@@ -1326,11 +1326,11 @@ export interface ObservationContent {
  * via the `definition` "ObservationLink".
  */
 export interface ObservationLink {
-  scenarioId: ScenarioId;
+  flowId: FlowId;
   revision: number;
 }
 /**
- * The published version of a scenario (what `shikigami run <id>` and
+ * The published version of a flow (what `shikigami run <id>` and
  * other unattended runs execute).
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -1376,8 +1376,8 @@ export interface PublishInput {
   expectedRevision?: number | null;
 }
 /**
- * One line of `versions/<scenario-id>/publish.jsonl`: which version runs
- * unattended from now on (`None`: none, the scenario was withdrawn). The
+ * One line of `versions/<flow-id>/publish.jsonl`: which version runs
+ * unattended from now on (`None`: none, the flow was withdrawn). The
  * last line is in force; earlier lines are the record of who published
  * what, kept in the shared part of the workspace.
  *
@@ -1416,10 +1416,10 @@ export interface Policy {
   apps?: string[];
   ai?: AiPolicy;
   /**
-   * Per-scenario settings, keyed by scenario ID.
+   * Per-flow settings, keyed by flow ID.
    */
-  scenarios?: {
-    [k: string]: ScenarioPolicy;
+  flows?: {
+    [k: string]: FlowPolicy;
   };
   records?: RecordsPolicy;
   remote?: RemotePolicy;
@@ -1433,16 +1433,16 @@ export interface Policy {
  * asked.
  */
 export interface AiPolicy {
-  runScenario?: ByRisk;
+  runFlow?: ByRisk;
   testStep?: ByRisk1;
   /**
-   * `delete_scenario` (moves to the trash).
+   * `delete_flow` (moves to the trash).
    */
-  deleteScenario?: ("allow" | "deny") | "ask";
+  deleteFlow?: ("allow" | "deny") | "ask";
 }
 /**
- * `run_scenario`, by the riskiest step the run may execute (including
- * the scenarios it calls).
+ * `run_flow`, by the riskiest step the run may execute (including
+ * the flows it calls).
  */
 export interface ByRisk {
   /**
@@ -1459,8 +1459,8 @@ export interface ByRisk {
   dangerous?: ("allow" | "deny") | "ask";
 }
 /**
- * `test_step`, by the step's risk (a `scenario.call` counts as the
- * riskiest step of the scenarios it calls).
+ * `test_step`, by the step's risk (a `flow.call` counts as the
+ * riskiest step of the flows it calls).
  */
 export interface ByRisk1 {
   /**
@@ -1477,14 +1477,14 @@ export interface ByRisk1 {
   dangerous?: ("allow" | "deny") | "ask";
 }
 /**
- * Settings for one scenario.
+ * Settings for one flow.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
- * via the `definition` "ScenarioPolicy".
+ * via the `definition` "FlowPolicy".
  */
-export interface ScenarioPolicy {
+export interface FlowPolicy {
   /**
-   * Whether an AI may run or test this scenario. Overrides `ai.runScenario`
+   * Whether an AI may run or test this flow. Overrides `ai.runFlow`
    * (and `ai.testStep` for calls of it) when it is stricter.
    */
   aiRun?: Decision | null;
@@ -1521,11 +1521,11 @@ export interface RemotePolicy {
    */
   manager?: string | null;
   /**
-   * Scenario IDs it may start (`"*"` for every scenario). Empty: none.
+   * Flow IDs it may start (`"*"` for every flow). Empty: none.
    */
-  scenarios?: string[];
+  flows?: string[];
   /**
-   * Run scenarios the server sends as bundles (not only the published
+   * Run flows the server sends as bundles (not only the published
    * versions in this workspace).
    */
   acceptBundles?: boolean;
@@ -1542,9 +1542,9 @@ export interface NotifyRule {
    */
   on?: RunOutcome[];
   /**
-   * Only these scenario IDs (default: every scenario).
+   * Only these flow IDs (default: every flow).
    */
-  scenarios?: string[];
+  flows?: string[];
   /**
    * The webhook URL (`https://`). Anyone with it can post to the channel:
    * treat it like a password.
@@ -1567,8 +1567,8 @@ export interface ApprovalRequest {
   status: ApprovalStatus;
   requestedAt: string;
   requestedBy: Actor;
-  scenarioId?: ScenarioId | null;
-  scenarioName?: string | null;
+  flowId?: FlowId | null;
+  flowName?: string | null;
   risk: RiskLevel;
   stepTypes?: string[];
   subject: unknown;
@@ -1577,13 +1577,13 @@ export interface ApprovalRequest {
   decidedBy?: Actor | null;
 }
 /**
- * What a scenario's project folder holds.
+ * What a flow's project folder holds.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ProjectFiles".
  */
 export interface ProjectFiles {
-  scenarioId: ScenarioId;
+  flowId: FlowId;
   /**
    * Absolute path of the folder.
    */
@@ -1594,7 +1594,7 @@ export interface ProjectFiles {
    */
   folders: string[];
   /**
-   * Every file except `scenario.json`, sorted by path.
+   * Every file except `flow.json`, sorted by path.
    */
   files: ProjectFile[];
 }
@@ -1619,7 +1619,7 @@ export interface ProjectFile {
   inUse?: boolean;
 }
 /**
- * A settings file (`config/*.json`) kept out of the scenario: values a
+ * A settings file (`config/*.json`) kept out of the flow: values a
  * person changes without touching the flow (a cut-off day, a recipient, a
  * folder). Studio edits it as a form; `config.read` turns it into
  * `{ "締め日": 25, … }`.
@@ -1672,12 +1672,12 @@ export interface Metadata1 {
  * via the `definition` "AiPolicy".
  */
 export interface AiPolicy1 {
-  runScenario?: ByRisk;
+  runFlow?: ByRisk;
   testStep?: ByRisk1;
   /**
-   * `delete_scenario` (moves to the trash).
+   * `delete_flow` (moves to the trash).
    */
-  deleteScenario?: ("allow" | "deny") | "ask";
+  deleteFlow?: ("allow" | "deny") | "ask";
 }
 /**
  * A decision for each step risk level.
@@ -1718,7 +1718,7 @@ export interface RecordsPolicy1 {
 }
 /**
  * Runs a management server may ask this PC for. Everything is closed by
- * default; `scenarios.<id>.unattended: false` still refuses a scenario.
+ * default; `flows.<id>.unattended: false` still refuses a flow.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "RemotePolicy".
@@ -1733,11 +1733,11 @@ export interface RemotePolicy1 {
    */
   manager?: string | null;
   /**
-   * Scenario IDs it may start (`"*"` for every scenario). Empty: none.
+   * Flow IDs it may start (`"*"` for every flow). Empty: none.
    */
-  scenarios?: string[];
+  flows?: string[];
   /**
-   * Run scenarios the server sends as bundles (not only the published
+   * Run flows the server sends as bundles (not only the published
    * versions in this workspace).
    */
   acceptBundles?: boolean;
@@ -1757,17 +1757,17 @@ export type RunEventEnvelope = {
   seq: number;
   at: string;
   /**
-   * The `scenario.call` steps (outermost first) the event happened
-   * inside; empty for the scenario that was started. Step IDs in the
-   * event belong to the innermost called scenario.
+   * The `flow.call` steps (outermost first) the event happened
+   * inside; empty for the flow that was started. Step IDs in the
+   * event belong to the innermost called flow.
    */
   callPath?: StepId[];
 } & RunEventEnvelope1;
 export type RunEventEnvelope1 =
   | {
       type: "runStarted";
-      scenarioId: ScenarioId;
-      scenarioName: string;
+      flowId: FlowId;
+      flowName: string;
       revision: number;
       origin?: RunOrigin;
     }
@@ -1968,8 +1968,8 @@ export interface RunError {
  */
 export interface RunReport {
   runId: RunId;
-  scenarioId: ScenarioId;
-  scenarioName: string;
+  flowId: FlowId;
+  flowName: string;
   revision: number;
   /**
    * Named version whose content was run, when it matches one.
@@ -1986,21 +1986,21 @@ export interface RunReport {
     [k: string]: unknown;
   };
   /**
-   * The scenarios `scenario.call` steps could run, as they were when the
+   * The flows `flow.call` steps could run, as they were when the
    * run started.
    */
-  subscenarios?: SubscenarioRef[];
+  subflows?: SubflowRef[];
   origin?: RunOrigin1;
 }
 /**
- * A called scenario's content as used by a run.
+ * A called flow's content as used by a run.
  *
  * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
- * via the `definition` "SubscenarioRef".
+ * via the `definition` "SubflowRef".
  */
-export interface SubscenarioRef {
-  scenarioId: ScenarioId;
-  scenarioName: string;
+export interface SubflowRef {
+  flowId: FlowId;
+  flowName: string;
   revision: number;
   /**
    * Named version its content matches, if any.
@@ -2035,7 +2035,7 @@ export interface RunOrigin1 {
  */
 export interface RunSnapshot {
   runId: RunId;
-  scenarioId: ScenarioId;
+  flowId: FlowId;
   status: RunStatus;
   currentStep?: StepId | null;
   stepsExecuted: number;

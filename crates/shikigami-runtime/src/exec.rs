@@ -1,4 +1,4 @@
-//! The scenario interpreter.
+//! The flow interpreter.
 //!
 //! Control flow (`control.*`) and variable assignment are executed here;
 //! every other step type is dispatched to a registered [`ActionHandler`].
@@ -15,11 +15,11 @@ use shikigami_core::call::MAX_CALL_DEPTH;
 use shikigami_core::expr::{self, Expr};
 use shikigami_core::policy::{Policy, TargetDef};
 use shikigami_core::project;
-use shikigami_core::registry::{builtin, control, is_control_type, scenario};
+use shikigami_core::registry::{builtin, control, flow, is_control_type};
 use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef, resource_keys};
 use shikigami_core::secret::SecretProvider;
 use shikigami_core::validate::LAST_ERROR_VAR;
-use shikigami_core::{OnError, RetryPolicy, RunId, Scenario, ScenarioId, Step, StepId};
+use shikigami_core::{Flow, FlowId, OnError, RetryPolicy, RunId, Step, StepId};
 use time::OffsetDateTime;
 use tokio::sync::{OwnedMutexGuard, Semaphore, mpsc};
 use tokio::task::JoinSet;
@@ -47,7 +47,7 @@ const MIN_SECRET_PART_CHARS: usize = 4;
 #[derive(Clone)]
 pub struct Emitter {
     inner: Arc<EmitterInner>,
-    /// `scenario.call` steps this emitter reports from inside.
+    /// `flow.call` steps this emitter reports from inside.
     call_path: Arc<[StepId]>,
 }
 
@@ -59,7 +59,7 @@ struct EmitterInner {
     tx: mpsc::UnboundedSender<RunEventEnvelope>,
     secrets: RwLock<Vec<String>>,
     snapshot: Arc<Mutex<RunSnapshot>>,
-    /// The readable log in the scenario's `logs/` folder, for full runs.
+    /// The readable log in the flow's `logs/` folder, for full runs.
     log: Mutex<Option<RunLog>>,
 }
 
@@ -83,7 +83,7 @@ impl Emitter {
         }
     }
 
-    /// The same run, reporting from inside the scenario `call` runs.
+    /// The same run, reporting from inside the flow `call` runs.
     fn nested(&self, call: &StepId) -> Self {
         let mut path = self.call_path.to_vec();
         path.push(call.clone());
@@ -416,12 +416,12 @@ pub(crate) const FINALLY_GRACE: Duration = Duration::from_secs(60);
 // ---------------------------------------------------------------------------
 // Interpreter
 
-pub(crate) enum Flow {
+pub(crate) enum Proceed {
     Next,
     Break,
     Continue,
     /// Interactive runs: read the step again from the current revision and
-    /// run it (after a pause that swapped the scenario, or a retry).
+    /// run it (after a pause that swapped the flow, or a retry).
     Retry,
 }
 
@@ -436,7 +436,7 @@ impl From<RunError> for Interrupt {
     }
 }
 
-type StepResult = Result<Flow, Interrupt>;
+type StepResult = Result<Proceed, Interrupt>;
 
 pub(crate) struct Executor {
     pub run_id: RunId,
@@ -445,11 +445,11 @@ pub(crate) struct Executor {
     pub resource_defs: Arc<HashMap<String, Vec<ResourceDef>>>,
     /// Params naming files or folders, per step type.
     pub path_params: Arc<HashMap<String, Vec<String>>>,
-    /// Folder of the scenario this executor runs: relative paths in path
+    /// Folder of the flow this executor runs: relative paths in path
     /// params are resolved from it.
     pub project_dir: Option<Arc<Path>>,
-    /// Folders of the scenarios `scenario.call` can run.
-    pub project_dirs: Arc<HashMap<ScenarioId, PathBuf>>,
+    /// Folders of the flows `flow.call` can run.
+    pub project_dirs: Arc<HashMap<FlowId, PathBuf>>,
     /// Step types with their own default timeout.
     pub default_timeouts: Arc<HashMap<String, u64>>,
     pub secrets: Option<Arc<dyn SecretProvider>>,
@@ -465,18 +465,18 @@ pub(crate) struct Executor {
     pub default_on_error: OnError,
     pub resources: Arc<ResourceLocks>,
     /// Set for interactive runs, on the main line only (not in parallel
-    /// branches), called scenarios included.
+    /// branches), called flows included.
     pub debug: Option<Arc<Debugger>>,
-    /// The called scenario this runs, if any: its steps are the snapshot
+    /// The called flow this runs, if any: its steps are the snapshot
     /// the run was given, not the live revision `debug` holds, so blocks run
     /// as written (still pausing) and a swapped-in revision waits for the
     /// caller.
-    pub in_call: Option<ScenarioId>,
+    pub in_call: Option<FlowId>,
     /// How many enclosing steps handle an error (a `try` with a `catch`, a
     /// `wait.until` with `onError: continue`): errors there do not pause.
     pub handled_depth: u32,
-    /// Scenarios `scenario.call` can run, as they were when the run started.
-    pub library: Arc<HashMap<ScenarioId, Arc<Scenario>>>,
+    /// Flows `flow.call` can run, as they were when the run started.
+    pub library: Arc<HashMap<FlowId, Arc<Flow>>>,
     /// Params naming sites and programs, per step type.
     pub target_defs: Arc<HashMap<String, Vec<TargetDef>>>,
     /// The workspace policy as it was when the run started.
@@ -508,14 +508,14 @@ fn duration_ms(start: Instant) -> u64 {
 }
 
 impl Executor {
-    pub(crate) fn new_from(scenario: &Scenario, base: Executor) -> Self {
+    pub(crate) fn new_from(flow: &Flow, base: Executor) -> Self {
         Self {
-            default_timeout_ms: scenario
+            default_timeout_ms: flow
                 .settings
                 .default_timeout_ms
                 .unwrap_or(base.default_timeout_ms),
-            default_retry: scenario.settings.default_retry.or(base.default_retry),
-            default_on_error: scenario.settings.on_error.unwrap_or(base.default_on_error),
+            default_retry: flow.settings.default_retry.or(base.default_retry),
+            default_on_error: flow.settings.on_error.unwrap_or(base.default_on_error),
             ..base
         }
     }
@@ -590,7 +590,7 @@ impl Executor {
     fn sub_block<'a>(&'a mut self, parent: &'a Step, name: &'a str) -> BoxFuture<'a, StepResult> {
         match self.debug.clone() {
             Some(debug) => match self.in_call.clone() {
-                Some(scenario) => self.called_block(debug, scenario, parent.block(name)),
+                Some(flow) => self.called_block(debug, flow, parent.block(name)),
                 None => self.live_block(
                     debug,
                     BlockKey::Child {
@@ -603,7 +603,7 @@ impl Executor {
         }
     }
 
-    /// Runs the scenario's top-level steps.
+    /// Runs the flow's top-level steps.
     pub(crate) fn top_block<'a>(&'a mut self, steps: &'a [Step]) -> BoxFuture<'a, StepResult> {
         match self.debug.clone() {
             Some(debug) => self.live_block(debug, BlockKey::Top),
@@ -617,23 +617,23 @@ impl Executor {
             let mut prev: Option<StepId> = None;
             let result = loop {
                 // A revision swapped in while paused inside a call applies
-                // once the run is back in the open scenario.
+                // once the run is back in the open flow.
                 if debug.take_updated() {
-                    self.adopt(&debug.scenario());
+                    self.adopt(&debug.flow());
                 }
                 let Some(step) = debug.next_step(&key, prev.as_ref()) else {
-                    break Ok(Flow::Next);
+                    break Ok(Proceed::Next);
                 };
                 debug.set_current(Some(step.id.clone()));
                 match self.step(&step).await {
                     // A step the new revision removed (skipped while paused)
                     // leaves the cursor where it was.
-                    Ok(Flow::Next) if !debug.in_block(&key, &step.id) => {}
-                    Ok(Flow::Next) => {
+                    Ok(Proceed::Next) if !debug.in_block(&key, &step.id) => {}
+                    Ok(Proceed::Next) => {
                         debug.finished(step.id.clone());
                         prev = Some(step.id);
                     }
-                    Ok(Flow::Retry) => {}
+                    Ok(Proceed::Retry) => {}
                     other => break other,
                 }
             };
@@ -642,25 +642,25 @@ impl Executor {
         })
     }
 
-    /// Runs a block of a called scenario in an interactive run: the steps
+    /// Runs a block of a called flow in an interactive run: the steps
     /// as given, pausing like the caller's, and running a step again when a
     /// pause says so.
     fn called_block<'a>(
         &'a mut self,
         debug: Arc<Debugger>,
-        scenario: ScenarioId,
+        flow: FlowId,
         steps: &'a [Step],
     ) -> BoxFuture<'a, StepResult> {
         Box::pin(async move {
-            debug.push_frame(BlockKey::Called { scenario });
+            debug.push_frame(BlockKey::Called { flow });
             let mut index = 0;
             let result = loop {
                 let Some(step) = steps.get(index) else {
-                    break Ok(Flow::Next);
+                    break Ok(Proceed::Next);
                 };
                 match self.step(step).await {
-                    Ok(Flow::Next) => index += 1,
-                    Ok(Flow::Retry) => {}
+                    Ok(Proceed::Next) => index += 1,
+                    Ok(Proceed::Retry) => {}
                     other => break other,
                 }
             };
@@ -683,14 +683,14 @@ impl Executor {
     }
 
     /// Whether `error` at `step` should pause the run: interactive, and
-    /// nothing in the scenario handles it.
+    /// nothing in the flow handles it.
     fn pauses_on_error(&self, step: &Step, error: &RunError) -> bool {
         let Some(debug) = &self.debug else {
             return false;
         };
         let own_on_error = !is_control_type(&step.step_type)
             || step.step_type == control::WAIT_UNTIL
-            || step.step_type == scenario::CALL;
+            || step.step_type == flow::CALL;
         debug.pause_on_error()
             && !debug.is_given_up(error)
             && self.handled_depth == 0
@@ -732,7 +732,7 @@ impl Executor {
             reason,
             error: error.map(|e| self.emitter.mask_error(e.clone())),
             variables: self.variable_values(),
-            revision: debug.scenario().revision,
+            revision: debug.flow().revision,
         });
         let waited = Instant::now();
         let command = tokio::select! {
@@ -748,7 +748,7 @@ impl Executor {
         // adopts a new revision when it gets back (see `live_block`).
         let updated = self.in_call.is_none() && debug.take_updated();
         if updated {
-            self.adopt(&debug.scenario());
+            self.adopt(&debug.flow());
         }
         self.emitter
             .update_snapshot(|s| s.status = RunStatus::Running);
@@ -762,22 +762,22 @@ impl Executor {
                 DebugCommand::Abort => ResumeAction::Abort,
                 _ => ResumeAction::Continue,
             },
-            revision: updated.then(|| debug.scenario().revision),
+            revision: updated.then(|| debug.flow().revision),
         });
         Ok((command, updated))
     }
 
     /// Catches up with a revision swapped in while paused: newly declared
     /// variables get their defaults (values of the others stay), and the
-    /// scenario settings apply from now on.
-    fn adopt(&mut self, scenario: &Scenario) {
-        self.secret_vars = scenario
+    /// flow settings apply from now on.
+    fn adopt(&mut self, flow: &Flow) {
+        self.secret_vars = flow
             .variables
             .iter()
             .filter(|v| v.secret)
             .map(|v| v.name.clone())
             .collect();
-        for var in &scenario.variables {
+        for var in &flow.variables {
             if !self.vars.contains_key(&var.name) {
                 let value = var.default.clone().unwrap_or(Value::Null);
                 if var.secret {
@@ -786,12 +786,12 @@ impl Executor {
                 self.set_var(&var.name, value, None);
             }
         }
-        self.default_timeout_ms = scenario
+        self.default_timeout_ms = flow
             .settings
             .default_timeout_ms
             .unwrap_or(DEFAULT_TIMEOUT_MS);
-        self.default_retry = scenario.settings.default_retry;
-        self.default_on_error = scenario.settings.on_error.unwrap_or(OnError::Fail);
+        self.default_retry = flow.settings.default_retry;
+        self.default_on_error = flow.settings.on_error.unwrap_or(OnError::Fail);
     }
 
     /// Total time this run has spent paused so far.
@@ -824,11 +824,11 @@ impl Executor {
         Box::pin(async move {
             for step in steps {
                 match self.step(step).await? {
-                    Flow::Next => {}
-                    flow => return Ok(flow),
+                    Proceed::Next => {}
+                    other => return Ok(other),
                 }
             }
-            Ok(Flow::Next)
+            Ok(Proceed::Next)
         })
     }
 
@@ -836,7 +836,7 @@ impl Executor {
         self.check_cancel()?;
         if step.disabled {
             self.skipped(step);
-            return Ok(Flow::Next);
+            return Ok(Proceed::Next);
         }
         if let Some(debug) = self.debug.clone()
             && let Some(reason) = debug.should_pause(&step.id)
@@ -844,13 +844,13 @@ impl Executor {
             match self.pause(&debug, reason, step, None).await? {
                 (DebugCommand::Skip, _) => {
                     self.skipped(step);
-                    return Ok(Flow::Next);
+                    return Ok(Proceed::Next);
                 }
                 (DebugCommand::Abort, _) => return Err(Interrupt::Cancelled),
                 // The step may have changed: run it as it is now.
                 (_, true) => {
                     debug.skip_pause_once(step.id.clone());
-                    return Ok(Flow::Retry);
+                    return Ok(Proceed::Retry);
                 }
                 _ => {}
             }
@@ -910,10 +910,7 @@ impl Executor {
             // A wait that times out or a call that fails may be skipped
             // with onError: continue; other control steps only pass on
             // their children's errors.
-            if !matches!(
-                step.step_type.as_str(),
-                control::WAIT_UNTIL | scenario::CALL
-            ) {
+            if !matches!(step.step_type.as_str(), control::WAIT_UNTIL | flow::CALL) {
                 return self.on_failure(step, result).await;
             }
         }
@@ -930,7 +927,7 @@ impl Executor {
                 );
                 let value = error.to_value();
                 self.set_var(LAST_ERROR_VAR, value, Some(&step.id));
-                Ok(Flow::Next)
+                Ok(Proceed::Next)
             }
             other => other,
         }
@@ -957,7 +954,7 @@ impl Executor {
                     Some(step.id.clone()),
                 );
                 self.skipped(step);
-                Ok(Flow::Next)
+                Ok(Proceed::Next)
             }
             (DebugCommand::Abort, _) => {
                 debug.give_up(error);
@@ -966,7 +963,7 @@ impl Executor {
             // Retry, or resume (which starts with the failed step).
             _ => {
                 debug.skip_pause_once(step.id.clone());
-                Ok(Flow::Retry)
+                Ok(Proceed::Retry)
             }
         }
     }
@@ -1006,11 +1003,11 @@ impl Executor {
                         }
                         .into());
                     }
-                    if let Flow::Break = self.sub_block(step, "body").await? {
+                    if let Proceed::Break = self.sub_block(step, "body").await? {
                         break;
                     }
                 }
-                Ok(Flow::Next)
+                Ok(Proceed::Next)
             }
             control::REPEAT => {
                 let count = self.eval_number(step, "count")?;
@@ -1030,11 +1027,11 @@ impl Executor {
                     if let Some(name) = &index_var {
                         self.set_var(name, Value::from(i), Some(&step.id));
                     }
-                    if let Flow::Break = self.sub_block(step, "body").await? {
+                    if let Proceed::Break = self.sub_block(step, "body").await? {
                         break;
                     }
                 }
-                Ok(Flow::Next)
+                Ok(Proceed::Next)
             }
             control::FOR_EACH => self.for_each(step).await,
             control::TRY => {
@@ -1082,16 +1079,16 @@ impl Executor {
                     return result;
                 }
                 match self.sub_block(step, "finally").await {
-                    Ok(Flow::Next) => result,
+                    Ok(Proceed::Next) => result,
                     other => other,
                 }
             }
             control::GROUP => self.sub_block(step, "body").await,
             control::PARALLEL => self.parallel(step).await,
             control::WAIT_UNTIL => self.wait_until(step).await,
-            scenario::CALL => self.call(step).await,
-            control::BREAK => Ok(Flow::Break),
-            control::CONTINUE => Ok(Flow::Continue),
+            flow::CALL => self.call(step).await,
+            control::BREAK => Ok(Proceed::Break),
+            control::CONTINUE => Ok(Proceed::Continue),
             control::FAIL => {
                 let message = expr::render_value(
                     &Value::String(param_str(step, "message")?.to_owned()),
@@ -1102,7 +1099,7 @@ impl Executor {
                     .params
                     .get("code")
                     .and_then(Value::as_str)
-                    .unwrap_or("SCENARIO_FAILED");
+                    .unwrap_or("FLOW_FAILED");
                 Err(RunError::new(code, expr::to_display(&message)).into())
             }
             other => Err(RunError::new(
@@ -1119,7 +1116,7 @@ impl Executor {
     async fn parallel(&mut self, step: &Step) -> StepResult {
         let branches = step.block("branches");
         if branches.is_empty() {
-            return Ok(Flow::Next);
+            return Ok(Proceed::Next);
         }
         let limit = step
             .params
@@ -1152,7 +1149,7 @@ impl Executor {
                 let result = executor
                     .block(std::slice::from_ref(&branch))
                     .await
-                    .map(|_| Flow::Next);
+                    .map(|_| Proceed::Next);
                 // Fail fast: stop queued branches before freeing the permit
                 // they are waiting for.
                 if matches!(result, Err(Interrupt::Failed(_))) {
@@ -1225,7 +1222,7 @@ impl Executor {
         for (name, (_, value)) in changed {
             self.vars.insert(name, value);
         }
-        Ok(Flow::Next)
+        Ok(Proceed::Next)
     }
 
     async fn for_each(&mut self, step: &Step) -> StepResult {
@@ -1260,11 +1257,11 @@ impl Executor {
             for (index, item) in items.into_iter().enumerate() {
                 self.check_cancel()?;
                 self.bind_item(step, index, item);
-                let flow = self.sub_block(step, "body").await?;
+                let proceed = self.sub_block(step, "body").await?;
                 if let Some(collect) = &collect {
                     results.push(collect.eval(&self.vars).map_err(expr_error)?);
                 }
-                if let Flow::Break = flow {
+                if let Proceed::Break = proceed {
                     break;
                 }
             }
@@ -1273,7 +1270,7 @@ impl Executor {
         if let Some(name) = &step.save_as {
             self.set_var(name, Value::Array(results), Some(&step.id));
         }
-        Ok(Flow::Next)
+        Ok(Proceed::Next)
     }
 
     fn bind_item(&mut self, step: &Step, index: usize, item: Value) {
@@ -1364,16 +1361,16 @@ impl Executor {
         }
     }
 
-    /// Runs the called scenario on its own variables: `inputs` (rendered
+    /// Runs the called flow on its own variables: `inputs` (rendered
     /// here) start them, `outputs` copy its output variables back. A
     /// failure inside becomes this step's failure, with where it happened
-    /// in `details.subScenario`.
+    /// in `details.subFlow`.
     async fn call(&mut self, step: &Step) -> StepResult {
-        let target = ScenarioId::new(param_str(step, "scenario")?);
+        let target = FlowId::new(param_str(step, "flow")?);
         let Some(callee) = self.library.get(&target).cloned() else {
             return Err(RunError::new(
                 "CALL_TARGET_NOT_FOUND",
-                format!("scenario '{target}' was not provided to this run"),
+                format!("flow '{target}' was not provided to this run"),
             )
             .into());
         };
@@ -1439,7 +1436,7 @@ impl Executor {
                         details: Some(serde_json::json!({ "timeoutMs": ms })),
                         ..RunError::new(
                             "STEP_TIMEOUT",
-                            format!("the called scenario did not finish within {ms} ms"),
+                            format!("the called flow did not finish within {ms} ms"),
                         )
                     })),
                 }
@@ -1474,10 +1471,10 @@ impl Executor {
                     None => Map::new(),
                 };
                 // A nested call already said where inside it failed.
-                details.entry("subScenario").or_insert_with(|| {
+                details.entry("subFlow").or_insert_with(|| {
                     serde_json::json!({
-                        "scenarioId": callee.id,
-                        "scenarioName": callee.name,
+                        "flowId": callee.id,
+                        "flowName": callee.name,
                         "stepId": error.step_id,
                         "stepType": error.step_type,
                     })
@@ -1493,7 +1490,7 @@ impl Executor {
             // The call itself failed (timeout): no step inside to point at.
             Err(interrupt) => return Err(interrupt),
         }
-        Ok(Flow::Next)
+        Ok(Proceed::Next)
     }
 
     /// Polls `condition` (after running `check`) until it holds or the
@@ -1524,7 +1521,7 @@ impl Executor {
             self.handled_block(handles, step, "check").await?;
             polls += 1;
             if expr::truthy(&condition.eval(&self.vars).map_err(expr_error)?) {
-                return Ok(Flow::Next);
+                return Ok(Proceed::Next);
             }
             let elapsed_ms = duration_ms(started).saturating_sub(self.paused_ms() - paused_before);
             if elapsed_ms >= timeout_ms {
@@ -1652,7 +1649,7 @@ impl Executor {
                     if let Some(name) = &step.save_as {
                         self.set_var(name, value, Some(&step.id));
                     }
-                    return Ok(Flow::Next);
+                    return Ok(Proceed::Next);
                 }
                 Err(err) => {
                     let will_retry = err.retryable && attempt < max_attempts;
@@ -1716,7 +1713,7 @@ impl Executor {
                     error: None,
                     will_retry: false,
                 });
-                Ok(Flow::Next)
+                Ok(Proceed::Next)
             }
             Err(e) => {
                 let error = e.at_step(&step.id, &step.step_type);
@@ -1734,7 +1731,7 @@ impl Executor {
     }
 }
 
-pub(crate) fn final_status(result: &Result<Flow, Interrupt>) -> (RunStatus, Option<RunError>) {
+pub(crate) fn final_status(result: &Result<Proceed, Interrupt>) -> (RunStatus, Option<RunError>) {
     match result {
         Ok(_) => (RunStatus::Succeeded, None),
         Err(Interrupt::Cancelled) => (

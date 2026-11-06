@@ -1,10 +1,10 @@
-//! `scenario.call`: running another scenario as one step.
+//! `flow.call`: running another flow as one step.
 
 use std::time::Duration;
 
 use serde_json::json;
-use shikigami_core::registry::scenario::CALL;
-use shikigami_core::{OnError, Step, StepId, Subscenario, VarDirection, VarType, VariableDef};
+use shikigami_core::registry::flow::CALL;
+use shikigami_core::{OnError, Step, StepId, Subflow, VarDirection, VarType, VariableDef};
 
 use super::*;
 
@@ -21,7 +21,7 @@ fn set(name: &str, expression: &str) -> Step {
         .with_param("expression", expression)
 }
 
-fn with_ids(mut s: Scenario, prefix: &str) -> Scenario {
+fn with_ids(mut s: Flow, prefix: &str) -> Flow {
     fn walk(steps: &mut [Step], prefix: &str, n: &mut u32) {
         for step in steps {
             if step.id.is_empty() {
@@ -39,8 +39,8 @@ fn with_ids(mut s: Scenario, prefix: &str) -> Scenario {
 
 /// `tax`: input `amount`, output `taxed = amount * 1.1` (rounded), and a
 /// local `scratch` that must not leak out.
-fn tax() -> Scenario {
-    let mut s = Scenario::new("税込みにする");
+fn tax() -> Flow {
+    let mut s = Flow::new("税込みにする");
     s.id = "scn_tax".into();
     s.variables = vec![
         var("amount", VarType::Number, VarDirection::Input),
@@ -55,23 +55,23 @@ fn tax() -> Scenario {
 
 fn call(target: &str, inputs: Value, outputs: Value) -> Step {
     Step::new(CALL)
-        .with_param("scenario", target)
+        .with_param("flow", target)
         .with_param("inputs", inputs)
         .with_param("outputs", outputs)
 }
 
-fn caller(steps: Vec<Step>, variables: Vec<VariableDef>) -> Scenario {
-    let mut s = Scenario::new("呼ぶ側");
+fn caller(steps: Vec<Step>, variables: Vec<VariableDef>) -> Flow {
+    let mut s = Flow::new("呼ぶ側");
     s.id = "scn_main".into();
     s.variables = variables;
     s.steps = steps;
     with_ids(s, "m")
 }
 
-fn subs(list: Vec<Scenario>) -> Vec<Subscenario> {
+fn subs(list: Vec<Flow>) -> Vec<Subflow> {
     list.into_iter()
-        .map(|scenario| Subscenario {
-            scenario,
+        .map(|flow| Subflow {
+            flow,
             version: None,
             project_dir: None,
         })
@@ -80,14 +80,14 @@ fn subs(list: Vec<Scenario>) -> Vec<Subscenario> {
 
 async fn run_with(
     runtime: &Runtime,
-    main: Scenario,
-    called: Vec<Scenario>,
+    main: Flow,
+    called: Vec<Flow>,
 ) -> (RunReport, Vec<RunEventEnvelope>) {
     let handle = runtime
         .start(
             main,
             RunOptions {
-                subscenarios: subs(called),
+                subflows: subs(called),
                 ..RunOptions::default()
             },
         )
@@ -116,8 +116,8 @@ async fn a_call_passes_inputs_and_returns_only_its_outputs() {
     let (report, events) = run_with(&Runtime::new(), main, vec![tax()]).await;
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs.get("total"), Some(&json!(1100)));
-    assert_eq!(report.subscenarios.len(), 1);
-    assert_eq!(report.subscenarios[0].scenario_id.as_str(), "scn_tax");
+    assert_eq!(report.subflows.len(), 1);
+    assert_eq!(report.subflows[0].flow_id.as_str(), "scn_tax");
 
     // The callee's own variables stay inside it.
     let top_level_vars: Vec<&str> = events
@@ -141,8 +141,8 @@ async fn a_call_passes_inputs_and_returns_only_its_outputs() {
 }
 
 #[tokio::test]
-async fn the_called_scenario_cannot_see_the_callers_variables() {
-    let mut leak = Scenario::new("覗く");
+async fn the_called_flow_cannot_see_the_callers_variables() {
+    let mut leak = Flow::new("覗く");
     leak.id = "scn_leak".into();
     leak.steps = vec![Step::new("log.message").with_param("message", "{{ secretNote }}")];
     let leak = with_ids(leak, "l");
@@ -161,14 +161,14 @@ async fn the_called_scenario_cannot_see_the_callers_variables() {
     assert_eq!(error.code, "EXPR_UNDEFINED_VARIABLE");
     assert_eq!(error.step_id.as_ref().map(StepId::as_str), Some("m2"));
     assert_eq!(error.step_type.as_deref(), Some(CALL));
-    let sub = &error.details.expect("details")["subScenario"];
-    assert_eq!(sub["scenarioId"], json!("scn_leak"));
+    let sub = &error.details.expect("details")["subFlow"];
+    assert_eq!(sub["flowId"], json!("scn_leak"));
     assert_eq!(sub["stepId"], json!("l1"));
 }
 
 #[tokio::test]
 async fn failures_inside_are_caught_by_the_caller() {
-    let mut boom = Scenario::new("失敗する");
+    let mut boom = Flow::new("失敗する");
     boom.id = "scn_boom".into();
     boom.steps = vec![
         Step::new("control.fail")
@@ -224,7 +224,7 @@ async fn missing_and_unknown_targets_do_not_start() {
         .start(
             main,
             RunOptions {
-                subscenarios: subs(vec![tax()]),
+                subflows: subs(vec![tax()]),
                 ..RunOptions::default()
             },
         )
@@ -240,7 +240,7 @@ async fn missing_and_unknown_targets_do_not_start() {
 
 #[tokio::test]
 async fn nested_calls_report_the_whole_call_path() {
-    let mut outer = Scenario::new("外側");
+    let mut outer = Flow::new("外側");
     outer.id = "scn_outer".into();
     outer.variables = vec![
         var("x", VarType::Number, VarDirection::Input),
@@ -275,7 +275,7 @@ async fn nested_calls_report_the_whole_call_path() {
 
 #[tokio::test]
 async fn a_call_times_out_as_a_whole_and_can_be_cancelled() {
-    let mut slow = Scenario::new("遅い");
+    let mut slow = Flow::new("遅い");
     slow.id = "scn_slow".into();
     slow.steps = vec![Step::new("flow.delay").with_param("ms", 5_000)];
     let slow = with_ids(slow, "w");
@@ -294,7 +294,7 @@ async fn a_call_times_out_as_a_whole_and_can_be_cancelled() {
         .start(
             main,
             RunOptions {
-                subscenarios: subs(vec![slow]),
+                subflows: subs(vec![slow]),
                 ..RunOptions::default()
             },
         )
@@ -310,7 +310,7 @@ async fn a_call_times_out_as_a_whole_and_can_be_cancelled() {
 
 #[tokio::test]
 async fn secrets_found_inside_a_call_stay_masked_outside() {
-    let mut login = Scenario::new("ログイン");
+    let mut login = Flow::new("ログイン");
     login.id = "scn_login".into();
     login.variables = vec![
         VariableDef {
@@ -347,7 +347,7 @@ async fn secrets_found_inside_a_call_stay_masked_outside() {
                     .as_object()
                     .cloned()
                     .unwrap_or_default(),
-                subscenarios: subs(vec![login]),
+                subflows: subs(vec![login]),
                 ..RunOptions::default()
             },
         )
@@ -364,7 +364,7 @@ async fn secrets_found_inside_a_call_stay_masked_outside() {
 
 #[tokio::test]
 async fn a_failed_call_still_hands_back_what_it_assigned() {
-    let mut half = Scenario::new("途中で失敗");
+    let mut half = Flow::new("途中で失敗");
     half.id = "scn_half".into();
     half.variables = vec![
         var("x", VarType::Number, VarDirection::Output),
@@ -402,8 +402,8 @@ async fn a_failed_call_still_hands_back_what_it_assigned() {
 /// Starts `main` interactively and answers each pause with the next of
 /// `commands`, returning where it paused (`callPath/stepId`) and the report.
 async fn debug_run(
-    main: Scenario,
-    called: Vec<Scenario>,
+    main: Flow,
+    called: Vec<Flow>,
     options: crate::DebugOptions,
     commands: Vec<crate::DebugCommand>,
 ) -> (Vec<String>, RunReport) {
@@ -411,7 +411,7 @@ async fn debug_run(
         .start(
             main,
             RunOptions {
-                subscenarios: subs(called),
+                subflows: subs(called),
                 debug: Some(options),
                 ..RunOptions::default()
             },
@@ -435,8 +435,8 @@ async fn debug_run(
     (paused_at, handle.wait().await.expect("wait"))
 }
 
-fn broken() -> Scenario {
-    let mut broken = Scenario::new("壊れている");
+fn broken() -> Flow {
+    let mut broken = Flow::new("壊れている");
     broken.id = "scn_broken".into();
     broken.steps = vec![Step::new("control.fail").with_param("message", "boom")];
     with_ids(broken, "b")
@@ -543,7 +543,7 @@ async fn stepping_goes_into_a_call_and_back_out() {
 }
 
 #[tokio::test]
-async fn breakpoints_inside_a_called_scenario_pause() {
+async fn breakpoints_inside_a_called_flow_pause() {
     let main = caller(
         vec![call("scn_tax", json!({ "amount": 1 }), json!({}))],
         vec![],

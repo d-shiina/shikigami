@@ -1,11 +1,11 @@
 // Which step a variable's value comes from, for drawing Blender-style links
 // between sockets. Display only: it follows the steps in the order they are
 // written and links each read to the latest write before it, or to the
-// scenario's starting values. It never decides anything the Runtime does.
+// flow's starting values. It never decides anything the Runtime does.
 import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
 import { nodeRows, outputs } from "./nodeRows";
 
-/** Pseudo node ids for the scenario's own inputs and outputs. */
+/** Pseudo node ids for the flow's own inputs and outputs. */
 export const INPUT_NODE = "@input";
 export const OUTPUT_NODE = "@output";
 

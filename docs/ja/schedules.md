@@ -2,7 +2,7 @@
 
 [English](../schedules.md) | 日本語
 
-Shikigami は、決まった時刻やきっかけでシナリオを自分で始めます。毎朝 8 時、毎月 25 日、勤務時間中の 30 分ごと、フォルダーにファイルが置かれたとき。Windows のタスク スケジューラーを設定する必要はありません。
+Shikigami は、決まった時刻やきっかけでフローを自分で始めます。毎朝 8 時、毎月 25 日、勤務時間中の 30 分ごと、フォルダーにファイルが置かれたとき。Windows のタスク スケジューラーを設定する必要はありません。
 
 ## エージェント
 
@@ -18,9 +18,9 @@ shikigami agent uninstall
 
 `agent install` は自分のユーザーのタスク スケジューラーに `Shikigami\Agent`（ログオン時）を登録します。エージェントはサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースのエージェントは 2 つ目を起動できません。
 
-- エージェントが始める実行は**無人実行**です。`shikigami run <id>` と同じく公開版を動かし、`policy.json` の `scenarios.<id>.unattended: false` なら動かしません。公開していないシナリオは `NOT_PUBLISHED` で失敗します。
+- エージェントが始める実行は**無人実行**です。`shikigami run <id>` と同じく公開版を動かし、`policy.json` の `flows.<id>.unattended: false` なら動かしません。公開していないフローは `NOT_PUBLISHED` で失敗します。
 - ほかの実行と同じく記録に残り、`origin.trigger` は `"schedule"`、`origin.requestedBy` はスケジュールの名前、`origin.jobId` はその ID です。
-- マウスとキーボードは Studio・CLI・MCP サーバーと共有し、使うノードはプロセスをまたいで順番に動きます。画面ロック中は `DESKTOP_UNAVAILABLE` で止まります（ブラウザやファイルの処理は動きます）。デスクトップのシナリオは、PC をサインインしたまま・ロックしないで動かしてください。
+- マウスとキーボードは Studio・CLI・MCP サーバーと共有し、使うノードはプロセスをまたいで順番に動きます。画面ロック中は `DESKTOP_UNAVAILABLE` で止まります（ブラウザやファイルの処理は動きます）。デスクトップのフローは、PC をサインインしたまま・ロックしないで動かしてください。
 - ほかのプロセスとは、自分のユーザーだけが書き込める名前付きパイプ（`\\.\pipe\shikigami-agent-…`）でやり取りします。
 
 ## スケジュール
@@ -45,7 +45,7 @@ shikigami schedule disable sch_…   # enable / remove
 | `monthly` | `day`（1〜31、-1 は月末）、`at` | 毎月。その月にない日（6 月の 31 日）は月末 |
 | `every` | `minutes`、`from` / `to`（任意）、`days`（任意） | `from`、`from` + `minutes`、… `to` まで（なければ一日中） |
 | `once` | `at`（"2026-11-07T08:00"） | 1 回だけ |
-| `fileAdded` | `folder`（シナリオのフォルダーからの相対パスか絶対パス）、`pattern`（"*.xlsx"）、`input`（任意） | 名前が合う新しいファイル 1 つにつき 1 回。大きさが変わらなくなってから始め、そのフルパスを入力変数 `input` に入れる。エージェントの起動時からあるファイル、Office のロックファイル（`~$…`）、ダウンロード途中のファイルは数えない |
+| `fileAdded` | `folder`（フローのフォルダーからの相対パスか絶対パス）、`pattern`（"*.xlsx"）、`input`（任意） | 名前が合う新しいファイル 1 つにつき 1 回。大きさが変わらなくなってから始め、そのフルパスを入力変数 `input` に入れる。エージェントの起動時からあるファイル、Office のロックファイル（`~$…`）、ダウンロード途中のファイルは数えない |
 
 時刻は PC の時刻です。ファイルが変わるとエージェントが読み直します。壊れたファイルは推測で読まず、`agent status` に問題を出し、直るまでどのスケジュールも動きません（`SCHEDULE_INVALID`）。
 
@@ -55,12 +55,12 @@ shikigami schedule disable sch_…   # enable / remove
 
 ## 通知
 
-`policy.json` の `notify` で、無人実行の終わりを知らせます。対象はエージェントが始める実行と `shikigami run`（タスク スケジューラー・バッチファイル）です。Studio の実行と AI の試し実行は人が見ているので知らせません。シナリオの `catch` でメールを送る必要はありません。
+`policy.json` の `notify` で、無人実行の終わりを知らせます。対象はエージェントが始める実行と `shikigami run`（タスク スケジューラー・バッチファイル）です。Studio の実行と AI の試し実行は人が見ているので知らせません。フローの `catch` でメールを送る必要はありません。
 
 ```json
 "notify": [
   { "webhook": "https://….logic.azure.com/workflows/…", "format": "teams" },
-  { "webhook": "https://hooks.slack.com/services/…", "format": "slack", "on": ["failed", "succeeded"], "scenarios": ["scn_01a1…"] }
+  { "webhook": "https://hooks.slack.com/services/…", "format": "slack", "on": ["failed", "succeeded"], "flows": ["scn_01a1…"] }
 ]
 ```
 
@@ -69,6 +69,6 @@ shikigami schedule disable sch_…   # enable / remove
 | `webhook` | （必須） | 送り先。`https://`（`http://` は `localhost` だけ）。URL を知っていれば誰でも投稿できるので、パスワードと同じように扱う |
 | `on` | `["failed"]` | どの終わり方を知らせるか：`failed`・`succeeded`・`cancelled` |
 | `format` | `teams` | `teams`：Teams の「ワークフロー」の Webhook 向けのカード（Power Automate の「HTTP 要求の受信時」でも受けられ、メールにもできる）。`slack`：Slack などの `{ "text": … }`。`json`：自社のシステム向けの実行の要約 |
-| `scenarios` | すべて | このシナリオ ID だけ |
+| `flows` | すべて | このフロー ID だけ |
 
-知らせる内容は、シナリオ、エラー（コード・メッセージ・ノード）、きっかけ（スケジュールの名前）、PC、時刻、版、実行 ID です。出力の値は送りません。始められなかったスケジュール（公開していない、ポリシーで止められた）は失敗として知らせます。送れなかった通知はログに残すだけで、実行の結果は変わりません。
+知らせる内容は、フロー、エラー（コード・メッセージ・ノード）、きっかけ（スケジュールの名前）、PC、時刻、版、実行 ID です。出力の値は送りません。始められなかったスケジュール（公開していない、ポリシーで止められた）は失敗として知らせます。送れなかった通知はログに残すだけで、実行の結果は変わりません。

@@ -77,7 +77,7 @@ describe("recordings", () => {
     expect(adds[3]?.op === "addStep" && adds[3].step.params?.target).toEqual({ window: win, point: { x: 3, y: 4 } });
   });
 
-  it("reuse a part the scenario already has", () => {
+  it("reuse a part the flow already has", () => {
     const { steps } = recordedSteps([actions[1]!], counter());
     const ops = recordingOps(steps, { saveButton: { app: "desktop", target: save } }, {});
     expect(ops).toHaveLength(1);
@@ -87,7 +87,7 @@ describe("recordings", () => {
 
   it("are handed to the AI with what to do", () => {
     setLocale("en");
-    const text = tidyRequest({ status: "stopped", actions: actions.slice(0, 2) }, "Quotes", "logs/recordings/a.json", "Where: at the end of the scenario");
+    const text = tidyRequest({ status: "stopped", actions: actions.slice(0, 2) }, "Quotes", "logs/recordings/a.json", "Where: at the end of the flow");
     expect(text).toContain('"Quotes"');
     expect(text).toContain("logs/recordings/a.json");
     expect(text).toContain("desktop.waitFor");
