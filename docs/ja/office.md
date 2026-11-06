@@ -124,11 +124,11 @@ AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange`
 | `via` | 要るもの | 補足 |
 |---|---|---|
 | `outlook`（既定） | なし | この PC の Outlook（クラシック版）にサインインしているアカウント。送信済みアイテムに残ります。Outlook が「プログラムがメールを送ろうとしています」と聞くことがあります |
-| `microsoft365` | `account: { "secret": "名前", "field": "accessToken" }` | Microsoft Graph でサインインした人として送ります。Microsoft Entra のアプリをシークレットに登録し（クライアント ID とシークレット、サイトは `https://login.microsoftonline.com` と `https://graph.microsoft.com`）、`oauth.signIn` で一度サインインします（スコープ `Mail.Send offline_access`、[oauth.md](oauth.md)）。添付は合計 3 MB まで（`MAIL_ATTACHMENT_TOO_LARGE`） |
+| `microsoft365` | `account: { "secret": "名前", "field": "accessToken" }` | Microsoft Graph でサインインした人として送ります。Microsoft Entra のアプリをシークレットに登録し（クライアント ID とシークレット、サイトは `https://login.microsoftonline.com` と `https://graph.microsoft.com`）、`oauth.signIn` で一度サインインします（スコープ `Mail.Send offline_access`、[oauth.md](oauth.md)）。添付は合計でおよそ 3 MB まで。本文も含めてメール全体が Graph の 1 回 4 MB に収まる必要があります（`MAIL_ATTACHMENT_TOO_LARGE`） |
 | `smtp` | `server`・`from`、たいてい `user` / `password` | `server` は `smtp.example.co.jp`（587 番で STARTTLS）か `smtp.example.co.jp:465`（TLS）。ログインはシークレットで、サイトに `smtp:<サーバー>` が要ります（ないと `SECRET_SITE_*`）。`security: "none"` はログインなしで受け付ける社内の中継サーバー向けで、パスワードは TLS なしでは送りません（`MAIL_INSECURE_LOGIN`） |
 
 - 選んだ送り方に関係ない params（`outlook` なのに `server` など）は `INVALID_PARAMS`。書いてある送り方と違う方法で送られることはありません
-- エラー：`MAIL_SEND_FAILED`（断られた。サーバーが一時的と言えば再試行）、`MAIL_SERVER_UNREACHABLE`、`MAIL_PERMISSION_DENIED`（Graph で Mail.Send がない）、`OAUTH_SIGN_IN_REQUIRED`
+- エラー：`MAIL_SEND_FAILED`（断られた。サーバーが一時的と言えば再試行）、`MAIL_SERVER_UNREACHABLE`（何も送っていない。再試行）、`MAIL_DELIVERY_UNKNOWN`（渡した後に返事が途切れ、送れたかどうか分からない。二重に送らないよう再試行しない。送信済みアイテムを確かめる）、`MAIL_PERMISSION_DENIED`（Graph で Mail.Send がない）、`OAUTH_SIGN_IN_REQUIRED`
 
 ```json
 { "type": "mail.send", "params": {

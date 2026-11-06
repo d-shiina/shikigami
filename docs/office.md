@@ -124,11 +124,11 @@ A message that has gone cannot be taken back, so `mail.send` is `dangerous`: it 
 | `via` | What it needs | Notes |
 |---|---|---|
 | `outlook` (default) | Nothing | The account signed in to Outlook (classic) on this PC; kept in Sent Items. Outlook may ask whether a program may send mail |
-| `microsoft365` | `account: { "secret": "<name>", "field": "accessToken" }` | Microsoft Graph as the signed-in user. Register the Microsoft Entra app as a secret (client ID and secret; sites `https://login.microsoftonline.com` and `https://graph.microsoft.com`) and sign in once with `oauth.signIn` (scope `Mail.Send offline_access`, [oauth.md](oauth.md)). Attachments up to 3 MB in all (`MAIL_ATTACHMENT_TOO_LARGE`) |
+| `microsoft365` | `account: { "secret": "<name>", "field": "accessToken" }` | Microsoft Graph as the signed-in user. Register the Microsoft Entra app as a secret (client ID and secret; sites `https://login.microsoftonline.com` and `https://graph.microsoft.com`) and sign in once with `oauth.signIn` (scope `Mail.Send offline_access`, [oauth.md](oauth.md)). Attachments up to about 3 MB in all: the whole message must fit in Graph's 4 MB request (`MAIL_ATTACHMENT_TOO_LARGE`) |
 | `smtp` | `server`, `from`, and usually `user` / `password` | `server` is `smtp.example.co.jp` (STARTTLS on 587) or `smtp.example.co.jp:465` (TLS). The login is a secret whose sites include `smtp:<server>`; otherwise `SECRET_SITE_*`. `security: "none"` is only for a company relay that takes mail without a login: a password is never sent without TLS (`MAIL_INSECURE_LOGIN`) |
 
 - Params that do not belong to the chosen way (`server` with `outlook`, …) give `INVALID_PARAMS`, so a scenario never looks like it sends one way and sends another
-- Errors: `MAIL_SEND_FAILED` (refused; retried when the server says it is temporary), `MAIL_SERVER_UNREACHABLE`, `MAIL_PERMISSION_DENIED` (Graph without Mail.Send), `OAUTH_SIGN_IN_REQUIRED`
+- Errors: `MAIL_SEND_FAILED` (refused; retried when the server says it is temporary), `MAIL_SERVER_UNREACHABLE` (nothing was sent; retried), `MAIL_DELIVERY_UNKNOWN` (the answer was lost after the message was handed over, so it may have gone out; never retried, so it is not sent twice: look in Sent Items), `MAIL_PERMISSION_DENIED` (Graph without Mail.Send), `OAUTH_SIGN_IN_REQUIRED`
 
 ```json
 { "type": "mail.send", "params": {

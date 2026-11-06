@@ -202,6 +202,54 @@ fn graph_messages_carry_recipients_and_files() {
     assert_eq!(body["saveToSentItems"], true);
 }
 
+#[test]
+fn graph_messages_must_fit_in_one_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut draft = sample(dir.path());
+    // Attachments under the 3 MB guess, but with the body the request is too big.
+    std::fs::write(&draft.attachments[0], vec![0u8; 2_900_000]).unwrap();
+    assert!(send::graph_message(&draft).is_ok());
+    draft.body = "あ".repeat(100_000);
+    let e = send::graph_message(&draft).unwrap_err();
+    assert_eq!(e.code, "MAIL_ATTACHMENT_TOO_LARGE");
+    assert!(!e.retryable);
+}
+
+#[tokio::test]
+async fn a_send_whose_answer_is_lost_is_never_retried() {
+    // The server reads the whole request, then hangs up without answering:
+    // the message may have gone out.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut buf = [0u8; 8192];
+        let _ = socket.read(&mut buf).await;
+        drop(socket);
+    });
+    let url = format!("http://{addr}/v1.0/me/sendMail");
+    let e = send::graph_send(&url, "tok", &json!({})).await.unwrap_err();
+    assert_eq!(e.code, "MAIL_DELIVERY_UNKNOWN");
+    assert!(!e.retryable);
+
+    // Nothing listening: nothing was sent, so a retry is safe.
+    let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = closed.local_addr().unwrap();
+    drop(closed);
+    let url = format!("http://{addr}/v1.0/me/sendMail");
+    let e = send::graph_send(&url, "tok", &json!({})).await.unwrap_err();
+    assert_eq!(e.code, "MAIL_SERVER_UNREACHABLE");
+    assert!(e.retryable);
+
+    // A server error may come after the message was taken.
+    let (url, _) = http_server("500 Internal Server Error").await;
+    let e = send::graph_send(&url, "tok", &json!({})).await.unwrap_err();
+    assert!(!e.retryable);
+    let (url, _) = http_server("503 Service Unavailable").await;
+    let e = send::graph_send(&url, "tok", &json!({})).await.unwrap_err();
+    assert!(e.retryable);
+}
+
 /// A one-request HTTP server answering `status`; gives what it was sent.
 async fn http_server(status: &'static str) -> (String, Arc<Mutex<String>>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

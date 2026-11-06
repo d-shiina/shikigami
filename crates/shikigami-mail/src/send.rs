@@ -23,6 +23,16 @@ use crate::{Draft, addresses, text};
 pub const GRAPH_SEND_URL: &str = "https://graph.microsoft.com/v1.0/me/sendMail";
 /// Graph takes a request of up to 4 MB; attachments grow by a third in base64.
 pub const GRAPH_MAX_ATTACHMENT_BYTES: u64 = 3 * 1024 * 1024;
+/// The whole sendMail request (JSON, attachments in base64) must fit in this.
+pub const GRAPH_MAX_REQUEST_BYTES: usize = 4_000_000;
+
+fn too_large() -> StepError {
+    StepError::permanent(
+        "MAIL_ATTACHMENT_TOO_LARGE",
+        "the message with its attachments is over the 4 MB Microsoft 365 takes in one request (about 3 MB of attachments)",
+    )
+    .with_details(json!({ "hint": "Zip or split the files, put a link to a shared folder in the body, or send through Outlook (via outlook)." }))
+}
 
 /// How `mail.send` sends.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -250,11 +260,7 @@ pub fn graph_message(draft: &Draft) -> Result<Value, StepError> {
         let bytes = read_attachment(path)?;
         total += bytes.len() as u64;
         if total > GRAPH_MAX_ATTACHMENT_BYTES {
-            return Err(StepError::permanent(
-                "MAIL_ATTACHMENT_TOO_LARGE",
-                "attachments over 3 MB in all cannot be sent through Microsoft 365 yet",
-            )
-            .with_details(json!({ "hint": "Zip or split the files, put a link to a shared folder in the body, or send through Outlook (via outlook)." })));
+            return Err(too_large());
         }
         attachments.push(json!({
             "@odata.type": "#microsoft.graph.fileAttachment",
@@ -262,7 +268,7 @@ pub fn graph_message(draft: &Draft) -> Result<Value, StepError> {
             "contentBytes": base64::engine::general_purpose::STANDARD.encode(&bytes),
         }));
     }
-    Ok(json!({
+    let message = json!({
         "message": {
             "subject": draft.subject,
             "body": { "contentType": if draft.html { "HTML" } else { "Text" }, "content": draft.body },
@@ -272,7 +278,12 @@ pub fn graph_message(draft: &Draft) -> Result<Value, StepError> {
             "attachments": attachments,
         },
         "saveToSentItems": true,
-    }))
+    });
+    // The body, the recipients and the JSON around the attachments count too.
+    if serde_json::to_vec(&message).map_or(usize::MAX, |b| b.len()) > GRAPH_MAX_REQUEST_BYTES {
+        return Err(too_large());
+    }
+    Ok(message)
 }
 
 /// Posts a sendMail body; Graph answers 202 Accepted.
@@ -285,10 +296,15 @@ pub async fn graph_send(url: &str, token: &str, body: &Value) -> Result<(), Step
         .send()
         .await
         .map_err(|e| {
-            StepError::new(
-                "MAIL_SEND_FAILED",
-                format!("Microsoft 365 could not be reached: {e}"),
-            )
+            if e.is_connect() {
+                // Nothing was sent: trying again is safe.
+                StepError::new(
+                    "MAIL_SERVER_UNREACHABLE",
+                    format!("Microsoft 365 could not be reached: {e}"),
+                )
+            } else {
+                delivery_unknown(format!("the answer of Microsoft 365 was lost: {e}"))
+            }
         })?;
     let status = response.status();
     if status.is_success() {
@@ -316,12 +332,22 @@ pub async fn graph_send(url: &str, token: &str, body: &Value) -> Result<(), Step
         ),
     };
     let error = format!("Microsoft 365 answered {status}");
-    let error = if status.is_server_error() || status.as_u16() == 429 {
+    // 429 and 503 mean the message was not taken; after other server errors
+    // it may have been sent, and sending again could send it twice.
+    let error = if matches!(status.as_u16(), 429 | 503) {
         StepError::new(code, error)
     } else {
         StepError::permanent(code, error)
     };
     Err(error.with_details(json!({ "status": status.as_u16(), "response": text, "hint": hint })))
+}
+
+/// The message may or may not have gone out: never retried, so a retry
+/// cannot send it twice.
+fn delivery_unknown(message: String) -> StepError {
+    StepError::permanent("MAIL_DELIVERY_UNKNOWN", message).with_details(json!({
+        "hint": "The message may have been sent. Look in Sent Items (or ask a recipient) before running the step again."
+    }))
 }
 
 /// Builds the message for SMTP (MIME, UTF-8, attachments).
@@ -398,9 +424,13 @@ pub async fn smtp_send(
         ));
     }
     builder.build().send(message).await.map_err(|e| {
+        if e.is_timeout() {
+            // The server may have taken the message before going quiet.
+            return delivery_unknown(format!("{}:{}: {e}", smtp.host, smtp.port));
+        }
         let (code, retryable) = if e.is_permanent() {
             ("MAIL_SEND_FAILED", false)
-        } else if e.is_transient() || e.is_timeout() {
+        } else if e.is_transient() {
             ("MAIL_SEND_FAILED", true)
         } else {
             ("MAIL_SERVER_UNREACHABLE", true)
