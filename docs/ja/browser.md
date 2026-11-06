@@ -96,7 +96,7 @@ PC のサインインでの SSO、クライアント証明書、必須の拡張�
 
 ### Edge の IE モード
 
-Edge が IE モードで表示するページは古い Internet Explorer のエンジンで動くため、Playwright（つまり `browser.*`）からは届きません。そこではデスクトップのノードを使います。IE モードのページは Edge のウィンドウの一部なので、`{ "window": { "process": "msedge.exe", "title": "<ページのタイトルの一部>" }, "element": { … } }` で指し、`inspect_ui` で中を見ます。Windows の CI（Windows Server、IE 強化セキュリティは切った状態）では、ページの見出し・ラベル・入力欄・ボタンが HTML の `id` 付きで UI Automation に出て、ボタンの `desktop.click` も効きました（`crates/shikigami-desktop/tests/ie_mode.rs`）。ラベルと入力欄は同じ名前になるので、部品は `role` も付けて指します。**実機の Edge ではまだ試していません**（[desktop.md](desktop.md)）。Windows Server では IE 強化セキュリティが入っているとページが空のままになります（ふつうの PC では切れています）。
+Edge が IE モードで表示するページは古い Internet Explorer のエンジンで動くため、Playwright（つまり `browser.*`）からは届きません。そこではデスクトップのノードを使います。IE モードのページは Edge のウィンドウの一部なので、`{ "window": { "process": "msedge.exe", "title": "<ページのタイトルの一部>" }, "element": { … } }` で指し、`inspect_ui` で中を見ます。Windows の CI（Windows Server、IE 強化セキュリティは切った状態）では、ページの見出し・ラベル・入力欄・ボタンが HTML の `id` 付きで UI Automation に出て、入力欄への `desktop.setValue` とボタンの `desktop.click` も効きました（`crates/shikigami-desktop/tests/ie_mode.rs`）。ラベルと入力欄は同じ名前になるので、部品は `role` も付けて指します。**実機の Edge ではまだ試していません**（[desktop.md](desktop.md)）。Windows Server では IE 強化セキュリティが入っているとページが空のままになります（ふつうの PC では切れています）。
 
 ### ダウンロードとアップロード
 
