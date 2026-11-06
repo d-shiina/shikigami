@@ -162,6 +162,11 @@ impl Target {
         }
     }
 
+    /// The window alone, keeping nothing else.
+    pub fn window_part_only(&self) -> Target {
+        Target::window_only(self.window.clone())
+    }
+
     pub fn window_only(window: WindowQuery) -> Target {
         Target {
             window,

@@ -152,6 +152,12 @@ pub enum Op {
         target: Target,
         max_rows: usize,
     },
+    /// Starts a SAP transaction in the SAP GUI window of `target`.
+    /// Output: the status bar `{ type, text }`.
+    SapTransaction {
+        target: Target,
+        code: String,
+    },
     /// Opens the context menu of `target.element` (or uses the open menu /
     /// the menu bar of `target.window`) and picks `path` item by item.
     Menu {

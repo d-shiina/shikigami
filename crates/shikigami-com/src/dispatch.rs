@@ -16,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 use windows::Win32::Foundation::{CloseHandle, HWND, VARIANT_FALSE, VARIANT_TRUE};
 use windows::Win32::System::Com::{
     CLSCTX_LOCAL_SERVER, CLSIDFromProgID, COINIT_APARTMENTTHREADED, CoCreateInstance,
+    CreateBindCtx, IMoniker, MkParseDisplayName,
     CoInitializeEx, CoUninitialize, DISPATCH_FLAGS, DISPATCH_METHOD, DISPATCH_PROPERTYGET,
     DISPATCH_PROPERTYPUT, DISPPARAMS, EXCEPINFO, IDispatch,
 };
@@ -166,6 +167,25 @@ impl Object {
                     StepError::new("APP_UNAVAILABLE", format!("cannot start {prog_id}: {e}"))
                 })
         }
+    }
+
+    /// The running object a moniker names, as VBScript's `GetObject(name)`
+    /// finds it (e.g. `SAPGUI` for SAP GUI's scripting).
+    pub fn bind(name: &str, missing: impl FnOnce() -> StepError) -> Result<Self, StepError> {
+        // SAFETY: parses a display name and binds it on this thread.
+        let bound = unsafe {
+            (|| -> windows::core::Result<IDispatch> {
+                let context = CreateBindCtx(0)?;
+                let mut eaten = 0;
+                let mut moniker: Option<IMoniker> = None;
+                MkParseDisplayName(&context, &HSTRING::from(name), &mut eaten, &mut moniker)?;
+                match moniker {
+                    Some(moniker) => moniker.BindToObject(&context, None),
+                    None => Err(windows::core::Error::empty()),
+                }
+            })()
+        };
+        bound.map(Self).map_err(|_| missing())
     }
 
     /// The process that owns the app's main window (Excel's `Hwnd`).

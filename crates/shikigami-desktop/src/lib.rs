@@ -46,6 +46,9 @@ pub mod menu;
 mod overlay;
 pub mod paddle;
 pub mod roles;
+#[cfg(windows)]
+mod sap;
+pub mod sapgui;
 pub mod table;
 pub mod target;
 #[cfg(windows)]
@@ -77,6 +80,7 @@ pub mod types {
     pub const HOVER: &str = "desktop.hover";
     pub const SELECT_MENU: &str = "desktop.selectMenu";
     pub const GET_TABLE: &str = "desktop.getTable";
+    pub const SAP_RUN_TRANSACTION: &str = "sap.runTransaction";
 }
 
 /// How much earlier than the step timeout the adapter stops waiting.
@@ -306,6 +310,7 @@ enum Kind {
     Hover,
     SelectMenu,
     GetTable,
+    SapTransaction,
 }
 
 struct DesktopStep {
@@ -428,6 +433,19 @@ impl ActionHandler for DesktopStep {
                         .mouse_target(params, "target", &input, deadline)
                         .await?,
                 },
+                Kind::SapTransaction => {
+                    let code = string(params, "code")?;
+                    let code = code.trim();
+                    if code.is_empty() {
+                        return Err(StepError::invalid_params(
+                            "'code' is the transaction code, e.g. VA03",
+                        ));
+                    }
+                    Op::SapTransaction {
+                        target: target(params, Allow::Plain)?,
+                        code: code.to_owned(),
+                    }
+                }
                 Kind::SelectMenu => {
                     let path: Vec<String> = match params.get("path") {
                         Some(Value::Array(items)) => items
@@ -1260,6 +1278,23 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             examples: vec![
                 json!({ "type": GET_TABLE, "name": "受注一覧を読む", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "gridOrders" } } }, "saveAs": "orders" }),
                 json!({ "type": GET_TABLE, "params": { "target": { "window": { "title": "販売管理" } }, "maxRows": 100 }, "saveAs": "orders" }),
+            ],
+            secret_params: &[],
+            input: false,
+        },
+        Def {
+            step_type: SAP_RUN_TRANSACTION,
+            kind: Kind::SapTransaction,
+            label: "SAP のトランザクションを開始",
+            description: "Starts the SAP transaction `code` (e.g. VA03, /nVA03 is not needed) in the SAP GUI window `target.window`, as typing it into the command field does. Output: the status bar then, { type, text } (type S success, W warning, E error, A abort, I info, or empty). Needs SAP GUI Scripting (enabled on the SAP server with sapgui/user_scripting and in SAP GUI's options). The other steps on SAP GUI are the usual desktop.* ones with SAP component ids from inspect_ui.",
+            params: json!({
+                "target": target,
+                "code": { "type": "string", "minLength": 1, "description": "トランザクションコード（例 VA03）" }
+            }),
+            required: &["target", "code"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": SAP_RUN_TRANSACTION, "name": "受注照会を開く", "params": { "target": { "window": { "process": "saplogon.exe", "title": "SAP Easy Access" } }, "code": "VA03" }, "saveAs": "status" }),
             ],
             secret_params: &[],
             input: false,

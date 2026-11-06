@@ -58,6 +58,8 @@ use crate::keys::{Chord, Key};
 use crate::menu;
 use crate::overlay::{Input, Overlay};
 use crate::roles;
+use crate::sap::SapWindow;
+use crate::sapgui;
 use crate::table::{self, GRID_ROLES, Grid};
 use crate::target::{
     ElementQuery, NodeInfo, Point, Target, WindowInfo, WindowQuery, app_allowed, describe,
@@ -322,6 +324,10 @@ impl Uia {
     }
 
     fn run(&self, op: Op) -> Result<Value, StepError> {
+        let op = match self.via_sap(op)? {
+            Routed::Done(result) => return Ok(result),
+            Routed::Uia(op) => *op,
+        };
         match op {
             Op::ListWindows => self.list_windows(),
             Op::Inspect {
@@ -362,7 +368,190 @@ impl Uia {
             } => self.pick(message, timeout_ms),
             Op::Highlight { target, ms } => self.highlight(&target, ms),
             Op::GetTable { target, max_rows } => self.get_table(&target, max_rows),
+            Op::SapTransaction { target, .. } => {
+                let (_, window, _) = self.find_window(&target.window)?;
+                Err(match Engine::of(&window) {
+                    Engine::SapGui => sap_scripting_off(),
+                    _ => StepError::permanent(
+                        "NOT_SAP_WINDOW",
+                        format!("'{}' is not a SAP GUI window", window.title),
+                    )
+                    .with_details(json!({ "hint": "Target the SAP GUI window (inspect_ui lists it with app sapgui)." })),
+                })
+            }
         }
+    }
+
+    // -- SAP GUI ------------------------------------------------------------------
+
+    /// The SAP GUI Scripting session of the window `query` names, when it
+    /// is a SAP GUI window that scripting reaches.
+    fn sap_for(
+        &self,
+        query: &WindowQuery,
+    ) -> Option<(SapWindow, WindowInfo, IUIAutomationElement)> {
+        let (el, window, _) = self.find_window(query).ok()?;
+        if Engine::of(&window) != Engine::SapGui {
+            return None;
+        }
+        SapWindow::attach(window.handle).map(|sap| (sap, window, el))
+    }
+
+    /// Carries out `op` through SAP GUI Scripting when its window is SAP
+    /// GUI, or hands it (perhaps changed: a SAP component turned into its
+    /// place on the screen) back to UI Automation.
+    fn via_sap(&self, op: Op) -> Result<Routed, StepError> {
+        let window = match &op {
+            Op::ListWindows => return Ok(Routed::Uia(Box::new(op))),
+            Op::Inspect { window, .. } => window,
+            Op::Drag { from, .. } => &from.window,
+            Op::Probe { target }
+            | Op::Click { target }
+            | Op::SetValue { target, .. }
+            | Op::GetValue { target }
+            | Op::Select { target, .. }
+            | Op::MouseClick { target, .. }
+            | Op::Type { target, .. }
+            | Op::Press { target, .. }
+            | Op::CloseWindow { target }
+            | Op::Scroll { target, .. }
+            | Op::Wheel { target, .. }
+            | Op::Hover { target }
+            | Op::Menu { target, .. }
+            | Op::GetTable { target, .. }
+            | Op::SapTransaction { target, .. } => &target.window,
+        };
+        let Some((sap, info, window_el)) = self.sap_for(window) else {
+            // A SAP component id with no scripting to reach it.
+            if let Some(target) = op_target(&op)
+                && let Some(id) = target.element.as_ref().and_then(|e| e.id.as_deref())
+                && sapgui::looks_like_component_id(id)
+            {
+                return Err(sap_scripting_off());
+            }
+            return Ok(Routed::Uia(Box::new(op)));
+        };
+        let done = Routed::Done;
+        Ok(match op {
+            Op::Inspect {
+                element, max_nodes, ..
+            } => {
+                let mut result = sap.inspect(max_nodes, element.as_ref())?;
+                result["app"] = json!("sapgui");
+                result["window"] = json!({ "title": info.title, "process": info.process, "className": info.class_name });
+                done(result)
+            }
+            Op::SapTransaction { code, .. } => done(sap.transaction(&code)?),
+            Op::GetTable { target, max_rows } => {
+                done(sap.table(target.element.as_ref(), max_rows)?)
+            }
+            Op::Menu { target, path } => {
+                if target.element.is_some() {
+                    return Err(StepError::permanent(
+                        "NOT_SUPPORTED",
+                        "SAP GUI context menus are not opened by desktop.selectMenu",
+                    )
+                    .with_details(json!({ "hint": "Open it with desktop.mouseClick (button: right), then click its item with desktop.mouseClick and target.ocr, or use the menu bar path." })));
+                }
+                done(sap.menu(&path)?)
+            }
+            op => {
+                let Some(element) = op_target(&op).and_then(|t| t.element.clone()) else {
+                    // The window itself: UI Automation acts on it.
+                    return Ok(Routed::Uia(Box::new(op)));
+                };
+                match op {
+                    Op::Probe { .. } => done(sap.probe(&element)),
+                    Op::Click { .. } => done(sap.click(&element)?),
+                    Op::SetValue { text, .. } => {
+                        check_app(&text, &info)?;
+                        done(sap.set_value(&element, &text)?)
+                    }
+                    Op::GetValue { .. } => done(sap.get_value(&element)?),
+                    Op::Select { option, .. } => done(sap.select(&element, &option)?),
+                    Op::Press { target, chord } => {
+                        sap.focus(&element)?;
+                        match sap.press(&chord) {
+                            Some(result) => done(result?),
+                            None => Routed::Uia(Box::new(Op::Press {
+                                target: target.window_part_only(),
+                                chord,
+                            })),
+                        }
+                    }
+                    Op::Type { target, text } => {
+                        check_app(&text, &info)?;
+                        sap.focus(&element)?;
+                        Routed::Uia(Box::new(Op::Type {
+                            target: target.window_part_only(),
+                            text,
+                        }))
+                    }
+                    Op::Scroll {
+                        direction: None, ..
+                    } => {
+                        sap.focus(&element)?;
+                        done(
+                            json!({ "verticalPercent": null, "horizontalPercent": null, "atEnd": false }),
+                        )
+                    }
+                    Op::Scroll { .. } => {
+                        return Err(StepError::permanent(
+                            "NOT_SUPPORTED",
+                            "SAP GUI tables are not scrolled by desktop.scroll",
+                        )
+                        .with_details(json!({ "hint": "desktop.getTable reads a whole SAP table or ALV grid (it scrolls by itself); otherwise use desktop.press with PageDown." })));
+                    }
+                    Op::MouseClick {
+                        target,
+                        button,
+                        double,
+                    } => Routed::Uia(Box::new(Op::MouseClick {
+                        target: self.sap_point(&sap, &target, &window_el)?,
+                        button,
+                        double,
+                    })),
+                    Op::Wheel {
+                        target,
+                        direction,
+                        notches,
+                    } => Routed::Uia(Box::new(Op::Wheel {
+                        target: self.sap_point(&sap, &target, &window_el)?,
+                        direction,
+                        notches,
+                    })),
+                    Op::Hover { target } => Routed::Uia(Box::new(Op::Hover {
+                        target: self.sap_point(&sap, &target, &window_el)?,
+                    })),
+                    Op::Drag { from, to } => Routed::Uia(Box::new(Op::Drag {
+                        from: self.sap_point(&sap, &from, &window_el)?,
+                        to,
+                    })),
+                    op => Routed::Uia(Box::new(op)),
+                }
+            }
+        })
+    }
+
+    /// A target naming a SAP component, as the place at its centre.
+    fn sap_point(
+        &self,
+        sap: &SapWindow,
+        target: &Target,
+        window_el: &IUIAutomationElement,
+    ) -> Result<Target, StepError> {
+        let Some(element) = &target.element else {
+            return Ok(target.clone());
+        };
+        let (left, top, width, height) = sap.screen_rect(element)?;
+        // SAFETY: UIA calls on the UIA thread.
+        let rect = unsafe { window_el.CurrentBoundingRectangle() }.or_fail()?;
+        let mut at = target.window_part_only();
+        at.point = Some(crate::target::Point {
+            x: left + width / 2 - rect.left,
+            y: top + height / 2 - rect.top,
+        });
+        Ok(at)
     }
 
     // -- finding ----------------------------------------------------------------
@@ -1253,6 +1442,21 @@ impl Uia {
     /// window itself where it can, so it may stay behind others; otherwise
     /// it is brought to the front and copied from the screen.
     fn capture(&self, target: &Target) -> Result<Capture, StepError> {
+        if let Some(element) = &target.element
+            && let Some((sap, _, window_el)) = self.sap_for(&target.window)
+        {
+            let (left, top, width, height) = sap.screen_rect(element)?;
+            let mut capture = self.capture(&target.window_part_only())?;
+            // SAFETY: UIA calls on the UIA thread.
+            let rect = unsafe { window_el.CurrentBoundingRectangle() }.or_fail()?;
+            capture.element = Some(Rect {
+                x: left - rect.left,
+                y: top - rect.top,
+                width: width.max(1) as u32,
+                height: height.max(1) as u32,
+            });
+            return Ok(capture);
+        }
         let found = self.resolve(target)?;
         let window = hwnd(found.window.handle);
         // SAFETY: Win32 / UIA calls on the UIA thread.
@@ -1635,6 +1839,45 @@ fn move_to(at: POINT) -> Result<(), StepError> {
     // SAFETY: plain Win32 calls.
     unsafe { SetCursorPos(at.x, at.y) }.or_fail()?;
     send(&[mouse(MOUSEEVENTF_MOVE)])
+}
+
+/// Where an op goes after the SAP GUI check.
+enum Routed {
+    Done(Value),
+    Uia(Box<Op>),
+}
+
+/// The target an op acts on (the start of a drag).
+fn op_target(op: &Op) -> Option<&Target> {
+    match op {
+        Op::ListWindows | Op::Inspect { .. } => None,
+        Op::Drag { from, .. } => Some(from),
+        Op::Probe { target }
+        | Op::Click { target }
+        | Op::SetValue { target, .. }
+        | Op::GetValue { target }
+        | Op::Select { target, .. }
+        | Op::MouseClick { target, .. }
+        | Op::Type { target, .. }
+        | Op::Press { target, .. }
+        | Op::CloseWindow { target }
+        | Op::Scroll { target, .. }
+        | Op::Wheel { target, .. }
+        | Op::Hover { target }
+        | Op::Menu { target, .. }
+        | Op::GetTable { target, .. }
+        | Op::SapTransaction { target, .. } => Some(target),
+    }
+}
+
+fn sap_scripting_off() -> StepError {
+    StepError::permanent(
+        "SAP_SCRIPTING_OFF",
+        "SAP GUI Scripting cannot reach this SAP GUI window",
+    )
+    .with_details(json!({
+        "hint": "Ask the user to enable scripting on the SAP server (transaction RZ11: sapgui/user_scripting = TRUE) and in SAP GUI Options > Accessibility & Scripting > Scripting (enable, turn off the notifications), then try again. Without it only the window itself, OCR and images work."
+    }))
 }
 
 /// A pattern of `el`, or an error when it does not support it.
