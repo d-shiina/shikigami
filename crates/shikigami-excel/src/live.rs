@@ -726,6 +726,12 @@ fn filter(params: &Value, book: &Object, session: &Session) -> Result<Value, Ste
         .and_then(|v| v.get("Count"))
         .and_then(|v| v.to_i64())
         .map_or(0, |n| n - 1);
+    // A table's totals row is in its range but is not a record.
+    let totals = table
+        .as_ref()
+        .and_then(|t| t.get("ShowTotals").ok())
+        .is_some_and(|v| v.to_bool());
+    let visible = if totals { visible - 1 } else { visible };
     save(book, session)?;
     Ok(json!({ "visible": visible.max(0) }))
 }
@@ -780,7 +786,7 @@ fn pivot(params: &Value, book: &Object, session: &Session) -> Result<Value, Step
             )
         })?;
         session.check()?;
-        let cache = book.get("PivotCaches")?.object("PivotCaches")?.object(
+        let cache = book.object("PivotCaches", vec![])?.object(
             "Create",
             vec![Var::i32(XL_DATABASE), Var::str(&source_data)],
         )?;

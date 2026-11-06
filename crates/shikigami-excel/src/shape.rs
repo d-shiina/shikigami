@@ -193,6 +193,7 @@ pub fn filters(params: &Value) -> Result<Option<Vec<Filter>>, StepError> {
             "'filters' has 1 to 64 conditions",
         ));
     }
+    let mut seen: Vec<&str> = Vec::new();
     items
         .iter()
         .map(|item| {
@@ -202,6 +203,14 @@ pub fn filters(params: &Value) -> Result<Option<Vec<Filter>>, StepError> {
                 .map(str::trim)
                 .filter(|c| !c.is_empty())
                 .ok_or_else(|| StepError::invalid_params("each filter needs 'column'"))?;
+            // Excel keeps one condition per column: a second would replace
+            // the first instead of narrowing it.
+            if seen.contains(&column) {
+                return Err(StepError::invalid_params(format!(
+                    "'{column}' has two filters: put every value to keep in one 'values'"
+                )));
+            }
+            seen.push(column);
             let Some(Value::Array(values)) = item.get("values") else {
                 return Err(StepError::invalid_params(format!(
                     "filter on '{column}' needs 'values', a list of what to keep"
@@ -353,6 +362,13 @@ mod tests {
         assert!(filters(&json!({})).is_err());
         assert!(filters(&json!({ "clear": true, "filters": [] })).is_err());
         assert!(filters(&json!({ "filters": [{ "column": "状態", "values": [] }] })).is_err());
+        assert!(
+            filters(&json!({ "filters": [
+                { "column": "状態", "values": ["未処理"] },
+                { "column": " 状態", "values": ["完了"] }
+            ] }))
+            .is_err()
+        );
         let f = filters(&json!({ "filters": [{ "column": " 状態 ", "values": ["未処理", 3] }] }))
             .unwrap()
             .unwrap();
