@@ -213,6 +213,31 @@ textarea,
   background-color: var(--color-desk);
 }
 
+/*
+ * The frame around a loop (if, try, …) and its blocks. A loop's frame is
+ * tinted with the control colour, so a loop inside a loop reads deeper; the
+ * others are a dashed outline only. The tag is opaque to cut the border.
+ */
+/* Clicks and the pointer go through to the pane and the lines beneath. */
+.react-flow__node-frame {
+  pointer-events: none !important;
+}
+.flow-frame {
+  border-color: color-mix(in srgb, var(--cat-control) 28%, transparent);
+}
+.flow-frame-loop {
+  border-color: color-mix(in srgb, var(--cat-control) 40%, transparent);
+  background-color: color-mix(in srgb, var(--cat-control) 5%, transparent);
+}
+.flow-frame-tag {
+  color: color-mix(in srgb, var(--cat-control) 80%, var(--color-desk));
+  background-color: color-mix(in srgb, var(--cat-control) 8%, var(--color-desk));
+  border: 1px solid color-mix(in srgb, var(--cat-control) 28%, transparent);
+}
+.flow-frame-loop .flow-frame-tag {
+  border-color: color-mix(in srgb, var(--cat-control) 40%, transparent);
+}
+
 .react-flow__edge-text {
   font-size: 11px;
 }

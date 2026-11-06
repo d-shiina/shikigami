@@ -1,4 +1,7 @@
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -17,7 +20,7 @@ const PAGES: Record<string, string> = {
     <button onclick="setTimeout(() => alert('登録しました（受付番号 42）'), 200)">登録</button>
     <p id="r"></p>
     <div id="menu" onmouseenter="document.getElementById('sub').hidden = false">メニュー<div id="sub" hidden><a href="/detail">月次レポート</a></div></div>
-    <a id="dl" href="/files/report.csv">CSV</a>
+    <a id="dl" href="/files/report.csv">CSV</a> <a id="slow" href="/files/slow.csv">遅い CSV</a>
     <iframe name="main" title="本文" src="/frame"></iframe>
     <div id="list" style="height:60px;overflow:auto" onscroll="document.getElementById('ly').textContent = this.scrollTop > 0 ? '下' : '上'"><div style="height:400px">上</div><div id="end">下の端</div></div>
     <p id="ly">上</p><p id="y" style="position:fixed;top:0">上</p>
@@ -25,6 +28,11 @@ const PAGES: Record<string, string> = {
     <div style="height:3000px"></div><p id="foot">ページの下</p><div style="height:3000px"></div>`,
   "/detail": `<title>詳細</title><h1>受注の詳細</h1><button onclick="window.close()">閉じる</button>`,
   "/frame": `<title>枠</title><label>備考 <input></label><iframe name="inner" src="/inner"></iframe>`,
+  "/upload": `<title>添付</title>
+    <label>請求書 <input type="file" id="f" multiple onchange="document.getElementById('n').textContent = [...this.files].map(f => f.name).join(',')"></label>
+    <input type="file" id="hidden" hidden onchange="document.getElementById('n').textContent = 'hidden:' + this.files[0].name">
+    <button onclick="document.getElementById('hidden').click()">ファイルを選ぶ</button>
+    <p id="n"></p>`,
   "/inner": `<button onclick="this.textContent = '押しました'">奥のボタン</button>`,
 };
 
@@ -35,7 +43,17 @@ const run = { runId: "run_pages" };
 
 beforeAll(async () => {
   server = createServer((req, res) => {
-    const body = PAGES[new URL(req.url ?? "/", "http://x").pathname];
+    const pathname = new URL(req.url ?? "/", "http://x").pathname;
+    if (pathname === "/files/slow.csv") {
+      // Starts at once, never finishes.
+      res.writeHead(200, { "content-type": "text/csv", "content-disposition": 'attachment; filename="slow.csv"' });
+      return void res.write("a,b\n");
+    }
+    if (pathname === "/files/report.csv") {
+      res.writeHead(200, { "content-type": "text/csv", "content-disposition": 'attachment; filename="report_20261106.csv"' });
+      return void res.end("注文番号,金額\nA-1001,12000\n");
+    }
+    const body = PAGES[pathname];
     if (body === undefined) return void res.writeHead(404).end();
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.end(`<!doctype html><html lang="ja"><meta charset="utf-8">${body}</html>`);
@@ -181,5 +199,40 @@ describe("hover, scroll and attributes", () => {
     expect(await adapter.call("getAttribute", { ...run, target: { css: "#dl" }, name: "title" })).toBeNull();
     const all = (await adapter.call("getAttribute", { ...run, target: { role: "link" }, name: "href", all: true })) as string[];
     expect(all).toContain(`${base}/files/report.csv`);
+  });
+});
+
+describe("downloads and uploads", () => {
+  const dir = mkdtempSync(join(tmpdir(), "shikigami-dl-"));
+
+  it("saves a download to a path or under the site's name", async () => {
+    const saved = (await adapter.call("download", { ...run, target: { css: "#dl" }, path: join(dir, "out", "受注.csv") })) as { path: string; fileName: string };
+    expect(saved).toEqual({ path: join(dir, "out", "受注.csv"), fileName: "report_20261106.csv" });
+    expect(readFileSync(saved.path, "utf8")).toContain("A-1001");
+    const named = (await adapter.call("download", { ...run, target: { css: "#dl" }, folder: join(dir, "in") })) as { path: string };
+    expect(named.path).toBe(join(dir, "in", "report_20261106.csv"));
+    const none = await failure(adapter.call("download", { ...run, target: { role: "button", name: "削除" }, path: join(dir, "x"), timeoutMs: 400 }));
+    expect(none.code).toBe("DOWNLOAD_NOT_STARTED");
+    expect((await failure(adapter.call("download", { ...run, target: { css: "#dl" } }))).code).toBe("INVALID_PARAMS");
+    const started = Date.now();
+    const slow = await failure(adapter.call("download", { ...run, target: { css: "#slow" }, path: join(dir, "slow.csv"), timeoutMs: 800 }));
+    expect(slow.code).toBe("DOWNLOAD_FAILED");
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
+  it("uploads through a file input or a button that opens the picker", async () => {
+    const a = join(dir, "a.pdf");
+    const b = join(dir, "b.pdf");
+    writeFileSync(a, "%PDF-1.4");
+    writeFileSync(b, "%PDF-1.4");
+    const r = { runId: "run_upload" };
+    await adapter.call("open", { ...r, url: `${base}/upload` });
+    await adapter.call("upload", { ...r, target: { label: "請求書" }, path: [a, b] });
+    expect(await adapter.call("getText", { ...r, target: { css: "#n" } })).toBe("a.pdf,b.pdf");
+    await adapter.call("upload", { ...r, target: { role: "button", name: "ファイルを選ぶ" }, path: a });
+    expect(await adapter.call("getText", { ...r, target: { css: "#n" } })).toBe("hidden:a.pdf");
+    const missing = await failure(adapter.call("upload", { ...r, target: { label: "請求書" }, path: join(dir, "ない.pdf") }));
+    expect(missing.code).toBe("FILE_NOT_FOUND");
+    await adapter.call("closeRun", r);
   });
 });

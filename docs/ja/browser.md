@@ -39,7 +39,10 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 | type | 主な params | 出力 |
 |---|---|---|
 | `browser.open` | `url`, `headless`, `session`（ログイン状態を保存・再利用する名前）, `dialog` | `{ url, title }` |
+| `browser.attach` | `port`（既定 9222）, `title` / `url`（使うタブ） | `{ url, title }` |
 | `browser.click` | `target`, `dialog`（クリックで出る JS のダイアログへの答え） | ダイアログの文 / `null` |
+| `browser.download` | `target`（押すもの）, `path`（保存するファイル）か `folder`（サイトの名前のまま） | `{ path, fileName }` |
+| `browser.upload` | `target`（ファイルの入力欄、またはファイル選択を開くボタン）, `path`（ファイル 1 つか配列） | – |
 | `browser.hover` | `target` | – |
 | `browser.scroll` | `target`（見えるところまで）と `to`（`top` / `bottom`）のどちらか、または両方 | – |
 | `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`） | – |
@@ -68,6 +71,38 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 { "type": "browser.getText", "params": { "target": { "role": "heading" } }, "saveAs": "title" },
 { "type": "browser.closeTab" }
 ```
+
+### 人が開いたブラウザを使う（`browser.attach`）
+
+PC のサインインでの SSO、クライアント証明書、必須の拡張機能など、人のブラウザでしか開けないサイトがあります。`browser.attach` は新しくブラウザを起動する代わりに、もう開いている Edge・Chrome を使い、同じ `context` の後のノードはその中で動きます。つなぐ先は `127.0.0.1` だけで、実行が終わるとブラウザは閉じずに手を離します。
+
+ブラウザはデバッグ用のポートを付けて起動しておきます。Chrome 136 以降はふだんのプロファイルではこのポートを無視し（[Chrome の告知](https://developer.chrome.com/blog/remote-debugging-port)）、Edge も同じになる見込みなので、専用のプロファイルのフォルダーを付け、そこで一度サインインしておきます（この引数のショートカットを作るのが簡単です）：
+
+```powershell
+& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Shikigami\edge-profile"
+```
+
+```jsonc
+{ "type": "browser.attach", "params": { "title": "勤怠" } }
+```
+
+注意：
+
+- ポートで待っている間は、この PC のどのプログラムからもそのブラウザを操作できます。必要な作業のときだけこの開き方をします
+- ワークスペースの許可したサイト（ポリシー）は `browser.open` で確かめます。人がもう開いていたタブは確かめません
+- 無人実行には使えません（ブラウザを起動する人がいない）。無人では `browser.open` の `session` を使います
+- つないでいる間、そのブラウザの JS のダイアログには実行が答えます
+- **Windows の PC の Edge ではまだ試していません**（Chromium で確認）
+
+### Edge の IE モード
+
+Edge が IE モードで表示するページは古い Internet Explorer のエンジンで動くため、Playwright（つまり `browser.*`）からは届きません。そこではデスクトップのノードを使います。IE モードのページは Edge のウィンドウの一部なので、`{ "window": { "process": "msedge.exe", "title": "<ページのタイトルの一部>" }, "element": { … } }` で指し、`inspect_ui` で中を見ます。**IE モードのページの部品が UI Automation で見えるかはまだ確かめていません**（[desktop.md](desktop.md)）。
+
+### ダウンロードとアップロード
+
+`browser.download` はリンクやボタンを押して、ダウンロードされたファイルを保存します。パスはシナリオのフォルダーからの相対で、`"path": "input/受注.csv"` とすれば次の `file.readCsv` / `excel.readRows` がそのまま読めます。`path` の代わりに `folder` を書くと、サイトが付けた名前のまま保存します（出力の `fileName`）。`browser.upload` はフォームにファイルを添付します。ファイルの入力欄そのものでも、ファイル選択を開くボタンでも使えます（選択の画面は出ません）。添付するだけなので、続けて送信ボタンを押します。
+
+どちらも `dangerous`（ダウンロードはファイルを書き、アップロードは外に送る）なので、確認パネルの「外への影響」に出ます。
 
 ### JS のダイアログ（alert・confirm・prompt）
 
@@ -102,6 +137,8 @@ iframe の中や、古いフレームセットのページの `<frame>` の中�
 
 待機は Playwright の自動待機を使うので、`flow.delay` を挟む必要はありません。待つ上限はノードの `timeoutMs`（既定 30 秒）で、アダプター側の操作もその直前で止まるため、タイムアウトしたクリックが再試行の後で遅れて実行されることはありません。
 
+Studio では、シナリオを実行しているあいだ（ノードで止めているときも）、ブラウザのノードの対象に **画面から選ぶ** と **光らせる** が使えます。Studio をしまい、実行中のブラウザで部品をクリックします（Esc でやめる。ページにはクリックが渡りません）。実行する前は選ぶブラウザがないので押せません。iframe の中はまだ選べません。
+
 ### エラー
 
 | コード | 意味 | 再試行 |
@@ -112,6 +149,12 @@ iframe の中や、古いフレームセットのページの `<frame>` の中�
 | `TAB_NOT_FOUND` | `browser.switchTab` に合うタブがない。`details.tabs` にタブの一覧 | する |
 | `LAST_TAB` | タブが 1 つだけのときの `browser.closeTab`（`browser.close` を使う） | しない |
 | `DIALOG_NOT_SHOWN` | `dialog` を付けたのに JS のダイアログが出なかった | しない |
+| `BROWSER_NOT_RUNNING` | `browser.attach` で `port` にブラウザがない。`details.hint` に起動のしかた | する |
+| `CONTEXT_IN_USE` | `browser.open` が使っている `context` に `browser.attach` | しない |
+| `DOWNLOAD_NOT_STARTED` | `browser.download` で押したがダウンロードが始まらない | しない |
+| `DOWNLOAD_FAILED` | ダウンロードが途中で切れた | する |
+| `FILE_NOT_FOUND` | `browser.upload` のファイルがない | しない |
+| `FILE_CHOOSER_NOT_SHOWN` | `browser.upload` の対象がファイルの入力欄でも、ファイル選択を開くものでもない | しない |
 | `BROWSER_NOT_OPEN` | 同じ `context` の `browser.open` がない | しない |
 | `NAVIGATION_FAILED` | ページを開けない | する |
 | `BROWSER_LAUNCH_FAILED` | ブラウザを起動できない | しない |

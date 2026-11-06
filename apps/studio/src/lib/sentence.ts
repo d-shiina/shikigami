@@ -226,6 +226,9 @@ const BUILDERS: Record<string, Builder> = {
   "browser.open": (p) => [...template(p.url), w(" をブラウザで開く")],
   "browser.click": (p, s) => [w(`${targetText(p.target)}を押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`), ...saveAs(s)],
   "browser.hover": (p) => [w(`${targetText(p.target)}にマウスを乗せる`)],
+  "browser.attach": (p) => [w(p.title || p.url ? `開いているブラウザの「${String(p.title ?? p.url)}」のタブを使う` : "開いているブラウザを使う")],
+  "browser.download": (p, s) => [w(`${targetText(p.target)}を押してダウンロードし、`), code(p.path ?? p.folder), w(p.path ? " に保存する" : " に保存する（名前はサイトのまま）"), ...saveAs(s)],
+  "browser.upload": (p) => [w(`${targetText(p.target)}に `), code(Array.isArray(p.path) ? p.path.join(", ") : p.path), w(" を添付する")],
   "browser.scroll": (p) => [
     w(
       p.target
@@ -287,6 +290,9 @@ const BUILDERS_EN: Record<string, Builder> = {
   "browser.open": (p) => [w("Open "), ...template(p.url), w(" in the browser")],
   "browser.click": (p, s) => [w(`Click ${targetText(p.target)}${dialogText(p.dialog)}`), ...saveAs(s)],
   "browser.hover": (p) => [w(`Hover over ${targetText(p.target)}`)],
+  "browser.attach": (p) => [w(p.title || p.url ? `Use the "${String(p.title ?? p.url)}" tab of the open browser` : "Use the open browser")],
+  "browser.download": (p, s) => [w(`Click ${targetText(p.target)} and save the download to `), code(p.path ?? p.folder), w(p.path ? "" : " (keeping the site's name)"), ...saveAs(s)],
+  "browser.upload": (p) => [w("Attach "), code(Array.isArray(p.path) ? p.path.join(", ") : p.path), w(` to ${targetText(p.target)}`)],
   "browser.scroll": (p) => [
     w(
       p.target

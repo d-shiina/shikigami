@@ -131,7 +131,7 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 - Classic Win32 buttons are clicked by posting the click, so a dialog opened by the button does not block
 - Apps running as administrator cannot be driven from Shikigami running with normal rights (a Windows restriction). This is reported as `ELEVATION_REQUIRED`
 - Requests whose node timed out or was stopped while waiting in the queue are dropped without running (no double clicks or typing after a stop or retry)
-- Before using the mouse or keyboard the window is brought to the front. When Windows refuses (e.g. the screen is locked) the node stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`
+- Before using the mouse or keyboard the window is brought to the front. While the screen is locked, the sign-in screen or an elevation prompt has the input, or a remote session is disconnected or minimized, such nodes stop with `DESKTOP_UNAVAILABLE` before they start (nodes without the mouse and keyboard still run). When Windows refuses for another reason the node stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`. The mouse and keyboard go to one node at a time across Studio, the CLI and the MCP server
 - The thread is Per-Monitor DPI aware so coordinates stay right on high-DPI screens
 
 ## Main errors

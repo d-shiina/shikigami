@@ -42,6 +42,7 @@ pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunOrigin, RunReport, RunSnapshot, RunStatus,
     RunTrigger, StepOutcome, SubscenarioRef,
 };
+pub use exec::DesktopProbe;
 pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 pub use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef, ResourceKind};
 
@@ -106,6 +107,19 @@ impl Runtime {
 
     pub fn builder() -> RuntimeBuilder {
         RuntimeBuilder::new()
+    }
+
+    /// Makes [`DESKTOP_INPUT`] exclusive across every process on this PC that
+    /// uses the same `dir` for its lock files (Studio, the MCP server, the
+    /// CLI and the agent use [`default_pc_lock_dir`]). Call before starting
+    /// runs.
+    pub fn with_pc_locks(mut self, dir: PathBuf) -> Self {
+        self.resources = Arc::new(exec::ResourceLocks {
+            pc_lock_dir: Some(dir),
+            desktop_probe: self.resources.desktop_probe.clone(),
+            ..exec::ResourceLocks::default()
+        });
+        self
     }
 
     /// Where steps look up registered secrets (`{ "secret": .., "field": .. }`
@@ -382,6 +396,11 @@ impl Default for Runtime {
     }
 }
 
+/// The lock folder shared by every Shikigami process of this Windows user.
+pub fn default_pc_lock_dir() -> PathBuf {
+    std::env::temp_dir().join("shikigami-locks")
+}
+
 /// Called once when a run ends (after its last step, before `RunFinished`).
 pub type RunFinishedHook = Arc<dyn Fn(RunEnd) -> BoxFuture<'static, ()> + Send + Sync>;
 
@@ -396,14 +415,24 @@ pub struct RuntimeBuilder {
     registry: StepRegistry,
     handlers: HashMap<String, Arc<dyn ActionHandler>>,
     run_finished_hooks: Vec<RunFinishedHook>,
+    desktop_probe: Option<exec::DesktopProbe>,
 }
 
 impl RuntimeBuilder {
+    /// How steps that take [`DESKTOP_INPUT`] find out whether the desktop
+    /// can take input now (installed by the desktop adapter). Without it they
+    /// just try.
+    pub fn desktop_probe(mut self, probe: DesktopProbe) -> Self {
+        self.desktop_probe = Some(probe);
+        self
+    }
+
     pub fn new() -> Self {
         let mut builder = Self {
             registry: StepRegistry::with_builtins(),
             handlers: HashMap::new(),
             run_finished_hooks: Vec::new(),
+            desktop_probe: None,
         };
         builder.handlers.insert(
             builtin_types::LOG_MESSAGE.into(),
@@ -453,7 +482,10 @@ impl RuntimeBuilder {
                     .map(|def| (def.step_type.clone(), def.path_params.clone()))
                     .collect(),
             ),
-            resources: Arc::default(),
+            resources: Arc::new(exec::ResourceLocks {
+                desktop_probe: self.desktop_probe,
+                ..exec::ResourceLocks::default()
+            }),
             default_timeouts: Arc::new(
                 self.registry
                     .iter()
