@@ -1788,11 +1788,13 @@ fn parse_bundle(value: serde_json::Value) -> CoreResult<FlowBundle> {
             .into_iter()
             .flatten()
     };
-    let documents = value
-        .get("flow")
+    // `scenario` / `subscenarios`: bundles from before flows were renamed.
+    let documents = ["flow", "scenario"]
         .into_iter()
+        .filter_map(|key| value.get(key))
         .chain(items("subflows"))
-        .chain(items("versions").filter_map(|v| v.get("flow")));
+        .chain(items("subscenarios"))
+        .chain(items("versions").filter_map(|v| v.get("flow").or_else(|| v.get("scenario"))));
     for document in documents {
         crate::migrate::check_supported(document)?;
     }

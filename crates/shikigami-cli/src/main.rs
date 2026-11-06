@@ -987,12 +987,16 @@ fn load_file(path: &Path) -> Result<(Flow, Vec<Flow>)> {
     let mut value: Value = serde_json::from_str(&text).context("parsing JSON")?;
     let mut bundled = Vec::new();
     if shikigami_core::version::is_bundle(&value) {
-        if let Some(Value::Array(subs)) = value.get_mut("subflows").map(Value::take) {
+        // `scenario` / `subscenarios`: bundles from before flows were
+        // renamed (up to 0.1.1).
+        let mut take =
+            |keys: [&str; 2]| keys.iter().find_map(|k| value.get_mut(*k).map(Value::take));
+        if let Some(Value::Array(subs)) = take(["subflows", "subscenarios"]) {
             for sub in subs {
                 bundled.push(shikigami_core::migrate::from_value(sub)?);
             }
         }
-        value = value.get_mut("flow").map(Value::take).unwrap_or_default();
+        value = take(["flow", "scenario"]).unwrap_or_default();
     }
     Ok((shikigami_core::migrate::from_value(value)?, bundled))
 }
@@ -1191,4 +1195,32 @@ async fn run(
         }
     }
     Ok(report.status)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod load_file_tests {
+    use super::*;
+
+    #[test]
+    fn reads_scenario_bundles_from_0_1() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.shikigami.json");
+        let bundle = serde_json::json!({
+            "format": "shikigami.scenarioBundle",
+            "formatVersion": 2,
+            "exportedAt": "2026-11-01T00:00:00Z",
+            "scenario": {
+                "schemaVersion": 3, "id": "scn_main", "name": "main",
+                "steps": [{ "id": "c", "type": "scenario.call", "params": { "scenario": "scn_sub" } }]
+            },
+            "subscenarios": [{ "schemaVersion": 3, "id": "scn_sub", "name": "sub" }]
+        });
+        std::fs::write(&path, bundle.to_string()).unwrap();
+        let (flow, subs) = load_file(&path).unwrap();
+        assert_eq!(flow.name, "main");
+        assert_eq!(flow.steps[0].step_type, "flow.call");
+        assert_eq!(subs.len(), 1);
+        assert_eq!(subs[0].name, "sub");
+    }
 }

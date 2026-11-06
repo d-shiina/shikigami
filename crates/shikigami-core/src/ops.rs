@@ -140,6 +140,7 @@ pub enum EditOp {
         step_id: StepId,
         position: Position,
     },
+    #[serde(alias = "updateScenario")]
     UpdateFlow {
         patch: FlowPatch,
     },
@@ -483,6 +484,15 @@ pub(crate) fn touch(metadata: &mut Metadata) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn reads_update_scenario_ops_from_old_history() {
+        let op: EditOp =
+            serde_json::from_value(json!({ "op": "updateScenario", "patch": { "name": "x" } }))
+                .expect("old op name");
+        assert!(matches!(op, EditOp::UpdateFlow { .. }));
+        assert_eq!(serde_json::to_value(&op).unwrap()["op"], "updateFlow");
+    }
 
     fn sample() -> Flow {
         let mut s = Flow::new("t");
