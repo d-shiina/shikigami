@@ -96,7 +96,7 @@ PC のサインインでの SSO、クライアント証明書、必須の拡張�
 
 ### Edge の IE モード
 
-Edge が IE モードで表示するページは古い Internet Explorer のエンジンで動くため、Playwright（つまり `browser.*`）からは届きません。そこではデスクトップのノードを使います。IE モードのページは Edge のウィンドウの一部なので、`{ "window": { "process": "msedge.exe", "title": "<ページのタイトルの一部>" }, "element": { … } }` で指し、`inspect_ui` で中を見ます。**IE モードのページの部品が UI Automation で見えるかはまだ確かめていません**（[desktop.md](desktop.md)）。
+Edge が IE モードで表示するページは古い Internet Explorer のエンジンで動くため、Playwright（つまり `browser.*`）からは届きません。そこではデスクトップのノードを使います。IE モードのページは Edge のウィンドウの一部なので、`{ "window": { "process": "msedge.exe", "title": "<ページのタイトルの一部>" }, "element": { … } }` で指し、`inspect_ui` で中を見ます。Windows の CI（Windows Server、IE 強化セキュリティは切った状態）では、ページの見出し・ラベル・入力欄・ボタンが HTML の `id` 付きで UI Automation に出て、入力欄への `desktop.setValue` とボタンの `desktop.click` も効きました（`crates/shikigami-desktop/tests/ie_mode.rs`）。ラベルと入力欄は同じ名前になるので、部品は `role` も付けて指します。**実機の Edge ではまだ試していません**（[desktop.md](desktop.md)）。Windows Server では IE 強化セキュリティが入っているとページが空のままになります（ふつうの PC では切れています）。
 
 ### ダウンロードとアップロード
 
@@ -109,6 +109,28 @@ Edge が IE モードで表示するページは古い Internet Explorer のエ�
 ダイアログを出す操作のノードに `dialog` を付けて答えます：`"accept"`（OK）、`"dismiss"`（キャンセル）、prompt に文字を入れるなら `{ "action": "accept", "promptText": "…" }`。ノードはダイアログを待ち（サーバーの返事の後に出る「登録しました」のように、クリックから少し遅れて出るものも）、その文を出力するので、alert に出る受付番号を `saveAs` で残せます。ノードの制限時間内に出なければ `DIALOG_NOT_SHOWN` で失敗します。
 
 `dialog` がないときは、人のいないブラウザと同じように閉じ（alert は OK、confirm・prompt はキャンセル）、次に失敗したノードの `details.dismissedDialog` に出します。ページが自分で描くダイアログは普通の部品なので、そのボタンを `browser.click` で押します。
+
+### 何ページにも分かれた表
+
+表の下の「次へ」で何ページにも分かれた一覧は、上のノードのくり返しで読みます（専用のノードはありません）。ページを読んで行に足し、「次へ」がある間はそれを押します：
+
+```jsonc
+{ "type": "variable.set", "params": { "name": "rows", "expression": "[]" } },
+{ "type": "variable.set", "params": { "name": "more", "expression": "true" } },
+{ "type": "variable.set", "params": { "name": "pageNo", "expression": "1" } },
+{ "type": "control.while", "params": { "condition": "more", "maxIterations": 200 }, "blocks": { "body": [
+  { "type": "browser.getTable", "params": { "target": { "css": "#orders" } }, "saveAs": "page" },
+  { "type": "variable.set", "params": { "name": "rows", "expression": "rows + page" } },
+  { "type": "browser.isVisible", "params": { "target": { "role": "link", "name": "次へ" } }, "saveAs": "more" },
+  { "type": "control.if", "params": { "condition": "more" }, "blocks": { "then": [
+    { "type": "browser.click", "params": { "target": { "role": "link", "name": "次へ" } } },
+    { "type": "variable.set", "params": { "name": "pageNo", "expression": "pageNo + 1" } },
+    { "type": "browser.waitFor", "params": { "target": { "text": "{{ pageNo }} ページ" } } }
+  ] } }
+] } }
+```
+
+押したあとは次のページにしか出ないもの（ここではページ番号）を待ちます。待たないと `getTable` が前の表をもう一度読むことがあります。最後のページにも灰色の「次へ」が残るサイトでは、押せるリンクだけにあるもので `target` を書きます（例 `css: "a.next:not(.disabled)"`）。
 
 ### フレーム
 

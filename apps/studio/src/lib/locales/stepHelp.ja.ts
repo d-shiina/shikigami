@@ -71,6 +71,7 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "desktop.screenshot": { summary: "ウィンドウの画像を保存", words: "画像 キャプチャ 撮る 証跡 png" },
   "desktop.closeWindow": { summary: "ウィンドウを閉じる", words: "終了 閉じる" },
   "desktop.getTable": { summary: "アプリの一覧や表をまとめて読む", words: "表 一覧 グリッド 行 読む 取得" },
+  "sap.runTransaction": { summary: "SAP GUI でトランザクション（VA03 など）を開く", words: "sap トランザクション tコード 基幹" },
   "desktop.selectMenu": { summary: "アプリのメニューを選ぶ（メニューバー・右クリック）", words: "メニュー 右クリック コンテキスト ファイル" },
   "desktop.scroll": { summary: "一覧をスクロールする・部品が見えるまで動かす（マウスを動かさない）", words: "スクロール ページ 下へ 一覧" },
   "desktop.mouseScroll": { summary: "アプリの上でマウスのホイールを回す", words: "ホイール スクロール マウス" },

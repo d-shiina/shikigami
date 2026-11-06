@@ -87,6 +87,7 @@
 - **相手**：WinActor・UiPath・PAD はブラウザ拡張や IE 用の仕組みで、人が開いたブラウザ・IE モードのページも操作できる
 - **影響**：日本の社内システムには IE モードでしか動かないものがまだ多い。拡張機能や証明書・SSO で「人のブラウザでしか入れない」社内サイトもある。対象に届かなければ他の強みは効かない
 - **方向**：IE モードはデスクトップ側（UI Automation）で扱えるかをまず確かめる（IE モードのタブは UIA で部品が見えることが多い）。人のブラウザへの接続は `--remote-debugging-port` で起動したブラウザに CDP でつなぐ案と、拡張機能を作る案を比べる
+- **対応**：人が開いたブラウザは `browser.attach`（`--remote-debugging-port` と専用の `--user-data-dir` で起動した Edge / Chrome に 127.0.0.1 でつなぐ、終わっても閉じない、PR #88）。拡張機能の案はとらない。IE モードは `desktop.*` で扱う。Windows CI の実験（`crates/shikigami-desktop/tests/ie_mode.rs`、PR #98）で、IE11 のエンジンで出したページの部品が UI Automation に `id` 付きで出て、入力とクリックも効くことを確かめた（[browser.md](../browser.md)「Edge IE mode」）。残り：どちらも実機の Edge での確認
 
 ### 5. 実際の業務アプリで未検証、SAP / Java の経路が未実装
 
@@ -94,6 +95,7 @@
 - **相手**：UiPath は SAP・Java・Citrix（Remote Runtime）それぞれに専用の経路がある。WinActor は国内の業務アプリでの実績が長い
 - **影響**：安定性はカタログでは比べられず、実績と事例で比べられる。未検証のままでは評価の土俵に乗らない
 - **方向**：代表的な業務アプリ（会計・販売管理・SAP GUI・Java 製の社内システム・Citrix）での検証の一覧を作り、結果を docs に「動作確認済み」として残す。SAP / Java の経路は [desktop.md](../desktop.md) の計画どおり
+- **対応（2026-11-06）**：SAP GUI Scripting と Java Access Bridge の経路を実装し、同じ `desktop.*` のノードがそれを通して動くようにした。`sap.runTransaction` を追加。Java は CI の Swing の画面で確認。実機での確認手順は [real-app-checks.md](real-app-checks.md)（SAP・業務アプリ・Citrix は未確認のまま）
 
 ### 6. インストーラーが未署名、企業での配布・更新の統制がない
 
@@ -138,6 +140,7 @@
 - **相手**：3 製品とも標準
 - **影響**：業務サイトの多くで「CSV をダウンロードする」「ファイルを添付する」「別ウィンドウで開く」が出てくる。ここで止まる
 - **方向**：組込ノードとして足す（外に触れる操作なので方針どおりノード）。ダウンロードは `file.*` と同じくプロジェクトフォルダー基準の保存先にする
+- **対応**：`browser.switchTab` / `browser.closeTab`、出す操作のノードの `dialog`（alert / confirm / prompt）、`target.frame`（iframe）、`browser.hover` / `browser.scroll` / `browser.getAttribute`（PR #83）、`browser.download` / `browser.upload`（保存先・添付するファイルはプロジェクトフォルダー基準、PR #88）。ページ送りしながらの表は既存のノードのくり返しで読む書き方を [browser.md](../browser.md)「Tables across pages」に追加（PR #98）。残り：実機の Edge での確認
 
 ### 12. デスクトップ操作の欠け
 
@@ -145,6 +148,7 @@
 - **相手**：3 製品とも標準（UiPath・PAD は表のデータ抽出、WinActor はリスト・表の取得）
 - **影響**：販売管理・会計ソフトの一覧画面から表を読む、は RPA の典型。1 セルずつ読むのは遅く、AI が組んでも長いシナリオになる
 - **方向**：`desktop.getTable`（`browser.getTable` と同じ形の配列で返す）、`desktop.scroll`、`desktop.drag` を組込で
+- **対応（2026-11-06）**：`desktop.scroll`・`desktop.mouseScroll`・`desktop.drag`・`desktop.hover`・`desktop.selectMenu`・`desktop.getTable` を追加（PR #82 ほか）。メニュー・スクロール・表は CI の WinForms の画面で確認。マウスを使う操作の実機確認は [real-app-checks.md](real-app-checks.md)
 
 ### 13. 画面の部品を名前を付けて共有する場所がない（重なり：部品選択）
 

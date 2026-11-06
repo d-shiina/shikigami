@@ -96,7 +96,7 @@ Notes:
 
 ### Edge IE mode
 
-Pages that Edge shows in IE mode run on the old Internet Explorer engine, which Playwright (and so `browser.*`) cannot reach. Use the desktop nodes there: the IE mode page is part of the Edge window, so target it with `{ "window": { "process": "msedge.exe", "title": "<part of the page title>" }, "element": { … } }` and look at it with `inspect_ui`. **Whether UI Automation lists the elements of IE mode pages has not been verified yet** ([desktop.md](desktop.md)).
+Pages that Edge shows in IE mode run on the old Internet Explorer engine, which Playwright (and so `browser.*`) cannot reach. Use the desktop nodes there: the IE mode page is part of the Edge window, so target it with `{ "window": { "process": "msedge.exe", "title": "<part of the page title>" }, "element": { … } }` and look at it with `inspect_ui`. On the Windows CI runner (Windows Server, IE Enhanced Security Configuration turned off) UI Automation lists the page's headings, labels, text boxes and buttons with their HTML `id`, and `desktop.setValue` into a text box and `desktop.click` on a button both work (`crates/shikigami-desktop/tests/ie_mode.rs`). Name the element with its `role` too: a label and its text box share the name. **Not yet tried on a real PC's Edge** ([desktop.md](desktop.md)). On Windows Server, IE Enhanced Security Configuration keeps the page blank; a desktop PC has it off.
 
 ### Downloads and uploads
 
@@ -109,6 +109,28 @@ Both are `dangerous` (a download writes a file, an upload sends one out), so the
 The step that causes the dialog answers it with `dialog`: `"accept"` (OK), `"dismiss"` (Cancel), or `{ "action": "accept", "promptText": "…" }` for a prompt. The step waits for the dialog (also one that shows a little after the click, such as "Saved" after the server answers) and outputs its message, so `saveAs` keeps a receipt number in an alert. If no dialog shows within the step's time limit it fails with `DIALOG_NOT_SHOWN`.
 
 Without `dialog`, a dialog is closed the way a browser without a person would (alert: OK, confirm / prompt: Cancel), and the next failing step says so in `details.dismissedDialog`. Dialogs drawn by the page itself are ordinary elements: click their buttons.
+
+### Tables across pages
+
+A list split over pages ("Next" under the table) is read with a loop of the nodes above; there is no separate node. Read the page, add it to the rows, and click "Next" while it is there:
+
+```jsonc
+{ "type": "variable.set", "params": { "name": "rows", "expression": "[]" } },
+{ "type": "variable.set", "params": { "name": "more", "expression": "true" } },
+{ "type": "variable.set", "params": { "name": "pageNo", "expression": "1" } },
+{ "type": "control.while", "params": { "condition": "more", "maxIterations": 200 }, "blocks": { "body": [
+  { "type": "browser.getTable", "params": { "target": { "css": "#orders" } }, "saveAs": "page" },
+  { "type": "variable.set", "params": { "name": "rows", "expression": "rows + page" } },
+  { "type": "browser.isVisible", "params": { "target": { "role": "link", "name": "Next" } }, "saveAs": "more" },
+  { "type": "control.if", "params": { "condition": "more" }, "blocks": { "then": [
+    { "type": "browser.click", "params": { "target": { "role": "link", "name": "Next" } } },
+    { "type": "variable.set", "params": { "name": "pageNo", "expression": "pageNo + 1" } },
+    { "type": "browser.waitFor", "params": { "target": { "text": "Page {{ pageNo }}" } } }
+  ] } }
+] } }
+```
+
+After the click, wait for something that only the next page shows (here its page number), or `getTable` may read the old table again. When the last page still shows a greyed-out "Next", give `target` something only the working link has, such as `css: "a.next:not(.disabled)"`.
 
 ### Frames
 
