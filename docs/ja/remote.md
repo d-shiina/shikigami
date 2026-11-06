@@ -60,7 +60,7 @@ Invoke-RestMethod -Method Post -Headers $h -ContentType application/json `
   http://127.0.0.1:8740/admin/jobs
 ```
 
-ジョブの状態：`queued`（待ち）→ `leased`（PC に渡した）→ `running` → `succeeded` / `failed` / `cancelled`、または `rejected`（PC が断った）、`lost`（実行中に PC から連絡が途絶えた。途中まで動いたかもしれないので、もう一度は始めません）。渡したのに 60 秒以内に始まらなかったジョブは待ちに戻ります。
+ジョブの状態：`queued`（待ち）→ `leased`（PC に渡した）→ `running` → `succeeded` / `failed` / `cancelled`、または `rejected`（PC が断った）、`lost`（実行中に PC から連絡が途絶えた。途中まで動いたかもしれないので、もう一度は始めません）。渡したのに 60 秒以内に始まらなかったジョブは待ちに戻ります。その間に開始をサーバーへ伝えられなかった PC は実行を中止するので、同じジョブが 2 台で同時に動くことはありません。渡したあとのジョブを取り消すと、持っている PC に次の連絡のときに中止を伝えます。
 
 ## プロトコル v1
 

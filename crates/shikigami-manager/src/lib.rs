@@ -343,15 +343,22 @@ impl Manager {
             .collect()
     }
 
-    /// Asks to stop a job: a queued one is cancelled at once, a running one
-    /// when its worker next checks in.
+    /// Asks to stop a job: a queued one is cancelled at once, one a worker
+    /// holds when that worker next checks in.
     pub fn cancel(&self, id: &str) -> Option<JobRecord> {
         self.change(|d| {
             let job = d.jobs.get_mut(id)?;
             match job.state {
-                JobState::Queued | JobState::Leased => {
+                JobState::Queued => {
                     job.state = JobState::Cancelled;
                     job.lease_until = None;
+                }
+                // The worker may already be running it: it is told to stop
+                // at its next check-in, and its report is still taken.
+                JobState::Leased => {
+                    job.state = JobState::Cancelled;
+                    job.lease_until = None;
+                    job.cancel_requested = true;
                 }
                 JobState::Running => job.cancel_requested = true,
                 _ => {}
@@ -564,6 +571,11 @@ async fn job_post(
                 let next = j.events.last().map_or(0, |e| e.seq + 1);
                 j.events
                     .extend(events.into_iter().filter(|e| e.seq >= next));
+                // Progress from the holder means it started, even when its
+                // `started` was lost on the way.
+                if j.state == JobState::Leased {
+                    j.state = JobState::Running;
+                }
                 Manager::extend(j);
                 Ack {
                     cancel: j.cancel_requested,
@@ -574,7 +586,9 @@ async fn job_post(
         "finished" => {
             let finished: Finished = parse(&body)?;
             m.with_job(&worker, &id, |j| {
-                if !j.state.is_done() || j.state == JobState::Lost {
+                let cancelled_while_held =
+                    j.state == JobState::Cancelled && j.cancel_requested && j.report.is_none();
+                if !j.state.is_done() || j.state == JobState::Lost || cancelled_while_held {
                     j.state = match finished.report.status {
                         shikigami_runtime::RunStatus::Succeeded => JobState::Succeeded,
                         shikigami_runtime::RunStatus::Cancelled => JobState::Cancelled,
@@ -676,4 +690,39 @@ pub async fn serve_on(
     listener: tokio::net::TcpListener,
 ) -> std::io::Result<()> {
     axum::serve(listener, router(manager)).await
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use shikigami_agent::remote::protocol::Offer;
+
+    #[test]
+    fn a_job_cancelled_while_a_worker_holds_it_tells_that_worker() {
+        let dir = tempfile::tempdir().unwrap();
+        let m = Manager::open(dir.path()).unwrap();
+        let flow: FlowId = serde_json::from_value(serde_json::json!("scn_a")).unwrap();
+        let job = m.add_job(NewJob {
+            flow_id: flow.clone(),
+            ..NewJob::default()
+        });
+        let offer = ClaimRequest {
+            flows: vec![Offer {
+                flow_id: flow,
+                name: "a".into(),
+                version_uid: "v1".into(),
+            }],
+            desktop: None,
+            wait_secs: 0,
+        };
+        assert!(m.try_claim("w1", &offer).is_some());
+        let cancelled = m.cancel(&job.id).unwrap();
+        assert_eq!(cancelled.state, JobState::Cancelled);
+        // The holder hears it at its next check-in, and the job does not
+        // go back to the queue.
+        assert!(cancelled.cancel_requested);
+        assert!(m.with_job("w1", &job.id, |j| j.cancel_requested).unwrap());
+        assert!(m.try_claim("w2", &offer).is_none());
+    }
 }

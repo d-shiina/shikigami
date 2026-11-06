@@ -60,7 +60,7 @@ Invoke-RestMethod -Method Post -Headers $h -ContentType application/json `
   http://127.0.0.1:8740/admin/jobs
 ```
 
-Job states: `queued` → `leased` (handed to a PC) → `running` → `succeeded` / `failed` / `cancelled`, or `rejected` (the PC refused it) or `lost` (the PC stopped answering while it ran; it is not started again, since part of it may have run). A leased job the PC does not start within 60 seconds goes back to the queue.
+Job states: `queued` → `leased` (handed to a PC) → `running` → `succeeded` / `failed` / `cancelled`, or `rejected` (the PC refused it) or `lost` (the PC stopped answering while it ran; it is not started again, since part of it may have run). A leased job the PC does not start within 60 seconds goes back to the queue; a PC that cannot get its start through to the server in that time cancels the run, so a job never runs on two PCs at once. Cancelling a leased job tells the PC holding it to stop at its next check-in.
 
 ## Protocol v1
 

@@ -362,22 +362,31 @@ async fn run_job(agent: &Arc<Agent>, link: &Link, job: Job) {
         }
     };
     tracing::info!(job = %job.id, run = %run_id, "job started");
-    if let Err(e) = link
-        .post::<_, ()>(
-            &format!("{jobs}/started"),
-            &Started {
-                run_id: run_id.clone(),
-            },
-        )
-        .await
-    {
-        tracing::warn!(error = %e, "could not tell the server the job started");
-    }
+    // Until the server has recorded the start, it may hand the job to
+    // another PC when the lease runs out. The run is cancelled before that
+    // happens, so a job never runs twice at once.
+    let leased_at = std::time::Instant::now();
+    let lease = Duration::from_secs(job.lease_secs.max(10));
+    let mut confirmed = false;
     let root = agent.local_root().to_path_buf();
     let mut next_seq = 0;
     let mut cancelled = false;
     loop {
         let running = agent.running().iter().any(|r| r.run_id == run_id);
+        if !confirmed {
+            match link
+                .post::<_, ()>(
+                    &format!("{jobs}/started"),
+                    &Started {
+                        run_id: run_id.clone(),
+                    },
+                )
+                .await
+            {
+                Ok(_) => confirmed = true,
+                Err(e) => tracing::warn!(error = %e, "could not tell the server the job started"),
+            }
+        }
         let events = events_from(&root, &run_id, next_seq);
         let last = events.last().map(|e| e.seq + 1);
         let ack: Result<Option<Ack>, RemoteError> = if events.is_empty() {
@@ -389,6 +398,8 @@ async fn run_job(agent: &Arc<Agent>, link: &Link, job: Job) {
         };
         match ack {
             Ok(ack) => {
+                // The server takes progress from the holder as its start.
+                confirmed = true;
                 if let Some(seq) = last {
                     next_seq = seq;
                 }
@@ -398,6 +409,10 @@ async fn run_job(agent: &Arc<Agent>, link: &Link, job: Job) {
             }
             // Kept in the run folder; sent again on the next round.
             Err(e) => tracing::warn!(error = %e, "could not send the run's progress"),
+        }
+        if !confirmed && !cancelled && running && leased_at.elapsed() > lease * 3 / 4 {
+            tracing::warn!(job = %job.id, "the server never heard the job start; cancelling it before the lease runs out");
+            cancelled = agent.cancel(&run_id);
         }
         if !running {
             break;
