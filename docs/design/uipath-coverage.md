@@ -120,6 +120,7 @@ Shikigami の表は「オブジェクトの配列」1 種類で、DataTable 型�
 | Read Range / Write Range / Read Cell / Write Cell / Append Range | `excel.readRows` / `readRange` / `readCell` / `writeCell` / `writeRange` / `appendRows` | 🔜（PR #25） |
 | Get Workbook Sheets / Add Sheet | `excel.listSheets` / `excel.addSheet` | 🔜（PR #25） |
 | Execute Macro | `excel.runMacro`（COM） | 🔜（Office） |
+| Use Excel File（開いているブック）/ Sort Range / Refresh / Save Excel File as PDF | `excel.*` が開いているブックを自動で使う / `excel.sort` / `excel.recalculate` / `excel.exportPdf` | ✅ |
 | Word Replace Text / Read Text | `word.*` | 🔜（Office） |
 | Send SMTP / Outlook Mail、Get Mail、Save Attachments | `mail.*`（Outlook から） | 🔜（Office） |
 

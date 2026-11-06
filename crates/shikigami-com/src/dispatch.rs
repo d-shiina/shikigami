@@ -20,14 +20,18 @@ use windows::Win32::System::Com::{
     DISPATCH_PROPERTYGET, DISPATCH_PROPERTYPUT, DISPPARAMS, EXCEPINFO, IDispatch, IMoniker,
     MkParseDisplayName,
 };
-use windows::Win32::System::Ole::DISPID_PROPERTYPUT;
+use windows::Win32::System::Ole::{
+    DISPID_PROPERTYPUT, GetActiveObject, SafeArrayGetDim, SafeArrayGetElement, SafeArrayGetLBound,
+    SafeArrayGetUBound,
+};
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
 use windows::Win32::System::Variant::{
-    VAR_CHANGE_FLAGS, VARENUM, VARIANT, VARIANT_0_0_0, VT_BOOL, VT_BSTR, VT_DATE, VT_DISPATCH,
-    VT_EMPTY, VT_I4, VT_I8, VT_NULL, VT_R8, VariantChangeType, VariantClear,
+    VAR_CHANGE_FLAGS, VARENUM, VARIANT, VARIANT_0_0_0, VT_ARRAY, VT_BOOL, VT_BSTR, VT_DATE,
+    VT_DISPATCH, VT_EMPTY, VT_ERROR, VT_I4, VT_I8, VT_NULL, VT_R8, VT_VARIANT, VariantChangeType,
+    VariantClear,
 };
 use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
-use windows::core::{BSTR, GUID, HSTRING, PCWSTR};
+use windows::core::{BSTR, GUID, HSTRING, IUnknown, Interface, PCWSTR};
 
 const LOCALE_USER_DEFAULT: u32 = 0x0400;
 const POLL: Duration = Duration::from_millis(200);
@@ -188,6 +192,19 @@ impl Object {
         bound.map(Self).map_err(|_| missing())
     }
 
+    /// The running instance of `prog_id` the person already has open (the
+    /// first one registered), or `None` when it is not running. Never
+    /// starts the app.
+    pub fn running(prog_id: &str) -> Option<Self> {
+        // SAFETY: looks up a class and asks the running object table for it.
+        unsafe {
+            let clsid = CLSIDFromProgID(&HSTRING::from(prog_id)).ok()?;
+            let mut unknown: Option<IUnknown> = None;
+            GetActiveObject(&clsid, None, &mut unknown).ok()?;
+            unknown?.cast::<IDispatch>().ok().map(Self)
+        }
+    }
+
     /// The process that owns the app's main window (Excel's `Hwnd`).
     pub fn window_process(&self) -> Option<u32> {
         let hwnd = self.get("Hwnd").ok()?.to_i64().ok()?;
@@ -319,6 +336,19 @@ impl Var {
         Self(v)
     }
 
+    /// An optional argument left out (`DISP_E_PARAMNOTFOUND`), for
+    /// skipping one before others, e.g. `Worksheets.Add(, after)`.
+    pub fn missing() -> Self {
+        Self::with(VT_ERROR, |u| u.scode = 0x8002_0004_u32 as i32)
+    }
+
+    /// An object as an argument, e.g. a Range passed to `Sort.SetRange`.
+    pub fn from_object(object: &Object) -> Self {
+        Self::with(VT_DISPATCH, |u| {
+            u.pdispVal = ManuallyDrop::new(Some(object.0.clone()))
+        })
+    }
+
     pub fn str(s: &str) -> Self {
         Self::with(VT_BSTR, |u| u.bstrVal = ManuallyDrop::new(BSTR::from(s)))
     }
@@ -406,6 +436,66 @@ impl Var {
             "COM_ERROR",
             format!("the app did not return an object for '{what}'"),
         ))
+    }
+
+    /// The code of an error value (Excel's `#DIV/0!` is 2007), if it is one.
+    pub fn error_code(&self) -> Option<i32> {
+        // SAFETY: the tag says the member is an SCODE.
+        (self.vt() == VT_ERROR)
+            .then(|| unsafe { self.0.Anonymous.Anonymous.Anonymous.scode } & 0xFFFF)
+    }
+
+    /// Whether the value is a date (VT_DATE).
+    pub fn is_date(&self) -> bool {
+        self.vt() == VT_DATE
+    }
+
+    /// The rows of a two-dimensional array of values (Excel's
+    /// `Range.Value`); a single value is one row of one.
+    pub fn to_grid(&self) -> Vec<Vec<Var>> {
+        if self.vt() != VARENUM(VT_ARRAY.0 | VT_VARIANT.0) {
+            let mut copy = Var::empty();
+            // SAFETY: copies an owned VARIANT into a new one.
+            if unsafe { windows::Win32::System::Variant::VariantCopy(&mut copy.0, &self.0) }
+                .is_err()
+            {
+                return vec![vec![Var::empty()]];
+            }
+            return vec![vec![copy]];
+        }
+        // SAFETY: the tag says the member is a SAFEARRAY of VARIANTs; each
+        // element is copied out into an owned Var.
+        unsafe {
+            let array = self.0.Anonymous.Anonymous.Anonymous.parray;
+            if array.is_null() || SafeArrayGetDim(array) != 2 {
+                return Vec::new();
+            }
+            let bounds = |dim| {
+                Some((
+                    SafeArrayGetLBound(array, dim).ok()?,
+                    SafeArrayGetUBound(array, dim).ok()?,
+                ))
+            };
+            let (Some((row0, row1)), Some((col0, col1))) = (bounds(1), bounds(2)) else {
+                return Vec::new();
+            };
+            (row0..=row1)
+                .map(|row| {
+                    (col0..=col1)
+                        .map(|col| {
+                            let index = [row, col];
+                            let mut cell = Var::empty();
+                            let _ = SafeArrayGetElement(
+                                array,
+                                index.as_ptr(),
+                                (&raw mut cell.0).cast(),
+                            );
+                            cell
+                        })
+                        .collect()
+                })
+                .collect()
+        }
     }
 
     /// Text, a number, true/false, a date as ISO text, or null (also for

@@ -13,6 +13,7 @@
 - 操作の記録（デスクトップ）：フロー図のドックの「記録」で、クリック（押した部品の対象つき）・入力欄の最終的な文字・Enter や Ctrl+S などのキーを書き留め、「そのままノードにする」か「AI に整えてもらう」を選べます。パスワード欄の文字は記録しません。元データはシナリオの `logs/recordings/` に残ります。デスクトップアダプターの inspect に `action: "record"`（docs/desktop.md）
 - `desktop.getTable`：アプリの表・グリッド・一覧をまとめて読み、`browser.getTable` と同じ「列見出しをキーにしたオブジェクトのリスト」で返します。対応しているグリッドは画面外の行も読みます。10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE`
 - メールの送信 `mail.send`（dangerous、承認の対象）。`via` で送り方を選びます：`outlook`（既定、この PC の Outlook）、`microsoft365`（Microsoft Graph、`oauth.signIn` でサインインしたシークレットの `accessToken`、サイトに `https://graph.microsoft.com`）、`smtp`（`server`・`from`、ログインはシークレットでサイトに `smtp:<サーバー>`、パスワードは TLS なしでは送らない）。シークレットのサイトの書き方 `smtp:<サーバー>` を追加（docs/office.md）
+- Excel 本体での操作：この PC の Excel でブックを開いているときは、`excel.*` の読み書きがファイルではなく開いているブックに働きます（画面の内容を読み、書いたら保存、Excel は閉じない）。`excel.recalculate`（数式を計算し直して保存）、`excel.sort`（見出しの列で並べ替え）、`excel.exportPdf`（ブックかシートを PDF に）を追加。どれもデスクトップ版 Excel が要り、ブックが開いていなければ見えない別の Excel を使います（docs/office.md）
 
 ## [0.1.2] - 2026-11-06
 
