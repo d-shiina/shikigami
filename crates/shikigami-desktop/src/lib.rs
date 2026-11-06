@@ -757,7 +757,10 @@ impl DesktopStep {
         if grid.truncated && limit.is_none() {
             return Err(StepError::permanent(
                 "TABLE_TOO_LARGE",
-                format!("the table has more than {max_rows} rows"),
+                format!(
+                    "the table has more rows than were read at once ({} read)",
+                    grid.rows.len()
+                ),
             )
             .with_details(json!({
                 "hint": "Set maxRows to read only the first rows, or narrow the list in the app (search or filter) before reading it."

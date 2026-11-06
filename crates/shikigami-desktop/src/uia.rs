@@ -1285,7 +1285,14 @@ impl Uia {
             .into_iter()
             .map(|(_, n)| n)
             .collect();
-        Ok(table::grid_from_nodes(&nodes, max_rows).to_json())
+        let mut grid = table::grid_from_nodes(&nodes, max_rows);
+        if nodes.len() >= FIND_LIMIT && !grid.truncated {
+            // The walk stopped before the table's end: the last row may be
+            // cut short, and more rows were left out.
+            grid.rows.pop();
+            grid.truncated = true;
+        }
+        Ok(grid.to_json())
     }
 
     /// The grid the target names, or the first one in it (tables and grids
