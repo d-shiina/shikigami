@@ -11,6 +11,7 @@ import { outline } from "../lib/outline";
 import { type Locale, setLocale, t, useLocale } from "../lib/i18n";
 import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
 import { useAppVersion, useUpdate } from "./AppMenu";
+import { SettingsGroup, SettingsRow, settingsInput, settingsPrimary } from "./settingsLayout";
 
 const ITEM = "flex h-full shrink-0 items-center gap-1.5 px-2 whitespace-nowrap";
 const BUTTON = `${ITEM} hover:bg-slate-100 hover:text-ink`;
@@ -22,36 +23,40 @@ export function WorkspaceSection() {
   const [path, setPath] = useState(workspace?.root ?? "");
   const [shared, setShared] = useState(workspace?.shared ?? false);
   if (!workspace) return null;
+  const unchanged = path.trim() === "" || (path.trim() === workspace.root && shared === workspace.shared);
   return (
     <form
-      className="space-y-2 text-[13px] text-slate-600"
       onSubmit={(e) => {
         e.preventDefault();
         if (path.trim()) void setWorkspace(path.trim(), shared);
       }}
     >
-      <input
-        value={path}
-        onChange={(e) => setPath(e.target.value)}
-        placeholder={t.workspacePath}
-        className="w-full rounded-[3px] border border-slate-300 bg-sheet px-2 py-1 font-mono text-[12px] text-ink focus:border-ink focus:outline-none"
-      />
-      <label className="flex items-center gap-1.5">
-        <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
-        {t.workspaceSharedLabel}
-      </label>
-      <div className="text-[11px] text-slate-400">
-        {t.bar.localRecords}
-        {t.colon}
-        {workspace.localRoot}
-      </div>
-      <button
-        type="submit"
-        disabled={path.trim() === "" || (path.trim() === workspace.root && shared === workspace.shared)}
-        className="rounded-[4px] bg-ink px-3 py-1 text-paper hover:bg-slate-700 disabled:bg-slate-300"
+      <SettingsGroup
+        footer={
+          <button type="submit" disabled={unchanged} className={settingsPrimary}>
+            {t.workspaceApply}
+          </button>
+        }
       >
-        {t.workspaceApply}
-      </button>
+        <SettingsRow label={t.workspaceFolder} hint={t.workspaceFolderHint} htmlFor="settings-workspace-path">
+          <input
+            id="settings-workspace-path"
+            value={path}
+            onChange={(e) => setPath(e.target.value)}
+            placeholder={t.workspacePath}
+            className={`${settingsInput} font-mono text-[12px]`}
+          />
+        </SettingsRow>
+        <SettingsRow label={t.workspaceShared}>
+          <label className="flex items-center gap-2 text-slate-700">
+            <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+            {t.workspaceSharedLabel}
+          </label>
+        </SettingsRow>
+        <SettingsRow label={t.bar.localRecords} hint={t.workspaceLocalHint}>
+          <code className="block font-mono text-[12px] break-all text-slate-600">{workspace.localRoot}</code>
+        </SettingsRow>
+      </SettingsGroup>
     </form>
   );
 }
@@ -168,11 +173,19 @@ const THEMES: [ThemeChoice, () => string, ReactNode][] = [
   ],
 ];
 
-/** ライト / ダーク / PCの設定, side by side as in VuePress's footer. */
-export function ThemeSwitch() {
+/** Segmented switch frame: small in the bar, labelled in settings. */
+const switchFrame = (labeled: boolean) =>
+  `flex shrink-0 items-center rounded-[3px] border border-slate-200 p-px ${labeled ? "" : "mx-1"}`;
+const switchButton = (on: boolean, labeled: boolean) =>
+  `${labeled ? "flex h-[26px] items-center gap-1.5 px-2.5 text-[13px]" : "grid h-[18px] place-items-center"} rounded-[2px] ${
+    on ? "bg-ink text-paper" : `${labeled ? "text-slate-600" : "text-slate-400"} hover:text-ink`
+  }`;
+
+/** ライト / ダーク / PCの設定, side by side as in VuePress's footer. `labeled` spells each out (settings). */
+export function ThemeSwitch({ labeled = false }: { labeled?: boolean }) {
   const { choice } = useTheme();
   return (
-    <div className="mx-1 flex shrink-0 items-center rounded-[3px] border border-slate-200 p-px" role="radiogroup" aria-label={t.bar.theme}>
+    <div className={switchFrame(labeled)} role="radiogroup" aria-label={t.bar.theme}>
       {THEMES.map(([key, label, icon]) => (
         <button
           key={key}
@@ -181,9 +194,10 @@ export function ThemeSwitch() {
           aria-checked={choice === key}
           title={label()}
           onClick={() => setTheme(key)}
-          className={`grid h-[18px] w-[22px] place-items-center rounded-[2px] ${choice === key ? "bg-ink text-paper" : "text-slate-400 hover:text-ink"}`}
+          className={`${switchButton(choice === key, labeled)} ${labeled ? "" : "w-[22px]"}`}
         >
           {icon}
+          {labeled && label()}
         </button>
       ))}
     </div>
@@ -196,10 +210,10 @@ const LANGUAGES: [Locale, string, string][] = [
 ];
 
 /** 日本語 / English, next to the theme. */
-export function LanguageSwitch() {
+export function LanguageSwitch({ labeled = false }: { labeled?: boolean }) {
   const { locale } = useLocale();
   return (
-    <div className="mx-1 flex shrink-0 items-center rounded-[3px] border border-slate-200 p-px" role="radiogroup" aria-label={t.bar.language}>
+    <div className={switchFrame(labeled)} role="radiogroup" aria-label={t.bar.language}>
       {LANGUAGES.map(([key, short, name]) => (
         <button
           key={key}
@@ -209,9 +223,9 @@ export function LanguageSwitch() {
           title={name}
           lang={key}
           onClick={() => setLocale(key)}
-          className={`grid h-[18px] place-items-center rounded-[2px] px-1 text-[10px] font-semibold ${locale === key ? "bg-ink text-paper" : "text-slate-400 hover:text-ink"}`}
+          className={`${switchButton(locale === key, labeled)} ${labeled ? "" : "px-1 text-[10px] font-semibold"}`}
         >
-          {short}
+          {labeled ? name : short}
         </button>
       ))}
     </div>
