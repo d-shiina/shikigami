@@ -10,6 +10,8 @@
 
 ### 追加
 
+- ブラウザ：`browser.attach`。人が `--remote-debugging-port` 付きで開いた Edge・Chrome を、ログイン・証明書・拡張機能ごと使います（127.0.0.1 のみ、終わっても閉じない、`dangerous`）。Edge の IE モードのページはデスクトップのノードで扱う方針を docs/browser.md に（UI Automation で見えるかは未確認）
+
 - ブラウザ：`browser.download`（押してダウンロードしたファイルを `path` か `folder` に保存）と `browser.upload`（ファイルの入力欄、またはファイル選択を開くボタンに添付）。パスはシナリオのフォルダーから。どちらも `dangerous` で、確認パネルの「外への影響」に出ます（docs/browser.md）
 
 - ブラウザ：別のタブ・ポップアップへ移る `browser.switchTab` と閉じて戻る `browser.closeTab`、JS のダイアログ（alert・confirm・prompt）に答える `dialog`（`browser.click` / `browser.press` / `browser.open`。ダイアログの文を出力）、iframe・フレームセットの中の部品を指す `target.frame`、`browser.hover`・`browser.scroll`・`browser.getAttribute`。`inspect_page` と `ELEMENT_NOT_FOUND` の `details` にフレームとタブの一覧、閉じたダイアログ（docs/browser.md）

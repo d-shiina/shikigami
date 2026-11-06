@@ -42,6 +42,7 @@ pub const BUNDLED_ADAPTER_SCRIPT: &str = "browser-adapter/src/main.ts";
 
 pub mod types {
     pub const OPEN: &str = "browser.open";
+    pub const ATTACH: &str = "browser.attach";
     pub const CLICK: &str = "browser.click";
     pub const HOVER: &str = "browser.hover";
     pub const SCROLL: &str = "browser.scroll";
@@ -471,6 +472,23 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             ..Def::default()
         },
         Def {
+            step_type: ATTACH,
+            method: "attach",
+            label: "開いているブラウザを使う",
+            description: "Uses a browser the person started on this PC instead of opening a new one: its tabs, logins, client certificates and extensions (for sites only reachable from the person's browser, e.g. with SSO). The browser must be started with a debugging port and its own profile folder, e.g. msedge.exe --remote-debugging-port=9222 --user-data-dir=\"%LOCALAPPDATA%\\Shikigami\\edge-profile\" (Edge and Chrome ignore the port on their everyday profile; sign in there once). Only 127.0.0.1 is reached. Later steps on the same `context` work in it; `title` / `url` pick a tab as in browser.switchTab (default: the first tab). The browser is never closed: the run lets go of it when it ends. Output: { url, title }. Fails with BROWSER_NOT_RUNNING when nothing listens on `port`. Not for unattended runs: use browser.open with `session` there.",
+            params: json!({
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "ブラウザを起動したときの --remote-debugging-port（既定 9222）" },
+                "title": { "type": "string", "minLength": 1, "description": "使うタブのタイトルの一部" },
+                "url": { "type": "string", "minLength": 1, "description": "使うタブのアドレスの一部" }
+            }),
+            required: &[],
+            has_output: true,
+            examples: vec![
+                json!({ "type": ATTACH, "name": "開いている Edge の勤怠システムを使う", "params": { "title": "勤怠" } }),
+            ],
+            ..Def::default()
+        },
+        Def {
             step_type: CLICK,
             method: "click",
             label: "クリック",
@@ -791,7 +809,8 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 expression_params: vec![],
                 binds_variables: vec![],
                 // Downloads write files; uploads send them out.
-                risk: if oauth || d.step_type == DOWNLOAD || d.step_type == UPLOAD {
+                // Attaching reaches the person's own logins.
+                risk: if oauth || [DOWNLOAD, UPLOAD, ATTACH].contains(&d.step_type) {
                     RiskLevel::Dangerous
                 } else {
                     RiskLevel::Interactive

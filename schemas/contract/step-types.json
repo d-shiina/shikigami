@@ -2,6 +2,40 @@
   "schemaVersion": 3,
   "stepTypes": [
     {
+      "type": "browser.attach",
+      "params": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
       "type": "browser.click",
       "params": {
         "type": "object",

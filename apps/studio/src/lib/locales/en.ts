@@ -1030,6 +1030,7 @@ export const en: Dict = {
   runErrors: errorsEn,
   stepHelp: stepHelpEn,
   stepTypes: {
+    "browser.attach": "Use open browser",
     "browser.click": "Click",
     "browser.close": "Close browser",
     "browser.closeTab": "Close tab",

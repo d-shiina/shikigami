@@ -57,6 +57,8 @@ interface Session {
   answered: DialogSeen[];
   /** Tells the running step that its dialog came. */
   onDialog?: () => void;
+  /** Set when the context is a browser the person started (browser.attach): never closed, only let go. */
+  attached?: Browser;
   /** The last dialog nobody asked for (dismissed); reported in the next failure. */
   unanswered?: DialogSeen;
   headless: boolean;
@@ -129,6 +131,8 @@ export class Adapter {
           return "pong";
         case "open":
           return await this.open(params);
+        case "attach":
+          return await this.attach(params);
         case "click":
           return await this.click(params);
         case "hover":
@@ -367,6 +371,51 @@ export class Adapter {
     const opened: Record<string, unknown> = { url: session.page.url(), title: await session.page.title() };
     if (dialog !== null) opened.dialog = dialog;
     return opened;
+  }
+
+  /**
+   * Takes over a browser the person started with a debugging port
+   * (`msedge --remote-debugging-port=9222`): its tabs, logins and
+   * extensions. Only this PC (127.0.0.1) is reached. The browser is never
+   * closed; the run lets go of it when it ends.
+   */
+  private async attach(params: Params): Promise<unknown> {
+    const port = params.port === undefined ? 9222 : Number(params.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new AdapterError("INVALID_PARAMS", "port must be a port number such as 9222");
+    const key = this.key(params);
+    const existing = this.sessions.get(key);
+    if (existing && !existing.attached) {
+      throw new AdapterError("CONTEXT_IN_USE", `browser context '${params.context ?? "default"}' already has a browser opened by browser.open`, {
+        details: { hint: "Give browser.attach its own `context` name, or close the other one first with browser.close." },
+      });
+    }
+    let session = existing;
+    if (!session || !session.attached?.isConnected()) {
+      let browser: Browser;
+      try {
+        browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: this.limit(params) });
+      } catch (error) {
+        throw new AdapterError("BROWSER_NOT_RUNNING", `no browser is waiting on port ${port}: ${(error as Error).message.split("\n")[0]}`, {
+          retryable: true,
+          details: {
+            port,
+            hint: `Start Edge with a debugging port and its own profile folder, e.g. msedge.exe --remote-debugging-port=${port} --user-data-dir="%LOCALAPPDATA%\\Shikigami\\edge-profile" (Edge and Chrome ignore the port on their everyday profile), sign in there once, and leave it open. See docs/browser.md "Using a browser the person opened".`,
+          },
+        });
+      }
+      const context = browser.contexts()[0] ?? (await browser.newContext());
+      const pages = context.pages();
+      const page = pages.find((p) => !p.url().startsWith("devtools://")) ?? (await context.newPage());
+      const created: Session = { context, page, headless: false, history: [page], answered: [], secrets: new Set(), secretFields: [], attached: browser };
+      for (const p of pages) this.watchTab(created, p);
+      context.on("page", (p) => this.watchTab(created, p));
+      session = created;
+      this.sessions.set(key, session);
+    }
+    if (params.title !== undefined || params.url !== undefined) {
+      return await this.switchTab({ ...params, index: undefined });
+    }
+    return { url: session.page.url(), title: await session.page.title() };
   }
 
   private target(params: Params): { page: Page; locator: Locator } {
@@ -935,6 +984,13 @@ export class Adapter {
   }
 
   private async closeSession(session: Session): Promise<SavedSession[]> {
+    if (session.attached) {
+      // The person's browser stays as it is: only the connection goes.
+      session.context.removeAllListeners("page");
+      for (const page of session.context.pages()) page.removeAllListeners("dialog");
+      await session.attached.close().catch(() => {});
+      return [];
+    }
     let saved: SavedSession[] = [];
     if (session.saveAs) {
       const state = await session.context.storageState().catch(() => undefined);
