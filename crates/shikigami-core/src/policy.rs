@@ -153,6 +153,60 @@ pub struct Policy {
     /// docs/design/remote-runs.md). Off unless enabled here.
     #[serde(default, skip_serializing_if = "RemotePolicy::is_default")]
     pub remote: RemotePolicy,
+    /// Who hears about unattended runs (the agent's and `shikigami run`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notify: Vec<NotifyRule>,
+}
+
+/// How an unattended run ended, for [`NotifyRule::on`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RunOutcome {
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+/// The shape of the message posted to a webhook.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum NotifyFormat {
+    /// A card for a Microsoft Teams "Workflows" webhook (or Power Automate's
+    /// "When a HTTP request is received", which can also send mail).
+    #[default]
+    Teams,
+    /// `{ "text": … }` for a Slack incoming webhook (and many chat tools).
+    Slack,
+    /// The run's summary as JSON, for your own systems.
+    Json,
+}
+
+/// One place unattended runs are reported to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NotifyRule {
+    /// Which endings to report. Default: failures only.
+    #[serde(default = "failed_only")]
+    pub on: Vec<RunOutcome>,
+    /// Only these flow IDs (default: every flow).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flows: Vec<String>,
+    /// The webhook URL (`https://`). Anyone with it can post to the channel:
+    /// treat it like a password.
+    pub webhook: String,
+    #[serde(default)]
+    pub format: NotifyFormat,
+}
+
+fn failed_only() -> Vec<RunOutcome> {
+    vec![RunOutcome::Failed]
+}
+
+impl NotifyRule {
+    pub fn applies(&self, outcome: RunOutcome, flow_id: &str) -> bool {
+        self.on.contains(&outcome)
+            && (self.flows.is_empty() || self.flows.iter().any(|s| s == flow_id))
+    }
 }
 
 /// How long run records are kept. Each PC applies it to its own records;
@@ -230,6 +284,7 @@ impl Default for Policy {
             flows: BTreeMap::new(),
             records: RecordsPolicy::default(),
             remote: RemotePolicy::default(),
+            notify: Vec::new(),
         }
     }
 }
@@ -347,6 +402,16 @@ impl Policy {
         }
         if self.records.keep_days == Some(0) || self.records.keep_runs == Some(0) {
             out.push("records: 0 would delete every run record; leave it out to keep them".into());
+        }
+        for (i, rule) in self.notify.iter().enumerate() {
+            if !rule.webhook.starts_with("https://") && !is_local_http(&rule.webhook) {
+                out.push(format!(
+                    "notify[{i}].webhook must start with https:// (http:// only for localhost)"
+                ));
+            }
+            if rule.on.is_empty() {
+                out.push(format!("notify[{i}].on is empty: it would never send"));
+            }
         }
         if self.remote.enabled {
             match self.remote.manager.as_deref() {

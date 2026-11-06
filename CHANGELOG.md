@@ -9,6 +9,7 @@
 ### 追加
 
 - Studio：現場の人が使う実行画面「Shikigami 実行」（別ウィンドウ）。公開されたフローだけが並び、入力変数から作るフォームで入力し、公開版を実行。実行中は一番上の段のノードの進み、終わると出力変数と `output/` に書いたファイル、失敗は日本語のエラー。サイドバーの「実行画面」か、Studio を `--runner` で起動して開く（docs/runner.md）
+- 無人実行の通知：`policy.json` の `notify` に Teams（ワークフローの Webhook）・Slack・任意の Webhook を書くと、エージェントのスケジュールと `shikigami run` の失敗（`on` で成功・取り消しも）を、フロー・エラー・PC・時刻つきで知らせます（docs/schedules.md）
 
 ## [0.1.3] - 2026-11-06
 
@@ -33,6 +34,7 @@
 - `desktop.getTable`：アプリの表・グリッド・一覧をまとめて読み、`browser.getTable` と同じ「列見出しをキーにしたオブジェクトのリスト」で返します。対応しているグリッドは画面外の行も読みます。10000 行を超えると `maxRows` を書かない限り `TABLE_TOO_LARGE`
 - メールの送信 `mail.send`（dangerous、承認の対象）。`via` で送り方を選びます：`outlook`（既定、この PC の Outlook）、`microsoft365`（Microsoft Graph、`oauth.signIn` でサインインしたシークレットの `accessToken`、サイトに `https://graph.microsoft.com`）、`smtp`（`server`・`from`、ログインはシークレットでサイトに `smtp:<サーバー>`、パスワードは TLS なしでは送らない）。シークレットのサイトの書き方 `smtp:<サーバー>` を追加（docs/office.md）
 - Excel 本体での操作：この PC の Excel でブックを開いているときは、`excel.*` の読み書きがファイルではなく開いているブックに働きます（画面の内容を読み、書いたら保存、Excel は閉じない）。`excel.recalculate`（数式を計算し直して保存）、`excel.sort`（見出しの列で並べ替え）、`excel.exportPdf`（ブックかシートを PDF に）を追加。どれもデスクトップ版 Excel が要り、ブックが開いていなければ見えない別の Excel を使います（docs/office.md）
+- Excel の書式・フィルター・ピボット：`excel.format`（太字・色・塗りつぶし・表示形式・配置・罫線・列幅）、`excel.filter`（見出しの列と値で絞り込み、`clear: true` で解除）、`excel.pivot`（見出しでまとめて合計・件数などを新しいシートに）を追加。どれもデスクトップ版 Excel が要り、開いているブックがあればそれを使います（docs/office.md）
 - スケジュールとエージェント：`shikigami agent install` で PC ごとのエージェントがサインイン時に起動し、`schedules.json` のスケジュール（毎日・曜日・毎月・n 分ごと・1 回）と、フォルダーにファイルが置かれたときに公開版を実行します。`shikigami agent status / stop / run / uninstall`、`shikigami schedule list / add / remove / enable / disable`（docs/schedules.md）
 
 ### 変更

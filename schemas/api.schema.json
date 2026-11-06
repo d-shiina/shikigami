@@ -2625,6 +2625,13 @@
         "remote": {
           "description": "Runs asked for by a management server (see\ndocs/design/remote-runs.md). Off unless enabled here.",
           "$ref": "#/$defs/RemotePolicy"
+        },
+        "notify": {
+          "description": "Who hears about unattended runs (the agent's and `shikigami run`).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NotifyRule"
+          }
         }
       },
       "additionalProperties": false
@@ -2775,6 +2782,70 @@
         }
       },
       "additionalProperties": false
+    },
+    "NotifyRule": {
+      "description": "One place unattended runs are reported to.",
+      "type": "object",
+      "properties": {
+        "on": {
+          "description": "Which endings to report. Default: failures only.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunOutcome"
+          },
+          "default": [
+            "failed"
+          ]
+        },
+        "flows": {
+          "description": "Only these flow IDs (default: every flow).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "webhook": {
+          "description": "The webhook URL (`https://`). Anyone with it can post to the channel:\ntreat it like a password.",
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/$defs/NotifyFormat",
+          "default": "teams"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "webhook"
+      ]
+    },
+    "RunOutcome": {
+      "description": "How an unattended run ended, for [`NotifyRule::on`].",
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "NotifyFormat": {
+      "description": "The shape of the message posted to a webhook.",
+      "oneOf": [
+        {
+          "description": "A card for a Microsoft Teams \"Workflows\" webhook (or Power Automate's\n\"When a HTTP request is received\", which can also send mail).",
+          "type": "string",
+          "const": "teams"
+        },
+        {
+          "description": "`{ \"text\": … }` for a Slack incoming webhook (and many chat tools).",
+          "type": "string",
+          "const": "slack"
+        },
+        {
+          "description": "The run's summary as JSON, for your own systems.",
+          "type": "string",
+          "const": "json"
+        }
+      ]
     },
     "ApprovalRequest": {
       "description": "One request, `approvals/<id>.json`.",

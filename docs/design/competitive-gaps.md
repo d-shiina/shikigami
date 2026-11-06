@@ -159,7 +159,7 @@
 
 ### 14. Excel の欠け
 
-- **今**（[office.md](../ja/office.md)）：開いているブックの操作・並べ替え・再計算・PDF 保存は済み。この PC の Excel で開いているブックには `excel.*` が自動で COM を使い（読み書きとも）、`excel.recalculate` / `excel.sort` / `excel.exportPdf` を追加した。残りは書式・フィルター・ピボット
+- **今**（[office.md](../ja/office.md)）：済み。この PC の Excel で開いているブックには `excel.*` が自動で COM を使い（読み書きとも）、`excel.recalculate` / `excel.sort` / `excel.exportPdf`、書式 `excel.format`・フィルター `excel.filter`・ピボット `excel.pivot` を追加した。残り：実機の Excel での確認
 - **相手**：3 製品とも、開いている Excel を COM で操作できる（PAD の Excel アクションは COM が基本）
 - **影響**：「人が開いて見ているブックに追記する」「数式を再計算した結果を読む」「PDF にして送る」は日本の事務で頻出
 - **方向**：ファイル直接を既定のまま、COM の「開いているブック」を別の入口として足す（デスクトップと同じく backend を自動で選ぶ形が AI に優しい）
