@@ -45,7 +45,7 @@ Versions themselves stay immutable. Moving a flow to the trash unpublishes it to
 
 ## 2. `policy.json`
 
-It sits directly in the workspace folder (the shared part). Without the file the defaults below apply. Edit it in Studio under "Permissions and approval". On the CLI: `shikigami policy show` (what is in effect), `shikigami policy check` (find mistakes), `shikigami policy init` (write the defaults).
+It sits directly in the workspace folder (the shared part). Without the file the defaults below apply. Edit it in Studio under Settings › "Run permissions". On the CLI: `shikigami policy show` (what is in effect), `shikigami policy check` (find mistakes), `shikigami policy init` (write the defaults).
 
 ```json
 {

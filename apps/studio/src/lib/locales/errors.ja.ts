@@ -28,7 +28,7 @@ export const errorsJa: Record<string, ErrorText> = {
   CALL_TARGET_NOT_FOUND: { what: "呼び出すフローが見つかりません", todo: "フローが消されていないか、呼び出し先の設定を確かめてください" },
   CALL_MISSING_INPUT: { what: "呼び出すフローに必要な入力が渡されていません", todo: "呼び出しノードの入力を埋めてください" },
   CALL_TOO_DEEP: { what: "フローの呼び出しが深くなりすぎました", todo: "フローが自分自身を呼び続けていないか確かめてください" },
-  RESUME_INCOMPATIBLE: { what: "直した内容では、止まった場所から続けられません", todo: "最初から実行し直してください" },
+  RESUME_INCOMPATIBLE: { what: "修正後の内容では、一時停止した箇所から再開できません", todo: "最初から実行し直してください" },
   UNSUPPORTED_STEP_TYPE: { what: "このノードの種類はこの環境では動きません", todo: "Shikigami を最新にするか、プラグインが入っているか確かめてください" },
   VALIDATION_FAILED: { what: "フローに直すべきところがあります", todo: "問題の一覧を見て直してください" },
   INVALID_PARAMS: { what: "ノードの設定が足りないか、形が合いません", todo: "ノードの設定を見直すか、AI に直してもらってください" },
@@ -37,7 +37,7 @@ export const errorsJa: Record<string, ErrorText> = {
   INTERNAL: { what: "Shikigami の中でエラーが起きました", todo: "もう一度実行してください。続くときは不具合として報告してください" },
   RUNTIME_PANIC: { what: "Shikigami の中でエラーが起きました", todo: "もう一度実行してください。続くときは不具合として報告してください" },
   ADAPTER_UNAVAILABLE: { what: "操作に使う部品（ブラウザ操作など）が見つかりません", todo: "Shikigami を入れ直してください" },
-  ADAPTER_CRASHED: { what: "操作に使う部品が止まりました", todo: "もう一度実行してください。次の操作で立ち上がり直します" },
+  ADAPTER_CRASHED: { what: "操作を担当するプログラムが異常終了しました", todo: "もう一度実行してください。次の操作で自動的に再起動します" },
 
   // Workspace rules
   SITE_NOT_ALLOWED: {
@@ -168,7 +168,7 @@ export const errorsJa: Record<string, ErrorText> = {
   UNKNOWN_COLUMN: { what: "見出しの行にない列名があります", todo: "見出しの名前と合わせてください" },
   INVALID_DATE: { what: "日付として読めません", todo: "2026/11/06 のような形にしてください" },
   MACRO_FAILED: { what: "マクロの実行中にエラーが起きました", todo: "Excel でマクロを動かして原因を確かめてください" },
-  MACRO_TIMEOUT: { what: "マクロが時間内に終わりませんでした", todo: "マクロがメッセージを出して止まっていないか確かめてください" },
+  MACRO_TIMEOUT: { what: "マクロが時間内に終わりませんでした", todo: "マクロがメッセージを表示して待機していないか確認してください" },
   APP_UNAVAILABLE: { what: "Office のアプリを起動できませんでした", todo: "アプリが入っているか確かめてください" },
   COM_ERROR: { what: "Office のアプリが思いがけない答えを返しました", todo: "アプリにダイアログが出ていないか確かめて、もう一度実行してください" },
   DOCUMENT_UNREADABLE: { what: (c) => `文書${c.q(c.path)}を読めません`, todo: "壊れていないか確かめてください" },
@@ -191,7 +191,7 @@ export const errorsJa: Record<string, ErrorText> = {
       const s = c.num("status") ?? 0;
       if (s === 401 || s === 403) return "サインインの情報や権限を確かめてください";
       if (s === 404) return "アドレスが正しいか確かめてください";
-      if (s >= 500 || s === 429) return "相手が混んでいるか止まっています。時間をおいて実行してください";
+      if (s >= 500 || s === 429) return "接続先が混雑しているか停止しています。時間をおいて実行してください";
       return "送る内容が相手の求める形か確かめてください";
     },
   },

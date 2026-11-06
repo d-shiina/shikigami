@@ -57,5 +57,5 @@ Press "Run" (F5). A browser opens and you can watch it sign in and ship; the flo
 
 ## 6. With a real system
 
-- Add the system's address to the allowed sites under Settings › Permissions and approval, so runs never go anywhere else ([policy](../policy.md))
+- Add the system's address to the allowed sites under Settings › Run permissions, so runs never go anywhere else ([policy](../policy.md))
 - For two-step sign-in or CAPTCHAs, add a node that waits for a person (`browser.waitForHuman`)
