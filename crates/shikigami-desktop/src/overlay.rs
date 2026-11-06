@@ -77,6 +77,14 @@ pub enum Raw {
         extended: bool,
         held: Held,
     },
+    /// Any other key, held back only because something before it still
+    /// waits to be sent on (so it cannot overtake a Tab or a click).
+    Pass {
+        vk: u16,
+        scan: u16,
+        extended: bool,
+        up: bool,
+    },
     /// The banner was clicked.
     Stop,
 }
@@ -98,6 +106,9 @@ static SWALLOW_UP: AtomicBool = AtomicBool::new(false);
 static RECORDING: AtomicBool = AtomicBool::new(false);
 /// What the recorder has not taken yet.
 static RAW: Mutex<VecDeque<Raw>> = Mutex::new(VecDeque::new());
+/// Set while the recorder is reading the screen for a held-back event: the
+/// keys after it wait in line too.
+static PROCESSING: AtomicBool = AtomicBool::new(false);
 /// Set when a key that is typing (not a command) goes down.
 static TYPED: AtomicBool = AtomicBool::new(false);
 /// The recorder's last sign of life (tick count): when it stops answering,
@@ -245,6 +256,11 @@ impl Overlay {
             Some(Raw::Up { at, .. }) => Some(at),
             _ => None,
         }
+    }
+
+    /// While set, every key waits in line behind the events held back.
+    pub fn processing(&self, on: bool) {
+        PROCESSING.store(on, Ordering::SeqCst);
     }
 
     /// Whether a typing key went down since the last call.
@@ -711,13 +727,29 @@ fn record_key(msg: u32, info: &KBDLLHOOKSTRUCT) -> Option<LRESULT> {
     let Ok(code) = u16::try_from(vk) else {
         return None;
     };
+    let extended = info.flags.0 & LLKHF_EXTENDED.0 != 0;
+    // Something held back is not sent on yet: this key waits behind it.
+    let in_line = |up: bool| {
+        let waiting =
+            PROCESSING.load(Ordering::SeqCst) || RAW.lock().is_ok_and(|queue| !queue.is_empty());
+        if !waiting {
+            return None;
+        }
+        push_raw(Raw::Pass {
+            vk: code,
+            scan: u16::try_from(info.scanCode).unwrap_or(0),
+            extended,
+            up,
+        });
+        Some(LRESULT(1))
+    };
     match msg {
         WM_KEYDOWN | WM_SYSKEYDOWN => {
             let held = held_now();
             if keys::is_command(code, held) {
                 push_raw(Raw::Key {
                     vk: code,
-                    extended: info.flags.0 & LLKHF_EXTENDED.0 != 0,
+                    extended,
                     held,
                 });
                 if let Ok(mut back) = HELD_BACK.lock()
@@ -727,16 +759,22 @@ fn record_key(msg: u32, info: &KBDLLHOOKSTRUCT) -> Option<LRESULT> {
                 }
                 return Some(LRESULT(1));
             }
+            if let Some(held) = in_line(false) {
+                return Some(held);
+            }
             if !keys::is_modifier(code) {
                 TYPED.store(true, Ordering::SeqCst);
             }
             None
         }
         WM_KEYUP | WM_SYSKEYUP => {
-            let mut back = HELD_BACK.lock().ok()?;
-            let i = back.iter().position(|v| *v == vk)?;
-            back.remove(i);
-            Some(LRESULT(1))
+            if let Ok(mut back) = HELD_BACK.lock()
+                && let Some(i) = back.iter().position(|v| *v == vk)
+            {
+                back.remove(i);
+                return Some(LRESULT(1));
+            }
+            in_line(true)
         }
         _ => None,
     }

@@ -41,10 +41,14 @@ export function recordedSteps(actions: readonly RecordedAction[], newId: () => s
     if (a.kind === "drag") return skipped.push({ index, reason: "drag" });
     if (a.failed || !a.target) return skipped.push({ index, reason: "failed" });
     const target = a.target;
-    const step = (type: string, params: Record<string, unknown>, name?: string): Step => ({
+    // A place without a name (`point`) is for the mouse only: keys go to
+    // the window, after clicking the place.
+    const byPoint = "point" in target;
+    const windowOnly = { window: target.window };
+    const step = (type: string, params: Record<string, unknown>, name?: string, on: Record<string, unknown> = target): Step => ({
       id: newId(),
       type,
-      params: { target, ...params },
+      params: { target: on, ...params },
       ...(name ? { name } : {}),
     });
     switch (a.kind) {
@@ -59,13 +63,21 @@ export function recordedSteps(actions: readonly RecordedAction[], newId: () => s
         );
         break;
       }
-      case "setValue":
-        if (a.password) steps.push(step("desktop.setValue", { value: "" }, t.recording.passwordName));
-        else if (a.unread || a.value === undefined) steps.push(step("desktop.type", { text: "" }, t.recording.unreadName));
-        else steps.push(step("desktop.setValue", { value: a.value }));
+      case "setValue": {
+        const name = a.password ? t.recording.passwordName : a.unread || a.value === undefined ? t.recording.unreadName : undefined;
+        const text = a.password || a.unread || a.value === undefined ? "" : a.value;
+        if (byPoint) {
+          steps.push(step("desktop.mouseClick", {}));
+          steps.push(step("desktop.type", { text }, name, windowOnly));
+        } else if (!a.password && (a.unread || a.value === undefined)) {
+          steps.push(step("desktop.type", { text: "" }, name));
+        } else {
+          steps.push(step("desktop.setValue", { value: text }, name));
+        }
         break;
+      }
       case "press":
-        steps.push(step("desktop.press", { key: a.key ?? "Enter" }));
+        steps.push(step("desktop.press", { key: a.key ?? "Enter" }, undefined, byPoint ? windowOnly : target));
         break;
     }
   });

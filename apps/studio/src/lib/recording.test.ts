@@ -46,6 +46,22 @@ describe("recordings", () => {
     ]);
   });
 
+  it("send keys for a place without a name to its window", () => {
+    const place = { window: win, point: { x: 3, y: 4 } };
+    const { steps } = recordedSteps(
+      [
+        { kind: "setValue", target: place, value: "abc" },
+        { kind: "press", target: place, key: "Enter" },
+      ],
+      counter(),
+    );
+    expect(steps.map((s) => [s.type, s.params])).toEqual([
+      ["desktop.mouseClick", { target: place }],
+      ["desktop.type", { target: { window: win }, text: "abc" }],
+      ["desktop.press", { target: { window: win }, key: "Enter" }],
+    ]);
+  });
+
   it("name a target used twice as a part, and keep the order", () => {
     const { steps } = recordedSteps(actions, counter());
     const ops = recordingOps(steps, {}, { parentId: null, block: null, index: 2 });

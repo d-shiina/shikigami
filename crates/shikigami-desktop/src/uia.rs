@@ -730,6 +730,8 @@ impl Uia {
         };
         let mut timed_out = false;
         loop {
+            // The last held-back event has been sent on.
+            overlay.processing(false);
             overlay.beat();
             if overlay.typed() {
                 self.note_typing(&mut rec, own);
@@ -743,9 +745,21 @@ impl Uia {
                 continue;
             };
             let before = rec.actions.len();
+            overlay.processing(matches!(raw, Raw::Down { .. } | Raw::Key { .. }));
             match raw {
                 Raw::Stop => break,
                 Raw::Up { .. } => {}
+                Raw::Pass {
+                    vk,
+                    scan,
+                    extended,
+                    up,
+                } => {
+                    replay_raw_key(vk, scan, extended, up);
+                    if !up && !keys::is_modifier(vk) {
+                        self.note_typing(&mut rec, own);
+                    }
+                }
                 Raw::Down { button, at, time } => {
                     let up = loop {
                         if let Some(up) = overlay.take_up(button) {
@@ -812,11 +826,19 @@ impl Uia {
                         // the Enter key, after the text typed so far.
                         let typed = self.field_action(el);
                         let mut press = self.element_action(el);
+                        let ime = ime_open();
                         replay_key(vk, extended, held);
                         std::thread::sleep(Duration::from_millis(80));
-                        if typed.get("value").is_some()
-                            && value_of(el).as_deref() != typed["value"].as_str()
-                        {
+                        // Confirming adds the converted text to what was
+                        // there; a submit that clears or closes the field
+                        // does not.
+                        let grew = match (typed["value"].as_str(), value_of(el)) {
+                            (Some(before), Some(after)) => {
+                                after.chars().count() > before.chars().count()
+                            }
+                            _ => false,
+                        };
+                        if ime && grew {
                             continue;
                         }
                         rec.field = None;
@@ -1971,6 +1993,18 @@ fn ime_open() -> bool {
         );
         sent.0 != 0 && open != 0
     }
+}
+
+/// Sends on a key that waited in line, as it was.
+fn replay_raw_key(vk: u16, scan: u16, extended: bool, up: bool) {
+    let mut flags = KEYBD_EVENT_FLAGS(0);
+    if extended {
+        flags |= KEYEVENTF_EXTENDEDKEY;
+    }
+    if up {
+        flags |= KEYEVENTF_KEYUP;
+    }
+    let _ = send(&[keyboard(vk, scan, flags)]);
 }
 
 /// Sends a held-back click on to the app: pressed at `at`, released at `up`.
