@@ -632,6 +632,18 @@ pub async fn run_scenario(
             message: e.message,
             details: e.details,
         })?;
+    track_run(app, &state, id, handle, RUN_EVENT)
+}
+
+/// Records a started run, sends its events to the windows as `event`, and
+/// keeps it in the registry (for `stop_run`) until it ends.
+pub(crate) fn track_run(
+    app: AppHandle,
+    state: &AppState,
+    id: ScenarioId,
+    handle: shikigami_runtime::RunHandle,
+    event_name: &'static str,
+) -> CmdResult<RunId> {
     let run_id = handle.run_id.clone();
     let mut recorder = RunRecorder::create(state.service.store().local_root(), &run_id)
         .map_err(|e| err("STORAGE_ERROR", e.to_string()))?
@@ -657,7 +669,7 @@ pub async fn run_scenario(
                 if let Err(e) = recorder.write_event(event) {
                     tracing::warn!(error = %e, "failed to record run event");
                 }
-                if let Err(e) = emit_app.emit(RUN_EVENT, event) {
+                if let Err(e) = emit_app.emit(event_name, event) {
                     tracing::warn!(error = %e, "failed to emit run event");
                 }
                 if let RunEvent::Paused {

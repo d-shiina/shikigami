@@ -5,10 +5,11 @@
 // kind of work (run history, schedules) is a new row here. Above the places,
 // the AI: its chat opens right beside this column, as Notion AI and Linear's
 // agent do, since it works on whatever place is open.
-import { Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, Settings2, Workflow } from "lucide-react";
+import { AppWindow, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, Settings2, Workflow } from "lucide-react";
 import { anyBusy, useAgent } from "../agent";
-import { useStudio } from "../context";
+import { useStudio, useStudioApi } from "../context";
 import { t } from "../lib/i18n";
+import { runnerApi } from "../runner/api";
 import type { Place } from "../store";
 import { useUpdate } from "./AppMenu";
 import { useInbox } from "./ReviewDesk";
@@ -95,6 +96,7 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
   const asks = useStudio((s) => s.secretRequests.length);
   const update = useUpdate();
   const go = (p: Place) => () => setPlace(p);
+  const store = useStudioApi();
   return (
     <aside aria-label={t.shell.places} style={{ width }} className="flex h-full shrink-0 flex-col border-r border-slate-200 bg-paper">
       {/* The top of the window: room to drag it by, level with the title bar. */}
@@ -127,7 +129,9 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
           title={asks > 0 ? t.bar.secretAskTitle : t.secretsIntro}
         />
       </nav>
-      <div className="px-2 py-1.5">
+      <div className="space-y-px px-2 py-1.5">
+        {/* Another window, not a place: the published scenarios for the people who only run them. */}
+        <Item icon={AppWindow} label={t.runner.open} on={false} onClick={() => void runnerApi.openWindow().catch((e: unknown) => store.setState({ error: e instanceof Error ? e.message : String(e) }))} title={t.runner.openTitle} />
         <Item
           icon={Settings2}
           label={t.shell.settings}

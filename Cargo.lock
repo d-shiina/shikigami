@@ -4684,6 +4684,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-updater",
  "tempfile",
+ "time",
  "tokio",
  "tokio-util",
  "tracing",

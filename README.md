@@ -23,6 +23,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/tutorials/](docs/tutorials/README.md) | Tutorials: one piece of office work from the request to the AI to a monthly run (sales CSVs into Excel, invoices from an order list, a web order system) |
 | [docs/architecture.md](docs/architecture.md) | System layout, scenario format, adapter / MCP / IPC / DB / error / security design, design decisions, MVP acceptance criteria |
 | [docs/mcp.md](docs/mcp.md) | Connecting the MCP server (Claude Code / Codex / Cursor), tool list, audit log, limits |
+| [docs/runner.md](docs/runner.md) | The run window for the people who only run scenarios: published scenarios, a form made from the inputs, results and files |
 | [docs/policy.md](docs/policy.md) | Unattended runs use only an approved, published version; allowed sites and apps; approving AI operations (`policy.json`) |
 | [docs/expressions.md](docs/expressions.md) | Functions available in scenario expressions |
 | [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md), [docs/database.md](docs/database.md) | Built-in nodes: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF, databases |
