@@ -143,6 +143,7 @@ const BY_TYPE: Record<string, LucideIcon> = {
   "desktop.waitFor": Hourglass,
   "desktop.screenshot": Camera,
   "desktop.closeWindow": X,
+  "desktop.getTable": Table,
   "desktop.selectMenu": Menu,
   "desktop.scroll": ArrowDownUp,
   "desktop.mouseScroll": Mouse,
