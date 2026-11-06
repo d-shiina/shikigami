@@ -34,6 +34,9 @@ export const errorsEn: Record<string, ErrorText> = {
   SITE_NOT_ALLOWED: { what: (c) => `${c.q(c.str("site"))} is not one of the allowed sites`, todo: "If it is right, add the site in Settings › Permissions and approval" },
   APP_NOT_ALLOWED: { what: "This app is not one of the allowed apps", todo: "If it is right, add the app in Settings › Permissions and approval" },
   UNATTENDED_NOT_ALLOWED: { what: "This flow may not run unattended", todo: "Check Settings › Permissions and approval" },
+  NOT_PUBLISHED: { what: "This flow has no published version", todo: "Schedules and unattended runs run the published version. Publish it from To review or the Versions tab" },
+  DESKTOP_UNAVAILABLE: { what: "The screen was locked or at the sign-in screen, so the mouse and keyboard could not be used", todo: "Keep the PC signed in and unlocked for scenarios that use the screen" },
+  RUN_INTERRUPTED: { what: "The run ended part way, when the PC restarted or the process ended", todo: "Check in the record how far it got, then run it again" },
   POLICY_DENIED: { what: "The workspace rules do not let an AI do this", todo: "Check Settings › Permissions and approval" },
 
   // Expressions
