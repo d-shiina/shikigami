@@ -213,10 +213,11 @@ fn kill(pid: u64) {
         .status();
 }
 
-/// A WinForms window with a DataGridView and a list view, drawn by
-/// PowerShell (every Windows has it), read with desktop.getTable.
+/// A WinForms window drawn by PowerShell (every Windows has it, and the
+/// CI's Notepad has no classic Edit): a menu bar, a long text to scroll,
+/// a DataGridView and a list view read with desktop.getTable.
 #[tokio::test]
-async fn winforms_grids_read_as_tables() {
+async fn winforms_menus_scrolling_and_tables() {
     let script = r#"
 Add-Type -AssemblyName System.Windows.Forms
 $f = New-Object System.Windows.Forms.Form
@@ -235,7 +236,16 @@ $l.Name = 'files'; $l.View = 'Details'; $l.Dock = 'Bottom'; $l.Height = 200
 $i = New-Object System.Windows.Forms.ListViewItem('a.txt')
 [void]$i.SubItems.Add('1 KB')
 [void]$l.Items.Add($i)
-$f.Controls.Add($g); $f.Controls.Add($l)
+$t = New-Object System.Windows.Forms.TextBox
+$t.Name = 'memo'; $t.Multiline = $true; $t.ScrollBars = 'Vertical'; $t.Dock = 'Fill'
+$m = New-Object System.Windows.Forms.MenuStrip
+$file = New-Object System.Windows.Forms.ToolStripMenuItem('ファイル(&F)')
+$write = New-Object System.Windows.Forms.ToolStripMenuItem('メモを書く(&W)...')
+$write.add_Click({ $t.Text = 'menu ok' })
+[void]$file.DropDownItems.Add($write)
+[void]$m.Items.Add($file)
+$f.Controls.Add($t); $f.Controls.Add($g); $f.Controls.Add($l); $f.Controls.Add($m)
+$f.MainMenuStrip = $m
 [System.Windows.Forms.Application]::Run($f)
 "#;
     let path = std::env::temp_dir().join("shikigami-grid-test.ps1");
@@ -243,10 +253,11 @@ $f.Controls.Add($g); $f.Controls.Add($l)
     bytes.extend_from_slice(script.as_bytes());
     std::fs::write(&path, bytes).unwrap();
 
+    let long: String = (1..=300).map(|i| format!("line {i}\r\n")).collect();
     let adapter = DesktopAdapter::new();
     let runtime = Runtime::builder().adapter(&adapter).build();
     let mut s = Scenario::new("grids");
-    for name in ["pid", "grid", "files"] {
+    for name in ["pid", "grid", "files", "memo", "scrolled"] {
         s.variables.push(VariableDef {
             direction: VarDirection::Output,
             ..VariableDef::new(name, VarType::Any)
@@ -268,6 +279,26 @@ $f.Controls.Add($g); $f.Controls.Add($l)
             types::GET_TABLE,
             json!({ "target": { "window": window, "element": { "id": "files" } } }),
             Some("files"),
+        ),
+        step(
+            types::SELECT_MENU,
+            json!({ "target": { "window": window }, "path": ["ファイル", "メモを書く"] }),
+            None,
+        ),
+        step(
+            types::GET_VALUE,
+            json!({ "target": { "window": window, "element": { "id": "memo" } } }),
+            Some("memo"),
+        ),
+        step(
+            types::SET_VALUE,
+            json!({ "target": { "window": window, "element": { "id": "memo" } }, "value": long }),
+            None,
+        ),
+        step(
+            types::SCROLL,
+            json!({ "target": { "window": window, "element": { "id": "memo" } }, "direction": "bottom" }),
+            Some("scrolled"),
         ),
     ];
     let report = runtime
@@ -293,4 +324,6 @@ $f.Controls.Add($g); $f.Controls.Add($l)
         report.outputs["files"],
         json!([{ "名前": "a.txt", "サイズ": "1 KB" }])
     );
+    assert_eq!(report.outputs["memo"], json!("menu ok"));
+    assert_eq!(report.outputs["scrolled"]["atEnd"], json!(true));
 }
