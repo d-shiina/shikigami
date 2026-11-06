@@ -1,7 +1,8 @@
 //! Pointing at the screen from Studio: the picker ("画面から選ぶ") and the
-//! highlight ("光らせる") of a node's target. Both go through the adapter's
-//! `inspect` with an `action`, the same entry the AI uses, so the target
-//! Studio fills in is built in one place (the adapter).
+//! highlight ("光らせる") of a node's target, and the recorder ("記録").
+//! All go through the adapter's `inspect` with an `action`, the same entry
+//! the AI uses, so the targets Studio fills in are built in one place (the
+//! adapter).
 
 use serde_json::Value;
 use shikigami_core::ErrorPayload;
@@ -19,7 +20,7 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
     }
 }
 
-/// Runs `params` (with `action: "pick" | "highlight"`) on the `adapter`
+/// Runs `params` (with `action: "pick" | "highlight" | "record"`) on the `adapter`
 /// (`desktop` / `browser`). `session` is the run whose browser to use.
 /// While picking (desktop or browser), Studio gets out of the way: it is minimised, and comes
 /// back when the user has clicked (or pressed Esc).
@@ -34,7 +35,11 @@ pub async fn point_at(
     let Some(found) = state.adapters.iter().find(|a| a.name() == adapter).cloned() else {
         return Err(err("NOT_SUPPORTED", format!("no adapter named {adapter}")));
     };
-    let picking = params.get("action").and_then(Value::as_str) == Some("pick");
+    // Picking and recording (desktop only) both need the screen.
+    let picking = matches!(
+        params.get("action").and_then(Value::as_str),
+        Some("pick" | "record")
+    );
     let window = app.get_webview_window("main");
     if picking {
         if let Some(w) = &window {

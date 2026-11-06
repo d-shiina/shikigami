@@ -159,6 +159,17 @@ pub enum Op {
         message: Option<String>,
         timeout_ms: u64,
     },
+    /// Records what the user does until the banner is clicked or
+    /// `timeout_ms` passes: each click (with the target of what was
+    /// clicked, as `Pick` builds it), each text field's final text, and
+    /// each command key. Answers `{ status: "stopped" | "timedOut",
+    /// actions: [...] }`. `title` is the banner's first line, with `{n}`
+    /// replaced by the number of actions so far.
+    Record {
+        title: String,
+        hint: String,
+        timeout_ms: u64,
+    },
     /// Frames the target on screen for `ms`: `{ found, rect? }`.
     Highlight {
         target: Target,

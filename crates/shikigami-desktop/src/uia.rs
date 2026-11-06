@@ -35,16 +35,18 @@ use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
 };
+use windows::Win32::UI::Input::Ime::ImmGetDefaultIMEWnd;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT,
+    GetDoubleClickTime, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT,
     KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSE_EVENT_FLAGS,
     MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE,
     MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput,
     VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    BM_CLICK, GetCursorPos, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, PostMessageW,
-    SW_RESTORE, SetCursorPos, SetForegroundWindow, ShowWindow, WM_CLOSE,
+    BM_CLICK, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId,
+    IsIconic, PostMessageW, SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_RESTORE, SendMessageTimeoutW,
+    SetCursorPos, SetForegroundWindow, ShowWindow, WM_CLOSE, WM_IME_CONTROL,
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
@@ -54,9 +56,10 @@ use crate::backend::{
 use crate::bitmap::{Bitmap, Rect};
 use crate::capture;
 use crate::engine::Engine;
+use crate::keys;
 use crate::keys::{Chord, Key};
 use crate::menu;
-use crate::overlay::{Input, Overlay};
+use crate::overlay::{Input, Overlay, Raw, held_now};
 use crate::roles;
 use crate::target::{
     ElementQuery, NodeInfo, Point, Target, WindowInfo, WindowQuery, app_allowed, describe,
@@ -360,6 +363,11 @@ impl Uia {
                 timeout_ms,
             } => self.pick(message, timeout_ms),
             Op::Highlight { target, ms } => self.highlight(&target, ms),
+            Op::Record {
+                title,
+                hint,
+                timeout_ms,
+            } => self.record(&title, hint, timeout_ms),
         }
     }
 
@@ -616,9 +624,16 @@ impl Uia {
 
     /// The target for the element at `pt` on screen.
     fn picked_at(&self, pt: POINT) -> Result<Value, StepError> {
+        // SAFETY: UIA call on the UIA thread.
+        let el = unsafe { self.automation.ElementFromPoint(pt).or_fail()? };
+        self.picked(&el, pt)
+    }
+
+    /// The target for `el`; `pt` (on screen) is where to point when it has
+    /// nothing better.
+    fn picked(&self, el: &IUIAutomationElement, pt: POINT) -> Result<Value, StepError> {
         // SAFETY: UIA calls on the UIA thread.
         unsafe {
-            let el = self.automation.ElementFromPoint(pt).or_fail()?;
             let root = self.automation.GetRootElement().or_fail()?;
             let walker = self.automation.ControlViewWalker().or_fail()?;
             // The top-level window: the last element before the desktop.
@@ -688,6 +703,254 @@ impl Uia {
                 );
             }
             Ok(result)
+        }
+    }
+
+    /// Records what the user does (see `Op::Record`). Each click and
+    /// command key is held back by the hooks until the screen is read (so
+    /// the target is the thing clicked, not what the click opened), then
+    /// sent on to the app.
+    fn record(&self, title: &str, hint: String, timeout_ms: u64) -> Result<Value, StepError> {
+        let life = Duration::from_millis(timeout_ms);
+        let titled = |n: usize| title.replace("{n}", &n.to_string());
+        let overlay = Overlay::record(titled(0), hint, life + Duration::from_secs(60))?;
+        let deadline = Instant::now() + life;
+        // SAFETY: plain Win32 calls.
+        let (own, double_ms, slop) = unsafe {
+            (
+                GetCurrentProcessId(),
+                GetDoubleClickTime(),
+                (GetSystemMetrics(SM_CXDOUBLECLK) / 2).max(2),
+            )
+        };
+        let mut rec = Recorder {
+            actions: Vec::new(),
+            field: None,
+            last_click: None,
+        };
+        let mut timed_out = false;
+        loop {
+            overlay.beat();
+            if overlay.typed() {
+                self.note_typing(&mut rec, own);
+            }
+            let Some(raw) = overlay.next_raw() else {
+                if Instant::now() >= deadline {
+                    timed_out = true;
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(8));
+                continue;
+            };
+            let before = rec.actions.len();
+            match raw {
+                Raw::Stop => break,
+                Raw::Up { .. } => {}
+                Raw::Down { button, at, time } => {
+                    let up = loop {
+                        if let Some(up) = overlay.take_up(button) {
+                            break up;
+                        }
+                        overlay.beat();
+                        if Instant::now() >= deadline + Duration::from_secs(30) {
+                            break at;
+                        }
+                        std::thread::sleep(Duration::from_millis(4));
+                    };
+                    // The second click of a double click: sent on at once,
+                    // so the app sees a double click.
+                    if let Some(last) = rec.last_click.take()
+                        && last.button == button
+                        && time.wrapping_sub(last.time) <= double_ms
+                        && (at.x - last.at.x).abs() <= slop
+                        && (at.y - last.at.y).abs() <= slop
+                    {
+                        replay_click(button, at, up);
+                        if let Some(action) = last.action.and_then(|i| rec.actions.get_mut(i)) {
+                            action["double"] = json!(true);
+                        }
+                        continue;
+                    }
+                    self.flush_field(&mut rec);
+                    let action = self.clicked(own, button, at, up, slop);
+                    replay_click(button, at, up);
+                    let index = action.map(|a| {
+                        rec.actions.push(a);
+                        rec.actions.len() - 1
+                    });
+                    rec.last_click = Some(LastClick {
+                        button,
+                        at,
+                        time,
+                        action: index,
+                    });
+                }
+                Raw::Key { vk, extended, held } => {
+                    // SAFETY: UIA call on the UIA thread.
+                    let focused = unsafe { self.automation.GetFocusedElement().ok() };
+                    let theirs = focused.as_ref().filter(|el| element_pid(el) != own);
+                    let field = theirs.filter(|el| editable(el));
+                    let typing_here = field
+                        .is_some_and(|el| rec.field.as_ref().is_some_and(|f| self.same(f, el)));
+                    if let Some(el) = field
+                        && (keys::is_text_edit(vk, held)
+                            || (typing_here && keys::is_ime_key(vk, held, ime_open())))
+                    {
+                        // Paste, undo, kana conversion…: part of the typing,
+                        // whose text is read when it ends.
+                        replay_key(vk, extended, held);
+                        self.keep_field(&mut rec, el.clone());
+                        continue;
+                    }
+                    if let Some(el) = field
+                        && typing_here
+                        && vk == 0x0D
+                        && held == keys::Held::default()
+                    {
+                        // Enter while typing: confirming the IME's conversion
+                        // changes the text (still typing); otherwise it is
+                        // the Enter key, after the text typed so far.
+                        let typed = self.field_action(el);
+                        let mut press = self.element_action(el);
+                        replay_key(vk, extended, held);
+                        std::thread::sleep(Duration::from_millis(80));
+                        if typed.get("value").is_some()
+                            && value_of(el).as_deref() != typed["value"].as_str()
+                        {
+                            continue;
+                        }
+                        rec.field = None;
+                        push_field(&mut rec, typed);
+                        press["kind"] = json!("press");
+                        press["key"] = json!("Enter");
+                        rec.actions.push(press);
+                        overlay.title(titled(rec.actions.len()));
+                        continue;
+                    }
+                    self.flush_field(&mut rec);
+                    if let (Some(el), Some(name)) = (theirs, keys::name(vk, held)) {
+                        let mut action = self.element_action(el);
+                        action["kind"] = json!("press");
+                        action["key"] = json!(name);
+                        rec.actions.push(action);
+                    }
+                    replay_key(vk, extended, held);
+                }
+            }
+            if rec.actions.len() != before {
+                overlay.title(titled(rec.actions.len()));
+            }
+        }
+        self.flush_field(&mut rec);
+        drop(overlay);
+        Ok(json!({
+            "status": if timed_out { "timedOut" } else { "stopped" },
+            "actions": rec.actions,
+        }))
+    }
+
+    /// What a click at `at` (released at `up`) was, before the app sees it:
+    /// `None` for a click on Studio itself.
+    fn clicked(
+        &self,
+        own: u32,
+        button: MouseButton,
+        at: POINT,
+        up: POINT,
+        slop: i32,
+    ) -> Option<Value> {
+        // SAFETY: UIA call on the UIA thread.
+        let el = unsafe { self.automation.ElementFromPoint(at).ok()? };
+        if element_pid(&el) == own {
+            return None;
+        }
+        let button = match button {
+            MouseButton::Left => "left",
+            MouseButton::Right => "right",
+        };
+        if (up.x - at.x).abs() > slop * 2 || (up.y - at.y).abs() > slop * 2 {
+            return Some(json!({
+                "kind": "drag",
+                "button": button,
+                "from": { "x": at.x, "y": at.y },
+                "to": { "x": up.x, "y": up.y },
+            }));
+        }
+        let mut action = match self.picked(&el, at) {
+            Ok(picked) => picked,
+            Err(e) => json!({ "failed": { "code": e.code, "message": e.message } }),
+        };
+        action["kind"] = json!("click");
+        action["button"] = json!(button);
+        action["double"] = json!(false);
+        if editable(&el) {
+            action["editable"] = json!(true);
+        }
+        Some(action)
+    }
+
+    /// `{ target, how, label, window, rect }` for an element (a field, the
+    /// focus when a key was pressed).
+    fn element_action(&self, el: &IUIAutomationElement) -> Value {
+        // SAFETY: UIA call on the UIA thread.
+        let rect = unsafe { el.CurrentBoundingRectangle().ok() };
+        let pt = rect.and_then(|r| center(r).ok()).unwrap_or_default();
+        self.picked(el, pt)
+            .unwrap_or_else(|e| json!({ "failed": { "code": e.code, "message": e.message } }))
+    }
+
+    /// A typing key went down: the focused field is the one being typed in.
+    fn note_typing(&self, rec: &mut Recorder, own: u32) {
+        // SAFETY: UIA call on the UIA thread.
+        let Some(el) = (unsafe { self.automation.GetFocusedElement().ok() }) else {
+            return;
+        };
+        if element_pid(&el) != own {
+            self.keep_field(rec, el);
+        }
+    }
+
+    fn keep_field(&self, rec: &mut Recorder, el: IUIAutomationElement) {
+        let same = rec.field.as_ref().is_some_and(|f| self.same(f, &el));
+        if !same {
+            self.flush_field(rec);
+            rec.field = Some(el);
+        }
+    }
+
+    /// The text typed into the field so far, as one `setValue`.
+    fn flush_field(&self, rec: &mut Recorder) {
+        let Some(el) = rec.field.take() else {
+            return;
+        };
+        let action = self.field_action(&el);
+        push_field(rec, action);
+    }
+
+    /// `setValue` with the field's text now (never a password's).
+    fn field_action(&self, el: &IUIAutomationElement) -> Value {
+        let mut action = self.element_action(el);
+        // SAFETY: UIA call on the UIA thread.
+        let password = unsafe { el.CurrentIsPassword().map(|b| b.as_bool()).unwrap_or(false) };
+        if password {
+            action["password"] = json!(true);
+        } else {
+            match value_of(el) {
+                Some(value) => action["value"] = json!(value),
+                None => action["unread"] = json!(true),
+            }
+        }
+        action["kind"] = json!("setValue");
+        action
+    }
+
+    fn same(&self, a: &IUIAutomationElement, b: &IUIAutomationElement) -> bool {
+        // SAFETY: UIA call on the UIA thread.
+        unsafe {
+            self.automation
+                .CompareElements(a, b)
+                .map(|b| b.as_bool())
+                .unwrap_or(false)
         }
     }
 
@@ -1626,6 +1889,132 @@ fn node_info(el: &IUIAutomationElement, depth: usize) -> NodeInfo {
             },
         }
     }
+}
+
+/// What the recorder has seen so far.
+struct Recorder {
+    actions: Vec<Value>,
+    /// The text field being typed in (read when the typing ends).
+    field: Option<IUIAutomationElement>,
+    last_click: Option<LastClick>,
+}
+
+struct LastClick {
+    button: MouseButton,
+    at: POINT,
+    time: u32,
+    /// Its place in `actions` (`None` when it was not written down).
+    action: Option<usize>,
+}
+
+fn element_pid(el: &IUIAutomationElement) -> u32 {
+    // SAFETY: UIA call on the UIA thread.
+    unsafe { el.CurrentProcessId().unwrap_or(0) as u32 }
+}
+
+/// A text field the user can type in.
+fn editable(el: &IUIAutomationElement) -> bool {
+    // SAFETY: UIA calls on the UIA thread.
+    unsafe {
+        pattern::<IUIAutomationValuePattern>(el, UIA_ValuePatternId)
+            .and_then(|p| p.CurrentIsReadOnly())
+            .is_ok_and(|read_only| !read_only.as_bool())
+    }
+}
+
+/// Adds a field's `setValue`. A click into the field just before is part
+/// of typing into it, so it goes.
+fn push_field(rec: &mut Recorder, action: Value) {
+    if let Some(last) = rec.actions.last()
+        && last["kind"] == "click"
+        && last["button"] == "left"
+        && last["double"] == false
+        && last["target"] == action["target"]
+    {
+        rec.actions.pop();
+        if let Some(click) = rec.last_click.as_mut() {
+            click.action = None;
+        }
+    }
+    rec.actions.push(action);
+}
+
+/// A field's text now.
+fn value_of(el: &IUIAutomationElement) -> Option<String> {
+    // SAFETY: UIA calls on the UIA thread.
+    unsafe {
+        pattern::<IUIAutomationValuePattern>(el, UIA_ValuePatternId)
+            .and_then(|p| p.CurrentValue())
+            .map(|v| v.to_string())
+            .ok()
+    }
+}
+
+/// Whether the IME of the window in front is on (Japanese input mode).
+fn ime_open() -> bool {
+    const IMC_GETOPENSTATUS: usize = 5;
+    // SAFETY: plain Win32 calls; the answer is a number.
+    unsafe {
+        let ime = ImmGetDefaultIMEWnd(GetForegroundWindow());
+        if ime.is_invalid() {
+            return false;
+        }
+        let mut open = 0usize;
+        let sent = SendMessageTimeoutW(
+            ime,
+            WM_IME_CONTROL,
+            WPARAM(IMC_GETOPENSTATUS),
+            LPARAM(0),
+            SMTO_ABORTIFHUNG,
+            100,
+            Some(&mut open),
+        );
+        sent.0 != 0 && open != 0
+    }
+}
+
+/// Sends a held-back click on to the app: pressed at `at`, released at `up`.
+fn replay_click(button: MouseButton, at: POINT, up: POINT) {
+    let (down_flag, up_flag) = match button {
+        MouseButton::Left => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
+        MouseButton::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
+    };
+    // SAFETY: plain Win32 calls.
+    unsafe {
+        let mut back = POINT::default();
+        let _ = GetCursorPos(&mut back);
+        let _ = SetCursorPos(at.x, at.y);
+        let _ = send(&[mouse(down_flag)]);
+        let _ = SetCursorPos(up.x, up.y);
+        let _ = send(&[mouse(up_flag)]);
+        // The user may have moved on while the screen was read.
+        let _ = SetCursorPos(back.x, back.y);
+    }
+}
+
+/// Sends a held-back key on to the app. The modifiers are normally still
+/// held by the user; any already let go are pressed around the key.
+fn replay_key(vk: u16, extended: bool, held: keys::Held) {
+    let now = held_now();
+    let mut missing = Vec::new();
+    for (was, is, vk) in [
+        (held.ctrl, now.ctrl, 0x11),
+        (held.alt, now.alt, 0x12),
+        (held.shift, now.shift, 0x10),
+        (held.win, now.win, 0x5B),
+    ] {
+        if was && !is {
+            missing.push(Key {
+                vk,
+                extended: vk == 0x5B,
+            });
+        }
+    }
+    let key = Key { vk, extended };
+    let mut inputs: Vec<INPUT> = missing.iter().map(|k| key_event(*k, false)).collect();
+    tap(&mut inputs, key);
+    inputs.extend(missing.iter().rev().map(|k| key_event(*k, true)));
+    let _ = send(&inputs);
 }
 
 fn hwnd(handle: isize) -> HWND {

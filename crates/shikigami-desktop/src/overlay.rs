@@ -1,8 +1,10 @@
-//! What the picker draws on screen and the input it takes: a frame around
-//! an element (four thin topmost windows, so the mouse is almost never on
-//! them), a banner at the top of the screen, and low-level mouse and
-//! keyboard hooks that take the click meant for picking (the app never gets
-//! it) and Esc.
+//! What the picker and the recorder draw on screen and the input they take:
+//! a frame around an element (four thin topmost windows, so the mouse is
+//! almost never on them), a banner at the top of the screen, and low-level
+//! mouse and keyboard hooks. Picking takes the click meant for picking (the
+//! app never gets it) and Esc. Recording holds back each click and command
+//! key until the recorder has looked at the screen, then the recorder sends
+//! it on (see `uia::record`); a click on the banner stops the recording.
 //!
 //! Everything runs on a thread of its own with a message loop (hooks and
 //! windows need one). UI Automation stays on its own thread: this thread
@@ -10,12 +12,16 @@
 
 #![allow(unsafe_code)]
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, mpsc};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use shikigami_runtime::StepError;
+
+use crate::backend::MouseButton;
+use crate::keys::{self, Held};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW, CreateSolidBrush,
@@ -25,18 +31,22 @@ use windows::Win32::Graphics::Gdi::{
     TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::SystemInformation::GetTickCount64;
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForWindow, SetThreadDpiAwarenessContext,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, VK_CONTROL, VK_ESCAPE, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-    GetClientRect, GetSystemMetrics, HHOOK, HWND_TOPMOST, KBDLLHOOKSTRUCT, LWA_ALPHA, MSG,
-    MSLLHOOKSTRUCT, PM_REMOVE, PeekMessageW, RegisterClassW, SM_CXSCREEN, SW_HIDE, SWP_NOACTIVATE,
-    SWP_SHOWWINDOW, SetLayeredWindowAttributes, SetWindowPos, SetWindowsHookExW, ShowWindow,
-    TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WNDCLASSW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    GetClientRect, GetSystemMetrics, HHOOK, HWND_TOPMOST, KBDLLHOOKSTRUCT, LLKHF_EXTENDED,
+    LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG, MSLLHOOKSTRUCT, PM_REMOVE, PeekMessageW,
+    RegisterClassW, SM_CXSCREEN, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
+    SetLayeredWindowAttributes, SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage,
+    UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
+    WM_LBUTTONUP, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSW,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
 
@@ -47,6 +57,29 @@ const BANNER_BG: COLORREF = COLORREF(0x003B_291E);
 const BANNER_TEXT: COLORREF = COLORREF(0x00FF_FFFF);
 const BANNER_DIM: COLORREF = COLORREF(0x00E1_D5CB);
 const THICKNESS: i32 = 3;
+
+/// What the user did while recording, in order. Times are the system's
+/// tick count in milliseconds (`MSLLHOOKSTRUCT::time`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Raw {
+    Down {
+        button: MouseButton,
+        at: POINT,
+        time: u32,
+    },
+    Up {
+        button: MouseButton,
+        at: POINT,
+    },
+    /// A command key (see `keys::is_command`), held back.
+    Key {
+        vk: u16,
+        extended: bool,
+        held: Held,
+    },
+    /// The banner was clicked.
+    Stop,
+}
 
 /// What the user did while picking.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -61,22 +94,44 @@ static INPUT: Mutex<Option<Input>> = Mutex::new(None);
 static CAPTURING: AtomicBool = AtomicBool::new(false);
 /// The button-up after the picking click is taken too.
 static SWALLOW_UP: AtomicBool = AtomicBool::new(false);
-/// One picker at a time (the hooks are global).
+/// The hooks hold back clicks and command keys while a recorder runs.
+static RECORDING: AtomicBool = AtomicBool::new(false);
+/// What the recorder has not taken yet.
+static RAW: Mutex<VecDeque<Raw>> = Mutex::new(VecDeque::new());
+/// Set when a key that is typing (not a command) goes down.
+static TYPED: AtomicBool = AtomicBool::new(false);
+/// The recorder's last sign of life (tick count): when it stops answering,
+/// the hooks let everything through rather than swallow the user's input.
+static BEAT: AtomicU64 = AtomicU64::new(0);
+const BEAT_LOST_MS: u64 = 15_000;
+/// The command keys held back, so their key-up is held back too.
+static HELD_BACK: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+/// Where the banner is on screen (left, top, right, bottom).
+static BANNER_AT: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
+/// One picker or recorder at a time (the hooks are global).
 static BUSY: AtomicBool = AtomicBool::new(false);
 /// The banner's two lines.
 static BANNER: Mutex<(String, String)> = Mutex::new((String::new(), String::new()));
 
 enum Cmd {
     Frame(Option<RECT>),
+    Title(String),
     Detail(String),
     Close,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Flash,
+    Pick,
+    Record,
 }
 
 /// A frame (and, for picking, a banner and the hooks) on screen until dropped.
 pub struct Overlay {
     tx: mpsc::Sender<Cmd>,
     thread: Option<JoinHandle<()>>,
-    picking: bool,
+    mode: Mode,
 }
 
 impl Overlay {
@@ -95,7 +150,37 @@ impl Overlay {
             *banner = (message, String::new());
         }
         SWALLOW_UP.store(false, Ordering::SeqCst);
-        match Self::start(true) {
+        match Self::start(Mode::Pick, Duration::from_secs(15 * 60)) {
+            Ok(overlay) => Ok(overlay),
+            Err(e) => {
+                BUSY.store(false, Ordering::SeqCst);
+                Err(e)
+            }
+        }
+    }
+
+    /// Starts recording for at most `life`: a banner (`title`, `hint`) that
+    /// stops the recording when clicked, and the hooks.
+    pub fn record(title: String, hint: String, life: Duration) -> Result<Self, StepError> {
+        if BUSY.swap(true, Ordering::SeqCst) {
+            return Err(StepError::permanent(
+                "PICK_BUSY",
+                "a pick or a recording is already running",
+            ));
+        }
+        if let Ok(mut raw) = RAW.lock() {
+            raw.clear();
+        }
+        if let Ok(mut held) = HELD_BACK.lock() {
+            held.clear();
+        }
+        if let Ok(mut banner) = BANNER.lock() {
+            *banner = (title, hint);
+        }
+        TYPED.store(false, Ordering::SeqCst);
+        SWALLOW_UP.store(false, Ordering::SeqCst);
+        beat();
+        match Self::start(Mode::Record, life) {
             Ok(overlay) => Ok(overlay),
             Err(e) => {
                 BUSY.store(false, Ordering::SeqCst);
@@ -106,7 +191,7 @@ impl Overlay {
 
     /// Frames `rect` for `duration`, then goes away on its own.
     pub fn flash(rect: RECT, duration: Duration) -> Result<(), StepError> {
-        let overlay = Self::start(false)?;
+        let overlay = Self::start(Mode::Flash, duration + Duration::from_secs(5))?;
         overlay.frame(Some(rect));
         std::thread::spawn(move || {
             std::thread::sleep(duration);
@@ -115,12 +200,12 @@ impl Overlay {
         Ok(())
     }
 
-    fn start(picking: bool) -> Result<Self, StepError> {
+    fn start(mode: Mode, life: Duration) -> Result<Self, StepError> {
         let (tx, rx) = mpsc::channel();
         let (ready_tx, ready_rx) = mpsc::channel();
         let thread = std::thread::Builder::new()
             .name("shikigami-overlay".into())
-            .spawn(move || run(picking, &rx, &ready_tx))
+            .spawn(move || run(mode, life, &rx, &ready_tx))
             .map_err(|e| {
                 StepError::new("ADAPTER_CRASHED", format!("cannot start the overlay: {e}"))
             })?;
@@ -128,7 +213,7 @@ impl Overlay {
             Ok(Ok(())) => Ok(Self {
                 tx,
                 thread: Some(thread),
-                picking,
+                mode,
             }),
             Ok(Err(message)) => Err(StepError::new("UIA_ERROR", message)),
             Err(_) => Err(StepError::new("UIA_ERROR", "the overlay did not start")),
@@ -137,6 +222,39 @@ impl Overlay {
 
     pub fn frame(&self, rect: Option<RECT>) {
         let _ = self.tx.send(Cmd::Frame(rect));
+    }
+
+    /// The banner's first line.
+    pub fn title(&self, text: String) {
+        let _ = self.tx.send(Cmd::Title(text));
+    }
+
+    /// The next thing the user did while recording.
+    pub fn next_raw(&self) -> Option<Raw> {
+        RAW.lock().ok().and_then(|mut raw| raw.pop_front())
+    }
+
+    /// The release of `button`, once the hooks have seen it (other events
+    /// stay queued).
+    pub fn take_up(&self, button: MouseButton) -> Option<POINT> {
+        let mut raw = RAW.lock().ok()?;
+        let i = raw
+            .iter()
+            .position(|r| matches!(r, Raw::Up { button: b, .. } if *b == button))?;
+        match raw.remove(i) {
+            Some(Raw::Up { at, .. }) => Some(at),
+            _ => None,
+        }
+    }
+
+    /// Whether a typing key went down since the last call.
+    pub fn typed(&self) -> bool {
+        TYPED.swap(false, Ordering::SeqCst)
+    }
+
+    /// Tells the hooks the recorder is still there.
+    pub fn beat(&self) {
+        beat();
     }
 
     /// The banner's second line (what is under the mouse).
@@ -156,10 +274,12 @@ impl Drop for Overlay {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
-        if self.picking {
-            CAPTURING.store(false, Ordering::SeqCst);
-            BUSY.store(false, Ordering::SeqCst);
+        match self.mode {
+            Mode::Pick => CAPTURING.store(false, Ordering::SeqCst),
+            Mode::Record => RECORDING.store(false, Ordering::SeqCst),
+            Mode::Flash => return,
         }
+        BUSY.store(false, Ordering::SeqCst);
     }
 }
 
@@ -205,7 +325,19 @@ fn classes(instance: HINSTANCE) -> Result<&'static Classes, String> {
         .map_err(Clone::clone)
 }
 
-fn run(picking: bool, rx: &mpsc::Receiver<Cmd>, ready: &mpsc::Sender<Result<(), String>>) {
+fn beat() {
+    // SAFETY: plain Win32 call.
+    BEAT.store(unsafe { GetTickCount64() }, Ordering::SeqCst);
+}
+
+fn run(
+    mode: Mode,
+    life: Duration,
+    rx: &mpsc::Receiver<Cmd>,
+    ready: &mpsc::Sender<Result<(), String>>,
+) {
+    let picking = mode == Mode::Pick;
+    let hooked = mode != Mode::Flash;
     // SAFETY: Win32 calls on this thread, for windows and hooks it owns.
     unsafe {
         let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -245,13 +377,9 @@ fn run(picking: bool, rx: &mpsc::Receiver<Cmd>, ready: &mpsc::Sender<Result<(), 
             Some(hwnd)
         };
         let edges: Vec<HWND> = (0..4).filter_map(|_| window(classes.frame)).collect();
-        let banner = if picking {
-            window(classes.banner)
-        } else {
-            None
-        };
+        let banner = if hooked { window(classes.banner) } else { None };
         let mut hooks: Vec<HHOOK> = Vec::new();
-        if picking {
+        if hooked {
             for (id, proc_) in [
                 (
                     WH_MOUSE_LL,
@@ -270,22 +398,30 @@ fn run(picking: bool, rx: &mpsc::Receiver<Cmd>, ready: &mpsc::Sender<Result<(), 
                     }
                 }
             }
-            CAPTURING.store(true, Ordering::SeqCst);
+            if picking {
+                CAPTURING.store(true, Ordering::SeqCst);
+            } else {
+                RECORDING.store(true, Ordering::SeqCst);
+            }
         }
         if let Some(banner) = banner {
             let scale = GetDpiForWindow(banner).max(96) as i32;
             let width = 640 * scale / 96;
             let height = 64 * scale / 96;
             let screen = GetSystemMetrics(SM_CXSCREEN);
+            let (left, top) = ((screen - width) / 2, 16 * scale / 96);
             let _ = SetWindowPos(
                 banner,
                 Some(HWND_TOPMOST),
-                (screen - width) / 2,
-                16 * scale / 96,
+                left,
+                top,
                 width,
                 height,
                 SWP_NOACTIVATE | SWP_SHOWWINDOW,
             );
+            if let Ok(mut at) = BANNER_AT.lock() {
+                *at = (left, top, left + width, top + height);
+            }
         }
         let _ = ready.send(Ok(()));
 
@@ -297,6 +433,14 @@ fn run(picking: bool, rx: &mpsc::Receiver<Cmd>, ready: &mpsc::Sender<Result<(), 
                     Ok(Cmd::Frame(None)) => {
                         for edge in &edges {
                             let _ = ShowWindow(*edge, SW_HIDE);
+                        }
+                    }
+                    Ok(Cmd::Title(text)) => {
+                        if let Ok(mut lines) = BANNER.lock() {
+                            lines.0 = text;
+                        }
+                        if let Some(banner) = banner {
+                            let _ = InvalidateRect(Some(banner), None, true);
                         }
                     }
                     Ok(Cmd::Detail(text)) => {
@@ -317,15 +461,17 @@ fn run(picking: bool, rx: &mpsc::Receiver<Cmd>, ready: &mpsc::Sender<Result<(), 
                 DispatchMessageW(&msg);
             }
             // Never outlive a lost owner by much.
-            if started.elapsed() > Duration::from_secs(15 * 60) {
+            if started.elapsed() > life {
                 break;
             }
             std::thread::sleep(Duration::from_millis(8));
         }
         // Only the picker owns the hooks: a highlight that ends while a
         // picker runs must not stop it from taking the click.
-        if picking {
-            CAPTURING.store(false, Ordering::SeqCst);
+        match mode {
+            Mode::Pick => CAPTURING.store(false, Ordering::SeqCst),
+            Mode::Record => RECORDING.store(false, Ordering::SeqCst),
+            Mode::Flash => {}
         }
         for hook in hooks {
             let _ = UnhookWindowsHookEx(hook);
@@ -448,8 +594,70 @@ fn set_input(input: Input) {
     }
 }
 
+/// Whether the recorder still answers (else the hooks let input through).
+fn recorder_alive() -> bool {
+    // SAFETY: plain Win32 call.
+    let now = unsafe { GetTickCount64() };
+    now.saturating_sub(BEAT.load(Ordering::SeqCst)) < BEAT_LOST_MS
+}
+
+fn push_raw(raw: Raw) {
+    if let Ok(mut queue) = RAW.lock() {
+        queue.push_back(raw);
+    }
+}
+
+fn on_banner(pt: POINT) -> bool {
+    BANNER_AT.lock().is_ok_and(|at| {
+        let (l, t, r, b) = *at;
+        pt.x >= l && pt.x < r && pt.y >= t && pt.y < b
+    })
+}
+
+/// Recording: holds back clicks (the recorder sends them on), stops on a
+/// click on the banner. `None` passes the event on.
+fn record_mouse(msg: u32, info: &MSLLHOOKSTRUCT) -> Option<LRESULT> {
+    if info.flags & LLMHF_INJECTED != 0 || !recorder_alive() {
+        return None;
+    }
+    let button = match msg {
+        WM_LBUTTONDOWN | WM_LBUTTONUP => MouseButton::Left,
+        WM_RBUTTONDOWN | WM_RBUTTONUP => MouseButton::Right,
+        _ => return None,
+    };
+    match msg {
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN => {
+            if on_banner(info.pt) {
+                push_raw(Raw::Stop);
+                SWALLOW_UP.store(true, Ordering::SeqCst);
+            } else {
+                push_raw(Raw::Down {
+                    button,
+                    at: info.pt,
+                    time: info.time,
+                });
+            }
+        }
+        _ => {
+            if !SWALLOW_UP.swap(false, Ordering::SeqCst) {
+                push_raw(Raw::Up {
+                    button,
+                    at: info.pt,
+                });
+            }
+        }
+    }
+    Some(LRESULT(1))
+}
+
 unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code >= 0 && CAPTURING.load(Ordering::SeqCst) {
+    if code >= 0 && RECORDING.load(Ordering::SeqCst) {
+        // SAFETY: for mouse messages lparam points at an MSLLHOOKSTRUCT.
+        let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+        if let Some(result) = record_mouse(wparam.0 as u32, info) {
+            return result;
+        }
+    } else if code >= 0 && CAPTURING.load(Ordering::SeqCst) {
         match wparam.0 as u32 {
             WM_LBUTTONDOWN => {
                 // SAFETY: for mouse messages lparam points at an MSLLHOOKSTRUCT.
@@ -478,7 +686,72 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
+fn down(vk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY) -> bool {
+    // SAFETY: plain Win32 call.
+    unsafe { GetAsyncKeyState(i32::from(vk.0)) < 0 }
+}
+
+/// The modifier keys held now.
+pub fn held_now() -> Held {
+    Held {
+        ctrl: down(VK_CONTROL),
+        alt: down(VK_MENU),
+        shift: down(VK_SHIFT),
+        win: down(VK_LWIN) || down(VK_RWIN),
+    }
+}
+
+/// Recording: holds back command keys (the recorder sends them on) and
+/// notes typing. `None` passes the event on.
+fn record_key(msg: u32, info: &KBDLLHOOKSTRUCT) -> Option<LRESULT> {
+    if info.flags.0 & LLKHF_INJECTED.0 != 0 || !recorder_alive() {
+        return None;
+    }
+    let vk = info.vkCode;
+    let Ok(code) = u16::try_from(vk) else {
+        return None;
+    };
+    match msg {
+        WM_KEYDOWN | WM_SYSKEYDOWN => {
+            let held = held_now();
+            if keys::is_command(code, held) {
+                push_raw(Raw::Key {
+                    vk: code,
+                    extended: info.flags.0 & LLKHF_EXTENDED.0 != 0,
+                    held,
+                });
+                if let Ok(mut back) = HELD_BACK.lock()
+                    && !back.contains(&vk)
+                {
+                    back.push(vk);
+                }
+                return Some(LRESULT(1));
+            }
+            if !keys::is_modifier(code) {
+                TYPED.store(true, Ordering::SeqCst);
+            }
+            None
+        }
+        WM_KEYUP | WM_SYSKEYUP => {
+            let mut back = HELD_BACK.lock().ok()?;
+            let i = back.iter().position(|v| *v == vk)?;
+            back.remove(i);
+            Some(LRESULT(1))
+        }
+        _ => None,
+    }
+}
+
 unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code >= 0 && RECORDING.load(Ordering::SeqCst) {
+        // SAFETY: for keyboard messages lparam points at a KBDLLHOOKSTRUCT.
+        let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+        if let Some(result) = record_key(wparam.0 as u32, info) {
+            return result;
+        }
+        // SAFETY: passing the event on, as every hook must.
+        return unsafe { CallNextHookEx(None, code, wparam, lparam) };
+    }
     if code >= 0
         && CAPTURING.load(Ordering::SeqCst)
         && matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN)

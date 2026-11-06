@@ -1,5 +1,6 @@
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
+import { RecordButton } from "./RecordButton";
 
 function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   const { label, children, className, ...rest } = props;
@@ -223,7 +224,8 @@ export function ScenarioActions({ view, onView }: { view: View; onView: (view: V
 }
 
 /**
- * Floating dock over the canvas, for the whole chart: add a step, undo, redo.
+ * Floating dock over the canvas, for the whole chart: add a step, record
+ * steps, undo, redo.
  * What acts on one step sits on that step (StepTools on the chart).
  */
 export function CanvasDock() {
@@ -248,6 +250,7 @@ export function CanvasDock() {
         ＋ <span className="@max-[560px]:hidden">{t.addStep}</span>
         <kbd className="rounded-[3px] bg-paper/15 px-1 font-sans text-[10px] @max-[560px]:hidden">{t.shortcut}</kbd>
       </button>
+      <RecordButton />
       <span className="mx-1 h-5 w-px bg-slate-200" />
       <DockButton label={`${t.undo} (Ctrl+Z)`} onClick={() => undo()} disabled={!canUndo}>
         ↶
