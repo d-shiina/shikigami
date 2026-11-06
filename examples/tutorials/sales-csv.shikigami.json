@@ -6,7 +6,7 @@
     "schemaVersion": 1,
     "id": "scn_tutorial_sales_csv",
     "name": "支店の売上 CSV を 1 つの Excel にまとめる",
-    "description": "input/支店 にある支店ごとの売上 CSV を読み、明細と支店別の合計を output/売上まとめ.xlsx に書く。チュートリアル（docs/ja/tutorials/sales-csv.md）の完成形。",
+    "description": "input にある支店ごとの売上 CSV を読み、明細と支店別の合計を output/売上まとめ.xlsx に書く。チュートリアル（docs/ja/tutorials/sales-csv.md）の完成形。",
     "revision": 1,
     "metadata": {
       "tags": [
@@ -18,7 +18,7 @@
         "name": "folder",
         "type": "string",
         "direction": "input",
-        "default": "input/支店",
+        "default": "input",
         "description": "支店ごとの売上 CSV があるフォルダー"
       },
       {
@@ -201,17 +201,17 @@
   "files": [
     {
       "scenarioId": "scn_tutorial_sales_csv",
-      "path": "input/支店/大阪.csv",
+      "path": "input/大阪.csv",
       "data": "5pel5LuYLOWVhuWTgSzmlbDph48s6YeR6aGNCjIwMjYtMTAtMDIs44Kz44OU44O855So57SZIEE0LDEwLDQ5MDAKMjAyNi0xMC0yMCzjgq/jg6rjgqLjg5XjgqHjgqTjg6ssMzAwLCI2LDAwMCIK"
     },
     {
       "scenarioId": "scn_tutorial_sales_csv",
-      "path": "input/支店/東京.csv",
+      "path": "input/東京.csv",
       "data": "5pel5LuYLOWVhuWTgSzmlbDph48s6YeR6aGNCjIwMjYtMTAtMDEs44Kz44OU44O855So57SZIEE0LDIwLDk4MDAKMjAyNi0xMC0wMyzjg4jjg4rjg7zvvIjpu5LvvIksMiwxNTYwMAoyMDI2LTEwLTE1LOODnOODvOODq+ODmuODsywxMDAsODAwMAo="
     },
     {
       "scenarioId": "scn_tutorial_sales_csv",
-      "path": "input/支店/福岡.csv",
+      "path": "input/福岡.csv",
       "data": "5pel5LuYLOWVhuWTgSzmlbDph48s6YeR6aGNCjIwMjYtMTAtMDgs44OI44OK44O877yI44Kr44Op44O877yJLDEsIjIxLDAwMCIKMjAyNi0xMC0wOSzku5jnrossNTAsMzUwMAoyMDI2LTEwLTI4LOOCs+ODlOODvOeUqOe0mSBBMyw1LDQyNTAK"
     }
   ]

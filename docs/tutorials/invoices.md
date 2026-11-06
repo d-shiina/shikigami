@@ -15,14 +15,14 @@ Group an Excel order list by customer and fill a Word template to make the invoi
 1. "New scenario" on the Scenarios page
 2. Drop these two on the project shelf
    - `input/受注一覧.xlsx`: sheet 受注 with 注文番号 (order no.), 受注日 (date), 取引先 (customer), 商品 (item), 金額 (amount)
-   - `templates/請求書.docx`: the invoice template
+   - `templates/請求書_ひな形.docx`: the invoice template (ひな形, "template", in the name sorts it onto the "Templates" shelf)
 
 The template has `{{ 顧客 }}`, `{{ 発行日 }}`, `{{ 当月 }}`, `{{ 合計 }}`, and in a table row `{{ 明細.注文番号 }}`, `{{ 明細.商品 }}`, `{{ 明細.金額 }}`. The row repeats once per line item ([Office](../office.md)). To use your own template, write the names in this form where the values go.
 
 ## 2. Ask the AI
 
 ```
-Group the orders in input/受注一覧.xlsx (sheet 受注) by customer (取引先), fill templates/請求書.docx,
+Group the orders in input/受注一覧.xlsx (sheet 受注) by customer (取引先), fill templates/請求書_ひな形.docx,
 and make one invoice per customer in output/請求書.
 - Names to fill: 顧客 (customer), 発行日 (today, like 2026年11月6日), 当月 (the month), 合計 (total, with commas), 明細 (order no., item, amount)
 - Make the month (like 2026年10月) an input variable

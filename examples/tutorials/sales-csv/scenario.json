@@ -3,11 +3,11 @@
   "schemaVersion": 1,
   "id": "scn_tutorial_sales_csv",
   "name": "支店の売上 CSV を 1 つの Excel にまとめる",
-  "description": "input/支店 にある支店ごとの売上 CSV を読み、明細と支店別の合計を output/売上まとめ.xlsx に書く。チュートリアル（docs/ja/tutorials/sales-csv.md）の完成形。",
+  "description": "input にある支店ごとの売上 CSV を読み、明細と支店別の合計を output/売上まとめ.xlsx に書く。チュートリアル（docs/ja/tutorials/sales-csv.md）の完成形。",
   "revision": 1,
   "metadata": { "tags": ["チュートリアル"] },
   "variables": [
-    { "name": "folder", "type": "string", "direction": "input", "default": "input/支店", "description": "支店ごとの売上 CSV があるフォルダー" },
+    { "name": "folder", "type": "string", "direction": "input", "default": "input", "description": "支店ごとの売上 CSV があるフォルダー" },
     { "name": "outFile", "type": "string", "direction": "input", "default": "output/売上まとめ.xlsx", "description": "書き出す Excel" },
     { "name": "branchCount", "type": "number", "direction": "output", "default": 0, "description": "読んだ支店の数" },
     { "name": "grandTotal", "type": "number", "direction": "output", "default": 0, "description": "全支店の売上合計（円）" },

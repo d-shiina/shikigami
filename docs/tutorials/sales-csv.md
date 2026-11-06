@@ -13,7 +13,7 @@ Every month each branch sends its sales as a CSV. Combine them into one workbook
 ## 1. Make a scenario and add the CSVs
 
 1. "New scenario" on the Scenarios page
-2. Drop the three CSVs in `examples/tutorials/sales-csv/input/支店/` (Tokyo, Osaka, Fukuoka) on the "Input" shelf. They go to `input/支店/` in the scenario's folder
+2. Drop the three CSVs in `examples/tutorials/sales-csv/input/` (東京 Tokyo, 大阪 Osaka, 福岡 Fukuoka) on the project shelf. CSV files go to `input/` in the scenario's folder
 
 Each CSV has a header row and four columns: 日付 (date), 商品 (item), 数量 (quantity), 金額 (amount). Some amounts carry commas, such as `"6,000"`.
 
@@ -22,7 +22,7 @@ Each CSV has a header row and four columns: 日付 (date), 商品 (item), 数量
 Paste this into the AI pane (in Japanese or English; the AI works either way):
 
 ```
-Read every CSV in input/支店 (sales per branch; header row: 日付, 商品, 数量, 金額)
+Read every CSV in input (sales per branch; header row: 日付, 商品, 数量, 金額)
 and combine them into one workbook, output/売上まとめ.xlsx.
 - Sheet 明細: every row, with a 支店 (branch) column taken from the file name. Quantities and amounts as numbers
 - Sheet 支店別: branch, number of rows, total amount
@@ -34,7 +34,7 @@ The finished sample has these nodes:
 
 | Node | What it does |
 |---|---|
-| List the CSVs (`file.list`) | `*.csv` in `input/支店` |
+| List the CSVs (`file.list`) | `*.csv` in `input` |
 | Read each branch (`control.forEach`) | Reads each file with `file.readCsv` and adds `baseName(file.name)` as the branch |
 | Totals per branch (`variable.set`) | Counts and sums per branch with `groupBy` and `sum` |
 | Delete the old workbook → add sheets → write rows | `file.delete`, `excel.addSheet`, `excel.appendRows` |

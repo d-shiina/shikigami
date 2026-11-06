@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "id": "scn_tutorial_invoices",
   "name": "受注一覧から取引先ごとの請求書を作る",
-  "description": "input/受注一覧.xlsx の受注を取引先ごとにまとめ、templates/請求書.docx に差し込んで output/請求書 に Word の請求書を作る。一覧は output/請求一覧.xlsx。チュートリアル（docs/ja/tutorials/invoices.md）の完成形。",
+  "description": "input/受注一覧.xlsx の受注を取引先ごとにまとめ、templates/請求書_ひな形.docx に差し込んで output/請求書 に Word の請求書を作る。一覧は output/請求一覧.xlsx。チュートリアル（docs/ja/tutorials/invoices.md）の完成形。",
   "revision": 1,
   "metadata": { "tags": ["チュートリアル"] },
   "variables": [
@@ -30,7 +30,7 @@
           {
             "id": "stp_word", "type": "word.fillTemplate", "name": "請求書を作る",
             "params": {
-              "template": "templates/請求書.docx",
+              "template": "templates/請求書_ひな形.docx",
               "path": "output/請求書/請求書_{{ customer }}.docx",
               "values": {
                 "顧客": "{{ customer }}",
