@@ -1,6 +1,8 @@
 // Studio's version, online updates and the MCP setup command: a section of
-// the settings place. The update check runs once per launch; the rail shows
-// a dot on Settings while a new version waits.
+// the settings place. Like VS Code: the check runs once per launch (or from
+// "check again"), a new version downloads in the background, and it is
+// installed silently on "restart to update" or when Studio is closed. The
+// rail shows a dot on Settings while a new version waits.
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { type AppInfo, type UpdateInfo, updates } from "../lib/api";
@@ -10,8 +12,9 @@ type UpdateState =
   | { kind: "idle" }
   | { kind: "checking" }
   | { kind: "latest" }
-  | { kind: "available"; info: UpdateInfo }
-  | { kind: "installing"; info: UpdateInfo; percent: number | null }
+  | { kind: "downloading"; info: UpdateInfo; percent: number | null }
+  | { kind: "ready"; info: UpdateInfo }
+  | { kind: "installing"; info: UpdateInfo }
   | { kind: "error"; message: string };
 
 function message(e: unknown): string {
@@ -33,7 +36,13 @@ async function check() {
   useApp.setState({ state: { kind: "checking" } });
   try {
     const found = await updates.check();
-    useApp.setState({ state: found ? { kind: "available", info: found } : { kind: "latest" } });
+    if (!found) {
+      useApp.setState({ state: { kind: "latest" } });
+      return;
+    }
+    useApp.setState({ state: { kind: "downloading", info: found, percent: null } });
+    await updates.download();
+    useApp.setState({ state: { kind: "ready", info: found } });
   } catch (e) {
     useApp.setState({ state: { kind: "error", message: message(e) } });
   }
@@ -52,14 +61,14 @@ function start() {
     .catch(() => {});
   void updates.onProgress((p) => {
     const s = useApp.getState().state;
-    if (s.kind === "installing") {
+    if (s.kind === "downloading") {
       useApp.setState({ state: { ...s, percent: p.total ? Math.floor((p.downloaded / p.total) * 100) : null } });
     }
   });
 }
 
 async function install(info: UpdateInfo) {
-  useApp.setState({ state: { kind: "installing", info, percent: 0 } });
+  useApp.setState({ state: { kind: "installing", info } });
   try {
     await updates.install();
   } catch (e) {
@@ -71,7 +80,7 @@ async function install(info: UpdateInfo) {
 export function useUpdate(): string | null {
   useEffect(start, []);
   const state = useApp((s) => s.state);
-  return state.kind === "available" || state.kind === "installing" ? state.info.version : null;
+  return state.kind === "downloading" || state.kind === "ready" || state.kind === "installing" ? state.info.version : null;
 }
 
 export function useAppVersion(): string | null {
@@ -100,23 +109,25 @@ export function AboutSection() {
       {info.updatesEnabled && state.kind === "checking" && <p className="text-slate-500">{t.updateChecking}</p>}
       {info.updatesEnabled && state.kind === "latest" && <p className="text-moegi-500">{t.updateLatest}</p>}
       {state.kind === "error" && <p className="break-all text-shu-600">{state.message}</p>}
-      {state.kind === "available" && (
+      {state.kind === "downloading" && (
+        <p className="text-slate-600">
+          v{state.info.version} {t.updateDownloading}
+          {state.percent !== null && ` ${state.percent}%`}
+        </p>
+      )}
+      {state.kind === "ready" && (
         <div>
           <p>
             v{state.info.version} {t.updateReady}
           </p>
+          <p className="mt-0.5 text-xs text-slate-500">{t.updateOnClose}</p>
           {state.info.notes && <p className="mt-1 max-h-32 overflow-y-auto text-xs whitespace-pre-wrap text-slate-600">{state.info.notes}</p>}
           <button type="button" onClick={() => void install(state.info)} className="mt-2 rounded-[4px] bg-ink px-3 py-1.5 font-medium text-paper hover:bg-slate-700">
             {t.updateInstall}
           </button>
         </div>
       )}
-      {state.kind === "installing" && (
-        <p className="text-slate-600">
-          {t.updateInstalling}
-          {state.percent !== null && ` ${state.percent}%`}
-        </p>
-      )}
+      {state.kind === "installing" && <p className="text-slate-600">{t.updateInstalling}</p>}
       {info.updatesEnabled && (state.kind === "latest" || state.kind === "error") && (
         <button type="button" onClick={() => void check()} className="text-xs text-brand-600 hover:underline">
           {t.updateCheck}

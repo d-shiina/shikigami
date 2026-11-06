@@ -10,7 +10,7 @@ import { CALL, callMap, knownVariables, outputs, paramLabel, referencedVariables
 import { outline } from "../lib/outline";
 import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../lib/parts";
 import { sentence, targetText } from "../lib/sentence";
-import { findStep, revertBlocker, touchedSteps } from "../store";
+import { findStep, isActive, revertBlocker, touchedSteps } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ActorMark, usePendingReview } from "./Timeline";
@@ -363,7 +363,15 @@ function TargetField({
     <div className="py-1">
       <div className="mb-1 flex flex-wrap items-center gap-1.5 pl-1 text-[11px] text-slate-500" title={schema.description ?? "target"}>
         {title}
-        {!ref && pointer && <PointTools adapter={pointer} schema={schema} value={value} onChange={onChange} />}
+        {!ref && pointer && (
+          <PointTools
+            adapter={pointer}
+            schema={schema}
+            value={value}
+            context={typeof step.params?.context === "string" ? step.params.context : undefined}
+            onChange={onChange}
+          />
+        )}
       </div>
       {(choices.length > 0 || ref) && (
         <div className="mb-1 flex items-center gap-1.5">
@@ -497,7 +505,15 @@ function PartInspector({ name }: { name: string }) {
       <Section title={t.parts.target}>
         <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
           {uses.length > 1 && <span>{t.parts.shared(uses.length)}</span>}
-          {pointer && <PointTools adapter={pointer} schema={schema} value={part.target} onChange={(target) => target && set({ target: target as Part["target"] })} />}
+          {pointer && (
+            <PointTools
+              adapter={pointer}
+              schema={schema}
+              value={part.target}
+              context={partContext(uses)}
+              onChange={(target) => target && set({ target: target as Part["target"] })}
+            />
+          )}
         </div>
         <ObjectFields schema={schema} value={part.target as Record<string, unknown>} onChange={(target) => target && set({ target: target as Part["target"] })} />
       </Section>
@@ -532,8 +548,12 @@ function PartInspector({ name }: { name: string }) {
   );
 }
 
+/** The browser context the nodes using a part run in (the first one that names one). */
+const partContext = (uses: readonly Step[]) =>
+  uses.map((u) => u.params?.context).find((c): c is string => typeof c === "string" && c !== "");
+
 /** The adapters whose targets can be picked on screen from Studio. */
-const POINTERS = new Set(["desktop"]);
+const POINTERS = new Set(["desktop", "browser"]);
 const pointerOf = (type: string) => {
   const adapter = type.split(".")[0] ?? "";
   return POINTERS.has(adapter) ? adapter : undefined;
@@ -547,28 +567,39 @@ function PointTools({
   adapter,
   schema,
   value,
+  context,
   onChange,
 }: {
   adapter: string;
   schema: JsonSchema;
   value: unknown;
+  /** The browser context the node uses (`context` param). */
+  context?: string;
   onChange: (value: unknown) => void;
 }) {
+  const run = useStudio((s) => s.run);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; warn?: boolean } | null>(null);
   const canPoint = Boolean(schema.properties?.point);
+  // A browser part is picked in the browser a run opened: there is none
+  // until the scenario runs (or is paused at a node).
+  const browser = adapter === "browser";
+  const session = browser && run && isActive(run) ? run.runId : undefined;
+  const unavailable = browser && !session;
+  const extra = browser && context ? { context } : {};
   const pick = async () => {
     setBusy(true);
     setNote(null);
     try {
-      const result = await api.pointAt(adapter, { action: "pick", message: t.picker.banner });
-      if (result.cancelled) {
+      const result = await api.pointAt(adapter, { action: "pick", message: t.picker.banner, ...extra }, session);
+      if (result.cancelled || result.status === "cancelled") {
         setNote({ text: t.picker.cancelled });
       } else if (result.how === "point" && !canPoint) {
         setNote({ text: t.picker.pointNotAllowed, warn: true });
       } else {
         onChange(result.target);
-        setNote(result.how === "point" ? { text: t.picker.byPoint, warn: true } : { text: t.picker.picked(String(result.label ?? "")) });
+        const label = String(result.label ?? result.text ?? "");
+        setNote(result.how === "point" ? { text: t.picker.byPoint, warn: true } : { text: label ? t.picker.picked(label) : t.picker.pickedPlain });
       }
     } catch (e) {
       setNote({ text: t.picker.failed(e instanceof Error ? e.message : String(e)), warn: true });
@@ -579,10 +610,9 @@ function PointTools({
   const highlight = async () => {
     setNote(null);
     try {
-      const result = await api.pointAt(adapter, { action: "highlight", target: value });
-      setNote(
-        !result.found ? { text: t.picker.notFound, warn: true } : result.visible === false ? { text: t.picker.hidden, warn: true } : { text: t.picker.found },
-      );
+      const result = await api.pointAt(adapter, { action: "highlight", target: value, ...extra }, session);
+      const found = browser ? Number(result.shown ?? 0) > 0 : Boolean(result.found);
+      setNote(!found ? { text: t.picker.notFound, warn: true } : result.visible === false ? { text: t.picker.hidden, warn: true } : { text: t.picker.found });
     } catch (e) {
       setNote({ text: t.picker.failed(e instanceof Error ? e.message : String(e)), warn: true });
     }
@@ -591,11 +621,23 @@ function PointTools({
   return (
     <>
       <span className="ml-auto flex items-center gap-0.5">
-        <button type="button" className={button} title={t.picker.pickTitle} disabled={busy} onClick={() => void pick()}>
+        <button
+          type="button"
+          className={button}
+          title={unavailable ? t.picker.needsRun : browser ? t.picker.pickBrowserTitle : t.picker.pickTitle}
+          disabled={busy || unavailable}
+          onClick={() => void pick()}
+        >
           <Crosshair size={13} strokeWidth={1.75} />
           {t.picker.pick}
         </button>
-        <button type="button" className={button} title={t.picker.highlightTitle} disabled={busy || !isRecord(value)} onClick={() => void highlight()}>
+        <button
+          type="button"
+          className={button}
+          title={unavailable ? t.picker.needsRun : t.picker.highlightTitle}
+          disabled={busy || unavailable || !isRecord(value)}
+          onClick={() => void highlight()}
+        >
           <ScanSearch size={13} strokeWidth={1.75} />
           {t.picker.highlight}
         </button>
