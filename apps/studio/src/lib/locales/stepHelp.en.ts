@@ -67,6 +67,7 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "desktop.waitFor": { summary: "Wait until a window or control appears (or goes away)", words: "wait appear" },
   "desktop.screenshot": { summary: "Save a picture of a window", words: "image capture evidence png" },
   "desktop.closeWindow": { summary: "Close a window", words: "quit exit" },
+  "desktop.getTable": { summary: "Read an app's grid or list at once as a table", words: "table grid list rows read" },
   "desktop.selectMenu": { summary: "Choose an app's menu item (menu bar or right-click)", words: "menu context right click file" },
   "desktop.scroll": { summary: "Scroll a list or bring a part into view (no mouse)", words: "scroll page down list bottom" },
   "desktop.mouseScroll": { summary: "Turn the mouse wheel over an app", words: "wheel scroll mouse" },
