@@ -145,6 +145,13 @@ pub enum Op {
     Hover {
         target: Target,
     },
+    /// Reads a grid, list or table (`target.element`, or the first one in
+    /// the window): a [`crate::table::Grid`] as JSON, at most `max_rows`
+    /// rows (`truncated` when there were more).
+    GetTable {
+        target: Target,
+        max_rows: usize,
+    },
     /// Opens the context menu of `target.element` (or uses the open menu /
     /// the menu bar of `target.window`) and picks `path` item by item.
     Menu {

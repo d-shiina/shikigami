@@ -842,9 +842,18 @@ fn merge<T: PartialEq>(mut a: Vec<T>, b: Vec<T>) -> Vec<T> {
 pub fn normalize_site(text: &str) -> Result<String, SecretError> {
     let invalid = || {
         SecretError::new("INVALID_SITE", format!("'{text}' is not a web address"))
-            .with_hint("Write the site's address, e.g. https://example.com, app:billing.exe for a desktop app, or plugin:<name> for a plugin")
+            .with_hint("Write the site's address, e.g. https://example.com, app:billing.exe for a desktop app, db:<server> for a database, or plugin:<name> for a plugin")
     };
     let text = text.trim();
+    // A database server as db.* steps name it: the Server, Data Source,
+    // DSN or DBQ of the connection string (db01\sqlexpress, 基幹).
+    if let Some(server) = text.strip_prefix("db:") {
+        let server = server.trim().to_lowercase();
+        if server.is_empty() {
+            return Err(invalid());
+        }
+        return Ok(format!("db:{server}"));
+    }
     for prefix in ["app:", "plugin:"] {
         if let Some(name) = text.strip_prefix(prefix) {
             let name = name.trim().to_lowercase();

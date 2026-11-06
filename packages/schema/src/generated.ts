@@ -89,7 +89,8 @@ export type Severity = "error" | "warning";
 export type StepCategory =
   | ("control" | "variable" | "log" | "flow" | "browser" | "windows" | "office" | "file" | "other")
   | "network"
-  | "system";
+  | "system"
+  | "database";
 /**
  * Risk level used by the permission layer (MCP approval, allow-lists).
  *
