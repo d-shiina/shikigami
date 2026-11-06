@@ -173,6 +173,15 @@ pub fn convert(text: &str, data_type: &DataType) -> Value {
         if let Ok(i) = trimmed.parse::<i64>() {
             return json!(i);
         }
+        // BIGINT UNSIGNED above i64::MAX.
+        if let Ok(u) = trimmed.parse::<u64>() {
+            return json!(u);
+        }
+        // More digits than a double holds exactly (DECIMAL(38, 0) and the
+        // like): kept as text so no identifier or amount is rounded.
+        if trimmed.chars().filter(char::is_ascii_digit).count() > 15 {
+            return json!(trimmed);
+        }
         match trimmed.parse::<f64>() {
             Ok(f) if f.is_finite() => {
                 // 12800.00 from a DECIMAL column is the whole number 12800.

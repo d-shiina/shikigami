@@ -428,3 +428,23 @@ fn large_unsigned_numbers_are_bound_exactly() {
         json!([{ "n": "9223372036854775809" }])
     );
 }
+
+#[test]
+fn large_numbers_are_read_exactly() {
+    use crate::odbc::convert;
+    use odbc_api::DataType;
+    assert_eq!(
+        convert("9223372036854775809", &DataType::BigInt),
+        json!(9_223_372_036_854_775_809_u64)
+    );
+    let decimal = DataType::Decimal {
+        precision: 38,
+        scale: 2,
+    };
+    assert_eq!(
+        convert("123456789012345678.90", &decimal),
+        json!("123456789012345678.90")
+    );
+    assert_eq!(convert("12800.00", &decimal), json!(12800));
+    assert_eq!(convert("980.5", &decimal), json!(980.5));
+}
