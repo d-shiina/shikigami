@@ -6,13 +6,15 @@ use serde_json::{Map, Value};
 use shikigami_core::{
     Actor, ActorKind, ApprovalId, ApprovalRequest, ChangeNote, EditOp, EditOutcome, ErrorPayload,
     Evidence, ExtractOutcome, FileStore, HistoryEntry, ImportConflict, ImportOutcome, NewReview,
-    NewScenario, NewVersion, ObservationContent, ObservationId, Policy, ProjectFile, ProjectFiles,
-    PublishInput, PublishedState, ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId,
-    ScenarioSummary, StepId, StepTypeDef, UserConfig, ValidationReport, VersionSummary,
-    WorkspaceInfo, WorkspaceManifest,
+    NewScenario, NewVersion, ObservationContent, ObservationId, PickId, PickRequest,
+    PickRequestStore, Policy, ProjectFile, ProjectFiles, PublishInput, PublishedState,
+    ReviewTimeline, RunId, Scenario, ScenarioDiff, ScenarioId, ScenarioSummary, StepId,
+    StepTypeDef, UserConfig, ValidationReport, VersionSummary, WorkspaceInfo, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
-use shikigami_runtime::{DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunSnapshot};
+use shikigami_runtime::{
+    DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunOrigin, RunSnapshot, RunTrigger,
+};
 use shikigami_secrets::{PendingSecretRequest, SecretInfo, SecretInput};
 use tauri::{AppHandle, Emitter, State};
 
@@ -137,6 +139,18 @@ pub fn save_policy(state: State<'_, AppState>, policy: Policy) -> CmdResult<Poli
 #[tauri::command]
 pub fn list_approvals(state: State<'_, AppState>) -> CmdResult<Vec<ApprovalRequest>> {
     Ok(state.approvals.pending()?)
+}
+
+/// AI clients waiting for the person to point at something in the browser.
+#[tauri::command]
+pub fn list_pick_requests(state: State<'_, AppState>) -> CmdResult<Vec<PickRequest>> {
+    Ok(PickRequestStore::new(state.service.store().local_root()).pending()?)
+}
+
+/// The person declines: the AI's banner in the browser closes and it is told so.
+#[tauri::command]
+pub fn cancel_pick_request(state: State<'_, AppState>, id: PickId) -> CmdResult<()> {
+    Ok(PickRequestStore::new(state.service.store().local_root()).cancel(&id)?)
 }
 
 #[tauri::command]
@@ -609,6 +623,7 @@ pub async fn run_scenario(
                     pause_at_start: debug.step,
                 }),
                 subscenarios,
+                origin: RunOrigin::new(RunTrigger::Studio),
                 ..RunOptions::default()
             },
         )
@@ -619,7 +634,8 @@ pub async fn run_scenario(
         })?;
     let run_id = handle.run_id.clone();
     let mut recorder = RunRecorder::create(state.service.store().local_root(), &run_id)
-        .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+        .map_err(|e| err("STORAGE_ERROR", e.to_string()))?
+        .prune_on_finish(&shikigami_core::Policy::path(state.service.store().root()));
 
     if let Ok(mut runs) = state.runs.lock() {
         runs.insert(

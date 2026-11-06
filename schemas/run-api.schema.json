@@ -70,6 +70,10 @@
               "type": "integer",
               "format": "uint64",
               "minimum": 0
+            },
+            "origin": {
+              "description": "Who asked for the run, from where, on which PC.",
+              "$ref": "#/$defs/RunOrigin"
             }
           },
           "required": [
@@ -362,6 +366,73 @@
       "description": "Identifier of a scenario. Also used as its file name in the store.",
       "type": "string"
     },
+    "RunOrigin": {
+      "description": "Who asked for a run, from where, and on which PC. Recorded in\n`runStarted` and the report so that runs can be told apart later (and\ncollected from many PCs).",
+      "type": "object",
+      "properties": {
+        "trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunTrigger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requestedBy": {
+          "description": "The person, AI client, schedule or manager that asked, in its own\nwords (e.g. \"claude-code\", a schedule's name).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jobId": {
+          "description": "The job of a schedule or management server this run carries out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "machine": {
+          "description": "The PC the run happened on (its computer name). Filled in by the\nRuntime when not given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "RunTrigger": {
+      "description": "How a run was started.",
+      "oneOf": [
+        {
+          "description": "\"Run\" in Studio (a person watching).",
+          "type": "string",
+          "const": "studio"
+        },
+        {
+          "description": "An AI client's `run_scenario` / `test_step`.",
+          "type": "string",
+          "const": "mcp"
+        },
+        {
+          "description": "`shikigami run` (a person, a batch file or Task Scheduler).",
+          "type": "string",
+          "const": "cli"
+        },
+        {
+          "description": "A schedule of the agent.",
+          "type": "string",
+          "const": "schedule"
+        },
+        {
+          "description": "A job from a management server.",
+          "type": "string",
+          "const": "remote"
+        }
+      ]
+    },
     "StepOutcome": {
       "type": "string",
       "enum": [
@@ -529,6 +600,10 @@
           "items": {
             "$ref": "#/$defs/SubscenarioRef"
           }
+        },
+        "origin": {
+          "description": "Who asked for the run, from where, on which PC.",
+          "$ref": "#/$defs/RunOrigin"
         }
       },
       "required": [

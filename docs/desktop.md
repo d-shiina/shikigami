@@ -19,6 +19,11 @@ Scenarios drive Windows apps (business systems, Notepad, the Excel window, SAP G
 
 When several elements match, Shikigami does not pick "one of them": it fails with `ELEMENT_AMBIGUOUS` and the candidates, so a run never presses a different element each time.
 
+### Picking on screen and named parts
+
+- In Studio, a desktop node's target has **Pick on screen** (Studio steps aside; the element under the mouse is framed; click it, Esc or right-click to cancel; the click never reaches the app) and **Highlight** (frames the target on the screen now). The target is built the sturdy way: an `id` unique in the window, else `role` + `name` (exact), else `nth`, else a `point` in the window. The same is `inspect_ui`-free for AI clients: the adapter's inspect takes `action: "pick"` / `"highlight"`.
+- **Named parts**: a scenario can keep targets under `parts` (`"parts": { "saveButton": { "label": "保存ボタン", "app": "desktop", "target": { … } } }`) and a node writes `"target": { "part": "saveButton" }` (nothing else beside it). When the screen changes, fix the part once. Studio lists them in the project panel (Parts) and turns a node's target into a part with **Make a part**; AI clients use the `setPart` / `removePart` edit ops. Browser nodes use parts the same way (`"app": "browser"`).
+
 ## Nodes
 
 | type | Main params | Output | Mouse / keyboard |
