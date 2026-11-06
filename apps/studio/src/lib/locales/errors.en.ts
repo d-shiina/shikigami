@@ -1,0 +1,196 @@
+// Run errors in words for people (see errors.ja.ts). Same codes as there.
+import type { ErrorText } from "../errorText";
+
+export const errorsEn: Record<string, ErrorText> = {
+  // Running
+  STEP_TIMEOUT: {
+    what: (c) => `Did not finish within ${c.num("timeoutMs") != null ? `${c.seconds("timeoutMs")} s` : "the time limit"}`,
+    todo: "When the app or page is slow, raise this node's timeout",
+  },
+  WAIT_TIMEOUT: { what: "The condition never came true while waiting", todo: "Check the condition and whether the wait is long enough" },
+  LOOP_LIMIT_EXCEEDED: {
+    what: (c) => `The loop went past its limit${c.num("maxIterations") != null ? ` (${c.num("maxIterations")} times)` : ""}`,
+    todo: "Check that the end condition can come true. Raise the limit only if it really needs more",
+  },
+  CANCELLED: { what: "Stopped", todo: "Run again to continue" },
+  RUN_CANCELLED: { what: "The run was stopped", todo: "Run again to continue" },
+  MISSING_INPUT: { what: (c) => `The input ${c.q(c.str("input"))} was not given`, todo: "Give a value when you run, or set the variable's default" },
+  INVALID_INPUT: { what: "An input has the wrong kind of value", todo: "Give a value of the variable's type (text, number, list…)" },
+  CALL_TARGET_NOT_FOUND: { what: "The scenario to call is missing", todo: "Check that it was not deleted and that the call names it" },
+  CALL_MISSING_INPUT: { what: "The called scenario needs an input that was not given", todo: "Fill in the call node's inputs" },
+  CALL_TOO_DEEP: { what: "Scenario calls are nested too deep", todo: "Check that a scenario does not keep calling itself" },
+  RESUME_INCOMPATIBLE: { what: "The fixed scenario cannot continue from where it stopped", todo: "Run it again from the start" },
+  UNSUPPORTED_STEP_TYPE: { what: "This kind of node does not run here", todo: "Update Shikigami, or check that its plugin is installed" },
+  VALIDATION_FAILED: { what: "The scenario has problems to fix", todo: "Fix the items in the problems list" },
+  INVALID_PARAMS: { what: "The node's settings are missing or malformed", todo: "Check the node's settings, or ask the AI to fix them" },
+  NOT_SUPPORTED: { what: "This element does not support the action", todo: "Use another way, such as a mouse click or typing keys" },
+  PLATFORM_UNSUPPORTED: { what: "This action runs only on Windows", todo: "Run it on a Windows PC" },
+  INTERNAL: { what: "Something went wrong inside Shikigami", todo: "Run again. If it keeps happening, report it as a bug" },
+  RUNTIME_PANIC: { what: "Something went wrong inside Shikigami", todo: "Run again. If it keeps happening, report it as a bug" },
+  ADAPTER_UNAVAILABLE: { what: "A part Shikigami uses to operate apps (such as the browser one) is missing", todo: "Reinstall Shikigami" },
+  ADAPTER_CRASHED: { what: "A part Shikigami uses to operate apps stopped", todo: "Run again. It restarts on the next action" },
+
+  // Workspace rules
+  SITE_NOT_ALLOWED: { what: (c) => `${c.q(c.str("site"))} is not one of the allowed sites`, todo: "If it is right, add the site in Settings › Permissions and approval" },
+  APP_NOT_ALLOWED: { what: "This app is not one of the allowed apps", todo: "If it is right, add the app in Settings › Permissions and approval" },
+  UNATTENDED_NOT_ALLOWED: { what: "This scenario may not run unattended", todo: "Check Settings › Permissions and approval" },
+  POLICY_DENIED: { what: "The workspace rules do not let an AI do this", todo: "Check Settings › Permissions and approval" },
+
+  // Expressions
+  EXPR_SYNTAX: { what: "The expression is not written correctly", todo: "Look for an unclosed bracket or quote" },
+  EXPR_UNDEFINED_VARIABLE: {
+    what: (c) => `The variable ${c.q(c.str("variable"))} does not exist yet`,
+    todo: "Check the spelling, and that it is not used before the node that sets it",
+  },
+  EXPR_UNKNOWN_FUNCTION: { what: (c) => `There is no function ${c.q(c.str("function"))}`, todo: "Check the function name (the expression field lists them)" },
+  EXPR_TYPE: { what: "A value in the expression has the wrong kind (text vs. number…)", todo: "Check the kinds of the values used" },
+
+  // Browser
+  ELEMENT_NOT_FOUND: {
+    what: (c) => `Could not find ${c.target || "the element"}`,
+    todo: "Check that the page has finished changing and the wording is the same. If the page is slow, put a wait node before this one",
+  },
+  ELEMENT_AMBIGUOUS: { what: (c) => `Several elements match${c.target ? ` ${c.target}` : ""}`, todo: "Match the name exactly, or say which one by number" },
+  ELEMENT_NOT_VISIBLE: { what: "The element is not shown on the screen", todo: "Check that it is not hidden and needs no scrolling" },
+  ELEMENT_DISABLED: { what: "The element cannot be used right now", todo: "Fill in what it needs first" },
+  ELEMENT_GONE: { what: "The element disappeared during the action", todo: "Put a wait node before this one until the screen settles" },
+  OPTION_NOT_FOUND: {
+    what: (c) => `There is no option ${c.q(c.str("value") || c.p("value"))}`,
+    todo: (c) => (c.list("options").length > 0 ? `The options are ${c.list("options").slice(0, 8).join(", ")}` : "Check the options"),
+  },
+  BROWSER_NOT_OPEN: { what: "The browser is not open", todo: "Put an Open browser node before this one" },
+  TAB_NOT_FOUND: {
+    what: (c) => `The tab ${c.q(c.p("title") || c.p("url"))} to move to was not found`,
+    todo: "Check that the click before opens a new tab, and that the title or address matches",
+  },
+  LAST_TAB: { what: "This is the only tab, so it cannot be closed", todo: "Use Close browser to close the whole browser" },
+  DIALOG_NOT_SHOWN: { what: "No dialog (OK / Cancel) appeared", todo: "If this node shows no dialog, clear its dialog setting" },
+  NAVIGATION_FAILED: { what: (c) => `Could not open the page ${c.q(c.p("url"))}`, todo: "Check the address and the network" },
+  BROWSER_LAUNCH_FAILED: { what: "Could not start the browser", todo: "Check that Microsoft Edge or Google Chrome is installed" },
+  BROWSER_ERROR: { what: "The browser action failed", todo: "Run again. If it keeps happening, read the original message" },
+  HUMAN_REQUIRED: { what: "A person is needed, but the browser runs without a window", todo: "Run it with a window" },
+  HUMAN_TIMEOUT: { what: "The person did not finish in time", todo: "Run again and finish within the time" },
+
+  // Desktop
+  WINDOW_NOT_FOUND: { what: (c) => `The window ${c.q(c.window)} is not open`, todo: "Check that the app is running and its title has not changed" },
+  WINDOW_AMBIGUOUS: { what: (c) => `Several ${c.q(c.window)} windows are open`, todo: "Make the title more specific, or say which one by number" },
+  NOT_CLICKABLE: { what: "This element does not take clicks", todo: "Use Mouse click instead" },
+  FOCUS_FAILED: { what: "Could not select the input field (stopped so nothing is typed elsewhere)", todo: "Target the input field itself" },
+  FOREGROUND_DENIED: { what: "Could not bring the window to the front", todo: "Check that the screen is not locked and no other window is in the way" },
+  INPUT_BLOCKED: { what: "Windows did not accept mouse or keyboard input", todo: "Check that the screen is not locked" },
+  ELEVATION_REQUIRED: { what: "The app runs as administrator", todo: "Start Shikigami as administrator too, or start the app normally" },
+  APP_NOT_RESPONDING: { what: "The app is not responding", todo: "Check that it has not frozen, then run again" },
+  IMAGE_NOT_FOUND: { what: "The image is not on the screen", todo: "Check that the display (zoom, theme) has not changed; take the image again if needed" },
+  IMAGE_AMBIGUOUS: { what: "The image appears several times", todo: "Say which one by number, or narrow the area" },
+  IMAGE_FILE_NOT_FOUND: { what: (c) => `The image file ${c.q(c.path)} is missing`, todo: "Check where the image is" },
+  IMAGE_FLAT: { what: "The image is one flat colour and would match anywhere", todo: "Take it again with a pattern or text in it" },
+  IMAGE_UNREADABLE: { what: "Cannot read the image file", todo: "Check that it is an image such as PNG" },
+  TEXT_NOT_FOUND: { what: (c) => `The text ${c.q(c.ocrText)} is not on the screen`, todo: "Check that it is shown and reads the same" },
+  TEXT_AMBIGUOUS: { what: (c) => `The text ${c.q(c.ocrText)} appears several times`, todo: "Say which one by number, or narrow the area" },
+  REGION_OUTSIDE: { what: "The area goes outside the window", todo: "Set the area again" },
+  OCR_ENGINE_MISSING: { what: "Text reading (PaddleOCR) is not available", todo: "Reinstall Shikigami, or switch to Windows text reading" },
+  OCR_LANGUAGE_MISSING: { what: "Windows has no text reading data for the language", todo: "Add the language in Windows Settings" },
+  OCR_FAILED: { what: "Reading the text failed", todo: "Run again" },
+  CAPTURE_FAILED: { what: "Could not take a picture of the screen", todo: "Check that the window is not minimized" },
+  UIA_ERROR: { what: "Could not read the app's elements", todo: "Run again. If it keeps happening, use image or mouse actions" },
+  UIA_UNAVAILABLE: { what: "Reading app elements is not available", todo: "Restart the PC and run again" },
+  READ_ONLY: { what: "This field cannot be changed", todo: "Target a field you can type into" },
+  PASSWORD_FIELD: { what: "Password fields cannot be read", todo: "Register the value as a secret and use that" },
+  LAUNCH_FAILED: { what: (c) => `Could not start ${c.q(c.p("path") || c.p("program"))}`, todo: "Check where the app is" },
+
+  // Files
+  FILE_NOT_FOUND: { what: (c) => `The file ${c.q(c.path)} does not exist`, todo: "Check the file's location and name" },
+  FOLDER_NOT_FOUND: { what: (c) => `The folder ${c.q(c.path)} does not exist`, todo: "Check the folder's location" },
+  FILE_EXISTS: { what: (c) => `${c.q(c.path)} already exists`, todo: "To replace it, turn on the node's Overwrite" },
+  FILE_IN_USE: { what: (c) => `${c.q(c.path)} is open in another app`, todo: "Close it (e.g. in Excel) and run again" },
+  FILE_ACCESS_DENIED: { what: (c) => `No permission to use ${c.q(c.path)}`, todo: "Check the folder's permissions and that the file is not read-only" },
+  FILE_ERROR: { what: (c) => `Could not use ${c.q(c.path)}`, todo: "Check the location and permissions" },
+  FOLDER_NOT_EMPTY: { what: "The folder is not empty", todo: "Check it is fine to delete its contents, then review the node's settings" },
+  NOT_A_FOLDER: { what: (c) => `${c.q(c.path)} is not a folder`, todo: "Give a folder" },
+  SAME_PATH: { what: "The source and destination are the same", todo: "Give another name or place" },
+  PATH_OUTSIDE_PROJECT: { what: "Places outside the scenario's folder cannot be used", todo: "Give a place inside the scenario's folder" },
+  RELATIVE_PATH: { what: "Give the full path", todo: "Use a path starting with C:\\" },
+  WRITE_FAILED: { what: (c) => `Could not write ${c.q(c.path)}`, todo: "Check that the folder exists and the file is not open" },
+  ENCODING_MISMATCH: { what: "The file's encoding is not the one given", todo: "Check the encoding (UTF-8, Shift_JIS…)" },
+  UNENCODABLE_TEXT: {
+    what: (c) => `Some characters cannot be written in Shift_JIS${c.list("characters").length > 0 ? ` (${c.list("characters").slice(0, 8).join(" ")})` : ""}`,
+    todo: "Save as UTF-8, or remove those characters",
+  },
+  CSV_INVALID: { what: "The CSV is malformed", todo: "Check the quotes and that each row has the same number of separators" },
+  ZIP_INVALID: { what: "The ZIP file is broken or not a ZIP", todo: "Check the file" },
+  ZIP_ERROR: { what: "Making or extracting the ZIP failed", todo: "Check the location and free space" },
+  CONFIG_INVALID: { what: "The settings file is malformed", todo: "Check how the settings file is written" },
+
+  // Office and documents
+  EXCEL_NOT_INSTALLED: { what: "Excel is not installed on this PC", todo: "Install Excel, or use a node that reads without Excel" },
+  WORKBOOK_UNREADABLE: { what: (c) => `Cannot read the workbook ${c.q(c.path)}`, todo: "Check that it is not broken or password protected" },
+  WORKBOOK_UNWRITABLE: { what: (c) => `Cannot write the workbook ${c.q(c.path)}`, todo: "Close it if it is open in Excel" },
+  SHEET_NOT_FOUND: {
+    what: (c) => `There is no sheet ${c.q(c.p("sheet"))}`,
+    todo: (c) => (c.list("sheets").length > 0 ? `The sheets are ${c.list("sheets").slice(0, 8).join(", ")}` : "Check the sheet name"),
+  },
+  INVALID_SHEET_NAME: { what: "The sheet name has characters that cannot be used", todo: "Change the sheet name" },
+  INVALID_CELL: { what: "The cell is not written correctly", todo: "Write it like A1" },
+  INVALID_RANGE: { what: "The range is not written correctly", todo: "Write it like A1:D20" },
+  RANGE_TOO_LARGE: { what: "The values go past the edge of the sheet", todo: "Check where writing starts and how many values there are" },
+  UNKNOWN_COLUMN: { what: "A column name is not in the header row", todo: "Match the header names" },
+  INVALID_DATE: { what: "Cannot read it as a date", todo: "Write it like 2026-11-06" },
+  MACRO_FAILED: { what: "The macro stopped with an error", todo: "Run the macro in Excel to find the cause" },
+  MACRO_TIMEOUT: { what: "The macro did not finish in time", todo: "Check that it is not waiting on a message box" },
+  APP_UNAVAILABLE: { what: "Could not start the Office app", todo: "Check that the app is installed" },
+  COM_ERROR: { what: "The Office app gave an unexpected answer", todo: "Check that no dialog is open in the app, then run again" },
+  DOCUMENT_UNREADABLE: { what: (c) => `Cannot read the document ${c.q(c.path)}`, todo: "Check that it is not broken" },
+  TEMPLATE_VALUE_MISSING: { what: "A value for the template is missing", todo: "Match the template's placeholders with the names of the values" },
+  UNSUPPORTED_FORMAT: { what: "This file format is not supported", todo: "Check that it is a supported format (.xlsx, .docx…)" },
+  OUTLOOK_NOT_INSTALLED: { what: "Outlook is not installed on this PC", todo: "Install Outlook" },
+  OUTLOOK_NOT_READY: { what: "Outlook is not ready", todo: "Start Outlook and finish signing in" },
+  OUTLOOK_TIMEOUT: { what: "Outlook did not answer in time", todo: "Check that no dialog is open in Outlook" },
+  MESSAGE_NOT_FOUND: { what: "The mail cannot be found", todo: "Check that it was not moved or deleted" },
+  INVALID_ADDRESS: { what: "There is no recipient address", todo: "Check the recipients" },
+  PDF_UNREADABLE: { what: (c) => `Cannot read the PDF ${c.q(c.path)}`, todo: "Check that it is not broken. For a PDF of images only, use text reading (OCR)" },
+  PDF_PASSWORD_REQUIRED: { what: "The PDF has a password", todo: "Register the password as a secret and pass it" },
+  PDF_WRONG_PASSWORD: { what: "The PDF password is wrong", todo: "Check the registered password" },
+
+  // System
+  HTTP_CONNECT_FAILED: { what: (c) => `Could not connect to ${c.q(c.p("url"))}`, todo: "Check the address and the network (proxy)" },
+  HTTP_ERROR: {
+    what: (c) => `The server returned an error${c.num("status") != null ? ` (${c.num("status")})` : ""}`,
+    todo: (c) => {
+      const s = c.num("status") ?? 0;
+      if (s === 401 || s === 403) return "Check the sign-in details and permissions";
+      if (s === 404) return "Check the address";
+      if (s >= 500 || s === 429) return "The server is busy or down. Run again later";
+      return "Check that what is sent is in the form the server expects";
+    },
+  },
+  HTTP_UNAVAILABLE: { what: "Could not prepare the connection", todo: "Run again" },
+  PROCESS_FAILED: {
+    what: (c) => `The program ended with an error${c.num("exitCode") != null ? ` (exit code ${c.num("exitCode")})` : ""}`,
+    todo: "Read the program's output (the original message and details)",
+  },
+  PROCESS_NOT_FOUND: { what: "The program cannot be found", todo: "Check the program's location or name" },
+  PROCESS_START_FAILED: { what: "Could not start the program", todo: "Check its location and permissions" },
+  CLIPBOARD_BUSY: { what: "Another app is using the clipboard", todo: "Run again" },
+  DIALOG_FAILED: { what: "Could not show the dialog", todo: "Run with a screen" },
+
+  // Secrets and sign-in
+  SECRET_NOT_FOUND: { what: (c) => `The secret ${c.q(c.secret)} is not registered`, todo: "Register it on the Secrets page" },
+  SECRET_FIELD_EMPTY: { what: (c) => `A field of the secret ${c.q(c.secret)} is empty`, todo: "Fill it in on the Secrets page" },
+  SECRET_SITE_NOT_SET: { what: (c) => `The secret ${c.q(c.secret)} has no allowed sites`, todo: "Add the site on the Secrets page" },
+  SECRET_SITE_MISMATCH: {
+    what: (c) => `This page is not an allowed site of the secret ${c.q(c.secret)}`,
+    todo: "Check the page's address, and add the site to the secret if it is right",
+  },
+  SECRET_APP_NOT_SET: { what: (c) => `The secret ${c.q(c.secret)} has no allowed apps`, todo: "Add the app (app:name.exe) on the Secrets page" },
+  SECRET_APP_MISMATCH: { what: (c) => `This app is not an allowed app of the secret ${c.q(c.secret)}`, todo: "Check the app, and add it to the secret if it is right" },
+  SECRET_KEY_MISSING: { what: "The secrets were registered on another PC or by another user and cannot be read here", todo: "Reset them on the Secrets page and register again" },
+  SECRET_DECRYPT_FAILED: { what: "Could not read the secret", todo: "Reset the secrets on the Secrets page and register again" },
+  SECRETS_UNAVAILABLE: { what: "Secrets cannot be used in this run", todo: "Run from Studio or the command line" },
+  SECRET_NOT_ALLOWED: { what: "A secret cannot go in this field", todo: "Use it in a node that types into an input field" },
+  SECRET_PLUGIN_NOT_ALLOWED: { what: "This plugin may not use the secret", todo: "Add plugin:name to the secret" },
+  OAUTH_SIGN_IN_REQUIRED: { what: "Not signed in yet", todo: "Put a Sign in node before this one" },
+  OAUTH_DENIED: { what: "The sign-in was refused", todo: "Check that access was allowed, and the app's client ID and redirect address" },
+  OAUTH_STATE_MISMATCH: { what: "The sign-in answer was not for this request", todo: "Run again" },
+  OAUTH_TOKEN_FAILED: { what: "The last step of signing in was refused", todo: "Check the client ID and secret and the addresses" },
+  OAUTH_FAILED: { what: "Signing in failed", todo: "Run again" },
+};

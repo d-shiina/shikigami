@@ -9,11 +9,14 @@
 ### 追加
 
 - ブラウザ：別のタブ・ポップアップへ移る `browser.switchTab` と閉じて戻る `browser.closeTab`、JS のダイアログ（alert・confirm・prompt）に答える `dialog`（`browser.click` / `browser.press` / `browser.open`。ダイアログの文を出力）、iframe・フレームセットの中の部品を指す `target.frame`、`browser.hover`・`browser.scroll`・`browser.getAttribute`。`inspect_page` と `ELEMENT_NOT_FOUND` の `details` にフレームとタブの一覧、閉じたダイアログ（docs/browser.md）
-
+- Studio の AI ペイン：会話をシナリオごとに持ち、複数のシナリオで AI に並行して作業してもらえます。ペインは開いているシナリオの会話に切り替わり、見出しから会話を選べます（作業中・終わった印）。「新しいシナリオを作る」会話は、AI が作ったシナリオの会話になります。同じシナリオで同時に動く会話は一つだけです
+- Studio の AI ペイン：AI の作業中でも「割り込む」で訂正を送れます。今の作業を止め、同じ会話でその訂正を続けます
 - Studio：実行が終わったあとも、フロー図に通った道筋（ノードの枠と線の色、変数の値）を残します。線は緑＝通った、朱＝止まったノードへ、橙＝実行中。シナリオを編集したとき・次の実行・別のシナリオを開いたときに消え、実行ログの「図の色を消す」（右クリックにも）で手で消せます
 
 ### 変更
 
+- Studio：実行エラーを日本語（英語表示なら英語）で出します。エラーの `code` と `details`、ノードの設定から「何が起きたか」と「どうすればよいか」を組み、AI 向けの英語の原文は「英語の原文」を開くと読めます。実行ログの行も同じ言葉です。`code` を知らないエラー（プラグイン・`control.fail`）は元のメッセージのままです
+- 実行エラーの `details` に名前と数値を足しました：`EXPR_UNDEFINED_VARIABLE` は `variable`、`EXPR_UNKNOWN_FUNCTION` は `function`、`STEP_TIMEOUT` は `timeoutMs`、`LOOP_LIMIT_EXCEEDED` は `maxIterations`、`MISSING_INPUT` は `input`
 - Studio から AI にシナリオ作りを頼むと、作っている途中が見えるようにしました：AI が作ったシナリオを自動で開き（何も開いていないか、空のシナリオを開いているとき）、AI は名前だけで作ってからノードを数個ずつ足し、フロー図は足されたノードへ視点を移します。空のシナリオを開いて頼むと、AI はそこに組みます。AI がツール呼び出しを書いている間は AI ペインに「『ノードを追加』を書いています」、ステータスバーに「Claude Code が作業中・…」を出します
 
 ## [0.1.0] - 2026-11-06

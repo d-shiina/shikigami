@@ -4,9 +4,10 @@
 // a run that ended in failure instead of letting it end quietly.
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { useAgent } from "../agent";
+import { scenarioBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
+import { explainError } from "../lib/errorText";
 import { fixRequest } from "../lib/fixRequest";
 import { plain, sentence } from "../lib/sentence";
 import { diveChain, findStep, isActive } from "../store";
@@ -102,7 +103,7 @@ export function RunPausePanel() {
   const reviewing = useStudio((s) => s.reviewing);
   const pending = usePendingReview();
   const agentAvailable = useAgent((s) => s.info?.available === true);
-  const agentBusy = useAgent((s) => s.turnId !== null || s.sending);
+  const agentBusy = useAgent((s) => scenarioBusy(s, scenario?.id));
   const agentName = useAgent((s) => s.info?.name ?? "AI");
   const askAgent = useAgent((s) => s.send);
   const [asking, setAsking] = useState(false);
@@ -128,6 +129,7 @@ export function RunPausePanel() {
   const stepLabel = step ? step.name || plain(sentence(step, def)) : stepId ? t.evidence.goneStep : null;
   const kind = step ? typeName(step.type, def?.label) : undefined;
   const error = pause?.error ?? failure;
+  const explained = error ? explainError(error, step) : null;
   const onError = pause ? pause.reason === "error" : true;
   // An AI's fix waits in the review queue: look at it before running it.
   const unreviewed = pause && scenario.revision !== pause.revision ? pending.length : 0;
@@ -243,10 +245,19 @@ export function RunPausePanel() {
         )}
       </div>
 
-      {error && (
+      {error && explained && (
         <div className="mt-1.5 flex items-baseline gap-2 text-[13px]">
           <code className="shrink-0 rounded-[3px] bg-shu-50 px-1.5 text-[12px] font-semibold text-shu-600">{error.code}</code>
-          <span className="min-w-0 break-words text-ink">{error.message}</span>
+          <div className="min-w-0 flex-1">
+            <div className="break-words font-semibold text-ink">{explained.what}</div>
+            {explained.todo && <div className="break-words text-slate-600">{explained.todo}</div>}
+            {explained.known && (
+              <details className="text-[12px] text-slate-600">
+                <summary className="w-fit cursor-pointer select-none hover:text-ink">{t.pause.original}</summary>
+                <div lang="en" className="break-words font-mono">{error.message}</div>
+              </details>
+            )}
+          </div>
         </div>
       )}
 
