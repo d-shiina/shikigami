@@ -732,7 +732,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
-      title={t.addStep}
+      title={data.addCase ? t.flow.addCase : t.addStep}
       className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-[4px] border border-dashed text-[13px] ${
         data.selected
           ? "border-brand-500 bg-brand-50 text-brand-600"
@@ -743,7 +743,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
     >
       {!data.end && <FlowHandles />}
       <Plus size={14} strokeWidth={2} aria-hidden="true" />
-      {t.addStep}
+      {data.addCase ? t.flow.addCase : t.addStep}
     </div>
   );
 }
@@ -940,6 +940,7 @@ export function FlowCanvas() {
   const run = useStudio(trailOf);
   const breakpoints = useStudio((s) => (flow ? s.breakpoints[flow.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
+  const addStep = useStudio((s) => s.addStep);
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   const stepMenu = useStepMenu();
   const slotMenu = useSlotMenu();
@@ -1013,7 +1014,9 @@ export function FlowCanvas() {
     const types = new Map(layout.nodes.flatMap((n) => (n.data.kind === "step" ? [[n.id, n.data.step.type] as const] : [])));
     for (const n of layout.nodes) {
       if (n.data.kind !== "step") continue;
-      if (n.data.parentId && types.get(n.data.parentId) === "control.parallel") continue;
+      // Nor among a switch's cases: what goes there is a case (see the "+" beside them).
+      const parentType = n.data.parentId ? types.get(n.data.parentId) : undefined;
+      if (parentType === "control.parallel" || (parentType === "control.switch" && n.data.block === "cases")) continue;
       map.set(n.id, { parentId: n.data.parentId, block: n.data.block, index: n.data.index });
     }
     return map;
@@ -1183,6 +1186,8 @@ export function FlowCanvas() {
         else {
           // An empty block is there to be filled: clicking it opens the palette for it.
           select({ kind: "slot", parentId: data.parentId, block: data.block });
+          // Beside a switch's cases it adds the next case.
+          if (data.addCase) return void addStep("control.case");
           const box = (event.target as Element).closest(".react-flow__node")?.getBoundingClientRect();
           setPaletteOpen(true, null, box);
         }

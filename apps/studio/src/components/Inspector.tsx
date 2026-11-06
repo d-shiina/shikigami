@@ -16,6 +16,7 @@ import { Sentence } from "./StoryView";
 import { ActorMark, usePendingReview } from "./Timeline";
 import { VarIcon } from "./VarIcon";
 import { VariablesPanel } from "./VariablesPanel";
+import { listToText, textToList } from "../lib/listText";
 
 type JsonSchema = {
   type?: string;
@@ -24,6 +25,7 @@ type JsonSchema = {
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
+  items?: JsonSchema | { type?: string | string[] };
 };
 
 const inputClass =
@@ -196,6 +198,14 @@ function TextOrSecretField({
   );
 }
 
+/** An array of strings, numbers and booleans, held as such (not yet something else). */
+function isScalarList(schema: JsonSchema, value: unknown): boolean {
+  const items = schema.items?.type;
+  const types = Array.isArray(items) ? items : items ? [items] : [];
+  const scalar = types.length > 0 && types.every((ty) => ["string", "number", "integer", "boolean", "null"].includes(ty));
+  return scalar && (value === undefined || value === null || (Array.isArray(value) && value.every((v) => v === null || typeof v !== "object")));
+}
+
 function ParamField({
   name,
   schema,
@@ -265,6 +275,18 @@ function ParamField({
     );
   } else if (schema.type === "string") {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
+  } else if (schema.type === "array" && isScalarList(schema, value)) {
+    // A few plain values (a case's values): one line, comma-separated.
+    hint = t.props.listHint;
+    editor = (
+      <CommitInput
+        value={listToText(value)}
+        onCommit={(text) => {
+          const list = textToList(text);
+          onChange(list.length === 0 ? null : list);
+        }}
+      />
+    );
   } else if (isForm(schema, value)) {
     // A target and other small records: one field per item, never JSON by hand.
     return (

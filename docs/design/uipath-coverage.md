@@ -28,7 +28,7 @@ UiPath は 1 つの操作に 1 つのアクティビティを用意する（「�
 |---|---|---|
 | Assign / Multiple Assign | `variable.set`（`expression`）。複数は並べる | ✅ |
 | If / Else If | `control.if`（else に `control.if`） | ✅ |
-| Switch | `control.if` の連鎖。値の対応表なら `{ A: 'x', B: 'y' }[code]` | ➖（Studio 表示を見て再検討） |
+| Switch | `control.switch`（`cases` に `control.case`、どれにも当たらなければ `default`）。値を置き換えるだけなら式の `{ A: 'x', B: 'y' }[code]` | ✅ |
 | While / Do While | `control.while` | ✅ |
 | For Each / For Each Row | `control.forEach`（表は配列なので行もこれ） | ✅ |
 | Repeat Number of Times | `control.repeat` | ✅ |

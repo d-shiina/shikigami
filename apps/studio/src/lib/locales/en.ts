@@ -560,7 +560,9 @@ export const en: Dict = {
     pausedHere: "Paused here",
     note: "Note",
     /** The tag on the frame around a loop, if, … and its blocks. */
-    frame: { loop: "Loop", if: "If", try: "Try", parallel: "Parallel", group: "Group" },
+    frame: { loop: "Loop", if: "If", switch: "Switch", try: "Try", parallel: "Parallel", group: "Group" },
+    /** Beside a switch's cases. */
+    addCase: "Add case",
   },
   project: {
     title: "Project",
@@ -783,6 +785,7 @@ export const en: Dict = {
     unset: "(not set)",
     numberHint: "A number, or an expression (e.g. count * 2)",
     jsonHint: "JSON (strings may use {{ expr }} templates)",
+    listHint: "Comma-separated (e.g. A, B, 10). Put a number in quotes, like \"10\", to mean text",
     form: "Form",
     flowInput: "Flow input",
     flowOutput: "Flow output",
@@ -1079,6 +1082,7 @@ export const en: Dict = {
   askCopied: "Copied the request for the AI. Paste it into an AI such as Claude Code. Once you have reviewed the fix, resume from here.",
   paramLabels: {
     message: "Message",
+    values: "Matches",
     level: "Level",
     name: "Variable",
     value: "Value",
@@ -1204,6 +1208,7 @@ export const en: Dict = {
     "clipboard.get": "Read clipboard",
     "clipboard.set": "Set clipboard",
     "control.break": "Break",
+    "control.case": "Case",
     "control.continue": "Continue",
     "control.fail": "Raise error",
     "control.forEach": "For each",
@@ -1211,6 +1216,7 @@ export const en: Dict = {
     "control.if": "If",
     "control.parallel": "Parallel",
     "control.repeat": "Repeat",
+    "control.switch": "Switch on value",
     "control.try": "Try / catch",
     "control.while": "While",
     "desktop.click": "Click",
@@ -1291,6 +1297,9 @@ export const en: Dict = {
     "control.if:then": "then",
     "control.if:else": "else",
     "control.parallel:branches": "at the same time",
+    "control.switch:cases": "case",
+    "control.switch:default": "when none match",
+    "control.case:body": "when it matches",
     "control.repeat:body": "repeat",
     "control.while:body": "repeat",
     "wait.until:check": "run before each check",

@@ -92,6 +92,7 @@ impl Validator {
             validator: self,
             issues: Vec::new(),
             seen_ids: HashSet::new(),
+            in_cases: false,
             known_vars: known_variables(flow, &self.registry),
             declared_vars: flow.variables.iter().map(|v| v.name.clone()).collect(),
             requires: flow.requires.clone(),
@@ -183,6 +184,8 @@ struct Cx<'a> {
     declared_vars: BTreeSet<String>,
     requires: BTreeMap<String, String>,
     parts: BTreeMap<String, crate::model::Part>,
+    /// The steps being checked are the `cases` of a `control.switch`.
+    in_cases: bool,
 }
 
 impl Cx<'_> {
@@ -381,12 +384,16 @@ impl Cx<'_> {
     }
 
     fn steps(&mut self, steps: &[Step], path: &str, loop_depth: usize) {
+        let in_cases = self.in_cases;
         for (i, step) in steps.iter().enumerate() {
+            self.in_cases = in_cases;
             self.step(step, &format!("{path}/{i}"), loop_depth);
         }
+        self.in_cases = false;
     }
 
     fn step(&mut self, step: &Step, path: &str, loop_depth: usize) {
+        let in_cases = std::mem::take(&mut self.in_cases);
         let id = Some(&step.id);
         if step.id.is_empty() {
             self.error(
@@ -509,6 +516,8 @@ impl Cx<'_> {
             }
         }
 
+        self.switch_case(step, path, in_cases);
+
         if matches!(step.step_type.as_str(), control::BREAK | control::CONTINUE) && loop_depth == 0
         {
             self.error(
@@ -566,7 +575,32 @@ impl Cx<'_> {
                     )
                 });
             }
+            self.in_cases = step.step_type == control::SWITCH && name == "cases";
             self.steps(children, &block_path, child_depth);
+        }
+    }
+
+    /// `control.case` steps live in the `cases` of a `control.switch`, and
+    /// nothing else does.
+    fn switch_case(&mut self, step: &Step, path: &str, in_cases: bool) {
+        let is_case = step.step_type == control::CASE;
+        if is_case && !in_cases {
+            self.error(
+                "CASE_OUTSIDE_SWITCH",
+                "'control.case' must be in the `cases` block of a control.switch".into(),
+                format!("{path}/type"),
+                Some(&step.id),
+            );
+        } else if !is_case && in_cases {
+            self.error(
+                "NOT_A_CASE",
+                format!(
+                    "the `cases` of control.switch hold only control.case steps, not '{}'",
+                    step.step_type
+                ),
+                format!("{path}/type"),
+                Some(&step.id),
+            );
         }
     }
 
@@ -1061,6 +1095,12 @@ fn generic_hint(code: &str) -> Option<&'static str> {
             "Put break/continue inside control.while, control.repeat or control.forEach. A control.parallel branch cannot leave an outer loop; end the branch or use control.fail."
         }
         "NO_OUTPUT" => "Remove `saveAs`: this step type returns no value.",
+        "CASE_OUTSIDE_SWITCH" => {
+            "Put the control.case into `blocks.cases` of a control.switch, or use control.if for a single condition."
+        }
+        "NOT_A_CASE" => {
+            "Wrap the step in a control.case (`params.values` or `params.condition`, the step in `blocks.body`), or move it to the switch's `default` block."
+        }
         "INVALID_VARIABLE_NAME" => {
             "Use letters, digits and '_' and start with a letter or '_' (e.g. invoiceTotal)."
         }
@@ -1384,6 +1424,61 @@ mod tests {
     }
 
     #[test]
+    fn cases_belong_to_a_switch() {
+        let log = |id: &str| {
+            Step::new("log.message")
+                .with_id(id)
+                .with_param("message", "x")
+        };
+        let case = |id: &str, body: &str| {
+            Step::new(control::CASE)
+                .with_id(id)
+                .with_param("values", json!(["A"]))
+                .with_block("body", vec![log(body)])
+        };
+        let mut s = Flow::new("switch");
+        s.steps = vec![
+            Step::new(control::SWITCH)
+                .with_id("sw")
+                .with_param("value", "'A'")
+                .with_block("cases", vec![case("c1", "l1"), log("stray")])
+                .with_block("default", vec![case("lost", "l2")]),
+            case("top", "l3"),
+        ];
+        let report = validator().validate(&s);
+        let found: Vec<(&str, &str)> = report
+            .issues
+            .iter()
+            .map(|i| {
+                (
+                    i.code.as_str(),
+                    i.step_id.as_ref().map_or("", |id| id.as_str()),
+                )
+            })
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("NOT_A_CASE", "stray"),
+                ("CASE_OUTSIDE_SWITCH", "lost"),
+                ("CASE_OUTSIDE_SWITCH", "top"),
+            ],
+            "{:?}",
+            report.issues
+        );
+
+        // A case needs `values` or `condition`.
+        let mut empty = Flow::new("switch");
+        empty.steps = vec![
+            Step::new(control::SWITCH)
+                .with_id("sw")
+                .with_param("value", "1")
+                .with_block("cases", vec![Step::new(control::CASE).with_id("c")]),
+        ];
+        assert!(codes(&validator().validate(&empty)).contains(&"INVALID_PARAMS"));
+    }
+
+    #[test]
     fn concurrent_for_each_rules() {
         let body = vec![
             Step::new("variable.set")
@@ -1526,6 +1621,11 @@ mod tests {
                         .with_id("loop")
                         .with_param("count", 1)
                         .with_block("body", vec![step])
+                } else if def.step_type == control::CASE {
+                    Step::new(control::SWITCH)
+                        .with_id("switch")
+                        .with_param("value", "'東京'")
+                        .with_block("cases", vec![step])
                 } else {
                     step
                 };

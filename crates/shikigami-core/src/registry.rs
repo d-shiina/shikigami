@@ -18,6 +18,10 @@ use crate::resource::{ResourceDef, ResourceKind};
 /// Built-in control-flow step types (executed by the Runtime itself).
 pub mod control {
     pub const IF: &str = "control.if";
+    /// Several branches picked by one value (VBA `Select Case`).
+    pub const SWITCH: &str = "control.switch";
+    /// One branch of `control.switch`; only allowed in its `cases` block.
+    pub const CASE: &str = "control.case";
     pub const WHILE: &str = "control.while";
     pub const REPEAT: &str = "control.repeat";
     pub const FOR_EACH: &str = "control.forEach";
@@ -297,6 +301,59 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             description: "Runs the `then` block when `condition` is truthy, otherwise the `else` block.".into(),
             params_schema: object_schema(json!({ "condition": expression }), &["condition"]),
             blocks: vec![block("then", "条件が真"), block("else", "条件が偽")],
+            has_output: false,
+            expression_params: vec!["condition".into()],
+            binds_variables: vec![],
+            risk: RiskLevel::Safe,
+            examples: vec![],
+            resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
+            path_params: Vec::new(),
+        },
+        StepTypeDef {
+            targets: Vec::new(),
+            step_type: control::SWITCH.into(),
+            category: StepCategory::Control,
+            label: "値で分岐".into(),
+            description: "Picks one of several branches by a value, like VBA `Select Case`. `value` is an expression evaluated once. `cases` holds only `control.case` steps, checked top to bottom: the first case whose `values` contains a value equal to it (or whose `condition` is truthy) runs its `body`, and no other case runs (no fall-through). When none matches, `default` runs. Use it instead of a chain of nested `control.if` when one value decides among three or more branches.".into(),
+            params_schema: object_schema(json!({ "value": expression }), &["value"]),
+            blocks: vec![block("cases", "ケース"), block("default", "どれにも該当しないとき")],
+            has_output: false,
+            expression_params: vec!["value".into()],
+            binds_variables: vec![],
+            risk: RiskLevel::Safe,
+            examples: vec![],
+            resources: vec![],
+            secret_params: vec![],
+            default_timeout_ms: None,
+            deprecated: None,
+            plugin: None,
+            path_params: Vec::new(),
+        },
+        StepTypeDef {
+            targets: Vec::new(),
+            step_type: control::CASE.into(),
+            category: StepCategory::Control,
+            label: "ケース".into(),
+            description: "One branch of `control.switch` (only allowed in its `cases` block). Runs `body` when the switch's value equals one of `values` (like `Case \"A\", \"B\"`; numbers compare by value, a string may be a `{{ expression }}` template), or when `condition` is truthy (like `Case Is >= 80` / `Case 1 To 5`: write the comparison in full, e.g. `score >= 80`). Give `values`, `condition`, or both (either one matching is enough).".into(),
+            params_schema: json!({
+                "type": "object",
+                "properties": {
+                    "values": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": { "type": ["string", "number", "boolean", "null"] },
+                        "description": "当てはまる値の一覧（例: [\"A\", \"B\"] / [1, 2]）",
+                    },
+                    "condition": expression,
+                },
+                "anyOf": [ { "required": ["values"] }, { "required": ["condition"] } ],
+                "additionalProperties": false,
+            }),
+            blocks: vec![block("body", "該当するとき")],
             has_output: false,
             expression_params: vec!["condition".into()],
             binds_variables: vec![],
@@ -685,6 +742,30 @@ fn builtin_examples(step_type: &str) -> Vec<Value> {
                 "then": [ { "type": "log.message", "params": { "message": "高額: {{ invoice.no }}" } } ],
                 "else": [ { "type": "log.message", "params": { "message": "通常: {{ invoice.no }}" } } ]
             }
+        })],
+        control::SWITCH => vec![json!({
+            "type": "control.switch",
+            "name": "区分で振り分ける",
+            "params": { "value": "order.kind" },
+            "blocks": {
+                "cases": [
+                    { "type": "control.case", "params": { "values": ["A", "B"] }, "blocks": { "body": [
+                        { "type": "log.message", "params": { "message": "通常品: {{ order.no }}" } }
+                    ] } },
+                    { "type": "control.case", "params": { "values": ["C"] }, "blocks": { "body": [
+                        { "type": "log.message", "params": { "message": "取り寄せ: {{ order.no }}" } }
+                    ] } },
+                    { "type": "control.case", "name": "10 万円以上", "params": { "condition": "order.amount >= 100000" }, "blocks": { "body": [
+                        { "type": "log.message", "params": { "message": "高額: {{ order.no }}" } }
+                    ] } }
+                ],
+                "default": [ { "type": "log.message", "params": { "level": "warn", "message": "不明な区分: {{ order.kind }}" } } ]
+            }
+        })],
+        control::CASE => vec![json!({
+            "type": "control.case",
+            "params": { "values": ["東京", "大阪"] },
+            "blocks": { "body": [ { "type": "log.message", "params": { "message": "支店あり" } } ] }
         })],
         control::WHILE => vec![json!({
             "type": "control.while",

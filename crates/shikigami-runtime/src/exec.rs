@@ -1083,7 +1083,8 @@ impl Executor {
                     other => other,
                 }
             }
-            control::GROUP => self.sub_block(step, "body").await,
+            control::SWITCH => self.switch(step).await,
+            control::GROUP | control::CASE => self.sub_block(step, "body").await,
             control::PARALLEL => self.parallel(step).await,
             control::WAIT_UNTIL => self.wait_until(step).await,
             flow::CALL => self.call(step).await,
@@ -1107,6 +1108,45 @@ impl Executor {
                 format!("unknown control step '{other}'"),
             )
             .into()),
+        }
+    }
+
+    /// Runs the first case that matches the value, or `default`. The case
+    /// runs as a step of its own, so the run shows which branch was taken.
+    async fn switch(&mut self, step: &Step) -> StepResult {
+        let value = self.eval(param_str(step, "value")?)?;
+        for case in step.block("cases") {
+            if case.disabled || case.step_type != control::CASE {
+                continue;
+            }
+            if !self.case_matches(case, &value)? {
+                continue;
+            }
+            return loop {
+                match self.block(std::slice::from_ref(case)).await? {
+                    Proceed::Retry => {}
+                    other => break Ok(other),
+                }
+            };
+        }
+        self.sub_block(step, "default").await
+    }
+
+    fn case_matches(&self, case: &Step, value: &Value) -> Result<bool, RunError> {
+        let at = |e: RunError| e.at_step(&case.id, &case.step_type);
+        if let Some(Value::Array(values)) = case.params.get("values") {
+            for candidate in values {
+                let candidate = expr::render_value(candidate, &self.vars)
+                    .map_err(expr_error)
+                    .map_err(at)?;
+                if expr::loose_eq(&candidate, value) {
+                    return Ok(true);
+                }
+            }
+        }
+        match case.params.get("condition").and_then(Value::as_str) {
+            Some(condition) => Ok(expr::truthy(&self.eval(condition).map_err(at)?)),
+            None => Ok(false),
         }
     }
 

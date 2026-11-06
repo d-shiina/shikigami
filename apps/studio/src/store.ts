@@ -658,6 +658,8 @@ export function findStep(steps: Step[], id: string): Step | null {
 /** Sensible starting params so a freshly added step is close to runnable. */
 const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "control.if": { condition: "true" },
+  "control.switch": { value: "''" },
+  "control.case": { values: [""] },
   "control.while": { condition: "false" },
   "control.repeat": { count: 1 },
   "control.forEach": { items: "[]", itemVar: "item" },
@@ -676,6 +678,14 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "browser.getText": { target: { text: "" } },
   "browser.press": { key: "Enter" },
 };
+
+const SWITCH = "control.switch";
+const CASE = "control.case";
+
+/** A case of a switch, with nothing to compare to yet. */
+function newCase(body: Step[] = []): Step {
+  return { id: newStepId(), type: CASE, params: { ...(DEFAULT_PARAMS[CASE] ?? {}) }, ...(body.length > 0 ? { blocks: { body } } : {}) };
+}
 
 export function newStepId(): string {
   return `stp_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -1029,7 +1039,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const { flow, selection, paletteAt } = get();
         if (!flow) return;
         const { position } = insertPlace(flow.steps ?? [], selection, paletteAt);
-        const step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
+        let step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
+        // A switch starts with its first case; a node added among the cases becomes a case of its own.
+        if (type === SWITCH) step.blocks = { cases: [newCase()] };
+        const parent = position.parentId ? findStep(flow.steps ?? [], position.parentId) : null;
+        if (parent?.type === SWITCH && position.block === "cases" && type !== CASE) step = newCase([step]);
         const ok = await get().applyOps([{ op: "addStep", step, position }]);
         if (ok && step.id) set({ selection: { kind: "step", stepId: step.id } });
       },

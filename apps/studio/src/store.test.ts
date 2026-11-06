@@ -90,6 +90,24 @@ describe("studio store", () => {
     expect(store.getState().selection).toEqual({ kind: "step", stepId: added.step.id });
   });
 
+  it("starts a switch with a case, and turns a node added among its cases into a case", async () => {
+    const sw = { id: "sw", type: "control.switch", params: { value: "kind" }, blocks: { cases: [] } };
+    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(2, [sw])));
+    const store = createStudioStore(fakeApi({ edit, getFlow: vi.fn(async () => flow(1, [sw])) }));
+    await store.getState().open("scn_a");
+
+    store.getState().select(null);
+    await store.getState().addStep("control.switch");
+    const first = edit.mock.calls[0]![2][0] as Extract<EditOp, { op: "addStep" }>;
+    expect(first.step).toMatchObject({ type: "control.switch", blocks: { cases: [{ type: "control.case", params: { values: [""] } }] } });
+
+    store.getState().select({ kind: "slot", parentId: "sw", block: "cases" });
+    await store.getState().addStep("log.message");
+    const second = edit.mock.calls[1]![2][0] as Extract<EditOp, { op: "addStep" }>;
+    expect(second.position).toMatchObject({ parentId: "sw", block: "cases" });
+    expect(second.step).toMatchObject({ type: "control.case", blocks: { body: [{ type: "log.message" }] } });
+  });
+
   it("adds at the plus button the palette was opened from, even though the palette closes as it adds", async () => {
     const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(2)));
     const store = createStudioStore(fakeApi({ edit }));

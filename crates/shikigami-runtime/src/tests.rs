@@ -212,6 +212,86 @@ async fn loops_with_break_and_continue() {
 }
 
 #[tokio::test]
+async fn switch_runs_the_first_matching_case_or_default() {
+    let case = |values: Option<Value>, condition: Option<&str>, message: &str| {
+        let mut step = Step::new("control.case").with_block("body", vec![log(message)]);
+        if let Some(values) = values {
+            step = step.with_param("values", values);
+        }
+        if let Some(condition) = condition {
+            step = step.with_param("condition", condition);
+        }
+        step
+    };
+    let switch = || {
+        Step::new("control.switch")
+            .with_param("value", "kind")
+            .with_block(
+                "cases",
+                vec![
+                    case(Some(json!(["A", "B"])), None, "AB"),
+                    case(Some(json!(["{{ special }}"])), None, "special"),
+                    case(Some(json!([1])), None, "one"),
+                    // Like `Case Is >= 10`; the earlier cases win when both match.
+                    case(None, Some("kind >= 10"), "big"),
+                    {
+                        let mut off = case(Some(json!([5])), None, "disabled");
+                        off.disabled = true;
+                        off
+                    },
+                ],
+            )
+            .with_block("default", vec![log("default: {{ kind }}")])
+    };
+    for (kind, expected) in [
+        (json!("B"), "AB"),
+        (json!("S"), "special"),
+        (json!(1.0), "one"),
+        (json!(25), "big"),
+        (json!(5), "default: 5"),
+        (json!(3), "default: 3"),
+    ] {
+        let mut s = flow(vec![switch()]);
+        s.variables
+            .push(var("kind", VarType::Any, VarDirection::Input, None));
+        s.variables.push(var(
+            "special",
+            VarType::String,
+            VarDirection::Local,
+            Some(json!("S")),
+        ));
+        let (report, events) = run(&Runtime::new(), s, json!({ "kind": kind })).await;
+        assert_eq!(
+            report.status,
+            RunStatus::Succeeded,
+            "{kind}: {:?}",
+            report.error
+        );
+        assert_eq!(logs(&events), [expected], "{kind}");
+    }
+
+    // The case that ran is reported as a step of its own; the others are not.
+    let mut s = flow(vec![switch()]);
+    s.variables
+        .push(var("kind", VarType::Any, VarDirection::Input, None));
+    s.variables.push(var(
+        "special",
+        VarType::String,
+        VarDirection::Local,
+        Some(json!("S")),
+    ));
+    let (_, events) = run(&Runtime::new(), s, json!({ "kind": 1 })).await;
+    let started: Vec<String> = events
+        .iter()
+        .filter_map(|e| match &e.event {
+            RunEvent::StepStarted { step_type, .. } => Some(step_type.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(started, ["control.switch", "control.case", "log.message"]);
+}
+
+#[tokio::test]
 async fn infinite_loops_are_bounded() {
     let s = flow(vec![
         Step::new("control.while")
