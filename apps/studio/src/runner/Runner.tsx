@@ -66,7 +66,7 @@ function List({ items, selected, onSelect, locked }: { items: RunnerItem[]; sele
             <li key={item.scenario.id}>
               <button
                 type="button"
-                disabled={locked && !on}
+                disabled={locked}
                 onClick={() => onSelect(item.scenario.id)}
                 aria-current={on}
                 className={`block w-full border-l-[3px] px-3 py-2 text-left disabled:opacity-50 ${on ? "border-brand-500 bg-brand-50" : "border-transparent hover:bg-slate-50"}`}
@@ -178,7 +178,10 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   }, []);
 
   const item = items?.find((i) => i.scenario.id === selected) ?? null;
-  const fields = useMemo(() => (item ? fieldsOf(item.scenario) : []), [item]);
+  // Per scenario and version: the list is read again after each run, and
+  // that must not wipe what the person typed (「もう一度」 runs with it).
+  const formKey = item ? `${item.scenario.id}@${item.version}` : "";
+  const fields = useMemo(() => (item ? fieldsOf(item.scenario) : []), [formKey]);
   useEffect(() => {
     setValues(initialValues(fields));
     setErrors({});
@@ -190,8 +193,10 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   const now = useTick(!!run && !finished);
 
   // When it ends: the outputs from the report, the files it wrote to output/.
+  // Keyed on the run and its end, not `finished` (a new object each render).
+  const ended = finished && run?.runId ? `${run.runId}:${finished.status}` : null;
   useEffect(() => {
-    if (!finished || !run?.runId || !item) return;
+    if (!ended || !run?.runId || !item) return;
     const runId = run.runId;
     const id = item.scenario.id;
     let tries = 0;
@@ -207,7 +212,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
     );
     void reload();
     // Once per finished run.
-  }, [finished, run?.runId]);
+  }, [ended]);
 
   const text = (step: { name?: string; type: string; params?: Record<string, unknown> }) =>
     step.name?.trim() || plain(sentence(step as never, defs.find((d) => d.type === step.type)));
@@ -252,7 +257,12 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <List items={items ?? []} selected={selected} onSelect={(id) => (reset(), setSelected(id))} locked={running} />
+          <List items={items ?? []} selected={selected} onSelect={(id) => {
+              // A run going on stays on screen until it ends (the rows are disabled too).
+              if (running) return;
+              reset();
+              setSelected(id);
+            }} locked={running} />
           {item && (
             <main className="flex min-w-0 flex-1 flex-col">
               <div className="px-5 pt-4 pb-2">

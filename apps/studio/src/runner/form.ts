@@ -38,7 +38,10 @@ function kindOf(v: VariableDef): FieldKind {
 function shown(kind: FieldKind, value: unknown): string | boolean {
   if (kind === "checkbox") return value === true;
   if (value === undefined || value === null) return "";
-  if (kind === "lines" && Array.isArray(value) && value.every((v) => typeof v !== "object" || v === null)) return value.map(String).join("\n");
+  // One per line only when it reads back the same: non-empty one-line texts.
+  // Anything else (numbers, empty or multi-line texts) is shown as JSON.
+  if (kind === "lines" && Array.isArray(value) && value.every((v) => typeof v === "string" && v.trim() === v && v !== "" && !v.includes("\n")))
+    return value.join("\n");
   if (typeof value === "string") return value;
   if (kind === "json" || kind === "lines" || typeof value === "object") return JSON.stringify(value, null, 2);
   return String(value);

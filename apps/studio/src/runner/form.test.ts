@@ -48,6 +48,12 @@ describe("the run window's form", () => {
     expect(collect(fields, { ...initialValues(fields), month: "x", password: "x", threshold: "たくさん" }).errors).toEqual({ threshold: "数を入れてください" });
   });
 
+  it("keeps defaults that one item per line would change", () => {
+    const fields = fieldsOf(scenario({ variables: [{ name: "ids", type: "array", direction: "input", default: [1, 2, 3] }] }));
+    expect(fields[0]?.initial).toBe("[\n  1,\n  2,\n  3\n]");
+    expect(collect(fields, initialValues(fields)).inputs).toEqual({ ids: [1, 2, 3] });
+  });
+
   it("shows results in the person's way", () => {
     expect(formatValue(3842500)).toBe("3,842,500");
     expect(formatValue(true)).toBe("はい");
