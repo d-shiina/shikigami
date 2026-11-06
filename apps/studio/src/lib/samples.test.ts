@@ -1,0 +1,21 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { setLocale } from "./i18n";
+import { SAMPLES, tutorialUrl } from "./samples";
+
+afterEach(() => setLocale("ja", false));
+
+describe("samples", () => {
+  it("open bundles Studio can import", async () => {
+    for (const sample of SAMPLES.filter((s) => s.bundle)) {
+      const bundle = JSON.parse(await sample.bundle!());
+      expect(bundle.format, sample.id).toBe("shikigami.scenarioBundle");
+      expect(bundle.scenario.id, sample.id).toMatch(/^scn_tutorial_/);
+    }
+  });
+
+  it("link the tutorial in Studio's language", () => {
+    expect(tutorialUrl("invoices")).toBe("https://github.com/d-shiina/shikigami/blob/main/docs/ja/tutorials/invoices.md");
+    setLocale("en", false);
+    expect(tutorialUrl()).toBe("https://github.com/d-shiina/shikigami/blob/main/docs/tutorials/README.md");
+  });
+});

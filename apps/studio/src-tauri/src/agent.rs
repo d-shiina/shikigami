@@ -584,10 +584,11 @@ pub fn agent_login_cancel(login: State<'_, AgentLogin>) {
     }
 }
 
-/// Opens the sign-in page in the default browser (only Anthropic's own pages).
+/// Opens the sign-in page, or one of Shikigami's own docs pages (the
+/// tutorials), in the default browser. Nothing else.
 #[tauri::command]
 pub fn agent_open_url(url: String) -> CmdResult<()> {
-    if !is_sign_in_url(&url) {
+    if !is_sign_in_url(&url) && !is_docs_url(&url) {
         return Err(err("INVALID_INPUT", "開けない URL です"));
     }
     let mut command = if cfg!(windows) {
@@ -615,6 +616,13 @@ fn is_sign_in_url(url: &str) -> bool {
     .iter()
     .any(|p| url.starts_with(p))
         && !url.contains(char::is_whitespace)
+}
+
+/// Shikigami's own pages on GitHub (the tutorials Studio links to).
+fn is_docs_url(url: &str) -> bool {
+    url.starts_with("https://github.com/d-shiina/shikigami/blob/main/docs/")
+        && !url.contains(char::is_whitespace)
+        && !url.contains("..")
 }
 
 fn login_url(line: &str) -> Option<String> {
@@ -1091,6 +1099,18 @@ mod tests {
         assert_eq!(login_url("Opening browser to sign in…"), None);
         assert_eq!(login_url("visit https://evil.example/claude.com/"), None);
         assert!(!is_sign_in_url("https://claude.com/ x"));
+        assert!(is_docs_url(
+            "https://github.com/d-shiina/shikigami/blob/main/docs/ja/tutorials/README.md"
+        ));
+        assert!(!is_docs_url(
+            "https://github.com/d-shiina/shikigami/blob/main/docs/../../x"
+        ));
+        assert!(!is_docs_url(
+            "https://github.com/someone/else/blob/main/docs/a.md"
+        ));
+        assert!(!is_sign_in_url(
+            "https://github.com/d-shiina/shikigami/blob/main/docs/a.md"
+        ));
     }
 
     #[test]

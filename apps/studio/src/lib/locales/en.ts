@@ -918,6 +918,19 @@ export const en: Dict = {
     original: "Original message",
     variablesNow: "Variables at this point",
   },
+  samples: {
+    title: "Samples",
+    lead: "One piece of office work, from asking the AI to running it every month. You can also open the finished scenario to look inside",
+    all: "All tutorials",
+    open: "Open finished",
+    read: "Read the steps",
+    needsSite: "Tried on a practice site",
+    items: {
+      "sales-csv": { name: "Combine branch sales CSVs into one Excel workbook", uses: "CSV, Excel" },
+      invoices: { name: "Make an invoice per customer from an order list", uses: "Excel, Word template" },
+      "web-orders": { name: "Ship pending orders in a web order system", uses: "Browser, sign-in" },
+    } as Record<string, { name: string; uses: string }>,
+  },
   list: {
     noTag: "Untagged",
     stepCount: (n: number) => `${n} nodes`,
