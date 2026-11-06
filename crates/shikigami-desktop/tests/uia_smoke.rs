@@ -32,7 +32,7 @@ async fn notepad_round_trip() {
 
     let runtime = Runtime::builder().adapter(&adapter).build();
     let mut s = Scenario::new("notepad");
-    for name in ["pid", "text"] {
+    for name in ["pid", "text", "scrolled"] {
         s.variables.push(VariableDef {
             direction: VarDirection::Output,
             ..VariableDef::new(name, VarType::Any)
@@ -86,6 +86,61 @@ async fn notepad_round_trip() {
         .unwrap();
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs["text"], json!("日本語 smoke test"));
+
+    // Scrolling without the mouse: a long text, then to its end and back.
+    let long: String = (1..=300).map(|i| format!("line {i}\r\n")).collect();
+    s.steps = vec![
+        step(
+            types::SET_VALUE,
+            json!({ "target": edit, "value": long }),
+            None,
+        ),
+        step(
+            types::SCROLL,
+            json!({ "target": edit, "direction": "bottom" }),
+            Some("text"),
+        ),
+        step(
+            types::SCROLL,
+            json!({ "target": edit, "direction": "up", "amount": 2 }),
+            Some("scrolled"),
+        ),
+    ];
+    let report = runtime
+        .start(s.clone(), RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    eprintln!("scroll: {:?} {:?}", report.outputs, report.error);
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["text"]["atEnd"], json!(true));
+    assert!(
+        report.outputs["scrolled"]["verticalPercent"]
+            .as_f64()
+            .unwrap()
+            < 100.0
+    );
+
+    // The menu bar: Help > About Notepad opens a dialog (a modal one: the
+    // step must not wait for it to close).
+    let about = json!({ "window": { "process": "notepad.exe", "title": "About" } });
+    s.steps = vec![
+        step(
+            types::SELECT_MENU,
+            json!({ "target": { "window": window }, "path": ["Help", "About Notepad"] }),
+            None,
+        ),
+        step(types::WAIT_FOR, json!({ "target": about }), None),
+        step(types::CLOSE_WINDOW, json!({ "target": about }), None),
+    ];
+    let report = runtime
+        .start(s.clone(), RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
 
     // The picture of the window, and OCR on it where an OCR pack is
     // installed (the result is printed; CI images differ in languages).

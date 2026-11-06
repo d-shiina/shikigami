@@ -72,6 +72,12 @@
 | `ai.deleteScenario` | ask | AI の `delete_scenario` |
 | `scenarios.<id>.aiRun` | なし | このシナリオ（と、これを呼ぶ実行・試行）だけ厳しくする。全体の規則より緩くはならない |
 | `scenarios.<id>.unattended` | true | false なら `shikigami run` で動かさない。これを呼ぶシナリオも動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
+| `records.keepDays` | なし（残す） | 各 PC が、この日数より古い実行記録（`runs/<run-id>/`）を消す。実行が終わったときに適用し、実行中のものは消さない |
+| `records.keepRuns` | なし（残す） | 各 PC が残す実行記録の数（新しいものから） |
+| `remote.enabled` | false | 管理サーバーからの実行を受けるか（[design/remote-runs.md](../design/remote-runs.md)）。枠の予約で、管理サーバーへの接続はまだない |
+| `remote.manager` | なし | 管理サーバーの URL。`https://`（`http://` は `localhost` だけ） |
+| `remote.scenarios` | 空（なし） | 管理サーバーが始めてよいシナリオの ID。`"*"` ですべて。`scenarios.<id>.unattended: false` のものはここで許しても動かない |
+| `remote.acceptBundles` | false | このワークスペースの公開版だけでなく、管理サーバーがバンドルで送るシナリオも動かすか |
 
 `allow`＝そのまま、`ask`＝人が Studio で承認してから、`deny`＝させない。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
 

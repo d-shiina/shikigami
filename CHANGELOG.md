@@ -6,20 +6,37 @@
 
 ## 未リリース
 
+### 追加
+
+- デスクトップのノード `desktop.selectMenu`（メニューバー・右クリックメニューの項目を上から名前でたどって選ぶ。アクセスキー `(F)`・`...`・ショートカットは省いてよい）、`desktop.scroll`（マウスを使わずに一覧や枠をスクロール、部品が見えるまで動かす。`atEnd` で最後まで来たかがわかる）、`desktop.mouseScroll`（マウスのホイール）、`desktop.drag`（マウスでドラッグ。別のウィンドウへも）、`desktop.hover`（マウスを重ねる）。マウスのノードは `target.ocr` / `target.image` / `target.point` も使えます（docs/desktop.md）
+- 実行記録（`runStarted` イベントと `report.json`）に `origin`：どこから始めたか（`trigger`：`studio` / `mcp` / `cli` / `schedule` / `remote`）、頼んだもの（`requestedBy`）、ジョブ（`jobId`）、PC の名前（`machine`）。以前の記録はそのまま読めます
+- `policy.json` に `records`（`keepDays`・`keepRuns`：各 PC が実行記録を残す日数と数。既定は消さない）と、管理サーバーからの実行の枠 `remote`（`enabled`・`manager`・`scenarios`・`acceptBundles`。既定は閉じる。まだ接続はしません）（docs/policy.md、docs/design/remote-runs.md）
+- PDF の結合・分割：`pdf.merge`（いくつかの PDF を 1 つに）、`pdf.extractPages`（`"1-3,5"`・`"2-"` で選んだページを新しい PDF に）、`pdf.split`（数ページずつのファイルに分けてパスの一覧を返す）。Acrobat は不要。新しいファイルには選んだページと、そのページが描くものだけを入れ、しおり・フォーム・ほかのページへのリンクは引き継ぎません（docs/pdf.md）
+- Studio のノードパレット：入力か出力を持つフローを「サブフロー」の分類にノードとして並べます。名前で探して選ぶと、そのフローの呼び出し（`scenario.call`）が足されます。開いているフロー自身と、入力も出力もないフローは並べません
+- `list_scenarios` の各行に `inputs` / `outputs`（入力・出力の変数名。どちらもなければ省略）を足しました。呼び出せる形が一覧で分かります
+- MCP ツール `ask_user_to_pick`：どのボタンかわからない（行ごとの「編集」、名前のないアイコンなど）とき、AI は推測せず人に指してもらいます。ブラウザに AI の言葉の帯が出て、迷っている候補には番号付きの枠が付き、人がクリックした部品を（ページには押させずに）`target` で受け取ります。同じ部品が並ぶときは `nth` と表の行の文字 `row` も返します。Studio にも「AI がブラウザの画面で指してほしいと言っています」と出て、そこから断れます。ブラウザアダプターに `pick` / `highlight` / `cancelPick`（`shikigami-browser` の inspect の `action`）、Studio が人の手で対象を選ぶときにも使えます
+- `test_step` は browser ノードを動かす前に、対象をブラウザ上で少しのあいだ枠で光らせます（「ここを押します」）
+- `inspect_page` の `image: true`：スクリーンショットを AI にも渡します（ツリーだけでは見分けにくいページ向け）
+
 ### 変更
 
+- AI への指示（MCP の説明・スキル）に「どれかわからなければ `nth` を当てずっぽうで選ばず、`ask_user_to_pick` で指してもらう」を加えました。`ELEMENT_AMBIGUOUS` のヒントも同じことを言います
 - オンラインアップデートを VS Code と同じ流れに：新しい版は裏でダウンロードし、インストーラーの画面を出さずに入れます。設定の「再起動して更新」で数秒後に新しい版が開き直すか、Studio を閉じたときに入ります（この版から。0.1.1 からこの版への更新は従来どおり画面が出ます）
 
 ## [0.1.1] - 2026-11-06
 
 ### 追加
 
+- ブラウザ：`browser.attach`。人が `--remote-debugging-port` 付きで開いた Edge・Chrome を、ログイン・証明書・拡張機能ごと使います（127.0.0.1 のみ、終わっても閉じない、`dangerous`）。Edge の IE モードのページはデスクトップのノードで扱う方針を docs/browser.md に（UI Automation で見えるかは未確認）
+
+- ブラウザ：`browser.download`（押してダウンロードしたファイルを `path` か `folder` に保存）と `browser.upload`（ファイルの入力欄、またはファイル選択を開くボタンに添付）。パスはシナリオのフォルダーから。どちらも `dangerous` で、確認パネルの「外への影響」に出ます（docs/browser.md）
+
 - ブラウザ：別のタブ・ポップアップへ移る `browser.switchTab` と閉じて戻る `browser.closeTab`、JS のダイアログ（alert・confirm・prompt）に答える `dialog`（`browser.click` / `browser.press` / `browser.open`。ダイアログの文を出力）、iframe・フレームセットの中の部品を指す `target.frame`、`browser.hover`・`browser.scroll`・`browser.getAttribute`。`inspect_page` と `ELEMENT_NOT_FOUND` の `details` にフレームとタブの一覧、閉じたダイアログ（docs/browser.md）
 - Studio の AI ペイン：会話をシナリオごとに持ち、複数のシナリオで AI に並行して作業してもらえます。ペインは開いているシナリオの会話に切り替わり、見出しから会話を選べます（作業中・終わった印）。「新しいシナリオを作る」会話は、AI が作ったシナリオの会話になります。同じシナリオで同時に動く会話は一つだけです
 - Studio の AI ペイン：AI の作業中でも「割り込む」で訂正を送れます。今の作業を止め、同じ会話でその訂正を続けます
 - Studio：実行が終わったあとも、フロー図に通った道筋（ノードの枠と線の色、変数の値）を残します。線は緑＝通った、朱＝止まったノードへ、橙＝実行中。シナリオを編集したとき・次の実行・別のシナリオを開いたときに消え、実行ログの「図の色を消す」（右クリックにも）で手で消せます
-
 - Studio：デスクトップのノードの「対象」に「画面から選ぶ」と「光らせる」を足しました。「画面から選ぶ」は Studio をしまい、マウスの下の部品を枠で囲んで追いかけ、クリックした部品の対象（ID、なければ種類と名前、それもなければウィンドウの中の位置）を入れます。クリックはアプリに渡しません。Esc か右クリックでやめます。「光らせる」は今の画面で対象を探し、見つかったら 2 秒枠で囲みます
+- 名前付きの部品（`parts`）：画面のボタンや入力欄に名前を付けてシナリオに置き、ノードの対象を `{ "part": "saveButton" }` と書けます。画面が変わったら部品を 1 か所直せば、使っているノードすべてに効きます。Studio ではプロジェクトの「部品」に並び、ノードの対象の「部品にする」で作れます（同じ対象のノードもまとめて置き換え）。AI は編集の `setPart` / `removePart` を使います。シナリオの形式は `schemaVersion` 4 になります（古いファイルはそのまま読めます）
 
 ### 変更
 

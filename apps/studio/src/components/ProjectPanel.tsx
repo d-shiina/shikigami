@@ -7,6 +7,7 @@
 import type { ProjectFile, Scenario, Step, StepTypeDef } from "@shikigami/schema";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
+  Boxes,
   Copy,
   Eraser,
   ExternalLink,
@@ -29,6 +30,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { copyText, menuFor, type MenuSpec } from "../lib/contextMenu";
 import { locale, stepLabel, t } from "../lib/i18n";
+import { partUses } from "../lib/parts";
 import { latestLog, logStatus, ProjectContext, type Role, ROLES, roleOf, useProject, usersOf } from "../project";
 
 const ROLE_COLOR: Record<Role, string> = {
@@ -229,6 +231,40 @@ export function ProjectButton() {
   );
 }
 
+/** The scenario's named screen parts: pick one to see and fix it in the inspector. */
+function PartsShelf() {
+  const parts = useStudio((s) => s.scenario?.parts);
+  const steps = useStudio((s) => s.scenario?.steps);
+  const selection = useStudio((s) => s.selection);
+  const select = useStudio((s) => s.select);
+  const entries = Object.entries(parts ?? {});
+  return (
+    <section className="pb-1" title={t.parts.shelfHint}>
+      <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-[11px] text-slate-400">
+        <Boxes size={12} strokeWidth={2} className="text-mizu-500" aria-hidden="true" />
+        <b className="font-semibold text-slate-600">{t.parts.shelf}</b>
+        <span className="ml-auto">{entries.length > 0 ? entries.length : ""}</span>
+      </div>
+      {entries.map(([name, part]) => {
+        const active = selection?.kind === "part" && selection.name === name;
+        const used = partUses(steps ?? [], name).length;
+        return (
+          <button
+            key={name}
+            type="button"
+            onClick={() => select({ kind: "part", name })}
+            className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-[12px] ${active ? "bg-brand-50 text-ink" : "text-slate-700 hover:bg-slate-100"}`}
+          >
+            <span className="min-w-0 flex-1 truncate">{part.label || name}</span>
+            <span className={`shrink-0 text-[10.5px] ${used === 0 ? "text-shu-500" : "text-slate-400"}`}>{t.parts.uses(used)}</span>
+          </button>
+        );
+      })}
+      {entries.length === 0 && <div className="px-2 pb-1 text-[11px] text-slate-400">{t.parts.empty}</div>}
+    </section>
+  );
+}
+
 export function ProjectPanel() {
   const files = useProject((s) => s.files);
   const p = useProject((s) => s);
@@ -306,6 +342,7 @@ export function ProjectPanel() {
         {ROLES.map((role) => (
           <Shelf key={role} role={role} files={byRole(role)} over={over === role} />
         ))}
+        <PartsShelf />
         {others.length > 0 && (
           <section className="pb-1">
             <div className="px-2 pt-2 pb-1 text-[11px] font-semibold text-slate-600">…</div>

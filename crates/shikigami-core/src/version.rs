@@ -291,7 +291,9 @@ pub struct ScenarioDiff {
     pub to: DiffSide,
     /// True when the contents are the same (names, variables, steps, settings).
     pub identical: bool,
-    /// Scenario-level fields: name, description, tags, settings.
+    /// Scenario-level fields: name, description, tags, settings, and each
+    /// named part (`parts.<name>`; `before` / `after` is absent when it was
+    /// added / removed).
     pub scenario: Vec<FieldChange>,
     pub variables: Vec<VariableChange>,
     pub steps: Vec<StepChange>,
@@ -305,6 +307,7 @@ pub fn same_content(a: &Scenario, b: &Scenario) -> bool {
         && a.requires == b.requires
         && a.settings == b.settings
         && a.variables == b.variables
+        && a.parts == b.parts
         && a.steps == b.steps
 }
 
@@ -346,6 +349,25 @@ pub fn ops_to_match(current: &Scenario, target: &Scenario) -> Vec<EditOp> {
                 }),
         );
     }
+    if current.parts != target.parts {
+        ops.extend(
+            current
+                .parts
+                .keys()
+                .filter(|name| !target.parts.contains_key(*name))
+                .map(|name| EditOp::RemovePart { name: name.clone() }),
+        );
+        ops.extend(
+            target
+                .parts
+                .iter()
+                .filter(|(name, part)| current.parts.get(*name) != Some(part))
+                .map(|(name, part)| EditOp::SetPart {
+                    name: name.clone(),
+                    part: part.clone(),
+                }),
+        );
+    }
     if current.steps != target.steps {
         ops.push(EditOp::ReplaceSteps {
             steps: target.steps.clone(),
@@ -371,6 +393,20 @@ pub fn diff(from: (&Scenario, DiffSide), to: (&Scenario, DiffSide)) -> ScenarioD
     push_field(&mut scenario, "description", &a.description, &b.description);
     push_field(&mut scenario, "tags", &a.metadata.tags, &b.metadata.tags);
     push_field(&mut scenario, "settings", &a.settings, &b.settings);
+    // Named screen parts, one entry each (`parts.saveButton`).
+    let mut names: Vec<&String> = a.parts.keys().chain(b.parts.keys()).collect();
+    names.sort();
+    names.dedup();
+    for name in names {
+        let (before, after) = (a.parts.get(name), b.parts.get(name));
+        if before != after {
+            scenario.push(FieldChange {
+                field: format!("parts.{name}"),
+                before: before.map(to_value),
+                after: after.map(to_value),
+            });
+        }
+    }
     let variables = diff_variables(&a.variables, &b.variables);
     let steps = diff_steps(a, b);
     ScenarioDiff {
