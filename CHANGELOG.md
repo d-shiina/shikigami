@@ -12,6 +12,8 @@
 
 ### 変更
 
+- Studio：実行エラーを日本語（英語表示なら英語）で出します。エラーの `code` と `details`、ノードの設定から「何が起きたか」と「どうすればよいか」を組み、AI 向けの英語の原文は「英語の原文」を開くと読めます。実行ログの行も同じ言葉です。`code` を知らないエラー（プラグイン・`control.fail`）は元のメッセージのままです
+- 実行エラーの `details` に名前と数値を足しました：`EXPR_UNDEFINED_VARIABLE` は `variable`、`EXPR_UNKNOWN_FUNCTION` は `function`、`STEP_TIMEOUT` は `timeoutMs`、`LOOP_LIMIT_EXCEEDED` は `maxIterations`、`MISSING_INPUT` は `input`
 - Studio から AI にシナリオ作りを頼むと、作っている途中が見えるようにしました：AI が作ったシナリオを自動で開き（何も開いていないか、空のシナリオを開いているとき）、AI は名前だけで作ってからノードを数個ずつ足し、フロー図は足されたノードへ視点を移します。空のシナリオを開いて頼むと、AI はそこに組みます。AI がツール呼び出しを書いている間は AI ペインに「『ノードを追加』を書いています」、ステータスバーに「Claude Code が作業中・…」を出します
 
 ## [0.1.0] - 2026-11-06
