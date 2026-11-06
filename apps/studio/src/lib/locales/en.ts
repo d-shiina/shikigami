@@ -931,6 +931,12 @@ export const en: Dict = {
       "web-orders": { name: "Ship pending orders in a web order system", uses: "Browser, sign-in" },
     } as Record<string, { name: string; uses: string }>,
   },
+  tray: {
+    tooltip: "Shikigami",
+    openRunner: "Open the run window",
+    openStudio: "Open Studio",
+    quit: "Quit",
+  },
   runner: {
     title: "Shikigami Run",
     open: "Run window",
@@ -948,6 +954,10 @@ export const en: Dict = {
     notNumber: "Enter a number",
     notJson: "Not in the right form (JSON)",
     linesHint: "One per line",
+    choose: "Select",
+    browse: "Browse…",
+    browseFile: "Choose a file",
+    browseFolder: "Choose a folder",
     run: "Run",
     runNote: (version: number) => `Runs published version ${version}. Leave the PC alone until it finishes`,
     stop: "Cancel",

@@ -4682,6 +4682,7 @@ dependencies = [
  "shikigami-core",
  "shikigami-runtime",
  "shikigami-secrets",
+ "shikigami-system",
  "tauri",
  "tauri-build",
  "tauri-plugin-updater",

@@ -13,6 +13,13 @@
  */
 export type FlowId = string;
 /**
+ * What a text variable holds ([`VariableDef::format`]).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "VarFormat".
+ */
+export type VarFormat = "file" | "folder" | "date" | "month";
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "OnError".
  */
@@ -384,6 +391,16 @@ export interface VariableDef {
    * Secret values are masked in logs, events and run records.
    */
   secret?: boolean;
+  /**
+   * What a `string` input holds, so the run window can offer the right
+   * field (a file picker, a calendar). Runs do not check it.
+   */
+  format?: VarFormat | null;
+  /**
+   * The only values an input takes: the run window shows a list to pick
+   * from. Each one must match `type`.
+   */
+  choices?: unknown[];
 }
 /**
  * A named screen part: what a node finds on screen, kept in one place.
