@@ -4,7 +4,7 @@
 import type { Evidence, HistoryEntry, ObservationContent, StepNote } from "@shikigami/schema";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAgent } from "../agent";
+import { scenarioBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { relativeTime } from "../lib/changes";
@@ -288,7 +288,7 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
   const selection = useStudio((s) => s.selection);
   const sendBack = useStudio((s) => s.sendBack);
   const scenario = useStudio((s) => s.scenario);
-  const agentReady = useAgent((s) => s.info?.available === true && s.turnId === null && !s.sending);
+  const agentReady = useAgent((s) => s.info?.available === true && !scenarioBusy(s, scenario?.id));
   const agentName = useAgent((s) => s.info?.name ?? "AI");
   const askAgent = useAgent((s) => s.send);
   const [fixNow, setFixNow] = useKeptState("sendBack.fixNow", true);
