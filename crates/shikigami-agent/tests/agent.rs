@@ -223,6 +223,47 @@ async fn a_new_file_starts_one_run_with_its_path() {
     h.agent.tick(&now, true);
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(h.reports.lock().unwrap().len(), 1);
+    // Processed and removed, then the same name arrives again: a new run.
+    std::fs::remove_file(input.join("new.csv")).unwrap();
+    h.agent.tick(&now, true);
+    std::fs::write(input.join("new.csv"), "again").unwrap();
+    h.agent.tick(&now, true);
+    h.agent.tick(&now, true);
+    wait_for_reports(&h, 2).await;
+}
+
+#[tokio::test]
+async fn a_broken_schedules_file_stops_every_schedule() {
+    let h = harness();
+    let id = scenario(&h, true);
+    save(
+        &h,
+        vec![Schedule {
+            id: "sch_x".into(),
+            name: "x".into(),
+            scenario_id: id,
+            enabled: true,
+            when: When::Every {
+                minutes: 1,
+                from: None,
+                to: None,
+                days: vec![],
+            },
+            inputs: Map::new(),
+        }],
+    );
+    let now = Zoned::now();
+    h.agent.tick(&now, false);
+    // Someone is editing it and leaves it broken.
+    let path = Schedules::path(h.agent.local_root());
+    std::thread::sleep(Duration::from_millis(20));
+    std::fs::write(&path, "{ not json").unwrap();
+    h.agent.tick(&now.checked_add(61.seconds()).unwrap(), false);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(h.reports.lock().unwrap().is_empty());
+    let status = h.agent.status();
+    assert!(status.problem.is_some());
+    assert!(status.schedules.is_empty());
 }
 
 #[tokio::test]

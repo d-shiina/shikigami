@@ -360,8 +360,14 @@ impl Agent {
                 s.schedules
             }
             Err(e) => {
+                // Nothing fires until the file is fixed: not even what it
+                // said before (someone may be turning a schedule off). What
+                // file triggers have seen is kept for when it is back.
                 tracing::warn!(error = %e, "schedules not read");
                 state.problem = Some(e.to_string());
+                state.schedules.clear();
+                state.next.clear();
+                state.growing.clear();
                 return;
             }
         };
@@ -395,6 +401,7 @@ impl Agent {
             if !state.seen.contains_key(&s.id) {
                 let files = self
                     .matching_files(&s)
+                    .unwrap_or_default()
                     .into_iter()
                     .map(|(p, _)| p)
                     .collect();
@@ -415,16 +422,13 @@ impl Agent {
         }
     }
 
-    fn matching_files(&self, s: &Schedule) -> Vec<(PathBuf, u64)> {
+    /// The files in a file trigger's folder; `None` when it cannot be read.
+    fn matching_files(&self, s: &Schedule) -> Option<Vec<(PathBuf, u64)>> {
         let When::FileAdded { pattern, .. } = &s.when else {
-            return Vec::new();
+            return None;
         };
-        let Some(folder) = self.watched_folder(s) else {
-            return Vec::new();
-        };
-        let Ok(entries) = std::fs::read_dir(&folder) else {
-            return Vec::new();
-        };
+        let folder = self.watched_folder(s)?;
+        let entries = std::fs::read_dir(&folder).ok()?;
         let mut files: Vec<(PathBuf, u64)> = entries
             .filter_map(Result::ok)
             .filter_map(|e| {
@@ -440,7 +444,7 @@ impl Agent {
             })
             .collect();
         files.sort();
-        files
+        Some(files)
     }
 
     fn look_for_files(self: &Arc<Self>, now: &Zoned) {
@@ -451,9 +455,16 @@ impl Agent {
             .cloned()
             .collect();
         for s in schedules {
-            let files = self.matching_files(&s);
+            let Some(files) = self.matching_files(&s) else {
+                continue;
+            };
             let ready: Vec<PathBuf> = {
                 let mut state = lock(&self.state);
+                // A file that is gone is forgotten, so one arriving later
+                // under the same name (orders.csv every day) starts a run.
+                if let Some(seen) = state.seen.get_mut(&s.id) {
+                    seen.retain(|p| files.iter().any(|(f, _)| f == p));
+                }
                 let seen = state.seen.get(&s.id).cloned().unwrap_or_default();
                 let before = state.growing.remove(&s.id).unwrap_or_default();
                 let mut growing = HashMap::new();
