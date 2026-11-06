@@ -163,10 +163,31 @@ pub async fn send(input: &ActionInput, via: Via, draft: Draft) -> Result<Value, 
             Ok(json!({ "via": "microsoft365" }))
         }
         Via::Smtp(smtp) => {
+            // Every secret in the login must be allowed to go to this
+            // server, the user name as much as the password.
+            let site = format!("smtp:{}", smtp.host);
+            let check_site = |secret: &shikigami_core::secret::ResolvedSecret| {
+                if secret.sites.iter().any(|s| s.eq_ignore_ascii_case(&site)) {
+                    return Ok(());
+                }
+                Err(StepError::permanent(
+                    if secret.sites.is_empty() { "SECRET_SITE_NOT_SET" } else { "SECRET_SITE_MISMATCH" },
+                    format!("secret '{}' may not be sent to {site}", secret.name),
+                )
+                .with_details(json!({
+                    "secret": secret.name,
+                    "sites": secret.sites,
+                    "url": site,
+                    "hint": format!("Call request_secret with this name and the site {site} so the user can allow it in Studio."),
+                })))
+            };
             let user = match input.params.get("user").filter(|v| !v.is_null()) {
                 None => None,
                 Some(value) => Some(match input.resolve_secret(value)? {
-                    Some(secret) => secret.value,
+                    Some(secret) => {
+                        check_site(&secret)?;
+                        secret.value
+                    }
                     None => shikigami_core::expr::to_display(value),
                 }),
             };
@@ -178,19 +199,7 @@ pub async fn send(input: &ActionInput, via: Via, draft: Draft) -> Result<Value, 
                             "'password' must be a registered secret, not text",
                         )
                     })?;
-                    let site = format!("smtp:{}", smtp.host);
-                    if !secret.sites.iter().any(|s| s.eq_ignore_ascii_case(&site)) {
-                        return Err(StepError::permanent(
-                            if secret.sites.is_empty() { "SECRET_SITE_NOT_SET" } else { "SECRET_SITE_MISMATCH" },
-                            format!("secret '{}' may not be sent to {site}", secret.name),
-                        )
-                        .with_details(json!({
-                            "secret": secret.name,
-                            "sites": secret.sites,
-                            "url": site,
-                            "hint": format!("Call request_secret with this name and the site {site} so the user can allow it in Studio."),
-                        })));
-                    }
+                    check_site(&secret)?;
                     Some(secret.value)
                 }
             };

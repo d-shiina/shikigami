@@ -411,3 +411,17 @@ async fn an_smtp_login_goes_only_to_its_server_and_only_over_tls() {
     assert_eq!(report.outputs["out"], json!({ "via": "smtp" }));
     assert!(seen.lock().unwrap().contains("To: keiri@example.co.jp"));
 }
+
+#[tokio::test]
+async fn a_secret_in_user_is_checked_like_the_password() {
+    let report = run_send(
+        vec!["smtp:mail.example.co.jp".into()],
+        json!({
+            "via": "smtp", "server": "evil.example.com", "from": "robot@example.co.jp",
+            "user": { "secret": "社内メール", "field": "password" },
+            "to": ["keiri@example.co.jp"], "subject": "日次",
+        }),
+    )
+    .await;
+    assert_eq!(report.error.unwrap().code, "SECRET_SITE_MISMATCH");
+}
