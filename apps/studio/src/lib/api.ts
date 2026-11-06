@@ -180,6 +180,9 @@ export const api = {
   debugRun: (runId: string, command: DebugCommand) =>
     call<{ revision: number; updated: boolean }>("debug_run", { runId, command }),
   stopRun: (runId: string) => call<void>("stop_run", { runId }),
+  /** The picker (`action: "pick"`) and highlight (`action: "highlight"`) of an adapter. */
+  pointAt: (adapter: string, params: Record<string, unknown>, session?: string) =>
+    call<Record<string, unknown>>("point_at", { adapter, session, params }),
   runStatus: (runId: string) => call<RunSnapshot | null>("run_status", { runId }),
   listSecrets: () => call<{ secrets: SecretInfo[]; keyLocation: string; keyMissing: boolean }>("list_secrets"),
   setSecret: (input: SecretInput) => call<SecretInfo>("set_secret", { input }),

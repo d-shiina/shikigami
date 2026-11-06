@@ -7,6 +7,7 @@
 mod agent;
 mod commands;
 mod debug;
+mod picker;
 mod updater;
 mod watcher;
 
@@ -142,6 +143,7 @@ pub fn run() {
             commands::stop_run,
             commands::run_status,
             debug::debug_run,
+            picker::point_at,
             updater::app_info,
             updater::check_update,
             updater::install_update,
