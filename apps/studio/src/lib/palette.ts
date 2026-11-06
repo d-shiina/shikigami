@@ -138,7 +138,6 @@ function presetItems(): PaletteItem[] {
     summary: `${preset.description}　${preset.name} ← ${preset.expression}`,
     type: "variable.set",
     params: { name: preset.name, expression: preset.expression },
-    name: preset.label,
     find: {
       label: normalize(preset.label),
       strong: normalize(`${preset.keyword} ${groupLabel(preset.category)} ${readings(`${preset.label} ${preset.description}`)}`),

@@ -500,6 +500,26 @@ pub fn list_step_types(state: State<'_, AppState>) -> Vec<StepTypeDef> {
     state.service.registry().iter().cloned().collect()
 }
 
+/// Evaluates an expression against the values a run recorded, for the
+/// result shown under an expression field. Functions have no side effects,
+/// so this never touches files, the screen or the network.
+#[tauri::command]
+pub fn eval_expression(expression: String, values: Map<String, Value>) -> CmdResult<Value> {
+    use shikigami_core::expr::{self, ExprError};
+    expr::evaluate(&expression, &values).map_err(|e| {
+        let details = match &e {
+            ExprError::UndefinedVariable(name) => Some(serde_json::json!({ "variable": name })),
+            ExprError::UnknownFunction(name) => Some(serde_json::json!({ "function": name })),
+            _ => None,
+        };
+        ErrorPayload {
+            code: e.code().to_owned(),
+            message: e.to_string(),
+            details,
+        }
+    })
+}
+
 #[tauri::command]
 pub fn flow_history(
     state: State<'_, AppState>,

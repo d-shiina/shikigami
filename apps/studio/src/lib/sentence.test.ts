@@ -1,6 +1,7 @@
 import type { StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { plain, readable, sentence, targetText } from "./sentence";
+import { setLocale } from "./i18n";
+import { plain, readable, sentence, targetText, typeTitle } from "./sentence";
 
 describe("sentence", () => {
   it("reads known step types as Japanese", () => {
@@ -8,6 +9,19 @@ describe("sentence", () => {
     expect(
       plain(sentence({ type: "browser.fill", params: { target: { label: "ユーザー名" }, value: "{{ user }}" } }, undefined)),
     ).toBe("「ユーザー名」欄に user を入れる");
+  });
+
+  it("reads a value-handling expression as words, with its form's name", () => {
+    const step = { type: "variable.set", params: { name: "total", expression: "sum(map(rows, r => num(r.金額)))" } };
+    expect(plain(sentence(step, undefined))).toBe("total に rows の「金額」の合計を入れる");
+    expect(sentence(step, undefined)).toContainEqual({ code: "rows" });
+    expect(typeTitle(step, undefined)).toBe("表の列を集計");
+    expect(plain(sentence({ type: "variable.set", params: { name: "t", expression: "replace(t, '/', '-')" } }, undefined))).toBe("t に t の 「/」 を 「-」 に置き換えた文字を入れる");
+    // Other expressions stay as written.
+    expect(plain(sentence({ type: "variable.set", params: { name: "x", expression: "a * b + c" } }, undefined))).toBe("x に a * b + c を入れる");
+    setLocale("en", false);
+    expect(plain(sentence(step, undefined))).toBe("Set total to the sum of “金額” in rows");
+    setLocale("ja", false);
   });
 
   it("turns template holes into chips and keeps the words", () => {
