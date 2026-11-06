@@ -453,6 +453,7 @@ export const en: Dict = {
   loading: "Loading…",
   categories: {
     control: "Control",
+    subflow: "Subflows",
     variable: "Variables",
     log: "Log",
     flow: "Waiting",
@@ -472,6 +473,8 @@ export const en: Dict = {
     other: "Other",
   },
   palette: {
+    flowShape: (inputs: string[], outputs: string[]) =>
+      [inputs.length > 0 ? `In: ${inputs.join(", ")}` : "", outputs.length > 0 ? `Out: ${outputs.join(", ")}` : ""].filter(Boolean).join(" → "),
     placeholder: "Find a node…",
     empty: (query: string) => `No node matches "${query}"`,
     frequent: "Frequent",

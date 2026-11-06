@@ -12,6 +12,8 @@
 - 実行記録（`runStarted` イベントと `report.json`）に `origin`：どこから始めたか（`trigger`：`studio` / `mcp` / `cli` / `schedule` / `remote`）、頼んだもの（`requestedBy`）、ジョブ（`jobId`）、PC の名前（`machine`）。以前の記録はそのまま読めます
 - `policy.json` に `records`（`keepDays`・`keepRuns`：各 PC が実行記録を残す日数と数。既定は消さない）と、管理サーバーからの実行の枠 `remote`（`enabled`・`manager`・`scenarios`・`acceptBundles`。既定は閉じる。まだ接続はしません）（docs/policy.md、docs/design/remote-runs.md）
 - PDF の結合・分割：`pdf.merge`（いくつかの PDF を 1 つに）、`pdf.extractPages`（`"1-3,5"`・`"2-"` で選んだページを新しい PDF に）、`pdf.split`（数ページずつのファイルに分けてパスの一覧を返す）。Acrobat は不要。新しいファイルには選んだページと、そのページが描くものだけを入れ、しおり・フォーム・ほかのページへのリンクは引き継ぎません（docs/pdf.md）
+- Studio のノードパレット：入力か出力を持つフローを「サブフロー」の分類にノードとして並べます。名前で探して選ぶと、そのフローの呼び出し（`scenario.call`）が足されます。開いているフロー自身と、入力も出力もないフローは並べません
+- `list_scenarios` の各行に `inputs` / `outputs`（入力・出力の変数名。どちらもなければ省略）を足しました。呼び出せる形が一覧で分かります
 - MCP ツール `ask_user_to_pick`：どのボタンかわからない（行ごとの「編集」、名前のないアイコンなど）とき、AI は推測せず人に指してもらいます。ブラウザに AI の言葉の帯が出て、迷っている候補には番号付きの枠が付き、人がクリックした部品を（ページには押させずに）`target` で受け取ります。同じ部品が並ぶときは `nth` と表の行の文字 `row` も返します。Studio にも「AI がブラウザの画面で指してほしいと言っています」と出て、そこから断れます。ブラウザアダプターに `pick` / `highlight` / `cancelPick`（`shikigami-browser` の inspect の `action`）、Studio が人の手で対象を選ぶときにも使えます
 - `test_step` は browser ノードを動かす前に、対象をブラウザ上で少しのあいだ枠で光らせます（「ここを押します」）
 - `inspect_page` の `image: true`：スクリーンショットを AI にも渡します（ツリーだけでは見分けにくいページ向け）

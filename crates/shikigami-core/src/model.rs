@@ -99,7 +99,17 @@ impl Scenario {
             step_count: self.walk().count(),
             tags: self.metadata.tags.clone(),
             updated_at: self.metadata.updated_at,
+            inputs: self.names_of(VarDirection::is_input),
+            outputs: self.names_of(VarDirection::is_output),
         }
+    }
+
+    fn names_of(&self, keep: impl Fn(VarDirection) -> bool) -> Vec<String> {
+        self.variables
+            .iter()
+            .filter(|v| keep(v.direction))
+            .map(|v| v.name.clone())
+            .collect()
     }
 
     /// Replaces every `{ "part": "<name>" }` param with that part's target,
@@ -463,6 +473,13 @@ pub struct ScenarioSummary {
     #[serde(default, with = "time::serde::rfc3339::option")]
     #[schemars(with = "Option<String>")]
     pub updated_at: Option<OffsetDateTime>,
+    /// Input variables (`input` and `inOut`), in declared order: what a
+    /// `scenario.call` to it can pass in.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<String>,
+    /// Output variables (`output` and `inOut`): what a call can receive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
 }
 
 pub(crate) fn now() -> OffsetDateTime {
@@ -495,6 +512,27 @@ mod tests {
         let ids: Vec<_> = scenario.walk().map(|s| s.id.as_str()).collect();
         // Blocks are stored in a BTreeMap, so "else" sorts before "then".
         assert_eq!(ids, ["a", "b", "d", "c", "e"]);
+    }
+
+    #[test]
+    fn summary_names_what_a_call_can_pass_in_and_receive() {
+        let mut scenario = Scenario::new("t");
+        let var = |name: &str, direction| VariableDef {
+            direction,
+            ..VariableDef::new(name, VarType::Any)
+        };
+        scenario.variables = vec![
+            var("invoice", VarDirection::Input),
+            var("tmp", VarDirection::Local),
+            var("count", VarDirection::InOut),
+            var("no", VarDirection::Output),
+        ];
+        let summary = scenario.summary();
+        assert_eq!(summary.inputs, ["invoice", "count"]);
+        assert_eq!(summary.outputs, ["count", "no"]);
+        // Nothing to pass: the listing stays as before.
+        let plain = serde_json::to_value(Scenario::new("u").summary()).unwrap();
+        assert!(plain.get("inputs").is_none() && plain.get("outputs").is_none());
     }
 
     #[test]

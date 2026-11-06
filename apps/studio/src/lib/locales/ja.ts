@@ -452,6 +452,7 @@ export const ja = {
   loading: "読み込み中…",
   categories: {
     control: "制御",
+    subflow: "サブフロー",
     variable: "変数",
     log: "ログ",
     flow: "待機",
@@ -471,6 +472,8 @@ export const ja = {
     other: "その他",
   },
   palette: {
+    flowShape: (inputs: string[], outputs: string[]) =>
+      [inputs.length > 0 ? `入力 ${inputs.join("・")}` : "", outputs.length > 0 ? `出力 ${outputs.join("・")}` : ""].filter(Boolean).join(" → "),
     placeholder: "ノードを探す…",
     empty: (query: string) => `「${query}」に合うノードがありません`,
     frequent: "よく使う",
