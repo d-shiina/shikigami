@@ -1,11 +1,10 @@
-import type { StepTypeDef } from "@shikigami/schema";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
-import { stepLabel, t } from "../lib/i18n";
-import { KEYWORD } from "../lib/keywords";
-import { presets } from "../lib/presets";
-
-export const categoryLabel = (category: string): string => (t.categories as Record<string, string>)[category] ?? category;
+import { blockName, stepLabel, t } from "../lib/i18n";
+import { frequent, groupLabel, groups, loadRecent, type PaletteItem, paletteItems, remember, search, sectionOf } from "../lib/palette";
+import { groupIcon, nodeIcon } from "../lib/nodeIcons";
+import { insertPlace, type PaletteAnchor } from "../store";
 
 /** Category colour, taken from the logo swirl. Used for node stripes too. */
 export const CATEGORY_COLOR: Record<string, string> = {
@@ -16,6 +15,9 @@ export const CATEGORY_COLOR: Record<string, string> = {
   browser: "var(--cat-browser)",
   windows: "var(--cat-windows)",
   office: "var(--cat-office)",
+  excel: "var(--cat-office)",
+  word: "var(--cat-office)",
+  outlook: "var(--cat-office)",
   file: "var(--cat-file)",
   network: "var(--cat-browser)",
   system: "var(--cat-windows)",
@@ -27,222 +29,275 @@ export const CATEGORY_COLOR: Record<string, string> = {
   other: "var(--cat-other)",
 };
 
-/** Categories in the order they are listed: the flow's own steps first, then what they drive. */
-const ORDER = ["control", "variable", "text", "number", "date", "list", "flow", "log", "browser", "windows", "office", "file", "network", "system", "other"];
-const CATEGORY_KEY = "shikigami.studio.paletteCategory";
+const color = (group: string) => CATEGORY_COLOR[group] ?? CATEGORY_COLOR.other;
 
-const rank = (category: string) => {
-  const at = ORDER.indexOf(category);
-  return at < 0 ? ORDER.length : at;
-};
-
-/** One line of the palette: a step type, or a ready-made "変数に代入" (preset). */
-type Item = { key: string; category: string; label: string; keyword?: string; summary: string; search: string; add: (addStep: AddStep) => void };
-type AddStep = (type: string, params?: Record<string, unknown>, name?: string) => Promise<void>;
-
-function stepItem(def: StepTypeDef): Item {
-  return {
-    key: def.type,
-    category: def.category,
-    label: stepLabel(def.type, def.label),
-    keyword: KEYWORD[def.type],
-    summary: summary(def.description ?? def.type),
-    search: `${stepLabel(def.type, def.label)} ${def.label} ${def.type} ${def.description ?? ""}`,
-    add: (addStep) => void addStep(def.type),
-  };
+/** A node's or group's icon on a tint of its colour. */
+function Tile({ icon: Icon, group, size }: { icon: React.ComponentType<{ size?: number; strokeWidth?: number; "aria-hidden"?: boolean }>; group: string; size: number }) {
+  const c = color(group);
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-[4px]"
+      style={{ width: size, height: size, color: c, background: `color-mix(in srgb, ${c} 14%, transparent)` }}
+    >
+      <Icon size={Math.round(size * 0.55)} strokeWidth={1.9} aria-hidden={true} />
+    </span>
+  );
 }
 
-const presetItems = (): Item[] =>
-  presets().map((preset) => ({
-  key: preset.key,
-  category: preset.category,
-  label: preset.label,
-  keyword: preset.keyword,
-  summary: `${preset.description}　${preset.name} ← ${preset.expression}`,
-  search: `${preset.label} ${preset.keyword} ${preset.description}`,
-  add: (addStep) => void addStep("variable.set", { name: preset.name, expression: preset.expression }, preset.label),
-  }));
+const WIDTH = 420;
+const HEIGHT = 480;
+const MARGIN = 12;
+/** Shorter than this, the popover goes beside what it was opened from instead. */
+const MIN_HEIGHT = 300;
 
-/** The first sentence of a description: enough to tell steps apart in a list. */
-function summary(text: string): string {
-  // "e.g." and "i.e." do not end a sentence.
-  const end = text.search(/(?<!\b(?:e\.g|i\.e))\.\s|。/);
-  return end < 0 ? text : text.slice(0, end + 1);
+/** A line of the list: a node, a group to open, or a heading. */
+type Row = { item: PaletteItem; tagged: boolean } | { group: string; count: number } | { heading: string };
+type Choice = Exclude<Row, { heading: string }>;
+
+/**
+ * Where the popover goes: below what it was opened from, or above it (as
+ * from the dock), whichever has room, shortened to fit; beside it when
+ * neither does. Never over it, so the place it adds to stays visible.
+ * Opened from nothing: near the top of the window.
+ */
+type Spot = { left: number; top?: number; bottom?: number; height: number };
+
+function place(anchor: PaletteAnchor | null): Spot {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const fit = (room: number) => Math.min(HEIGHT, room);
+  if (!anchor) return { left: Math.max(MARGIN, (vw - WIDTH) / 2), top: Math.max(MARGIN, Math.min(96, vh - HEIGHT - MARGIN)), height: fit(vh - 2 * MARGIN) };
+  const left = Math.min(Math.max(MARGIN, anchor.left), vw - WIDTH - MARGIN);
+  const below = vh - MARGIN - (anchor.bottom + 8);
+  const above = anchor.top - 8 - MARGIN;
+  if (below >= Math.min(HEIGHT, MIN_HEIGHT) && (below >= HEIGHT || below >= above)) return { left, top: anchor.bottom + 8, height: fit(below) };
+  // Above: held by its bottom edge, so a short list still sits right over the anchor.
+  if (above >= MIN_HEIGHT) return { left, bottom: vh - (anchor.top - 8), height: fit(above) };
+  const height = fit(vh - 2 * MARGIN);
+  const side = anchor.right + 8 + WIDTH <= vw - MARGIN ? anchor.right + 8 : Math.max(MARGIN, anchor.left - 8 - WIDTH);
+  return { left: side, top: Math.min(Math.max(MARGIN, anchor.top), vh - MARGIN - height), height };
 }
 
-function loadCategory(): string {
-  try {
-    return globalThis.localStorage?.getItem(CATEGORY_KEY) ?? "control";
-  } catch {
-    return "control";
-  }
-}
-
-function matches(item: Item, query: string): boolean {
-  if (!query) return true;
-  const haystack = `${item.search} ${categoryLabel(item.category)}`.toLowerCase();
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .every((word) => haystack.includes(word));
+/** The selected node on the chart, when it is on screen (Ctrl+K opens beside it). */
+function selectedAnchor(id: string | undefined): PaletteAnchor | null {
+  if (!id) return null;
+  const box = document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.getBoundingClientRect();
+  if (!box || box.bottom < 0 || box.top > window.innerHeight || box.right < 0 || box.left > window.innerWidth) return null;
+  return box;
 }
 
 /**
- * Ctrl+K: summon a step by typing what you want instead of hunting a toolbox.
- * Without a query it browses one category at a time (←→ or the list on the
- * left); typing searches every category, grouped under their names.
+ * Adding a node: a popover beside the "+", the empty block, the node or the
+ * dock it was opened from (Ctrl+K: beside the selected node), so the chart
+ * and the place the node goes stay in view. Typing searches every node, best
+ * match first; without a query it shows the nodes used most, then the groups,
+ * which open in place (← or Esc to go back).
  */
 export function CommandPalette() {
   const open = useStudio((s) => s.paletteOpen);
   const setOpen = useStudio((s) => s.setPaletteOpen);
   const stepTypes = useStudio((s) => s.stepTypes);
+  const scenario = useStudio((s) => s.scenario);
   const selection = useStudio((s) => s.selection);
+  const at = useStudio((s) => s.paletteAt);
+  const anchor = useStudio((s) => s.paletteAnchor);
   const addStep = useStudio((s) => s.addStep);
   const [query, setQuery] = useState("");
-  const [category, setCategoryState] = useState(loadCategory);
+  const [group, setGroup] = useState<string | null>(null);
+  const [recent, setRecent] = useState(loadRecent);
   const [active, setActive] = useState(0);
+  const [pos, setPos] = useState<Spot>({ left: 0, top: 0, height: HEIGHT });
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
 
-  const items = useMemo(() => [...stepTypes.map(stepItem), ...presetItems()], [stepTypes]);
-  const categories = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const i of items) counts.set(i.category, (counts.get(i.category) ?? 0) + 1);
-    return [...counts].sort((a, b) => rank(a[0]) - rank(b[0]));
-  }, [items]);
-  const current = categories.some(([c]) => c === category) ? category : (categories[0]?.[0] ?? "control");
-  const results = useMemo(
-    () =>
-      query
-        ? items.filter((i) => matches(i, query)).sort((a, b) => rank(a.category) - rank(b.category))
-        : items.filter((i) => i.category === current),
-    [items, query, current],
-  );
+  const items = useMemo(() => paletteItems(stepTypes), [stepTypes]);
+  const all = useMemo(() => groups(items), [items]);
+  const rows: Row[] = useMemo(() => {
+    if (query.trim()) return search(items, query, recent).map((item) => ({ item, tagged: true }));
+    if (group) return items.filter((i) => i.group === group).map((item) => ({ item, tagged: false }));
+    const view = frequent(items, recent);
+    const top = [...view.recent, ...view.common].slice(0, 6);
+    const out: Row[] = [
+      { heading: view.recent.length > 0 ? t.palette.recent : t.palette.common },
+      ...top.map((item) => ({ item, tagged: true })),
+    ];
+    all.forEach(([g, count], i) => {
+      const section = sectionOf(g);
+      if (i === 0 || section !== sectionOf(all[i - 1]![0])) out.push({ heading: t.palette.sections[section] ?? section });
+      out.push({ group: g, count });
+    });
+    return out;
+  }, [items, all, query, group, recent]);
+  const choices = rows.filter((r): r is Choice => !("heading" in r));
 
-  const setCategory = (next: string) => {
-    setCategoryState(next);
-    setActive(0);
-    try {
-      globalThis.localStorage?.setItem(CATEGORY_KEY, next);
-    } catch {
-      // Only a remembered preference.
-    }
-  };
-
+  useLayoutEffect(() => {
+    if (!open) return;
+    setPos(place(anchor ?? selectedAnchor(selection?.kind === "step" ? selection.stepId : undefined)));
+    // Placed once per opening: adding moves the selection, but the popover is gone by then.
+  }, [open, anchor]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (open) {
       setQuery("");
+      setGroup(null);
+      setRecent(loadRecent());
       setActive(0);
       input.current?.focus();
     }
   }, [open]);
   useEffect(() => {
     setActive(0);
-  }, [query]);
+  }, [query, group]);
   useEffect(() => {
     list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
   if (!open) return null;
 
-  const choose = (item: Item | undefined) => {
-    if (!item) return;
+  const choose = (choice: Choice | undefined) => {
+    if (!choice) return;
+    if ("group" in choice) {
+      setGroup(choice.group);
+      input.current?.focus();
+      return;
+    }
+    const item = choice.item;
+    setRecent(remember(recent, item.key));
+    // addStep reads where to add (the "+" it was opened from) before it awaits; closing clears that place.
+    void addStep(item.type, item.params, item.name);
     setOpen(false);
-    item.add(addStep);
   };
-  const shiftCategory = (delta: number) => {
-    const at = categories.findIndex(([c]) => c === current);
-    const next = categories[(at + delta + categories.length) % categories.length];
-    if (next) setCategory(next[0]);
+  const back = () => {
+    setGroup(null);
+    input.current?.focus();
   };
 
+  const where = (() => {
+    const defs = new Map(stepTypes.map((d) => [d.type, d]));
+    const spot = insertPlace(scenario?.steps ?? [], selection, at);
+    const name = (step: { name?: string | null; type: string }) => step.name || stepLabel(step.type, defs.get(step.type)?.label);
+    if (spot.before) return t.palette.before(name(spot.before));
+    if (spot.after) return t.palette.after(name(spot.after));
+    if (spot.into) {
+      const def = defs.get(spot.into.parent.type);
+      const label = def?.blocks?.find((b) => b.name === spot.into!.block)?.label ?? spot.into.block;
+      return t.palette.into(name(spot.into.parent), blockName(spot.into.parent.type, spot.into.block, label));
+    }
+    return t.palette.atEnd;
+  })();
+
+  let index = -1;
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/20 pt-[12vh] backdrop-blur-[1px]"
-      onMouseDown={() => setOpen(false)}
-    >
+    // No dimming: the chart and the place the node goes stay in view. A click outside closes.
+    <div className="fixed inset-0 z-50" onMouseDown={() => setOpen(false)}>
       <div
-        className="flex max-h-[70vh] w-[min(760px,92vw)] flex-col overflow-hidden rounded-[4px] border border-slate-300 bg-sheet shadow-dialog"
+        role="dialog"
+        aria-label={t.addStep}
+        style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: WIDTH, maxHeight: pos.height }}
+        className="absolute flex flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-lifted"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
-          <img src="/mark.png" alt="" className="h-5 w-5" />
+        <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-slate-200 px-3.5">
+          {group && !query ? (
+            <button
+              type="button"
+              onClick={back}
+              title={t.palette.back}
+              className="-ml-1 flex shrink-0 items-center gap-0.5 rounded-[3px] py-0.5 pr-1.5 pl-0.5 text-[13px] font-medium text-ink hover:bg-slate-100"
+            >
+              <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
+              {groupLabel(group)}
+            </button>
+          ) : (
+            <Search size={17} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+          )}
           <input
             ref={input}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") setOpen(false);
-              else if (e.key === "ArrowDown") {
+              if (e.nativeEvent.isComposing) return;
+              const current = choices[active];
+              if (e.key === "Escape") {
+                if (group && !query) back();
+                else setOpen(false);
+              } else if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setActive((a) => Math.min(a + 1, results.length - 1));
+                setActive((a) => Math.min(a + 1, choices.length - 1));
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setActive((a) => Math.max(a - 1, 0));
-              } else if (!query && (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Tab")) {
+              } else if (!query && e.key === "ArrowRight" && current && "group" in current) {
                 e.preventDefault();
-                shiftCategory(e.key === "ArrowLeft" || (e.key === "Tab" && e.shiftKey) ? -1 : 1);
-              } else if (e.key === "Enter") choose(results[active]);
+                choose(current);
+              } else if (!query && group && (e.key === "ArrowLeft" || e.key === "Backspace")) {
+                e.preventDefault();
+                back();
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                choose(current);
+              }
             }}
-            placeholder={t.palettePlaceholder}
-            className="flex-1 bg-transparent text-base outline-none placeholder:text-slate-400"
+            placeholder={t.palette.placeholder}
+            aria-label={t.palette.placeholder}
+            className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-400"
           />
-          <kbd className="rounded border border-slate-300 px-1 text-[10px] text-slate-500">Esc</kbd>
         </div>
-        <div className="flex items-center gap-2 px-4 pt-2 text-[11px] text-slate-500">
-          {t.paletteTitle} · {selection?.kind === "slot" ? t.addInto : selection?.kind === "step" ? t.addAfterSelection : t.addHere}
-          <span className="ml-auto">{query ? t.palette.searchAll : t.palette.switchHint}</span>
-        </div>
-        <div className="flex min-h-0 flex-1">
-          <nav className="w-[156px] shrink-0 overflow-y-auto border-r border-slate-100 p-2">
-            {categories.map(([c, count]) => {
-              const on = !query && c === current;
+        <ul ref={list} className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5" aria-label={t.addStep}>
+          {choices.length === 0 && <li className="px-3 py-4 text-sm text-slate-500">{t.palette.empty(query)}</li>}
+          {rows.map((row) => {
+            if ("heading" in row) {
               return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => {
-                    setQuery("");
-                    setCategory(c);
-                    input.current?.focus();
-                  }}
-                  className={`flex w-full items-center gap-2 rounded-[3px] px-2.5 py-1.5 text-left text-[13px] ${
-                    on ? "bg-slate-100 font-semibold text-ink" : "text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="h-3.5 w-1 shrink-0 rounded-[1px]" style={{ background: CATEGORY_COLOR[c] ?? CATEGORY_COLOR.other }} />
-                  <span className="flex-1 truncate">{categoryLabel(c)}</span>
-                  <span className="text-[11px] text-slate-400">{count}</span>
-                </button>
+                <li key={`h:${row.heading}`} className="px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-500">
+                  {row.heading}
+                </li>
               );
-            })}
-          </nav>
-          <ul ref={list} className="min-w-0 flex-1 overflow-y-auto p-2">
-            {results.length === 0 && <li className="px-3 py-4 text-sm text-slate-400">{t.paletteEmpty}</li>}
-            {results.map((item, i) => (
+            }
+            const i = ++index;
+            const on = i === active;
+            const common = {
+              type: "button" as const,
+              "data-index": i,
+              onMouseMove: () => i !== active && setActive(i),
+              onClick: () => choose(row),
+            };
+            if ("group" in row) {
+              return (
+                <li key={`g:${row.group}`}>
+                  <button {...common} className={`flex w-full items-center gap-2.5 rounded-[4px] px-2 py-1.5 text-left text-[13px] ${on ? "bg-slate-100" : ""}`}>
+                    <Tile icon={groupIcon(row.group)} group={row.group} size={24} />
+                    <span className="flex-1 truncate font-medium text-ink">{groupLabel(row.group)}</span>
+                    <span className="text-[11px] text-slate-500 tabular-nums">{row.count}</span>
+                    <ChevronRight size={14} strokeWidth={1.75} className="text-slate-500" aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            }
+            const item = row.item;
+            return (
               <li key={item.key}>
-                {query && item.category !== results[i - 1]?.category && (
-                  <div className="px-3 pt-2 pb-1 text-[11px] font-bold text-slate-400">{categoryLabel(item.category)}</div>
-                )}
-                <button
-                  type="button"
-                  data-index={i}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(item)}
-                  className={`flex w-full items-center gap-3 rounded-[3px] px-3 py-2 text-left ${i === active ? "bg-slate-100" : ""}`}
-                >
-                  <span className="h-7 w-1 shrink-0 rounded-[1px]" style={{ background: CATEGORY_COLOR[item.category] ?? CATEGORY_COLOR.other }} />
+                <button {...common} className={`flex w-full items-center gap-3 rounded-[4px] px-2 py-2 text-left ${on ? "bg-slate-100" : ""}`}>
+                  <Tile icon={nodeIcon(item.type, item.group)} group={item.group} size={32} />
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-sm font-medium">
-                      {item.label}
-                      {item.keyword && <span className="font-mono text-[11px] font-normal text-slate-400">{item.keyword}</span>}
+                    <span className="flex items-center gap-1.5 text-[13px] leading-5 font-semibold text-ink">
+                      <span className="truncate">{item.label}</span>
+                      {item.keyword && <span className="rounded-[2px] bg-slate-100 px-1 font-mono text-[10px] leading-4 font-normal text-slate-600">{item.keyword}</span>}
                     </span>
-                    <span className="block truncate text-xs text-slate-500">{item.summary}</span>
+                    <span className="block truncate text-xs leading-[18px] text-slate-500">{item.summary}</span>
                   </span>
+                  {row.tagged && <span className="shrink-0 text-[11px] text-slate-500">{groupLabel(item.group)}</span>}
                 </button>
               </li>
-            ))}
-          </ul>
+            );
+          })}
+        </ul>
+        <div className="flex shrink-0 items-center gap-2 border-t border-slate-200 px-3.5 py-2 text-[11px]">
+          <span className="min-w-0 truncate">
+            <span className="text-slate-500">{t.palette.where}</span>
+            <span className="ml-1.5 font-medium text-ink">{where}</span>
+          </span>
+          <span className="ml-auto shrink-0 text-slate-500">
+            <kbd className="rounded-[2px] bg-slate-100 px-1">Enter</kbd> {t.palette.add}
+          </span>
         </div>
       </div>
     </div>

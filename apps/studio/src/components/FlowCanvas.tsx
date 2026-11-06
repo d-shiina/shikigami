@@ -19,6 +19,7 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
+import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
@@ -48,7 +49,7 @@ import {
 } from "../lib/nodeRows";
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence } from "../lib/sentence";
-import { callKey, diveChain, type DiveLevel, revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
+import { callKey, diveChain, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, type VariableChange } from "../store";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
@@ -204,8 +205,48 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
  * A step-to-step edge. Its block label ("forEach：…", "catch：…") sits just
  * above the step it leads to, not halfway, where sibling edges share a line.
  */
+type BlockEdgeData = {
+  detourX?: number;
+  /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
+  insert?: InsertAt;
+  /** The pointer is on the line or its "+". */
+  hovered?: boolean;
+  hover?: (id: string | null) => void;
+};
+
+/**
+ * The "+" on a line between nodes: shown while the pointer is on the line,
+ * it opens the node palette to add a node right there.
+ */
+function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: BlockEdgeData; x?: number; y?: number; inline?: boolean }) {
+  const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
+  if (!data.insert) return null;
+  const at = data.insert;
+  const button = (
+    <button
+      type="button"
+      title={t.menu.addHere}
+      aria-label={t.menu.addHere}
+      onMouseEnter={() => data.hover?.(edgeId)}
+      onMouseLeave={() => data.hover?.(null)}
+      onClick={(e) => {
+        e.stopPropagation();
+        setPaletteOpen(true, at, e.currentTarget.getBoundingClientRect());
+      }}
+      style={inline ? undefined : { transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
+      className={`nodrag nopan pointer-events-auto flex h-[18px] w-[18px] items-center justify-center rounded-[3px] border border-slate-300 bg-sheet text-slate-600 shadow-raised hover:border-ink hover:bg-ink hover:text-white ${
+        inline ? "ml-1 shrink-0" : "absolute"
+      } ${data.hovered ? "opacity-100" : "pointer-events-none opacity-0"}`}
+    >
+      <Plus size={12} strokeWidth={2.25} aria-hidden="true" />
+    </button>
+  );
+  return button;
+}
+
 function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
-  const detourX = (data as { detourX?: number } | undefined)?.detourX;
+  const edge = (data ?? {}) as BlockEdgeData;
+  const detourX = edge.detourX;
   if (detourX !== undefined) {
     // Around a loop's body: out of the step, along to the side of the body,
     // then back up into the loop's head (a back edge) or down into the next step.
@@ -228,7 +269,16 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
           `H ${targetX - toward(targetX, detourX) * r} Q ${targetX} ${targetY - 16} ${targetX} ${targetY - 16 + r}`,
           `V ${targetY}`,
         ].join(" ");
-    return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+    return (
+      <>
+        <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+        {!back && (
+          <EdgeLabelRenderer>
+            <InsertButton edgeId={id} data={edge} x={targetX} y={targetY - 8} />
+          </EdgeLabelRenderer>
+        )}
+      </>
+    );
   }
   // Splits turn just below their step; joins turn just above the next step, so
   // branches of different lengths meet on one line instead of at staggered heights.
@@ -236,19 +286,26 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
   const centerY = down && label ? sourceY + 12 : down && Math.abs(sourceX - targetX) > 1 ? targetY - 16 : undefined;
   // The offset must not reach past the turn, or the line runs on below it and doubles back.
   const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset: centerY === undefined ? 20 : 12, borderRadius: 4 });
+  const straight = Math.abs(sourceX - targetX) <= 1;
   return (
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
-      {label && (
-        <EdgeLabelRenderer>
+      <EdgeLabelRenderer>
+        {label ? (
+          // The "+" sits after the label; a spacer as wide on the other side keeps the label centred on the line.
           <div
             style={{ transform: `translate(-50%, -100%) translate(${targetX}px, ${targetY - 10}px)` }}
-            className="pointer-events-none absolute max-w-[300px] truncate rounded-[3px] bg-paper px-1.5 text-[11px] leading-4 text-slate-600"
+            className="pointer-events-none absolute flex items-center"
           >
-            {label}
+            {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
+            <span className="max-w-[300px] truncate rounded-[3px] bg-paper px-1.5 text-[11px] leading-4 text-slate-600">{label}</span>
+            <InsertButton edgeId={id} data={edge} inline />
           </div>
-        </EdgeLabelRenderer>
-      )}
+        ) : (
+          // Halfway down a straight line; just under the turn where lines join.
+          <InsertButton edgeId={id} data={edge} x={targetX} y={straight ? (sourceY + targetY) / 2 - 4 : targetY - 8} />
+        )}
+      </EdgeLabelRenderer>
     </>
   );
 }
@@ -658,16 +715,22 @@ function StepNode({ data }: StepNodeProps) {
 }
 
 function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
+  // An empty block, an empty scenario, or the faint "+" under the last node: each adds a node there.
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
-      className={`flex items-center justify-center rounded-[4px] border border-dashed text-xs ${
-        data.selected ? "border-brand-500 bg-brand-50 text-brand-600" : "border-slate-300 text-slate-400"
+      title={t.addStep}
+      className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-[4px] border border-dashed text-[13px] ${
+        data.selected
+          ? "border-brand-500 bg-brand-50 text-brand-600"
+          : data.end
+            ? "border-slate-300 text-slate-500 opacity-75 hover:border-slate-500 hover:bg-sheet hover:text-ink hover:opacity-100"
+            : "border-slate-400 bg-sheet/60 text-slate-600 hover:border-ink hover:bg-sheet hover:text-ink"
       }`}
     >
-      <FlowHandles />
-      {/* The edge into the slot already carries the block's label. */}
-      {data.parentId ? t.flow.emptySlot(t.shortcut) : t.emptyScenario}
+      {!data.end && <FlowHandles />}
+      <Plus size={14} strokeWidth={2} aria-hidden="true" />
+      {t.addStep}
     </div>
   );
 }
@@ -839,6 +902,7 @@ export function FlowCanvas() {
   const run = useStudio((s) => s.run);
   const breakpoints = useStudio((s) => (scenario ? s.breakpoints[scenario.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
+  const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   const stepMenu = useStepMenu();
   const slotMenu = useSlotMenu();
   const paneMenu = usePaneMenu();
@@ -904,6 +968,27 @@ export function FlowCanvas() {
     [calls],
   );
   const layout = useMemo(() => layoutScenario(scenario?.steps ?? [], defs, extra), [scenario, defs, extra]);
+  // A node added on a line goes just before the step the line leads to. Not
+  // where that would start another branch running at the same time.
+  const insertBefore = useMemo(() => {
+    const map = new Map<string, InsertAt>();
+    const types = new Map(layout.nodes.flatMap((n) => (n.data.kind === "step" ? [[n.id, n.data.step.type] as const] : [])));
+    for (const n of layout.nodes) {
+      if (n.data.kind !== "step") continue;
+      if (n.data.parentId && types.get(n.data.parentId) === "control.parallel") continue;
+      map.set(n.id, { parentId: n.data.parentId, block: n.data.block, index: n.data.index });
+    }
+    return map;
+  }, [layout]);
+  const [hoveredEdge, setHoveredEdgeNow] = useState<string | null>(null);
+  // Leaving the line lets the pointer reach its "+" before it hides.
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const setHoveredEdge = useCallback((id: string | null) => {
+    clearTimeout(hideTimer.current);
+    if (id) setHoveredEdgeNow(id);
+    else hideTimer.current = setTimeout(() => setHoveredEdgeNow(null), 250);
+  }, []);
+  useEffect(() => () => clearTimeout(hideTimer.current), []);
   const vars = useMemo(() => knownVariables(scenario?.variables, scenario?.steps ?? []), [scenario]);
 
   const issueCounts = useMemo(() => {
@@ -983,7 +1068,12 @@ export function FlowCanvas() {
     sourceHandle: "flow",
     targetHandle: "flow",
     type: "block",
-    data: { detourX: e.detourX },
+    data: {
+      detourX: e.detourX,
+      insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
+      hovered: hoveredEdge === e.id,
+      hover: setHoveredEdge,
+    } satisfies BlockEdgeData,
     animated: e.loop,
     style: { stroke: "var(--flow-edge)", strokeWidth: 2, ...(e.loop ? { strokeDasharray: "5 4" } : {}) },
     // A plain colour: the marker id is built from it, so no var().
@@ -1027,13 +1117,20 @@ export function FlowCanvas() {
 
       }}
       minZoom={0.2}
-      onNodeClick={(_, node) => {
+      onNodeClick={(event, node) => {
         if (inside) return;
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
-        else select({ kind: "slot", parentId: data.parentId, block: data.block });
+        else {
+          // An empty block is there to be filled: clicking it opens the palette for it.
+          select({ kind: "slot", parentId: data.parentId, block: data.block });
+          const box = (event.target as Element).closest(".react-flow__node")?.getBoundingClientRect();
+          setPaletteOpen(true, null, box);
+        }
       }}
       onPaneClick={() => select(null)}
+      onEdgeMouseEnter={(_, edge) => edge.type === "block" && setHoveredEdge(edge.id)}
+      onEdgeMouseLeave={() => setHoveredEdge(null)}
       onNodeContextMenu={(event, node) =>
         menuFor(() => {
           const data = node.data as StepNodeData | SlotNodeData;
