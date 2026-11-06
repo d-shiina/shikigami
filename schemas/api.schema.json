@@ -2525,6 +2525,14 @@
           "additionalProperties": {
             "$ref": "#/$defs/ScenarioPolicy"
           }
+        },
+        "records": {
+          "description": "How long this PC keeps run records (`runs/`).",
+          "$ref": "#/$defs/RecordsPolicy"
+        },
+        "remote": {
+          "description": "Runs asked for by a management server (see\ndocs/design/remote-runs.md). Off unless enabled here.",
+          "$ref": "#/$defs/RemotePolicy"
         }
       },
       "additionalProperties": false
@@ -2616,6 +2624,62 @@
             "boolean",
             "null"
           ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RecordsPolicy": {
+      "description": "How long run records are kept. Each PC applies it to its own records;\nwithout a limit they are kept until deleted by hand.",
+      "type": "object",
+      "properties": {
+        "keepDays": {
+          "description": "Delete run records older than this many days.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "keepRuns": {
+          "description": "Keep at most this many run records (the newest).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "RemotePolicy": {
+      "description": "Runs a management server may ask this PC for. Everything is closed by\ndefault; `scenarios.<id>.unattended: false` still refuses a scenario.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Connect to the management server at all.",
+          "type": "boolean",
+          "default": false
+        },
+        "manager": {
+          "description": "The management server's URL (`https://…`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenarios": {
+          "description": "Scenario IDs it may start (`\"*\"` for every scenario). Empty: none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "acceptBundles": {
+          "description": "Run scenarios the server sends as bundles (not only the published\nversions in this workspace).",
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false

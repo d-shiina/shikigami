@@ -1844,3 +1844,31 @@ async fn a_full_run_starts_with_work_emptied_and_writes_a_log() {
     run_project(&runtime, keep, options()).await;
     assert!(work.join("keep.csv").is_file());
 }
+
+#[tokio::test]
+async fn the_origin_of_a_run_is_recorded() {
+    let runtime = Runtime::new();
+    let handle = runtime
+        .start(
+            scenario(vec![set("x", "1")]),
+            RunOptions {
+                origin: RunOrigin::new(RunTrigger::Schedule).requested_by("毎朝 8 時"),
+                ..RunOptions::default()
+            },
+        )
+        .expect("start");
+    let mut events = Vec::new();
+    let report = handle.wait_with(|e| events.push(e.clone())).await.unwrap();
+    assert_eq!(report.origin.trigger, Some(RunTrigger::Schedule));
+    assert_eq!(report.origin.requested_by.as_deref(), Some("毎朝 8 時"));
+    assert_eq!(report.origin.machine, event::machine_name());
+    match &events[0].event {
+        RunEvent::RunStarted { origin, .. } => assert_eq!(origin, &report.origin),
+        other => panic!("first event {other:?}"),
+    }
+    // Records written before origins existed still read.
+    let mut old = serde_json::to_value(&report).unwrap();
+    old.as_object_mut().unwrap().remove("origin");
+    let old: RunReport = serde_json::from_value(old).unwrap();
+    assert!(old.origin.is_empty());
+}

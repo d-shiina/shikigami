@@ -1351,6 +1351,8 @@ export interface Policy {
   scenarios?: {
     [k: string]: ScenarioPolicy;
   };
+  records?: RecordsPolicy;
+  remote?: RemotePolicy;
 }
 /**
  * What an AI client (MCP) may do. Studio and the CLI are people and are not
@@ -1417,6 +1419,42 @@ export interface ScenarioPolicy {
    * runs from Studio. Default `true`.
    */
   unattended?: boolean | null;
+}
+/**
+ * How long this PC keeps run records (`runs/`).
+ */
+export interface RecordsPolicy {
+  /**
+   * Delete run records older than this many days.
+   */
+  keepDays?: number | null;
+  /**
+   * Keep at most this many run records (the newest).
+   */
+  keepRuns?: number | null;
+}
+/**
+ * Runs asked for by a management server (see
+ * docs/design/remote-runs.md). Off unless enabled here.
+ */
+export interface RemotePolicy {
+  /**
+   * Connect to the management server at all.
+   */
+  enabled?: boolean;
+  /**
+   * The management server's URL (`https://…`).
+   */
+  manager?: string | null;
+  /**
+   * Scenario IDs it may start (`"*"` for every scenario). Empty: none.
+   */
+  scenarios?: string[];
+  /**
+   * Run scenarios the server sends as bundles (not only the published
+   * versions in this workspace).
+   */
+  acceptBundles?: boolean;
 }
 /**
  * One request, `approvals/<id>.json`.
@@ -1562,6 +1600,49 @@ export interface ByRisk2 {
    */
   dangerous?: ("allow" | "deny") | "ask";
 }
+/**
+ * How long run records are kept. Each PC applies it to its own records;
+ * without a limit they are kept until deleted by hand.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "RecordsPolicy".
+ */
+export interface RecordsPolicy1 {
+  /**
+   * Delete run records older than this many days.
+   */
+  keepDays?: number | null;
+  /**
+   * Keep at most this many run records (the newest).
+   */
+  keepRuns?: number | null;
+}
+/**
+ * Runs a management server may ask this PC for. Everything is closed by
+ * default; `scenarios.<id>.unattended: false` still refuses a scenario.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "RemotePolicy".
+ */
+export interface RemotePolicy1 {
+  /**
+   * Connect to the management server at all.
+   */
+  enabled?: boolean;
+  /**
+   * The management server's URL (`https://…`).
+   */
+  manager?: string | null;
+  /**
+   * Scenario IDs it may start (`"*"` for every scenario). Empty: none.
+   */
+  scenarios?: string[];
+  /**
+   * Run scenarios the server sends as bundles (not only the published
+   * versions in this workspace).
+   */
+  acceptBundles?: boolean;
+}
 
 /**
  * A run event with ordering and timing metadata.
@@ -1589,6 +1670,7 @@ export type RunEventEnvelope1 =
       scenarioId: ScenarioId;
       scenarioName: string;
       revision: number;
+      origin?: RunOrigin;
     }
   | {
       type: "stepStarted";
@@ -1658,6 +1740,13 @@ export type RunEventEnvelope1 =
       error?: RunError | null;
       durationMs: number;
     };
+/**
+ * How a run was started.
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "RunTrigger".
+ */
+export type RunTrigger = "studio" | "mcp" | "cli" | "schedule" | "remote";
 /**
  * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
  * via the `definition` "StepOutcome".
@@ -1731,6 +1820,26 @@ export interface ShikigamiRunApi {
   debug_command: DebugCommand;
 }
 /**
+ * Who asked for the run, from where, on which PC.
+ */
+export interface RunOrigin {
+  trigger?: RunTrigger | null;
+  /**
+   * The person, AI client, schedule or manager that asked, in its own
+   * words (e.g. "claude-code", a schedule's name).
+   */
+  requestedBy?: string | null;
+  /**
+   * The job of a schedule or management server this run carries out.
+   */
+  jobId?: string | null;
+  /**
+   * The PC the run happened on (its computer name). Filled in by the
+   * Runtime when not given.
+   */
+  machine?: string | null;
+}
+/**
  * Structured failure information, kept for AI-assisted diagnosis.
  *
  * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
@@ -1782,6 +1891,7 @@ export interface RunReport {
    * run started.
    */
   subscenarios?: SubscenarioRef[];
+  origin?: RunOrigin1;
 }
 /**
  * A called scenario's content as used by a run.
@@ -1799,6 +1909,26 @@ export interface SubscenarioRef {
   version?: number | null;
 }
 /**
+ * Who asked for the run, from where, on which PC.
+ */
+export interface RunOrigin1 {
+  trigger?: RunTrigger | null;
+  /**
+   * The person, AI client, schedule or manager that asked, in its own
+   * words (e.g. "claude-code", a schedule's name).
+   */
+  requestedBy?: string | null;
+  /**
+   * The job of a schedule or management server this run carries out.
+   */
+  jobId?: string | null;
+  /**
+   * The PC the run happened on (its computer name). Filled in by the
+   * Runtime when not given.
+   */
+  machine?: string | null;
+}
+/**
  * Live state of a run, for `get_run_status` while it is executing.
  *
  * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
@@ -1810,4 +1940,29 @@ export interface RunSnapshot {
   status: RunStatus;
   currentStep?: StepId | null;
   stepsExecuted: number;
+}
+/**
+ * Who asked for a run, from where, and on which PC. Recorded in
+ * `runStarted` and the report so that runs can be told apart later (and
+ * collected from many PCs).
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "RunOrigin".
+ */
+export interface RunOrigin2 {
+  trigger?: RunTrigger | null;
+  /**
+   * The person, AI client, schedule or manager that asked, in its own
+   * words (e.g. "claude-code", a schedule's name).
+   */
+  requestedBy?: string | null;
+  /**
+   * The job of a schedule or management server this run carries out.
+   */
+  jobId?: string | null;
+  /**
+   * The PC the run happened on (its computer name). Filled in by the
+   * Runtime when not given.
+   */
+  machine?: string | null;
 }

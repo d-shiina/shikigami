@@ -16,7 +16,8 @@ use shikigami_core::{
 };
 use shikigami_runtime::record::{self, RunRecorder};
 use shikigami_runtime::{
-    Adapter, RunEvent, RunHandle, RunOptions, RunSnapshot, RunStatus, Runtime,
+    Adapter, RunEvent, RunHandle, RunOptions, RunOrigin, RunSnapshot, RunStatus, RunTrigger,
+    Runtime,
 };
 use shikigami_secrets::{NewSecretRequest, Vault};
 use tokio::sync::watch;
@@ -1791,6 +1792,7 @@ impl ShikigamiMcp {
                     keep_adapter_state: true,
                     subscenarios,
                     project_dir,
+                    origin: RunOrigin::new(RunTrigger::Mcp),
                     ..RunOptions::default()
                 },
             )
@@ -1949,6 +1951,11 @@ impl ShikigamiMcp {
         let project_dir = self.svc().project_dir(&scenario.id).ok();
         let root = self.svc().store().local_root();
         let recorder = RunRecorder::create(root, &id).map_err(io_err)?;
+        record::prune_by_policy(
+            root,
+            &Policy::path(self.svc().store().root()),
+            std::slice::from_ref(&id),
+        );
         let mut runs = self
             .inner
             .runs
@@ -1963,6 +1970,7 @@ impl ShikigamiMcp {
                 subscenarios,
                 project_dir,
                 full_run: true,
+                origin: RunOrigin::new(RunTrigger::Mcp),
                 ..RunOptions::default()
             },
         ) {

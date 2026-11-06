@@ -12,7 +12,9 @@ use shikigami_core::{
     WorkspaceInfo, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
-use shikigami_runtime::{DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunSnapshot};
+use shikigami_runtime::{
+    DebugOptions, RunEvent, RunEventEnvelope, RunOptions, RunOrigin, RunSnapshot, RunTrigger,
+};
 use shikigami_secrets::{PendingSecretRequest, SecretInfo, SecretInput};
 use tauri::{AppHandle, Emitter, State};
 
@@ -609,6 +611,7 @@ pub async fn run_scenario(
                     pause_at_start: debug.step,
                 }),
                 subscenarios,
+                origin: RunOrigin::new(RunTrigger::Studio),
                 ..RunOptions::default()
             },
         )
@@ -620,6 +623,11 @@ pub async fn run_scenario(
     let run_id = handle.run_id.clone();
     let mut recorder = RunRecorder::create(state.service.store().local_root(), &run_id)
         .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    shikigami_runtime::record::prune_by_policy(
+        state.service.store().local_root(),
+        &shikigami_core::Policy::path(state.service.store().root()),
+        std::slice::from_ref(&run_id),
+    );
 
     if let Ok(mut runs) = state.runs.lock() {
         runs.insert(

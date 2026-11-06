@@ -39,8 +39,8 @@ use tokio_util::sync::CancellationToken;
 pub use adapter::Adapter;
 pub use debug::{DebugCommand, DebugControl, DebugOptions, PauseReason, ResumeAction};
 pub use event::{
-    LogLevel, RunError, RunEvent, RunEventEnvelope, RunReport, RunSnapshot, RunStatus, StepOutcome,
-    SubscenarioRef,
+    LogLevel, RunError, RunEvent, RunEventEnvelope, RunOrigin, RunReport, RunSnapshot, RunStatus,
+    RunTrigger, StepOutcome, SubscenarioRef,
 };
 pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 pub use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef, ResourceKind};
@@ -76,6 +76,8 @@ pub struct RunOptions {
     /// it starts with each scenario's `work/` folder emptied (unless its
     /// settings say `keepWork`) and writes a readable log to `logs/`.
     pub full_run: bool,
+    /// Who asked for the run, from where (recorded; `machine` is filled in).
+    pub origin: RunOrigin,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -247,6 +249,10 @@ impl Runtime {
 
         let task_run_id = run_id.clone();
         let version = options.version;
+        let mut origin = options.origin;
+        if origin.machine.is_none() {
+            origin.machine = event::machine_name();
+        }
         let secrets = self.secrets.clone();
         let hooks = if options.keep_adapter_state {
             Arc::new(Vec::new())
@@ -261,6 +267,7 @@ impl Runtime {
                 scenario_id: scenario.id.clone(),
                 scenario_name: scenario.name.clone(),
                 revision: scenario.revision,
+                origin: origin.clone(),
             });
 
             let (_lease, busy) = WorkLease::take(&fresh_work);
@@ -344,6 +351,7 @@ impl Runtime {
                 error,
                 outputs,
                 subscenarios,
+                origin,
             }
         });
 

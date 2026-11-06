@@ -72,6 +72,12 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | `ai.deleteScenario` | ask | The AI's `delete_scenario` |
 | `scenarios.<id>.aiRun` | none | Stricter rules for this scenario only (and runs and tests that call it). Never looser than the global rule |
 | `scenarios.<id>.unattended` | true | When false, `shikigami run` does not run it, nor any scenario that calls it (`UNATTENDED_NOT_ALLOWED`). Studio still can |
+| `records.keepDays` | none (keep) | Each PC deletes its run records (`runs/<run-id>/`) older than this many days. Applied when a run ends; runs still going are never deleted |
+| `records.keepRuns` | none (keep) | Each PC keeps at most this many run records, the newest |
+| `remote.enabled` | false | Take runs from a management server ([design/remote-runs.md](design/remote-runs.md), Japanese). Reserved: no management server connects yet |
+| `remote.manager` | none | The management server's URL. `https://` (`http://` only for `localhost`) |
+| `remote.scenarios` | empty (none) | Scenario IDs the management server may start, or `"*"` for all. `scenarios.<id>.unattended: false` still refuses one |
+| `remote.acceptBundles` | false | Also run scenarios the server sends as bundles, not only published versions in this workspace |
 
 `allow` = go ahead, `ask` = after a person approves in Studio, `deny` = never. The risk is the node type's `risk` (`safe`: variables, logs, control; `interactive`: operating screens; `dangerous`: deleting and moving files, HTTP to the outside, running programs and so on). Unregistered node types count as `dangerous`.
 

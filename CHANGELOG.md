@@ -8,6 +8,9 @@
 
 ### 追加
 
+- 実行記録（`runStarted` イベントと `report.json`）に `origin`：どこから始めたか（`trigger`：`studio` / `mcp` / `cli` / `schedule` / `remote`）、頼んだもの（`requestedBy`）、ジョブ（`jobId`）、PC の名前（`machine`）。以前の記録はそのまま読めます
+- `policy.json` に `records`（`keepDays`・`keepRuns`：各 PC が実行記録を残す日数と数。既定は消さない）と、管理サーバーからの実行の枠 `remote`（`enabled`・`manager`・`scenarios`・`acceptBundles`。既定は閉じる。まだ接続はしません）（docs/policy.md、docs/design/remote-runs.md）
+
 - Studio：実行が終わったあとも、フロー図に通った道筋（ノードの枠と線の色、変数の値）を残します。線は緑＝通った、朱＝止まったノードへ、橙＝実行中。シナリオを編集したとき・次の実行・別のシナリオを開いたときに消え、実行ログの「図の色を消す」（右クリックにも）で手で消せます
 
 ### 変更

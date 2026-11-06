@@ -19,7 +19,9 @@ use shikigami_core::{
     UserConfig, WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
-use shikigami_runtime::{LogLevel, RunEvent, RunOptions, RunStatus, Runtime, StepOutcome};
+use shikigami_runtime::{
+    LogLevel, RunEvent, RunOptions, RunOrigin, RunStatus, RunTrigger, Runtime, StepOutcome,
+};
 use shikigami_secrets::{SecretInput, Vault};
 
 #[derive(Parser)]
@@ -515,11 +517,17 @@ fn real_main() -> Result<ExitCode> {
                     subscenarios,
                     project_dir,
                     full_run: true,
+                    origin: RunOrigin::new(RunTrigger::Cli),
                     ..RunOptions::default()
                 },
                 *json,
                 *vars,
             ))?;
+            shikigami_runtime::record::prune_by_policy(
+                svc.store().local_root(),
+                &Policy::path(svc.store().root()),
+                &[],
+            );
             return Ok(match status {
                 RunStatus::Succeeded => ExitCode::SUCCESS,
                 RunStatus::Cancelled => ExitCode::from(130),
