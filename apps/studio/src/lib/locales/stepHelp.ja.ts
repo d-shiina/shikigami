@@ -37,6 +37,7 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "mail.list": { summary: "Outlook のメールを探す（新しい順）", words: "アウトルック メール 受信 検索 一覧" },
   "mail.saveAttachments": { summary: "Outlook のメールの添付ファイルを保存", words: "アウトルック メール 添付 保存 ダウンロード" },
   "mail.createDraft": { summary: "Outlook にメールの下書きを作る（送信はしない）", words: "アウトルック メール 送信 作成 下書き" },
+  "mail.send": { summary: "メールを送る（Outlook・Microsoft 365・SMTP）", words: "アウトルック メール 送信 送る 通知 smtp graph office365" },
   "file.readCsv": { summary: "CSV を読んで、1 行ずつのデータにする", words: "読む 読み込み tsv 表" },
   "file.writeCsv": { summary: "データを CSV に書く", words: "書く 書き込み 出力 保存 tsv" },
   "file.readText": { summary: "テキストファイルを読む", words: "読む 読み込み txt 文字コード" },

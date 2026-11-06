@@ -34,6 +34,7 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "mail.list": { summary: "Find Outlook messages (newest first)", words: "email mail inbox search" },
   "mail.saveAttachments": { summary: "Save an Outlook message's attachments", words: "email mail attachment download" },
   "mail.createDraft": { summary: "Create an Outlook draft (not sent)", words: "email mail send compose draft" },
+  "mail.send": { summary: "Send a message through Outlook, Microsoft 365 or an SMTP server", words: "email mail send smtp graph office365 notify" },
   "file.readCsv": { summary: "Read a CSV into rows", words: "read load tsv table" },
   "file.writeCsv": { summary: "Write rows to a CSV", words: "write save export tsv" },
   "file.readText": { summary: "Read a text file", words: "read load txt" },

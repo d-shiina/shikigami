@@ -1,11 +1,13 @@
 //! Mail steps (`mail.*`) for the Shikigami Runtime.
 //!
-//! One set of steps for mail, whatever sends it. Today they go through the
-//! Outlook on this PC (COM, Windows only), using the account the person is
-//! signed in to, so no passwords or server settings are needed. Nothing
-//! is sent: `mail.createDraft` leaves the message in Drafts for a person
-//! to check and send. `mail.list` reads a folder and
-//! `mail.saveAttachments` saves a message's files.
+//! One set of steps for mail, whatever sends it. Reading and drafts go
+//! through the Outlook on this PC (COM, Windows only), using the account the
+//! person is signed in to, so no passwords or server settings are needed.
+//! `mail.createDraft` leaves the message in Drafts for a person to check and
+//! send; `mail.list` reads a folder and `mail.saveAttachments` saves a
+//! message's files. `mail.send` sends (a dangerous step, approved like
+//! other outside effects) through Outlook, Microsoft 365 (Graph, with the
+//! OAuth sign-in of `oauth.signIn`) or an SMTP server ([`send`]).
 
 // StepError is the Runtime's handler error type; boxing it here would only
 // move the allocation.
@@ -17,17 +19,20 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use shikigami_core::registry::{RiskLevel, StepCategory, StepTypeDef};
 use shikigami_core::resource::ResourceDef;
+use shikigami_core::secret::{text_or_secret_schema, token_or_secret_schema};
 use shikigami_runtime::{
     ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
 };
 
 #[cfg(windows)]
 mod outlook;
+pub mod send;
 
 pub mod types {
     pub const CREATE_DRAFT: &str = "mail.createDraft";
     pub const LIST: &str = "mail.list";
     pub const SAVE_ATTACHMENTS: &str = "mail.saveAttachments";
+    pub const SEND: &str = "mail.send";
 }
 
 /// Outlook is driven one request at a time.
@@ -64,6 +69,7 @@ enum Kind {
     CreateDraft,
     List,
     SaveAttachments,
+    Send,
 }
 
 /// A message to leave in Drafts.
@@ -103,6 +109,8 @@ pub enum Request {
     Draft(Draft),
     List(ListQuery),
     Save(SaveQuery),
+    /// `mail.send` through Outlook; the other ways are handled in [`send`].
+    Send(Draft),
 }
 
 struct MailStep {
@@ -117,6 +125,13 @@ impl ActionHandler for MailStep {
         let cancel = input.cancel.clone();
         Box::pin(async move {
             let request = request?;
+            let request = match request {
+                Request::Send(draft) => match send::Via::parse(&input.params)? {
+                    send::Via::Outlook => Request::Send(draft),
+                    via => return send::send(&input, via, draft).await,
+                },
+                other => other,
+            };
             tokio::task::spawn_blocking(move || run(request, timeout, &cancel))
                 .await
                 .map_err(|e| StepError::permanent("INTERNAL", e.to_string()))?
@@ -192,47 +207,51 @@ fn addresses(params: &Value, key: &str) -> Result<Vec<String>, StepError> {
     Ok(out)
 }
 
+/// The message of `mail.createDraft` and `mail.send`.
+fn message(params: &Value) -> Result<Draft, StepError> {
+    let to = addresses(params, "to")?;
+    if to.is_empty() {
+        return Err(
+            StepError::permanent("INVALID_ADDRESS", "'to' has no address")
+                .with_details(json!({ "hint": "Give at least one address in `to`." })),
+        );
+    }
+    let attachments: Vec<String> = params
+        .get("attachments")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(missing) = attachments.iter().find(|p| !Path::new(p).is_file()) {
+        return Err(StepError::permanent(
+            "FILE_NOT_FOUND",
+            format!("attachment {missing} does not exist"),
+        )
+        .with_details(json!({ "hint": "Attach files by their full path, e.g. the `path` a word.fillTemplate step returned." })));
+    }
+    Ok(Draft {
+        to,
+        cc: addresses(params, "cc")?,
+        bcc: addresses(params, "bcc")?,
+        subject: required(params, "subject")?,
+        body: params
+            .get("body")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        html: params.get("html").and_then(Value::as_bool).unwrap_or(false),
+        attachments,
+    })
+}
+
 fn parse(kind: Kind, params: &Value) -> Result<Request, StepError> {
     Ok(match kind {
-        Kind::CreateDraft => {
-            let to = addresses(params, "to")?;
-            if to.is_empty() {
-                return Err(
-                    StepError::permanent("INVALID_ADDRESS", "'to' has no address")
-                        .with_details(json!({ "hint": "Give at least one address in `to`." })),
-                );
-            }
-            let attachments: Vec<String> = params
-                .get("attachments")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default();
-            if let Some(missing) = attachments.iter().find(|p| !Path::new(p).is_file()) {
-                return Err(StepError::permanent(
-                    "FILE_NOT_FOUND",
-                    format!("attachment {missing} does not exist"),
-                )
-                .with_details(json!({ "hint": "Attach files by their full path, e.g. the `path` a word.fillTemplate step returned." })));
-            }
-            Request::Draft(Draft {
-                to,
-                cc: addresses(params, "cc")?,
-                bcc: addresses(params, "bcc")?,
-                subject: required(params, "subject")?,
-                body: params
-                    .get("body")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned(),
-                html: params.get("html").and_then(Value::as_bool).unwrap_or(false),
-                attachments,
-            })
-        }
+        Kind::CreateDraft => Request::Draft(message(params)?),
+        Kind::Send => Request::Send(message(params)?),
         Kind::List => Request::List(ListQuery {
             folder: text(params, "folder"),
             unread_only: params
@@ -372,6 +391,47 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 json!({ "type": SAVE_ATTACHMENTS, "params": { "id": "{{ mail.id }}", "folder": "C:\\work\\受信請求書", "nameContains": ".pdf" }, "saveAs": "files" }),
             ],
         ),
+        (
+            SEND,
+            Kind::Send,
+            "メールを送信",
+            "Sends a message (it cannot be taken back: use mail.createDraft when a person should check it first). `to` / `cc` / `bcc` are lists of addresses, `body` is plain text (`html: true` for HTML), `attachments` are file paths. `via` picks how: \"outlook\" (default; the account signed in to Outlook classic on this PC), \"microsoft365\" (Microsoft Graph as the signed-in user: `account` { \"secret\": \"<name>\", \"field\": \"accessToken\" } of a secret signed in with oauth.signIn, scope Mail.Send, sites including https://graph.microsoft.com; attachments up to 3 MB in all) or \"smtp\" (`server` such as smtp.example.co.jp, :465 for TLS, otherwise STARTTLS on 587; `from`; a login as secrets in `user` / `password` whose sites include smtp:<server>; `security: \"none\"` only for a company relay without a login). Output: { via }.",
+            schema(
+                json!({
+                    "to": list("宛先（1 件以上）"),
+                    "cc": list("CC"),
+                    "bcc": list("BCC"),
+                    "subject": { "type": "string", "minLength": 1, "description": "件名" },
+                    "body": { "type": "string", "description": "本文" },
+                    "html": { "type": "boolean", "description": "本文を HTML として扱う" },
+                    "attachments": list("添付するファイル：シナリオのフォルダーからの相対パスか絶対パス"),
+                    "via": { "enum": ["outlook", "microsoft365", "smtp"], "description": "送り方。既定は outlook（この PC の Outlook）" },
+                    "account": token_or_secret_schema("microsoft365：oauth.signIn でサインインしたシークレット { \"secret\": \"名前\", \"field\": \"accessToken\" }"),
+                    "server": { "type": "string", "minLength": 1, "description": "smtp：メールサーバー（例 smtp.example.co.jp、:465 で TLS）" },
+                    "security": { "enum": ["starttls", "tls", "none"], "description": "smtp：暗号化（既定は 465 番なら tls、ほかは starttls）" },
+                    "from": { "type": "string", "minLength": 3, "description": "smtp：差出人のアドレス" },
+                    "user": text_or_secret_schema("smtp：ログインするユーザー名。シークレット { \"secret\": \"名前\", \"field\": \"username\" }"),
+                    "password": text_or_secret_schema("smtp：パスワード。シークレット { \"secret\": \"名前\", \"field\": \"password\" } だけ")
+                }),
+                &["to", "subject"],
+            ),
+            RiskLevel::Dangerous,
+            vec![
+                json!({ "type": SEND, "name": "請求書を送る", "params": {
+                    "to": ["{{ order.メール }}"], "subject": "請求書送付のご案内（{{ order.受注番号 }}）",
+                    "body": "{{ order.顧客名 }} 様\n\n請求書をお送りします。", "attachments": ["{{ invoice.path }}"]
+                } }),
+                json!({ "type": SEND, "name": "Microsoft 365 で完了を知らせる", "params": {
+                    "via": "microsoft365", "account": { "secret": "Microsoft365", "field": "accessToken" },
+                    "to": ["keiri@example.co.jp"], "subject": "本日の処理が終わりました", "body": "件数：{{ len(orders) }}"
+                } }),
+                json!({ "type": SEND, "name": "社内のメールサーバーで送る", "params": {
+                    "via": "smtp", "server": "smtp.example.co.jp", "from": "robot@example.co.jp",
+                    "user": { "secret": "社内メール", "field": "username" }, "password": { "secret": "社内メール", "field": "password" },
+                    "to": ["keiri@example.co.jp"], "subject": "日次レポート", "attachments": ["output/日次.xlsx"]
+                } }),
+            ],
+        ),
     ];
     defs.into_iter()
         .map(
@@ -391,13 +451,17 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                         risk,
                         examples,
                         resources: vec![ResourceDef::Static(OUTLOOK.into())],
-                        secret_params: vec![],
+                        secret_params: if step_type == SEND {
+                            vec!["account".into(), "user".into(), "password".into()]
+                        } else {
+                            vec![]
+                        },
                         default_timeout_ms: Some(120_000),
                         deprecated: None,
                         plugin: None,
                         // An Outlook folder in mail.list, a disk folder here.
                         path_params: match step_type {
-                            "mail.createDraft" => vec!["attachments".into()],
+                            "mail.createDraft" | "mail.send" => vec!["attachments".into()],
                             "mail.saveAttachments" => vec!["folder".into()],
                             _ => vec![],
                         },

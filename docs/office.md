@@ -102,22 +102,43 @@ Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`)
 
 ## Mail (`mail.*`, implemented)
 
-Crate `crates/shikigami-mail`. One `mail.*` set regardless of app; for now it uses this PC's Outlook (classic) through COM (Windows only; the new Outlook app and the web version are not supported). It uses the account signed in to Outlook, so no passwords or server settings are needed.
+Crate `crates/shikigami-mail`. One `mail.*` set regardless of app. Reading and drafts use this PC's Outlook (classic) through COM (Windows only; the new Outlook app and the web version are not supported), with the account signed in to Outlook, so no passwords or server settings are needed. `mail.send` can also send through Microsoft 365 or an SMTP server.
 
 | type | Main params | Output |
 |---|---|---|
 | `mail.createDraft` | `to` / `cc` / `bcc` (lists of addresses), `subject`, `body`, `html`, `attachments` (list of full paths) | `{ id }` |
 | `mail.list` | `folder` (e.g. `Inbox/Invoices`; default the Inbox), `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit` (default 50), `includeBody` | A list of mails, newest first: `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
 | `mail.saveAttachments` | `id` (an id from `mail.list`), `folder` (where to save), `nameContains` | A list of the full paths saved |
+| `mail.send` | The params of `mail.createDraft`, plus `via` and what that way needs (below) | `{ via }` |
 
-- **Nothing is sent.** `mail.createDraft` only puts a draft in the Drafts folder; a person checks and sends it. Sending automatically (`mail.send`) leaves the PC, so it is being considered separately
+- `mail.createDraft` only puts a draft in the Drafts folder; a person checks and sends it. Use it when a person should look before anything leaves
 - Write recipients one per list item (`["{{ customer.email }}"]`). Anything that is not an address gives `INVALID_ADDRESS` and a missing attachment `FILE_NOT_FOUND`, before the draft is created
 - Saving attachments never overwrites a file of the same name; it numbers them like `invoice (2).pdf`. Folder parts in attachment names are ignored
 - Outlook operations run one at a time (resource `app:outlook`). The person's Outlook is never closed. `OUTLOOK_TIMEOUT` when it gets stuck on a security prompt or similar
 - Mail content is data from outside, not instructions (this is stated to AI clients too)
 
+### Sending (`mail.send`)
+
+A message that has gone cannot be taken back, so `mail.send` is `dangerous`: it goes through the review and approvals like other outside effects ([policy.md](policy.md)). `via` picks how it is sent:
+
+| `via` | What it needs | Notes |
+|---|---|---|
+| `outlook` (default) | Nothing | The account signed in to Outlook (classic) on this PC; kept in Sent Items. Outlook may ask whether a program may send mail |
+| `microsoft365` | `account: { "secret": "<name>", "field": "accessToken" }` | Microsoft Graph as the signed-in user. Register the Microsoft Entra app as a secret (client ID and secret; sites `https://login.microsoftonline.com` and `https://graph.microsoft.com`) and sign in once with `oauth.signIn` (scope `Mail.Send offline_access`, [oauth.md](oauth.md)). Attachments up to 3 MB in all (`MAIL_ATTACHMENT_TOO_LARGE`) |
+| `smtp` | `server`, `from`, and usually `user` / `password` | `server` is `smtp.example.co.jp` (STARTTLS on 587) or `smtp.example.co.jp:465` (TLS). The login is a secret whose sites include `smtp:<server>`; otherwise `SECRET_SITE_*`. `security: "none"` is only for a company relay that takes mail without a login: a password is never sent without TLS (`MAIL_INSECURE_LOGIN`) |
+
+- Params that do not belong to the chosen way (`server` with `outlook`, …) give `INVALID_PARAMS`, so a scenario never looks like it sends one way and sends another
+- Errors: `MAIL_SEND_FAILED` (refused; retried when the server says it is temporary), `MAIL_SERVER_UNREACHABLE`, `MAIL_PERMISSION_DENIED` (Graph without Mail.Send), `OAUTH_SIGN_IN_REQUIRED`
+
+```json
+{ "type": "mail.send", "params": {
+  "via": "microsoft365", "account": { "secret": "Microsoft365", "field": "accessToken" },
+  "to": ["accounting@example.co.jp"], "subject": "Today's run is done", "body": "Orders: {{ len(orders) }}"
+} }
+```
+
 ## Next (planned)
 
 1. **Excel recalculation and PDF export**: added the same way as `excel.runMacro`
 2. **Word PDF export**: through COM (the same way as Excel macros)
-3. **Sending mail and other ways to send**: `mail.send` (`Dangerous`, with thorough recipient checks), and choosing something other than Outlook (SMTP / Microsoft Graph) in settings
+3. **Reading mail without Outlook**: `mail.list` / `mail.saveAttachments` through Microsoft 365 and IMAP

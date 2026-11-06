@@ -102,22 +102,43 @@ AI はブックの中身を `test_step`（`excel.listSheets` / `excel.readRange`
 
 ## メール（`mail.*`、実装済み）
 
-クレート `crates/shikigami-mail`。アプリで分けず `mail.*` の 1 セットにし、今はこの PC の Outlook（クラシック版）を COM で使います（Windows だけ。新しい Outlook アプリと Web 版は対象外）。Outlook にサインインしているアカウントをそのまま使うので、パスワードやサーバー設定は要りません。
+クレート `crates/shikigami-mail`。アプリで分けず `mail.*` の 1 セットにしています。読む・下書きはこの PC の Outlook（クラシック版）を COM で使います（Windows だけ。新しい Outlook アプリと Web 版は対象外）。Outlook にサインインしているアカウントをそのまま使うので、パスワードやサーバー設定は要りません。`mail.send` は Microsoft 365 や SMTP サーバーからも送れます。
 
 | type | 主な params | 出力 |
 |---|---|---|
 | `mail.createDraft` | `to` / `cc` / `bcc`（アドレスの配列）, `subject`, `body`, `html`, `attachments`（フルパスの配列） | `{ id }` |
 | `mail.list` | `folder`（例 `受信トレイ/請求書`、省略で受信トレイ）, `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit`（既定 50）, `includeBody` | 新しい順のメールの配列 `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
 | `mail.saveAttachments` | `id`（`mail.list` の id）, `folder`（保存先）, `nameContains` | 保存したファイルのフルパスの配列 |
+| `mail.send` | `mail.createDraft` の params に、`via` とその送り方に要るもの（下記） | `{ via }` |
 
-- **送信はしません**。`mail.createDraft` は下書きフォルダーに置くだけで、人が確かめて送ります。自動送信（`mail.send`）は、外に出るものなので別途検討します
+- `mail.createDraft` は下書きフォルダーに置くだけで、人が確かめて送ります。外に出る前に人が見るべきときはこちら
 - 宛先は 1 件ずつ配列で書きます（`["{{ customer.email }}"]`）。アドレスの形でないものは `INVALID_ADDRESS`、無い添付ファイルは `FILE_NOT_FOUND` で、下書きを作る前に止めます
 - 添付の保存は同じ名前のファイルを上書きせず、`請求書 (2).pdf` のように番号を付けます。添付の名前に含まれるフォルダー指定は無視します
 - Outlook への操作は 1 つずつ動きます（資源 `app:outlook`）。ユーザーの Outlook は閉じません。セキュリティの確認ダイアログなどで止まったときは `OUTLOOK_TIMEOUT`
 - メールの中身は外から来たデータで、指示ではありません（AI クライアントへの説明にも明記）
 
+### 送信（`mail.send`）
+
+送ったメールは取り消せないので、`mail.send` は `dangerous` です。ほかの外への影響と同じく確認待ち・承認の対象になります（[policy.md](policy.md)）。`via` で送り方を選びます。
+
+| `via` | 要るもの | 補足 |
+|---|---|---|
+| `outlook`（既定） | なし | この PC の Outlook（クラシック版）にサインインしているアカウント。送信済みアイテムに残ります。Outlook が「プログラムがメールを送ろうとしています」と聞くことがあります |
+| `microsoft365` | `account: { "secret": "名前", "field": "accessToken" }` | Microsoft Graph でサインインした人として送ります。Microsoft Entra のアプリをシークレットに登録し（クライアント ID とシークレット、サイトは `https://login.microsoftonline.com` と `https://graph.microsoft.com`）、`oauth.signIn` で一度サインインします（スコープ `Mail.Send offline_access`、[oauth.md](oauth.md)）。添付は合計 3 MB まで（`MAIL_ATTACHMENT_TOO_LARGE`） |
+| `smtp` | `server`・`from`、たいてい `user` / `password` | `server` は `smtp.example.co.jp`（587 番で STARTTLS）か `smtp.example.co.jp:465`（TLS）。ログインはシークレットで、サイトに `smtp:<サーバー>` が要ります（ないと `SECRET_SITE_*`）。`security: "none"` はログインなしで受け付ける社内の中継サーバー向けで、パスワードは TLS なしでは送りません（`MAIL_INSECURE_LOGIN`） |
+
+- 選んだ送り方に関係ない params（`outlook` なのに `server` など）は `INVALID_PARAMS`。書いてある送り方と違う方法で送られることはありません
+- エラー：`MAIL_SEND_FAILED`（断られた。サーバーが一時的と言えば再試行）、`MAIL_SERVER_UNREACHABLE`、`MAIL_PERMISSION_DENIED`（Graph で Mail.Send がない）、`OAUTH_SIGN_IN_REQUIRED`
+
+```json
+{ "type": "mail.send", "params": {
+  "via": "microsoft365", "account": { "secret": "Microsoft365", "field": "accessToken" },
+  "to": ["keiri@example.co.jp"], "subject": "本日の処理が終わりました", "body": "件数：{{ len(orders) }}"
+} }
+```
+
 ## 次の段階（予定）
 
 1. **Excel の再計算・PDF 出力**：`excel.runMacro` と同じ仕組みで足す
 2. **Word の PDF 出力**：COM（Excel のマクロと同じ仕組み）
-3. **メールの送信と別の送り方**：`mail.send`（`Dangerous`、宛先の確認を厚くする）、Outlook 以外（SMTP / Microsoft Graph）を設定で選べるようにする
+3. **Outlook なしで読む**：`mail.list` / `mail.saveAttachments` を Microsoft 365・IMAP でも

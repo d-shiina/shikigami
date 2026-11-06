@@ -39,6 +39,7 @@ pub fn run(
             })?;
             match request {
                 Request::Draft(draft) => create_draft(&app, &draft, session),
+                Request::Send(draft) => send(&app, &draft, session),
                 Request::List(query) => list(&mapi, &query),
                 Request::Save(query) => save_attachments(&mapi, &query, session),
             }
@@ -54,6 +55,24 @@ pub fn run(
 }
 
 fn create_draft(app: &Object, draft: &Draft, session: &Session) -> Result<Value, StepError> {
+    let item = compose(app, draft, session)?;
+    item.call("Save", vec![])?;
+    Ok(json!({ "id": item.get("EntryID")?.to_text() }))
+}
+
+/// Sends from the account signed in to Outlook; Outlook keeps it in Sent
+/// Items (or the Outbox until it is online).
+fn send(app: &Object, draft: &Draft, session: &Session) -> Result<Value, StepError> {
+    let item = compose(app, draft, session)?;
+    item.call("Send", vec![]).map_err(|e| {
+        StepError::permanent("MAIL_SEND_FAILED", format!("Outlook did not send the message: {}", e.message))
+            .with_details(json!({ "hint": "Outlook may have asked whether a program may send mail; ask the user to allow it, or check the addresses." }))
+    })?;
+    Ok(json!({ "via": "outlook" }))
+}
+
+/// A new message filled in from `draft`, not saved yet.
+fn compose(app: &Object, draft: &Draft, session: &Session) -> Result<Object, StepError> {
     session.check()?;
     let item = app.object("CreateItem", vec![Var::i32(OL_MAIL_ITEM)])?;
     item.put("To", Var::str(&draft.to.join("; ")))?;
@@ -73,8 +92,7 @@ fn create_draft(app: &Object, draft: &Draft, session: &Session) -> Result<Value,
         }
     }
     session.check()?;
-    item.call("Save", vec![])?;
-    Ok(json!({ "id": item.get("EntryID")?.to_text() }))
+    Ok(item)
 }
 
 fn folder(mapi: &Object, path: Option<&str>) -> Result<Object, StepError> {
