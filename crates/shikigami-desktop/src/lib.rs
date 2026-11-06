@@ -38,8 +38,13 @@ use shikigami_runtime::{
 pub mod backend;
 pub mod bitmap;
 #[cfg(windows)]
+mod bridge;
+#[cfg(windows)]
 mod capture;
 pub mod engine;
+#[cfg(windows)]
+mod jab;
+pub mod jabmap;
 pub mod keys;
 pub mod menu;
 #[cfg(windows)]
@@ -485,7 +490,11 @@ impl ActionHandler for DesktopStep {
 fn is_not_ready(e: &StepError) -> bool {
     matches!(
         e.code.as_str(),
-        "WINDOW_NOT_FOUND" | "ELEMENT_NOT_FOUND" | "ELEMENT_DISABLED" | "ELEMENT_GONE"
+        "WINDOW_NOT_FOUND"
+            | "ELEMENT_NOT_FOUND"
+            | "ELEMENT_DISABLED"
+            | "ELEMENT_GONE"
+            | "JAVA_NOT_READY"
     )
 }
 

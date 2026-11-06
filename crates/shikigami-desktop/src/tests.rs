@@ -909,3 +909,31 @@ fn sap_gui_words_map_to_desktop_ones() {
     assert_eq!(key("Alt+F4"), None);
     assert_eq!(key("Tab"), None);
 }
+
+#[test]
+fn java_words_map_to_desktop_ones() {
+    use crate::jabmap::{has_state, role, wide};
+    for (java, shared) in [
+        ("push button", "button"),
+        ("text", "textbox"),
+        ("password text", "textbox"),
+        ("check box", "checkbox"),
+        ("menu", "menuitem"),
+        ("table", "table"),
+        ("label", "text"),
+        ("something new", "custom"),
+    ] {
+        assert_eq!(role(java), shared, "{java}");
+        assert!(roles::control_type(shared).is_some(), "{shared}");
+    }
+    assert!(has_state(
+        "enabled,focusable,visible,showing,checked",
+        "checked"
+    ));
+    assert!(!has_state("enabled,unchecked", "checked"));
+    let mut buffer = [0u16; 8];
+    for (i, c) in "登録".encode_utf16().enumerate() {
+        buffer[i] = c;
+    }
+    assert_eq!(wide(&buffer), "登録");
+}

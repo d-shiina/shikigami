@@ -16,6 +16,7 @@ use shikigami_com::{Object, Var};
 use shikigami_runtime::StepError;
 
 use crate::backend::Text;
+use crate::bridge::AppBridge;
 use crate::keys::Chord;
 use crate::menu;
 use crate::sapgui::{self, component_id};
@@ -525,5 +526,47 @@ impl SapWindow {
             rows: cells,
             truncated: rows > max_rows,
         })
+    }
+}
+
+impl AppBridge for SapWindow {
+    fn app(&self) -> &'static str {
+        "sapgui"
+    }
+    fn inspect(&self, max_nodes: usize, root: Option<&ElementQuery>) -> Result<Value, StepError> {
+        SapWindow::inspect(self, max_nodes, root)
+    }
+    fn probe(&self, element: &ElementQuery) -> Value {
+        SapWindow::probe(self, element)
+    }
+    fn click(&self, element: &ElementQuery) -> Result<Value, StepError> {
+        SapWindow::click(self, element)
+    }
+    fn set_value(&self, element: &ElementQuery, value: &Text) -> Result<Value, StepError> {
+        SapWindow::set_value(self, element, value)
+    }
+    fn get_value(&self, element: &ElementQuery) -> Result<Value, StepError> {
+        SapWindow::get_value(self, element)
+    }
+    fn select(&self, element: &ElementQuery, option: &str) -> Result<Value, StepError> {
+        SapWindow::select(self, element, option)
+    }
+    fn press(&self, chord: &Chord) -> Option<Result<Value, StepError>> {
+        SapWindow::press(self, chord)
+    }
+    fn focus(&self, element: &ElementQuery) -> Result<(), StepError> {
+        SapWindow::focus(self, element)
+    }
+    fn screen_rect(&self, element: &ElementQuery) -> Result<(i32, i32, i32, i32), StepError> {
+        SapWindow::screen_rect(self, element)
+    }
+    fn menu(&self, path: &[String]) -> Result<Value, StepError> {
+        SapWindow::menu(self, path)
+    }
+    fn table(&self, element: Option<&ElementQuery>, max_rows: usize) -> Result<Value, StepError> {
+        SapWindow::table(self, element, max_rows)
+    }
+    fn transaction(&self, code: &str) -> Result<Value, StepError> {
+        SapWindow::transaction(self, code)
     }
 }
