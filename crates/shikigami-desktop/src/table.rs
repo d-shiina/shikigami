@@ -133,42 +133,82 @@ pub fn grid_from_nodes(nodes: &[NodeInfo], max_rows: usize) -> Grid {
             .map(|(j, _)| i + 1 + j)
             .collect()
     };
+    let is_cell = |c: &usize| !matches!(nodes[*c].role, "scrollbar" | "thumb");
+    // Rows: the shallowest row-like elements. Where those are leaves under
+    // other elements (WinForms DataGridView reports its cells as rows),
+    // their parents are the rows.
     let row_depth = nodes
         .iter()
         .skip(1)
         .filter(|n| ROW_ROLES.contains(&n.role))
         .map(|n| n.depth)
         .min();
-    let mut headers: Vec<String> = Vec::new();
-    // (the row's own text, its cells)
-    let mut rows: Vec<(String, Vec<String>)> = Vec::new();
-    let mut truncated = false;
+    let mut row_ids: Vec<usize> = Vec::new();
     if let Some(depth) = row_depth {
-        for i in 1..nodes.len() {
-            let n = &nodes[i];
-            if n.depth != depth || !ROW_ROLES.contains(&n.role) {
-                continue;
-            }
-            let cells: Vec<usize> = children(i)
-                .into_iter()
-                .filter(|&c| !matches!(nodes[c].role, "scrollbar" | "thumb"))
+        let at_depth: Vec<usize> = (1..nodes.len())
+            .filter(|&i| nodes[i].depth == depth && ROW_ROLES.contains(&nodes[i].role))
+            .collect();
+        let leaves = at_depth.iter().all(|&i| children(i).is_empty());
+        if leaves && depth > 1 {
+            row_ids = (1..nodes.len())
+                .filter(|&i| {
+                    nodes[i].depth == depth - 1
+                        && children(i)
+                            .iter()
+                            .any(|&c| ROW_ROLES.contains(&nodes[c].role))
+                })
                 .collect();
-            if headers.is_empty()
-                && !cells.is_empty()
-                && cells.iter().all(|&c| HEADER_ROLES.contains(&nodes[c].role))
-            {
-                headers = cells.iter().map(|&c| text(&nodes[c])).collect();
-                continue;
+            // The header row has header cells only.
+            if let Some(h) = (1..nodes.len()).find(|&i| {
+                nodes[i].depth == depth - 1 && {
+                    let cells = children(i);
+                    !cells.is_empty()
+                        && cells.iter().all(|&c| HEADER_ROLES.contains(&nodes[c].role))
+                }
+            }) {
+                row_ids.push(h);
+                row_ids.sort_unstable();
             }
-            if rows.len() == max_rows {
-                truncated = true;
-                break;
-            }
-            let mut row: Vec<String> = cells.iter().map(|&c| text(&nodes[c])).collect();
-            if cells.is_empty() {
-                row = vec![text(n)];
-            }
-            rows.push((text(n), row));
+        } else {
+            row_ids = at_depth;
+        }
+    }
+    let mut headers: Vec<String> = Vec::new();
+    // (the row's own text, its cells, whether its first cell is a header)
+    let mut rows: Vec<(String, Vec<String>, bool)> = Vec::new();
+    let mut truncated = false;
+    for &i in &row_ids {
+        let n = &nodes[i];
+        let cells: Vec<usize> = children(i).into_iter().filter(is_cell).collect();
+        if headers.is_empty()
+            && rows.is_empty()
+            && !cells.is_empty()
+            && cells.iter().all(|&c| HEADER_ROLES.contains(&nodes[c].role))
+        {
+            headers = cells.iter().map(|&c| text(&nodes[c])).collect();
+            continue;
+        }
+        if rows.len() == max_rows {
+            truncated = true;
+            break;
+        }
+        let row_header = cells
+            .first()
+            .is_some_and(|&c| HEADER_ROLES.contains(&nodes[c].role));
+        let mut row: Vec<String> = cells.iter().map(|&c| text(&nodes[c])).collect();
+        if cells.is_empty() {
+            row = vec![text(n)];
+        }
+        rows.push((text(n), row, row_header));
+    }
+    // A row header column (the row's number or a blank) is not data.
+    if !rows.is_empty() && rows.iter().all(|(_, _, h)| *h) {
+        let width = rows.iter().map(|(_, r, _)| r.len()).max().unwrap_or(0);
+        if headers.len() == width {
+            headers.remove(0);
+        }
+        for (_, row, _) in &mut rows {
+            row.remove(0);
         }
     }
     if headers.is_empty() {
@@ -190,7 +230,7 @@ pub fn grid_from_nodes(nodes: &[NodeInfo], max_rows: usize) -> Grid {
     // as children.
     let rows = rows
         .into_iter()
-        .map(|(name, mut row)| {
+        .map(|(name, mut row, _)| {
             if row.len() + 1 == headers.len() {
                 row.insert(0, name);
             }
