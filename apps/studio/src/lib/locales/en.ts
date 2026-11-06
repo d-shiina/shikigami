@@ -96,6 +96,8 @@ export const en: Dict = {
   noIssues: "No issues",
   log: "Run log",
   clearLog: "Clear",
+  /** Takes the last run's colours off the chart. */
+  clearTrail: "Clear chart colours",
   stepName: "Display name",
   stepType: "Type",
   params: "Parameters",

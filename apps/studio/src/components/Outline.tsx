@@ -8,6 +8,7 @@ import { plain, sentence } from "../lib/sentence";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { usePendingReview } from "./Timeline";
 import { t } from "../lib/i18n";
+import { trailOf } from "../store";
 
 const RUN_DOT: Record<string, string> = {
   running: "bg-accent-500 animate-pulse",
@@ -23,7 +24,7 @@ export function OutlinePanel({ left = 12 }: { left?: number }) {
   const scenario = useStudio((s) => s.scenario);
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
-  const runSteps = useStudio((s) => s.run?.steps);
+  const runSteps = useStudio((s) => trailOf(s)?.steps);
   const validation = useStudio((s) => s.validation);
   const reviewing = useStudio((s) => s.reviewing);
   const goTo = useStudio((s) => s.goTo);
