@@ -196,6 +196,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atoi"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d12c37257553c19e9aee6cba77814fdc9e07844abfc8b3a2c377cd920ee5a993"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3136,6 +3145,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "odbc-api"
+version = "29.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6b1b0916a031befcc283779c63622db4d718a397a85e6f3cdfd009dd96fe381"
+dependencies = [
+ "atoi",
+ "log",
+ "odbc-sys",
+ "thiserror 2.0.21",
+ "widestring",
+]
+
+[[package]]
+name = "odbc-sys"
+version = "0.31.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38467959ef8ec6b76e0d98a7da6a270b65b7ab4f22b2209ef81c8a9260633a50"
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4300,6 +4328,7 @@ version = "0.1.2"
 dependencies = [
  "serde_json",
  "shikigami-browser",
+ "shikigami-db",
  "shikigami-desktop",
  "shikigami-excel",
  "shikigami-files",
@@ -4375,6 +4404,19 @@ dependencies = [
  "time",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "shikigami-db"
+version = "0.1.1"
+dependencies = [
+ "odbc-api",
+ "serde_json",
+ "shikigami-core",
+ "shikigami-runtime",
+ "tempfile",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -6093,6 +6135,12 @@ name = "weezl"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
+
+[[package]]
+name = "widestring"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
 
 [[package]]
 name = "win32job"
