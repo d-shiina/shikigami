@@ -141,7 +141,7 @@ async fn edge_ie_mode_page_through_ui_automation() {
     };
 
     let runtime = Runtime::builder().adapter(&adapter).build();
-    let field = json!({ "window": window, "element": { "name": "Customer" } });
+    let field = json!({ "window": window, "element": { "role": "textbox", "name": "Customer" } });
     let button = json!({ "window": window, "element": { "role": "button", "name": "Register" } });
     let set = run(
         &runtime,
