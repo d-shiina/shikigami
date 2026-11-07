@@ -45,7 +45,7 @@ import {
 } from "./lib/api";
 import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
 import { registerExtensions } from "./lib/extensions";
-import { copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
+import { boxRange, copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
@@ -362,6 +362,8 @@ export type StudioState = {
   removeSelected(): Promise<void>;
   /** Shift+click: selects the nodes from the selected one to `stepId` (same block only). */
   selectTo(stepId: string): void;
+  /** Shift+drag: selects the nodes the box was drawn around (as one run of siblings, see `boxRange`). */
+  selectBox(stepIds: string[]): void;
   /** Puts the selected nodes inside a new control node (繰り返し・条件分岐・エラー処理・グループ), where they were. */
   wrapSelected(type: string): Promise<void>;
   /** Opens or closes the "サブフローにまとめる" form beside the selected node. */
@@ -1275,6 +1277,15 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       setExtractName(name) {
         set({ extractName: name });
+      },
+
+      selectBox(stepIds) {
+        const { flow } = get();
+        if (!flow) return;
+        const ids = boxRange(flow.steps ?? [], stepIds, CASE);
+        if (ids.length === 0) return;
+        const focus = ids.at(-1)!;
+        set({ selection: { kind: "step", stepId: focus }, range: ids.length > 1 ? { anchor: ids[0]!, focus, ids } : null, dive: [] });
       },
 
       selectTo(stepId) {
