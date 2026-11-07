@@ -92,3 +92,60 @@ describe("the node opened full size", () => {
     expect(testStep).not.toHaveBeenCalled();
   });
 });
+
+describe("a list of records", () => {
+  it("edits a form's fields one box at a time, never as JSON", async () => {
+    const formDef = {
+      type: "dialog.form",
+      category: "system",
+      label: "入力フォーム",
+      description: "",
+      paramsSchema: {
+        type: "object",
+        properties: {
+          fields: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                label: { type: "string" },
+                type: { enum: ["text", "date"] },
+                options: { type: "array", items: { type: ["string", "number"] } },
+              },
+              required: ["name"],
+            },
+          },
+        },
+        required: ["fields"],
+      },
+      blocks: [],
+      hasOutput: true,
+      risk: "interactive",
+    } as unknown as StepTypeDef;
+    const formFlow = {
+      ...flow,
+      steps: [{ id: "s1", type: "dialog.form", params: { fields: [{ name: "month", label: "対象月" }] } }],
+    } as unknown as Flow;
+    const edit = vi.fn(async () => {
+      throw new Error("not saved in this test");
+    });
+    const store = await studio({ listStepTypes: vi.fn(async () => [formDef]), getFlow: vi.fn(async () => formFlow), edit } as Partial<Api>);
+    store.setState({ stepTypes: [formDef] });
+    store.getState().openEditor("s1");
+    render(
+      <StudioContext.Provider value={store}>
+        <NodeEditor />
+      </StudioContext.Provider>,
+    );
+    expect(screen.getByText("結果のキー")).toBeTruthy();
+    expect((screen.getByDisplayValue("対象月") as HTMLInputElement).value).toBe("対象月");
+    expect(screen.queryByDisplayValue(/\[\{/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /項目を追加/ }));
+    const sent = () => (edit.mock.calls.at(-1) as unknown as [string, number, { patch: { replaceParams: { fields: unknown[] } } }[]])[2][0]!.patch.replaceParams.fields;
+    expect(sent()).toEqual([{ name: "month", label: "対象月" }, {}]);
+    fireEvent.click(screen.getAllByTitle("この項目を外す")[0]!);
+    // The only field gone: the setting is left unset, not an empty list.
+    expect((edit.mock.calls.at(-1) as unknown as [string, number, { patch: { replaceParams: object } }[]])[2][0]!.patch.replaceParams).toEqual({});
+  });
+});

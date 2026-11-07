@@ -103,10 +103,10 @@ jobs:
       # An experiment, not a gate: the OCR benchmark (Japanese business
       # screens, crates/shikigami-desktop/src/ocr_bench.rs) with PaddleOCR
       # and with Windows OCR on the same machine. The results are notices on
-      # the run. Installing Windows OCR's Japanese pack takes a few minutes,
-      # so it runs on main, and on pull requests whose title names OCR.
+      # the run. Installing Windows OCR's Japanese pack takes about 15 minutes,
+      # so it runs only on pull requests whose title names OCR.
       - name: OCR benchmark, PaddleOCR and Windows OCR (experiment)
-        if: runner.os == 'Windows' && (github.event_name == 'push' || contains(github.event.pull_request.title, 'OCR'))
+        if: runner.os == 'Windows' && contains(github.event.pull_request.title, 'OCR')
         continue-on-error: true
         shell: pwsh
         run: |

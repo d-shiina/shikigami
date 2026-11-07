@@ -47,6 +47,8 @@ When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one n
 | `desktop.waitFor` | `target`, `state` (visible / hidden / enabled) | – | not used |
 | `desktop.isVisible` | `target`, `waitMs` | true / false | not used |
 | `desktop.closeWindow` | `target` | – | not used |
+| `desktop.setWindow` | `target` (a window), `state` (`maximized` / `minimized` / `normal`), `front` (bring to the front), `x` `y` `width` `height` (pixels from the screen's top left; only the ones given change) | `{ state, x, y, width, height }` | not used |
+| `desktop.check` | `target` (a checkbox), `checked` (default true) | – | not used |
 | `desktop.mouseClick` | `target`, `button`, `double` | – | **used** |
 | `desktop.type` | `target`, `text` (text or a secret) | – | **used** |
 | `desktop.press` | `target`, `key` (`Enter` `Control+S` `Alt+F4`…, written as for the browser) | – | **used** |

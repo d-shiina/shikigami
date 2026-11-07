@@ -169,6 +169,144 @@ pub async fn input(params: &Value) -> Result<Value, StepError> {
     }
 }
 
+/// The kinds of `dialog.form` fields.
+pub const FIELD_TYPES: [&str; 6] = ["text", "multiline", "number", "date", "select", "checkbox"];
+
+/// Checks `fields` and turns them into what dialog.ps1 reads: each with a
+/// name, a label (the name when none), a known type, and its default and
+/// options as the type takes them.
+pub fn form_fields(params: &Value) -> Result<Vec<Value>, StepError> {
+    let fields = params
+        .get("fields")
+        .and_then(Value::as_array)
+        .filter(|f| !f.is_empty())
+        .ok_or_else(|| StepError::invalid_params("'fields' must list at least one field"))?;
+    let mut names = std::collections::HashSet::new();
+    fields
+        .iter()
+        .map(|field| {
+            let name = field
+                .get("name")
+                .map(shikigami_core::expr::to_display)
+                .filter(|n| !n.trim().is_empty())
+                .ok_or_else(|| StepError::invalid_params("every field needs a 'name'"))?;
+            if !names.insert(name.clone()) {
+                return Err(StepError::invalid_params(format!(
+                    "two fields are named '{name}'"
+                )));
+            }
+            let kind = field.get("type").and_then(Value::as_str).unwrap_or("text");
+            if !FIELD_TYPES.contains(&kind) {
+                return Err(StepError::invalid_params(format!(
+                    "field '{name}': type must be one of {}",
+                    FIELD_TYPES.join(", ")
+                )));
+            }
+            let label = text(field, "label").unwrap_or_else(|| name.clone());
+            let default = field.get("default").filter(|v| !v.is_null());
+            let options: Vec<String> = match field.get("options") {
+                Some(Value::Array(items)) => {
+                    items.iter().map(shikigami_core::expr::to_display).collect()
+                }
+                _ => Vec::new(),
+            };
+            if kind == "select" && options.is_empty() {
+                return Err(StepError::invalid_params(format!(
+                    "field '{name}': a select needs 'options'"
+                )));
+            }
+            let default = match (kind, default) {
+                (_, None) => Value::Null,
+                ("checkbox", Some(v)) => Value::Bool(match v {
+                    Value::Bool(b) => *b,
+                    Value::String(s) => s == "true",
+                    _ => false,
+                }),
+                ("date", Some(v)) => {
+                    let day = shikigami_core::expr::to_display(v);
+                    let day: String = day.chars().take(10).collect();
+                    if !is_day(&day) {
+                        return Err(StepError::invalid_params(format!(
+                            "field '{name}': the default date must look like 2026-10-28"
+                        )));
+                    }
+                    Value::String(day)
+                }
+                (_, Some(v)) => Value::String(shikigami_core::expr::to_display(v)),
+            };
+            Ok(serde_json::json!({
+                "name": name,
+                "label": label,
+                "type": kind,
+                "required": field.get("required").and_then(Value::as_bool).unwrap_or(false),
+                "default": default,
+                "options": options,
+            }))
+        })
+        .collect()
+}
+
+/// `2026-10-28`.
+fn is_day(text: &str) -> bool {
+    let parts: Vec<&str> = text.split('-').collect();
+    let number = |s: &str, len: usize| {
+        (s.len() == len && s.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| s.parse::<u32>().ok())
+            .flatten()
+    };
+    matches!(
+        (parts.as_slice(), parts.first().and_then(|y| number(y, 4))),
+        ([_, m, d], Some(_)) if number(m, 2).is_some_and(|m| (1..=12).contains(&m)) && number(d, 2).is_some_and(|d| (1..=31).contains(&d))
+    )
+}
+
+/// The form's answers as the flow gets them: whole numbers without `.0`.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn form_answers(printed: &str) -> Result<Value, StepError> {
+    let mut answers: Value = serde_json::from_str(printed.trim())
+        .map_err(|e| StepError::permanent("DIALOG_FAILED", format!("unreadable answers: {e}")))?;
+    if let Some(map) = answers.as_object_mut() {
+        for value in map.values_mut() {
+            if let Some(n) = value.as_f64()
+                && n.fract() == 0.0
+                && n.abs() < 9_007_199_254_740_992.0
+            {
+                *value = serde_json::json!(n as i64);
+            }
+        }
+    }
+    Ok(answers)
+}
+
+/// Asks for several values at once. Returns them by field name, or null
+/// when the person cancels.
+pub async fn form(params: &Value) -> Result<Value, StepError> {
+    let fields = form_fields(params)?;
+    let message = text(params, "message").unwrap_or_default();
+    let title = text(params, "title").unwrap_or_default();
+    #[cfg(windows)]
+    {
+        let answer = powershell(
+            "form",
+            &[
+                ("MESSAGE", message),
+                ("TITLE", title),
+                ("FIELDS", Value::Array(fields).to_string()),
+            ],
+        )
+        .await?;
+        match answer {
+            Some(printed) => form_answers(&printed),
+            None => Ok(Value::Null),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (fields, message, title);
+        Err(unsupported())
+    }
+}
+
 /// Lets the person pick a file, files, a folder or a save location.
 /// Returns the path (a list for `files`), or null when cancelled.
 pub async fn select_file(params: &Value) -> Result<Value, StepError> {
@@ -254,7 +392,7 @@ mod snapshots {
         let dir = std::env::var_os("SHIKIGAMI_SNAPSHOT_DIR")
             .map_or_else(|| temp.path().to_path_buf(), std::path::PathBuf::from);
         std::fs::create_dir_all(&dir).unwrap();
-        let cases: [Case; 6] = [
+        let cases: [Case; 8] = [
             (
                 "message-info",
                 "message",
@@ -315,6 +453,30 @@ mod snapshots {
                 "2026-10",
             ),
             (
+                "form",
+                "form",
+                "light",
+                &[
+                    ("TITLE", "請求書の発行"),
+                    ("MESSAGE", "今回の条件を入れてください"),
+                    (
+                        "FIELDS",
+                        r#"[{"name":"month","label":"対象月","type":"text","required":true,"default":"2026-10","options":[]},{"name":"due","label":"支払期限","type":"date","required":false,"default":"2026-11-30","options":[]},{"name":"office","label":"営業所","type":"select","required":true,"default":"大阪","options":["東京","大阪"]},{"name":"min","label":"最低金額","type":"number","required":false,"default":"10,000","options":[]},{"name":"note","label":"備考","type":"multiline","required":false,"default":null,"options":[]},{"name":"mail","label":"メールでも送る","type":"checkbox","required":false,"default":true,"options":[]}]"#,
+                    ),
+                ],
+                r#"{"month":"2026-10","due":"2026-11-30","office":"大阪","min":10000,"note":"","mail":true}"#,
+            ),
+            (
+                "form-incomplete-dark",
+                "form",
+                "dark",
+                &[(
+                    "FIELDS",
+                    r#"[{"name":"month","label":"対象月","type":"text","required":true,"default":null,"options":[]},{"name":"min","label":"最低金額","type":"number","required":false,"default":"たくさん","options":[]}]"#,
+                )],
+                "",
+            ),
+            (
                 "input-dark",
                 "input",
                 "dark",
@@ -336,8 +498,58 @@ mod snapshots {
             ));
             env.push(("SNAPSHOT", file.display().to_string()));
             let answer = powershell(mode, &env).await.unwrap();
-            assert_eq!(answer.as_deref(), Some(expected), "{name}");
+            if mode == "form" {
+                // A form left incomplete does not close: snapshot mode
+                // reports it as cancelled.
+                let expected = (!expected.is_empty())
+                    .then(|| serde_json::from_str::<serde_json::Value>(expected).unwrap());
+                let answer = answer.map(|a| super::form_answers(&a).unwrap());
+                assert_eq!(answer, expected, "{name}");
+            } else {
+                assert_eq!(answer.as_deref(), Some(expected), "{name}");
+            }
             assert!(std::fs::metadata(&file).unwrap().len() > 1000, "{name}");
         }
+    }
+}
+
+#[cfg(test)]
+mod form_tests {
+    use serde_json::json;
+
+    use super::{form_answers, form_fields};
+
+    #[test]
+    fn fields_are_checked_and_filled_in() {
+        let fields = form_fields(&json!({ "fields": [
+            { "name": "month", "required": true, "default": "2026-10" },
+            { "name": "due", "type": "date", "default": "2026-11-30T00:00:00" },
+            { "name": "office", "type": "select", "options": ["東京", 2] },
+            { "name": "mail", "type": "checkbox", "default": "true" },
+        ] }))
+        .unwrap();
+        assert_eq!(fields[0]["label"], "month");
+        assert_eq!(fields[0]["type"], "text");
+        assert_eq!(fields[1]["default"], "2026-11-30");
+        assert_eq!(fields[2]["options"], json!(["東京", "2"]));
+        assert_eq!(fields[3]["default"], true);
+        for bad in [
+            json!({ "fields": [] }),
+            json!({ "fields": [{ "name": "a" }, { "name": "a" }] }),
+            json!({ "fields": [{ "name": "a", "type": "password" }] }),
+            json!({ "fields": [{ "name": "a", "type": "select" }] }),
+            json!({ "fields": [{ "name": "a", "type": "date", "default": "11/30" }] }),
+        ] {
+            assert!(form_fields(&bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn whole_numbers_come_back_whole() {
+        assert_eq!(
+            form_answers(r#"{"min":10000.0,"rate":0.5,"name":"山田","mail":false,"due":null}"#)
+                .unwrap(),
+            json!({ "min": 10000, "rate": 0.5, "name": "山田", "mail": false, "due": null })
+        );
     }
 }

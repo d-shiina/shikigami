@@ -572,6 +572,16 @@ Example: `{"type":"db.query","params":{"connection":"DSN=基幹システム;Trus
 
 ### desktop.*
 
+#### desktop.check (チェック状態)
+
+Sets the checkbox `target` to checked (`checked: true`, the default) or unchecked (`checked: false`), without the mouse. Does nothing when it already is, so running the flow twice never flips it back (desktop.click would). Fails with NOT_A_CHECKBOX when the target has no checked state.
+
+Params:
+- `target`*: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
+- `checked`: true | false — チェックを付ける（外すときは false、既定は付ける）
+Example: `{"type":"desktop.check","name":"メール送信をオン","params":{"target":{"window":{"process":"billing.exe"},"element":{"role":"checkbox","name":"メール送信"}}}}`
+Example: `{"type":"desktop.check","name":"印刷をオフ","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"chkPrint"}},"checked":false}}`
+
 #### desktop.click (クリック)
 
 Activates `target` without the mouse: presses a button or menu item, toggles a checkbox, selects a list item or tab, expands a tree item. Works even when the window is behind others. Waits until the element exists and is enabled. For elements that only react to a real mouse click, use desktop.mouseClick.
@@ -747,6 +757,22 @@ Params:
 Example: `{"type":"desktop.setValue","name":"顧客コードを入力","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"txtCustomer"}},"value":"{{ customerCode }}"}}`
 Example: `{"type":"desktop.setValue","name":"パスワードを入力","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"txtPassword"}},"value":{"secret":"請求システム","field":"password"}}}`
 
+#### desktop.setWindow (ウィンドウ状態)
+
+Changes how the window `target.window` is shown: `state` "maximized", "minimized" or "normal"; `x` / `y` / `width` / `height` (screen pixels; what is left out stays) move and size it (a maximized window is restored first); `front: true` brings it to the front. Output: { state, x, y, width, height } afterwards. Use it before steps whose places depend on the window's size (desktop.mouseClick with point, images), so every run starts from the same layout.
+
+Params:
+- `target`*: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
+- `state`: "maximized" | "minimized" | "normal" — 最大化・最小化・元のサイズ
+- `front`: true | false — 前面に出す
+- `x`: whole number — 左端の位置（画面の左からのピクセル）
+- `y`: whole number — 上端の位置（画面の上からのピクセル）
+- `width`: whole number — 幅（ピクセル）
+- `height`: whole number — 高さ（ピクセル）
+Output: yes (saveAs)
+Example: `{"type":"desktop.setWindow","name":"請求システムを最大化","params":{"target":{"window":{"process":"billing.exe"}},"state":"maximized"}}`
+Example: `{"type":"desktop.setWindow","name":"決まった位置と大きさにする","params":{"target":{"window":{"title":"販売管理"}},"x":0,"y":0,"width":1280,"height":800,"front":true}}`
+
 #### desktop.type (キーボード入力)
 
 Brings the window to the front, focuses `target` and types `text` with the keyboard (does not clear the field first). For apps that ignore desktop.setValue. With `target.image` / `target.ocr` it first clicks that place (e.g. a label's text with `offset` to the field beside it). `text` may be a registered secret, typed only into the apps registered with it.
@@ -769,6 +795,17 @@ Example: `{"type":"desktop.waitFor","name":"「登録完了」が出るのを待
 
 
 ### dialog.*
+
+#### dialog.form (入力フォーム)
+
+Asks the person at the PC for several values at once in one dialog, and outputs them as an object keyed by each field's `name` (null when they cancel). Field types: text (default), multiline, number (a number, or null when left empty), date ("2026-10-28" or null), select (one of `options`) and checkbox (true / false). `required: true` keeps OK from closing the form until the field has a value. Use it only in flows that someone watches; unattended runs would wait until the timeout (10 minutes unless timeoutMs is set). Never ask for passwords: use registered secrets. Windows only.
+
+Params:
+- `message`: text
+- `title`: text
+- `fields`*: list of { name*: text, label: text, type: "text" | "multiline" | "number" | "date" | "select" | "checkbox", required: true | false, default: any, options: list of text or number }
+Output: yes (saveAs)
+Example: `{"type":"dialog.form","params":{"title":"請求書の発行","message":"今回の条件を入れてください","fields":[{"name":"month","label":"対象月","default":"{{ formatDate(today(), 'yyyy-MM') }}","required":true},{"name":"dueDate","label":"支払期限","type":"date"},{"name":"office","label":"営業所","type":"select","options":["東京","大阪","名古屋"],"required":true},{"name":"minAmount","label":"対象にする最低金額","type":"number","default":10000},{"name":"sendMail","label":"メールでも送る","type":"checkbox","default":true}]},"saveAs":"form"}`
 
 #### dialog.input (入力ダイアログ)
 
@@ -831,6 +868,46 @@ Output: yes (saveAs)
 Example: `{"type":"excel.appendRows","name":"結果を 1 行追加","params":{"path":"output/結果.xlsx","rows":[{"受注番号":"{{ order.受注番号 }}","金額":"{{ order.金額 }}","受注日":{"date":"{{ order.受注日 }}"}}]}}`
 Example: `{"type":"excel.appendRows","params":{"path":"output/結果.xlsx","sheet":"集計","rows":"{{ results }}"}}`
 
+#### excel.clearRange (範囲のクリア)
+
+Empties the cells `range` (e.g. "A2:F1000") of `sheet`, values and formulas, keeping their formats, and saves the workbook. Use it to empty a template's table before writing new rows. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`: text — シート名（完全一致）。省略すると先頭のシート
+- `range`*: text — 空にするセル（例 A2:F1000）
+Example: `{"type":"excel.clearRange","name":"前回の明細を消す","params":{"path":"templates/日報.xlsx","sheet":"明細","range":"A2:H500"}}`
+
+#### excel.copySheet (シートのコピー)
+
+Copies the sheet `sheet` (values, formulas, formats, column widths) as a new sheet `name`, right after it, and saves the workbook. Fails with SHEET_EXISTS when `name` exists. A sheet with tables (Format as Table) or pivot tables can only be copied while the workbook is open in Excel on this PC (SHEET_NOT_COPYABLE otherwise).
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`*: text — シート名（完全一致）。省略すると先頭のシート
+- `name`*: text — 新しいシート名
+Example: `{"type":"excel.copySheet","name":"ひな形から今月のシートを作る","params":{"path":"output/月報.xlsx","sheet":"ひな形","name":"{{ month }}月"}}`
+
+#### excel.deleteRows (行の削除)
+
+Deletes `count` (default 1) rows from row `row` of `sheet`, moving the rows below up, and saves the workbook. To delete rows found with excel.readRows, use their `_row` and go from the bottom up (control.forEach over reverse(...)), because the rows below move up after each delete. Formulas that pointed at the deleted rows show #REF!, as in Excel. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`: text — シート名（完全一致）。省略すると先頭のシート
+- `row`*: whole number or text — 行番号（readRows の行なら {{ row._row }}）
+- `count`: whole number or text — 行の数（既定 1）
+Example: `{"type":"control.forEach","params":{"items":"reverse(filter(orders, o => o.状態 == '取消'))","itemVar":"order"},"blocks":{"body":[{"type":"excel.deleteRows","name":"取消の行を消す","params":{"path":"input/受注.xlsx","sheet":"受注","row":"{{ order._row }}"}}]}}`
+
+#### excel.deleteSheet (シートの削除)
+
+Deletes the sheet `sheet` and saves the workbook; does nothing when there is no such sheet, so re-running is safe. Refuses (SHEET_REFERENCED, with the cells in details.usedBy) when formulas or named ranges of other sheets use it, unless the workbook is open in Excel on this PC (Excel then deletes it as a person would, turning those references into #REF!). The only sheet of a workbook cannot be deleted (LAST_SHEET).
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`*: text — シート名（完全一致）。省略すると先頭のシート
+Example: `{"type":"excel.deleteSheet","name":"作業用のシートを消す","params":{"path":"output/集計.xlsx","sheet":"作業"}}`
+
 #### excel.exportPdf (PDF 出力)
 
 Saves the workbook `path` (or only `sheet`) as the PDF `to`, laid out as Excel prints it (print area, page setup). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Uses the workbook open in Excel on this PC when it is open (what is on the screen), otherwise opens the file read-only in a separate, hidden Excel. Needs Windows with desktop Excel. Output: { path }.
@@ -877,6 +954,17 @@ Params:
 - `autoFit`: true | false — 列の幅を中身に合わせる
 Example: `{"type":"excel.format","name":"見出しを太字・水色にする","params":{"path":"input/受注.xlsx","sheet":"受注","range":"A1:F1","bold":true,"fillColor":"#DDEBF7","align":"center"}}`
 Example: `{"type":"excel.format","name":"金額を 3 桁区切りにする","params":{"path":"input/受注.xlsx","sheet":"受注","range":"E2:E1000","numberFormat":"#,##0","autoFit":true}}`
+
+#### excel.insertRows (行の挿入)
+
+Inserts `count` (default 1) empty rows at row `row` of `sheet`, moving that row and the ones below it down, and saves the workbook. Formulas and named ranges that point below follow the rows, as in Excel. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`: text — シート名（完全一致）。省略すると先頭のシート
+- `row`*: whole number or text — 行番号（readRows の行なら {{ row._row }}）
+- `count`: whole number or text — 行の数（既定 1）
+Example: `{"type":"excel.insertRows","name":"見出しの下に 1 行空ける","params":{"path":"input/受注.xlsx","sheet":"受注","row":2}}`
 
 #### excel.listSheets (シート一覧)
 
@@ -944,6 +1032,16 @@ Params:
 - `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
 Example: `{"type":"excel.recalculate","name":"数式を計算し直す","params":{"path":"output/集計.xlsx"}}`
 
+#### excel.renameSheet (シート名の変更)
+
+Renames the sheet `sheet` to `name` and saves the workbook. Formulas and named ranges that use the sheet are changed to the new name, as in Excel. Does nothing when `sheet` is gone and `name` exists (already renamed), so re-running is safe; fails with SHEET_EXISTS when both exist.
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`*: text — シート名（完全一致）。省略すると先頭のシート
+- `name`*: text — 新しいシート名
+Example: `{"type":"excel.renameSheet","params":{"path":"output/月報.xlsx","sheet":"ひな形","name":"{{ month }}月"}}`
+
 #### excel.runMacro (マクロ実行)
 
 Runs the VBA macro `macro` (e.g. 集計 or Module1.集計; a Function's return value is the output) of the workbook `path` with `args`, in a separate, hidden Excel that never touches the user's open Excel windows, then saves the workbook (`save: false` to discard its changes) and closes it. Needs Windows with desktop Excel; macros must be enabled for the workbook on this PC. Use only for what other excel.* steps cannot do: read and write cells with them. A macro that shows a MsgBox waits forever and is ended at the step's timeoutMs (default 300000).
@@ -956,6 +1054,22 @@ Params:
 Output: yes (saveAs)
 Example: `{"type":"excel.runMacro","name":"集計マクロを実行","params":{"path":"templates/集計.xlsm","macro":"Module1.集計"}}`
 Example: `{"type":"excel.runMacro","params":{"path":"templates/集計.xlsm","macro":"月次レポート","args":["{{ month }}",2026]},"saveAs":"result"}`
+
+#### excel.saveAs (名前を付けて保存)
+
+Saves a copy of the workbook `path` as `to`, in the format of `to`'s extension: .xlsx, .xlsm, .xlsb, .xls (Excel 97-2003), .csv (only `sheet`, or the first sheet; UTF-8 with BOM, or Shift_JIS with encoding "shift_jis") or .pdf. `path` may be an .xls or a password-protected workbook (`password`, a registered secret): save it as .xlsx first, and the other excel.* steps can then work on the copy, which has no password. Opens the saved file read-only in a separate, hidden Excel (changes not yet saved in an open Excel are not in the copy). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Needs Windows with desktop Excel. Output: { path }.
+
+Params:
+- `path`*: text [path] — 元のブック（.xlsx・.xlsm・.xls・.xlsb・.csv）：フローのフォルダーからの相対パス（例 input/受注.xls）か絶対パス
+- `to`*: text [path] — 保存先：拡張子（.xlsx・.xlsm・.xlsb・.xls・.csv・.pdf）で形式が決まる
+- `sheet`: text — CSV・PDF にするシート（省略すると CSV は先頭のシート、PDF はブック全体）
+- `password`: { secret*: text, field*: "username" | "password" | "totp" } [may be a secret] — A registered secret, e.g. { "secret": "受注システム", "field": "password" }. Only the name is written here; the value is looked up when the step runs.
+- `encoding`: "utf-8" | "shift_jis" — CSV の文字コード（既定 utf-8、BOM 付き）
+- `overwrite`: true | false — 同じ名前のファイルがあれば上書きする（既定 false）
+Output: yes (saveAs)
+Example: `{"type":"excel.saveAs","name":"古い形式のブックを xlsx にする","params":{"path":"input/受注.xls","to":"work/受注.xlsx","overwrite":true}}`
+Example: `{"type":"excel.saveAs","params":{"path":"input/給与.xlsx","password":{"secret":"給与ブック","field":"password"},"to":"work/給与.xlsx","overwrite":true}}`
+Example: `{"type":"excel.saveAs","params":{"path":"output/集計.xlsx","sheet":"集計","to":"output/集計.csv","encoding":"shift_jis","overwrite":true}}`
 
 #### excel.sort (並べ替え)
 
@@ -1329,6 +1443,24 @@ Example: `{"type":"pdf.split","params":{"path":"input/まとめて読み取り.p
 
 
 ### process.*
+
+#### process.kill (プロセス終了)
+
+Ends every running process of the program `name` (e.g. "sales.exe"; case and .exe do not matter) with its child processes, without asking it to save. Use it to restart an application that hangs (then desktop.launch it again). Outputs { killed } (0 when it was not running, which is not an error). Unsaved work in that program is lost. A process of another user or of an administrator fails with PROCESS_KILL_FAILED.
+
+Params:
+- `name`*: text
+Output: yes (saveAs)
+Example: `{"type":"process.kill","params":{"name":"sales.exe"}}`
+
+#### process.list (プロセス一覧)
+
+Outputs the programs running on this PC as [{ pid, name }]. With `name` (e.g. "EXCEL" or "EXCEL.EXE"; case and .exe do not matter) only that program's processes, so `length(list) > 0` tells whether it is running.
+
+Params:
+- `name`: text
+Output: yes (saveAs)
+Example: `{"type":"process.list","params":{"name":"EXCEL"},"saveAs":"excels"}`
 
 #### process.run (プログラム実行)
 

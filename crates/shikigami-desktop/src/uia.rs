@@ -46,14 +46,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     BM_CLICK, GA_ROOT, GetAncestor, GetCursorPos, GetForegroundWindow, GetSystemMetrics,
-    GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, PostMessageW,
-    SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_RESTORE, SendMessageTimeoutW, SetCursorPos,
-    SetForegroundWindow, ShowWindow, WM_CLOSE, WM_IME_CONTROL, WindowFromPoint,
+    GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, IsZoomed,
+    PostMessageW, SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE,
+    SWP_NOACTIVATE, SWP_NOZORDER, SendMessageTimeoutW, SetCursorPos, SetForegroundWindow,
+    SetWindowPos, ShowWindow, WM_CLOSE, WM_IME_CONTROL, WindowFromPoint,
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
 use crate::backend::{
-    Backend, Capture, Direction, MouseButton, OcrEngine, OcrOptions, Op, ScrollUnit, Text,
+    Backend, Bounds, Capture, Direction, MouseButton, OcrEngine, OcrOptions, Op, ScrollUnit, Text,
+    WindowState,
 };
 use crate::bitmap::{Bitmap, Rect};
 use crate::bridge::AppBridge;
@@ -359,6 +361,12 @@ impl Uia {
             Op::Type { target, text } => self.type_text(&target, &text),
             Op::Press { target, chord } => self.press(&target, &chord),
             Op::CloseWindow { target } => self.close_window(&target),
+            Op::SetWindow {
+                target,
+                state,
+                front,
+                bounds,
+            } => self.set_window(&target, state, front, bounds),
             Op::Scroll {
                 target,
                 direction,
@@ -439,6 +447,7 @@ impl Uia {
             | Op::Type { target, .. }
             | Op::Press { target, .. }
             | Op::CloseWindow { target }
+            | Op::SetWindow { target, .. }
             | Op::Scroll { target, .. }
             | Op::Wheel { target, .. }
             | Op::Hover { target }
@@ -1454,6 +1463,92 @@ impl Uia {
         Ok(Value::Null)
     }
 
+    fn set_window(
+        &self,
+        target: &Target,
+        state: Option<WindowState>,
+        front: bool,
+        bounds: Bounds,
+    ) -> Result<Value, StepError> {
+        let (_, window, _) = self.find_window(&target.window)?;
+        let h = hwnd(window.handle);
+        if h.0.is_null() {
+            return Err(StepError::permanent(
+                "NOT_SUPPORTED",
+                "this window cannot be moved or sized",
+            ));
+        }
+        // SAFETY: Win32 calls on the UIA thread, on a window handle UIA gave.
+        unsafe {
+            match state {
+                Some(WindowState::Maximized) => {
+                    let _ = ShowWindow(h, SW_MAXIMIZE);
+                }
+                Some(WindowState::Minimized) => {
+                    let _ = ShowWindow(h, SW_MINIMIZE);
+                }
+                Some(WindowState::Normal) => {
+                    let _ = ShowWindow(h, SW_RESTORE);
+                }
+                None => {}
+            }
+            if !bounds.is_empty() {
+                // A maximized or minimized window keeps its size: restore it first.
+                if IsZoomed(h).as_bool() || IsIconic(h).as_bool() {
+                    let _ = ShowWindow(h, SW_RESTORE);
+                }
+                let mut r = RECT::default();
+                GetWindowRect(h, &raw mut r).or_fail()?;
+                SetWindowPos(
+                    h,
+                    None,
+                    bounds.x.unwrap_or(r.left),
+                    bounds.y.unwrap_or(r.top),
+                    bounds.width.unwrap_or(r.right - r.left).max(1),
+                    bounds.height.unwrap_or(r.bottom - r.top).max(1),
+                    SWP_NOZORDER | SWP_NOACTIVATE,
+                )
+                .or_fail()?;
+            }
+            if front {
+                if IsIconic(h).as_bool() {
+                    let _ = ShowWindow(h, SW_RESTORE);
+                }
+                if GetForegroundWindow() != h {
+                    // Windows lets the process that sent the last input
+                    // choose the foreground window.
+                    let _ = send(&[mouse(MOUSEEVENTF_MOVE)]);
+                    let _ = SetForegroundWindow(h);
+                }
+                if foreground_pid() != window.pid {
+                    return Err(StepError::new(
+                        "FOREGROUND_DENIED",
+                        "Windows did not let Shikigami bring the window to the front",
+                    )
+                    .with_details(json!({
+                        "hint": "Keep the screen unlocked and do not use the PC while desktop steps run."
+                    })));
+                }
+            }
+            let mut r = RECT::default();
+            GetWindowRect(h, &raw mut r).or_fail()?;
+            let now = if IsIconic(h).as_bool() {
+                WindowState::Minimized
+            } else if IsZoomed(h).as_bool() {
+                WindowState::Maximized
+            } else {
+                WindowState::Normal
+            };
+            Ok(json!({
+                "state": now.name(),
+                "x": r.left,
+                "y": r.top,
+                "width": r.right - r.left,
+                "height": r.bottom - r.top,
+            }))
+        }
+    }
+
     // -- scrolling and menus --------------------------------------------------------
 
     fn scroll(
@@ -2233,6 +2328,7 @@ fn op_target(op: &Op) -> Option<&Target> {
         | Op::Type { target, .. }
         | Op::Press { target, .. }
         | Op::CloseWindow { target }
+        | Op::SetWindow { target, .. }
         | Op::Scroll { target, .. }
         | Op::Wheel { target, .. }
         | Op::Hover { target }
