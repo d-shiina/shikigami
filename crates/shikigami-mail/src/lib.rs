@@ -221,7 +221,20 @@ impl ActionHandler for MailStep {
             if kind != Kind::Send
                 && let Mailbox::Microsoft365 { account } = Mailbox::parse(&input.params)?
             {
-                return graph::run(&input, &account, request).await;
+                if kind != Kind::SendDraft {
+                    return graph::run(&input, &account, request).await;
+                }
+                // Like mail.send: give up before the Runtime would retry it.
+                let limit = Duration::from_millis(send::send_limit_ms(input.timeout_ms));
+                return match tokio::time::timeout(limit, graph::run(&input, &account, request))
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(_) => Err(send::delivery_unknown(format!(
+                        "no answer within {} ms",
+                        limit.as_millis()
+                    ))),
+                };
             }
             let request = match request {
                 Request::Send(draft) => match send::Via::parse(&input.params)? {

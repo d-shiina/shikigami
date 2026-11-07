@@ -970,3 +970,50 @@ async fn replies_and_forwards_are_left_in_drafts_until_sent() {
     assert_eq!(e.code, "FOLDER_NOT_FOUND");
     assert_eq!(e.details.as_ref().unwrap()["folders"], json!(["処理済み"]));
 }
+
+#[tokio::test]
+async fn an_html_reply_over_a_text_quote_is_all_html() {
+    let (base, seen) = graph_server(mailbox).await;
+    graph::run_at(
+        &base,
+        "tok",
+        request(
+            Kind::Reply,
+            json!({ "id": "M1", "all": true, "body": "<b>承知</b>", "html": true }),
+        ),
+    )
+    .await
+    .unwrap();
+    let seen = seen.lock().unwrap().clone();
+    let (_, _, patch) = seen
+        .iter()
+        .find(|(m, p, _)| m == "PATCH" && p == "/v1.0/me/messages/D1")
+        .unwrap();
+    assert_eq!(patch["body"]["contentType"], "HTML");
+    let content = patch["body"]["content"].as_str().unwrap();
+    assert!(content.starts_with("<div><b>承知</b></div>"), "{content}");
+    assert!(content.contains("&gt; 元のメール"), "{content}");
+}
+
+#[tokio::test]
+async fn a_draft_send_whose_answer_is_lost_is_not_retried() {
+    // A server that takes the request and closes without answering.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 4096];
+            let _ = socket.read(&mut buf).await;
+            drop(socket);
+        }
+    });
+    let e = graph::run_at(
+        &format!("http://{addr}/v1.0"),
+        "tok",
+        request(Kind::SendDraft, json!({ "id": "D1" })),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(e.code, "MAIL_DELIVERY_UNKNOWN", "{}", e.message);
+    assert!(!e.retryable);
+}

@@ -98,10 +98,19 @@ impl Graph {
             request = request.json(body);
         }
         let response = request.send().await.map_err(|e| {
-            StepError::new(
-                "MAIL_SERVER_UNREACHABLE",
-                format!("Microsoft 365 could not be reached: {e}"),
-            )
+            if e.is_connect() {
+                StepError::new(
+                    "MAIL_SERVER_UNREACHABLE",
+                    format!("Microsoft 365 could not be reached: {e}"),
+                )
+            } else {
+                // The request may have arrived: only a step that changes
+                // nothing twice may treat this as "try again".
+                StepError::new(
+                    "MAIL_CONNECTION_LOST",
+                    format!("the answer from Microsoft 365 did not arrive: {e}"),
+                )
+            }
         })?;
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
@@ -145,8 +154,14 @@ impl Graph {
                     encode(id)
                 ),
             };
-            let folders = self.get(&list).await?;
-            let folders = folders["value"].as_array().cloned().unwrap_or_default();
+            // Every page of the folders (Graph gives 100 at a time).
+            let mut folders = Vec::new();
+            let mut next = Some(list);
+            while let Some(page) = next.take() {
+                let answer = self.get(&page).await?;
+                folders.extend(answer["value"].as_array().cloned().unwrap_or_default());
+                next = answer["@odata.nextLink"].as_str().map(str::to_owned);
+            }
             let found = folders
                 .iter()
                 .find(|f| f["displayName"].as_str().is_some_and(|n| n == *part));
@@ -417,17 +432,13 @@ async fn answer(graph: &Graph, answer: &Answer, forward: bool) -> Result<Value, 
     if !answer.body.is_empty() {
         // The new text above what Graph quoted, in the quoted body's kind.
         let content = match (answer.html, quoted_html) {
-            (_, true) => crate::prepend_html(
-                quoted,
-                &if answer.html {
-                    answer.body.clone()
-                } else {
-                    html_text(&answer.body)
-                },
-            ),
-            (_, false) => format!("{}\r\n\r\n{quoted}", answer.body),
+            (true, true) => crate::prepend_html(quoted, &answer.body),
+            (false, true) => crate::prepend_html(quoted, &html_text(&answer.body)),
+            // HTML asked for over a text quote: the quote becomes HTML too.
+            (true, false) => format!("<div>{}</div><br>{}", answer.body, html_text(quoted)),
+            (false, false) => format!("{}\r\n\r\n{quoted}", answer.body),
         };
-        patch["body"] = body(&content, quoted_html);
+        patch["body"] = body(&content, quoted_html || answer.html);
     }
     if !answer.cc.is_empty() {
         let mut cc: Vec<Value> = created["ccRecipients"]
@@ -487,15 +498,14 @@ pub async fn run_at(base: &str, token: &str, request: Request) -> Result<Value, 
             graph
                 .post(&format!("{}/send", message_path(&id)), &json!({}))
                 .await
-                .map_err(|e| {
-                    if e.code == "MAIL_SERVER_UNREACHABLE" {
-                        e
-                    } else {
-                        StepError {
-                            retryable: false,
-                            ..e
-                        }
-                    }
+                .map_err(|e| match e.code.as_str() {
+                    // Nothing was sent: safe to retry.
+                    "MAIL_SERVER_UNREACHABLE" => e,
+                    "MAIL_CONNECTION_LOST" => crate::send::delivery_unknown(e.message),
+                    _ => StepError {
+                        retryable: false,
+                        ..e
+                    },
                 })?;
             Ok(Value::Null)
         }

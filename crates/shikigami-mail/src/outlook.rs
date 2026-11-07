@@ -15,6 +15,7 @@ use crate::{
 };
 
 const OL_FOLDER_INBOX: i32 = 6;
+const OL_FOLDER_DELETED_ITEMS: i32 = 3;
 const OL_MAIL_ITEM: i32 = 0;
 /// `Class` of a mail message (other items: meeting requests, reports, ...).
 const OL_MAIL: i64 = 43;
@@ -57,8 +58,21 @@ pub fn run(
                     Ok(Value::Null)
                 }
                 Request::Delete { id } => {
-                    // Outlook moves it to Deleted Items.
-                    message(&mapi, &id)?.call("Delete", vec![])?;
+                    // Outlook moves it to Deleted Items, but deletes one
+                    // already there for good: leave that one as it is.
+                    let item = message(&mapi, &id)?;
+                    let deleted = mapi
+                        .object("GetDefaultFolder", vec![Var::i32(OL_FOLDER_DELETED_ITEMS)])?
+                        .get("EntryID")?
+                        .to_text();
+                    let parent = item
+                        .get("Parent")?
+                        .object("Parent")?
+                        .get("EntryID")?
+                        .to_text();
+                    if parent != deleted {
+                        item.call("Delete", vec![])?;
+                    }
                     Ok(Value::Null)
                 }
                 Request::Reply(answer) => respond(&mapi, &answer, false, session),
