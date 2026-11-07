@@ -11,6 +11,10 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # No debug info in the test builds: they compile and link faster (above all
+  # on Windows) and the cache is smaller. A panic still names its file and line.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
 
 jobs:
   rust:
@@ -73,8 +77,9 @@ jobs:
           done
       # An experiment, not a gate: does an Edge IE mode page show its
       # elements to UI Automation? The test reports what it saw as annotations.
+      # It takes about 3 minutes, so it runs on main only, not on every PR.
       - name: Edge IE mode through UI Automation (experiment)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name == 'push'
         continue-on-error: true
         shell: pwsh
         run: |
@@ -103,7 +108,7 @@ jobs:
           path: ${{ runner.temp }}/dialogs
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
-        if: runner.os == 'Windows' && always()
+        if: runner.os == 'Windows' && github.event_name == 'push' && always()
         with:
           name: ie-mode
           path: ${{ runner.temp }}/ie-mode
