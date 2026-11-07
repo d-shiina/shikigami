@@ -23,6 +23,8 @@ import {
   Scissors,
   TableOfContents,
   Trash2,
+  Play,
+  StepForward,
   Undo2,
   UnfoldVertical,
   Variable,
@@ -33,6 +35,7 @@ import { isActive, runBreakpoints, selectedIds, trailOf, WRAP_BLOCK } from "../s
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
 import { stepLabel, t } from "../lib/i18n";
 import { handOffText } from "../lib/todos";
+import { canStartAt } from "../lib/startAt";
 
 /** A call step as the chart shows it. */
 export type CallMenu = { key: string; canEnter: boolean; unfolded: boolean };
@@ -57,7 +60,19 @@ export function useStepMenu() {
     // Right-clicking one of several picked nodes keeps them picked.
     if (!selectedIds(s).includes(id)) s.select({ kind: "step", stepId: id });
     const agentName = agent.getState().info?.name ?? "AI";
+    // Runs of the open flow only (not of a node in a flow it calls).
+    const running = !!s.run && isActive(s.run);
+    const own = options.owner === s.flow?.id;
+    const startable = own && s.flow ? canStartAt(s.flow.steps ?? [], id) === true : false;
     return [
+      own && { label: t.menu.runTo, icon: Play, disabled: running, run: () => void store.getState().runTo(id) },
+      own && {
+        label: startable ? t.menu.runFrom : t.menu.runFromNot,
+        icon: StepForward,
+        disabled: running || !startable,
+        run: () => void store.getState().runFrom(id),
+      },
+      "-",
       call?.canEnter && { label: t.menu.openCall, icon: LogIn, run: () => store.getState().enterCall(id) },
       call && {
         label: call.unfolded ? t.menu.fold : t.menu.unfold,

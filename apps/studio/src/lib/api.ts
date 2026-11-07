@@ -257,7 +257,11 @@ export const api = {
   /** A finished run's report and events (runs/<id>/), for what an AI test run did. */
   runRecord: (runId: string) => call<RunRecord>("run_record", { runId }),
   /** Studio runs pause on unhandled errors and at `debug.breakpoints`; `debug.step` pauses before the first step. */
-  run: (id: string, inputs?: Record<string, unknown>, debug?: { breakpoints: string[]; step?: boolean }) =>
+  run: (
+    id: string,
+    inputs?: Record<string, unknown>,
+    debug?: { breakpoints: string[]; step?: boolean; startAt?: string; startValues?: Record<string, unknown> },
+  ) =>
     call<string>("run_flow", { id, inputs, debug }),
   /** Step commands for a paused run; resuming swaps in the stored revision first (e.g. the AI's fix). */
   debugRun: (runId: string, command: DebugCommand) =>
