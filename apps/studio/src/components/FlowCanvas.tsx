@@ -991,7 +991,7 @@ export function FlowCanvas() {
     [feedback],
   );
   // On the review desk every unreviewed step is marked by what happened to it.
-  const diffs = useMemo(() => summarize([...pending].reverse()).steps, [pending]);
+  const diffs = useMemo(() => summarize([...pending].reverse(), flow?.steps).steps, [pending, flow]);
   // Oldest first, so the toolbar offers the newest unreviewed change.
   const reviews = useMemo(() => {
     const map = new Map<string, HistoryEntry[]>();

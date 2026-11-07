@@ -35,12 +35,18 @@ export function IssuesPanel() {
 /** What a person does in Studio, one button each. */
 export function TodoList({ todos, onAct }: { todos: Todo[]; onAct?: () => void }) {
   const select = useStudio((s) => s.select);
+  const place = useStudio((s) => s.place);
+  const setPlace = useStudio((s) => s.setPlace);
   const openSecretForm = useStudio((s) => s.openSecretForm);
   const openFolder = useProjectMaybe((s) => s.open, null);
   const setPanelOpen = useProjectMaybe((s) => s.setPanelOpen, null);
   const act = (todo: Todo) => {
     onAct?.();
-    if (todo.kind === "pick") select({ kind: "part", name: todo.part });
+    if (todo.kind === "pick") {
+      // A part opens in the inspector, which review covers with its own panel.
+      if (place === "review") setPlace("flows");
+      select({ kind: "part", name: todo.part });
+    }
     else if (todo.kind === "secret") openSecretForm({ name: todo.name, sites: [], fields: todo.fields });
     else {
       setPanelOpen?.(true);

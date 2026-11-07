@@ -31,7 +31,7 @@ export function OutlinePanel({ left = 12 }: { left?: number }) {
   const pending = usePendingReview();
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const items = useMemo(() => outline(flow?.steps ?? [], defs), [flow, defs]);
-  const changed = useMemo(() => (reviewing ? summarize([...pending].reverse()).steps : new Map()), [reviewing, pending]);
+  const changed = useMemo(() => (reviewing ? summarize([...pending].reverse(), flow?.steps).steps : new Map()), [reviewing, pending, flow]);
   const errors = useMemo(
     () => new Set((validation?.issues ?? []).filter((i) => i.severity === "error" && i.stepId).map((i) => i.stepId)),
     [validation],

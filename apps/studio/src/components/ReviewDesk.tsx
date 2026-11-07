@@ -188,7 +188,7 @@ export function ReviewPanel() {
   }, [flowId, loadTimeline]);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const oldestFirst = useMemo(() => [...pending].reverse(), [pending]);
-  const summary = useMemo(() => summarize(oldestFirst), [oldestFirst]);
+  const summary = useMemo(() => summarize(oldestFirst, flow?.steps), [oldestFirst, flow]);
   const newest = pending[0];
   const oldest = oldestFirst[0];
   const since = (oldest?.revision ?? 1) - 1;
@@ -247,7 +247,7 @@ export function ReviewPanel() {
           <div className="min-w-0 flex-1">
             <div className="text-[15px] leading-snug font-bold">{title}</div>
             <div className="mt-0.5 text-[11px] text-slate-500">
-              {actorLabel(newest)} ・ {t.evidence.revision(oldest.revision - 1)} → {newest.revision} ・ {relativeTime(newest.at)} ・ {headline(summary)}
+              {actorLabel(newest)} ・ {summary.created ? t.evidence.revision(newest.revision) : `${t.evidence.revision(oldest.revision - 1)} → ${newest.revision}`} ・ {relativeTime(newest.at)} ・ {headline(summary)}
             </div>
           </div>
         </div>
@@ -691,6 +691,7 @@ export function ReviewActions({
   const [hint, setHint] = useState<"keep" | "sendBack" | "revert">("keep");
   if (pending.length === 0) return null;
   const blocker = groupRevertBlocker(pending, history);
+  const created = pending.some((e) => e.kind === "create");
   if (sending) {
     return (
       <div className="border-t border-slate-200 bg-sheet px-4 py-3">
@@ -704,16 +705,19 @@ export function ReviewActions({
     <div className="space-y-2 border-t border-slate-200 bg-sheet px-4 py-3">
       <div className="flex items-start gap-2">
         <p className="min-h-[2lh] flex-1 text-[11.5px] leading-relaxed text-slate-500">{means}</p>
-        <button
-          type="button"
-          onClick={() => void revertAll()}
-          disabled={blocker !== null}
-          title={blocker ?? `${t.desk.allEdits(pending.length)}\n${t.desk.revertTitle}`}
-          {...hover("revert")}
-          className="shrink-0 text-[11.5px] text-slate-500 underline-offset-2 enabled:hover:text-shu-600 enabled:hover:underline disabled:text-slate-300"
-        >
-          ↶ {t.desk.revertAll}
-        </button>
+        {/* A new flow has nothing to go back to; it is deleted from the library instead. */}
+        {!created && (
+          <button
+            type="button"
+            onClick={() => void revertAll()}
+            disabled={blocker !== null}
+            title={blocker ?? `${t.desk.allEdits(pending.length)}\n${t.desk.revertTitle}`}
+            {...hover("revert")}
+            className="shrink-0 text-[11.5px] text-slate-500 underline-offset-2 enabled:hover:text-shu-600 enabled:hover:underline disabled:text-slate-300"
+          >
+            ↶ {t.desk.revertAll}
+          </button>
+        )}
       </div>
       <div className="flex gap-2">
         <button

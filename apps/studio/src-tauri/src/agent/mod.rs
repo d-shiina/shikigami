@@ -317,7 +317,7 @@ pub fn agent_info() -> AgentInfo {
     let command = config.executable();
     let problem = match (&command, cli_path()) {
         (None, _) if config.kind != AgentKind::Command && config.command.is_none() => Some(format!(
-            "{} がまだありません。下の「導入する」を押すと、この場で入れてサインインできます。",
+            "{} がまだインストールされていません。AI ペインの「AI を使う準備」から、その場でインストールしてサインインできます。",
             config.name()
         )),
         (None, _) => Some("config.json の agent.command が見つかりません。".to_owned()),

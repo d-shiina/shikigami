@@ -519,7 +519,7 @@ export function approvedUpTo(timeline: ReviewTimeline | undefined): number {
 export function pendingIn(history: HistoryEntry[], reviewed: number[] | undefined, approved = 0): HistoryEntry[] {
   const seen = new Set(reviewed ?? []);
   return history
-    .filter((e) => isExternal(e) && isRevertible(e) && e.revision > approved && !seen.has(e.revision))
+    .filter((e) => isExternal(e) && (isRevertible(e) || e.kind === "create") && e.revision > approved && !seen.has(e.revision))
     .reverse();
 }
 
@@ -1049,7 +1049,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       changeBy(delta) {
         const { flow, stepTypes, selection } = get();
         const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
-        const changed = summarize([...pendingReview(get())].reverse()).steps;
+        const changed = summarize([...pendingReview(get())].reverse(), flow?.steps).steps;
         const all = outline(flow?.steps ?? [], defs).map((i) => i.id);
         const current = selection?.kind === "step" ? selection.stepId : null;
         const at = current ? all.indexOf(current) : -1;

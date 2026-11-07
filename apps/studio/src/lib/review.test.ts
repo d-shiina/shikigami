@@ -167,3 +167,40 @@ describe("replaceSteps", () => {
     expect(digest({ report: null, truncated: true, events: [] }, ["a"])).toMatchObject({ partial: true, missed: [], covered: 0 });
   });
 });
+
+import { pendingIn } from "../store";
+
+describe("a flow an AI made", () => {
+  const created: HistoryEntry = {
+    kind: "create",
+    revision: 1,
+    actor: { kind: "chat", name: "AI（貼り付け）" },
+    at: "",
+    label: "paste AI answer",
+    checks: ["検索するのは注文番号でよいですか？"],
+  };
+  const steps = [
+    { id: "a", type: "control.forEach", blocks: { body: [{ id: "b", type: "log.message" }] } },
+    { id: "c", type: "log.message" },
+  ];
+
+  it("waits for review, so its checks can be answered", () => {
+    expect(pendingIn([created], undefined).map((e) => e.revision)).toEqual([1]);
+    expect(pendingIn([{ ...created, actor: { kind: "studio" } }], undefined)).toEqual([]);
+  });
+
+  it("counts every step it has as added", () => {
+    const s = summarize([created, entry(2, [{ op: "updateStep", stepId: "c", patch: { name: "x" } }])], steps);
+    expect([...s.steps]).toEqual([
+      ["a", "added"],
+      ["b", "added"],
+      ["c", "added"],
+    ]);
+    expect(s.created).toBe(true);
+    expect(headline(s)).toBe("新しいフロー（3ノード）");
+  });
+
+  it("cannot be reverted", () => {
+    expect(groupRevertBlocker([created], [created])).not.toBeNull();
+  });
+});
