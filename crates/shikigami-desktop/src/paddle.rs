@@ -29,8 +29,7 @@ const RUNTIME: &str = "onnxruntime.dll";
 #[cfg(not(windows))]
 const RUNTIME: &str = "libonnxruntime.so";
 
-/// Screen text is sharp and needs no enlarging; only tiny pictures (one
-/// field) are enlarged to this shorter side...
+/// Tiny pictures (one field) are enlarged to this shorter side...
 const DET_MIN_SIDE: f32 = 96.0;
 /// ... and shrunk until the longer one is at most this.
 const DET_MAX_SIDE: f32 = 2560.0;
@@ -47,6 +46,11 @@ const REC_MAX_WIDTH: u32 = 3200;
 const VERTICAL_RATIO: f32 = 1.5;
 /// Lines read at once.
 const REC_BATCH: usize = 8;
+/// Small screen text (9 pt, 12 px) is found and read better enlarged:
+/// pictures are read this much larger, when the larger copy still fits the
+/// detector ([`DET_MAX_SIDE`]). On the OCR benchmark (`ocr_bench`) it reads
+/// about a fifth fewer texts wrong for about a third more time.
+const ENLARGE: f32 = 1.5;
 /// Lines read with less confidence than this are dropped (noise).
 const TEXT_SCORE: f32 = 0.5;
 /// Letters the model knows that look the same as a Latin letter or digit
@@ -60,11 +64,7 @@ pub const LOOKALIKES: &str = "ıΑΒΕΖΗΙΚΜΝΟΡΤΥΧιονАВЕКМНО
 pub struct Paddle {
     det: Mutex<Session>,
     rec: Mutex<Session>,
-    /// Characters by class index minus one (0 is CTC's blank); one past the
-    /// end is a space.
-    chars: Vec<String>,
-    /// Classes recognition never chooses (see [`LOOKALIKES`]).
-    skip: Vec<bool>,
+    vocab: Vocab,
 }
 
 /// The larger, slower models (PP-OCRv6 medium) in `medium\` next to the
@@ -192,12 +192,10 @@ fn load(sub: Option<&str>) -> Result<Paddle, String> {
         .split('\n')
         .map(str::to_owned)
         .collect();
-    let skip = skipped_classes(&chars);
     Ok(Paddle {
         det: Mutex::new(det),
         rec: Mutex::new(rec),
-        chars,
-        skip,
+        vocab: Vocab::new(chars),
     })
 }
 
@@ -208,6 +206,32 @@ fn ocr_error(e: impl std::fmt::Display) -> StepError {
 impl Paddle {
     /// The lines of text in `image`, in its pixels.
     pub fn recognize(&self, image: &Bitmap) -> Result<Vec<OcrLine>, StepError> {
+        let longest = image.width.max(image.height) as f32;
+        if longest * ENLARGE > DET_MAX_SIDE {
+            return self.recognize_as_is(image);
+        }
+        let large = image.scaled(ENLARGE);
+        let back = |v: i32| (v as f32 / ENLARGE).round() as i32;
+        Ok(self
+            .recognize_as_is(&large)?
+            .into_iter()
+            .map(|mut line| {
+                for word in &mut line.words {
+                    let (x, y) = (back(word.rect.x), back(word.rect.y));
+                    word.rect = Rect {
+                        x,
+                        y,
+                        width: (back(word.rect.right()) - x).max(1) as u32,
+                        height: (back(word.rect.bottom()) - y).max(1) as u32,
+                    };
+                }
+                line
+            })
+            .collect())
+    }
+
+    /// The lines of text in `image` at its own size.
+    fn recognize_as_is(&self, image: &Bitmap) -> Result<Vec<OcrLine>, StepError> {
         let mut crops: Vec<(Rect, Bitmap)> = self
             .detect(image)?
             .into_iter()
@@ -328,7 +352,7 @@ impl Paddle {
             .enumerate()
             .map(|(i, ((_, crop), &w))| {
                 let item = &scores[i * steps * classes..(i + 1) * steps * classes];
-                let decoded = ctc_decode(item, steps, classes, &self.chars, &self.skip);
+                let decoded = ctc_decode(item, steps, classes, &self.vocab);
                 if decoded.is_empty() || decoded.score < TEXT_SCORE {
                     return None;
                 }
@@ -452,10 +476,12 @@ pub fn text_boxes(probs: &[f32], width: u32, height: u32) -> Vec<Rect> {
 }
 
 /// A line as recognition read it: each character with the time step (a
-/// column of the line picture) where it was read.
+/// column of the line picture) where it was read, and how sure the model
+/// was of it (0–1).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Decoded {
     pub chars: Vec<(String, f32)>,
+    pub confidences: Vec<f32>,
     pub score: f32,
 }
 
@@ -473,6 +499,7 @@ impl Decoded {
         let mut words: Vec<OcrWord> = Vec::new();
         let mut open = false;
         for (i, (c, _)) in self.chars.iter().enumerate() {
+            let sure = self.confidences.get(i).copied();
             let left = if i == 0 {
                 0.0
             } else {
@@ -498,10 +525,15 @@ impl Decoded {
                 Some(word) if open && !alone => {
                     word.text.push_str(c);
                     word.rect = word.rect.union(&rect);
+                    word.confidence = match (word.confidence, sure) {
+                        (Some(a), Some(b)) => Some(a.min(b)),
+                        (a, b) => a.or(b),
+                    };
                 }
                 _ => words.push(OcrWord {
                     text: c.clone(),
                     rect,
+                    confidence: sure,
                 }),
             }
             open = !alone;
@@ -510,51 +542,113 @@ impl Decoded {
     }
 }
 
-/// Which classes (index = class, 0 is the blank) are [`LOOKALIKES`].
-pub fn skipped_classes(chars: &[String]) -> Vec<bool> {
-    std::iter::once(false)
-        .chain(chars.iter().map(|c| {
+/// Pairs that look alike on screen: a kanji or hiragana and the katakana
+/// of the same shape. Which one a line means follows from its neighbours
+/// (see [`Decoded::fix_kana`]).
+pub const KANA_PAIRS: [(char, char); 13] = [
+    ('一', 'ー'),
+    ('力', 'カ'),
+    ('口', 'ロ'),
+    ('工', 'エ'),
+    ('二', 'ニ'),
+    ('夕', 'タ'),
+    ('卜', 'ト'),
+    ('八', 'ハ'),
+    ('才', 'オ'),
+    ('へ', 'ヘ'),
+    ('べ', 'ベ'),
+    ('ぺ', 'ペ'),
+    // A long vowel read as a hyphen ("エラ-番号").
+    ('-', 'ー'),
+];
+
+/// Recognition's classes: class 0 is CTC's blank, class `i` is
+/// `chars[i - 1]`, one past the end is a space.
+pub struct Vocab {
+    pub chars: Vec<String>,
+    /// Classes recognition never chooses (see [`skipped`]).
+    skip: Vec<bool>,
+}
+
+impl Vocab {
+    pub fn new(chars: Vec<String>) -> Self {
+        let single = |c: &String| {
             let mut it = c.chars();
-            matches!((it.next(), it.next()), (Some(ch), None) if LOOKALIKES.contains(ch))
-        }))
-        .collect()
+            match (it.next(), it.next()) {
+                (Some(ch), None) => Some(ch),
+                _ => None,
+            }
+        };
+        let skip = std::iter::once(false)
+            .chain(chars.iter().map(|c| single(c).is_some_and(skipped)))
+            .collect();
+        Vocab { chars, skip }
+    }
+
+    fn skips(&self, class: usize) -> bool {
+        self.skip.get(class).copied().unwrap_or(false)
+    }
+
+    fn char(&self, class: usize) -> String {
+        self.chars
+            .get(class - 1)
+            .cloned()
+            .unwrap_or_else(|| " ".into())
+    }
+}
+
+/// Characters recognition never chooses, because a Japanese business
+/// screen does not show them and the model reads them for one that it does:
+/// - [`LOOKALIKES`] of Latin letters ("AI" read as "Aı");
+/// - kanji outside Japanese use (JIS X 0208 and Windows' own additions, the
+///   characters Shift_JIS can write): the model, trained on Chinese too,
+///   reads "納" as the simplified "纳" and "録" as the traditional "錄".
+///   Its next guess, the Japanese form of the same shape, wins.
+pub fn skipped(c: char) -> bool {
+    if LOOKALIKES.contains(c) {
+        return true;
+    }
+    let ideograph = matches!(c as u32,
+        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF);
+    if !ideograph {
+        return false;
+    }
+    let mut buf = [0u8; 4];
+    let (_, _, unmappable) = encoding_rs::SHIFT_JIS.encode(c.encode_utf8(&mut buf));
+    unmappable
 }
 
 /// Greedy CTC decoding of `[steps, classes]` scores: the best class per
-/// step (never one `skip` marks), repeats merged, blanks (class 0) dropped.
-pub fn ctc_decode(
-    scores: &[f32],
-    steps: usize,
-    classes: usize,
-    chars: &[String],
-    skip: &[bool],
-) -> Decoded {
+/// step, repeats merged, blanks (class 0) dropped. Where the best is a
+/// class `vocab` skips, the best class it does not skip is read instead.
+pub fn ctc_decode(scores: &[f32], steps: usize, classes: usize, vocab: &Vocab) -> Decoded {
     let mut out = Vec::new();
     let mut confidence = Vec::new();
     let mut previous = 0;
     for t in 0..steps {
         let row = &scores[t * classes..(t + 1) * classes];
-        let (best, score) = row
-            .iter()
-            .enumerate()
-            .filter(|&(i, _)| !skip.get(i).copied().unwrap_or(false))
-            .fold(
+        let best_of = |allowed: &dyn Fn(usize) -> bool| {
+            row.iter().enumerate().filter(|&(i, _)| allowed(i)).fold(
                 (0, f32::MIN),
                 |acc, (i, &s)| if s > acc.1 { (i, s) } else { acc },
-            );
+            )
+        };
+        let (mut best, mut score) = best_of(&|_| true);
+        if vocab.skips(best) {
+            (best, score) = best_of(&|i| i != 0 && !vocab.skips(i));
+        }
         if best != 0 && best != previous {
-            let c = chars.get(best - 1).cloned().unwrap_or_else(|| " ".into());
-            out.push((c, t as f32));
-            // A lookalike the model preferred is the same shape: its
-            // probability counts for the letter read instead, or a lone "I"
-            // read as "ı" would be dropped as noise.
-            let lookalikes: f32 = row
+            out.push((vocab.char(best), t as f32));
+            // A skipped class the model preferred is the same shape: its
+            // probability counts for the character read instead, or a lone
+            // "I" read as "ı" would be dropped as noise.
+            let skipped: f32 = row
                 .iter()
                 .enumerate()
-                .filter(|&(i, _)| skip.get(i).copied().unwrap_or(false))
+                .filter(|&(i, _)| vocab.skips(i))
                 .map(|(_, &s)| s)
                 .sum();
-            confidence.push((score + lookalikes).min(1.0));
+            confidence.push((score + skipped).min(1.0));
         }
         previous = best;
     }
@@ -563,7 +657,86 @@ pub fn ctc_decode(
     } else {
         confidence.iter().sum::<f32>() / confidence.len() as f32
     };
-    Decoded { chars: out, score }
+    let mut decoded = Decoded {
+        chars: out,
+        confidences: confidence,
+        score,
+    };
+    decoded.fix_kana();
+    decoded
+}
+
+fn is_numeral(c: char) -> bool {
+    c.is_ascii_digit() || ('０'..='９').contains(&c) || "一二三四五六七八九十百千何数".contains(c)
+}
+
+fn is_katakana(c: char) -> bool {
+    matches!(c as u32, 0x30A1..=0x30FA | 0x30FC)
+}
+
+fn is_hiragana(c: char) -> bool {
+    matches!(c as u32, 0x3041..=0x3096)
+}
+
+fn is_kanji(c: char) -> bool {
+    matches!(c as u32, 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF)
+}
+
+/// Kanji that follow "一" in words ("データ一覧", "メニュー一括"): after
+/// katakana, "一" before any other kanji is the long vowel ("コピー用紙").
+const AFTER_ICHI: &str = "覧括時部式般致度件回日月年人個つ定律斉緒切旦方体同連貫環行列";
+
+impl Decoded {
+    /// Chooses between the halves of a [`KANA_PAIRS`] pair by the
+    /// neighbours: katakana after katakana ("デー夕" is "データ", "ホ一ム" is
+    /// "ホーム", "コピ一用紙" is "コピー用紙"), the kanji or hiragana among
+    /// those ("入カ" is "入力").
+    pub fn fix_kana(&mut self) {
+        let single: Vec<Option<char>> = self
+            .chars
+            .iter()
+            .map(|(c, _)| {
+                let mut it = c.chars();
+                match (it.next(), it.next()) {
+                    (Some(ch), None) => Some(ch),
+                    _ => None,
+                }
+            })
+            .collect();
+        for i in 0..single.len() {
+            let Some(c) = single[i] else { continue };
+            let Some(&(other, kana)) = KANA_PAIRS.iter().find(|&&(a, b)| c == a || c == b) else {
+                continue;
+            };
+            let before = i.checked_sub(1).and_then(|j| single[j]);
+            let after = single.get(i + 1).copied().flatten();
+            let neighbours = [before, after];
+            let katakana = neighbours.iter().flatten().any(|&n| is_katakana(n));
+            // Hiragana counts with kanji except for the hiragana halves.
+            let native = neighbours
+                .iter()
+                .flatten()
+                .any(|&n| is_kanji(n) || (is_hiragana(n) && !is_hiragana(other)));
+            // After a number カ is the counter: "3カ月", "2カ所", "十カ国".
+            let counter = other == '力' && before.is_some_and(is_numeral);
+            let wanted = if counter {
+                Some(kana)
+            } else if c == other {
+                // After katakana the katakana half, except "一" starting a
+                // word of its own.
+                let starts_word = c == '一' && after.is_some_and(|n| AFTER_ICHI.contains(n));
+                let after_katakana = before.is_some_and(is_katakana) && !starts_word;
+                // A hyphen only right after katakana ("A-カード" keeps it).
+                let among_katakana = katakana && !native && c != '-';
+                (after_katakana || among_katakana).then_some(kana)
+            } else {
+                (native && !katakana).then_some(other)
+            };
+            if let Some(w) = wanted {
+                self.chars[i].0 = w.to_string();
+            }
+        }
+    }
 }
 
 impl OcrLine {

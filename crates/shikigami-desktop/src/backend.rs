@@ -279,10 +279,11 @@ pub trait Backend: Send + Sync + 'static {
         image: Bitmap,
         options: OcrOptions,
     ) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
-        if options.engine == Some(OcrEngine::Windows) {
-            return Box::pin(async { Err(unsupported()) });
+        match &options.engine {
+            Some(OcrEngine::Windows) => Box::pin(async { Err(unsupported()) }),
+            Some(OcrEngine::Other(name)) => other_recognize(name, image, options.clone()),
+            _ => paddle_recognize(image, options.accurate),
         }
-        paddle_recognize(image, options.accurate)
     }
 
     /// An image file (PNG everywhere; other formats where the platform
@@ -305,19 +306,30 @@ pub struct OcrOptions {
     pub accurate: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OcrEngine {
     Paddle,
     Windows,
+    /// An engine added with [`register_ocr_engine`] (e.g. a cloud AI-OCR
+    /// from an extension), by its name.
+    Other(String),
 }
 
 impl OcrOptions {
     /// `accurate` is PaddleOCR's; it does not go with Windows OCR.
     pub fn check(self) -> Result<Self, StepError> {
-        if self.accurate && self.engine == Some(OcrEngine::Windows) {
-            return Err(StepError::invalid_params(
-                "accurate uses PaddleOCR's larger models; leave out engine: \"windows\"",
-            ));
+        match &self.engine {
+            Some(OcrEngine::Windows) if self.accurate => {
+                return Err(StepError::invalid_params(
+                    "accurate uses PaddleOCR's larger models; leave out engine: \"windows\"",
+                ));
+            }
+            Some(OcrEngine::Other(name)) if self.accurate => {
+                return Err(StepError::invalid_params(format!(
+                    "accurate uses PaddleOCR's larger models; leave out engine: \"{name}\""
+                )));
+            }
+            _ => {}
         }
         Ok(self)
     }
@@ -328,9 +340,105 @@ impl OcrEngine {
         match name {
             "paddle" => Ok(Self::Paddle),
             "windows" => Ok(Self::Windows),
-            other => Err(StepError::invalid_params(format!(
-                "unknown OCR engine '{other}' (use paddle or windows)"
-            ))),
+            other if ocr_engine(other).is_some() => Ok(Self::Other(other.to_owned())),
+            other => {
+                let mut names = vec!["paddle".to_owned(), "windows".to_owned()];
+                names.extend(ocr_engine_names());
+                Err(StepError::invalid_params(format!(
+                    "unknown OCR engine '{other}' (use {})",
+                    names.join(", ")
+                )))
+            }
+        }
+    }
+
+    /// The name flows write (`engine` of desktop.readText and target.ocr).
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Paddle => "paddle",
+            Self::Windows => "windows",
+            Self::Other(name) => name,
+        }
+    }
+}
+
+/// An OCR engine besides the built-in ones (PaddleOCR, Windows OCR): the
+/// slot for engines an extension adds, such as a cloud AI-OCR. Register it
+/// once at start-up with [`register_ocr_engine`]; flows then choose it with
+/// `engine: "<name>"`, and desktop.readText, target.ocr and inspect_ui read
+/// through it.
+pub trait OcrProvider: Send + Sync + 'static {
+    /// The name flows choose it by: lower case letters, digits and `-`, not
+    /// `paddle` or `windows`.
+    fn name(&self) -> &str;
+
+    /// The lines of text in `image`, in its pixels (`OcrWord::confidence`
+    /// where the engine says how sure it is).
+    fn recognize(
+        &self,
+        image: Bitmap,
+        options: OcrOptions,
+    ) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>>;
+}
+
+type Providers = std::sync::RwLock<Vec<std::sync::Arc<dyn OcrProvider>>>;
+
+fn providers() -> &'static Providers {
+    static PROVIDERS: std::sync::OnceLock<Providers> = std::sync::OnceLock::new();
+    PROVIDERS.get_or_init(Default::default)
+}
+
+/// Adds an OCR engine (see [`OcrProvider`]); one of the same name is
+/// replaced.
+pub fn register_ocr_engine(provider: std::sync::Arc<dyn OcrProvider>) -> Result<(), String> {
+    let name = provider.name();
+    let valid = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if !valid || name == "paddle" || name == "windows" {
+        return Err(format!("'{name}' cannot name an OCR engine"));
+    }
+    let mut list = providers()
+        .write()
+        .map_err(|_| "the OCR engines are broken")?;
+    list.retain(|p| p.name() != name);
+    list.push(provider);
+    Ok(())
+}
+
+/// The added engine called `name`.
+pub fn ocr_engine(name: &str) -> Option<std::sync::Arc<dyn OcrProvider>> {
+    providers()
+        .read()
+        .ok()?
+        .iter()
+        .find(|p| p.name() == name)
+        .cloned()
+}
+
+/// The names of the added engines.
+pub fn ocr_engine_names() -> Vec<String> {
+    providers()
+        .read()
+        .map(|list| list.iter().map(|p| p.name().to_owned()).collect())
+        .unwrap_or_default()
+}
+
+/// An added engine's reading (see [`OcrProvider`]).
+pub fn other_recognize(
+    name: &str,
+    image: Bitmap,
+    options: OcrOptions,
+) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
+    match ocr_engine(name) {
+        Some(provider) => provider.recognize(image, options),
+        None => {
+            let error = StepError::permanent(
+                "OCR_ENGINE_MISSING",
+                format!("the OCR engine '{name}' is not installed"),
+            );
+            Box::pin(async move { Err(error) })
         }
     }
 }

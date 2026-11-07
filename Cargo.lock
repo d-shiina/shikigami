@@ -4607,6 +4607,7 @@ name = "shikigami-desktop"
 version = "0.1.9"
 dependencies = [
  "base64 0.22.1",
+ "encoding_rs",
  "ort",
  "png",
  "regex",

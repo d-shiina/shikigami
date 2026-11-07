@@ -282,6 +282,9 @@ pub(crate) fn reading_order<T>(mut found: Vec<T>, rect: impl Fn(&T) -> Rect) -> 
 pub struct OcrWord {
     pub text: String,
     pub rect: Rect,
+    /// How sure OCR is of the word (0–1): the least sure of its
+    /// characters. `None` where the engine does not say (Windows OCR).
+    pub confidence: Option<f32>,
 }
 
 /// One line of words.
@@ -295,7 +298,15 @@ impl OcrLine {
     /// Japanese into words with spaces between, which are dropped between
     /// characters of scripts written without spaces.
     pub fn text(&self) -> String {
+        self.spans().0
+    }
+
+    /// [`text`](Self::text), and where each word is in it: (first
+    /// character, characters, confidence).
+    pub fn spans(&self) -> (String, Vec<(usize, usize, Option<f32>)>) {
         let mut out = String::new();
+        let mut length = 0;
+        let mut spans = Vec::new();
         for word in &self.words {
             let text = word.text.trim();
             if text.is_empty() {
@@ -305,10 +316,22 @@ impl OcrLine {
                 && !(is_unspaced(last) || is_unspaced(first))
             {
                 out.push(' ');
+                length += 1;
             }
+            let count = text.chars().count();
+            spans.push((length, count, word.confidence));
             out.push_str(text);
+            length += count;
         }
-        out
+        (out, spans)
+    }
+
+    /// How sure OCR is of the line: its least sure word.
+    pub fn confidence(&self) -> Option<f32> {
+        self.words
+            .iter()
+            .filter_map(|w| w.confidence)
+            .reduce(f32::min)
     }
 
     pub fn rect(&self) -> Option<Rect> {
@@ -341,31 +364,51 @@ pub fn ocr_text(lines: &[OcrLine]) -> String {
         .join("\n")
 }
 
+/// Words OCR is less sure of than this are marked `unsure`.
+pub const UNSURE_BELOW: f32 = 0.8;
+
 /// Lines as returned to flows and the AI, with their places moved by
-/// (`dx`, `dy`) (into window coordinates).
+/// (`dx`, `dy`) (into window coordinates). Where the engine says how sure
+/// it is (PaddleOCR), each line has `confidence` (0–1, its least sure
+/// word) and, when some words are below [`UNSURE_BELOW`], `unsure`: the
+/// positions (in characters of `text`) of those words' characters.
 pub fn ocr_lines_json(lines: &[OcrLine], dx: i32, dy: i32) -> Value {
     Value::Array(
         lines
             .iter()
             .filter_map(|line| {
-                let text = line.text();
+                let (text, spans) = line.spans();
                 let rect = line.rect()?.offset(dx, dy);
-                (!text.is_empty()).then(|| {
-                    json!({ "text": text, "x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height })
-                })
+                if text.is_empty() {
+                    return None;
+                }
+                let mut out = json!({ "text": text, "x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height });
+                if let Some(confidence) = line.confidence() {
+                    out["confidence"] = json!((f64::from(confidence) * 100.0).round() / 100.0);
+                    let unsure: Vec<usize> = spans
+                        .iter()
+                        .filter(|(_, _, c)| c.is_some_and(|c| c < UNSURE_BELOW))
+                        .flat_map(|&(start, count, _)| start..start + count)
+                        .collect();
+                    if !unsure.is_empty() {
+                        out["unsure"] = json!(unsure);
+                    }
+                }
+                Some(out)
             })
             .collect(),
     )
 }
 
 /// For matching: no spaces, lower case, full-width letters and digits as
-/// ASCII (OCR reads `１２３` and `123` alike).
+/// ASCII (OCR reads `１２３` and `123` alike), and `￥` as `¥`.
 fn fold(c: char) -> Option<char> {
     if c.is_whitespace() {
         return None;
     }
     let c = match c as u32 {
         0xFF01..=0xFF5E => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
+        0xFFE5 => '¥',
         _ => c,
     };
     Some(c.to_lowercase().next().unwrap_or(c))
