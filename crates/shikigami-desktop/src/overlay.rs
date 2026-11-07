@@ -41,12 +41,13 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
     GetClientRect, GetSystemMetrics, HHOOK, HWND_TOPMOST, KBDLLHOOKSTRUCT, LLKHF_EXTENDED,
-    LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG, MSLLHOOKSTRUCT, PM_REMOVE, PeekMessageW,
-    RegisterClassW, SM_CXSCREEN, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-    SetLayeredWindowAttributes, SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage,
-    UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG, MSLLHOOKSTRUCT, MWMO_INPUTAVAILABLE,
+    MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW, QS_ALLINPUT, RegisterClassW, SM_CXSCREEN,
+    SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW, SetLayeredWindowAttributes, SetWindowPos,
+    SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL,
+    WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_PAINT, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
 
@@ -480,7 +481,14 @@ fn run(
             if started.elapsed() > life {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(8));
+            // Wait for the next message, not a fixed sleep: Windows calls the
+            // low-level hooks by sending this thread a message for every
+            // mouse move and waits for the answer before the cursor moves on.
+            // A sleep here held each move until the thread woke (about 16 ms),
+            // so a fast mouse queued up hundreds of moves a second and the
+            // cursor crawled. The timeout only bounds how late a command
+            // from the picker (frame, banner text, close) is seen.
+            let _ = MsgWaitForMultipleObjectsEx(None, 8, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         }
         // Only the picker owns the hooks: a highlight that ends while a
         // picker runs must not stop it from taking the click.
@@ -548,6 +556,38 @@ unsafe extern "system" fn banner_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    // SAFETY: the arguments Windows gave this window procedure.
+    guarded(
+        "banner",
+        || unsafe { paint_banner(hwnd, msg, wparam, lparam) },
+        || unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    )
+}
+
+/// Runs a callback Windows calls (hook, window procedure). A panic must not
+/// leave it: unwinding out of an `extern "system"` function aborts the whole
+/// app (Studio closes with no message). It is written to the log, and
+/// `fallback` answers Windows instead (the event passes on untouched).
+fn guarded(
+    what: &str,
+    body: impl FnOnce() -> LRESULT,
+    fallback: impl FnOnce() -> LRESULT,
+) -> LRESULT {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)) {
+        Ok(result) => result,
+        Err(panic) => {
+            let message = panic
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_owned())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_default();
+            tracing::error!(%message, "the picker's {what} panicked; the event was passed on");
+            fallback()
+        }
+    }
+}
+
+unsafe fn paint_banner(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if msg != WM_PAINT {
         // SAFETY: the default handling of our own window's messages.
         return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
@@ -667,6 +707,15 @@ fn record_mouse(msg: u32, info: &MSLLHOOKSTRUCT) -> Option<LRESULT> {
 }
 
 unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // SAFETY: the arguments Windows gave this hook.
+    guarded(
+        "mouse hook",
+        || unsafe { on_mouse(code, wparam, lparam) },
+        || unsafe { CallNextHookEx(None, code, wparam, lparam) },
+    )
+}
+
+unsafe fn on_mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 && RECORDING.load(Ordering::SeqCst) {
         // SAFETY: for mouse messages lparam points at an MSLLHOOKSTRUCT.
         let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
@@ -781,6 +830,15 @@ fn record_key(msg: u32, info: &KBDLLHOOKSTRUCT) -> Option<LRESULT> {
 }
 
 unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // SAFETY: the arguments Windows gave this hook.
+    guarded(
+        "keyboard hook",
+        || unsafe { on_key(code, wparam, lparam) },
+        || unsafe { CallNextHookEx(None, code, wparam, lparam) },
+    )
+}
+
+unsafe fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 && RECORDING.load(Ordering::SeqCst) {
         // SAFETY: for keyboard messages lparam points at a KBDLLHOOKSTRUCT.
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
