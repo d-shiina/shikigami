@@ -33,6 +33,7 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::SystemInformation::GetTickCount64;
+use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForWindow, SetThreadDpiAwarenessContext,
 };
@@ -41,13 +42,13 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-    GetClientRect, GetSystemMetrics, HHOOK, HWND_TOPMOST, KBDLLHOOKSTRUCT, LLKHF_EXTENDED,
-    LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG, MSLLHOOKSTRUCT, MWMO_INPUTAVAILABLE,
-    MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW, QS_ALLINPUT, RegisterClassW, SM_CXSCREEN,
-    SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetLayeredWindowAttributes,
-    SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx,
-    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_PAINT,
-    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSW, WS_EX_LAYERED,
+    GetClientRect, GetMessageW, GetSystemMetrics, HHOOK, HWND_TOPMOST, KBDLLHOOKSTRUCT, KillTimer,
+    LLKHF_EXTENDED, LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG, MSLLHOOKSTRUCT,
+    PostThreadMessageW, RegisterClassW, SM_CXSCREEN, SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, SetLayeredWindowAttributes, SetTimer, SetWindowPos,
+    SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL,
+    WH_MOUSE_LL, WM_APP, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_PAINT,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW, WS_EX_LAYERED,
     WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
@@ -150,9 +151,14 @@ enum Mode {
 /// A frame (and, for picking, a banner and the hooks) on screen until dropped.
 pub struct Overlay {
     tx: mpsc::Sender<Cmd>,
+    /// The overlay thread's id, to wake it for a command.
+    thread_id: u32,
     thread: Option<JoinHandle<()>>,
     mode: Mode,
 }
+
+/// Posted to the overlay thread when a command is waiting in its channel.
+const WM_WAKE: u32 = WM_APP + 1;
 
 impl Overlay {
     /// Starts picking: a banner with `message`, and the hooks.
@@ -230,8 +236,9 @@ impl Overlay {
                 StepError::new("ADAPTER_CRASHED", format!("cannot start the overlay: {e}"))
             })?;
         match ready_rx.recv_timeout(Duration::from_secs(5)) {
-            Ok(Ok(())) => Ok(Self {
+            Ok(Ok(thread_id)) => Ok(Self {
                 tx,
+                thread_id,
                 thread: Some(thread),
                 mode,
             }),
@@ -240,18 +247,26 @@ impl Overlay {
         }
     }
 
+    /// Hands `cmd` to the overlay thread and wakes it.
+    fn send(&self, cmd: Cmd) {
+        if self.tx.send(cmd).is_ok() {
+            // SAFETY: plain Win32 call; the thread made its queue before it said it was ready.
+            let _ = unsafe { PostThreadMessageW(self.thread_id, WM_WAKE, WPARAM(0), LPARAM(0)) };
+        }
+    }
+
     pub fn frame(&self, rect: Option<RECT>) {
-        let _ = self.tx.send(Cmd::Frame(rect));
+        self.send(Cmd::Frame(rect));
     }
 
     /// Frames the window the part under the mouse is in (`None` hides it).
     pub fn window(&self, rect: Option<RECT>) {
-        let _ = self.tx.send(Cmd::Window(rect));
+        self.send(Cmd::Window(rect));
     }
 
     /// The banner's first line.
     pub fn title(&self, text: String) {
-        let _ = self.tx.send(Cmd::Title(text));
+        self.send(Cmd::Title(text));
     }
 
     /// The next thing the user did while recording.
@@ -289,7 +304,7 @@ impl Overlay {
 
     /// The banner's second line (what is under the mouse).
     pub fn detail(&self, text: String) {
-        let _ = self.tx.send(Cmd::Detail(text));
+        self.send(Cmd::Detail(text));
     }
 
     /// The click or Esc, once.
@@ -300,7 +315,7 @@ impl Overlay {
 
 impl Drop for Overlay {
     fn drop(&mut self) {
-        let _ = self.tx.send(Cmd::Close);
+        self.send(Cmd::Close);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
@@ -376,7 +391,7 @@ fn run(
     mode: Mode,
     life: Duration,
     rx: &mpsc::Receiver<Cmd>,
-    ready: &mpsc::Sender<Result<(), String>>,
+    ready: &mpsc::Sender<Result<u32, String>>,
 ) {
     let picking = mode == Mode::Pick;
     let hooked = mode != Mode::Flash;
@@ -472,10 +487,37 @@ fn run(
                 *at = (left, top, left + width, top + height);
             }
         }
-        let _ = ready.send(Ok(()));
+        // Wakes the loop now and then, so it never outlives a lost owner by much.
+        let timer = SetTimer(None, 0, 500, None);
+        let _ = ready.send(Ok(GetCurrentThreadId()));
 
         let started = Instant::now();
+        // GetMessage, not a loop that peeks and then waits: Windows calls
+        // the low-level hooks by sending this thread a message for every
+        // mouse move and key, and waits for the answer before the cursor
+        // moves on. Only a thread that sits in GetMessage answers each one
+        // at once. The earlier loops (a sleep, then a wait with a timeout)
+        // answered some of them only when the wait ran out, so a fast mouse
+        // queued up moves faster than they were answered and the cursor
+        // crawled, until Windows gave up on the hooks. Commands from the
+        // picker come through the channel with a WM_WAKE posted after them.
+        let mut msg = MSG::default();
         'running: loop {
+            let got = GetMessageW(&mut msg, None, 0, 0);
+            if got.0 <= 0 {
+                break;
+            }
+            if msg.hwnd.0.is_null() && (msg.message == WM_WAKE || msg.message == WM_TIMER) {
+                // A thread message: commands, or the timer.
+            } else {
+                let _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+                continue;
+            }
+            // Never outlive a lost owner by much.
+            if started.elapsed() > life {
+                break;
+            }
             loop {
                 match rx.try_recv() {
                     Ok(Cmd::Frame(Some(rect))) => {
@@ -526,23 +568,9 @@ fn run(
                     Err(mpsc::TryRecvError::Empty) => break,
                 }
             }
-            let mut msg = MSG::default();
-            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
-                let _ = TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-            // Never outlive a lost owner by much.
-            if started.elapsed() > life {
-                break;
-            }
-            // Wait for the next message, not a fixed sleep: Windows calls the
-            // low-level hooks by sending this thread a message for every
-            // mouse move and waits for the answer before the cursor moves on.
-            // A sleep here held each move until the thread woke (about 16 ms),
-            // so a fast mouse queued up hundreds of moves a second and the
-            // cursor crawled. The timeout only bounds how late a command
-            // from the picker (frame, banner text, close) is seen.
-            let _ = MsgWaitForMultipleObjectsEx(None, 8, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        }
+        if timer != 0 {
+            let _ = KillTimer(None, timer);
         }
         // Only the picker owns the hooks: a highlight that ends while a
         // picker runs must not stop it from taking the click.
