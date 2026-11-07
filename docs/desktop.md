@@ -32,7 +32,7 @@ When several elements match, Shikigami does not pick "one of them": it fails wit
 - **Clicks**, with the target of what was clicked, built as **Pick on screen** builds it. Each click is held back for a moment while the screen is read (so the target is the button, not the menu it opens), then passed on to the app. A double click stays a double click.
 - **Typing**: the field's final text when you leave it, as one `desktop.setValue` (Japanese input through the IME works the same: its conversion keys F6–F10, Escape and the Enter that confirms a conversion count as typing). A password field's text is never recorded: the node asks you to choose a secret.
 - **Keys**: Enter, Tab, Escape, F1–F24 and shortcuts with Ctrl / Alt / Windows (`Control+S`) become `desktop.press`. Copy, paste, undo and select-all inside a field are part of the typing.
-- Not recorded: drags, the mouse wheel, Studio itself, and browsers (yet).
+- Not recorded: drags, the mouse wheel, and Studio itself. To record in a browser, choose **Browser** when you press **Record** (see [browser.md](browser.md#recording)).
 
 When you stop, **Recorded actions** lists the nodes. **Add as nodes** adds one node per action where a new node would go (a target used twice or more becomes a named part). **Have the AI tidy up** hands the recording to the AI pane (or the clipboard) with what to do: waits where the screen changes, loops for repeated work, input variables for values that differ each time. The raw recording stays in the flow's `logs/recordings/`. The adapter's inspect takes `action: "record"` for the same.
 

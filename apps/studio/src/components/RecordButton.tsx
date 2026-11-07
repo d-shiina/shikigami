@@ -1,20 +1,21 @@
 // "記録" on the canvas dock: Studio steps aside while the person works in a
-// desktop app, then shows what was recorded. It becomes nodes as it is
+// desktop app or on a page in the browser, then shows what was recorded. It becomes nodes as it is
 // (where a new node would go), or goes to the AI to be tidied up; either
 // way the raw recording stays in the flow's logs/recordings/.
 import type { Step } from "@shikigami/schema";
 import { Circle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAgent } from "../agent";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { clipboardAi } from "../lib/askAi";
 import { locale, t } from "../lib/i18n";
+import { pageAbove } from "../lib/loopScope";
 import { type Recording, recordedSteps, recordingOps, tidyRequest } from "../lib/recording";
 import { plain, sentence } from "../lib/sentence";
 import { projectApi } from "../project";
-import { insertPlace, newStepId } from "../store";
+import { isActive, insertPlace, newStepId } from "../store";
 import { Sentence } from "./StoryView";
 
 const stamp = () => {
@@ -23,22 +24,76 @@ const stamp = () => {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 };
 
+/** The browser Studio opens to record with no run going (the picker's, kept open by the adapter). */
+const STUDIO_BROWSER = "studio-pick";
+
+/** The address of the flow's first 「ページを開く」, when it is written out. */
+function firstPage(steps: readonly Step[]): string {
+  for (const s of steps) {
+    if (s.type === "browser.open" && typeof s.params?.url === "string" && !s.params.url.includes("{{")) return s.params.url;
+    for (const inner of Object.values(s.blocks ?? {})) {
+      const found = firstPage(inner);
+      if (found) return found;
+    }
+  }
+  return "";
+}
+
+type Where = "desktop" | "browser";
+
 export function RecordButton() {
   const flow = useStudio((s) => s.flow);
+  const run = useStudio((s) => s.run);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ recording: Recording; path: string | null } | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [where, setWhere] = useState<Where>("desktop");
+  const [url, setUrl] = useState("");
+  const box = useRef<HTMLDivElement>(null);
+  // A run going with its browser open: record there, on the page it is at.
+  const running = run && isActive(run) ? run.runId : undefined;
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("mousedown", away);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", away);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (!open && flow && !url) setUrl(firstPage(flow.steps ?? []));
+    setOpen(!open);
+  };
 
   const record = async () => {
     if (!flow) return;
+    const browser = where === "browser";
+    if (browser && !running && !url.trim()) return setNote(t.recording.needsUrl);
+    setOpen(false);
     setBusy(true);
     setNote(null);
     try {
-      const recording = (await api.pointAt("desktop", {
-        action: "record",
-        title: t.recording.bannerTitle,
-        hint: t.recording.bannerHint,
-      })) as unknown as Recording;
+      const recording = (
+        browser
+          ? await api.pointAt(
+              "browser",
+              { action: "record", title: t.recording.bannerTitle, hint: t.recording.browserBannerHint, lang: locale, ...(running ? {} : { url: url.trim() }) },
+              running ?? STUDIO_BROWSER,
+            )
+          : await api.pointAt("desktop", {
+              action: "record",
+              title: t.recording.bannerTitle,
+              hint: t.recording.bannerHint,
+            })
+      ) as unknown as Recording;
       let path: string | null = `logs/recordings/${stamp()}.json`;
       try {
         await projectApi.writeText(flow.id, path, JSON.stringify(recording, null, 2), false);
@@ -53,22 +108,78 @@ export function RecordButton() {
     }
   };
 
+  const choice = (value: Where, label: string, hint: string) => (
+    <label className={`flex cursor-pointer gap-2 rounded-md px-2 py-1.5 ${where === value ? "bg-slate-100" : "hover:bg-slate-50"}`}>
+      <input type="radio" name="record-where" className="mt-1" checked={where === value} onChange={() => setWhere(value)} />
+      <span className="min-w-0">
+        <span className="block text-sm text-ink">{label}</span>
+        <span className="block text-[11px] whitespace-normal text-slate-500">{hint}</span>
+      </span>
+    </label>
+  );
+
   return (
-    <>
+    <div ref={box} className="relative">
       <button
         type="button"
         title={note ?? t.recording.recordTitle}
-        onClick={() => void record()}
+        aria-expanded={open}
+        onClick={toggle}
         disabled={busy}
         className={`flex h-8 items-center gap-1.5 rounded-md px-2 text-sm hover:bg-slate-100 disabled:opacity-60 ${note ? "text-shu-600" : "text-slate-700"}`}
       >
         <Circle size={11} strokeWidth={0} fill="currentColor" className="text-shu-500" aria-hidden="true" />
         <span className="@max-[560px]:hidden">{busy ? t.recording.busy : t.recording.record}</span>
       </button>
-      {result && createPortal(<RecordingDialog recording={result.recording} path={result.path} onClose={() => setResult(null)} />, document.body)}
-    </>
+      {open && (
+        <div
+          role="dialog"
+          aria-label={t.recording.where}
+          className="absolute bottom-full left-0 z-30 mb-2 w-72 space-y-1 rounded-lg border border-slate-200 bg-sheet p-2 shadow-raised"
+        >
+          <p className="px-2 pt-1 text-[11px] font-medium text-slate-600">{t.recording.where}</p>
+          {choice("desktop", t.recording.desktop, t.recording.desktopHint)}
+          {choice("browser", t.recording.browser, running ? t.recording.browserRunning : t.recording.browserHint)}
+          {where === "browser" && !running && (
+            <label className="block space-y-1 px-2 pt-1">
+              <span className="text-[11px] font-medium text-slate-600">{t.recording.url}</span>
+              <input
+                className="w-full rounded border border-slate-300 bg-paper px-2 py-1 font-mono text-xs focus:border-primary focus:outline-none"
+                value={url}
+                placeholder="https://"
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && void record()}
+              />
+            </label>
+          )}
+          {note && <p className="px-2 text-[11px] text-shu-600">{note}</p>}
+          <div className="flex justify-end px-2 pt-1 pb-1">
+            <button
+              type="button"
+              className="rounded bg-primary px-3 py-1 text-sm font-semibold text-on-primary hover:bg-primary-hover"
+              onClick={() => void record()}
+            >
+              {t.recording.start}
+            </button>
+          </div>
+        </div>
+      )}
+      {result &&
+        createPortal(
+          <RecordingDialog recording={result.recording} path={result.path} onClose={() => setResult(null)} />,
+          document.body,
+        )}
+    </div>
   );
 }
+
+const skipText = (reason: "drag" | "failed" | "upload" | "opened") =>
+  ({
+    drag: t.recording.skippedDrag,
+    failed: t.recording.skippedFailed,
+    upload: t.recording.skippedUpload,
+    opened: t.recording.skippedOpened,
+  })[reason];
 
 function RecordingDialog({ recording, path, onClose }: { recording: Recording; path: string | null; onClose: () => void }) {
   const flow = useStudio((s) => s.flow);
@@ -81,16 +192,18 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
   const askAgent = useAgent((s) => s.send);
   const [told, setTold] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
-  const { steps, skipped } = useMemo(() => recordedSteps(recording.actions, newStepId), [recording]);
+  const place = flow ? insertPlace(flow.steps ?? [], selection, null) : null;
+  // Nodes going after a 「ページを開く」 work on the page it opens.
+  const pageOpen = Boolean(flow && place?.after && (place.after.type === "browser.open" || pageAbove(flow.steps ?? [], place.after.id ?? "")));
+  const { steps, skipped } = useMemo(() => recordedSteps(recording.actions, newStepId, { pageOpen }), [recording, pageOpen]);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d])), [stepTypes]);
-  if (!flow) return null;
-  const place = insertPlace(flow.steps ?? [], selection, null);
+  if (!flow || !place) return null;
   const rows: ({ step: Step } | { skipped: string })[] = [];
   {
     let next = 0;
     recording.actions.forEach((_, index) => {
       const skip = skipped.find((s) => s.index === index);
-      if (skip) rows.push({ skipped: skip.reason === "drag" ? t.recording.skippedDrag : t.recording.skippedFailed });
+      if (skip) rows.push({ skipped: skipText(skip.reason) });
       else if (steps[next]) rows.push({ step: steps[next++]! });
     });
   }
