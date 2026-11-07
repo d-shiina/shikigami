@@ -364,7 +364,8 @@ pub fn part_ref(value: &Value) -> Option<&str> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VariableDef {
-    /// Identifier used in expressions: `[A-Za-z_][A-Za-z0-9_]*`.
+    /// Identifier used in expressions: letters of any script (orderNo, 受注番号),
+    /// digits and `_`, not starting with a digit.
     pub name: String,
     #[serde(rename = "type", default)]
     pub var_type: VarType,

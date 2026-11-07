@@ -67,7 +67,7 @@ describe("recordings", () => {
     const ops = recordingOps(steps, {}, { parentId: null, block: null, index: 2 });
     const parts = ops.filter((o) => o.op === "setPart");
     expect(parts.map((o) => o.op === "setPart" && [o.name, o.part.label])).toEqual([
-      ["part1", "件名"],
+      ["件名", "件名"],
       ["btnSave", "btnSave"],
     ]);
     const adds = ops.filter((o) => o.op === "addStep");
@@ -128,7 +128,7 @@ describe("recordings", () => {
     // After a 「ページを開く」, the page is not opened again.
     expect(recordedSteps(browser.slice(0, 2), counter(), { pageOpen: true }).steps.map((s) => s.type)).toEqual(["browser.fill"]);
     const ops = recordingOps(steps, {}, { parentId: null, block: null, index: 0 });
-    expect(ops[0]).toEqual({ op: "setPart", name: "part1", part: { app: "browser", target: name, label: "氏名" } });
+    expect(ops[0]).toEqual({ op: "setPart", name: "氏名", part: { app: "browser", target: name, label: "氏名" } });
     expect(ops.filter((o) => o.op === "addStep")).toHaveLength(7);
   });
 

@@ -60,7 +60,19 @@ export function newPartName(target: unknown, taken: Iterable<string>): string {
     base = parts.map((p, i) => (i === 0 ? p.charAt(0).toLowerCase() + p.slice(1) : p.charAt(0).toUpperCase() + p.slice(1))).join("");
     break;
   }
-  if (!/^[A-Za-z_]/.test(base)) base = base ? `part${base}` : "part";
+  // No English word: the screen's own Japanese words make a name too
+  // (「保存」→ 保存), since names may be in any script.
+  if (!base) {
+    for (const w of words) {
+      if (typeof w !== "string") continue;
+      const name = Array.from((w.match(/[\p{Alphabetic}\p{N}_]+/gu) ?? []).join("")).slice(0, 20).join("");
+      if (/^[\p{Alphabetic}_]/u.test(name)) {
+        base = name;
+        break;
+      }
+    }
+  }
+  if (!/^[\p{Alphabetic}_]/u.test(base)) base = base ? `part${base}` : "part";
   if (base !== "part" && !used.has(base)) return base;
   for (let n = 1; ; n++) if (!used.has(`${base}${n}`)) return `${base}${n}`;
 }

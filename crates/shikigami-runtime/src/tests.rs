@@ -178,6 +178,33 @@ async fn invalid_flows_do_not_start() {
 }
 
 #[tokio::test]
+async fn japanese_variable_names_run_end_to_end() {
+    let mut s = flow(vec![
+        set("合計金額", "0"),
+        Step::new("control.forEach")
+            .with_param("items", "受注一覧")
+            .with_param("itemVar", "受注")
+            .with_block("body", vec![set("合計金額", "合計金額 + num(受注.金額)")]),
+        Step::new("variable.set")
+            .with_param("name", "表示")
+            .with_param("value", "{{ 宛名 }} 様：合計 {{ 合計金額 }} 円"),
+    ]);
+    s.variables
+        .push(var("受注一覧", VarType::Array, VarDirection::Input, None));
+    s.variables
+        .push(var("宛名", VarType::String, VarDirection::Input, None));
+    s.variables
+        .push(var("合計金額", VarType::Number, VarDirection::Output, None));
+    s.variables
+        .push(var("表示", VarType::String, VarDirection::Output, None));
+    let inputs = json!({ "受注一覧": [{ "金額": "100" }, { "金額": "250" }], "宛名": "山田" });
+    let (report, _) = run(&Runtime::new(), s, inputs).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["合計金額"], json!(350));
+    assert_eq!(report.outputs["表示"], json!("山田 様：合計 350 円"));
+}
+
+#[tokio::test]
 async fn loops_with_break_and_continue() {
     let mut s = flow(vec![
         set("acc", "''"),

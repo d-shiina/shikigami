@@ -227,7 +227,7 @@
       "type": "object",
       "properties": {
         "name": {
-          "description": "Identifier used in expressions: `[A-Za-z_][A-Za-z0-9_]*`.",
+          "description": "Identifier used in expressions: letters of any script (orderNo, 受注番号),\ndigits and `_`, not starting with a digit.",
           "type": "string"
         },
         "type": {

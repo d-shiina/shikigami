@@ -4571,11 +4571,11 @@
           },
           "itemVar": {
             "type": "string",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            "pattern": "^[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*$"
           },
           "indexVar": {
             "type": "string",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            "pattern": "^[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*$"
           },
           "collect": {
             "type": "string",
@@ -4707,7 +4707,7 @@
           },
           "indexVar": {
             "type": "string",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            "pattern": "^[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*$"
           }
         },
         "required": [
@@ -4762,7 +4762,7 @@
         "properties": {
           "errorVar": {
             "type": "string",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            "pattern": "^[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*$"
           }
         },
         "required": [],
@@ -14413,17 +14413,17 @@
           "inputs": {
             "type": "object",
             "propertyNames": {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              "pattern": "^[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*$"
             }
           },
           "outputs": {
             "type": "object",
             "propertyNames": {
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              "pattern": "^[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*$"
             },
             "additionalProperties": {
               "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              "pattern": "^[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*$"
             }
           }
         },
@@ -16140,7 +16140,7 @@
         "properties": {
           "name": {
             "type": "string",
-            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            "pattern": "^[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*$"
           },
           "value": {},
           "expression": {

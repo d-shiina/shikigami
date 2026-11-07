@@ -13,9 +13,9 @@ export type Part = { text: string } | { code: string };
 
 const w = (text: string): Part => ({ text });
 
-const PATH = String.raw`([A-Za-z_][\w.]*(?:\[\d+\])?)`;
+const PATH = String.raw`([\p{Alphabetic}_][\p{Alphabetic}\p{N}_.]*(?:\[\d+\])?)`;
 /** Built-in functions that read better as words. The flow keeps the expression as written. */
-const fn = (name: string) => new RegExp(String.raw`\b${name}\(${PATH}\)`, "g");
+const fn = (name: string) => new RegExp(String.raw`\b${name}\(${PATH}\)`, "gu");
 const SYMBOLS: [RegExp, string][] = [
   [/\s*>=\s*/g, " ≥ "],
   [/\s*<=\s*/g, " ≤ "],
@@ -26,7 +26,7 @@ const WORDS: Record<"ja" | "en", [RegExp, string][]> = {
   ja: [
     [fn("len"), "$1の件数"],
     [fn("sum"), "$1の合計"],
-    [new RegExp(String.raw`!isEmpty\(${PATH}\)`, "g"), "$1が空でない"],
+    [new RegExp(String.raw`!isEmpty\(${PATH}\)`, "gu"), "$1が空でない"],
     [fn("isEmpty"), "$1が空"],
     [/\s*&&\s*/g, " かつ "],
     [/\s*\|\|\s*/g, " または "],
@@ -35,7 +35,7 @@ const WORDS: Record<"ja" | "en", [RegExp, string][]> = {
   en: [
     [fn("len"), "count of $1"],
     [fn("sum"), "sum of $1"],
-    [new RegExp(String.raw`!isEmpty\(${PATH}\)`, "g"), "$1 is not empty"],
+    [new RegExp(String.raw`!isEmpty\(${PATH}\)`, "gu"), "$1 is not empty"],
     [fn("isEmpty"), "$1 is empty"],
     [/\s*&&\s*/g, " and "],
     [/\s*\|\|\s*/g, " or "],

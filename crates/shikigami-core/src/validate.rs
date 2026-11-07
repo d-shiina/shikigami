@@ -395,7 +395,7 @@ impl Cx<'_> {
                     path.clone(),
                     None,
                 );
-                self.hint("Use letters, digits and _ like a variable name (saveButton); put the words people use in `label`.".to_owned());
+                self.hint("Use letters (Japanese is fine), digits and _ like a variable name (saveButton, 保存ボタン); no spaces or symbols. Put the words people read in `label`.".to_owned());
             }
             if part.target.is_null() {
                 // The nodes that use it say so; an unused one only reminds.
@@ -1322,7 +1322,7 @@ fn generic_hint(code: &str) -> Option<&'static str> {
             "Wrap the step in a control.case (`params.values` or `params.condition`, the step in `blocks.body`), or move it to the switch's `default` block."
         }
         "INVALID_VARIABLE_NAME" => {
-            "Use letters, digits and '_' and start with a letter or '_' (e.g. invoiceTotal)."
+            "Use letters (Japanese is fine), digits and '_', starting with a letter or '_', with no spaces or symbols (e.g. invoiceTotal, 請求金額)."
         }
         "DUPLICATE_VARIABLE" => "Keep one declaration per variable name.",
         "VARIABLE_TYPE_MISMATCH" => {
@@ -1759,6 +1759,67 @@ mod tests {
                 .with_block("cases", vec![Step::new(control::CASE).with_id("c")]),
         ];
         assert!(codes(&validator().validate(&empty)).contains(&"INVALID_PARAMS"));
+    }
+
+    #[test]
+    fn japanese_variable_names() {
+        let mut s = Flow::new("日本語");
+        s.variables
+            .push(VariableDef::new("受注一覧", VarType::Array));
+        s.variables
+            .push(VariableDef::new("合計金額", VarType::Number));
+        s.steps = vec![
+            Step::new("control.forEach")
+                .with_id("f")
+                .with_param("items", "受注一覧")
+                .with_param("itemVar", "受注")
+                .with_param("indexVar", "番号")
+                .with_block(
+                    "body",
+                    vec![
+                        Step::new("variable.set")
+                            .with_id("s1")
+                            .with_param("name", "合計金額")
+                            .with_param("expression", "合計金額 + num(受注.金額) + 番号 * 0"),
+                    ],
+                ),
+            Step::new("log.message")
+                .with_id("l")
+                .with_param("message", "合計 {{ 合計金額 }} 円"),
+        ];
+        let report = validator().validate(&s);
+        assert!(
+            report.issues.iter().all(|i| i.severity != Severity::Error),
+            "{:?}",
+            report.issues
+        );
+        assert!(
+            !codes(&report).contains(&"UNDEFINED_VARIABLE"),
+            "{:?}",
+            report.issues
+        );
+
+        // Spaces, symbols and a leading digit are still not names.
+        for bad in ["税込 金額", "金額（税込）", "1件目"] {
+            let mut s = Flow::new("bad");
+            s.variables.push(VariableDef::new(bad, VarType::Number));
+            assert!(
+                codes(&validator().validate(&s)).contains(&"INVALID_VARIABLE_NAME"),
+                "{bad}"
+            );
+            let mut s = Flow::new("bad");
+            s.steps = vec![
+                Step::new("control.forEach")
+                    .with_id("f")
+                    .with_param("items", "[1]")
+                    .with_param("itemVar", bad)
+                    .with_block("body", vec![]),
+            ];
+            assert!(
+                codes(&validator().validate(&s)).contains(&"INVALID_PARAMS"),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

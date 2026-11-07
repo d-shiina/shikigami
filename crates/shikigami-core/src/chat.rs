@@ -186,7 +186,7 @@ Reply in the person's language. Names, labels, summary and checks are in that la
 - Use only step types and params listed in the reference. Set every required param.
 - Params listed as "expression" take a bare expression without {{ }}: "condition": "count > 3". Every other text param is a template: "合計 {{ total }} 円"; a text that is exactly one {{ expr }} keeps the value's type.
 - Work on text, numbers, dates and lists with expression functions inside variable.set, not with extra steps: "expression": "sum(map(rows, r => num(r.金額)))".
-- Variables: declare inputs and outputs in "variables" (name: letters, digits and _ only, e.g. orderNo). Variables set by "saveAs" or variable.set need no declaration.
+- Variables: declare inputs and outputs in "variables" (name: letters of any language, digits and _, no spaces or symbols, e.g. orderNo or 受注番号; use the language the person uses). Variables set by "saveAs" or variable.set need no declaration.
 
 ## The screen: never guess
 
