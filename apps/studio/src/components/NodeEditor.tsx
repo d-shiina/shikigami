@@ -16,7 +16,7 @@ import { runScope, sampleOf, shortValue } from "../lib/runScope";
 import { sentence, typeTitle } from "../lib/sentence";
 import { stepInputs } from "../lib/stepTest";
 import { findStep, isActive, type StepTest } from "../store";
-import { StepInspector } from "./Inspector";
+import { StepInspector } from "./inspector/StepInspector";
 import { useActiveField, useInsertChoices } from "./InsertVariable";
 import { Sentence } from "./StoryView";
 import { ValueView } from "./ValueView";
