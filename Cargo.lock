@@ -4477,7 +4477,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-adapters"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde_json",
  "shikigami-browser",
@@ -4496,7 +4496,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-agent"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "jiff",
@@ -4520,7 +4520,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-browser"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde_json",
  "shikigami-core",
@@ -4535,7 +4535,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-cli"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "clap",
@@ -4558,7 +4558,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-com"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde_json",
  "shikigami-runtime",
@@ -4568,7 +4568,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-core"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -4588,7 +4588,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-db"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "odbc-api",
  "serde_json",
@@ -4601,7 +4601,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-desktop"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "ort",
  "png",
@@ -4619,7 +4619,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-excel"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -4634,7 +4634,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-files"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "csv",
  "encoding_rs",
@@ -4651,7 +4651,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-mail"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "lettre",
@@ -4669,7 +4669,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-manager"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "axum",
  "ring",
@@ -4688,7 +4688,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-mcp"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "rmcp",
@@ -4707,7 +4707,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-pdf"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "pdf-extract",
  "serde_json",
@@ -4721,7 +4721,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-plugins"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "dirs",
  "jsonschema",
@@ -4738,7 +4738,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-runtime"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "schemars 1.2.3",
  "serde",
@@ -4754,7 +4754,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-secrets"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -4774,7 +4774,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-studio"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -4801,7 +4801,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-system"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "clipboard-win",
@@ -4826,7 +4826,7 @@ dependencies = [
 
 [[package]]
 name = "shikigami-word"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde_json",
  "shikigami-core",
