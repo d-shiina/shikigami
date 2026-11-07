@@ -42,6 +42,10 @@ export type Row =
       refs: string[];
       /** A required setting still empty: shown as "未設定", not as a value. */
       unset?: boolean;
+      /** The setting as stored, for the hover preview (a picture's path, a place given by a picture). */
+      raw?: unknown;
+      /** The whole text when `value` was cut short. */
+      full?: string;
       /** A file of the flow's folder (`input/orders.xlsx`) in a path param: shown in its shelf's colour. */
       file?: { path: string; role: "input" | "config" | "templates" | "output" | "work" | "logs" };
     }
@@ -75,18 +79,30 @@ export function referencedVariables(value: unknown, known: ReadonlySet<string>):
 /** Params that hold a bare expression rather than text with `{{ }}` holes. */
 const EXPRESSION_KEYS = new Set(["condition", "expression", "items", "count"]);
 
-function display(key: string, value: unknown): string {
+/** A setting as one line, whole. */
+function fullText(key: string, value: unknown): string {
   if (typeof value === "string" && t.paramNames.choices[key]?.[value]) return choiceLabel(key, value);
   if (key === "target" || key === "to") return targetText(value);
   // A case's values read as a list, the way they are typed in.
-  if (key === "values" && Array.isArray(value)) return truncate(listToText(value));
-  const text =
-    typeof value !== "string"
-      ? formatValue(value)
-      : EXPRESSION_KEYS.has(key)
-        ? readable(value)
-        : value.replace(/\{\{(.*?)\}\}/g, (_, expr: string) => `{{ ${readable(expr.trim())} }}`);
-  return truncate(text);
+  if (key === "values" && Array.isArray(value)) return listToText(value);
+  return typeof value !== "string"
+    ? formatValue(value)
+    : EXPRESSION_KEYS.has(key)
+      ? readable(value)
+      : value.replace(/\{\{(.*?)\}\}/g, (_, expr: string) => `{{ ${readable(expr.trim())} }}`);
+}
+
+function display(key: string, value: unknown): string {
+  const text = fullText(key, value);
+  // A place in words is never cut: it is what the node is about.
+  return key === "target" || key === "to" ? text : truncate(text);
+}
+
+/** The display text of a setting, with the whole of it when it was cut short. */
+function shown(key: string, value: unknown): { value: string; full?: string; raw: unknown } {
+  const text = display(key, value);
+  const full = fullText(key, value);
+  return { value: text, raw: value, ...(full !== text ? { full } : {}) };
 }
 
 function truncate(text: string): string {
@@ -135,7 +151,7 @@ function callInputRows(step: Step, known: ReadonlySet<string>): Extract<Row, { k
     kind: "param",
     key: `inputs.${name}`,
     label: name,
-    value: display(name, value),
+    ...shown(name, value),
     refs: referencedVariables(value, known),
   }));
 }
@@ -168,7 +184,7 @@ export function paramRows(step: Step, def: StepTypeDef | undefined, known: Reado
       kind: "param",
       key,
       label: paramLabel(key, step.type),
-      value: display(key, step.params?.[key]),
+      ...shown(key, step.params?.[key]),
       refs: referencedVariables(step.params?.[key], known),
       ...(projectFile(key, step.params?.[key], def) ? { file: projectFile(key, step.params?.[key], def) } : {}),
     }));

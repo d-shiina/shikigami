@@ -205,6 +205,7 @@ export const paramsEn = {
     level: { debug: "Detail", info: "Info", warn: "Warning", warning: "Warning", error: "Error" },
     state: { visible: "Shown", hidden: "Not shown", attached: "On the page", detached: "Gone from the page", enabled: "Can be used", maximized: "Maximized", minimized: "Minimized", normal: "Normal size" },
     dialog: { accept: "OK", dismiss: "Cancel" },
+    match: { "": "Contains (default)", contains: "Contains", exact: "Exact", prefix: "Starts with", suffix: "Ends with", pattern: "Pattern (regex)" },
     to: { top: "Top", bottom: "Bottom" },
     direction: { up: "Up", down: "Down", left: "Left", right: "Right", top: "To the top", bottom: "To the bottom" },
     button: { left: "Left", right: "Right" },

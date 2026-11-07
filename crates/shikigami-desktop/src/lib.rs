@@ -1001,10 +1001,11 @@ fn target_schema(allow: Allow) -> Value {
             "type": "object",
             "description": "トップレベルのウィンドウ。inspect_ui（引数なし）の一覧から title / process を写す",
             "properties": {
-                "title": { "type": "string", "minLength": 1, "description": "タイトル（既定は部分一致・大文字小文字無視）" },
+                "title": { "type": "string", "minLength": 1, "description": "タイトル（照合のしかたは match。既定は部分一致・大文字小文字無視）" },
+                "match": { "enum": ["contains", "exact", "prefix", "suffix", "pattern"], "description": "title の照合のしかた：contains（含む・既定）、exact（完全一致）、prefix（で始まる）、suffix（で終わる）、pattern（正規表現。日付やファイル名が変わる窓に）。exact 以外は大文字小文字を区別しない" },
                 "process": { "type": "string", "minLength": 1, "description": "実行ファイル名（例 billing.exe）" },
                 "className": { "type": "string", "minLength": 1 },
-                "exact": { "type": "boolean", "description": "title を完全一致にする" },
+                "exact": { "type": "boolean", "description": "title を完全一致にする（match: \"exact\" の古い書き方）" },
                 "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号" }
             },
             "additionalProperties": false,

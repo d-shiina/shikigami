@@ -5199,6 +5199,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -5361,6 +5370,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -5522,6 +5540,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -5778,6 +5805,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -6055,6 +6091,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -6222,6 +6267,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -6383,6 +6437,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -6658,6 +6721,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -6956,6 +7028,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -7239,6 +7320,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -7529,6 +7619,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -7695,6 +7794,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -7911,6 +8019,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -8104,6 +8221,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -8287,6 +8413,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -8453,6 +8588,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -8624,6 +8768,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -9005,6 +9158,15 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
+                  },
                   "process": {
                     "type": "string",
                     "minLength": 1
@@ -9295,6 +9457,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",
@@ -11698,6 +11869,15 @@
                   "title": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "match": {
+                    "enum": [
+                      "contains",
+                      "exact",
+                      "prefix",
+                      "suffix",
+                      "pattern"
+                    ]
                   },
                   "process": {
                     "type": "string",

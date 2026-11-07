@@ -4479,6 +4479,9 @@ dependencies = [
 name = "shikigami-adapters"
 version = "0.1.9"
 dependencies = [
+ "base64 0.22.1",
+ "csv",
+ "encoding_rs",
  "serde_json",
  "shikigami-browser",
  "shikigami-db",
@@ -4605,6 +4608,7 @@ version = "0.1.9"
 dependencies = [
  "ort",
  "png",
+ "regex",
  "serde",
  "serde_json",
  "shikigami-com",

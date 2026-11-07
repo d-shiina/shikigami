@@ -4,6 +4,7 @@
 import type { ProjectFile, RunEventEnvelope, RunReport, StepTypeDef } from "@shikigami/schema";
 import { Check, Circle, FileText, FolderOpen, Loader2, Play, Search, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { HoverPreview } from "../components/HoverPreview";
 import { WindowControls } from "../components/WindowControls";
 import { ApiError, api } from "../lib/api";
 import { relativeTime } from "../lib/changes";
@@ -497,7 +498,11 @@ function Result({
           {outputs.map((v) => (
             <div key={v.name} className="contents">
               <dt className="text-slate-500">{labelOf(v)}</dt>
-              <dd className="break-words">{formatValue(report.outputs?.[v.name])}</dd>
+              <dd className="break-words">
+                <HoverPreview value={report.outputs?.[v.name]} flowId={item.flow.id}>
+                  {formatValue(report.outputs?.[v.name])}
+                </HoverPreview>
+              </dd>
             </div>
           ))}
         </dl>
