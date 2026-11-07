@@ -22,11 +22,12 @@ export function folderOf(path: string): string {
 }
 
 /** The node that reads a file, by where it sits and what it is; the setting that names it. */
-const READERS: { test: (path: string) => boolean; type: string; param: string }[] = [
+const READERS: { test: (path: string) => boolean; type: string; param: string; extra?: Record<string, unknown> }[] = [
   { test: (p) => /^config\/.+\.json$/i.test(p), type: "config.read", param: "path" },
   { test: (p) => /^templates\/.+\.docx$/i.test(p), type: "word.fillTemplate", param: "template" },
   { test: (p) => /\.(xlsx|xlsm|xls)$/i.test(p), type: "excel.readRows", param: "path" },
-  { test: (p) => /\.(csv|tsv)$/i.test(p), type: "file.readCsv", param: "path" },
+  { test: (p) => /\.tsv$/i.test(p), type: "file.readCsv", param: "path", extra: { delimiter: "\t" } },
+  { test: (p) => /\.csv$/i.test(p), type: "file.readCsv", param: "path" },
   { test: (p) => /\.pdf$/i.test(p), type: "pdf.readText", param: "path" },
   { test: (p) => /\.docx$/i.test(p), type: "word.readText", param: "path" },
   { test: (p) => /\.(txt|md|log|json|xml|html?)$/i.test(p), type: "file.readText", param: "path" },
@@ -39,7 +40,7 @@ const READERS: { test: (path: string) => boolean; type: string; param: string }[
 export function nodeForFile(path: string, types: StepTypeDef[]): { type: string; params: Record<string, unknown> } | null {
   const p = norm(path);
   const reader = READERS.find((r) => r.test(p) && types.some((d) => d.type === r.type));
-  return reader ? { type: reader.type, params: { [reader.param]: p } } : null;
+  return reader ? { type: reader.type, params: { [reader.param]: p, ...reader.extra } } : null;
 }
 
 /** What a dragged file is called on the chip under the pointer. */

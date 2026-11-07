@@ -62,8 +62,8 @@ function targetAt(x: number, y: number): { id: string; el: Element; target: Targ
   return el && id && target ? { id, el, target } : null;
 }
 
-/** What a folder setting takes from a dropped path (a file's folder). */
-const forKind = (kind: DropKind, path: string) => (kind === "folder" && /\.[^/\\]+$/.test(path) ? folderOf(path) : path);
+/** What a folder setting takes from a dragged file of the folder: the folder it is in. */
+const forKind = (kind: DropKind, path: string) => (kind === "folder" ? folderOf(path) : path);
 
 /** Starts dragging a file of the folder (`input/a.xlsx`) from a pointer press on it. */
 export function startFileDrag(e: React.PointerEvent, path: string) {
@@ -134,8 +134,13 @@ function useExternalDrop() {
       const p = project.getState();
       const dir = p.files?.dir;
       if (target.kind === "folder") {
+        // A folder from Explorer is taken as it is; a file the flow's folder
+        // lists is one, so its folder is taken. (The page cannot ask the disk
+        // which a path outside the folder is: a dropped folder is far likelier.)
         const path = paths[0]!;
-        return target.drop([forKind("folder", insideFolder(dir, path) ?? path)], el);
+        const rel = insideFolder(dir, path);
+        const isFile = rel !== null && (p.files?.files ?? []).some((f) => f.path === rel);
+        return target.drop([rel === null ? path : isFile ? folderOf(rel) : rel], el);
       }
       const wanted = target.kind === "file" ? paths.slice(0, 1) : paths;
       const inside = wanted.map((path) => insideFolder(dir, path));

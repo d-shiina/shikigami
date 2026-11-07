@@ -28,7 +28,8 @@ describe("folderOf", () => {
 describe("nodeForFile", () => {
   it("reads a file with the node for it", () => {
     expect(nodeForFile("input/受注.xlsx", types)).toEqual({ type: "excel.readRows", params: { path: "input/受注.xlsx" } });
-    expect(nodeForFile("input/a.CSV", types)?.type).toBe("file.readCsv");
+    expect(nodeForFile("input/a.CSV", types)).toEqual({ type: "file.readCsv", params: { path: "input/a.CSV" } });
+    expect(nodeForFile("input/a.tsv", types)).toEqual({ type: "file.readCsv", params: { path: "input/a.tsv", delimiter: "\t" } });
     expect(nodeForFile("input/請求書.pdf", types)?.type).toBe("pdf.readText");
     expect(nodeForFile("input/契約書.docx", types)?.type).toBe("word.readText");
     expect(nodeForFile("input/memo.txt", types)?.type).toBe("file.readText");
