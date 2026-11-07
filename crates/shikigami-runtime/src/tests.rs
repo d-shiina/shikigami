@@ -2529,3 +2529,68 @@ async fn a_flow_swapped_in_while_paused_still_starts_at_the_chosen_step() {
     let logs = logs(&events);
     assert_eq!(&logs[1..], ["b", "c"], "{logs:?}");
 }
+
+#[tokio::test]
+async fn a_finished_run_becomes_a_test_case_that_passes() {
+    let mut s = flow(vec![set("doubled", "n * 2")]);
+    s.variables = vec![
+        var("n", VarType::Number, VarDirection::Input, Some(json!(1))),
+        VariableDef {
+            secret: true,
+            ..var("pass", VarType::String, VarDirection::Input, None)
+        },
+        var("doubled", VarType::Number, VarDirection::Output, None),
+        var("tmp", VarType::Number, VarDirection::Local, Some(json!(0))),
+    ];
+    let runtime = Runtime::new();
+    let (report, events) = run(&runtime, s.clone(), json!({ "n": 21, "pass": "p" })).await;
+    let (case, left_out) = testing::case_from_run(&s, &events, &report);
+    assert_eq!(case.inputs, *json!({ "n": 21 }).as_object().unwrap());
+    assert_eq!(left_out, ["pass"]);
+    assert_eq!(
+        case.expect.outputs,
+        *json!({ "doubled": 42 }).as_object().unwrap()
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let policy = dir.path().join("policy.json");
+    let records = testing::Records {
+        workspace: dir.path(),
+        policy: &policy,
+    };
+    let interrupt = testing::Interrupt::default();
+    // The secret input is not kept in the case: a person passes it.
+    let mut inputs = case.inputs.clone();
+    inputs.insert("pass".into(), json!("p"));
+    let options = RunOptions {
+        inputs: inputs.clone(),
+        ..RunOptions::default()
+    };
+    let result = testing::run_case(
+        &runtime,
+        records,
+        &interrupt,
+        "21",
+        &case,
+        s.clone(),
+        options,
+    )
+    .await
+    .unwrap();
+    assert!(result.passed, "{:?}", result.mismatches);
+
+    // A stopped suite cancels what starts after it.
+    interrupt.stop();
+    let records = testing::Records {
+        workspace: dir.path(),
+        policy: &policy,
+    };
+    let options = RunOptions {
+        inputs,
+        ..RunOptions::default()
+    };
+    let result = testing::run_case(&runtime, records, &interrupt, "21", &case, s, options)
+        .await
+        .unwrap();
+    assert_eq!(result.status, RunStatus::Cancelled);
+}

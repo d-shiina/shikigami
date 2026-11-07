@@ -107,6 +107,7 @@ struct Api {
     project_files: ProjectFiles,
     project_file: ProjectFile,
     config_file: ConfigFile,
+    test_case: crate::testcase::TestCase,
 }
 
 fn api_schema() -> Value {

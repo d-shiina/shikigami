@@ -75,7 +75,7 @@ export type PaletteAnchor = { left: number; top: number; right: number; bottom: 
 export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "extensions" | "settings";
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
-export type BottomTab = "log" | "issues";
+export type BottomTab = "log" | "issues" | "tests";
 
 export type StepRunState = "running" | "succeeded" | "failed" | "skipped" | "paused";
 

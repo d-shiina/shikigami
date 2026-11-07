@@ -6,6 +6,7 @@ import { PERSON_CODES } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { IssuesPanel } from "./IssuesPanel";
 import { Resizer } from "./Resizer";
+import { TestsPanel } from "./TestsPanel";
 
 const LEVEL_STYLE = {
   debug: "text-slate-400",
@@ -15,8 +16,8 @@ const LEVEL_STYLE = {
 } as const;
 
 /**
- * The panel under the chart: what a run did (log) and what is wrong with the
- * flow (issues). Both are lists over time or over the whole flow, read
+ * The panel under the chart: what a run did (log), what is wrong with the
+ * flow (issues) and its test cases (tests). Both are lists over time or over the whole flow, read
  * side by side with the chart, so they sit below it rather than beside it.
  */
 const HEIGHT_KEY = "shikigami.studio.bottom";
@@ -63,6 +64,7 @@ export function BottomPanel() {
   const tabs: [BottomTab, string, number][] = [
     ["log", t.log, 0],
     ["issues", t.issues, issueCount],
+    ["tests", t.tests.tab, 0],
   ];
   return (
     <section style={{ height: Math.min(height, max) }} className="relative flex min-h-0 shrink-0 flex-col border-t border-slate-200 bg-sheet">
@@ -105,7 +107,7 @@ export function BottomPanel() {
           ✕
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">{tab === "log" ? <RunLog /> : <IssuesPanel />}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{tab === "log" ? <RunLog /> : tab === "tests" ? <TestsPanel /> : <IssuesPanel />}</div>
     </section>
   );
 }

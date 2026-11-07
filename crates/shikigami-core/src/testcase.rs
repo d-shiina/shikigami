@@ -97,13 +97,13 @@ pub struct Outcome<'a> {
 }
 
 /// One difference between what the case expects and what the run did.
+/// `actual` is `null` when the run had no such value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Mismatch {
     /// `status`, `outputs.total`, `outputs.rows[2].金額`, `errorCode`, `errorStep`.
     pub at: String,
     pub expected: Value,
-    /// `null` when the run had no such value.
     pub actual: Value,
 }
 
@@ -260,6 +260,14 @@ pub fn save(project_dir: &Path, name: &str, case: &TestCase) -> CoreResult<PathB
     Ok(path)
 }
 
+/// Delete a case. One that is not there is not an error.
+pub fn remove(project_dir: &Path, name: &str) -> CoreResult<()> {
+    match fs::remove_file(case_path(project_dir, name)?) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+        _ => Ok(()),
+    }
+}
+
 fn case_path(project_dir: &Path, name: &str) -> CoreResult<PathBuf> {
     let bad = name.is_empty()
         || name.starts_with('.')
@@ -373,6 +381,9 @@ mod tests {
         assert_eq!(all[1].1, case);
         assert!(save(dir.path(), "../x", &case).is_err());
         assert!(load(dir.path(), "無い").is_err());
+        remove(dir.path(), "a_通常").unwrap();
+        remove(dir.path(), "a_通常").unwrap();
+        assert_eq!(load_all(dir.path()).unwrap().len(), 1);
         fs::write(tests_dir(dir.path()).join("bad.json"), r#"{"expected":{}}"#).unwrap();
         assert!(load_all(dir.path()).is_err());
     }
