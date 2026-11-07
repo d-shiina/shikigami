@@ -6,7 +6,7 @@ import { t } from "./i18n";
 export const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 export type Day = (typeof DAYS)[number];
 export type WhenKind = ScheduleWhen["kind"];
-export const KINDS: WhenKind[] = ["daily", "monthly", "every", "once", "fileAdded"];
+export const KINDS: WhenKind[] = ["daily", "monthly", "every", "once", "fileAdded", "mailReceived"];
 
 /** What a new schedule of `kind` starts as. */
 export function blankWhen(kind: WhenKind, now = new Date()): ScheduleWhen {
@@ -24,6 +24,8 @@ export function blankWhen(kind: WhenKind, now = new Date()): ScheduleWhen {
     }
     case "fileAdded":
       return { kind, folder: "input", pattern: "*" };
+    case "mailReceived":
+      return { kind, minutes: 5 };
   }
 }
 
@@ -46,6 +48,9 @@ export function whenProblem(when: ScheduleWhen): string | null {
       return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when.at) ? null : t.runs.onceAt;
     case "fileAdded":
       return when.folder.trim() ? null : t.runs.folder;
+    case "mailReceived":
+      if (when.minutes !== undefined && (!Number.isInteger(when.minutes) || when.minutes < 1)) return t.runs.minutes;
+      return when.via === "microsoft365" && !when.account?.secret.trim() ? t.runs.mailAccount : null;
   }
 }
 
@@ -95,6 +100,12 @@ export function describeWhen(when: ScheduleWhen): string {
       return w.once(when.at.replace("T", " "));
     case "fileAdded":
       return w.fileAdded(when.folder, when.pattern || "*");
+    case "mailReceived": {
+      const filters = [when.subjectContains && w.subject(when.subjectContains), when.fromContains && w.from(when.fromContains)]
+        .filter(Boolean)
+        .join(w.daysJoin);
+      return w.mailReceived(when.folder || t.runs.inbox, filters, when.minutes ?? 5);
+    }
   }
 }
 

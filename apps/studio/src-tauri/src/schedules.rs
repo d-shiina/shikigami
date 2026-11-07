@@ -139,7 +139,7 @@ pub fn delete_schedule(state: State<'_, AppState>, id: String) -> CmdResult<Sche
 /// fail with `MISSING_INPUT` otherwise.
 fn missing_inputs(vars: &[VariableDef], schedule: &Schedule) -> Option<String> {
     let from_file = match &schedule.when {
-        When::FileAdded { input, .. } => input.as_deref(),
+        When::FileAdded { input, .. } | When::MailReceived { input, .. } => input.as_deref(),
         _ => None,
     };
     let missing: Vec<&str> = vars

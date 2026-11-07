@@ -38,6 +38,7 @@ shikigami schedule add scn_01a1… --daily 08:00 --days mon,tue,wed,thu,fri --sk
 shikigami schedule add scn_01a1… --every 30 --from 09:00 --to 18:00
 shikigami schedule add scn_01a1… --once 2026-11-07T08:00
 shikigami schedule add scn_01a1… --file-added input --pattern "*.xlsx" --file-input file
+shikigami schedule add scn_01a1… --mail-received 受信トレイ --subject-contains 請求書 --mail-input mail
 shikigami schedule list
 shikigami schedule disable sch_…   # enable / remove
 ```
@@ -51,6 +52,19 @@ shikigami schedule disable sch_…   # enable / remove
 | `every` | `minutes`、`from` / `to`（任意）、`days`（任意）、`skipHolidays`（任意） | `from`、`from` + `minutes`、… `to` まで（なければ一日中） |
 | `once` | `at`（"2026-11-07T08:00"） | 1 回だけ |
 | `fileAdded` | `folder`（フローのフォルダーからの相対パスか絶対パス）、`pattern`（"*.xlsx"）、`input`（任意） | 名前が合う新しいファイル 1 つにつき 1 回。大きさが変わらなくなってから始め、そのフルパスを入力変数 `input` に入れる。エージェントの起動時からあるファイル、Office のロックファイル（`~$…`）、ダウンロード途中のファイルは数えない |
+| `mailReceived` | `folder`（任意、既定は受信トレイ）、`subjectContains`・`fromContains`（任意）、`minutes`（確認の間隔、既定 5）、`via`・`account`（任意、`mail.list` と同じ）、`input`（任意） | 条件に合う新しいメール 1 通につき 1 回。そのメール（`{ id, subject, from, fromAddress, receivedAt, attachments }`）を入力変数 `input` に入れる。エージェントの起動時からあるメールは数えない |
+
+### メールが届いたら
+
+`mailReceived` は `minutes` 分ごとに `mail.list` でフォルダーを見て、前に見たときになかったメールでフローを始めます。この PC の Outlook（クラシック版）を使うので、Outlook を起動してサインインしておきます。Outlook のない PC や業務用のメールボックスは `via: "microsoft365"` と `account`（[office.md](office.md) の「Outlook なしで Microsoft 365 のメールボックスを扱う」）で見ます。
+
+- 入力変数に入ったメールの `id` で、フローの中で添付の保存（`mail.saveAttachments`）・移動（`mail.move`）・返信（`mail.reply`）ができます。処理したメールは移動するか既読にしておくと、受信トレイで見分けやすくなります
+- 見られなかったとき（Outlook が起動していない、サインインが切れた）は `agent status` のそのスケジュールに理由を出し、次の確認でまた見ます
+- エージェントが止まっている間に届いたメールは、次に起動したときの「起動時からあるメール」になり、数えません
+
+```json
+{ "kind": "mailReceived", "folder": "受信トレイ", "subjectContains": "請求書", "minutes": 5, "input": "mail" }
+```
 
 ### 祝日と営業日
 

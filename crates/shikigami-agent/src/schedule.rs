@@ -81,7 +81,34 @@ pub enum When {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         input: Option<String>,
     },
+    /// When a mail arrives in `folder` (the inbox when not given) whose
+    /// subject and sender contain `subjectContains` / `fromContains`,
+    /// looked for every `minutes` minutes (5 when not given) with
+    /// `mail.list` (`via` / `account` as for it: Outlook on this PC, or a
+    /// Microsoft 365 mailbox). Each new mail starts one run, with the mail
+    /// (`{ id, subject, from, fromAddress, receivedAt, attachments }`) in
+    /// the input variable `input` when given. Mails already there when the
+    /// agent starts do not.
+    MailReceived {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        folder: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subject_contains: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from_contains: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        via: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        account: Option<Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        minutes: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+    },
 }
+
+/// How often a mail trigger looks when it does not say.
+pub const MAIL_MINUTES: u32 = 5;
 
 /// What a monthly schedule does when its day is not a business day.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -332,6 +359,27 @@ impl When {
                 .trim()
                 .is_empty()
                 .then(|| "folder is empty".to_owned()),
+            Self::MailReceived {
+                via,
+                account,
+                minutes,
+                ..
+            } => {
+                if *minutes == Some(0) {
+                    return Some("minutes must be at least 1".into());
+                }
+                match via.as_deref() {
+                    None | Some("outlook") if account.is_some() => {
+                        Some("account is only used with via microsoft365".into())
+                    }
+                    None | Some("outlook") => None,
+                    Some("microsoft365") if account.is_none() => Some(
+                        "via microsoft365 needs account: { \"secret\": \"<name>\", \"field\": \"accessToken\" }".into(),
+                    ),
+                    Some("microsoft365") => None,
+                    Some(other) => Some(format!("via '{other}' is not one of outlook, microsoft365")),
+                }
+            }
         }
     }
 
@@ -426,7 +474,7 @@ impl When {
                     .ok()?;
                 (t > *after).then_some(t)
             }
-            Self::FileAdded { .. } => None,
+            Self::FileAdded { .. } | Self::MailReceived { .. } => None,
         }
     }
 }

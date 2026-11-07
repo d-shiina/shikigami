@@ -189,6 +189,70 @@ function WhenFields({ when, onChange, inputs }: { when: ScheduleWhen; onChange: 
           </div>
         </>
       );
+    case "mailReceived":
+      return (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Labeled label={r.mailbox}>
+              <select
+                className={inputClass}
+                value={when.via ?? "outlook"}
+                onChange={(e) => {
+                  const m365 = e.target.value === "microsoft365";
+                  onChange({ ...when, via: m365 ? "microsoft365" : undefined, account: m365 ? { secret: "", field: "accessToken" } : undefined });
+                }}
+              >
+                <option value="outlook">Outlook</option>
+                <option value="microsoft365">Microsoft 365</option>
+              </select>
+            </Labeled>
+            {when.via === "microsoft365" ? (
+              <Labeled label={r.mailAccount} hint={r.mailAccountHint}>
+                <input
+                  className={inputClass}
+                  value={when.account?.secret ?? ""}
+                  onChange={(e) => onChange({ ...when, account: { secret: e.target.value, field: "accessToken" } })}
+                  required
+                />
+              </Labeled>
+            ) : (
+              <div />
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Labeled label={r.mailFolder} hint={r.mailFolderHint}>
+              <input className={inputClass} value={when.folder ?? ""} placeholder={r.inbox} onChange={(e) => onChange({ ...when, folder: e.target.value || undefined })} />
+            </Labeled>
+            <Labeled label={r.mailMinutes}>
+              <input
+                type="number"
+                min={1}
+                className={inputClass}
+                value={when.minutes ?? 5}
+                onChange={(e) => onChange({ ...when, minutes: Math.floor(Number(e.target.value)) })}
+              />
+            </Labeled>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Labeled label={r.subjectContains}>
+              <input className={inputClass} value={when.subjectContains ?? ""} onChange={(e) => onChange({ ...when, subjectContains: e.target.value || undefined })} />
+            </Labeled>
+            <Labeled label={r.fromContains}>
+              <input className={inputClass} value={when.fromContains ?? ""} onChange={(e) => onChange({ ...when, fromContains: e.target.value || undefined })} />
+            </Labeled>
+          </div>
+          <Labeled label={r.mailInput} hint={r.mailInputHint}>
+            <select className={inputClass} value={when.input ?? ""} onChange={(e) => onChange({ ...when, input: e.target.value || undefined })}>
+              <option value="">{r.noInput}</option>
+              {inputs.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </Labeled>
+        </>
+      );
   }
 }
 
@@ -324,7 +388,7 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
       </div>
       <WhenFields when={draft.when} inputs={inputs} onChange={(when) => setDraft({ ...draft, when })} />
       <InputFields
-        vars={vars.filter((v) => !(draft.when.kind === "fileAdded" && draft.when.input === v.name))}
+        vars={vars.filter((v) => !((draft.when.kind === "fileAdded" || draft.when.kind === "mailReceived") && draft.when.input === v.name))}
         values={draft.inputs ?? {}}
         onChange={(inputs) => setDraft({ ...draft, inputs })}
       />

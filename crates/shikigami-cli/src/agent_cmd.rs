@@ -86,7 +86,7 @@ pub enum ScheduleCmd {
         json: bool,
     },
     /// Add a schedule. Give exactly one of --daily, --monthly, --every,
-    /// --once, --file-added.
+    /// --once, --file-added, --mail-received.
     Add(Box<AddArgs>),
     /// Delete a schedule.
     Remove { id: String },
@@ -137,6 +137,18 @@ pub struct AddArgs {
     /// When a file appears in FOLDER (relative to the flow's folder, e.g. input).
     #[arg(long, value_name = "FOLDER")]
     file_added: Option<String>,
+    /// When a mail arrives in FOLDER (e.g. 受信トレイ, or "" for the inbox),
+    /// looked for every --every minutes (default 5); narrow it with
+    /// --subject-contains / --from-contains. Outlook on this PC.
+    #[arg(long, value_name = "FOLDER")]
+    mail_received: Option<String>,
+    #[arg(long, value_name = "TEXT")]
+    subject_contains: Option<String>,
+    #[arg(long, value_name = "TEXT")]
+    from_contains: Option<String>,
+    /// Input variable that gets the new mail (--mail-received).
+    #[arg(long, value_name = "NAME")]
+    mail_input: Option<String>,
     /// File name pattern for --file-added, e.g. *.xlsx.
     #[arg(long, default_value = "*")]
     pattern: String,
@@ -176,7 +188,17 @@ fn when_of(a: &AddArgs) -> Result<When> {
             },
         });
     }
-    if let Some(minutes) = a.every {
+    if let Some(folder) = &a.mail_received {
+        found.push(When::MailReceived {
+            folder: (!folder.trim().is_empty()).then(|| folder.clone()),
+            subject_contains: a.subject_contains.clone(),
+            from_contains: a.from_contains.clone(),
+            via: None,
+            account: None,
+            minutes: a.every,
+            input: a.mail_input.clone(),
+        });
+    } else if let Some(minutes) = a.every {
         found.push(When::Every {
             minutes,
             from: a.from.clone(),
@@ -197,7 +219,9 @@ fn when_of(a: &AddArgs) -> Result<When> {
         });
     }
     if found.len() != 1 {
-        bail!("give exactly one of --daily, --monthly, --every, --once, --file-added");
+        bail!(
+            "give exactly one of --daily, --monthly, --every, --once, --file-added, --mail-received"
+        );
     }
     let when = found.remove(0);
     if let Some(problem) = when.problem() {

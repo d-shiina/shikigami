@@ -12,6 +12,14 @@ describe("schedule", () => {
     expect(describeWhen({ kind: "fileAdded", folder: "input", pattern: "*.xlsx" })).toBe("input に *.xlsx が届いたら");
   });
 
+  it("says which mail starts a run", () => {
+    expect(describeWhen({ kind: "mailReceived", subjectContains: "請求書", minutes: 5 })).toBe(
+      "受信トレイ に 件名「請求書」 のメールが届いたら（5 分ごとに確認）",
+    );
+    expect(whenProblem({ kind: "mailReceived", via: "microsoft365", account: { secret: " ", field: "accessToken" } })).not.toBeNull();
+    expect(whenProblem({ kind: "mailReceived", minutes: 0 })).not.toBeNull();
+  });
+
   it("says how holidays are treated", () => {
     expect(describeWhen({ kind: "daily", at: "08:00", days: ["mon", "fri"], skipHolidays: true })).toBe(
       "毎週 月・金 の 08:00（祝日・会社の休日を除く）",
@@ -27,7 +35,7 @@ describe("schedule", () => {
     expect(isTime("8")).toBe(false);
     expect(whenProblem({ kind: "every", minutes: 0 })).not.toBeNull();
     expect(whenProblem({ kind: "fileAdded", folder: " ", pattern: "*" })).not.toBeNull();
-    for (const kind of ["daily", "monthly", "every", "once", "fileAdded"] as const) {
+    for (const kind of ["daily", "monthly", "every", "once", "fileAdded", "mailReceived"] as const) {
       expect(whenProblem(blankWhen(kind))).toBeNull();
     }
   });

@@ -1133,6 +1133,38 @@
               "long": "file-added"
             },
             {
+              "id": "mail_received",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "mail-received"
+            },
+            {
+              "id": "subject_contains",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "subject-contains"
+            },
+            {
+              "id": "from_contains",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "from-contains"
+            },
+            {
+              "id": "mail_input",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "mail-input"
+            },
+            {
               "id": "pattern",
               "required": false,
               "takesValue": true,
