@@ -7,6 +7,8 @@ import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy
 import { type AgentChoice, type AgentKind, agent } from "../lib/api";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
+import { plainLine } from "../lib/markdown";
+import { Markdown } from "./Markdown";
 
 const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[name] ?? name;
 const chatTitle = (c: Chat) => c.title || t.agent.untitled;
@@ -302,7 +304,7 @@ function lastWords(c: Chat): string {
     const item = c.items[i]!;
     if (item.role === "person") return item.text.split("\n")[0] ?? "";
     const text = [...item.parts].reverse().find((p) => p.kind === "text");
-    if (text?.kind === "text") return text.text.trim().split("\n")[0] ?? "";
+    if (text?.kind === "text") return plainLine(text.text);
   }
   return c.sessionId ? t.agent.earlier : "";
 }
@@ -365,7 +367,7 @@ function Progress({ starting, quiet, preparing }: { starting: boolean; quiet: bo
 function Part({ part }: { part: AgentPart }) {
   switch (part.kind) {
     case "text":
-      return <div className="text-[13px] leading-relaxed whitespace-pre-wrap text-ink">{part.text.trim()}</div>;
+      return <Markdown text={part.text.trim()} />;
     case "tool":
       return (
         <div className="flex items-start gap-1.5 text-[11.5px] text-slate-500">

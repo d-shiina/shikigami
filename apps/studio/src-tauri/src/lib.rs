@@ -204,6 +204,7 @@ pub fn run() {
             agent::agent_install,
             agent::agent_install_cancel,
             agent::agent_open_url,
+            agent::agent_open_link,
             runner::runner_list,
             runner::runner_run,
             runner::open_runner,
