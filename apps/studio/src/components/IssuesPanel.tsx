@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useStudio } from "../context";
 import { stepLabel, t } from "../lib/i18n";
 import { issueText } from "../lib/issueText";
+import { writtenAt } from "../lib/problemText";
 import { authorIssues, PERSON_CODES, returnText, type Todo, todoTitle } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { useProjectMaybe } from "../project";
@@ -21,7 +22,7 @@ export function IssuesPanel() {
   const todos = useTodos();
   const issues = validation?.issues ?? [];
   const forAi = authorIssues(validation);
-  const rest = issues.filter((i) => i.severity !== "error" && !PERSON_CODES.has(i.code));
+  const rest = issues.filter((i) => i.severity !== "error" && !PERSON_CODES.has(i.code) && !forAi.includes(i));
   if (todos.length === 0 && forAi.length === 0 && rest.length === 0) return <p className="p-4 text-sm text-moegi-500">✓ {t.noIssues}</p>;
   return (
     <div className="divide-y divide-slate-100">
@@ -161,6 +162,10 @@ function IssueList({ issues, goTo }: { issues: ValidationIssue[]; goTo: (id: str
               {stepName(flow, defs, issue.stepId)}
             </div>
             <div className="text-sm">{issueText(issue, flow)}</div>
+            {flow && (() => {
+              const written = writtenAt(flow, issue);
+              return written ? <Written text={written} /> : null;
+            })()}
           </button>
         </li>
       ))}
@@ -172,4 +177,16 @@ function IssueList({ issues, goTo }: { issues: ValidationIssue[]; goTo: (id: str
 function stepName(flow: Flow | null, defs: StepTypeDef[], id: string | null | undefined): string {
   const step = flow && id ? findStep(flow.steps ?? [], id) : null;
   return step ? ` · ${t.quote(step.name || stepLabel(step.type, defs.find((d) => d.type === step.type)?.label))}` : "";
+}
+
+/** What the AI wrote where the problem is, as it wrote it. */
+export function Written({ text }: { text: string }) {
+  return (
+    <div className="mt-0.5 flex min-w-0 items-baseline gap-1 text-[11px] text-slate-600">
+      <span className="shrink-0">{t.todos.writtenShort}</span>
+      <code className="min-w-0 truncate rounded bg-sheet px-1 font-mono text-ink" title={text}>
+        {text}
+      </code>
+    </div>
+  );
 }

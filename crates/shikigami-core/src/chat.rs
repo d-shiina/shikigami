@@ -58,6 +58,13 @@ pub struct AnswerProblem {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub path: String,
     pub message: String,
+    /// The node the problem is in, by its name (or type when unnamed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+    /// What the answer has at `path`, as JSON (shortened), so the AI finds
+    /// it in its own answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub found: Option<String>,
 }
 
 impl AnswerProblem {
@@ -65,8 +72,56 @@ impl AnswerProblem {
         Self {
             path: path.into(),
             message: message.into(),
+            step: None,
+            found: None,
         }
     }
+
+    /// With the node and the value at `pointer` (relative to the flow).
+    fn at(mut self, flow: &Value, pointer: &str) -> Self {
+        self.found = flow.pointer(pointer).map(short_json);
+        self.step = step_at(flow, pointer);
+        self
+    }
+}
+
+/// Longest a `found` value gets, in characters.
+const FOUND_LIMIT: usize = 300;
+
+fn short_json(value: &Value) -> String {
+    let text = serde_json::to_string(value).unwrap_or_default();
+    if text.chars().count() <= FOUND_LIMIT {
+        return text;
+    }
+    let mut cut: String = text.chars().take(FOUND_LIMIT).collect();
+    cut.push('…');
+    cut
+}
+
+/// The name of the innermost step `pointer` is in (`/steps/2/blocks/then/0/…`).
+fn step_at(flow: &Value, pointer: &str) -> Option<String> {
+    let parts: Vec<&str> = pointer.split('/').skip(1).collect();
+    let mut found = None;
+    for j in 0..parts.len() {
+        let is_step = parts[j].parse::<usize>().is_ok()
+            && ((j >= 1 && parts[j - 1] == "steps") || (j >= 2 && parts[j - 2] == "blocks"));
+        if !is_step {
+            continue;
+        }
+        let at = format!("/{}", parts[..=j].join("/"));
+        let Some(step) = flow.pointer(&at).and_then(Value::as_object) else {
+            continue;
+        };
+        let label = step
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|n| !n.trim().is_empty())
+            .or_else(|| step.get("type").and_then(Value::as_str));
+        if let Some(label) = label {
+            found = Some(label.to_owned());
+        }
+    }
+    found
 }
 
 // -- the guide ------------------------------------------------------------
@@ -492,7 +547,10 @@ fn shape_problems(flow: &Value) -> Vec<AnswerProblem> {
     };
     let mut problems: Vec<AnswerProblem> = validator
         .iter_errors(flow)
-        .map(|e| AnswerProblem::new(format!("/flow{}", e.instance_path()), e.to_string()))
+        .map(|e| {
+            let pointer = e.instance_path().to_string();
+            AnswerProblem::new(format!("/flow{pointer}"), e.to_string()).at(flow, &pointer)
+        })
         .collect();
     problems.dedup();
     problems.truncate(30);
@@ -642,6 +700,22 @@ mod tests {
                 .iter()
                 .any(|p| p.path == "/flow/steps/0" && p.message.contains("parameters")),
             "{unknown:?}"
+        );
+        // The node and what was written there go along.
+        let nested = read_answer(
+            r#"{ "flow": { "name": "x", "steps": [ { "type": "control.if", "name": "金額の確認",
+                "params": { "condition": "true" },
+                "blocks": { "then": [ { "type": "log.message", "name": "記録", "param": { "message": "a" } } ] } } ] } }"#,
+        )
+        .unwrap_err();
+        let inner = nested
+            .iter()
+            .find(|p| p.path == "/flow/steps/0/blocks/then/0")
+            .unwrap_or_else(|| panic!("{nested:?}"));
+        assert_eq!(inner.step.as_deref(), Some("記録"));
+        assert!(
+            inner.found.as_deref().unwrap_or("").contains("\"param\""),
+            "{inner:?}"
         );
         let none = read_answer("どうぞよろしく").unwrap_err();
         assert!(none[0].message.contains("No JSON"));

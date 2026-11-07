@@ -14,6 +14,8 @@ export interface IssueContext {
   field: string;
   /** A variable named in the message (`variable 'total' …`). */
   name: string;
+  /** The function an unknown-function error names. */
+  fn: string;
   /** A setting's name as the panel shows it, for this node. */
   label(key: string): string;
 }
@@ -42,6 +44,7 @@ export function issueText(issue: ValidationIssue, flow?: Flow | null): string {
     missing: /^"([^"]+)" is a required property/.exec(issue.message)?.[1] ?? "",
     field: /\/params\/([^/]+)/.exec(issue.path)?.[1] ?? "",
     name: /'([^']+)'/.exec(issue.message)?.[1] ?? "",
+    fn: /^unknown function: (\S+)/.exec(issue.message)?.[1] ?? "",
     label: (key) => paramLabel(key, type),
   });
 }

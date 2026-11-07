@@ -1005,7 +1005,10 @@ impl Cx<'_> {
             if def.expression_params.contains(key) {
                 if let Value::String(src) = value {
                     match Expr::parse(src) {
-                        Ok(expr) => self.check_vars(expr.variables(), &param_path, id),
+                        Ok(expr) => {
+                            self.check_vars(expr.variables(), &param_path, id);
+                            self.habit(src, false, &param_path, id);
+                        }
                         Err(e) => {
                             self.error(e.code(), e.to_string(), param_path, id);
                             if src.contains("{{") {
@@ -1013,21 +1016,28 @@ impl Cx<'_> {
                                     "'{key}' is an expression param: write the bare expression without {{{{ }}}}, e.g. \"count > 3\"."
                                 ));
                             } else {
-                                self.expr_hint(&e);
+                                self.expr_hint(&e, src, false);
                             }
                         }
                     }
                 }
                 continue;
             }
-            let mut results = Vec::new();
-            expr::visit_templates(value, &mut |r| results.push(r));
-            for result in results {
-                match result {
-                    Ok(template) => self.check_vars(template.variables(), &param_path, id),
+            let mut texts = Vec::new();
+            visit_strings(value, &mut |s| texts.push(s.to_owned()));
+            for text in texts {
+                if !text.contains("{{") {
+                    self.habit(&text, true, &param_path, id);
+                    continue;
+                }
+                match expr::Template::parse(&text) {
+                    Ok(template) => {
+                        self.check_vars(template.variables(), &param_path, id);
+                        self.habit(&text, true, &param_path, id);
+                    }
                     Err(e) => {
                         self.error(e.code(), e.to_string(), param_path.clone(), id);
-                        self.expr_hint(&e);
+                        self.expr_hint(&e, &text, true);
                     }
                 }
             }
@@ -1086,16 +1096,65 @@ impl Cx<'_> {
         }
     }
 
-    fn expr_hint(&mut self, error: &expr::ExprError) {
-        if let expr::ExprError::UnknownFunction(name) = error {
-            let near = closest(name, expr::function_names());
-            self.hint(format!(
-                "{}Available functions: {}.",
-                near.map(|n| format!("Did you mean '{n}'? "))
-                    .unwrap_or_default(),
-                expr::function_names().collect::<Vec<_>>().join(", ")
-            ));
+    /// How to fix an expression that does not parse: the habit from another
+    /// language when it looks like one, the nearest function for an unknown
+    /// one, else the rules with examples.
+    fn expr_hint(&mut self, error: &expr::ExprError, src: &str, template: bool) {
+        match error {
+            expr::ExprError::UnknownFunction(name) => {
+                let near = closest(name, expr::function_names());
+                let lead = expr::unknown_function_hint(name).or_else(|| {
+                    near.map(|n| {
+                        format!(
+                            "Did you mean '{n}'? {}",
+                            expr::describe_function(n).unwrap_or_default()
+                        )
+                    })
+                });
+                self.hint(format!(
+                    "{}Available functions: {}.",
+                    lead.map(|l| format!("{l} ")).unwrap_or_default(),
+                    expr::function_names().collect::<Vec<_>>().join(", ")
+                ));
+            }
+            expr::ExprError::Syntax { .. } => {
+                let rules = generic_hint("EXPR_SYNTAX").unwrap_or_default();
+                self.hint(match expr::mistake_hint(src, template) {
+                    Some(habit) => format!("{habit} {rules}"),
+                    None => rules.to_owned(),
+                });
+            }
+            _ => {}
         }
+    }
+
+    /// A value that works but was most likely written in another
+    /// language's way, so it would quietly give the wrong value:
+    /// `${total}` in a text (stays as written) or `items.length` (empty).
+    fn habit(&mut self, src: &str, template: bool, path: &str, id: Option<&StepId>) {
+        let hint = if template && self.dollar_variable(src) {
+            Some("Embed values with {{ name }}, not ${name}.".to_owned())
+        } else {
+            expr::length_member_hint(src, template)
+        };
+        if let Some(hint) = hint {
+            self.warn(
+                "EXPR_OTHER_LANGUAGE",
+                format!("'{src}' looks written the way another language does it"),
+                path.to_owned(),
+                id,
+            );
+            self.hint(hint);
+        }
+    }
+
+    /// `${name}` naming a variable of the flow.
+    fn dollar_variable(&self, src: &str) -> bool {
+        src.match_indices("${").any(|(i, _)| {
+            let rest = &src[i + 2..];
+            rest.find('}')
+                .is_some_and(|end| self.known_vars.contains(rest[..end].trim()))
+        })
     }
 
     fn check_vars(&mut self, names: BTreeSet<String>, path: &str, id: Option<&StepId>) {
@@ -1115,6 +1174,15 @@ impl Cx<'_> {
                 });
             }
         }
+    }
+}
+
+fn visit_strings(value: &Value, f: &mut dyn FnMut(&str)) {
+    match value {
+        Value::String(s) => f(s),
+        Value::Array(items) => items.iter().for_each(|v| visit_strings(v, f)),
+        Value::Object(map) => map.values().for_each(|v| visit_strings(v, f)),
+        _ => {}
     }
 }
 
@@ -1280,7 +1348,7 @@ fn generic_hint(code: &str) -> Option<&'static str> {
             "Omit schemaVersion (Core writes the current one). A file from a newer Shikigami needs that newer version to open."
         }
         "EXPR_SYNTAX" => {
-            "Check quotes and brackets. Strings use '...', comparisons ==, !=, <, >, logic &&, ||, !. In template params wrap expressions in {{ }}."
+            "Check quotes and brackets. Strings use '...', comparisons ==, !=, <, >, logic &&, ||, !, join text with +, call functions as name(x) (not x.name()). In template params wrap expressions in {{ }}. Examples: total > 1000 && status == '済', name + '様', len(items) == 0, upper(trim(code))."
         }
         "INVALID_STEP_DEFINITION" => {
             "The step type itself is broken; report it instead of changing the flow."
@@ -1859,6 +1927,52 @@ mod tests {
         for issue in report.errors() {
             assert!(issue.hint.is_some(), "{issue:?}");
         }
+    }
+
+    #[test]
+    fn habits_of_other_languages_get_the_shikigami_way() {
+        let mut s = Flow::new("habits");
+        s.variables.push(VariableDef::new("total", VarType::Number));
+        s.variables.push(VariableDef::new("items", VarType::Array));
+        s.steps = vec![
+            Step::new("control.if")
+                .with_id("a")
+                .with_param("condition", "total === 3"),
+            Step::new("log.message")
+                .with_id("b")
+                .with_param("message", "合計 ${total} 円"),
+            Step::new("control.if")
+                .with_id("c")
+                .with_param("condition", "items.length > 0"),
+            Step::new("log.message")
+                .with_id("d")
+                .with_param("message", "{{ toUpperCase(total) }}"),
+            // PowerShell's ${env:…} is not a variable of the flow.
+            Step::new("log.message")
+                .with_id("e")
+                .with_param("message", "${env:USERPROFILE}"),
+        ];
+        let report = validator().validate(&s);
+        assert!(
+            hint_of(&report, "EXPR_SYNTAX").contains("there is no ==="),
+            "{report:?}"
+        );
+        let other: Vec<_> = report
+            .issues
+            .iter()
+            .filter(|i| i.code == "EXPR_OTHER_LANGUAGE")
+            .collect();
+        assert_eq!(other.len(), 2, "{other:?}");
+        assert!(other.iter().all(|i| i.severity == Severity::Warning));
+        assert!(
+            other[0]
+                .hint
+                .as_deref()
+                .unwrap_or("")
+                .contains("{{ name }}")
+        );
+        assert!(other[1].hint.as_deref().unwrap_or("").contains("len(x)"));
+        assert!(hint_of(&report, "EXPR_UNKNOWN_FUNCTION").contains("upper()"));
     }
 
     #[test]

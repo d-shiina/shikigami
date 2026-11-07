@@ -45,7 +45,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** Why a pasted answer could not be read, written for the AI that wrote it. */
-export type AnswerProblem = { path?: string; message: string };
+export type AnswerProblem = {
+  path?: string;
+  message: string;
+  /** The node the problem is in, by its name (or type). */
+  step?: string;
+  /** What the answer has at `path`, as JSON (shortened). */
+  found?: string;
+};
 /** The flow a pasted answer made or changed, or the problems to send back (nothing changed then). */
 export type PasteOutcome = { outcome?: EditOutcome; problems: AnswerProblem[] };
 
