@@ -1,14 +1,34 @@
 import type { CaseResult, TestCase } from "@shikigami/schema";
 import { Check, Play, Save, Square, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { explainError } from "../lib/errorText";
 import { t } from "../lib/i18n";
 import { badName, freeName, mismatchText } from "../lib/testCases";
 import { isActive } from "../store";
+import { create } from "zustand";
 
 type Named = { name: string; case: TestCase };
+
+/**
+ * The suite outlives the tab: switching to the log or closing the panel
+ * unmounts the component while the cases still run, and results belong to
+ * the flow that ran them, not to whichever flow is open when they arrive.
+ */
+const useSuite = create<{
+  /** Last results here, by flow, then by case name. */
+  results: Record<string, Record<string, CaseResult>>;
+  /** The flow and the cases running now. */
+  running: { flowId: string; names: string[] } | null;
+}>(() => ({ results: {}, running: null }));
+
+const keep = (flowId: string, done: CaseResult[]) =>
+  useSuite.setState((s) => ({
+    results: { ...s.results, [flowId]: { ...(s.results[flowId] ?? {}), ...Object.fromEntries(done.map((r) => [r.name, r])) } },
+  }));
+
+const NONE: Record<string, CaseResult> = {};
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -21,23 +41,30 @@ export function TestsPanel() {
   const flowId = useStudio((s) => s.flow?.id ?? null);
   const run = useStudio((s) => s.run);
   const [cases, setCases] = useState<Named[]>([]);
-  const [results, setResults] = useState<Record<string, CaseResult>>({});
-  const [running, setRunning] = useState<string[] | null>(null);
+  const results = useSuite((s) => (flowId ? s.results[flowId] : undefined)) ?? NONE;
+  const suite = useSuite((s) => s.running);
+  const running = suite && suite.flowId === flowId ? suite.names : null;
   const [naming, setNaming] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The flow open now: answers for one opened before are dropped.
+  const current = useRef(flowId);
+  current.current = flowId;
+
   const reload = useCallback(async () => {
     if (!flowId) return;
     try {
-      setCases(await api.listTestCases(flowId));
+      const list = await api.listTestCases(flowId);
+      if (current.current === flowId) setCases(list);
     } catch (e) {
-      setError(message(e));
+      if (current.current === flowId) setError(message(e));
     }
   }, [flowId]);
 
   useEffect(() => {
-    setResults({});
+    setCases([]);
+    setNaming(null);
     setNote(null);
     setError(null);
     void reload();
@@ -46,18 +73,19 @@ export function TestsPanel() {
   if (!flowId) return null;
   // A run of this flow that has ended can become a case.
   const lastRun = run && run.flowId === flowId && !isActive(run) ? run : null;
-  const busy = running !== null;
+  // One suite at a time, whichever flow it is of.
+  const busy = suite !== null;
 
   const runCases = async (names?: string[]) => {
-    setRunning(names ?? cases.map((c) => c.name));
+    const id = flowId;
+    useSuite.setState({ running: { flowId: id, names: names ?? cases.map((c) => c.name) } });
     setError(null);
     try {
-      const done = await api.runTests(flowId, names);
-      setResults((prev) => ({ ...prev, ...Object.fromEntries(done.map((r) => [r.name, r])) }));
+      keep(id, await api.runTests(id, names));
     } catch (e) {
-      setError(message(e));
+      if (current.current === id) setError(message(e));
     } finally {
-      setRunning(null);
+      useSuite.setState({ running: null });
     }
   };
 
@@ -77,7 +105,10 @@ export function TestsPanel() {
   const remove = async (name: string) => {
     try {
       await api.deleteTestCase(flowId, name);
-      setResults(({ [name]: _, ...rest }) => rest);
+      useSuite.setState((s) => {
+        const { [name]: _, ...rest } = s.results[flowId] ?? {};
+        return { results: { ...s.results, [flowId]: rest } };
+      });
       await reload();
     } catch (e) {
       setError(message(e));
@@ -90,14 +121,14 @@ export function TestsPanel() {
   return (
     <div className="text-sm">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-1.5">
-        {busy ? (
+        {running ? (
           <button type="button" className="flex items-center gap-1 rounded-md px-2 text-xs leading-6 text-slate-600 hover:bg-slate-100 hover:text-ink" onClick={() => void api.stopTests()}>
             <Square size={12} aria-hidden /> {t.tests.stop}
           </button>
         ) : (
           <button
             type="button"
-            disabled={cases.length === 0}
+            disabled={cases.length === 0 || busy}
             className="flex items-center gap-1 rounded-md px-2 text-xs leading-6 text-slate-600 hover:bg-slate-100 hover:text-ink disabled:opacity-40"
             onClick={() => void runCases()}
             title={t.tests.usesDraft}
@@ -115,7 +146,7 @@ export function TestsPanel() {
           <Save size={12} aria-hidden /> {t.tests.saveRun}
         </button>
         <span className="flex-1" />
-        {busy && <span className="text-xs text-slate-500">{t.tests.running}</span>}
+        {running && <span className="text-xs text-slate-500">{t.tests.running}</span>}
         {!busy && ran.length > 0 && (
           <span className={`text-xs ${failed ? "text-shu-600" : "text-moegi-500"}`}>{t.tests.summary(ran.length - failed, failed)}</span>
         )}
