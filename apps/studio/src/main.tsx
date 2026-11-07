@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { Runner } from "./runner/Runner";
 // Bundled so Japanese never falls back to Chinese glyph shapes, offline too.
+import "@fontsource-variable/inter/index.css";
 import "@fontsource-variable/noto-sans-jp";
 import "./index.css";
 import { initLocale, onLocaleChange, t } from "./lib/i18n";

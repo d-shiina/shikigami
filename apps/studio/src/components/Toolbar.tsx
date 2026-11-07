@@ -170,7 +170,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
       <ViewSwitch view={view} onChange={onView} />
       <span className="mx-1 h-5 w-px bg-slate-200" />
       {running ? (
-        <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-300 bg-sheet text-[13px]">
+        <div className="flex h-7 items-center overflow-hidden rounded-lg border border-slate-300 bg-sheet text-[13px]">
           <span className="flex items-center gap-2 px-3 font-medium text-ink">
             <span className={`h-2 w-2 rounded-full ${paused ? (run?.pause?.reason === "error" ? "bg-shu-500" : "bg-mizu-500") : "bg-accent-500 animate-pulse"}`} />
             {paused ? t.status.paused : t.status.running}
@@ -210,7 +210,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
             onClick={() => startRun({ step: true })}
             disabled={errors > 0}
             title={t.toolbar.stepRunTitle}
-            className="flex h-8 items-center gap-1 rounded-lg border border-slate-300 px-2.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
+            className="flex h-7 items-center gap-1 rounded-lg border border-slate-300 px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
           >
             <span className="@max-[920px]/title:hidden">{t.toolbar.stepRun}</span>
             <span className="hidden @max-[920px]/title:inline" aria-hidden="true">
@@ -222,7 +222,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
             onClick={() => startRun()}
             disabled={errors > 0}
             title={errors > 0 ? (authorIssues(validation).length > 0 ? t.toolbar.fixErrors : unsetIssues(validation).length > 0 ? t.toolbar.fillUnset : t.todos.runBlocked) : `${t.run} (F5)`}
-            className="group flex h-8 items-center gap-2 rounded-lg bg-primary pr-1.5 pl-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
+            className="group flex h-7 items-center gap-2 rounded-lg bg-primary pr-1.5 pl-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
           >
             <PlayIcon />
             {t.run}

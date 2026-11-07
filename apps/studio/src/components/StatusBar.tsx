@@ -247,7 +247,7 @@ function Version() {
 
 export function StatusBar() {
   return (
-    <footer className="col-span-full flex h-7 min-w-0 items-center border-t border-slate-200 bg-sheet px-2 text-[11px] text-slate-500">
+    <footer className="col-span-full flex h-7 min-w-0 items-center bg-frame px-2 text-[11px] text-slate-500">
       <AiActivity />
       <span className="flex-1" />
       <RunStatus />
