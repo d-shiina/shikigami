@@ -16,7 +16,7 @@ Shikigami is a local-first RPA platform where AI clients (Claude Code, Codex, Cu
 
 1. Download `Shikigami.Studio_<version>_x64-setup.exe` from the [latest release](https://github.com/d-shiina/shikigami/releases/latest) and run it. It installs per user, so no administrator rights are needed. Studio updates itself from then on.
 2. Start **Shikigami Studio** from the Start menu. Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
-3. To have AI build flows, open "Claude Code" at the top left of Studio (Ctrl+J) and press "Install Claude Code": [Claude Code](https://claude.com/claude-code) goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
+3. To have AI build flows, open the AI pane at the top left of Studio (Ctrl+J), pick the AI you use — Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot — and press "Install": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
 4. Check the AI's changes under "To review" in the sidebar and press "Review and publish". Published flows run without AI from Studio, from the "Shikigami Run" window, or on a schedule.
 
 To try one task from start to finish, see the [tutorials](docs/tutorials/README.md) (about 15 minutes each, with sample files). The rest of this page is for developers.

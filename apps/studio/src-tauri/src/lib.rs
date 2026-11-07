@@ -194,6 +194,8 @@ pub fn run() {
             commands::list_secret_requests,
             commands::dismiss_secret_request,
             agent::agent_info,
+            agent::agent_choices,
+            agent::agent_select,
             agent::agent_send,
             agent::agent_stop,
             agent::agent_login,

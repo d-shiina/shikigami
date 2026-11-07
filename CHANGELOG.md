@@ -6,6 +6,15 @@
 
 ## 未リリース
 
+### 主な変更
+
+- AI ペインで Claude Code のほかに OpenAI Codex・Gemini CLI・GitHub Copilot も使えるようになりました。設定の「使う AI」で選び、導入とサインインはペインのボタンからできます
+
+### 追加
+
+- Studio：AI ペインで Claude Code のほかに OpenAI Codex・Gemini CLI・GitHub Copilot を使えるようにしました。設定の「使う AI」（AI を使う準備の枠でも選べます）で切り替え、どれもペインのボタンで導入（Codex・Gemini・Copilot は npm、Node.js が無ければ先に入れます）とサインインができます。どの AI も Shikigami のツールだけを使い、作業の表示・会話の続き・差し戻しの直しは同じように動きます。会話は AI ごとに続きます
+- Studio：設定の「MCP サーバーの登録」に、選んでいる AI 用の登録コマンドを表示
+
 ## [0.1.8] - 2026-11-07
 
 ### 主な変更

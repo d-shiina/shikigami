@@ -91,21 +91,29 @@ Claude Code のログインが切れている・未ログインのとき（`Fail
 
 ## AI を選べるようにする（エージェント非依存）
 
-MCP は Claude Code 以外（GitHub Copilot、Gemini CLI、Codex など）でも使えるので、使う AI は `config.json`（`%APPDATA%\Shikigami\config.json`）の `agent` で差し替えられる：
+AI ペインは Claude Code 専用ではない。Studio が裏で動かせる AI は 4 つで、設定の「AI エージェント」→「使う AI」（AI を使う準備の枠にも同じ選択）で選ぶ。選んだものは `config.json`（`%APPDATA%\Shikigami\config.json`）の `agent.kind` に残る。違いは `apps/studio/src-tauri/src/agent/providers.rs` に閉じている。
 
-```json
-{ "agent": { "kind": "claudeCode" } }                        // 既定。claude を PATH と ~/.local/bin から探す
-{ "agent": { "kind": "claudeCode", "command": "C:\\tools\\claude.exe" } }
-{ "agent": { "kind": "command", "name": "Gemini CLI", "command": "gemini",
-             "args": ["-p", "--mcp-config", "{mcpConfig}"] } }
-```
+| `kind` | AI | 起動（1 メッセージ 1 プロセス、メッセージは stdin） | Shikigami だけに絞る方法 | 会話の続き | 指示の渡し方 |
+|---|---|---|---|---|---|
+| `claudeCode` | Claude Code | `claude -p --output-format stream-json …` | `--strict-mcp-config`・`--tools ""`・`--allowedTools mcp__shikigami` | `--resume <session_id>` | `--append-system-prompt-file` |
+| `codex` | OpenAI Codex CLI | `codex exec --json --skip-git-repo-check --sandbox read-only …  -` | `-c features.shell_tool=false`・`-c web_search='disabled'`、MCP は `-c mcp_servers.shikigami.*`（`default_tools_approval_mode='approve'`） | `codex exec … resume <thread_id> -` | 作業フォルダーの `AGENTS.md` |
+| `gemini` | Gemini CLI | `gemini --output-format stream-json --allowed-mcp-server-names shikigami` | 作業フォルダーの `.gemini/settings.json`（`mcpServers.shikigami.trust: true`、組み込みツールは `tools.exclude`）。`GEMINI_CLI_TRUST_WORKSPACE=true` でこの設定を読ませる | `--resume <session_id>` | 作業フォルダーの `GEMINI.md` |
+| `copilot` | GitHub Copilot CLI | `copilot --output-format json --additional-mcp-config @copilot-mcp.json` | `--disable-builtin-mcps`・`--available-tools shikigami`・`--allow-tool shikigami` | `--resume <sessionId>` | 作業フォルダーの `AGENTS.md` |
+| `command` | そのほか | `config.json` の `command`・`args` | AI 任せ | 無し | 無し |
 
-- `command` 種別：メッセージを stdin に書き、stdout の各行を返事として表示する。`{mcpConfig}`（Shikigami 用 MCP 設定ファイルのパス）と `{workspace}` を引数に埋め込める。MCP を自前で登録済みの AI ならそのままでもよい。会話の継続・ツール表示は無し（必要になったら種別を足す）。
+- 指示（`SYSTEM_PROMPT`）は引数でなくファイルで渡す。Windows で npm から入れた AI は `.cmd` なので、引数に改行を入れられない。Codex の `-c` の値は TOML のリテラル文字列（`'C:\…'`）にして、パスの `\` をそのまま渡す。
+- 各 AI の出力（JSON の行）は `ClaudeStream` / `CodexStream` / `GeminiStream` / `CopilotStream` が同じ `agent-event`（返事・ツール・書いている途中・失敗・作ったフロー・終わり）に読み替える。ツール名の前置き（`mcp__shikigami__`・`mcp_shikigami_`・`shikigami-`）は外す。
+- 会話は AI ごと。会話に AI の種類（`agent`）を残し、別の AI に切り替えたあとは前の会話の続きにせず新しく始める（元の AI に戻せば続く）。
+- 導入（`agent_install`）：Claude Code は公式インストーラー、ほかは `npm install --global <パッケージ>`（`@openai/codex`・`@google/gemini-cli`・`@github/copilot`）。npm が無い Windows では先に `winget install OpenJS.NodeJS.LTS`。入れ終わるとその AI に切り替える。起動したあとの Studio の PATH には新しく入ったものが載らないので、探す場所（`%APPDATA%\npm`・`~/.local/bin`）と子プロセスの PATH（`Program Files\nodejs` など）を足す。
+- サインイン（`agent_login`）：Claude Code は `claude auth login`、Codex は `codex login`（確認は `codex login status`）、Copilot は `copilot login --web-flow`。ペインが開いてよいページは AI ごと（claude.com・auth.openai.com・github.com/login など）。Gemini CLI は自分の画面でしかサインインできないので、その画面を別ウィンドウで開き、そこで「Sign in with Google」を選んでもらう。
+- 確かめ方：4 つとも CLI を入れ、偽のモデルサーバー（OpenAI 互換・Responses API・Gemini API）を立てて、Studio と同じ引数で「Shikigami のツールを呼ぶ → 返事 → 次のメッセージで会話が続く」まで動くことを確認した（Shikigami の MCP サーバーは本物）。テストにある各 AI の出力の行はこのとき出たもの。実際のアカウントでの確認と Windows 実機は未。
+- `command` 種別：メッセージを stdin に書き、stdout の各行を返事として表示する。`{mcpConfig}`（Shikigami 用 MCP 設定ファイルのパス）と `{workspace}` を引数に埋め込める。
 - 使えないとき（AI が見つからない、`shikigami` CLI が無い）は、ペインに理由を表示して入力を止める。
+- Cursor は裏で 1 回ずつ動かす CLI の作りが違うので、ペインからは動かさない。Cursor からは MCP サーバーとして登録して使う（docs/mcp.md）。設定の「MCP サーバーの登録」は、選んでいる AI の登録コマンドを出す。
 
 ## 今回やったこと（最初の一歩）
 
-- Tauri コマンド `agent_info` / `agent_send` / `agent_stop`、イベント `agent-event`（`apps/studio/src-tauri/src/agent.rs`）。
+- Tauri コマンド `agent_info` / `agent_send` / `agent_stop`、イベント `agent-event`（`apps/studio/src-tauri/src/agent/mod.rs`）。
 - ヘッダーの AI 名ボタン（例「Claude Code」、Ctrl+J）と右側の AI ペイン（`AgentPane.tsx`、会話は `agent.ts`）。開いているフローと選んだ手順を文脈として付ける。
 - 差し戻しフォームの「<AI 名> がすぐ直す」。
 

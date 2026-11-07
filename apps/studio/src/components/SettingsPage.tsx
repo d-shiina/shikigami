@@ -7,6 +7,7 @@ import { Bot, FolderOpen, Info, type LucideIcon, Monitor, ShieldCheck } from "lu
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAgent } from "../agent";
 import { t } from "../lib/i18n";
+import { AgentPicker } from "./AgentPane";
 import { AboutSection } from "./AppMenu";
 import { PolicySection } from "./PolicySection";
 import { SettingsGroup, SettingsRow } from "./settingsLayout";
@@ -46,9 +47,11 @@ function AgentSection() {
   const info = useAgent((s) => s.info);
   return (
     <SettingsGroup>
-      <SettingsRow label={t.shell.name}>
-        <span className="font-semibold">{info?.name ?? "AI"}</span>
-        {!info?.available && <span className="ml-2 text-shu-600">{info?.problem ?? t.shell.agentNone}</span>}
+      <SettingsRow label={t.shell.agentPick} hint={t.shell.agentPickHint} htmlFor="settings-agent">
+        <div className="flex max-w-md">
+          <AgentPicker id="settings-agent" />
+        </div>
+        {!info?.available && <p className="mt-1 text-[12px] text-shu-600">{info?.problem ?? t.shell.agentNone}</p>}
       </SettingsRow>
       {info?.command && (
         <SettingsRow label={t.shell.agentCommand}>
