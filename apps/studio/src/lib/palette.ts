@@ -7,6 +7,7 @@ import { stepLabel, t } from "./i18n";
 import { KEYWORD } from "./keywords";
 import { en } from "./locales/en";
 import { presets } from "./presets";
+import { extensionGroup, extensionOf, extensionSummary, extensionTag, groupExtension } from "./extensions";
 import { toKana } from "./romaji";
 
 /** One line of the palette: a node type, or a ready-made "変数への代入" (preset). */
@@ -84,7 +85,7 @@ export const SUBGROUPS: Record<string, [string, string[]][]> = {
     ["output", ["excel.saveAs", "excel.exportPdf", "excel.runMacro"]],
   ],
   word: [["", ["word.fillTemplate", "word.readText"]]],
-  outlook: [["", ["mail.list", "mail.saveAttachments", "mail.createDraft", "mail.send"]]],
+  outlook: [["", ["mail.list", "mail.saveAttachments", "mail.move", "mail.markRead", "mail.delete", "mail.createDraft", "mail.reply", "mail.forward", "mail.sendDraft", "mail.send"]]],
   file: [
     ["read", ["file.readCsv", "file.readText", "pdf.readText", "config.read"]],
     ["write", ["file.writeCsv", "file.writeText"]],
@@ -167,11 +168,18 @@ const UNLISTED = new Set(["control.case"]);
 const OFFICE_APPS: Record<string, string> = { excel: "excel", word: "word", mail: "outlook" };
 
 export function groupOf(def: Pick<StepTypeDef, "type" | "category">): string {
+  // An extension's nodes are listed under the extension ("Azure AI-OCR"), as people look for it by name.
+  const ext = extensionOf(def.type);
+  if (ext) return extensionGroup(ext);
   if (def.category === "office") return OFFICE_APPS[def.type.split(".")[0] ?? ""] ?? "office";
   return def.category;
 }
 
-export const groupLabel = (group: string): string => (t.categories as Record<string, string>)[group] ?? group;
+export const groupLabel = (group: string): string => {
+  const ext = groupExtension(group);
+  if (ext) return ext.label || ext.name;
+  return (t.categories as Record<string, string>)[group] ?? group;
+};
 
 /** Lower case, NFKC (full-width → half-width), katakana → hiragana. */
 export function normalize(text: string): string {
@@ -220,7 +228,7 @@ function firstSentence(text: string): string {
 
 /** What a node does, in a line, in the current language. */
 export function stepSummary(type: string, description?: string | null): string {
-  return t.stepHelp[type]?.summary ?? firstSentence(description ?? "");
+  return t.stepHelp[type]?.summary ?? (extensionSummary(type) || firstSentence(description ?? ""));
 }
 
 function stepItem(def: StepTypeDef, at: number): PaletteItem {
@@ -244,7 +252,7 @@ function stepItem(def: StepTypeDef, at: number): PaletteItem {
       strong: normalizeMarked(
         `${def.label} ${def.type} ${KEYWORD[def.type] ?? ""} ${help?.words ?? ""} ${english} ${groupLabel(group)} ${readings(`${def.label} ${help?.words ?? ""}`)}`,
       ),
-      weak: normalizeMarked(`${help?.summary ?? ""} ${def.description ?? ""}`),
+      weak: normalizeMarked(`${help?.summary ?? ""} ${extensionSummary(def.type) ?? ""} ${def.description ?? ""}`),
     },
   };
 }
@@ -474,6 +482,11 @@ const APP_GROUPS = new Set(SECTIONS.find((s) => s.id === "apps")?.groups ?? []);
  */
 export function appTag(def: Pick<StepTypeDef, "type" | "category"> | undefined, title: string): string | null {
   if (!def) return null;
+  const ext = extensionOf(def.type);
+  if (ext) {
+    const tag = extensionTag(ext);
+    return title.includes(tag) ? null : tag;
+  }
   const group = groupOf(def);
   if (!APP_GROUPS.has(group) || group === "system") return null;
   const label = groupLabel(group);

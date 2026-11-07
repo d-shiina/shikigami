@@ -227,6 +227,15 @@ pub enum Op {
         message: Option<String>,
         timeout_ms: u64,
     },
+    /// 「画面から切り取る」: freezes the screen, dims it and lets the user
+    /// drag a rectangle on it. Answers `{ target: { window }, png (base64),
+    /// width, height, rect, window }` with the window under the middle of
+    /// the rectangle, or `{ cancelled: true }` on Esc, a right click or
+    /// after `timeout_ms`.
+    Snip {
+        message: Option<String>,
+        timeout_ms: u64,
+    },
     /// Records what the user does until the banner is clicked or
     /// `timeout_ms` passes: each click (with the target of what was
     /// clicked, as `Pick` builds it), each text field's final text, and

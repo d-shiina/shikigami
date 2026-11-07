@@ -2310,3 +2310,60 @@ async fn a_failed_browser_step_leaves_a_picture_of_the_page_beside_the_log() {
     assert!(report.error.unwrap().details.is_none());
     assert_eq!(shots.lock().unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn a_run_can_start_at_a_chosen_step() {
+    let mut s = flow(vec![
+        set("x", "1"),
+        Step::new("control.group")
+            .with_block("body", vec![log("before"), set("y", "x + 1"), log("after")]),
+        log("end"),
+    ]);
+    for name in ["x", "y"] {
+        s.variables.push(var(
+            name,
+            VarType::Number,
+            VarDirection::Output,
+            Some(json!(0)),
+        ));
+    }
+    let start = s.steps[1].blocks["body"][1].id.clone();
+    let handle = Runtime::new()
+        .start(
+            s.clone(),
+            RunOptions {
+                start_at: Some(start.clone()),
+                start_values: json!({ "x": 5, "nope": 1 }).as_object().cloned().unwrap(),
+                ..RunOptions::default()
+            },
+        )
+        .expect("start");
+    let mut events = Vec::new();
+    let report = handle.wait_with(|e| events.push(e.clone())).await.unwrap();
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    // x = 1 never ran: the earlier run's 5 is used.
+    assert_eq!(report.outputs["x"], json!(5));
+    assert_eq!(report.outputs["y"], json!(6));
+    let logs = logs(&events);
+    assert!(logs[0].contains("から実行します"), "{logs:?}");
+    assert_eq!(&logs[1..], ["after", "end"]);
+
+    let mut inside_loop = s.clone();
+    inside_loop.steps = vec![
+        Step::new("control.repeat")
+            .with_id("r")
+            .with_param("count", 2)
+            .with_block("body", vec![log("x").with_id("in")]),
+    ];
+    let error = Runtime::new()
+        .start(
+            inside_loop,
+            RunOptions {
+                start_at: Some("in".into()),
+                ..RunOptions::default()
+            },
+        )
+        .err()
+        .expect("refused");
+    assert_eq!(error.code, "START_INSIDE_BLOCK");
+}

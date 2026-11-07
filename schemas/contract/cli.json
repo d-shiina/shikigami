@@ -612,6 +612,108 @@
               "positional": true
             }
           ]
+        },
+        {
+          "name": "install",
+          "args": [
+            {
+              "id": "source",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "yes",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "yes",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "update",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            },
+            {
+              "id": "yes",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "yes",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "remove",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "enable",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "disable",
+          "args": [
+            {
+              "id": "name",
+              "required": true,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "positional": true
+            }
+          ]
+        },
+        {
+          "name": "registry",
+          "args": [
+            {
+              "id": "set",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "set"
+            }
+          ]
         }
       ]
     },

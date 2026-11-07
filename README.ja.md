@@ -35,6 +35,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 | [docs/audit.md](docs/ja/audit.md) | 監査の記録：誰がどのフローを変更・公開・実行したか（`shikigami audit`）と保存期間 |
 | [docs/remote.md](docs/ja/remote.md) | 管理サーバー：PC の登録、空いた PC へのジョブの振り分け、プロトコル v1 と参考実装のサーバー |
 | [docs/oauth.md](docs/ja/oauth.md) | OAuth でサインインする Web API（Box など）。リダイレクト URL は固定のどんな URL でもよい |
+| [docs/ja/extensions.md](docs/ja/extensions.md) | 拡張機能：クラウド型 AI-OCR・社内システム・SaaS の API などのノードを後から追加（zip・URL・GitHub から導入） |
 | [docs/design/plugins.md](docs/design/plugins.md) | ノードのプラグイン：社内システムなど向けのノードを、本体を作り直さずに足す（マニフェスト + 別プロセス） |
 | [docs/design/ui-principles.md](docs/design/ui-principles.md) | Studio の画面の決まり：ボタンをどこに置き、どう見せるか、その理由 |
 | [docs/ja/compatibility.md](docs/ja/compatibility.md) | 互換性の方針：フロー形式（`schemaVersion`・移行・`requires`）、MCP・CLI で何を壊さないか |

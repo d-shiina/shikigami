@@ -25,6 +25,7 @@ import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
 import { RunsPage } from "./components/RunsPage";
 import { SecretsPage } from "./components/SecretsPage";
+import { ExtensionsPage } from "./components/ExtensionsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { FlowsPage } from "./components/FlowsPage";
 import { Sidebar } from "./components/Sidebar";
@@ -366,41 +367,49 @@ function Shell() {
             <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
           </Peek>
         )}
-        {/* The work floats on the window's ground, framed and rounded, as in Linear. */}
-        <div className="mt-1.5 mr-1.5 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+        {/* The title bar lies on the window's ground, so the window buttons sit in its corner as
+            on any Windows window; the work under it floats, framed and rounded, as in Linear. */}
+        <div className="flex min-w-0 flex-1 flex-col">
           <TitleBar view={view} onView={setView} />
-          <HumanBanner />
-          <Banner />
-          <div className="flex min-h-0 flex-1">
-            {/* The AI's chat, beside the sidebar it is opened from. */}
-            {/* Kept mounted while closed, so an unsent draft survives (the pane draws nothing then). */}
-            <div className="relative flex">
-              <AgentPane width={fit.agent} />
-              {fit.agent > 0 && grip("agent")}
+          <div className="mr-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+            <HumanBanner />
+            <Banner />
+            <div className="flex min-h-0 flex-1">
+              {/* The AI's chat, beside the sidebar it is opened from. */}
+              {/* Kept mounted while closed, so an unsent draft survives (the pane draws nothing then). */}
+              <div className="relative flex">
+                <AgentPane width={fit.agent} />
+                {fit.agent > 0 && grip("agent")}
+              </div>
+              {/* With nothing open, the editor has nothing to show: the library does. */}
+              {(place === "library" || (place === "flows" && !hasFlow)) && (
+                <div className="min-w-0 flex-1">
+                  <FlowsPage />
+                </div>
+              )}
+              {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+              {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
+              {place === "runs" && (
+                <div className="min-w-0 flex-1">
+                  <RunsPage />
+                </div>
+              )}
+              {place === "secrets" && (
+                <div className="min-w-0 flex-1">
+                  <SecretsPage />
+                </div>
+              )}
+              {place === "extensions" && (
+                <div className="min-w-0 flex-1">
+                  <ExtensionsPage />
+                </div>
+              )}
+              {place === "settings" && (
+                <div className="min-w-0 flex-1">
+                  <SettingsPage />
+                </div>
+              )}
             </div>
-            {/* With nothing open, the editor has nothing to show: the library does. */}
-            {(place === "library" || (place === "flows" && !hasFlow)) && (
-              <div className="min-w-0 flex-1">
-                <FlowsPage />
-              </div>
-            )}
-            {place === "flows" && hasFlow && <FlowsPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
-            {place === "review" && <ReviewPlace view={view} onView={setView} fit={fit} sizes={sizes} grip={grip} />}
-            {place === "runs" && (
-              <div className="min-w-0 flex-1">
-                <RunsPage />
-              </div>
-            )}
-            {place === "secrets" && (
-              <div className="min-w-0 flex-1">
-                <SecretsPage />
-              </div>
-            )}
-            {place === "settings" && (
-              <div className="min-w-0 flex-1">
-                <SettingsPage />
-              </div>
-            )}
           </div>
         </div>
       </div>

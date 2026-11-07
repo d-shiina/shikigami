@@ -37,8 +37,8 @@
 | G10 | P1 | Excel | 行・列の挿入と削除、範囲のクリア、シートの削除・名前変更・コピーがない | WinActor：Excel 操作（行削除・シート名変更・シートコピー…）／UiPath：Insert/Delete Rows・Delete Range・Rename Sheet・Copy Sheet／PAD：「Excel ワークシートから行を削除」など | 済み |
 | G11 | P1 | Excel | `.xls`・パスワード付きのブックが開けない、CSV や `.xlsx` への変換（名前を付けて保存）がない | UiPath：Save Workbook As・Password／PAD：「Excel の起動」のパスワード・「Excel を閉じる」の名前を付けて保存 | 済み |
 | G12 | P1 | 人とのやりとり | フローの途中で複数の項目（選択肢・日付・チェック）を一度に入れてもらう画面がない（`dialog.input` は 1 行だけ） | UiPath：Create Form／PAD：「カスタム フォームを表示」／WinActor：ユーザー入力（複数項目） | 済み |
-| G13 | P1 | Studio・デバッグ | 選んだノードから実行する（前のノードを飛ばす）ことができない | UiPath：Run from this Activity／PAD：「ここから実行」 | 着手順 8 |
-| G14 | P1 | メール | メールの移動・既読にする・返信・転送・削除がない。Outlook（クラシック）なしで受信できない（Microsoft 365・IMAP） | UiPath：Move / Mark as Read / Reply To / Delete Outlook Mail Message・Get IMAP Mail／PAD：「メール メッセージの処理」・Exchange / Outlook / IMAP | 着手順 9 |
+| G13 | P1 | Studio・デバッグ | 選んだノードから実行する（前のノードを飛ばす）ことができない | UiPath：Run from this Activity／PAD：「ここから実行」 | 済み |
+| G14 | P1 | メール | メールの移動・既読にする・返信・転送・削除がない。Outlook（クラシック）なしで受信できない（Microsoft 365・IMAP） | UiPath：Move / Mark as Read / Reply To / Delete Outlook Mail Message・Get IMAP Mail／PAD：「メール メッセージの処理」・Exchange / Outlook / IMAP | 済み（IMAP は残り） |
 | G15 | P1 | スケジュール | 祝日・会社の休日を飛ばす・「第 3 営業日」の指定がない。メールが届いたら起動もない | UiPath：Orchestrator の Non-Working Days・キュートリガー／PAD：クラウドフローのメールトリガー | 着手順 10 |
 | G16 | P1 | 記録 | ブラウザの操作は記録できない（デスクトップだけ） | WinActor：Web レコーディング／UiPath：Web Recorder／PAD：Web レコーダー | 着手順 11 |
 | G17 | P1 | Word | PDF で保存・文字の置換・表の読み取りがない（`word.fillTemplate` / `word.readText` だけ） | UiPath：Save Document As PDF・Replace Text／PAD：「Word 文書を保存」の PDF・「Word 文書内の語句の検索と置換」 | 着手順 12 |
@@ -107,12 +107,15 @@
 
 ### G13 選んだノードから実行
 
+**対応**：済み。繰り返し・分岐の中からは始めない形にした（グループ・try の中からは始められる）。変数は直前の実行がそのノードに来たときの値。
+
 - ノードの右クリックに「ここから実行」。前のノードは実行せず、変数は既定値（または直前の実行の、そのノードの手前の値を使うかを選ぶ）。ブロックの中のノードなら、外側の繰り返しの 1 回目として入る。Runtime の `debug` の「ノードへ飛ぶ」と同じ仕組みで始める
 
 ### G14 メール
 
-- `mail.move`（`id`・`folder`）、`mail.markRead`（`id`・`read`）、`mail.reply` / `mail.forward`（下書きか送信か、送信は Dangerous）、`mail.delete`（ごみ箱へ）
-- `mail.list` / `mail.saveAttachments` に `via`（`outlook` / `microsoft365` / `imap`）。`mail.send` と同じ書き方
+- 済み：`mail.move`（`id`・`folder`）、`mail.markRead`（`id`・`read`）、`mail.reply` / `mail.forward`（下書きに置く。送るのは Dangerous の `mail.sendDraft` だけ）、`mail.delete`（削除済みアイテムへ）
+- 済み：`mail.send` 以外のメールのノードに `via`（`outlook` / `microsoft365`）。`mail.send` と同じ書き方で、Microsoft 365 は Graph
+- 残り：`via: "imap"`（Outlook・Microsoft 365 以外のメールボックス）
 
 ### G15 祝日・営業日・メールのトリガー
 

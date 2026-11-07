@@ -330,6 +330,37 @@ pub fn read_project_text(
         .unwrap_or(text))
 }
 
+/// A picture of the flow's folder (an image part's PNG) as a data URL, for
+/// Studio to show. Missing files come back as `None`.
+#[tauri::command]
+pub fn read_project_image(
+    state: State<'_, AppState>,
+    id: FlowId,
+    path: String,
+) -> CmdResult<Option<String>> {
+    use base64::Engine as _;
+    let Ok(bytes) = state.service.read_project_file(&id, &path) else {
+        return Ok(None);
+    };
+    if bytes.len() > 16 * 1024 * 1024 {
+        return Err(err(
+            "PROJECT_FILE_TOO_LARGE",
+            "大きすぎるため Studio では表示できません",
+        ));
+    }
+    let kind = if bytes.starts_with(b"\x89PNG") {
+        "image/png"
+    } else if bytes.starts_with(&[0xFF, 0xD8]) {
+        "image/jpeg"
+    } else {
+        return Ok(None);
+    };
+    Ok(Some(format!(
+        "data:{kind};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    )))
+}
+
 /// The columns of the table a node reads (an Excel sheet, a CSV file), read
 /// from its file now, so a repeat over its rows can offer them before any
 /// run. Empty when the node reads no table or the file is not there yet.
@@ -724,6 +755,12 @@ pub struct DebugSettings {
     /// Pause before the first step.
     #[serde(default)]
     step: bool,
+    /// 「ここから実行」: start at this step (the ones before do not run).
+    #[serde(default)]
+    start_at: Option<shikigami_core::StepId>,
+    /// The variables' values there, from the last run.
+    #[serde(default)]
+    start_values: Map<String, Value>,
 }
 
 /// Starts a run of the stored flow. Events are emitted as `run-event`
@@ -760,6 +797,8 @@ pub async fn run_flow(
                 }),
                 subflows,
                 origin: RunOrigin::new(RunTrigger::Studio),
+                start_at: debug.start_at,
+                start_values: debug.start_values,
                 ..RunOptions::default()
             },
         )

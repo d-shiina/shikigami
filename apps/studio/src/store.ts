@@ -1,6 +1,7 @@
 // Studio state. All mutations go through the backend API as EditOps; the
 // store only mirrors what Core returns (flow, validation, undo state).
 import { unsetParams } from "./lib/nodeRows";
+import { valuesBefore } from "./lib/startAt";
 import type {
   ApprovalRequest,
   DebugCommand,
@@ -43,10 +44,12 @@ import {
   type StepTestResult,
 } from "./lib/api";
 import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
+import { registerExtensions } from "./lib/extensions";
 import { copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
+import { ancestorsOf } from "./flow/layout";
 import { resultName } from "./lib/resultName";
 import { summarize } from "./lib/review";
 import { setFlowNames } from "./lib/sentence";
@@ -68,7 +71,7 @@ export type PaletteAnchor = { left: number; top: number; right: number; bottom: 
  * The places in the sidebar; each fills the window right of it. "library" is
  * the page of all flows, "flows" the editor of the open one.
  */
-export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "settings";
+export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "extensions" | "settings";
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues";
@@ -267,6 +270,8 @@ export type StudioState = {
   followRun: boolean;
   /** Steps to pause before, per flow (this PC only). */
   breakpoints: Record<string, string[]>;
+  /** Frames (a loop, if, group, …) folded to their head on the chart, per flow (this PC only). */
+  folded: Record<string, string[]>;
   outlineOpen: boolean;
   paletteOpen: boolean;
   /** Where the palette adds, when it was opened from a "+" between nodes; otherwise after the selection. */
@@ -372,11 +377,13 @@ export type StudioState = {
   extract(stepIds: string[], name: string): Promise<boolean>;
   onExternalChange(flowId: string): Promise<void>;
   /** `step`: pause before the first step. */
-  startRun(options?: { step?: boolean; stopAt?: string }): Promise<void>;
+  startRun(options?: { step?: boolean; stopAt?: string; startAt?: string; startValues?: Record<string, unknown> }): Promise<void>;
   openEditor(stepId: string): void;
   closeEditor(): void;
   /** 「ここまで実行」: runs the flow up to and through `stepId`, then pauses, so its result can be looked at. */
   runTo(stepId: string): Promise<void>;
+  /** 「ここから実行」: the nodes before it do not run; variables start as the last run had them there. */
+  runFrom(stepId: string): Promise<void>;
   /** 「ノードの単体実行」: runs only `stepId`, with `values` for the variables it reads. */
   testStep(stepId: string, values: Record<string, unknown>): Promise<void>;
   /** 「中止」 for the node running alone. */
@@ -388,6 +395,10 @@ export type StudioState = {
   toggleBreakpoint(stepId: string, flowId?: string): void;
   /** Removes every breakpoint of the open flow and of the flows it calls. */
   clearBreakpoints(): void;
+  /** Folds a frame to its head on the chart, or opens it again. */
+  toggleFold(stepId: string, flowId?: string): void;
+  /** Opens the folded frames around a step of the open flow, so it can be shown. */
+  unfoldTo(stepId: string): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -577,6 +588,24 @@ function loadBreakpoints(): Record<string, string[]> {
     return JSON.parse(globalThis.localStorage?.getItem(BREAKPOINTS_KEY) ?? "{}") as Record<string, string[]>;
   } catch {
     return {};
+  }
+}
+
+const FOLDED_KEY = "shikigami.studio.folded";
+
+function loadFolded(): Record<string, string[]> {
+  try {
+    return JSON.parse(globalThis.localStorage?.getItem(FOLDED_KEY) ?? "{}") as Record<string, string[]>;
+  } catch {
+    return {};
+  }
+}
+
+function saveFolded(folded: Record<string, string[]>) {
+  try {
+    globalThis.localStorage?.setItem(FOLDED_KEY, JSON.stringify(folded));
+  } catch {
+    // Only how the chart is shown on this PC.
   }
 }
 
@@ -849,6 +878,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       tested: {},
       followRun: true,
       breakpoints: loadBreakpoints(),
+      folded: loadFolded(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
       paletteAt: null,
@@ -883,6 +913,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const [stepTypes, summaries] = await Promise.all([api.listStepTypes(), api.listFlows()]);
           setFlowNames(new Map(summaries.map((s) => [s.id, s.name] as const)));
+          registerExtensions(stepTypes);
           set({ stepTypes, summaries });
           void get().loadInbox();
           set({ workspace: await api.workspaceInfo() });
@@ -1077,6 +1108,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       goTo(stepId) {
+        get().unfoldTo(stepId);
         set({ selection: { kind: "step", stepId }, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 }, dive: [] });
       },
 
@@ -1417,12 +1449,22 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (!get().run) set({ trying: null });
       },
 
+      async runFrom(stepId) {
+        const { run, flow } = get();
+        if (!flow || (run && isActive(run))) return;
+        await get().startRun({ startAt: stepId, startValues: valuesBefore(run, flow.id, stepId) });
+      },
+
       async startRun(options) {
         const flow = get().flow;
         if (!flow) return;
         try {
           const breakpoints = [...new Set([...runBreakpoints(get()), ...(options?.stopAt ? [options.stopAt] : [])])];
-          const runId = await api.run(flow.id, undefined, { breakpoints, step: options?.step ?? false });
+          const runId = await api.run(flow.id, undefined, {
+            breakpoints,
+            step: options?.step ?? false,
+            ...(options?.startAt ? { startAt: options.startAt, startValues: options.startValues ?? {} } : {}),
+          });
           set((s) => ({
             // Events may have arrived before the command returned.
             run: s.run?.runId === runId ? s.run : newRun(runId, flow.id),
@@ -1483,6 +1525,30 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           });
           return false;
         }
+      },
+
+      toggleFold(stepId, flowId) {
+        const id = flowId ?? get().flow?.id;
+        if (!id) return;
+        const current = get().folded[id] ?? [];
+        const next = current.includes(stepId) ? current.filter((s) => s !== stepId) : [...current, stepId];
+        const folded = { ...get().folded, [id]: next };
+        if (next.length === 0) delete folded[id];
+        saveFolded(folded);
+        set({ folded });
+      },
+
+      unfoldTo(stepId) {
+        const flow = get().flow;
+        const current = flow ? get().folded[flow.id] : undefined;
+        if (!flow || !current) return;
+        const around = new Set(ancestorsOf(flow.steps ?? [], stepId));
+        const next = current.filter((id) => !around.has(id));
+        if (next.length === current.length) return;
+        const folded = { ...get().folded, [flow.id]: next };
+        if (next.length === 0) delete folded[flow.id];
+        saveFolded(folded);
+        set({ folded });
       },
 
       toggleBreakpoint(stepId, flowId) {
@@ -1650,6 +1716,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           }
           return { run, human, secretFix, reveal, ...moved };
         });
+        // Where a run pauses is shown, even inside a folded frame.
+        const reveal = get().reveal;
+        if (env.type === "paused" && reveal?.stepId === env.stepId) get().unfoldTo(env.stepId);
         // 「ここまで実行」: the pause before the node is only a way to get there; run it and pause after.
         const trying = get().trying;
         if (trying && env.type === "paused" && env.stepId === trying && env.reason === "breakpoint") {

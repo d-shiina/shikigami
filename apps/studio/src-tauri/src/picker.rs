@@ -20,7 +20,7 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
     }
 }
 
-/// Runs `params` (with `action: "pick" | "highlight" | "record"`) on the `adapter`
+/// Runs `params` (with `action: "pick" | "snip" | "highlight" | "record"`) on the `adapter`
 /// (`desktop` / `browser`). `session` is the run whose browser to use.
 /// While picking (desktop or browser), Studio gets out of the way: it is minimised, and comes
 /// back when the user has clicked (or pressed Esc).
@@ -30,15 +30,27 @@ pub async fn point_at(
     state: State<'_, AppState>,
     adapter: String,
     session: Option<String>,
-    params: Value,
+    flow_id: Option<shikigami_core::FlowId>,
+    mut params: Value,
 ) -> CmdResult<Value> {
     let Some(found) = state.adapters.iter().find(|a| a.name() == adapter).cloned() else {
         return Err(err("NOT_SUPPORTED", format!("no adapter named {adapter}")));
     };
-    // Picking and recording (desktop only) both need the screen.
+    // A picture a part keeps in the flow's folder (templates/…) is found
+    // from there, as a run finds it.
+    if let Some(id) = &flow_id
+        && let Ok(dir) = state.service.project_dir(id)
+    {
+        shikigami_core::project::resolve_params(
+            &mut params,
+            &["target.image.path".to_owned()],
+            &dir,
+        );
+    }
+    // Picking, cutting out and recording (desktop only) all need the screen.
     let picking = matches!(
         params.get("action").and_then(Value::as_str),
-        Some("pick" | "record")
+        Some("pick" | "snip" | "record")
     );
     let window = app.get_webview_window("main");
     if picking {

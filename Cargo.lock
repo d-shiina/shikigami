@@ -4606,6 +4606,7 @@ dependencies = [
 name = "shikigami-desktop"
 version = "0.1.9"
 dependencies = [
+ "base64 0.22.1",
  "encoding_rs",
  "ort",
  "png",
@@ -4659,6 +4660,7 @@ name = "shikigami-mail"
 version = "0.1.9"
 dependencies = [
  "base64 0.22.1",
+ "jiff",
  "lettre",
  "reqwest",
  "rustls",
@@ -4730,15 +4732,20 @@ version = "0.1.9"
 dependencies = [
  "dirs",
  "jsonschema",
+ "reqwest",
+ "rustls",
  "semver",
  "serde",
  "serde_json",
  "shikigami-core",
  "shikigami-runtime",
  "tempfile",
+ "time",
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
+ "zip 9.1.3",
 ]
 
 [[package]]
@@ -4790,6 +4797,7 @@ dependencies = [
  "shikigami-adapters",
  "shikigami-agent",
  "shikigami-core",
+ "shikigami-plugins",
  "shikigami-runtime",
  "shikigami-secrets",
  "shikigami-system",

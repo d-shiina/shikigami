@@ -349,6 +349,34 @@ enum PluginCmd {
     /// Check the plugin in DIR (manifest, schemas, examples) without
     /// installing it.
     Check { dir: PathBuf },
+    /// Install an extension from a zip file or folder, an https zip URL or
+    /// a GitHub repository (its latest release). Without --yes, only shows
+    /// what it is: its nodes, what they send outside and the program it
+    /// starts.
+    Install {
+        source: String,
+        /// Install it (the program runs on this PC: install only what you trust).
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Update an installed extension from where it was installed from.
+    Update {
+        name: String,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Remove an installed extension.
+    Remove { name: String },
+    /// Turn an installed extension on.
+    Enable { name: String },
+    /// Turn an installed extension off (kept, but its nodes are not loaded).
+    Disable { name: String },
+    /// Show or set (`--set URL`, empty to clear) the registry index URL,
+    /// and list the extensions it offers.
+    Registry {
+        #[arg(long)]
+        set: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -358,6 +386,101 @@ enum SchemaCmd {
         #[arg(long, default_value = "schemas")]
         dir: PathBuf,
     },
+}
+
+fn builtin_names() -> Vec<String> {
+    shikigami_adapters::builtin()
+        .iter()
+        .map(|a| a.name().to_owned())
+        .collect()
+}
+
+/// `shikigami plugin install / update / remove / enable / disable / registry`.
+fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
+    use shikigami_plugins::install::{self, Source};
+    let Some(root) = install::install_root() else {
+        bail!("cannot find the folder extensions are installed into (%LOCALAPPDATA%)");
+    };
+    let builtin = builtin_names();
+    let taken: Vec<&str> = builtin.iter().map(String::as_str).collect();
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let install = |staged: install::Staged,
+                   yes: bool,
+                   current: Option<String>|
+     -> Result<ExitCode> {
+        let preview = staged.preview(&root);
+        if let Some(current) = current
+            && current == staged.manifest.version
+            && !yes
+        {
+            install::discard(&root, &staged.id);
+            println!("{} {} is the latest version", staged.manifest.name, current);
+            return Ok(ExitCode::SUCCESS);
+        }
+        println!("{}", serde_json::to_string_pretty(&preview)?);
+        if !yes {
+            install::discard(&root, &staged.id);
+            eprintln!(
+                "Not installed. The extension runs `{}` on this PC: if you trust it, run the command again with --yes.",
+                preview["program"].as_str().unwrap_or("")
+            );
+            return Ok(ExitCode::from(2));
+        }
+        let dir = install::commit(&root, staged)?;
+        eprintln!(
+            "installed into {} (restart Studio and AI clients to use it)",
+            dir.display()
+        );
+        Ok(ExitCode::SUCCESS)
+    };
+    match cmd {
+        PluginCmd::Install { source, yes } => {
+            let staged = rt.block_on(install::stage(&root, Source::parse(source)?, &taken))?;
+            install(staged, *yes, None)
+        }
+        PluginCmd::Update { name, yes } => {
+            let staged = rt.block_on(install::stage_update(&root, name, &taken))?;
+            let current =
+                shikigami_plugins::install::list(std::slice::from_ref(&root), Some(&root), &taken)
+                    .into_iter()
+                    .find(|p| p.summary["name"] == name.as_str())
+                    .and_then(|p| p.summary["version"].as_str().map(str::to_owned));
+            install(staged, *yes, current)
+        }
+        PluginCmd::Remove { name } => {
+            install::remove(&root, name)?;
+            eprintln!("removed {name}");
+            Ok(ExitCode::SUCCESS)
+        }
+        PluginCmd::Enable { name } | PluginCmd::Disable { name } => {
+            let on = matches!(cmd, PluginCmd::Enable { .. });
+            install::set_enabled(&root, name, on)?;
+            eprintln!("{name} is {}", if on { "on" } else { "off" });
+            Ok(ExitCode::SUCCESS)
+        }
+        PluginCmd::Registry { set } => {
+            if let Some(url) = set {
+                install::set_registry_url(url).map_err(|e| anyhow::anyhow!(e))?;
+            }
+            let Some(url) = install::registry_url() else {
+                eprintln!(
+                    "no registry is set (shikigami plugin registry --set https://…/index.json)"
+                );
+                return Ok(ExitCode::SUCCESS);
+            };
+            let list = rt.block_on(install::fetch_registry(&url))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &serde_json::json!({ "registry": url, "extensions": list })
+                )?
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        PluginCmd::List | PluginCmd::Check { .. } => unreachable!("handled by run"),
+    }
 }
 
 fn actor() -> Actor {
@@ -515,18 +638,31 @@ fn real_main() -> Result<ExitCode> {
         }
         Command::Plugin(PluginCmd::List) => {
             let problems: Vec<_> = loaded.problems.iter().map(|p| p.to_json()).collect();
+            let builtin = builtin_names();
+            let taken: Vec<&str> = builtin.iter().map(String::as_str).collect();
+            let root = shikigami_plugins::install::install_root();
             let report = serde_json::json!({
                 "dirs": shikigami_plugins::default_dirs(),
+                "installDir": root,
                 "plugins": loaded.plugins,
                 "problems": problems,
+                "installed": shikigami_plugins::install::list(
+                    &shikigami_plugins::default_dirs(), root.as_deref(), &taken),
             });
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
+        Command::Plugin(
+            cmd @ (PluginCmd::Install { .. }
+            | PluginCmd::Update { .. }
+            | PluginCmd::Remove { .. }
+            | PluginCmd::Enable { .. }
+            | PluginCmd::Disable { .. }
+            | PluginCmd::Registry { .. }),
+        ) => {
+            return plugin_command(cmd);
+        }
         Command::Plugin(PluginCmd::Check { dir }) => {
-            let builtin: Vec<String> = shikigami_adapters::builtin()
-                .iter()
-                .map(|a| a.name().to_owned())
-                .collect();
+            let builtin = builtin_names();
             let taken: Vec<&str> = builtin.iter().map(String::as_str).collect();
             match shikigami_plugins::Plugin::load(dir, &taken) {
                 Ok(plugin) => println!("{}", serde_json::to_string_pretty(&plugin.summary())?),

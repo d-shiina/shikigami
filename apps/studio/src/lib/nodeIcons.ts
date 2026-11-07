@@ -2,6 +2,11 @@
 // Studio), so a node can be told apart at a glance in the palette.
 import {
   AppWindow,
+  FolderInput,
+  Forward,
+  MailCheck,
+  Reply,
+  SendHorizontal,
   ArrowDownUp,
   ArrowDownToLine,
   ArrowLeftRight,
@@ -86,7 +91,24 @@ import {
   Trash2,
   Workflow,
   X,
+  Scan,
+  Receipt,
+  Image,
+  Cloud,
+  CloudUpload,
+  Server,
+  Building2,
+  Landmark,
+  Users,
+  ShoppingCart,
+  Truck,
+  Languages,
+  Bot,
+  Brain,
+  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
+import { extensionOf, groupExtension } from "./extensions";
 
 const BY_TYPE: Record<string, LucideIcon> = {
   "browser.open": Globe,
@@ -139,6 +161,12 @@ const BY_TYPE: Record<string, LucideIcon> = {
   "mail.saveAttachments": Paperclip,
   "mail.createDraft": MailPlus,
   "mail.send": Send,
+  "mail.move": FolderInput,
+  "mail.markRead": MailCheck,
+  "mail.delete": Trash2,
+  "mail.reply": Reply,
+  "mail.forward": Forward,
+  "mail.sendDraft": SendHorizontal,
   "file.readCsv": FileInput,
   "file.writeCsv": FileOutput,
   "file.readText": FileInput,
@@ -232,8 +260,52 @@ const BY_GROUP: Record<string, LucideIcon> = {
   list: List,
 };
 
-/** The icon of a palette group; plugins' own groups get a puzzle piece. */
-export const groupIcon = (group: string): LucideIcon => BY_GROUP[group] ?? Puzzle;
+/**
+ * The icons an extension's manifest can name (`"icon": "scan-text"`): a
+ * set chosen for what extensions connect to, so the bundle does not carry
+ * all of Lucide. Other names get the puzzle piece.
+ */
+export const EXTENSION_ICONS: Record<string, LucideIcon> = {
+  "scan-text": ScanText,
+  scan: Scan,
+  "file-search": FileSearch,
+  "file-text": FileText,
+  receipt: Receipt,
+  image: Image,
+  cloud: Cloud,
+  "cloud-upload": CloudUpload,
+  server: Server,
+  database: Database,
+  globe: Globe,
+  mail: Mail,
+  "message-square": MessageSquare,
+  send: Send,
+  "building-2": Building2,
+  landmark: Landmark,
+  users: Users,
+  "shopping-cart": ShoppingCart,
+  truck: Truck,
+  calculator: Calculator,
+  table: Table,
+  languages: Languages,
+  bot: Bot,
+  brain: Brain,
+  sparkles: Sparkles,
+  "shield-check": ShieldCheck,
+  workflow: Workflow,
+  puzzle: Puzzle,
+};
 
-/** The icon of a node: its own, else its group's (presets use their group's: 文字, 日付…). */
-export const nodeIcon = (type: string, group: string): LucideIcon => (type === "variable.set" && BY_GROUP[group] && group !== "variable" ? BY_GROUP[group]! : (BY_TYPE[type] ?? groupIcon(group)));
+const extensionIcon = (icon: string | undefined): LucideIcon => (icon && EXTENSION_ICONS[icon]) || Puzzle;
+
+/** The icon of a palette group; an extension's group gets its manifest's icon, else a puzzle piece. */
+export const groupIcon = (group: string): LucideIcon => BY_GROUP[group] ?? extensionIcon(groupExtension(group)?.icon);
+
+/** The icon of a node: its own, else its extension's, else its group's (presets use their group's: 文字, 日付…). */
+export const nodeIcon = (type: string, group: string): LucideIcon => {
+  if (type === "variable.set" && BY_GROUP[group] && group !== "variable") return BY_GROUP[group]!;
+  const own = BY_TYPE[type];
+  if (own) return own;
+  const ext = extensionOf(type);
+  return ext ? extensionIcon(ext.icon) : groupIcon(group);
+};

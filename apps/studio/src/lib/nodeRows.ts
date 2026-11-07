@@ -1,11 +1,12 @@
 // What a flow node shows, Blender-style: one "項目 : 値" row per parameter,
 // plus output rows for the variables the step writes. Display only; the
 // layout uses the same rows to size nodes, so both always agree.
+import { extensionChoiceLabel, extensionParamTitle } from "./extensions";
 import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
 import { BINDS, CALL, FOR_EACH, REPEAT, TRY, VARIABLE_SET } from "./stepTypes";
 import { formatValue } from "./changes";
 import { listToText } from "./listText";
-import { readable, targetText } from "./sentence";
+import { readable, secretName, targetText } from "./sentence";
 import { locale, t } from "./i18n";
 
 export const NODE_HEAD_H = 38;
@@ -14,12 +15,13 @@ export const NODE_PAD_B = 8;
 export const MAX_PARAM_ROWS = 5;
 
 /** A node setting's name for people; `type` picks the node's own name for it (a `path` saved to or read from). */
-export const paramLabel = (key: string, type?: string) => (type ? t.paramNames.for[type]?.[key] : undefined) ?? t.paramNames.labels[key] ?? key;
+export const paramLabel = (key: string, type?: string) =>
+  (type ? (t.paramNames.for[type]?.[key] ?? extensionParamTitle(type, key)) : undefined) ?? t.paramNames.labels[key] ?? key;
 
 /** A choice of a setting in words (`visible` → 表示されている); unknown values stay as they are. */
-export const choiceLabel = (key: string, value: unknown) => {
+export const choiceLabel = (key: string, value: unknown, type?: string) => {
   const text = String(value);
-  return t.paramNames.choices[key]?.[text] ?? text;
+  return (type ? extensionChoiceLabel(type, key, text) : undefined) ?? t.paramNames.choices[key]?.[text] ?? text;
 };
 
 /**
@@ -80,7 +82,10 @@ export function referencedVariables(value: unknown, known: ReadonlySet<string>):
 const EXPRESSION_KEYS = new Set(["condition", "expression", "items", "count"]);
 
 /** A setting as one line, whole. */
-function fullText(key: string, value: unknown): string {
+function fullText(key: string, value: unknown, type?: string): string {
+  const secret = secretName(value);
+  if (secret) return `🔑 ${secret}`;
+  if (typeof value === "string" && type && extensionChoiceLabel(type, key, value)) return choiceLabel(key, value, type);
   if (typeof value === "string" && t.paramNames.choices[key]?.[value]) return choiceLabel(key, value);
   if (key === "target" || key === "to") return targetText(value);
   // A case's values read as a list, the way they are typed in.
@@ -92,16 +97,16 @@ function fullText(key: string, value: unknown): string {
       : value.replace(/\{\{(.*?)\}\}/g, (_, expr: string) => `{{ ${readable(expr.trim())} }}`);
 }
 
-function display(key: string, value: unknown): string {
-  const text = fullText(key, value);
+function display(key: string, value: unknown, type?: string): string {
+  const text = fullText(key, value, type);
   // A place in words is never cut: it is what the node is about.
   return key === "target" || key === "to" ? text : truncate(text);
 }
 
 /** The display text of a setting, with the whole of it when it was cut short. */
-function shown(key: string, value: unknown): { value: string; full?: string; raw: unknown } {
-  const text = display(key, value);
-  const full = fullText(key, value);
+function shown(key: string, value: unknown, type?: string): { value: string; full?: string; raw: unknown } {
+  const text = display(key, value, type);
+  const full = fullText(key, value, type);
   return { value: text, raw: value, ...(full !== text ? { full } : {}) };
 }
 
@@ -184,7 +189,7 @@ export function paramRows(step: Step, def: StepTypeDef | undefined, known: Reado
       kind: "param",
       key,
       label: paramLabel(key, step.type),
-      ...shown(key, step.params?.[key]),
+      ...shown(key, step.params?.[key], step.type),
       refs: referencedVariables(step.params?.[key], known),
       ...(projectFile(key, step.params?.[key], def) ? { file: projectFile(key, step.params?.[key], def) } : {}),
     }));

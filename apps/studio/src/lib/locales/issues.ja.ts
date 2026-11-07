@@ -10,7 +10,11 @@ export const issuesJa: Record<string, IssueText> = {
     c.missing ? `「${c.label(c.missing)}」を入力してください` : c.field ? `「${c.label(c.field)}」の値の形式が正しくありません` : "ノードの設定に誤りがあります",
   UNDEFINED_VARIABLE: (c) => (c.name ? `変数「${c.name}」がありません。変数を追加するか、名前を確認してください` : "存在しない変数を使っています"),
   EXPR_SYNTAX: (c) => (c.field ? `「${c.label(c.field)}」の式の書き方が正しくありません` : "式の書き方が正しくありません"),
-  EXPR_UNKNOWN_FUNCTION: "式で使っている関数がありません。関数名を確認してください",
+  EXPR_UNKNOWN_FUNCTION: (c) => (c.fn ? `関数「${c.fn}」はありません。関数名を確認してください` : "式で使っている関数がありません。関数名を確認してください"),
+  EXPR_OTHER_LANGUAGE: (c) =>
+    `${c.field ? `「${c.label(c.field)}」` : "式"}が他の言語の書き方になっているため、意図した値になりません`,
+  EXPR_UNDEFINED_VARIABLE: (c) => (c.name ? `変数「${c.name}」がありません` : "存在しない変数を使っています"),
+  EXPR_TYPE: (c) => (c.field ? `「${c.label(c.field)}」の式で、値の種類が合っていません` : "式で値の種類が合っていません"),
   VARIABLE_TYPE_MISMATCH: (c) => (c.name ? `変数「${c.name}」の初期値が種類と一致しません` : "変数の初期値が種類と一致しません"),
   INVALID_VARIABLE_NAME: (c) => `変数名${c.name ? `「${c.name}」` : ""}には、半角の英字・数字・_ だけを使えます（先頭は英字）`,
   DUPLICATE_VARIABLE: (c) => `変数${c.name ? `「${c.name}」` : ""}が 2 回追加されています`,
