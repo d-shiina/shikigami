@@ -37,6 +37,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use shikigami_core::{Flow, FlowId, Step, StepId, Validator};
 use tokio::sync::Notify;
 
@@ -96,13 +97,28 @@ pub enum DebugCommand {
     Pause,
     /// Replace the breakpoints (any time).
     SetBreakpoints { step_ids: Vec<StepId> },
+    /// While paused: give a variable another value before going on (the
+    /// run stays paused). Secret variables cannot be set this way; the
+    /// change is reported as `variableChanged` without a step.
+    SetVariable { name: String, value: Value },
 }
 
 impl DebugCommand {
     /// Commands that end a pause.
-    fn resumes(&self) -> bool {
-        !matches!(self, Self::Pause | Self::SetBreakpoints { .. })
+    pub fn resumes(&self) -> bool {
+        !matches!(
+            self,
+            Self::Pause | Self::SetBreakpoints { .. } | Self::SetVariable { .. }
+        )
     }
+}
+
+/// What a paused run gets from [`Debugger::wait`].
+pub(crate) enum Waited {
+    /// A command that ends the pause.
+    Resume(DebugCommand),
+    /// A variable to set while staying paused.
+    Set(String, Value),
 }
 
 /// What a resumed run does next (reported as `resumed`).
@@ -172,6 +188,10 @@ struct State {
     /// An error the person chose to let end the run; the steps it passes
     /// through on the way out must not pause on it again.
     given_up: Option<RunError>,
+    /// While paused: the variables a person may set (not secret ones).
+    editable: Vec<String>,
+    /// Variables set while paused that the run has not applied yet.
+    edits: Vec<(String, Value)>,
 }
 
 /// Shared between the run task (pausing) and [`DebugControl`] (commands).
@@ -211,6 +231,8 @@ impl Debugger {
                 skip_once: None,
                 paused_ms: 0,
                 given_up: None,
+                editable: Vec::new(),
+                edits: Vec::new(),
             }),
             wake: Notify::new(),
             validator,
@@ -303,11 +325,14 @@ impl Debugger {
     }
 
     /// Marks the run paused; the caller then waits with [`Self::wait`].
-    pub(crate) fn enter_pause(&self, reason: PauseReason) {
+    /// `editable`: the variables a person may set meanwhile.
+    pub(crate) fn enter_pause(&self, reason: PauseReason, editable: Vec<String>) {
         let mut state = self.state();
         state.paused = Some(reason);
         state.resume = None;
         state.mode = Mode::Run;
+        state.editable = editable;
+        state.edits.clear();
     }
 
     /// The run stopped waiting without a command (cancelled).
@@ -315,16 +340,24 @@ impl Debugger {
         let mut state = self.state();
         state.paused = None;
         state.resume = None;
+        state.editable.clear();
+        state.edits.clear();
     }
 
-    /// Waits for a resuming command.
-    pub(crate) async fn wait(&self) -> DebugCommand {
+    /// Waits for a resuming command or a variable to set. Variables set
+    /// before a command come first.
+    pub(crate) async fn wait(&self) -> Waited {
         loop {
             let notified = self.wake.notified();
             {
                 let mut state = self.state();
+                if !state.edits.is_empty() {
+                    let (name, value) = state.edits.remove(0);
+                    return Waited::Set(name, value);
+                }
                 if let Some(command) = state.resume.take() {
                     state.paused = None;
+                    state.editable.clear();
                     let depth = state.frames.len();
                     state.mode = match command {
                         DebugCommand::StepInto => Mode::StepInto,
@@ -332,7 +365,7 @@ impl Debugger {
                         DebugCommand::StepOut => Mode::StepOut(depth),
                         _ => Mode::Run,
                     };
-                    return command;
+                    return Waited::Resume(command);
                 }
             }
             notified.await;
@@ -374,6 +407,20 @@ impl Debugger {
             }
             DebugCommand::SetBreakpoints { step_ids } => {
                 state.breakpoints = step_ids.into_iter().collect();
+            }
+            DebugCommand::SetVariable { name, value } => {
+                if state.paused.is_none() || state.resume.is_some() {
+                    return Err(RunError::new("RUN_NOT_PAUSED", "the run is not paused"));
+                }
+                if !state.editable.contains(&name) {
+                    return Err(RunError::new(
+                        "VARIABLE_NOT_EDITABLE",
+                        format!("'{name}' is not a variable that can be set here"),
+                    ));
+                }
+                state.edits.push((name, value));
+                drop(state);
+                self.wake.notify_one();
             }
             command => {
                 debug_assert!(command.resumes());

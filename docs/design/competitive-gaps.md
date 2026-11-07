@@ -48,7 +48,7 @@
 | G21 | P2 | ブラウザ | 1 文字ずつ打つ入力がない（キーの動きを見ているサイトで `browser.fill` が効かない） | UiPath：Type Into の入力方式／PAD：「Web ページ内のテキスト フィールドに入力する」の入力をエミュレート | 済み |
 | G22 | P2 | Studio | ノードのメモ（注釈）を Studio で書けない（フローの `description` はあるが画面に出ない） | UiPath：Annotation／PAD：コメント／WinActor：コメント | 済み（#151） |
 | G23 | P2 | Studio | フローの中の検索（ノード名・設定値・変数名で探す）がない | UiPath：Find / Find References／PAD：アクションの検索 | 着手順 13 |
-| G24 | P2 | デバッグ | 一時停止中に変数の値を書き換えられない | UiPath：Locals パネルの値の変更・Immediate | 着手順 13 |
+| G24 | P2 | デバッグ | 一時停止中に変数の値を書き換えられない | UiPath：Locals パネルの値の変更・Immediate | 済み |
 | G25 | P2 | デスクトップ | 部品の指定は「ウィンドウ＋部品」の 2 段だけ。親の部品をたどる指定がなく、同じ名前の部品は `nth` 頼み | UiPath：Selector の階層・Anchor／PAD：UI 要素のセレクター | 後で |
 | G26 | P2 | 資格情報 | Windows の資格情報マネージャーにある資格情報を使えない | UiPath：Get Secure Credential | 後で |
 | G27 | P2 | 帳票 | 帳票の項目を読む AI-OCR がない | UiPath：Document Understanding／WinActor：AI-OCR 連携 | プラグイン候補 |

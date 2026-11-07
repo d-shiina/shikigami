@@ -1510,7 +1510,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const run = get().run;
         if (!run || !isActive(run)) return false;
         // Resuming runs the stored revision: never with AI edits nobody has looked at.
-        const resumes = !["pause", "setBreakpoints", "abort"].includes(command.action);
+        const resumes = !["pause", "setBreakpoints", "setVariable", "abort"].includes(command.action);
         if (resumes && run.pause && get().flow?.revision !== run.pause.revision && pendingReview(get()).length > 0) {
           set({ error: t.runMsg.reviewBeforeResume });
           return false;
@@ -1524,7 +1524,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             error:
               e instanceof ApiError && e.code === "RESUME_INCOMPATIBLE"
                 ? t.runMsg.pausedStepGone
-                : message(e),
+                : e instanceof ApiError && e.code === "VARIABLE_NOT_EDITABLE"
+                  ? t.pause.notEditable
+                  : message(e),
           });
           return false;
         }
@@ -1618,6 +1620,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             else if (diveChain(s.flow, s.called, path).length === path.length) dive = path;
           }
           const moved = dive !== s.dive ? { dive, selection: null } : {};
+          // A value changed while paused (by the person) shows at the pause.
+          const edited = asVariableChange(env);
+          if (edited && run.pause && edited.iteration == null && callKey(path) === callKey(run.pause.callPath)) {
+            run.pause = { ...run.pause, variables: { ...run.pause.variables, [edited.variable]: edited.value } };
+          }
           if (path.length > 0 && env.type !== "paused" && env.type !== "resumed") {
             // Inside a called flow: its steps and variables are not the
             // chart's. They show when their call is unfolded or entered.

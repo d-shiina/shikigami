@@ -2021,6 +2021,11 @@ export type DebugCommand =
   | {
       action: "setBreakpoints";
       stepIds: StepId[];
+    }
+  | {
+      action: "setVariable";
+      name: string;
+      value: unknown;
     };
 
 export interface ShikigamiRunApi {

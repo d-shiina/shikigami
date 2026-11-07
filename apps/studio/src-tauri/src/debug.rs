@@ -64,10 +64,7 @@ pub fn debug_run(
         })?;
         (control, run.flow_id.clone())
     };
-    let resumes = !matches!(
-        command,
-        DebugCommand::Pause | DebugCommand::SetBreakpoints { .. } | DebugCommand::Abort
-    );
+    let resumes = command.resumes() && command != DebugCommand::Abort;
     let mut updated = false;
     if resumes && control.is_paused() {
         let flow = state.service.get(&flow_id)?;

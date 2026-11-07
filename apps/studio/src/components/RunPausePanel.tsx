@@ -42,23 +42,102 @@ function Button({
   );
 }
 
-function Variables({ values }: { values: Record<string, unknown> }) {
+/** Longer strings arrive cut short (see the Runtime's previews): not editable. */
+const PREVIEW_CHARS = 1000;
+
+/**
+ * What a typed value becomes: text stays text for a text variable; other
+ * values are read as JSON (number, true / false, a list, ...). `undefined`:
+ * not a value of that kind.
+ */
+export function editedValue(text: string, current: unknown): unknown {
+  if (typeof current === "string") return text;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return current === null || current === undefined ? text : undefined;
+  }
+}
+
+function editableValue(value: unknown): boolean {
+  if (value === "***") return false;
+  if (typeof value === "string") return [...value].length <= PREVIEW_CHARS || !value.endsWith("…");
+  return true;
+}
+
+function Variable({ name, value, secret }: { name: string; value: unknown; secret: boolean }) {
+  const debug = useStudio((s) => s.debug);
+  const [text, setText] = useState<string | null>(null);
+  const [wrong, setWrong] = useState(false);
+  const editable = !secret && editableValue(value);
+  const start = () => {
+    setWrong(false);
+    setText(typeof value === "string" ? value : JSON.stringify(value));
+  };
+  const save = async () => {
+    if (text === null) return;
+    const next = editedValue(text, value);
+    if (next === undefined) {
+      setWrong(true);
+      return;
+    }
+    if (JSON.stringify(next) !== JSON.stringify(value) && !(await debug({ action: "setVariable", name, value: next }))) return;
+    setText(null);
+  };
+  if (text !== null) {
+    return (
+      <span className="flex items-center gap-1 rounded-lg bg-slate-100 px-1.5 text-[12px] leading-[20px]">
+        <span className="shrink-0 font-semibold text-slate-600">{name}</span>
+        <span className="text-slate-400">=</span>
+        <textarea
+          autoFocus
+          rows={Math.min(6, text.split("\n").length)}
+          aria-label={t.pause.valueOf(name)}
+          aria-invalid={wrong}
+          title={wrong ? t.pause.notAValue : t.pause.editHint}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setWrong(false);
+          }}
+          onKeyDown={(e) => {
+            // Shift+Enter starts a new line: a text keeps its line breaks.
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void save();
+            }
+            if (e.key === "Escape") setText(null);
+          }}
+          onBlur={() => void save()}
+          className={`min-h-5 w-[140px] resize-none rounded-md border bg-paper px-1 text-[12px] leading-[18px] text-ink outline-none ${wrong ? "border-shu-500" : "border-brand-500"}`}
+        />
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      disabled={!editable}
+      onClick={start}
+      title={editable ? `${name} = ${JSON.stringify(value, null, 2)}\n${t.pause.clickToEdit}` : secret || value === "***" ? t.pause.secretNotEditable : t.pause.tooLongToEdit}
+      className="flex max-w-[220px] items-center gap-1 rounded-lg bg-slate-100 px-1.5 text-left text-[12px] leading-[20px] enabled:hover:bg-slate-200"
+    >
+      <span className="shrink-0 font-semibold text-slate-600">{name}</span>
+      <span className="text-slate-400">=</span>
+      <HoverPreview value={value} longText className="truncate text-ink">
+        {shortText(value)}
+      </HoverPreview>
+    </button>
+  );
+}
+
+function Variables({ values, secrets }: { values: Record<string, unknown>; secrets: ReadonlySet<string> }) {
   const entries = Object.entries(values);
   if (entries.length === 0) return <span className="text-[12px] text-slate-400">{t.pause.noVariables}</span>;
   return (
     <div className="flex flex-wrap gap-1">
       {entries.slice(0, MAX_VARS).map(([name, value]) => (
-        <span
-          key={name}
-          title={`${name} = ${JSON.stringify(value, null, 2)}`}
-          className="flex max-w-[220px] items-center gap-1 rounded-lg bg-slate-100 px-1.5 text-[12px] leading-[20px]"
-        >
-          <span className="shrink-0 font-semibold text-slate-600">{name}</span>
-          <span className="text-slate-400">=</span>
-          <HoverPreview value={value} longText className="truncate text-ink">
-            {shortText(value)}
-          </HoverPreview>
-        </span>
+        <Variable key={name} name={name} value={value} secret={secrets.has(name)} />
       ))}
       {entries.length > MAX_VARS && <span className="text-[12px] text-slate-400">{t.pause.moreVariables(entries.length - MAX_VARS)}</span>}
     </div>
@@ -122,6 +201,8 @@ export function RunPausePanel() {
   const inCall = pause?.callPath ?? [];
   const owner = inCall.length > 0 ? (diveChain(flow, called, inCall).at(-1)?.flow ?? flow) : flow;
   const step = stepId ? findStep(owner.steps ?? [], stepId) : null;
+  // The paused values are the owner's (a called flow has its own variables).
+  const secretNames = new Set((owner.variables ?? []).filter((v) => v.secret).map((v) => v.name));
   const show = () => {
     if (!stepId) return;
     if (inCall.length === 0) return goTo(stepId);
@@ -303,7 +384,7 @@ export function RunPausePanel() {
                 {evidence.title}
               </div>}
             <div className="text-[11px] font-semibold text-slate-500">{t.pause.variablesNow}</div>
-            <Variables values={pause.variables} />
+            <Variables values={pause.variables} secrets={secretNames} />
           </div>
         </div>
       )}
