@@ -9,6 +9,7 @@ import {
   ClipboardCopy,
   ClipboardPaste,
   Copy,
+  CopyPlus,
   Eraser,
   Eye,
   EyeOff,
@@ -18,6 +19,7 @@ import {
   Plus,
   Redo2,
   Scan,
+  Scissors,
   TableOfContents,
   Trash2,
   Undo2,
@@ -26,7 +28,7 @@ import {
 } from "lucide-react";
 import { useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
-import { isActive, runBreakpoints, trailOf } from "../store";
+import { isActive, runBreakpoints, selectedIds, trailOf } from "../store";
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
 import { t } from "../lib/i18n";
 import { handOffText } from "../lib/todos";
@@ -51,7 +53,8 @@ export function useStepMenu() {
     };
     const copyId: MenuEntry = { label: t.menu.copyId, icon: Copy, run: () => copyText(id) };
     if (readOnly) return [breakpointItem, "-", copyId];
-    s.select({ kind: "step", stepId: id });
+    // Right-clicking one of several picked nodes keeps them picked.
+    if (!selectedIds(s).includes(id)) s.select({ kind: "step", stepId: id });
     const agentName = agent.getState().info?.name ?? "AI";
     return [
       call?.canEnter && { label: t.menu.openCall, icon: LogIn, run: () => store.getState().enterCall(id) },
@@ -60,6 +63,11 @@ export function useStepMenu() {
         icon: call.unfolded ? FoldVertical : UnfoldVertical,
         run: () => store.getState().toggleUnfolded(call.key),
       },
+      "-",
+      { label: t.menu.cut, icon: Scissors, shortcut: "Ctrl+X", run: () => void store.getState().copySelected(true) },
+      { label: t.menu.copy, icon: Copy, shortcut: "Ctrl+C", run: () => void store.getState().copySelected() },
+      { label: t.menu.pasteAfter, icon: ClipboardPaste, shortcut: "Ctrl+V", run: () => void store.getState().paste() },
+      { label: t.duplicate, icon: CopyPlus, shortcut: "Ctrl+D", run: () => void store.getState().duplicateSelected() },
       "-",
       { label: t.moveUp, icon: ArrowUp, shortcut: "Alt+↑", run: () => void store.getState().moveSelected(-1) },
       { label: t.moveDown, icon: ArrowDown, shortcut: "Alt+↓", run: () => void store.getState().moveSelected(1) },
@@ -93,7 +101,10 @@ export function useSlotMenu() {
   const store = useStudioApi();
   return (parentId: string | null, block: string | null): MenuSpec[] => {
     store.getState().select({ kind: "slot", parentId, block });
-    return [{ label: t.menu.addHere, icon: Plus, shortcut: t.shortcut, run: () => store.getState().setPaletteOpen(true) }];
+    return [
+      { label: t.menu.addHere, icon: Plus, shortcut: t.shortcut, run: () => store.getState().setPaletteOpen(true) },
+      { label: t.menu.paste, icon: ClipboardPaste, shortcut: "Ctrl+V", run: () => void store.getState().paste() },
+    ];
   };
 }
 
@@ -115,6 +126,7 @@ export function usePaneMenu() {
     const breakpoints = runBreakpoints(s).length;
     return [
       { label: t.addStep, icon: Plus, shortcut: t.shortcut, run: () => store.getState().setPaletteOpen(true) },
+      { label: t.menu.pasteNodes, icon: ClipboardPaste, shortcut: "Ctrl+V", run: () => void store.getState().paste() },
       "-",
       { label: t.undo, icon: Undo2, shortcut: "Ctrl+Z", disabled: !s.canUndo, run: () => void store.getState().undo() },
       { label: t.redo, icon: Redo2, shortcut: "Ctrl+Y", disabled: !s.canRedo, run: () => void store.getState().redo() },
