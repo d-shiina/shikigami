@@ -141,6 +141,8 @@ pub struct Agent {
     stop: CancellationToken,
     keys: Mutex<Arc<dyn KeyStore>>,
     remote_problem: Mutex<Option<String>>,
+    /// Mails one `mail.list` page asks for ([`MAIL_PAGE`] unless set).
+    mail_page: std::sync::atomic::AtomicUsize,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -169,6 +171,7 @@ impl Agent {
             stop: CancellationToken::new(),
             keys: Mutex::new(crate::remote::default_key_store(svc.store().local_root())),
             remote_problem: Mutex::new(None),
+            mail_page: std::sync::atomic::AtomicUsize::new(MAIL_PAGE),
             svc,
         })
     }
@@ -179,6 +182,14 @@ impl Agent {
 
     pub fn local_root(&self) -> &Path {
         self.svc.store().local_root()
+    }
+
+    /// How many mails one `mail.list` page of a mail trigger asks for. Only
+    /// tests change it, to read many pages without many runs.
+    #[doc(hidden)]
+    pub fn set_mail_page(&self, mails: usize) {
+        self.mail_page
+            .store(mails.max(1), std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Where the worker key for the management server is kept (Windows
@@ -644,9 +655,10 @@ impl Agent {
         let mut all = Vec::new();
         let mut ids = HashSet::new();
         let mut before: Option<String> = None;
+        let size = self.mail_page.load(std::sync::atomic::Ordering::Relaxed);
         for _ in 0..MAIL_PAGES {
-            let page = self.list_mail_page(s, now, before.as_deref()).await?;
-            let full = page.len() >= MAIL_PAGE;
+            let page = self.list_mail_page(s, now, before.as_deref(), size).await?;
+            let full = page.len() >= size;
             let oldest = page
                 .last()
                 .and_then(|m| m["receivedAt"].as_str())
@@ -684,6 +696,7 @@ impl Agent {
         s: &Schedule,
         now: &Zoned,
         before: Option<&str>,
+        size: usize,
     ) -> Result<Vec<Value>, String> {
         let When::MailReceived {
             folder,
@@ -726,7 +739,7 @@ impl Agent {
             ),
         );
         put("before", before.map(Value::from));
-        put("limit", Some(MAIL_PAGE.into()));
+        put("limit", Some(size.into()));
         put("includeBody", Some(false.into()));
         let mut step = Step::new("mail.list").with_id("look");
         step.params = params;

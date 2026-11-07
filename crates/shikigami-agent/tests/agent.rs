@@ -543,12 +543,15 @@ async fn more_new_mails_than_one_page_all_start_runs() {
     let mails = Arc::new(Mutex::new(Ok(Vec::new())));
     let asked = Arc::new(Mutex::new(Vec::new()));
     let (agent, reports) = mail_agent(dir.path(), &mails, &asked, None);
+    // Pages of 10 (not 500), so a few runs cover more than one page; 600
+    // whole runs took over a minute on Windows CI.
+    agent.set_mail_page(10);
     let now = Zoned::now();
     agent.tick(&now, false);
     tokio::time::sleep(Duration::from_millis(300)).await;
-    // 600 arrive before the next look, newest first, a second apart.
+    // 25 arrive before the next look, newest first, a second apart.
     let start: jiff::civil::DateTime = "2026-11-07T09:00:00".parse().unwrap();
-    *mails.lock().unwrap() = Ok((0..600)
+    *mails.lock().unwrap() = Ok((0..25)
         .rev()
         .map(|i| {
             let mut m = mail(&format!("m{i}"), &format!("【請求書】{i}"));
@@ -558,14 +561,16 @@ async fn more_new_mails_than_one_page_all_start_runs() {
         })
         .collect());
     agent.tick(&now.checked_add(6.minutes()).unwrap(), false);
-    wait_for(&reports, 600, 60).await;
+    wait_for(&reports, 25, 60).await;
     let got = reports.lock().unwrap().clone();
-    assert_eq!(got.len(), 600);
+    assert_eq!(got.len(), 25);
     // The oldest one too, which the first page did not hold.
     assert!(got.iter().any(|r| r.outputs["got"] == "【請求書】0"));
     let asked = asked.lock().unwrap().clone();
-    assert_eq!(asked.len(), 3, "{asked:?}");
-    assert_eq!(asked[2]["before"], "2026-11-07T09:01:41");
+    // The first look, then three pages: 24–15, 15–6 and 6–0.
+    assert_eq!(asked.len(), 4, "{asked:?}");
+    assert_eq!(asked[2]["before"], "2026-11-07T09:00:16");
+    assert_eq!(asked[3]["before"], "2026-11-07T09:00:07");
 }
 
 #[tokio::test]
