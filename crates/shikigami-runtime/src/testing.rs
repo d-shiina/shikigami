@@ -2,6 +2,8 @@
 //! case, recorded like any other, then compared with what the case expects.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -9,6 +11,8 @@ use shikigami_core::Flow;
 use shikigami_core::testcase::{self, TestCase};
 
 use crate::record::RunRecorder;
+use tokio_util::sync::CancellationToken;
+
 use crate::{RunError, RunOptions, RunStatus, Runtime};
 
 /// One test case's run, compared with what it expects.
@@ -27,25 +31,72 @@ pub struct CaseResult {
     pub duration_ms: i64,
 }
 
-/// Run one case and compare. `workspace` is where runs are recorded.
+/// Stops a suite: cancels the case running now (so its `finally` blocks
+/// and adapter clean-up run) and keeps the rest from starting. Ctrl+C in
+/// the CLI.
+#[derive(Clone, Default)]
+pub struct Interrupt {
+    current: Arc<Mutex<Option<CancellationToken>>>,
+    stopped: Arc<AtomicBool>,
+}
+
+impl Interrupt {
+    pub fn stop(&self) {
+        self.stopped.store(true, Ordering::SeqCst);
+        if let Some(token) = self.slot().as_ref() {
+            token.cancel();
+        }
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self.stopped.load(Ordering::SeqCst)
+    }
+
+    fn slot(&self) -> std::sync::MutexGuard<'_, Option<CancellationToken>> {
+        self.current.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn running(&self, token: Option<CancellationToken>) {
+        let stopped = self.is_stopped();
+        if let (true, Some(token)) = (stopped, &token) {
+            token.cancel();
+        }
+        *self.slot() = token;
+    }
+}
+
+/// Where a case's run is recorded: the workspace's local root, and its
+/// `policy.json` (whose `records` limits apply as for any run).
+pub struct Records<'a> {
+    pub workspace: &'a Path,
+    pub policy: &'a Path,
+}
+
+/// Run one case and compare.
 pub async fn run_case(
     runtime: &Runtime,
-    workspace: &Path,
+    records: Records<'_>,
+    interrupt: &Interrupt,
     name: &str,
     case: &TestCase,
     flow: Flow,
     options: RunOptions,
 ) -> Result<CaseResult, RunError> {
     let handle = runtime.start(flow, options)?;
+    interrupt.running(Some(handle.cancel_token()));
     let run_id = handle.run_id.to_string();
-    let mut recorder = RunRecorder::create(workspace, &handle.run_id).map_err(record_err)?;
+    let mut recorder = RunRecorder::create(records.workspace, &handle.run_id)
+        .map_err(record_err)?
+        .prune_on_finish(records.policy);
     let report = handle
         .wait_with(|e| {
             if let Err(err) = recorder.write_event(e) {
                 tracing::warn!(error = %err, "failed to record event");
             }
         })
-        .await?;
+        .await;
+    interrupt.running(None);
+    let report = report?;
     recorder.finish(&report).map_err(record_err)?;
     let status = serde_json::to_value(report.status).unwrap_or_default();
     let error_step = report

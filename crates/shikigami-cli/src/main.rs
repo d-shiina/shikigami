@@ -809,8 +809,20 @@ fn real_main() -> Result<ExitCode> {
                 svc.store().root(),
                 Arc::new(Vault::open(svc.store().root())),
             );
+            let interrupt = testing::Interrupt::default();
+            let stop = interrupt.clone();
+            rt.spawn(async move {
+                if tokio::signal::ctrl_c().await.is_ok() {
+                    eprintln!("cancelling…");
+                    stop.stop();
+                }
+            });
+            let policy = Policy::path(svc.store().root());
             let mut results = Vec::new();
             for (name, case) in selected {
+                if interrupt.is_stopped() {
+                    break;
+                }
                 let options = RunOptions {
                     inputs: case.inputs.clone(),
                     version,
@@ -822,7 +834,11 @@ fn real_main() -> Result<ExitCode> {
                 };
                 let result = rt.block_on(testing::run_case(
                     &runtime,
-                    svc.store().local_root(),
+                    testing::Records {
+                        workspace: svc.store().local_root(),
+                        policy: &policy,
+                    },
+                    &interrupt,
                     &name,
                     &case,
                     flow.clone(),
@@ -846,6 +862,9 @@ fn real_main() -> Result<ExitCode> {
                 );
             } else {
                 println!("{} passed, {failed} failed", results.len() - failed);
+            }
+            if interrupt.is_stopped() {
+                return Ok(ExitCode::from(130));
             }
             return Ok(if failed == 0 {
                 ExitCode::SUCCESS

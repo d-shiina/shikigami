@@ -176,12 +176,25 @@ fn compare(at: &str, expected: &Value, actual: &Value, out: &mut Vec<Mismatch>) 
             }
         }
         (Value::Number(want), Value::Number(got)) => {
-            if want.as_f64() != got.as_f64() {
+            if !same_number(want, got) {
                 out.push(differ());
             }
         }
         _ if expected == actual => {}
         _ => out.push(differ()),
+    }
+}
+
+/// `3` = `3.0`, but whole numbers past 2^53 compare exactly, not as f64.
+fn same_number(a: &serde_json::Number, b: &serde_json::Number) -> bool {
+    let whole = |n: &serde_json::Number| {
+        n.as_i64()
+            .map(i128::from)
+            .or_else(|| n.as_u64().map(i128::from))
+    };
+    match (whole(a), whole(b)) {
+        (Some(a), Some(b)) => a == b,
+        _ => a.as_f64() == b.as_f64(),
     }
 }
 
@@ -305,6 +318,25 @@ mod tests {
             ]
         );
         assert_eq!(found[2].actual, Value::Null);
+    }
+
+    #[test]
+    fn whole_numbers_compare_exactly() {
+        let expect: Expect =
+            serde_json::from_value(json!({ "outputs": { "id": 9007199254740992u64 } })).unwrap();
+        let outputs = json!({ "id": 9007199254740993u64 });
+        assert_eq!(
+            expect
+                .check(&outcome("succeeded", outputs.as_object().unwrap()))
+                .len(),
+            1
+        );
+        let outputs = json!({ "id": 9007199254740992.0 });
+        assert!(
+            expect
+                .check(&outcome("succeeded", outputs.as_object().unwrap()))
+                .is_empty()
+        );
     }
 
     #[test]
