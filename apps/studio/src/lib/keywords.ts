@@ -129,17 +129,30 @@ export function laneLabel(step: Step, block: string, label: string): string {
     case "control.forEach:body":
     case "control.repeat:body":
     case "control.while:body":
+    case "wait.until:check":
       return "";
     default:
       return blockLabel(step, block, label);
   }
 }
 
-/** Beside a loop's line back up to its head. */
+/** On the foot of a loop's frame: it goes round again. */
 export function loopBackLabel(step: Step): string {
   const ja = locale === "ja";
   if (step.type === "control.forEach") return ja ? "次の 1 件へ" : "Next item";
+  if (step.type === "wait.until") return ja ? "もう一度確かめる" : "Check again";
   return ja ? "次の回へ" : "Next round";
+}
+
+/** On the line out of a loop's frame: when it leaves. */
+export function loopExitLabel(step: Step): string {
+  const ja = locale === "ja";
+  if (step.type === "control.forEach") return ja ? "すべて終わったら" : "When all are done";
+  if (step.type === "control.while") return ja ? "条件が外れたら" : "When the condition fails";
+  if (step.type === "wait.until") return ja ? "条件を満たしたら" : "When the condition holds";
+  const count = (step.params as Record<string, unknown> | undefined)?.count;
+  if (typeof count === "number") return ja ? `${count} 回終えたら` : `After ${count} rounds`;
+  return ja ? "回数を終えたら" : "After the last round";
 }
 
 /** What the head of a frame says after its name: the condition of an if, the value a switch compares, what a loop walks over. */

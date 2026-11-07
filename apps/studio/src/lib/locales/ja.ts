@@ -709,6 +709,9 @@ export const ja = {
     addFinallyTitle: "成功でも失敗でも最後に実行するノードを追加",
     foldFrame: "たたむ",
     unfoldFrame: "広げる",
+    breakNote: "ここで繰り返しを抜けます",
+    continueNote: "ここから次の回へ進みます",
+    failNote: "フローはここでエラーで止まります",
     inside: (n: number) => `中に ${n} ノード`,
     /** A case that matches nothing yet. */
     caseEmpty: "（値なし）",

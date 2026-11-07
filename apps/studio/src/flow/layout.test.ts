@@ -153,17 +153,27 @@ describe("layoutFlow", () => {
     expect(layout.width).toBeGreaterThanOrEqual(NODE_W * 2);
   });
 
-  it("draws loop back-edges, and leaves a loop from the bottom of its frame", () => {
+  it("draws a loop's line back to where its body starts, and leaves it from outside its frame", () => {
     const steps: Step[] = [
       { id: "loop", type: "control.repeat", blocks: { body: [log("x")] } },
       log("after"),
     ];
     const layout = layoutFlow(steps, defs);
     expect(layout.edges.some((e) => e.source === "x" && e.target === "end:loop:body")).toBe(true);
-    expect(layout.edges.find((e) => e.source === "end:loop:body" && e.target === "loop")?.loop).toBe(true);
+    // Back from the end of the body into its first node, not into the head.
+    const back = layout.edges.find((e) => e.source === "end:loop:body")!;
+    expect([back.target, back.loop, back.label]).toEqual(["x", true, "次の回へ"]);
+    expect(layout.edges.some((e) => e.target === "loop" && e.source !== "loop")).toBe(false);
+    const frame = layout.frames.find((f) => f.id === "loop")!;
+    expect(back.detourX).toBe(frame.x + LOOP_LINE_X);
+    // The line out starts on the frame's bottom edge.
+    const join = layout.nodes.find((n) => n.id === "join:loop")!;
+    expect(join.position.y + 8).toBe(frame.y + frame.height);
+    const tail = layout.nodes.find((n) => n.id === "end:loop:body")!;
+    expect(tail.position.y + 24 + 14).toBeLessThan(frame.y + frame.height);
     // Out of the frame's bottom; a hidden line from the head carries a run's trail there.
     expect(layout.edges.find((e) => e.source === "loop" && e.target === "join:loop")?.hidden).toBe(true);
-    expect(layout.edges.some((e) => e.source === "join:loop" && e.target === "after")).toBe(true);
+    expect(layout.edges.find((e) => e.source === "join:loop" && e.target === "after")?.label).toBe("回数を終えたら");
     expect(layout.nodes.find((n) => n.id === "join:loop")?.data).toMatchObject({ shown: false });
   });
 
@@ -200,6 +210,14 @@ describe("layoutFlow", () => {
     expect(pos.after!.y).toBeGreaterThan(pos.t!.y);
   });
 
+  it("draws no line back up an empty loop", () => {
+    const layout = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }], defs);
+    expect(layout.edges.filter((e) => !e.hidden).map((e) => `${e.source}->${e.target}`)).toEqual(["loop->slot:loop:body"]);
+    // Into the "+" at the flow's end there is no line, so nothing says when it leaves.
+    const after = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }, log("x")], defs);
+    expect(after.edges.find((e) => e.source === "join:loop")?.label).toBe("すべて終わったら");
+  });
+
   it("frames a loop with everything inside it, apart from what comes after", () => {
     const steps: Step[] = [
       log("before"),
@@ -229,15 +247,15 @@ describe("layoutFlow", () => {
     expect(inner.x).toBeGreaterThan(outer.x);
     expect(inner.right).toBeLessThan(outer.right);
     expect(inner.bottom).toBeLessThan(outer.bottom);
-    // The line back up runs inside the loop's frame, left of the inner one, under the loop's icon.
-    const back = layout.edges.find((e) => e.source === "end:outer:body" && e.target === "outer")!;
+    // The line back runs inside the outer frame, left of the inner one.
+    const back = layout.edges.find((e) => e.source === "end:outer:body")!;
+    expect(back.target).toBe("x");
     expect(back.detourX).toBe(outer.x + LOOP_LINE_X);
     expect(back.detourX! + 12).toBeLessThan(inner.x);
-    expect(back.label).toBe("次の回へ");
     // It is left from the bottom of the frame, after everything in it.
     const exit = layout.nodes.find((n) => n.id === "join:outer")!;
     expect(exit.position.y).toBeGreaterThan(inner.bottom);
-    expect(exit.position.y).toBeLessThan(outer.bottom);
+    expect(exit.position.y + 8).toBe(outer.bottom);
   });
 
   it("frames branches too, and keeps side-by-side frames apart", () => {
@@ -280,13 +298,13 @@ describe("layoutFlow", () => {
     expect(pos["end:if:then"]!.y).toBeGreaterThan(pos.t!.y);
     expect(pos["end:if:else"]!.y).toBeGreaterThan(pos.e2!.y);
     expect(pos["end:if:then"]!.x + 12).toBe(pos.t!.x + NODE_W / 2);
-    // The branches run through their "+" into the end of the loop's body, and that back up into the loop.
+    // The branches run through their "+" into the end of the loop's body, and that back to the start of the body.
     const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
     expect(into("end:if:then")).toEqual(["t"]);
     expect(into("end:if:else")).toEqual(["e2"]);
     expect(into("join:if")).toEqual(["end:if:else", "end:if:then"]);
     expect(into("end:loop:body")).toEqual(["join:if"]);
-    expect(layout.edges.find((e) => e.source === "end:loop:body")?.target).toBe("loop");
+    expect(layout.edges.find((e) => e.source === "end:loop:body")?.target).toBe("if");
     // Inside the frames: the branches' in the if's, the body's below it but in the loop's.
     const frame = (id: string) => layout.frames.find((f) => f.id === id)!;
     const inside = (id: string, n: string) => {
@@ -297,5 +315,45 @@ describe("layoutFlow", () => {
     expect(inside("if", "end:if:then")).toBe(true);
     expect(inside("if", "end:loop:body")).toBe(false);
     expect(inside("loop", "end:loop:body")).toBe(true);
+  });
+
+  it("runs a try's \"finally\" after its columns meet, not beside them", () => {
+    const layout = layoutFlow(
+      [{ id: "try", type: "control.try", blocks: { try: [log("t")], catch: [log("c")], finally: [log("f")] } }, log("after")],
+      defs,
+    );
+    const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
+    expect(into("join:try:then")).toEqual(["end:try:catch", "end:try:try"]);
+    expect(layout.edges.find((e) => e.source === "join:try:then")).toMatchObject({ target: "f", label: "最後に必ず" });
+    expect(into("join:try")).toEqual(["end:try:finally"]);
+    const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
+    expect(pos.f!.y).toBeGreaterThan(pos["join:try:then"]!.y);
+  });
+
+  it("puts a frame's join on its bottom edge", () => {
+    const layout = layoutFlow([{ id: "if", type: "control.if", blocks: { then: [log("a")], else: [log("b")] } }], defs);
+    const frame = layout.frames[0]!;
+    expect(layout.nodes.find((n) => n.id === "join:if")!.position.y + 4).toBe(frame.y + frame.height);
+  });
+
+  it("goes on from no break, continue or fail, and adds no \"+\" after one", () => {
+    const layout = layoutFlow(
+      [{ id: "loop", type: "control.repeat", blocks: { body: [{ id: "if", type: "control.if", blocks: { then: [{ id: "brk", type: "control.break" }], else: [log("e")] } }] } }],
+      defs,
+    );
+    expect(layout.edges.some((e) => e.source === "brk")).toBe(false);
+    expect(layout.nodes.some((n) => n.id === "end:if:then")).toBe(false);
+    expect(layout.nodes.some((n) => n.id === "end:if:else")).toBe(true);    // A disabled one is skipped when it runs: the flow goes on past it.
+    const off = layoutFlow(
+      [{ id: "loop", type: "control.repeat", blocks: { body: [{ id: "brk", type: "control.break", disabled: true }] } }],
+      defs,
+    );
+    expect(off.edges.some((e) => e.source === "brk" && e.target === "end:loop:body")).toBe(true);
+  });
+
+  it("draws a wait's check going round like a loop", () => {
+    const layout = layoutFlow([{ id: "w", type: "wait.until", params: { condition: "{{ ok }}" }, blocks: { check: [log("c")] } }, log("after")], defs);
+    expect(layout.edges.find((e) => e.source === "end:w:check")).toMatchObject({ target: "c", loop: true, label: "もう一度確かめる" });
+    expect(layout.edges.find((e) => e.source === "join:w")?.label).toBe("条件を満たしたら");
   });
 });
