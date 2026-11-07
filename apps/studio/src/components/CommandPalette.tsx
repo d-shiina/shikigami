@@ -412,7 +412,7 @@ function Detail({ item, def }: { item: PaletteItem; def: StepTypeDef | undefined
     if (def.hasOutput) lines.push([t.palette.output, t.palette.gives]);
   }
   return (
-    <div className="h-[88px] shrink-0 overflow-hidden border-t border-slate-200 px-3.5 py-2" aria-live="polite">
+    <div className="h-[108px] shrink-0 overflow-hidden border-t border-slate-200 px-3.5 py-2" aria-live="polite">
       <div className="flex items-center gap-2">
         <span className="truncate text-[13px] font-semibold text-ink">{item.label}</span>
         <span className="shrink-0 text-[11px] text-slate-500">{groupLabel(item.group)}</span>
