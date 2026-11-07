@@ -7,7 +7,7 @@
 // back up from the end of their body.
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { CASE, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
-import { laneLabel } from "../lib/keywords";
+import { laneLabel, loopBackLabel } from "../lib/keywords";
 import { nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
@@ -30,13 +30,8 @@ const TAIL_GAP = 16;
  */
 export const READ_ROOM = 16 + 80 + 4 + 80;
 export const WRITE_ROOM = 16 + 80;
-/**
- * Beside a loop's body: room for the line that returns to the loop's head,
- * outside the body's value chips so it never runs through steps or chips.
- */
+/** Beside a loop's body: room for the line that returns to the loop's head (see LOOP_LINE_X). */
 const LOOP_ROOM = 32;
-/** How far right of a loop body's steps its line back up runs: past the written chips. */
-const DETOUR_RIGHT = WRITE_ROOM + 12;
 /** Between side-by-side lanes: one lane's write chips, a loop's detour, the next one's read chips. */
 const GAP_X = READ_ROOM + WRITE_ROOM + LOOP_ROOM;
 /**
@@ -52,8 +47,13 @@ export const FRAME_TOP = 0;
 const JOIN_GAP = 28;
 export const JOIN_SIZE = 8;
 const JOIN_BELOW = 14;
-/** A loop's frame runs outside its detour line; other frames outside their chips. */
-const LOOP_FRAME = { left: READ_ROOM + 12, right: DETOUR_RIGHT + 20 };
+/**
+ * A loop's line back runs up the left of its frame, LOOP_LINE_X in from the
+ * edge: straight under the loop's icon in its head, so it plainly returns to
+ * that loop. Its frame has room for it outside the frames of steps inside.
+ */
+export const LOOP_LINE_X = 19.5;
+const LOOP_FRAME = { left: READ_ROOM + 12 + 24, right: WRITE_ROOM + 12 };
 const BLOCK_FRAME = { left: READ_ROOM + 12, right: WRITE_ROOM + 12 };
 /**
  * Beside the blocks of a step that is not a loop: room for its frame to sit
@@ -123,7 +123,7 @@ export type LayoutEdge = {
   target: string;
   label?: string;
   loop?: boolean;
-  /** For a loop's back edge: the x the line runs up at, beside the loop's body instead of through it. */
+  /** For a loop's back edge: the x the line runs up at, under the loop's icon instead of through its body. */
   detourX?: number;
   /** From the head of a frame down into one of its columns: turns just under the head. */
   split?: boolean;
@@ -393,7 +393,7 @@ class Builder {
       const placed = this.list(lane.steps, y + own.h + GAP_Y, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
       this.edge(id, placed.entry, lane.label || undefined, undefined, undefined, undefined, true);
       if (isLoop) {
-        for (const e of placed.exits) this.edge(e, id, undefined, true, laneX + size.w + DETOUR_RIGHT);
+        for (const e of placed.exits) this.edge(e, id, loopBackLabel(step), true, left + LOOP_LINE_X);
       } else {
         for (const e of placed.exits) this.edge(e, join);
       }

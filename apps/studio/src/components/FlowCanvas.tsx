@@ -289,17 +289,32 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
   if (detourX !== undefined) {
-    // A loop's line back: out of the end of its body, along to the side of
-    // the body, then up into the bottom of the loop's head (the frame's top edge).
+    // A loop's line back: out of the end of its body, along to the left edge
+    // of its frame, then up into the loop's icon in its head, saying where to.
     const r = 4;
     const outY = sourceY + 12;
     const sx = detourX > sourceX ? 1 : -1;
+    const topY = targetY + HEAD_H;
     const path = [
       `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
       `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
-      `V ${targetY + HEAD_H}`,
+      `V ${topY}`,
     ].join(" ");
-    return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+    return (
+      <>
+        <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+        {label && (
+          <EdgeLabelRenderer>
+            <span
+              style={{ transform: `translate(${detourX + 7}px, ${topY + 6}px)` }}
+              className="pointer-events-none absolute top-0 left-0 text-[11px] leading-4 whitespace-nowrap text-slate-500"
+            >
+              {label}
+            </span>
+          </EdgeLabelRenderer>
+        )}
+      </>
+    );
   }
   // Splits turn just below their step; joins turn just above the next step, so
   // branches of different lengths meet on one line instead of at staggered heights.

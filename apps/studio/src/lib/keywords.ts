@@ -135,6 +135,13 @@ export function laneLabel(step: Step, block: string, label: string): string {
   }
 }
 
+/** Beside a loop's line back up to its head. */
+export function loopBackLabel(step: Step): string {
+  const ja = locale === "ja";
+  if (step.type === "control.forEach") return ja ? "次の 1 件へ" : "Next item";
+  return ja ? "次の回へ" : "Next round";
+}
+
 /** What the head of a frame says after its name: the condition of an if, the value a switch compares, what a loop walks over. */
 export function headSummary(step: Step): string {
   const p = (step.params ?? {}) as Record<string, unknown>;

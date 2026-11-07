@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { CASE_H, HEAD_H, layoutFlow, NODE_W, type StepNodeData } from "./layout";
+import { CASE_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -221,10 +221,11 @@ describe("layoutFlow", () => {
     expect(inner.x).toBeGreaterThan(outer.x);
     expect(inner.right).toBeLessThan(outer.right);
     expect(inner.bottom).toBeLessThan(outer.bottom);
-    // The lines around a loop's body run inside its frame, outside the inner one.
+    // The line back up runs inside the loop's frame, left of the inner one, under the loop's icon.
     const back = layout.edges.find((e) => e.source === "end:outer:body" && e.target === "outer")!;
-    expect(back.detourX).toBeGreaterThan(inner.right);
-    expect(back.detourX).toBeLessThan(outer.right);
+    expect(back.detourX).toBe(outer.x + LOOP_LINE_X);
+    expect(back.detourX! + 12).toBeLessThan(inner.x);
+    expect(back.label).toBe("次の回へ");
     // It is left from the bottom of the frame, after everything in it.
     const exit = layout.nodes.find((n) => n.id === "join:outer")!;
     expect(exit.position.y).toBeGreaterThan(inner.bottom);
