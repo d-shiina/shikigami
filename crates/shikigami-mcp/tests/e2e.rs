@@ -337,7 +337,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 40);
+    assert_eq!(tools.len(), 42);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -1057,4 +1057,86 @@ async fn scenario_tool_names_from_0_1_still_work() {
     let tools = h.client.list_all_tools().await.unwrap();
     assert!(tools.iter().any(|t| t.name == "create_flow"));
     assert!(!tools.iter().any(|t| t.name.contains("scenario")));
+}
+
+#[tokio::test]
+async fn ai_writes_test_cases_and_runs_them() {
+    let h = start(ServerOptions::default()).await;
+    let created = h
+        .ok(
+            "create_flow",
+            json!({
+                "name": "倍にする",
+                "variables": [
+                    { "name": "n", "type": "number", "direction": "input", "default": 1 },
+                    { "name": "doubled", "type": "number", "direction": "output", "default": 0 }
+                ],
+                "steps": [{ "type": "variable.set", "params": { "name": "doubled", "expression": "n * 2" } }]
+            }),
+        )
+        .await;
+    let id = created["flow"]["id"].as_str().unwrap().to_owned();
+
+    let saved = h
+        .ok(
+            "save_test_case",
+            json!({ "flowId": id, "name": "21", "case": { "inputs": { "n": 21 }, "expect": { "outputs": { "doubled": 42 } } } }),
+        )
+        .await;
+    assert_eq!(saved["path"], "tests/21.json");
+    h.ok(
+        "save_test_case",
+        json!({ "flowId": id, "name": "違う", "case": { "expect": { "outputs": { "doubled": 3 } } } }),
+    )
+    .await;
+    let (is_error, again) = h
+        .call(
+            "save_test_case",
+            json!({ "flowId": id, "name": "21", "case": { "inputs": { "n": 1 } } }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(again["code"], "TEST_CASE_EXISTS");
+    let (is_error, unknown) = h
+        .call(
+            "save_test_case",
+            json!({ "flowId": id, "name": "x", "case": { "inputs": { "m": 1 } } }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(unknown["code"], "TEST_CASE_UNKNOWN_INPUT");
+
+    let ran = h.ok("run_tests", json!({ "flowId": id })).await;
+    assert_eq!(ran["passed"], 1, "{ran}");
+    assert_eq!(ran["failed"], 1);
+    let wrong = &ran["cases"][1];
+    assert_eq!(wrong["name"], "違う");
+    assert_eq!(wrong["mismatches"][0]["at"], "outputs.doubled");
+    assert_eq!(wrong["mismatches"][0]["actual"], 2);
+
+    let one = h
+        .ok("run_tests", json!({ "flowId": id, "cases": ["21"] }))
+        .await;
+    assert_eq!(one["cases"].as_array().unwrap().len(), 1);
+    // One approval covers each case once.
+    let (is_error, twice) = h
+        .call("run_tests", json!({ "flowId": id, "cases": ["21", "21"] }))
+        .await;
+    assert!(is_error);
+    assert_eq!(twice["code"], "TEST_CASE_REPEATED");
+
+    // A case file someone broke by hand is not replaced without overwrite.
+    h.ok(
+        "write_project_file",
+        json!({ "flowId": id, "path": "tests/壊れた.json", "text": "{ not json" }),
+    )
+    .await;
+    let (is_error, kept) = h
+        .call(
+            "save_test_case",
+            json!({ "flowId": id, "name": "壊れた", "case": {} }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(kept["code"], "TEST_CASE_EXISTS");
 }

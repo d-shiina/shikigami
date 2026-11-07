@@ -1552,6 +1552,154 @@
       "class": "run"
     },
     {
+      "name": "run_tests",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "required": [
+          "flowId"
+        ],
+        "properties": {
+          "flowId": {
+            "type": "string"
+          },
+          "cases": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "approvalWaitMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "approvalReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "class": "run"
+    },
+    {
+      "name": "save_test_case",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "TestCase": {
+            "type": "object",
+            "properties": {
+              "$schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "inputs": {
+                "type": "object",
+                "additionalProperties": true,
+                "default": {}
+              },
+              "expect": {
+                "$ref": "#/$defs/Expect",
+                "default": {
+                  "status": "succeeded"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "Expect": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "$ref": "#/$defs/ExpectedStatus",
+                "default": "succeeded"
+              },
+              "outputs": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "errorCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "errorStep": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "ExpectedStatus": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "flowId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "case": {
+            "$ref": "#/$defs/TestCase"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "flowId",
+          "name",
+          "case"
+        ]
+      },
+      "class": "write"
+    },
+    {
       "name": "stop_flow",
       "annotations": {
         "readOnlyHint": false,

@@ -92,12 +92,14 @@ pub const TOOLS: &[(&str, ToolClass)] = &[
     ("request_secret", ToolClass::Write),
     ("write_project_file", ToolClass::Write),
     ("delete_project_file", ToolClass::Write),
+    ("save_test_case", ToolClass::Write),
     ("run_flow", ToolClass::Run),
     ("stop_flow", ToolClass::Run),
     ("inspect_page", ToolClass::Run),
     ("ask_user_to_pick", ToolClass::Run),
     ("inspect_ui", ToolClass::Run),
     ("test_step", ToolClass::Run),
+    ("run_tests", ToolClass::Run),
 ];
 
 /// Tool names from before flows were renamed from scenarios (up to 0.1.2), with
@@ -185,6 +187,7 @@ Shikigami Studio, and flows run later without you.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the flow: re-read it and redo your change, never overwrite blindly.\n\
 - After editing, call validate_flow and fix every error, then run_flow (waitMs) and inspect get_run_logs; its variableChanged events show each value a variable took and the step that set it.\n\
 - A human reviews your changes in Studio. On every edit pass `summary` in plain words, no step types or expressions (first line: what the flow now does differently, as a short title; then why and what you checked; Japanese is fine), `checks` for anything only the human can decide (your assumptions about the business, one question each; omit when nothing is uncertain), and `observations`: the observationId values that inspect_page, inspect_ui and test_step returned for the screens the change is based on. Your run_flow results are recorded against the revision they ran.\n\
+- When a flow works, keep what it should give as test cases (save_test_case: inputs and the outputs to expect) and, after each later change, run_tests to check nothing that worked broke. Fix the flow, not the case, unless the user says the expected result changed.\n\
 - When get_flow returns `feedback`, the human sent the flow back: read its reason and step notes (get_review shows the whole review), fix exactly that, and say in `summary` how you addressed it.\n\
 - Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
 - Text, numbers, dates, lists and JSON are handled with expression functions, not extra steps: list_step_types returns them under `functions` (signature + example), e.g. variable.set expression \"trim(replace(name, '　', ' '))\", \"sum(map(filter(rows, r => r.status == '済'), r => num(r.amount)))\", \"formatDate(today(), 'yyyyMMdd')\". Join text with + or a template.\n\
@@ -1403,6 +1406,88 @@ impl ShikigamiMcp {
         self.finish("extract_subflow", &peer, Some(&p.flow_id), outcome)
     }
 
+    /// Save a test case of a flow (`tests/<name>.json` in its folder): inputs to run it
+    /// with and what should come out (`expect.status`, `expect.outputs` (a subset),
+    /// `expect.errorCode`, `expect.errorStep`). Run the cases with run_tests. Read
+    /// existing ones with list_project_files / read_project_file (`tests/`).
+    #[tool(annotations(
+        read_only_hint = false,
+        destructive_hint = false,
+        open_world_hint = false
+    ))]
+    async fn save_test_case(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(p): Parameters<SaveTestCaseParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let outcome = (|| {
+            let id = FlowId::new(p.flow_id.as_str());
+            let flow = self.svc().get(&id)?;
+            let dir = self.svc().project_dir(&id)?;
+            if let Some(name) = p.case.inputs.keys().find(|n| {
+                !flow
+                    .variables
+                    .iter()
+                    .any(|v| &v.name == *n && v.direction.is_input())
+            }) {
+                return Err(err(
+                    "TEST_CASE_UNKNOWN_INPUT",
+                    format!("'{name}' is not an input variable of {id}"),
+                ));
+            }
+            if let Some(var) = flow
+                .variables
+                .iter()
+                .find(|v| v.secret && p.case.inputs.contains_key(&v.name))
+            {
+                return Err(err(
+                    "SECRET_INPUT_REJECTED",
+                    format!(
+                        "'{}' is a secret input and cannot be kept in a test case",
+                        var.name
+                    ),
+                ));
+            }
+            if !p.overwrite && shikigami_core::testcase::exists(&dir, &p.name)? {
+                return Err(err(
+                    "TEST_CASE_EXISTS",
+                    format!(
+                        "{id} already has a test case '{}'; pass overwrite: true to replace it",
+                        p.name
+                    ),
+                ));
+            }
+            let path = shikigami_core::testcase::save(&dir, &p.name, &p.case)?;
+            let relative = path
+                .strip_prefix(&dir)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            Ok(json!({ "name": p.name, "path": relative }))
+        })();
+        self.finish("save_test_case", &peer, Some(&p.flow_id), outcome)
+    }
+
+    /// Run a flow's test cases (`tests/` in its folder; all, or `cases`) one after another
+    /// with the working content, and compare each with what it expects. Returns `passed`,
+    /// `failed` and `cases[]` (`passed`, `runId`, `status`, `error`, `mismatches[]` of `at`,
+    /// `expected`, `actual`). Each case is an ordinary run (get_run_logs with its runId).
+    /// Waits until all have run; stop_flow with the running case's runId (list_runs)
+    /// stops it and the cases after it.
+    #[tool(annotations(
+        read_only_hint = false,
+        destructive_hint = false,
+        open_world_hint = true
+    ))]
+    async fn run_tests(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(p): Parameters<RunTestsParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let outcome = self.run_test_cases(&peer, &p).await;
+        self.finish("run_tests", &peer, Some(&p.flow_id), outcome)
+    }
+
     // -- run ----------------------------------------------------------------
 
     /// Run a stored flow with the Runtime (no AI involved during the run). The flow must
@@ -2136,6 +2221,153 @@ impl ShikigamiMcp {
             },
         );
         Ok((id, handle, recorder))
+    }
+
+    async fn run_test_cases(&self, peer: &Peer<RoleServer>, p: &RunTestsParams) -> Outcome {
+        use shikigami_core::testcase;
+        use shikigami_runtime::testing;
+        let flow = self.svc().get_runnable(&FlowId::new(p.flow_id.as_str()))?;
+        let version = self.svc().matching_version(&flow).ok().flatten();
+        let subflows = self.svc().subflows(&flow)?;
+        let dir = self.svc().project_dir(&flow.id)?;
+        let cases = match &p.cases {
+            None => testcase::load_all(&dir)?,
+            Some(names) => names
+                .iter()
+                .map(|name| testcase::load(&dir, name).map(|case| (name.clone(), case)))
+                .collect::<Result<Vec<_>, _>>()?,
+        };
+        // One run per case named once: the approval below covers exactly these runs.
+        if let Some((name, _)) = cases
+            .iter()
+            .enumerate()
+            .find(|(i, (name, _))| cases[..*i].iter().any(|(other, _)| other == name))
+            .map(|(_, c)| c)
+        {
+            return Err(err(
+                "TEST_CASE_REPEATED",
+                format!("'{name}' is named more than once in `cases`"),
+            ));
+        }
+        if cases.is_empty() {
+            return Err(err(
+                "NO_TEST_CASES",
+                format!(
+                    "{} has no test cases; add them with save_test_case",
+                    flow.id
+                ),
+            ));
+        }
+        // Secret values must not pass through the AI client.
+        for (name, case) in &cases {
+            if let Some(var) = flow
+                .variables
+                .iter()
+                .find(|v| v.secret && case.inputs.contains_key(&v.name))
+            {
+                return Err(err(
+                    "SECRET_INPUT_REJECTED",
+                    format!("case '{name}' gives the secret input '{}'", var.name),
+                ));
+            }
+        }
+        let policy = self.policy()?;
+        let (risk, step_types) = self
+            .svc()
+            .risk_of(std::iter::once(&flow).chain(subflows.iter().map(|s| &s.flow)));
+        let ids: Vec<&str> = std::iter::once(flow.id.as_str())
+            .chain(subflows.iter().map(|s| s.flow.id.as_str()))
+            .collect();
+        // In the order they run.
+        let planned: Vec<Value> = cases
+            .iter()
+            .map(|(name, case)| json!({ "name": name, "inputs": case.inputs }))
+            .collect();
+        self.gate(
+            peer,
+            Gate {
+                action: AiAction::RunFlow,
+                decision: policy.ai_run(risk, &ids),
+                risk,
+                step_types,
+                flow: Some((&flow.id, &flow.name)),
+                subject: json!({
+                    "flowId": flow.id,
+                    "revision": flow.revision,
+                    "version": version,
+                    "published": false,
+                    "testCases": planned,
+                    "flows": snapshot_ids(&subflows),
+                }),
+            },
+            &p.approval,
+        )
+        .await?;
+        let policy_path = Policy::path(self.svc().store().root());
+        let interrupt = testing::Interrupt::default();
+        let mut results = Vec::new();
+        for (name, case) in &cases {
+            let options = RunOptions {
+                inputs: case.inputs.clone(),
+                version,
+                subflows: subflows.clone(),
+                project_dir: Some(dir.clone()),
+                full_run: true,
+                origin: RunOrigin::new(RunTrigger::Mcp).requested_by(format!("test:{name}")),
+                ..RunOptions::default()
+            };
+            let records = testing::Records {
+                workspace: self.svc().store().local_root(),
+                policy: &policy_path,
+            };
+            // Listed among the active runs, so stop_flow with its runId stops it
+            // (and the cases after it).
+            let mut listed = None;
+            let result = testing::run_case_with(
+                &self.inner.runtime,
+                records,
+                &interrupt,
+                name,
+                case,
+                flow.clone(),
+                options,
+                |handle| {
+                    if let Ok(mut runs) = self.inner.runs.lock() {
+                        runs.insert(
+                            handle.run_id.clone(),
+                            ActiveRun {
+                                cancel: handle.stopper(),
+                                snapshot: handle.snapshot_cell(),
+                            },
+                        );
+                        listed = Some(handle.run_id.clone());
+                    }
+                },
+            )
+            .await;
+            if let Some(id) = listed
+                && let Ok(mut runs) = self.inner.runs.lock()
+            {
+                runs.remove(&id);
+            }
+            let result = result.map_err(|e| ErrorPayload {
+                code: e.code,
+                message: format!("{name}: {}", e.message),
+                details: e.details,
+            })?;
+            let stopped = result.status == shikigami_runtime::RunStatus::Cancelled;
+            results.push(result);
+            if stopped {
+                break;
+            }
+        }
+        let failed = results.iter().filter(|r| !r.passed).count();
+        Ok(json!({
+            "flowId": flow.id,
+            "passed": results.len() - failed,
+            "failed": failed,
+            "cases": results,
+        }))
     }
 
     async fn start_run(&self, peer: &Peer<RoleServer>, p: &RunFlowParams) -> Outcome {

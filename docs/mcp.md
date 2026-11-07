@@ -82,9 +82,11 @@ args = ["mcp"]
 |  | `import_flow` | Import a bundle or a flow document. `IMPORT_CONFLICT` when the ID exists (choose with `onConflict: update / copy`). Subflows in the bundle come along |
 |  | `extract_subflow` | Move consecutive nodes of one block into a new flow and replace them with a single `flow.call`. Variables they read and write become inputs and outputs, so nothing changes in how it runs ([design](design/subflows.md)) |
 |  | `write_project_file` / `delete_project_file` | Put a file in the flow's folder (`text`, or `copyFrom` a file on this PC; `overwrite` to replace) / move one to the trash |
+|  | `save_test_case` | Save a test case (`tests/<name>.json`: `inputs` and `expect`; `overwrite` to replace). Unknown or secret inputs are refused ([testing.md](testing.md)) |
 |  | `request_secret` | Ask the person for login details. Studio shows "Login needed" and opens the registration form with the name and sites filled in. Values are entered only in Studio and never returned to the AI. `waitMs` waits for the registration ([secrets.md](secrets.md)) |
 | run | `run_flow` | Run the work in progress with the Runtime (the AI's trial run; the AI takes no part in running it). `waitMs` waits for it to finish. `published: true` runs the published version. Input variables marked `secret: true` cannot be passed |
 |  | `stop_flow` | Cancel a run |
+|  | `run_tests` | Run the flow's test cases (`tests/`, all or `cases`) with the work in progress and compare each with what it expects: `passed`, `failed`, `cases[]` with `mismatches[]` ([testing.md](testing.md)). Waits until all have run; approval as for `run_flow` |
 | browser | `inspect_page` | The page's accessibility tree (how to choose a `target`: [browser.md](browser.md)). Saves the tree and a screenshot as evidence and returns an `observationId`. `image: true` also returns the screenshot to the AI |
 |  | `ask_user_to_pick` | When the AI cannot tell which element is meant, the person clicks it in the browser (the click does not reach the page) and it comes back as a `target`. Studio shows the request and can decline it ([browser.md](browser.md)) |
 | desktop | `inspect_ui` | The open windows, or the elements of one window (how to choose a `target`: [desktop.md](desktop.md)). When it looks at a window it saves the element tree as evidence and returns an `observationId` |

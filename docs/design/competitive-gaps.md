@@ -52,7 +52,7 @@
 | G25 | P2 | デスクトップ | 部品の指定は「ウィンドウ＋部品」の 2 段だけ。親の部品をたどる指定がなく、同じ名前の部品は `nth` 頼み | UiPath：Selector の階層・Anchor／PAD：UI 要素のセレクター | 済み |
 | G26 | P2 | 資格情報 | Windows の資格情報マネージャーにある資格情報を使えない | UiPath：Get Secure Credential | 済み |
 | G27 | P2 | 帳票 | 帳票の項目を読む AI-OCR がない | UiPath：Document Understanding／WinActor：AI-OCR 連携 | プラグイン候補 |
-| G28 | P2 | テスト | 入力と期待する出力を保存して繰り返し流すテストがない | UiPath：Test Suite | CLI・Studio は済み（AI は次） |
+| G28 | P2 | テスト | 入力と期待する出力を保存して繰り返し流すテストがない | UiPath：Test Suite | 済み |
 | G29 | P2 | 連携 | kintone・Box・Slack などの個別ノード、端末エミュレーター、FTP / SFTP がない | UiPath：Integration Service・Terminal・FTP／PAD：コネクター・FTP | プラグイン候補 |
 | G30 | P2 | 支援 | 有償サポート・販売パートナー・研修と認定がない | WinActor・UiPath | 広がってから |
 
@@ -154,9 +154,9 @@
 
 - フローのフォルダーの `tests/<名前>.json` に `inputs` と `expect`（`status`・`outputs` は書いたものだけ比べる・`errorCode`・`errorStep`）。`shikigami test <フロー> [--case] [--draft] [--json]` で 1 ケース 1 回ふつうに実行し、違いを `at`・`expected`・`actual` で出す。終了コード 1 で CI やバッチに使える。`tests/` はバンドルに入る（docs/testing.md）
 - Studio：下のパネルの「テスト」タブ。「この実行をテストケースとして保存」（入力・終わり方・出力をそのまま期待に。シークレットと切り詰めた値は除く）、一覧・すべて実行・1 件実行・中止、違いを「出力『total』 期待 3 実際 4」の言葉で
-- 次：AI（MCP）からケースを書いて流す道
+- AI：MCP の `save_test_case`（入力変数でない名前・シークレットの入力は断る）と `run_tests`（承認は run_flow と同じ）
 
-**対応**：CLI と Studio まで済み。UiPath の Test Suite のようなモック（外の操作の差し替え）はまだ持たない。外を操作するフローはテスト用の入力（テスト環境の URL・フォルダー）を渡して本当に流す前提。
+**対応**：済み（CLI・Studio・AI）。UiPath の Test Suite のようなモック（外の操作の差し替え）はまだ持たない。外を操作するフローはテスト用の入力（テスト環境の URL・フォルダー）を渡して本当に流す前提。
 
 ### G27・G29 はプラグインの見本として作る候補。
 
