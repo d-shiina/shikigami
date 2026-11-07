@@ -898,6 +898,7 @@ export const en: Dict = {
     pick: "Pick on screen",
     pickTitle: "Studio steps aside; click the part you want on screen (Esc or right-click to cancel)",
     banner: "Click the part you want (Esc or right-click to cancel)",
+    bannerDesktop: "Click the part (the orange frame is its window; Esc to cancel)",
     pickedPlain: "Picked",
     pickBrowserTitle: "Hide Studio and click the part in the running browser (Esc to cancel)",
     needsOpen: "There is no Open page node above this one. Put one first, and Studio opens that page in a browser to pick from",
