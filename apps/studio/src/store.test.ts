@@ -904,12 +904,15 @@ describe("copying nodes", () => {
     // Picking upwards still gives the nodes in flow order.
     store.getState().select({ kind: "step", stepId: "s3" });
     store.getState().setExtractOpen(true);
+    store.getState().setExtractName("請求書の登録");
     store.getState().selectTo("s2");
     expect(store.getState().extractOpen).toBe(true);
+    expect(store.getState().extractName).toBe("請求書の登録");
     const picked = extractChoices(store.getState().flow!.steps ?? [], store.getState());
     expect(picked && "picked" in picked && picked.picked.map((s) => s.id)).toEqual(["s2", "s3"]);
     // Picking another node closes the form.
     store.getState().select({ kind: "step", stepId: "s1" });
     expect(store.getState().extractOpen).toBe(false);
+    expect(store.getState().extractName).toBe("");
   });
 });

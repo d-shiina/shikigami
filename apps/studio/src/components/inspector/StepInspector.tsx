@@ -75,11 +75,12 @@ export function ExtractForm({ step }: { step: Step }) {
   const extract = useStudio((s) => s.extract);
   const choices = useMemo(() => extractChoices(flow?.steps ?? [], { selection, range }) ?? { from: [step] }, [flow, selection, range, step]);
   const [count, setCount] = useState(1);
-  const [name, setName] = useState("");
+  // In the store: Shift+click to widen the range moves the form to another node.
+  const name = useStudio((s) => s.extractName);
+  const setName = useStudio((s) => s.setExtractName);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     setCount(1);
-    setName("");
   }, [step.id]);
   const picked = "picked" in choices ? choices.picked : choices.from.slice(0, Math.min(count, choices.from.length));
   const names = picked.map((s) => s.name || s.type).join(" → ");

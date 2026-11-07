@@ -246,6 +246,8 @@ export type StudioState = {
   range: { anchor: string; focus: string; ids: string[] } | null;
   /** The "サブフローにまとめる" form is open beside the selected node. */
   extractOpen: boolean;
+  /** The new flow's name typed in that form: kept while Shift+click moves the form to another node. */
+  extractName: string;
   notice: string | null;
   error: string | null;
   run: RunState | null;
@@ -364,6 +366,7 @@ export type StudioState = {
   wrapSelected(type: string): Promise<void>;
   /** Opens or closes the "サブフローにまとめる" form beside the selected node. */
   setExtractOpen(open: boolean): void;
+  setExtractName(name: string): void;
   /** Puts the selected nodes on the clipboard (`cut` also removes them). */
   copySelected(cut?: boolean): Promise<void>;
   /** Adds the nodes on the clipboard after the selection (or at the "+" / empty block). */
@@ -901,6 +904,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       selection: null,
       range: null,
       extractOpen: false,
+      extractName: "",
       notice: null,
       error: null,
       run: null,
@@ -1144,7 +1148,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       // Picking a step of the open flow brings the chart back up to it.
       select(selection) {
-        set(selection ? { selection, range: null, dive: [], extractOpen: false } : { selection, range: null, extractOpen: false });
+        set(selection ? { selection, range: null, dive: [], extractOpen: false, extractName: "" } : { selection, range: null, extractOpen: false, extractName: "" });
       },
 
       goTo(stepId) {
@@ -1266,7 +1270,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setExtractOpen(open) {
-        set({ extractOpen: open && get().selection?.kind === "step" });
+        set({ extractOpen: open && get().selection?.kind === "step", extractName: "" });
+      },
+
+      setExtractName(name) {
+        set({ extractName: name });
       },
 
       selectTo(stepId) {
@@ -1413,7 +1421,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const outcome = await api.extractSubflow(flow.id, flow.revision ?? 0, stepIds, name);
           applyOutcome(outcome.caller);
-          set({ selection: { kind: "step", stepId: outcome.callStepId }, range: null, extractOpen: false, notice: t.extracted(outcome.subflow.flow.name) });
+          set({ selection: { kind: "step", stepId: outcome.callStepId }, range: null, extractOpen: false, extractName: "", notice: t.extracted(outcome.subflow.flow.name) });
           await Promise.all([get().refreshList(), get().loadHistory(), get().loadCalled()]);
           return true;
         } catch (e) {
