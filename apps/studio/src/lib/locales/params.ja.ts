@@ -238,7 +238,7 @@ export const paramsJa = {
     direction: { up: "上", down: "下", left: "左", right: "右", top: "一番上", bottom: "一番下" },
     button: { left: "左", right: "右" },
     unit: { line: "行", page: "ページ" },
-    engine: { paddle: "PaddleOCR", windows: "Windows OCR" },
+    engine: { paddle: "標準（PaddleOCR）", windows: "Windows 標準 OCR" },
     buttons: { ok: "OK", okCancel: "OK・キャンセル", yesNo: "はい・いいえ", yesNoCancel: "はい・いいえ・キャンセル" },
     kind: { file: "ファイルを 1 つ", files: "ファイルを複数", folder: "フォルダー", save: "保存先を指定" },
     align: { left: "左揃え", center: "中央揃え", right: "右揃え" },

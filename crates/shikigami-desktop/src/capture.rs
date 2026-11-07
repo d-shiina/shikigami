@@ -192,6 +192,7 @@ pub fn recognize(image: &Bitmap, language: Option<&str>) -> Result<Vec<OcrLine>,
             words.push(OcrWord {
                 text: word.Text().map_err(ocr_error)?.to_string(),
                 rect: back(word.BoundingRect().map_err(ocr_error)?),
+                confidence: None,
             });
         }
         lines.push(OcrLine { words });

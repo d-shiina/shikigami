@@ -102,6 +102,18 @@ jobs:
           Set-ItemProperty $key InternetExplorerIntegrationTestingAllowed 1 -Type DWord
           Set-ItemProperty $key HideFirstRunExperience 1 -Type DWord
           cargo test -p shikigami-desktop --test ie_mode -- --ignored --nocapture
+      # An experiment, not a gate: the OCR benchmark (Japanese business
+      # screens, crates/shikigami-desktop/src/ocr_bench.rs) with PaddleOCR
+      # and with Windows OCR on the same machine. The results are notices on
+      # the run. Installing Windows OCR's Japanese pack takes about 15 minutes,
+      # so it runs only on pull requests whose title names OCR.
+      - name: OCR benchmark, PaddleOCR and Windows OCR (experiment)
+        if: runner.os == 'Windows' && contains(github.event.pull_request.title, 'OCR')
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Add-WindowsCapability -Online -Name "Language.OCR~~~ja-JP~0.0.1.0" | Out-Null
+          cargo test -p shikigami-desktop --lib ocr_bench -- --ignored --nocapture
       # Pictures of the dialog.* dialogs, drawn by the Windows test.
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows' && always()
