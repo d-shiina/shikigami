@@ -73,7 +73,13 @@ pub async fn read_lines(
     picture: &Picture,
     options: OcrOptions,
 ) -> Result<Vec<OcrLine>, StepError> {
-    let lines = backend.recognize(picture.image.clone(), options).await?;
+    // An added engine reads the same on every backend.
+    let lines = match &options.engine {
+        Some(OcrEngine::Other(name)) => {
+            crate::backend::other_recognize(name, picture.image.clone(), options.clone()).await?
+        }
+        _ => backend.recognize(picture.image.clone(), options).await?,
+    };
     let (dx, dy) = picture.origin;
     Ok(lines
         .into_iter()
@@ -84,6 +90,7 @@ pub async fn read_lines(
                 .map(|w| OcrWord {
                     text: w.text,
                     rect: w.rect.offset(dx, dy),
+                    confidence: w.confidence,
                 })
                 .collect(),
         })

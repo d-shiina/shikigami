@@ -21,6 +21,7 @@ import { startFileDrag } from "./FileDrag";
 import { StepInspector } from "./inspector/StepInspector";
 import { useActiveField, useInsertChoices } from "./InsertVariable";
 import { Sentence } from "./StoryView";
+import { OcrResult, isOcrOutput } from "./OcrResult";
 import { ValueView } from "./ValueView";
 
 export function NodeEditor() {
@@ -255,6 +256,11 @@ function access(column: string): string {
   return /^[\p{L}_][\p{L}\p{N}_]*$/u.test(column) ? `.${column}` : `['${column.replace(/'/g, "\\'")}']`;
 }
 
+/** A node's value: OCR results as lines to check, anything else as a table. */
+function Output({ stepType, value }: { stepType?: string; value: unknown }) {
+  return isOcrOutput(stepType, value) ? <OcrResult value={value} /> : <ValueView value={value} />;
+}
+
 /** The node's result: its run alone, or else what the last run did there. */
 function Result({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }) {
   const stepTest = useStudio((s) => s.stepTest);
@@ -265,6 +271,8 @@ function Result({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }) {
 
 /** What 「ノードの単体実行」 gave. */
 function TestResult({ test, hasOutput }: { test: StepTest; hasOutput: boolean }) {
+  const flow = useStudio((s) => s.flow);
+  const stepType = flow ? findStep(flow.steps ?? [], test.stepId)?.type : undefined;
   if (test.running) return <p className="px-4 py-3 text-[12.5px] font-semibold text-slate-600">{t.editor.testing}</p>;
   const r = test.result;
   const ok = r?.status === "succeeded";
@@ -275,7 +283,7 @@ function TestResult({ test, hasOutput }: { test: StepTest; hasOutput: boolean })
       {r && hasOutput && (
         <div>
           <div className="pb-1 text-[11px] font-semibold text-slate-600">{t.editor.output}</div>
-          <ValueView value={r.output} />
+          <Output stepType={stepType} value={r.output} />
         </div>
       )}
       {r && r.logs.length > 0 && (
@@ -333,7 +341,7 @@ function RunResult({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }
             {t.editor.output}
             {step?.saveAs && <span className="ml-1.5 font-mono font-normal text-slate-500">{step.saveAs}</span>}
           </div>
-          {change ? <ValueView value={change.value} /> : <span className="text-slate-400">—</span>}
+          {change ? <Output stepType={step?.type} value={change.value} /> : <span className="text-slate-400">—</span>}
         </div>
       )}
       {!hasOutput && <div className="text-[11.5px] text-slate-400">{t.editor.noOutput}</div>}

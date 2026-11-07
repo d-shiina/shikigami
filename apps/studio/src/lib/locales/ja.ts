@@ -1394,6 +1394,17 @@ export const ja = {
     text: (n: number) => `${n.toLocaleString("ja-JP")} 文字`,
     size: (w: number, h: number) => `${w} × ${h}`,
   },
+  ocr: {
+    engine: "読み取りエンジン",
+    engines: { paddle: "標準（PaddleOCR）", "paddle-accurate": "高精度（PaddleOCR）", windows: "Windows 標準 OCR" } as Record<string, string>,
+    lines: (n: number) => `${n} 行`,
+    unsure: (n: number) => `確かめたい文字 ${n} 個`,
+    unsureHint: "色の付いた文字は、読み取りの信頼度が低い文字です。画面と見比べてください。",
+    confidence: "信頼度",
+    noConfidence: "このエンジンは信頼度を返しません",
+    noText: "文字は見つかりませんでした",
+    raw: "そのままの値",
+  },
   values: {
     none: "（なし）",
     empty: "（空）",

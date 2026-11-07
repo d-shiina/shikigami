@@ -122,6 +122,20 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 - PaddleOCR が入っていないときは **Windows OCR**（Windows.Media.Ocr）を使います。小さい文字と日本語は苦手なので、2 倍に拡大してから読ませます。`engine: "windows"` で明示もでき、`language`（`ja`・`en-US` など）はこちら用です
 - `accurate: true`（Studio では「高精度」）にすると PaddleOCR の大きいモデル（PP-OCRv6 medium、`ocr\medium\`）で読みます。手書きにかなり強くなる代わりに数倍〜10 倍遅くなります（1000×560 の画像で 0.4 秒 → 約 5 秒）。`desktop.readText` と `ocr` ターゲットで使えます。インストーラに同梱し、開発中は `pnpm studio:bundle-ocr` が ModelScope から取れれば取ります（`SHIKIGAMI_OCR_ACCURATE=required` で取れなければエラー、`skip` で取らない）
 - `desktop.readText` はどちらのエンジンで読んだかを `engine` で返し、既定が Windows OCR に落ちたときは `warning` を付けます
+- PaddleOCR は日本語として読みます。日本語で使わない漢字（簡体字の「纳」、繁体字の「錄」など Shift_JIS で書けない字）は選ばず、次の候補の同じ形の日本の字（「納」「録」）にします。形の似たかなと漢字は前後の文字で選びます：カタカナの後の「ー」（「コピ一用紙」→「コピー用紙」、ただし「データ一覧」はそのまま）、漢字の間の「力」（「入カ」→「入力」）、カタカナの間の「タ」（「デー夕」→「データ」）。画像は 1.5 倍に拡大して読みます（小さい文字が見つかりやすく、読み違いも減ります）
+- `desktop.readText` の各行には、エンジンが確からしさを返すとき（PaddleOCR。Windows OCR は返しません）`confidence`（0〜1、行の中で一番自信のない語）と `unsure`（信頼度 0.8 未満の語の文字が `text` の何文字目か）が付きます。Studio のノードの実行結果では、行ごとの信頼度と読んだエンジンを表示し、信頼度の低い文字に色を付けます
+- ほかのエンジン（拡張機能のクラウド AI-OCR など）は `OcrProvider` トレイト（`shikigami_desktop::backend::register_ocr_engine`）で足せます。フローでは `engine: "<名前>"` で選びます
+
+### OCR の正解率（ベンチマーク）
+
+`crates/shikigami-desktop/src/ocr_bench.rs` が、日本語の業務画面の画像（`tests/fixtures/ocr-bench`、`tests/ocr-bench/make.mjs` で作成）で OCR を測ります。表計算・ブラウザのフォーム・帳票・複数行のダイアログを、9・10.5・12・14pt、ライト/ダーク、そのまま・ClearType の色にじみ・リモートデスクトップ（JPEG）で用意しています。「文字」は 1 − 編集距離 ÷ 文字数、「項目」は項目まるごと正しく読めた割合です（全角半角は同じとみなします）。
+
+| PaddleOCR small | 文字 | 項目 |
+| --- | --- | --- |
+| 改善前（v0.1.9） | 99.1 % | 94.7 % |
+| 改善後 | 99.6 % | 98.0 % |
+
+画像は Linux の Chromium と Noto Sans JP・IPA フォントで描いたもので、Windows の描画ではないため、実機の画面ではもう少し下がる可能性があります。`cargo test -p shikigami-desktop --lib ocr_bench -- --ignored --nocapture` で表と読み違いの一覧を出します。9pt の分は毎回のテストで走り、99 %・95 % を下回ると失敗します。Windows の CI では同じベンチマークを Windows OCR でも測ります（main と、タイトルに OCR を含む Pull Request での実験。結果は実行の通知に出ます）。
 - 開発中のチェックアウトでは、`pnpm studio:dev` が `target\ocr` がない（または古い）ときに取ってきます（`pnpm studio:bundle-ocr` でも可）。開発版の Studio・MCP サーバー・テストが使います
 
 ### AI が画面を見るには（MCP）
