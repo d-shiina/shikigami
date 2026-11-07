@@ -783,6 +783,8 @@ export const en: Dict = {
     exact: "Exact match",
     match: "Match",
     nth: "Which one (0…)",
+    within: "Inside (group, row)",
+    after: "After (label)",
     window: "Window",
     element: "Control",
     title: "Title",

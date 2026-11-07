@@ -1056,6 +1056,48 @@ fn launch(params: &Value) -> Result<Value, StepError> {
 
 // -- step type definitions ----------------------------------------------------
 
+/// `target.element`, with `within` / `after` nesting `levels` more times.
+fn element_schema(description: &str, levels: usize) -> Value {
+    let mut properties = json!({
+        "id": { "type": "string", "minLength": 1, "description": "部品の ID（UIA の AutomationId）。完全一致" },
+        "name": { "type": "string", "minLength": 1, "description": "表示名（既定は部分一致・大文字小文字無視）" },
+        "role": { "enum": roles::names(), "description": "部品の種類（ブラウザと同じ語彙：button, textbox, checkbox, combobox, menuitem, tab, row ...）" },
+        "className": { "type": "string", "minLength": 1 },
+        "exact": { "type": "boolean", "description": "name を完全一致にする" },
+        "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号（inspect_ui の表示順。after があるときはその後ろから数える）" }
+    });
+    if levels > 0 {
+        // Written like element itself; the step checks them (the schema
+        // would repeat the whole element in every target otherwise).
+        let nested = |description: &str| {
+            json!({
+                "type": "object",
+                "description": format!("{description}。書き方は element と同じ（id / name / role / className / exact / nth、さらに within / after を {} 段まで）", target::MAX_NESTING - 1),
+                "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "role": { "type": "string" },
+                    "exact": { "type": "boolean" },
+                    "nth": { "type": "integer", "minimum": 0 }
+                }
+            })
+        };
+        properties["within"] = nested(
+            "この部品の中だけを探す（グループ・ペイン・表の行など。inspect_ui の木で探す部品より上にある行から写す）",
+        );
+        properties["after"] = nested(
+            "この部品より後ろ（inspect_ui の表示順）で最初に一致する部品を選ぶ。名前のない入力欄を、すぐ前のラベル（text \"氏名\" など）で指すときに",
+        );
+    }
+    json!({
+        "type": "object",
+        "description": description,
+        "properties": properties,
+        "additionalProperties": false,
+        "anyOf": [ { "required": ["id"] }, { "required": ["name"] }, { "required": ["role"] }, { "required": ["className"] } ]
+    })
+}
+
 fn target_schema(allow: Allow) -> Value {
     let mut properties = json!({
         "window": {
@@ -1072,20 +1114,10 @@ fn target_schema(allow: Allow) -> Value {
             "additionalProperties": false,
             "anyOf": [ { "required": ["title"] }, { "required": ["process"] }, { "required": ["className"] } ]
         },
-        "element": {
-            "type": "object",
-            "description": "ウィンドウ内の部品。inspect_ui の行から写す：id が第一候補、なければ role + name。省略するとウィンドウ自体",
-            "properties": {
-                "id": { "type": "string", "minLength": 1, "description": "部品の ID（UIA の AutomationId）。完全一致" },
-                "name": { "type": "string", "minLength": 1, "description": "表示名（既定は部分一致・大文字小文字無視）" },
-                "role": { "enum": roles::names(), "description": "部品の種類（ブラウザと同じ語彙：button, textbox, checkbox, combobox, menuitem, tab, row ...）" },
-                "className": { "type": "string", "minLength": 1 },
-                "exact": { "type": "boolean", "description": "name を完全一致にする" },
-                "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号（inspect_ui の表示順）" }
-            },
-            "additionalProperties": false,
-            "anyOf": [ { "required": ["id"] }, { "required": ["name"] }, { "required": ["role"] }, { "required": ["className"] } ]
-        }
+        "element": element_schema(
+            "ウィンドウ内の部品。inspect_ui の行から写す：id が第一候補、なければ role + name。同じ名前の部品が並ぶときは within（入っているグループ・行）か after（すぐ前のラベル）で絞る。省略するとウィンドウ自体",
+            target::MAX_NESTING,
+        )
     });
     let xy = |description: &str| {
         json!({

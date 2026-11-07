@@ -1099,3 +1099,104 @@ fn java_words_map_to_desktop_ones() {
     }
     assert_eq!(wide(&buffer), "登録");
 }
+
+#[test]
+fn elements_are_found_inside_a_group_or_after_their_label() {
+    let nodes = vec![
+        node(0, "window", "受注入力", ""),
+        node(1, "group", "請求先", "grpBill"),
+        node(2, "text", "氏名", ""),
+        node(2, "textbox", "", ""),
+        node(2, "button", "検索", ""),
+        node(1, "group", "送り先", "grpShip"),
+        node(2, "text", "氏名", ""),
+        node(2, "textbox", "", ""),
+        node(2, "button", "検索", ""),
+        node(1, "text", "備考", ""),
+        node(1, "textbox", "", ""),
+    ];
+    let element = |q: Value| pick_element(&serde_json::from_value(q).unwrap(), &nodes);
+    assert_eq!(
+        element(json!({ "role": "button", "name": "検索" }))
+            .unwrap_err()
+            .code,
+        "ELEMENT_AMBIGUOUS"
+    );
+    assert_eq!(
+        element(json!({ "role": "button", "name": "検索", "within": { "id": "grpShip" } }))
+            .unwrap(),
+        8
+    );
+    // The first text box after the label, inside the group.
+    assert_eq!(
+        element(json!({ "role": "textbox", "after": { "role": "text", "name": "氏名" }, "within": { "name": "送り先" } }))
+            .unwrap(),
+        7
+    );
+    assert_eq!(
+        element(json!({ "role": "textbox", "after": { "name": "備考" } })).unwrap(),
+        10
+    );
+    assert_eq!(
+        element(json!({ "role": "textbox", "after": { "name": "備考" }, "nth": 1 }))
+            .unwrap_err()
+            .code,
+        "ELEMENT_NOT_FOUND"
+    );
+    // Nothing after the anchor, or the group itself missing.
+    let missing = element(json!({ "role": "button", "within": { "id": "grpNone" } })).unwrap_err();
+    assert_eq!(missing.code, "ELEMENT_NOT_FOUND");
+    assert!(missing.message.contains("target.element.within"));
+    // An ambiguous anchor says so.
+    assert_eq!(
+        element(json!({ "role": "textbox", "after": { "name": "氏名" } }))
+            .unwrap_err()
+            .code,
+        "ELEMENT_AMBIGUOUS"
+    );
+
+    // The picker uses them instead of nth when it can.
+    use crate::target::{Point, picked_target};
+    let windows = vec![window("受注入力", "orders.exe")];
+    let pick = |i| picked_target(&windows, 0, &nodes, Some(i), Point { x: 1, y: 1 });
+    let ship_search = pick(8);
+    assert_eq!(ship_search.how, "within");
+    assert_eq!(
+        ship_search.target["element"],
+        json!({ "role": "button", "name": "検索", "exact": true, "within": { "id": "grpShip" } })
+    );
+    let note = pick(10);
+    assert_eq!(note.how, "after");
+    assert_eq!(
+        note.target["element"],
+        json!({ "role": "textbox", "after": { "role": "text", "name": "備考", "exact": true } })
+    );
+    for i in 1..nodes.len() {
+        let target: crate::target::Target = serde_json::from_value(pick(i).target).unwrap();
+        if let Some(e) = &target.element {
+            assert_eq!(pick_element(e, &nodes).unwrap(), i, "node {i}");
+        }
+    }
+}
+
+#[test]
+fn within_and_after_nest_only_so_deep() {
+    let params = |element: Value| json!({ "target": { "window": { "process": "a.exe" }, "element": element } });
+    let parse = |element: Value| {
+        crate::target::Target::from_params(&params(element), "target", crate::target::Allow::Plain)
+    };
+    assert!(
+        parse(json!({ "role": "button", "within": { "id": "g", "within": { "id": "p" } } }))
+            .is_ok()
+    );
+    let deep = parse(
+        json!({ "role": "button", "within": { "id": "a", "within": { "id": "b", "within": { "id": "c" } } } }),
+    );
+    assert_eq!(deep.unwrap_err().code, "INVALID_PARAMS");
+    let empty = parse(json!({ "role": "button", "after": { "exact": true } })).unwrap_err();
+    assert!(
+        empty
+            .message
+            .contains("target.element.after needs id, name or role")
+    );
+}

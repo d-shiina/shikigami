@@ -19,9 +19,16 @@ Flows drive Windows apps (business systems, Notepad, the Excel window, SAP GUI�
 
 When several elements match, Shikigami does not pick "one of them": it fails with `ELEMENT_AMBIGUOUS` and the candidates, so a run never presses a different element each time.
 
+When the same name repeats on a screen (a "Search" button for both the billing and the shipping address) or a text box has no name, two fields point at it without counting (`nth`), which survives controls being added or moved:
+
+- `within`: look only inside this element. `{ "role": "button", "name": "Search", "within": { "id": "grpShip" } }` is the Search in the shipping group
+- `after`: the first match after this element (in `inspect_ui` order). `{ "role": "textbox", "after": { "role": "text", "name": "Name" } }` is the box right after the label "Name"; `nth` counts from there
+
+Both are written like `element` and nest up to two levels (a `within` inside a `within`).
+
 ### Picking on screen and named parts
 
-- In Studio, a desktop node's target has **Pick on screen** (Studio steps aside; the element under the mouse is framed; click it, Esc or right-click to cancel; the click never reaches the app) and **Highlight** (frames the target on the screen now). The target is built the sturdy way: an `id` unique in the window, else `role` + `name` (exact), else `nth`, else a `point` in the window. The same is `inspect_ui`-free for AI clients: the adapter's inspect takes `action: "pick"` / `"highlight"`.
+- In Studio, a desktop node's target has **Pick on screen** (Studio steps aside; the element under the mouse is framed; click it, Esc or right-click to cancel; the click never reaches the app) and **Highlight** (frames the target on the screen now). The target is built the sturdy way: an `id` unique in the window, else `role` + `name` (exact), inside the group or row around it when the name repeats (`within`), after the label before it when it has no name (`after`), else `nth`, else a `point` in the window. The same is `inspect_ui`-free for AI clients: the adapter's inspect takes `action: "pick"` / `"highlight"`.
 - **Named parts**: a flow can keep targets under `parts` (`"parts": { "saveButton": { "label": "保存ボタン", "app": "desktop", "target": { … } } }`) and a node writes `"target": { "part": "saveButton" }` (nothing else beside it). When the screen changes, fix the part once. Studio lists them in the project panel (Parts) and turns a node's target into a part with **Make a part**; AI clients use the `setPart` / `removePart` edit ops. Browser nodes use parts the same way (`"app": "browser"`).
 - **Image parts** (screens with nothing to pick: Citrix, remote desktops, drawn screens): nodes that find their place by a picture (`desktop.mouseClick`, `desktop.waitFor`, `desktop.isVisible`, `desktop.hover`, `desktop.type`, `desktop.drag`…) have **Cut out of screen** beside **Pick on screen**. Studio steps aside, the screen dims, and you drag over the picture to look for (Esc or right-click cancels). You name it, and it becomes a part of the kind *Image*: the picture is saved as `templates/<key>.png` and the part is an ordinary desktop part, `{ "window": { … }, "image": { "path": "templates/image1.png", "threshold": 0.9 }, "offset": { "x": 0, "y": 0 } }`, with the window under the picture (the search stays inside it; `region` narrows it further). The part's screen shows the picture; clicking on it sets where the node acts (`offset` from the centre), the **Match** slider sets `threshold` (default 90%), and **Retake** cuts the picture again under the same name for every node that uses it. **Delete unused parts** under the Parts list removes the parts no node uses, and their pictures nothing else names (to the workspace's trash). Relative `image.path` values are resolved from the flow's folder, like any path. The adapter's inspect takes `action: "snip"` for the same (it answers the window and the PNG as base64). Cutting out works only on Windows and has not been tried on a real PC yet.
 
@@ -189,7 +196,7 @@ Java apps (Swing, AWT, and apps built on them, such as many in-house systems) sh
 | code | Meaning and fix |
 |---|---|
 | `WINDOW_NOT_FOUND` | No such window (with the list of open windows). Check title / process with `inspect_ui` |
-| `WINDOW_AMBIGUOUS` / `ELEMENT_AMBIGUOUS` | Several match (with candidates). Add conditions or `nth` |
+| `WINDOW_AMBIGUOUS` / `ELEMENT_AMBIGUOUS` | Several match (with candidates). Add conditions, `within` / `after` for elements, or `nth` |
 | `ELEMENT_NOT_FOUND` | No such element. Copy id / role / name from `inspect_ui` |
 | `NOT_CLICKABLE` / `NOT_SUPPORTED` | The element cannot be operated without the mouse. Use `desktop.mouseClick` / `desktop.type` |
 | `OPTION_NOT_FOUND` | No such option (with the list of options) |
