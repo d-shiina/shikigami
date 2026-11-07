@@ -4608,6 +4608,7 @@ version = "0.1.9"
 dependencies = [
  "ort",
  "png",
+ "regex",
  "serde",
  "serde_json",
  "shikigami-com",
