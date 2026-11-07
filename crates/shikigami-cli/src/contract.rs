@@ -167,7 +167,7 @@ mod tests {
             .registry()
             .iter()
             .filter(|def| {
-                let label = def.label.trim_end_matches(|c| c == '）' || c == ')');
+                let label = def.label.trim_end_matches(['）', ')']);
                 let label = label.split(['（', '(']).next().unwrap_or(label);
                 label.ends_with(['う', 'く', 'ぐ', 'す', 'つ', 'ぬ', 'ぶ', 'む', 'る'])
                     || label.ends_with("ない")
