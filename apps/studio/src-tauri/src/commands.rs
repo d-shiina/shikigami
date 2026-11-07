@@ -755,6 +755,12 @@ pub struct DebugSettings {
     /// Pause before the first step.
     #[serde(default)]
     step: bool,
+    /// 「ここから実行」: start at this step (the ones before do not run).
+    #[serde(default)]
+    start_at: Option<shikigami_core::StepId>,
+    /// The variables' values there, from the last run.
+    #[serde(default)]
+    start_values: Map<String, Value>,
 }
 
 /// Starts a run of the stored flow. Events are emitted as `run-event`
@@ -791,6 +797,8 @@ pub async fn run_flow(
                 }),
                 subflows,
                 origin: RunOrigin::new(RunTrigger::Studio),
+                start_at: debug.start_at,
+                start_values: debug.start_values,
                 ..RunOptions::default()
             },
         )

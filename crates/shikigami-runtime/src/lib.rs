@@ -20,6 +20,7 @@ pub mod record;
 mod runlog;
 pub mod sidecar;
 pub mod single;
+pub mod start;
 mod used_secrets;
 
 use std::collections::HashMap;
@@ -31,7 +32,9 @@ use serde_json::{Map, Value};
 use shikigami_core::policy::{Policy, TargetDef};
 use shikigami_core::registry::builtin as builtin_types;
 use shikigami_core::secret::SecretProvider;
-use shikigami_core::{Flow, FlowId, OnError, RunId, StepRegistry, StepTypeDef, Subflow, Validator};
+use shikigami_core::{
+    Flow, FlowId, OnError, RunId, StepId, StepRegistry, StepTypeDef, Subflow, Validator,
+};
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -80,6 +83,15 @@ pub struct RunOptions {
     pub full_run: bool,
     /// Who asked for the run, from where (recorded; `machine` is filled in).
     pub origin: RunOrigin,
+    /// 「ここから実行」: start at this step; the steps before it do not run
+    /// (see [`start`]). `work/` is then kept as it is, since the steps
+    /// before may have left files there.
+    pub start_at: Option<StepId>,
+    /// With `start_at`: values the flow's variables start with instead of
+    /// their defaults (what an earlier run left), for the steps before the
+    /// start that did not run. Unknown names and secret variables are
+    /// ignored.
+    pub start_values: Map<String, Value>,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -190,6 +202,14 @@ impl Runtime {
         // Nodes that name a part run with its target.
         let mut flow = flow;
         flow.inline_parts();
+        let start_step = match &options.start_at {
+            Some(id) => {
+                flow.steps = start::steps_from(&flow.steps, id)?;
+                Some(id.clone())
+            }
+            None => None,
+        };
+        let start_values = options.start_values.clone();
 
         let policy = match &self.policy_path {
             Some(path) => Policy::load(path).map_err(|e| RunError {
@@ -219,7 +239,7 @@ impl Runtime {
         let emitter = Emitter::new(run_id.clone(), tx, snapshot.clone(), log);
         // Folders whose `work/` the run starts empty.
         let fresh_work: Vec<PathBuf> =
-            if options.full_run {
+            if options.full_run && options.start_at.is_none() {
                 options
                     .project_dir
                     .iter()
@@ -344,6 +364,32 @@ impl Runtime {
             // After `runStarted`, so the inputs' `variableChanged` events
             // come first in the run.
             let init = init_variables(&flow, &inputs, &mut executor);
+            if init.is_ok()
+                && let Some(start) = &start_step
+            {
+                for var in flow.variables.iter().filter(|v| !v.secret) {
+                    if let Some(value) = start_values.get(&var.name) {
+                        executor.set_var(&var.name, value.clone(), None);
+                    }
+                }
+                let name = flow
+                    .steps
+                    .first()
+                    .map(|s| {
+                        if s.id == *start {
+                            s.name.clone()
+                        } else {
+                            String::new()
+                        }
+                    })
+                    .filter(|n| !n.is_empty())
+                    .map_or_else(|| start.to_string(), |n| format!("「{n}」"));
+                emitter.emit(RunEvent::Log {
+                    level: LogLevel::Info,
+                    message: format!("{name}から実行します（前のノードは実行しません）"),
+                    step_id: Some(start.clone()),
+                });
+            }
             let result = match init {
                 Ok(()) => executor.top_block(&flow.steps).await,
                 Err(e) => Err(exec::Interrupt::Failed(e)),

@@ -1,6 +1,7 @@
 // Studio state. All mutations go through the backend API as EditOps; the
 // store only mirrors what Core returns (flow, validation, undo state).
 import { unsetParams } from "./lib/nodeRows";
+import { valuesBefore } from "./lib/startAt";
 import type {
   ApprovalRequest,
   DebugCommand,
@@ -375,11 +376,13 @@ export type StudioState = {
   extract(stepIds: string[], name: string): Promise<boolean>;
   onExternalChange(flowId: string): Promise<void>;
   /** `step`: pause before the first step. */
-  startRun(options?: { step?: boolean; stopAt?: string }): Promise<void>;
+  startRun(options?: { step?: boolean; stopAt?: string; startAt?: string; startValues?: Record<string, unknown> }): Promise<void>;
   openEditor(stepId: string): void;
   closeEditor(): void;
   /** 「ここまで実行」: runs the flow up to and through `stepId`, then pauses, so its result can be looked at. */
   runTo(stepId: string): Promise<void>;
+  /** 「ここから実行」: the nodes before it do not run; variables start as the last run had them there. */
+  runFrom(stepId: string): Promise<void>;
   /** 「ノードの単体実行」: runs only `stepId`, with `values` for the variables it reads. */
   testStep(stepId: string, values: Record<string, unknown>): Promise<void>;
   /** 「中止」 for the node running alone. */
@@ -1444,12 +1447,22 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (!get().run) set({ trying: null });
       },
 
+      async runFrom(stepId) {
+        const { run, flow } = get();
+        if (!flow || (run && isActive(run))) return;
+        await get().startRun({ startAt: stepId, startValues: valuesBefore(run, flow.id, stepId) });
+      },
+
       async startRun(options) {
         const flow = get().flow;
         if (!flow) return;
         try {
           const breakpoints = [...new Set([...runBreakpoints(get()), ...(options?.stopAt ? [options.stopAt] : [])])];
-          const runId = await api.run(flow.id, undefined, { breakpoints, step: options?.step ?? false });
+          const runId = await api.run(flow.id, undefined, {
+            breakpoints,
+            step: options?.step ?? false,
+            ...(options?.startAt ? { startAt: options.startAt, startValues: options.startValues ?? {} } : {}),
+          });
           set((s) => ({
             // Events may have arrived before the command returned.
             run: s.run?.runId === runId ? s.run : newRun(runId, flow.id),
