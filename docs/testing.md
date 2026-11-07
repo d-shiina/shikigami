@@ -62,6 +62,10 @@ Use the "Tests" tab of the panel under the chart.
 - While they run, "Stop" stops the case running now and starts no more
 - To change a case, open its file under `tests/` in the project shelf
 
+## From an AI
+
+Over MCP, `save_test_case` writes a case and `run_tests` runs them ([mcp.md](mcp.md)). When an AI changes a flow, ask it to "add test cases and fix it until run_tests passes": it then checks after each change that earlier results still hold. Secret inputs cannot be put in a case.
+
 ## From the command line
 
 ```bash

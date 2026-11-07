@@ -333,6 +333,34 @@ pub struct RunFlowParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct SaveTestCaseParams {
+    pub flow_id: String,
+    /// The case's name: its file is `tests/<name>.json` in the flow's folder
+    /// (e.g. `3支店の合計`). No `/ \ : * ? " < > |`.
+    pub name: String,
+    /// Inputs to run with and what should come out. `expect.outputs` names
+    /// only the outputs to check (objects: only the keys given; lists: same
+    /// length, item by item; numbers by value).
+    pub case: shikigami_core::testcase::TestCase,
+    /// Replace a case of that name. Without it an existing case gives
+    /// TEST_CASE_EXISTS.
+    #[serde(default)]
+    pub overwrite: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RunTestsParams {
+    pub flow_id: String,
+    /// Only these cases (names). Omit for all of `tests/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cases: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub approval: ApprovalArgs,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestSecretParams {
     /// Name to register the login under, e.g. `Google` or `受注システム`. Use an
     /// existing name (list_secrets) to ask for a missing field or site.

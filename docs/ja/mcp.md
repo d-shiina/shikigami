@@ -82,9 +82,11 @@ args = ["mcp"]
 |  | `import_flow` | バンドルかフロー文書を取り込む。同じ ID があれば `IMPORT_CONFLICT`（`onConflict: update / copy` で選ぶ）。バンドルのサブフローもいっしょに取り込む |
 |  | `extract_subflow` | 同じブロックに並んだノードを新しいフローに切り出し、`flow.call` 1 つに置き換える。読み書きする変数は入力・出力として受け渡すので動きは変わらない（[設計](../design/subflows.md)） |
 |  | `write_project_file` / `delete_project_file` | フローのフォルダーにファイルを置く（`text`、またはこの PC のファイルを `copyFrom`。置き換えは `overwrite`）/ ごみ箱へ移す |
+|  | `save_test_case` | テストケースを保存（`tests/<名前>.json`：`inputs` と `expect`。置き換えは `overwrite`）。入力変数でない名前とシークレットの入力は断る（[testing.md](testing.md)） |
 |  | `request_secret` | ログイン情報をユーザーに求める。Studio に「ログイン情報が必要です」と出て、名前とサイトが入った登録フォームが開く。値は Studio でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
 | run | `run_flow` | Runtime で作業中の内容を実行（AI の試し実行。AI は実行に関与しない）。`waitMs` で完了まで待てる。`published: true` で公開版を実行。`secret: true` の入力変数には値を渡せない |
 |  | `stop_flow` | 実行のキャンセル |
+|  | `run_tests` | フローのテストケース（`tests/`、全部か `cases`）を作業中の内容で流し、期待と比べる：`passed`・`failed`・`cases[]`（`mismatches[]`）（[testing.md](testing.md)）。全部終わるまで待つ。承認は `run_flow` と同じ |
 | ブラウザ | `inspect_page` | ページのアクセシビリティツリー（`target` の選び方は [browser.md](browser.md)）。証跡としてツリーとスクリーンショットを保存し `observationId` を返す。`image: true` でスクリーンショットも AI に返す |
 |  | `ask_user_to_pick` | どの部品かわからないとき、人にブラウザでクリックしてもらい（クリックはページに届かない）、`target` で受け取る。Studio にも依頼が出て、そこから断れる（[browser.md](browser.md)） |
 | デスクトップ | `inspect_ui` | 開いているウィンドウの一覧、または 1 つのウィンドウの部品の一覧（`target` の選び方は [desktop.md](desktop.md)）。ウィンドウを見たときは部品ツリーを証跡に保存し `observationId` を返す |
