@@ -1336,7 +1336,7 @@
       ]
     },
     "PluginInfo": {
-      "description": "A plugin that provides step types, as installed on this PC.",
+      "description": "A plugin (an extension, in Studio) that provides step types, as\ninstalled on this PC, with what Studio shows about it.",
       "type": "object",
       "properties": {
         "name": {
@@ -1346,11 +1346,118 @@
         "version": {
           "description": "Installed version (semver).",
           "type": "string"
+        },
+        "label": {
+          "description": "The plugin's display name (its palette group).",
+          "type": "string"
+        },
+        "tag": {
+          "description": "Where its nodes work, shown as the tag before a node's name\n(\"AI-OCR\"). Empty: the label.",
+          "type": "string"
+        },
+        "icon": {
+          "description": "A Lucide icon name for its nodes (`scan-text`).",
+          "type": "string"
+        },
+        "publisher": {
+          "description": "Who makes it.",
+          "type": "string"
+        },
+        "credentials": {
+          "description": "The registered secrets it takes, by kind, so Studio offers the\nright ones (and a form of that kind) for its secret params.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginCredential"
+          }
+        },
+        "external": {
+          "description": "What this step sends outside the PC, when it does: shown on the\nreview panel before publishing.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExternalUse"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "name",
         "version"
+      ]
+    },
+    "PluginCredential": {
+      "description": "A secret a plugin's steps take: of which kind, and in which params.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SecretKind"
+        },
+        "label": {
+          "description": "What to register, for people (\"Azure のキー\").",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "params": {
+          "description": "The step params (in `secretParams`) that take it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "label",
+        "params"
+      ]
+    },
+    "SecretKind": {
+      "description": "What a secret holds, so Studio can name its fields and the AI can tell\na login from an API key. Every kind is stored, referenced (`{ \"secret\",\n\"field\" }`), site-checked and masked the same way: the kind only changes\nhow the fields are called and which ones a person fills in.",
+      "oneOf": [
+        {
+          "description": "A user name and password typed into a site or app (and an MFA key).",
+          "type": "string",
+          "const": "login"
+        },
+        {
+          "description": "A fixed key or token for a web API, kept in `password` and sent by\n`http.request` (`authType` `bearer` or `header`).",
+          "type": "string",
+          "const": "apiKey"
+        },
+        {
+          "description": "An app registered at an OAuth provider: `username` = client ID,\n`password` = client secret. `oauth.signIn` gets the access token.",
+          "type": "string",
+          "const": "oauth"
+        }
+      ]
+    },
+    "ExternalUse": {
+      "description": "Data a step sends to a service outside the PC.",
+      "type": "object",
+      "properties": {
+        "service": {
+          "description": "The service it is sent to (\"Azure AI Document Intelligence\").",
+          "type": "string"
+        },
+        "data": {
+          "description": "What is sent (\"読み取る画像・PDF\").",
+          "type": "string"
+        },
+        "param": {
+          "description": "The param holding the address it is sent to, when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "service",
+        "data"
       ]
     },
     "HistoryEntry": {

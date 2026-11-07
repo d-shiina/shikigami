@@ -4725,15 +4725,20 @@ version = "0.1.9"
 dependencies = [
  "dirs",
  "jsonschema",
+ "reqwest",
+ "rustls",
  "semver",
  "serde",
  "serde_json",
  "shikigami-core",
  "shikigami-runtime",
  "tempfile",
+ "time",
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
+ "zip 9.1.3",
 ]
 
 [[package]]

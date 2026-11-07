@@ -110,6 +110,7 @@ mod tests {
         def.plugin = Some(PluginInfo {
             name: name.into(),
             version: version.into(),
+            ..Default::default()
         });
         registry.register(def);
         registry

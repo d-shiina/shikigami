@@ -170,14 +170,62 @@ pub struct Deprecation {
     pub replacement: Option<String>,
 }
 
-/// A plugin that provides step types, as installed on this PC.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// A plugin (an extension, in Studio) that provides step types, as
+/// installed on this PC, with what Studio shows about it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginInfo {
     /// The plugin's name, also the prefix of its step types.
     pub name: String,
     /// Installed version (semver).
     pub version: String,
+    /// The plugin's display name (its palette group).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+    /// Where its nodes work, shown as the tag before a node's name
+    /// ("AI-OCR"). Empty: the label.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tag: String,
+    /// A Lucide icon name for its nodes (`scan-text`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub icon: String,
+    /// Who makes it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub publisher: String,
+    /// The registered secrets it takes, by kind, so Studio offers the
+    /// right ones (and a form of that kind) for its secret params.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub credentials: Vec<PluginCredential>,
+    /// What this step sends outside the PC, when it does: shown on the
+    /// review panel before publishing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external: Option<ExternalUse>,
+}
+
+/// A secret a plugin's steps take: of which kind, and in which params.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginCredential {
+    pub kind: crate::secret::SecretKind,
+    /// What to register, for people ("Azure のキー").
+    pub label: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    /// The step params (in `secretParams`) that take it.
+    pub params: Vec<String>,
+}
+
+/// Data a step sends to a service outside the PC.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalUse {
+    /// The service it is sent to ("Azure AI Document Intelligence").
+    pub service: String,
+    /// What is sent ("読み取る画像・PDF").
+    pub data: String,
+    /// The param holding the address it is sent to, when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub param: Option<String>,
 }
 
 impl StepTypeDef {

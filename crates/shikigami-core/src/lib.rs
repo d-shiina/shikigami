@@ -39,7 +39,10 @@ pub use ops::{EditOp, FlowPatch, Position, StepPatch};
 pub use pick::{PickRequest, PickRequestStore, PickWait};
 pub use policy::{Decision, Policy, TargetDef, TargetKind};
 pub use project::{BundledFile, ConfigFile, ConfigItem, ConfigType, ProjectFile, ProjectFiles};
-pub use registry::{Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef};
+pub use registry::{
+    Deprecation, ExternalUse, PluginCredential, PluginInfo, RiskLevel, StepCategory, StepRegistry,
+    StepTypeDef,
+};
 pub use review::{
     ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,
     ObservationContent, ObservationSource, ReviewTimeline, ReviewVerdict, StepNote, TestRun,
