@@ -427,8 +427,8 @@ export const ja = {
         gemini: "Google の AI です。あなたの Google アカウントで動きます（無料で使える回数があります）。",
         copilot: "GitHub の AI です。GitHub Copilot を契約している GitHub アカウントで動きます。会社で Copilot を使っている人向けです。",
       },
-      notInstalled: "未導入",
-      install: (name: string) => `${name} を導入する`,
+      notInstalled: "未インストール",
+      install: (name: string) => `${name} をインストールする`,
       retry: "もう一度",
       installing: "インストールしています…（1〜2 分）",
       stopping: "止めています…",
@@ -1277,6 +1277,7 @@ export const ja = {
     hoursAgo: (n: number) => `${n}時間前`,
   },
   headline: {
+    created: (n: number) => (n > 0 ? `新しいフロー（${n}ノード）` : "新しいフロー"),
     added: (n: number) => `${n}ノード追加`,
     changed: (n: number) => `${n}ノード変更`,
     removed: (n: number) => `${n}ノード削除`,

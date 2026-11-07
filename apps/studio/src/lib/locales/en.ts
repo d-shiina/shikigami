@@ -1278,6 +1278,7 @@ export const en: Dict = {
     hoursAgo: (n: number) => `${n} h ago`,
   },
   headline: {
+    created: (n: number) => (n > 0 ? `New flow (${n} nodes)` : "New flow"),
     added: (n: number) => `${n} added`,
     changed: (n: number) => `${n} changed`,
     removed: (n: number) => `${n} removed`,

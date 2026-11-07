@@ -15,15 +15,26 @@ export type ReviewSummary = {
   removed: Step[];
   variables: number;
   flow: boolean;
+  /** The group made the flow: every step it has now counts as added. */
+  created: boolean;
 };
 
-/** `entries` oldest first. */
-export function summarize(entries: HistoryEntry[]): ReviewSummary {
+/**
+ * `entries` oldest first. `current` is the flow's steps now: a `create` entry
+ * records no ops (the flow arrived whole), so its steps are read from there.
+ */
+export function summarize(entries: HistoryEntry[], current: Step[] = []): ReviewSummary {
   const steps = new Map<string, StepDiff>();
   const removed = new Map<string, Step>();
   const vars = new Set<string>();
   let flow = false;
+  let created = false;
   for (const entry of entries) {
+    if (entry.kind === "create") {
+      created = true;
+      for (const step of flatten(current)) if (step.id) steps.set(step.id, "added");
+      continue;
+    }
     const generated = generatedIds(entry);
     for (const op of entry.ops ?? []) {
       const added = op.op === "addStep" ? (op.step.id ?? generated.shift()) : undefined;
@@ -61,7 +72,7 @@ export function summarize(entries: HistoryEntry[]): ReviewSummary {
       }
     }
   }
-  return { steps, removed: [...removed.values()], variables: vars.size, flow };
+  return { steps, removed: [...removed.values()], variables: vars.size, flow, created };
 }
 
 /** A step without its children, to tell whether the step itself changed. */
@@ -85,6 +96,7 @@ function generatedIds(entry: HistoryEntry): string[] {
 /** "3ノード追加・1変更" — what the group did, in a few words. */
 export function headline(summary: ReviewSummary): string {
   const count = (d: StepDiff) => [...summary.steps.values()].filter((v) => v === d).length;
+  if (summary.created) return t.headline.created(count("added"));
   const parts = [
     count("added") && t.headline.added(count("added")),
     count("changed") && t.headline.changed(count("changed")),

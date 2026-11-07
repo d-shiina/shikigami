@@ -45,6 +45,7 @@ function DisplaySection() {
 
 function AgentSection() {
   const info = useAgent((s) => s.info);
+  const setOpen = useAgent((s) => s.setOpen);
   return (
     <SettingsGroup>
       <SettingsRow label={t.shell.agentPick} hint={t.shell.agentPickHint} htmlFor="settings-agent">
@@ -52,6 +53,15 @@ function AgentSection() {
           <AgentPicker id="settings-agent" />
         </div>
         {!info?.available && <p className="mt-1 text-[12px] text-shu-600">{info?.problem ?? t.shell.agentNone}</p>}
+        {info && !info.available && info.installable && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="mt-1.5 flex h-7 items-center rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
+          >
+            {t.agent.setup.title}
+          </button>
+        )}
       </SettingsRow>
       {info?.command && (
         <SettingsRow label={t.shell.agentCommand}>
@@ -69,27 +79,47 @@ export function SettingsPage() {
   const scroller = useRef<HTMLDivElement>(null);
   const [current, setCurrent] = useState<SectionId>("workspace");
 
+  // A section picked in the list stays marked while the pane scrolls to it,
+  // even when it is too near the bottom to reach the top.
+  const picked = useRef<SectionId | null>(null);
+
   // Mark the section being read in the list: the last one whose top has
-  // passed the upper part of the pane (or the last one at the very bottom).
+  // passed the upper part of the pane (or the last one once scrolled to the
+  // very bottom).
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
     const update = () => {
+      if (picked.current) return setCurrent(picked.current);
       const top = el.getBoundingClientRect().top + 80;
       let found: SectionId = IDS[0];
       for (const id of IDS) {
         const node = el.querySelector(`#settings-${id}`);
         if (node && node.getBoundingClientRect().top <= top) found = id;
       }
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) found = "about";
+      const scrolled = el.scrollTop > 0 && el.scrollHeight > el.clientHeight + 2;
+      if (scrolled && el.scrollTop + el.clientHeight >= el.scrollHeight - 2) found = "about";
       setCurrent(found);
+    };
+    // The person scrolling by hand ends a pick.
+    const release = () => {
+      picked.current = null;
     };
     update();
     el.addEventListener("scroll", update, { passive: true });
-    return () => el.removeEventListener("scroll", update);
+    el.addEventListener("wheel", release, { passive: true });
+    el.addEventListener("pointerdown", release);
+    el.addEventListener("keydown", release);
+    return () => {
+      el.removeEventListener("scroll", update);
+      el.removeEventListener("wheel", release);
+      el.removeEventListener("pointerdown", release);
+      el.removeEventListener("keydown", release);
+    };
   }, []);
 
   const go = (id: SectionId) => {
+    picked.current = id;
     setCurrent(id);
     scroller.current?.querySelector(`#settings-${id}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
