@@ -21,6 +21,7 @@ mod runlog;
 pub mod sidecar;
 pub mod single;
 pub mod start;
+pub mod testing;
 mod used_secrets;
 
 use std::collections::{BTreeSet, HashMap};

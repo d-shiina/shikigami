@@ -15,12 +15,14 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use serde_json::{Map, Value};
 use shikigami_core::secret::SecretKind;
+use shikigami_core::testcase;
 use shikigami_core::{
     Actor, ActorKind, ApprovalId, ApprovalStore, DiffKind, FileStore, Flow, FlowDiff, FlowId,
     FlowService, ImportConflict, NewFlow, NewVersion, Policy, PublishInput, UserConfig,
     WorkspaceManifest,
 };
 use shikigami_runtime::record::RunRecorder;
+use shikigami_runtime::testing;
 use shikigami_runtime::{
     LogLevel, RunEvent, RunOptions, RunOrigin, RunStatus, RunTrigger, Runtime, StepOutcome,
 };
@@ -65,6 +67,22 @@ enum Command {
         /// Also print every variable change (value and the step that set it).
         #[arg(long)]
         vars: bool,
+    },
+    /// Run a flow's test cases (`tests/<name>.json` in its folder) and
+    /// compare what came out with what each case expects. Exits 1 when a
+    /// case fails. Like `run`, it uses the published version unless --draft.
+    Test {
+        /// Flow ID in the workspace, or a path to a flow JSON file.
+        target: String,
+        /// Only this case (the file name without .json); repeatable.
+        #[arg(long = "case", value_name = "NAME")]
+        cases: Vec<String>,
+        /// Run the working content instead of the published version.
+        #[arg(long)]
+        draft: bool,
+        /// Print the results as one JSON object.
+        #[arg(long)]
+        json: bool,
     },
     /// Validate a flow (by ID or JSON file).
     Validate { target: String },
@@ -753,6 +771,86 @@ fn real_main() -> Result<ExitCode> {
                 RunStatus::Succeeded => ExitCode::SUCCESS,
                 RunStatus::Cancelled => ExitCode::from(130),
                 _ => ExitCode::from(1),
+            });
+        }
+        Command::Test {
+            target,
+            cases,
+            draft,
+            json,
+        } => {
+            let svc = open_service()?;
+            let (flow, version, mut subflows) = runnable(&svc, target, *draft)?;
+            let project_dir = project_dirs(&svc, target, &flow, &mut subflows)?
+                .context("the flow has no folder to keep test cases in")?;
+            let selected = if cases.is_empty() {
+                testcase::load_all(&project_dir).map_err(core_err)?
+            } else {
+                cases
+                    .iter()
+                    .map(|name| {
+                        testcase::load(&project_dir, name)
+                            .map(|case| (name.clone(), case))
+                            .map_err(core_err)
+                    })
+                    .collect::<Result<_>>()?
+            };
+            if selected.is_empty() {
+                bail!(
+                    "{} has no test cases; write them as {}/<name>.json",
+                    flow.id,
+                    testcase::tests_dir(&project_dir).display()
+                );
+            }
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            let runtime = runtime.clone().for_workspace(
+                svc.store().root(),
+                Arc::new(Vault::open(svc.store().root())),
+            );
+            let mut results = Vec::new();
+            for (name, case) in selected {
+                let options = RunOptions {
+                    inputs: case.inputs.clone(),
+                    version,
+                    subflows: subflows.clone(),
+                    project_dir: Some(project_dir.clone()),
+                    full_run: true,
+                    origin: RunOrigin::new(RunTrigger::Cli).requested_by(format!("test:{name}")),
+                    ..RunOptions::default()
+                };
+                let result = rt.block_on(testing::run_case(
+                    &runtime,
+                    svc.store().local_root(),
+                    &name,
+                    &case,
+                    flow.clone(),
+                    options,
+                ))?;
+                if !*json {
+                    print_case(&result);
+                }
+                results.push(result);
+            }
+            let failed = results.iter().filter(|r| !r.passed).count();
+            if *json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "flowId": flow.id,
+                        "passed": results.len() - failed,
+                        "failed": failed,
+                        "cases": results,
+                    }))?
+                );
+            } else {
+                println!("{} passed, {failed} failed", results.len() - failed);
+            }
+            return Ok(if failed == 0 {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
             });
         }
     }
@@ -1458,6 +1556,26 @@ async fn run(
     Ok(report.status)
 }
 
+fn print_case(result: &testing::CaseResult) {
+    let mark = if result.passed { "✓" } else { "✗" };
+    let about = result
+        .description
+        .as_ref()
+        .map(|d| format!(" — {d}"))
+        .unwrap_or_default();
+    println!("{mark} {}{about} ({} ms)", result.name, result.duration_ms);
+    for m in &result.mismatches {
+        println!("    {}: expected {}, got {}", m.at, m.expected, m.actual);
+    }
+    if !result.passed {
+        if let Some(err) = &result.error {
+            let at = err.step_id.as_ref().map(|s| s.as_str()).unwrap_or("-");
+            println!("    error at {at}: {} {}", err.code, err.message);
+        }
+        println!("    run {}", result.run_id);
+    }
+}
+
 /// "2026-11-01" (that day, local midnight as UTC) or an RFC 3339 time.
 fn parse_when(text: &str) -> Result<time::OffsetDateTime> {
     use time::format_description::well_known::Rfc3339;
@@ -1594,6 +1712,22 @@ mod cli_tests {
         };
         assert!(draft);
         assert_eq!(inputs, vec!["x=1".to_owned()]);
+        let cli = Cli::try_parse_from([
+            "shikigami",
+            "test",
+            "scn_a",
+            "--case",
+            "a",
+            "--case",
+            "b",
+            "--draft",
+        ])
+        .unwrap();
+        let Command::Test { cases, draft, .. } = cli.command else {
+            panic!("not a test");
+        };
+        assert!(draft);
+        assert_eq!(cases, ["a", "b"]);
         // The name from before flows were renamed still works.
         assert!(Cli::try_parse_from(["shikigami", "scenario", "list"]).is_ok());
     }

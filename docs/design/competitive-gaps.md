@@ -52,7 +52,7 @@
 | G25 | P2 | デスクトップ | 部品の指定は「ウィンドウ＋部品」の 2 段だけ。親の部品をたどる指定がなく、同じ名前の部品は `nth` 頼み | UiPath：Selector の階層・Anchor／PAD：UI 要素のセレクター | 済み |
 | G26 | P2 | 資格情報 | Windows の資格情報マネージャーにある資格情報を使えない | UiPath：Get Secure Credential | 済み |
 | G27 | P2 | 帳票 | 帳票の項目を読む AI-OCR がない | UiPath：Document Understanding／WinActor：AI-OCR 連携 | プラグイン候補 |
-| G28 | P2 | テスト | 入力と期待する出力を保存して繰り返し流すテストがない | UiPath：Test Suite | 後で |
+| G28 | P2 | テスト | 入力と期待する出力を保存して繰り返し流すテストがない | UiPath：Test Suite | CLI は済み（Studio は次） |
 | G29 | P2 | 連携 | kintone・Box・Slack などの個別ノード、端末エミュレーター、FTP / SFTP がない | UiPath：Integration Service・Terminal・FTP／PAD：コネクター・FTP | プラグイン候補 |
 | G30 | P2 | 支援 | 有償サポート・販売パートナー・研修と認定がない | WinActor・UiPath | 広がってから |
 
@@ -149,6 +149,13 @@
 - `element.within`（この部品の中だけを探す）と `element.after`（この部品の後ろで最初に当たる部品、名前のない入力欄をラベルで指す）。どちらも `element` と同じ書き方で 2 段まで。画面から選ぶも、`nth` の前にこの 2 つを試す
 
 **対応**：済み。UiPath の Anchor は位置（右・下）で探すが、ここでは画面の部品の並び順の「後ろ」にした（ラベルの後に入力欄が来る業務画面の作りで足り、AI が inspect_ui の木から写せる）。実機ではまだ試していない。
+
+### G28 テストの仕組み
+
+- フローのフォルダーの `tests/<名前>.json` に `inputs` と `expect`（`status`・`outputs` は書いたものだけ比べる・`errorCode`・`errorStep`）。`shikigami test <フロー> [--case] [--draft] [--json]` で 1 ケース 1 回ふつうに実行し、違いを `at`・`expected`・`actual` で出す。終了コード 1 で CI やバッチに使える。`tests/` はバンドルに入る（docs/testing.md）
+- 次：Studio で「この実行をテストケースにする」（入力と出力をそのまま期待値に）とテストの一覧・まとめて実行、AI（MCP）からケースを書いて流す道
+
+**対応**：CLI まで済み。UiPath の Test Suite のようなモック（外の操作の差し替え）はまだ持たない。外を操作するフローはテスト用の入力（テスト環境の URL・フォルダー）を渡して本当に流す前提。
 
 ### G27・G29 はプラグインの見本として作る候補。
 

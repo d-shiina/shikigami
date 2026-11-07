@@ -1,0 +1,4 @@
+{
+  "description": "input の 3 支店の CSV を合計する",
+  "expect": { "outputs": { "branchCount": 3, "grandTotal": 73050 } }
+}

@@ -1,0 +1,4 @@
+{
+  "inputs": { "folder": "無いフォルダー" },
+  "expect": { "status": "failed", "errorCode": "FILE_NOT_FOUND" }
+}

@@ -65,6 +65,16 @@ Next month, replace the CSVs and run it. To use another folder, change the `fold
 shikigami run scn_tutorial_sales_csv -i folder=C:\share\sales\2026-11
 ```
 
+## 6. Keep tests
+
+So that you can check the result stays the same after a change, keep test cases in `tests/` (see `examples/tutorials/sales-csv/tests/`).
+
+```bash
+shikigami test scn_tutorial_sales_csv --draft
+```
+
+See [Testing flows](../testing.md) for how to write them.
+
 ## Next
 
 - [Make an invoice per customer from an order list](invoices.md): turn totals into Word invoices

@@ -37,6 +37,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/policy.md](docs/policy.md) | Unattended runs use only an approved, published version; allowed sites and apps; approving AI operations (`policy.json`) |
 | [docs/expressions.md](docs/expressions.md) | Functions available in flow expressions |
 | [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md), [docs/database.md](docs/database.md) | Built-in nodes: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF, databases |
+| [docs/testing.md](docs/testing.md) | Test cases: inputs and expected outputs kept with a flow, run with `shikigami test` |
 | [docs/schedules.md](docs/schedules.md) | Schedules and file triggers; the agent that runs them on each PC |
 | [docs/audit.md](docs/audit.md) | One audit trail: who changed, published and ran which flow (`shikigami audit`), and how long it is kept |
 | [docs/remote.md](docs/remote.md) | Management server: enroll PCs, hand jobs to whichever is free, protocol v1 and a reference server |

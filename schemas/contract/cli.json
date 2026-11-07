@@ -540,6 +540,51 @@
       ]
     },
     {
+      "name": "test",
+      "args": [
+        {
+          "id": "target",
+          "required": true,
+          "takesValue": true,
+          "repeatable": false,
+          "global": false,
+          "positional": true
+        },
+        {
+          "id": "cases",
+          "required": false,
+          "takesValue": true,
+          "repeatable": true,
+          "global": false,
+          "long": "case"
+        },
+        {
+          "id": "draft",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "draft",
+          "values": [
+            "true",
+            "false"
+          ]
+        },
+        {
+          "id": "json",
+          "required": false,
+          "takesValue": false,
+          "repeatable": false,
+          "global": false,
+          "long": "json",
+          "values": [
+            "true",
+            "false"
+          ]
+        }
+      ]
+    },
+    {
       "name": "validate",
       "args": [
         {

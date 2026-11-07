@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestCase",
+  "description": "One test case, `tests/<name>.json`.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "`https://…/test-case.schema.json`, for editors (optional, not used).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "description": {
+      "description": "What the case is about, in the author's words.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "inputs": {
+      "description": "Values of the flow's input variables, as `shikigami run -i` takes them.",
+      "type": "object",
+      "additionalProperties": true,
+      "default": {}
+    },
+    "expect": {
+      "$ref": "#/$defs/Expect",
+      "default": {
+        "status": "succeeded"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Expect": {
+      "description": "What should come out of the run.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "How the run ends. `failed` for a case that checks an error is raised.",
+          "$ref": "#/$defs/ExpectedStatus",
+          "default": "succeeded"
+        },
+        "outputs": {
+          "description": "Output variables to compare (a subset, see the module docs).",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "errorCode": {
+          "description": "The error's code, when `status` is `failed` (e.g. `ELEMENT_NOT_FOUND`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "errorStep": {
+          "description": "The node the run should stop at, when `status` is `failed`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExpectedStatus": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    }
+  },
+  "$id": "https://shikigami.dev/schemas/test-case.schema.json"
+}

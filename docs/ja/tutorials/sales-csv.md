@@ -65,6 +65,16 @@ AI は CSV を読み、ノードを足しながら試し実行を繰り返しま
 shikigami run scn_tutorial_sales_csv -i folder=C:\共有\売上\2026-11
 ```
 
+## 6. テストを残す
+
+直したあとも同じ結果になるか確かめられるよう、`tests/` にテストケースを置いておきます（見本は `examples/tutorials/sales-csv/tests/`）。
+
+```bash
+shikigami test scn_tutorial_sales_csv --draft
+```
+
+書き方は [フローのテスト](../testing.md) を参照してください。
+
 ## 次は
 
 - [受注一覧から取引先ごとの請求書を作る](invoices.md)：まとめた結果を Word の請求書にする

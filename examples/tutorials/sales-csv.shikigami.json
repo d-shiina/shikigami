@@ -213,6 +213,16 @@
       "flowId": "scn_tutorial_sales_csv",
       "path": "input/福岡.csv",
       "data": "5pel5LuYLOWVhuWTgSzmlbDph48s6YeR6aGNCjIwMjYtMTAtMDgs44OI44OK44O877yI44Kr44Op44O877yJLDEsIjIxLDAwMCIKMjAyNi0xMC0wOSzku5jnrossNTAsMzUwMAoyMDI2LTEwLTI4LOOCs+ODlOODvOeUqOe0mSBBMyw1LDQyNTAK"
+    },
+    {
+      "flowId": "scn_tutorial_sales_csv",
+      "path": "tests/3支店の合計.json",
+      "data": "ewogICJkZXNjcmlwdGlvbiI6ICJpbnB1dCDjga4gMyDmlK/lupfjga4gQ1NWIOOCkuWQiOioiOOBmeOCiyIsCiAgImV4cGVjdCI6IHsgIm91dHB1dHMiOiB7ICJicmFuY2hDb3VudCI6IDMsICJncmFuZFRvdGFsIjogNzMwNTAgfSB9Cn0K"
+    },
+    {
+      "flowId": "scn_tutorial_sales_csv",
+      "path": "tests/フォルダーが無い.json",
+      "data": "ewogICJpbnB1dHMiOiB7ICJmb2xkZXIiOiAi54Sh44GE44OV44Kp44Or44OA44O8IiB9LAogICJleHBlY3QiOiB7ICJzdGF0dXMiOiAiZmFpbGVkIiwgImVycm9yQ29kZSI6ICJGSUxFX05PVF9GT1VORCIgfQp9Cg=="
     }
   ]
 }
