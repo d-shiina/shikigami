@@ -495,7 +495,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             step_type: control::GROUP.into(),
             category: StepCategory::Control,
             label: "グループ".into(),
-            description: "Runs `body` in order. Use it to name a set of steps or as one branch of `control.parallel`.".into(),
+            description: "Runs `body` in order. Use it to name a set of steps or as one branch of `control.parallel`. With `retry` (e.g. { \"maxAttempts\": 3, \"backoffMs\": 2000 }) the whole body runs again from its first step when any step in it fails, e.g. to open the site, sign in and go to the page again. Only a group is retried as a whole; `retry` on other control steps is not used.".into(),
             params_schema: object_schema(json!({}), &[]),
             blocks: vec![block("body", "処理")],
             has_output: false,

@@ -98,7 +98,7 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "control.repeat": { summary: "決めた回数だけ、中のノードを繰り返す", words: "ループ 繰り返し 回数 回数ループ" },
   "control.while": { summary: "条件が成り立つ間、中のノードを繰り返す", words: "ループ 繰り返し 条件 条件ループ" },
   "control.try": { summary: "エラーが起きたら、別のノードで処理する", words: "エラー 例外 失敗 catch finally 例外処理" },
-  "control.group": { summary: "ノードをまとめて名前を付ける", words: "まとめる グループ" },
+  "control.group": { summary: "ノードをまとめて名前を付ける。再試行の回数を付けると、失敗したとき中身を最初からやり直す", words: "まとめる グループ 再試行 リトライ やり直し" },
   "control.parallel": { summary: "いくつかの流れを同時に動かす", words: "並列 同時 並行" },
   "control.break": { summary: "繰り返しを途中で抜ける", words: "ループ 中断 抜ける ループを抜ける" },
   "control.continue": { summary: "繰り返しの残りをスキップして次の 1 件へ", words: "ループ スキップ 飛ばす 次の繰り返しへ" },

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
 import { Maximize2 } from "lucide-react";
 import { t } from "../../lib/i18n";
+import { GROUP } from "../../lib/stepTypes";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../../lib/dataFlow";
 import { stepSummary } from "../../lib/palette";
 import { issueText } from "../../lib/issueText";
@@ -329,7 +330,7 @@ function ExecutionSection({ step, isCall, update }: { step: Step; isCall: boolea
   const all: { key: string; label: string; set: boolean; hide?: boolean }[] = [
     { key: "disabled", label: t.disabled, set: step.disabled === true },
     { key: "timeoutMs", label: t.timeoutMs, set: step.timeoutMs != null, hide: control },
-    { key: "retry", label: t.retry, set: step.retry != null, hide: control || isCall },
+    { key: "retry", label: t.retry, set: step.retry != null, hide: (control && step.type !== GROUP) || isCall },
     { key: "onError", label: t.onError, set: step.onError != null, hide: control },
   ].filter((r) => !r.hide);
   const shown = (key: string) => (all.find((r) => r.key === key)?.set ?? false) || added.has(key);
