@@ -19,6 +19,7 @@ pub mod node;
 pub mod record;
 mod runlog;
 pub mod sidecar;
+pub mod single;
 
 use std::collections::HashMap;
 use std::path::PathBuf;

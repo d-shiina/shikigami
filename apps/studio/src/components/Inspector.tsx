@@ -9,7 +9,7 @@ import { locale, stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { stepSummary } from "../lib/palette";
 import { issueText } from "../lib/issueText";
-import { CALL, callMap, choiceLabel, knownVariables, outputs, paramLabel, plainHint, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
+import { CALL, callMap, choiceLabel, knownVariables, outputs, paramLabel, paramRows, plainHint, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { outline } from "../lib/outline";
 import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../lib/parts";
 import { runScope } from "../lib/runScope";
@@ -1342,7 +1342,6 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
   const revert = useStudio((s) => s.revert);
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
-  const openEditor = useStudio((s) => s.openEditor);
   const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
   const links = useMemo(() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
@@ -1372,17 +1371,6 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
             <span className="text-sm font-bold" style={{ color }} title={`${step.type} · ID: ${id}`}>
               {typeTitle(step, def)}
             </span>
-            {!inEditor && (
-              <button
-                type="button"
-                title={t.editor.openTitle}
-                onClick={() => openEditor(id)}
-                className="ml-auto flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-white/60 hover:text-ink"
-              >
-                <Maximize2 size={12} strokeWidth={1.75} aria-hidden="true" />
-                {t.editor.open}
-              </button>
-            )}
           </div>
           <div className="space-y-1 px-3 py-2">
             <div className="text-[13px] leading-snug">
@@ -1424,40 +1412,99 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
           </ul>
         )}
       </div>
-      <Section title={t.props.basics}>
-        <Row label={t.stepName}>
-          <CommitInput value={step.name ?? ""} onCommit={(name) => update({ name })} />
-        </Row>
-      </Section>
-      {isCall ? (
-        <CallEditor step={step} vars={vars} update={update} />
-      ) : (
-        <ParamsEditor step={step} def={def} vars={vars} update={update} />
-      )}
-      {!isCall && (outs.length > 0 || def?.hasOutput) && (
-        <Section title={t.props.output}>
-          {def?.hasOutput && (
-            <Row label={t.saveAs} socket={step.saveAs ? TYPE_COLOR[vars.get(step.saveAs) ?? "any"] : undefined}>
-              <CommitInput
-                mono
-                value={step.saveAs ?? ""}
-                placeholder={t.props.variableName}
-                onCommit={(v) => update({ saveAs: v.trim() === "" ? null : v.trim() })}
-              />
+      {inEditor ? (
+        <>
+          <Section title={t.props.basics}>
+            <Row label={t.stepName}>
+              <CommitInput value={step.name ?? ""} onCommit={(name) => update({ name })} />
             </Row>
+          </Section>
+          {isCall ? (
+            <CallEditor step={step} vars={vars} update={update} />
+          ) : (
+            <ParamsEditor step={step} def={def} vars={vars} update={update} />
           )}
-          {outs
-            .filter((o) => o.variable !== step.saveAs)
-            .map((o) => (
-              <Row key={o.variable} label={o.label} socket={TYPE_COLOR[vars.get(o.variable) ?? "any"]}>
-                <span className="block pt-1 font-mono text-xs font-semibold">{o.variable}</span>
-              </Row>
-            ))}
-        </Section>
+          {!isCall && (outs.length > 0 || def?.hasOutput) && (
+            <Section title={t.props.output}>
+              {def?.hasOutput && (
+                <Row label={t.saveAs} socket={step.saveAs ? TYPE_COLOR[vars.get(step.saveAs) ?? "any"] : undefined}>
+                  <CommitInput
+                    mono
+                    value={step.saveAs ?? ""}
+                    placeholder={t.props.variableName}
+                    onCommit={(v) => update({ saveAs: v.trim() === "" ? null : v.trim() })}
+                  />
+                </Row>
+              )}
+              {outs
+                .filter((o) => o.variable !== step.saveAs)
+                .map((o) => (
+                  <Row key={o.variable} label={o.label} socket={TYPE_COLOR[vars.get(o.variable) ?? "any"]}>
+                    <span className="block pt-1 font-mono text-xs font-semibold">{o.variable}</span>
+                  </Row>
+                ))}
+            </Section>
+          )}
+          <ExecutionSection step={step} isCall={isCall} update={update} />
+        </>
+      ) : (
+        <StepSummary step={step} def={def} vars={vars} isCall={isCall} />
       )}
       <Connections stepId={id} links={links} vars={vars} />
-      <ExecutionSection step={step} isCall={isCall} update={update} />
     </div>
+  );
+}
+
+/**
+ * The right pane's view of a node: what it is set to, read-only. Settings
+ * are changed in the node opened full size (NodeEditor), so there is one
+ * place to edit them (docs/design/ui-principles.md §2).
+ */
+function StepSummary({ step, def, vars, isCall }: { step: Step; def: StepTypeDef | undefined; vars: Map<string, string | undefined>; isCall: boolean }) {
+  const openEditor = useStudio((s) => s.openEditor);
+  const known = useMemo(() => new Set(vars.keys()), [vars]);
+  const rows = paramRows(step, def, known);
+  const outs = outputs(step);
+  const execution = [
+    step.disabled ? [t.disabled, "✓"] : null,
+    step.timeoutMs ? [t.timeoutMs, String(step.timeoutMs)] : null,
+    step.retry?.maxAttempts ? [t.retry, String(step.retry.maxAttempts)] : null,
+    step.onError ? [t.onError, step.onError === "fail" ? t.onErrorFail : t.onErrorContinue] : null,
+  ].filter((r): r is string[] => r !== null);
+  const line = (label: string, value: React.ReactNode, key: string, socket?: string) => (
+    <div key={key} className="grid grid-cols-[84px_1fr] items-baseline gap-x-2 py-0.5 text-[12px]">
+      <span className="flex items-center justify-end text-right text-[11px] leading-tight text-slate-500">
+        {socket && <span className="mr-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: socket }} />}
+        {label}
+      </span>
+      <span className="min-w-0 break-words text-ink">{value}</span>
+    </div>
+  );
+  return (
+    <>
+      <Section title={t.props.settingsSummary}>
+        {step.name && line(t.stepName, step.name, "name")}
+        {rows.map((r) => line(r.label, r.value, r.key))}
+        {rows.length === 0 && !step.name && <p className="py-1 text-[12px] text-slate-500">{t.props.noSettings}</p>}
+        <button
+          type="button"
+          title={t.props.editSettingsTitle}
+          onClick={() => step.id && openEditor(step.id)}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-[4px] border border-slate-300 py-1.5 text-[12px] font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600"
+        >
+          <Maximize2 size={12} strokeWidth={1.75} aria-hidden="true" />
+          {t.props.editSettings}
+        </button>
+      </Section>
+      {!isCall && (outs.length > 0 || step.saveAs) && (
+        <Section title={t.props.output}>
+          {[...(step.saveAs ? [{ label: t.saveAs, variable: step.saveAs }] : []), ...outs.filter((o) => o.variable !== step.saveAs)].map((o) =>
+            line(o.label, <span className="font-mono text-xs font-semibold">{o.variable}</span>, o.variable, TYPE_COLOR[vars.get(o.variable) ?? "any"]),
+          )}
+        </Section>
+      )}
+      {execution.length > 0 && <Section title={t.props.execution}>{execution.map(([label, value]) => line(label!, value, label!))}</Section>}
+    </>
   );
 }
 

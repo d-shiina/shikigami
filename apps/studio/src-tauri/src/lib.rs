@@ -178,6 +178,7 @@ pub fn run() {
             commands::get_observation,
             commands::run_record,
             commands::run_flow,
+            commands::test_step,
             commands::stop_run,
             commands::run_status,
             debug::debug_run,

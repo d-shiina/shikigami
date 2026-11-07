@@ -130,15 +130,19 @@ const OUTPUT_KEYS: Record<string, string[]> = {
 };
 
 /** A call shows one row per input it passes, labelled with the called flow's variable. */
-function callRows(step: Step, known: ReadonlySet<string>): Row[] {
-  const inputs = Object.entries(callMap(step, "inputs"));
-  const rows: Row[] = inputs.slice(0, MAX_PARAM_ROWS).map(([name, value]) => ({
+function callInputRows(step: Step, known: ReadonlySet<string>): Extract<Row, { kind: "param" }>[] {
+  return Object.entries(callMap(step, "inputs")).map(([name, value]) => ({
     kind: "param",
     key: `inputs.${name}`,
     label: name,
     value: display(name, value),
     refs: referencedVariables(value, known),
   }));
+}
+
+function callRows(step: Step, known: ReadonlySet<string>): Row[] {
+  const inputs = callInputRows(step, known);
+  const rows: Row[] = inputs.slice(0, MAX_PARAM_ROWS);
   if (inputs.length > MAX_PARAM_ROWS) rows.push({ kind: "more", count: inputs.length - MAX_PARAM_ROWS });
   for (const o of outputs(step)) rows.push({ kind: "output", ...o });
   return rows;
@@ -154,18 +158,26 @@ function projectFile(key: string, value: unknown, def: StepTypeDef | undefined):
   return FOLDERS.has(role) && path.includes("/") ? { path, role: role as "input" } : undefined;
 }
 
+/** Every set param of a node as a line (label: value), for the chart and the right pane's summary. */
+export function paramRows(step: Step, def: StepTypeDef | undefined, known: ReadonlySet<string> = new Set()): Extract<Row, { kind: "param" }>[] {
+  if (step.type === CALL) return callInputRows(step, known);
+  const skip = new Set(OUTPUT_KEYS[step.type] ?? []);
+  return paramKeys(step, def)
+    .filter((k) => !skip.has(k))
+    .map((key) => ({
+      kind: "param",
+      key,
+      label: paramLabel(key, step.type),
+      value: display(key, step.params?.[key]),
+      refs: referencedVariables(step.params?.[key], known),
+      ...(projectFile(key, step.params?.[key], def) ? { file: projectFile(key, step.params?.[key], def) } : {}),
+    }));
+}
+
 export function nodeRows(step: Step, def: StepTypeDef | undefined, known: ReadonlySet<string> = new Set()): Row[] {
   if (step.type === CALL) return callRows(step, known);
-  const skip = new Set(OUTPUT_KEYS[step.type] ?? []);
-  const params = paramKeys(step, def).filter((k) => !skip.has(k));
-  const rows: Row[] = params.slice(0, MAX_PARAM_ROWS).map((key) => ({
-    kind: "param",
-    key,
-    label: paramLabel(key, step.type),
-    value: display(key, step.params?.[key]),
-    refs: referencedVariables(step.params?.[key], known),
-    ...(projectFile(key, step.params?.[key], def) ? { file: projectFile(key, step.params?.[key], def) } : {}),
-  }));
+  const params = paramRows(step, def, known);
+  const rows: Row[] = params.slice(0, MAX_PARAM_ROWS);
   if (params.length > MAX_PARAM_ROWS) rows.push({ kind: "more", count: params.length - MAX_PARAM_ROWS });
   for (const o of outputs(step)) rows.push({ kind: "output", ...o });
   return rows;

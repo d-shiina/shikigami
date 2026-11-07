@@ -386,14 +386,14 @@ describe("studio store", () => {
     expect(store.getState().run!.failure).toBeNull();
   });
 
-  it("「このノードだけ試す」 runs up to the node, steps over it and pauses after", async () => {
+  it("「ここまで実行」 runs up to the node, steps over it and pauses after", async () => {
     const run = vi.fn(async () => "run_1");
     const debugRun = vi.fn(async () => ({ revision: 1, updated: false }));
     const store = createStudioStore(fakeApi({ run, debugRun, getFlow: vi.fn(async () => flow(1, [{ id: "s1", type: "log.message" }, { id: "s2", type: "log.message" }])) }));
     await store.getState().open("scn_a");
     store.getState().openEditor("s2");
     expect(store.getState().editing).toBe("s2");
-    await store.getState().tryStep("s2");
+    await store.getState().runTo("s2");
     expect(store.getState().trying).toBe("s2");
     // The node itself is a breakpoint, on top of the ones the person set.
     expect(run).toHaveBeenCalledWith("scn_a", undefined, { breakpoints: ["s2"], step: false });
@@ -404,11 +404,26 @@ describe("studio store", () => {
     expect(debugRun).toHaveBeenCalledWith("run_1", { action: "stepOver" });
     expect(store.getState().trying).toBeNull();
     // A second try while it runs does nothing.
-    await store.getState().tryStep("s2");
+    await store.getState().runTo("s2");
     expect(run).toHaveBeenCalledTimes(1);
     // Closing the flow closes the editor.
     store.getState().closeEditor();
     expect(store.getState().editing).toBeNull();
+  });
+
+  it("「ノードの単体実行」 runs only the node, with the values given, and keeps the last run", async () => {
+    const run = vi.fn(async () => "run_1");
+    const result = { status: "succeeded", output: 42, logs: [{ level: "info", message: "ok" }] };
+    const testStep = vi.fn(async () => result);
+    const store = createStudioStore(fakeApi({ run, testStep, getFlow: vi.fn(async () => flow(1, [{ id: "s1", type: "log.message" }, { id: "s2", type: "log.message" }])) } as never));
+    await store.getState().open("scn_a");
+    const pending = store.getState().testStep("s2", { price: 21 });
+    expect(store.getState().stepTest).toMatchObject({ stepId: "s2", running: true });
+    await pending;
+    expect(testStep).toHaveBeenCalledWith("scn_a", "s2", { price: 21 });
+    expect(run).not.toHaveBeenCalled();
+    expect(store.getState().stepTest).toMatchObject({ stepId: "s2", running: false, result });
+    expect(store.getState().run).toBeNull();
   });
 
   it("does not resume onto AI edits nobody has reviewed", async () => {
