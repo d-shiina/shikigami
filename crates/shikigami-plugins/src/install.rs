@@ -119,7 +119,12 @@ impl Source {
                 format!("'{text}' is not https; only https downloads are installed"),
             ));
         }
-        Ok(Self::File { path: text.into() })
+        // Kept for updates: a relative path would be read from wherever the
+        // update runs.
+        let path = std::path::absolute(text).unwrap_or_else(|_| PathBuf::from(text));
+        Ok(Self::File {
+            path: path.display().to_string(),
+        })
     }
 
     /// The text [`Source::parse`] reads back.
@@ -304,6 +309,32 @@ async fn stage_into(work: &Path, source: &Source, taken: &[&str]) -> Result<(Pat
     })?;
     check(&manifest, taken)?;
     Ok((dir, manifest))
+}
+
+/// Stages a new version of the installed plugin `name` from where it was
+/// installed from. Refused when the source now holds another plugin, which
+/// would otherwise replace that one instead.
+pub async fn stage_update(root: &Path, name: &str, taken: &[&str]) -> Result<Staged> {
+    let record = source_of(root, name).ok_or_else(|| {
+        InstallError::new(
+            "PLUGIN_SOURCE_UNKNOWN",
+            format!(
+                "'{name}' was not installed by Shikigami, so there is nowhere to update it from"
+            ),
+        )
+    })?;
+    let staged = stage(root, record.source, taken).await?;
+    if staged.manifest.name != name {
+        discard(root, &staged.id);
+        return Err(InstallError::new(
+            "PLUGIN_SOURCE_CHANGED",
+            format!(
+                "the source of '{name}' now holds the extension '{}'; install that one separately if you want it",
+                staged.manifest.name
+            ),
+        ));
+    }
+    Ok(staged)
 }
 
 /// The checks loading does, without starting anything.
@@ -859,13 +890,17 @@ mod tests {
             Source::parse("https://github.com/acme").unwrap_err().code,
             "SOURCE_INVALID"
         );
-        assert_eq!(
-            Source::parse(r#""C:\Users\me\ocr.zip""#).unwrap(),
-            Source::File {
-                path: r"C:\Users\me\ocr.zip".into()
-            }
-        );
-        for s in ["github:acme/ocr", "https://example.com/a.zip", "C:\\a.zip"] {
+        // A relative path is kept absolute, so an update finds it from anywhere.
+        let Source::File { path } = Source::parse(r#""plugins/ocr.zip""#).unwrap() else {
+            panic!("not a file source")
+        };
+        assert!(Path::new(&path).is_absolute(), "{path}");
+        assert!(path.ends_with("ocr.zip"));
+        for s in [
+            "github:acme/ocr",
+            "https://example.com/a.zip",
+            "plugins/a.zip",
+        ] {
             let source = Source::parse(s).unwrap();
             assert_eq!(Source::parse(&source.display()).unwrap(), source);
         }
@@ -987,6 +1022,36 @@ mod tests {
                 .plugins
                 .len(),
             1
+        );
+
+        // The source now holding another extension is not taken as an update.
+        let other = home.path().join("other");
+        copy_dir(&hello(), &other).unwrap();
+        let text = std::fs::read_to_string(other.join(MANIFEST_FILE)).unwrap();
+        std::fs::write(
+            other.join(MANIFEST_FILE),
+            text.replacen("\"hello\"", "\"hello2\"", 1)
+                .replace("hello.", "hello2."),
+        )
+        .unwrap();
+        let record = SourceRecord {
+            source: Source::File {
+                path: other.display().to_string(),
+            },
+            installed_at: now(),
+        };
+        std::fs::write(
+            root.join("hello").join(SOURCE_FILE),
+            serde_json::to_string(&record).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            stage_update(&root, "hello", &[]).await.unwrap_err().code,
+            "PLUGIN_SOURCE_CHANGED"
+        );
+        assert_eq!(
+            stage_update(&root, "nothing", &[]).await.unwrap_err().code,
+            "PLUGIN_SOURCE_UNKNOWN"
         );
 
         remove(&root, "hello").unwrap();

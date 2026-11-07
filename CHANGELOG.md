@@ -6,6 +6,12 @@
 
 ## 未リリース
 
+### 追加
+
+- 拡張機能：クラウド型 AI-OCR・社内システム・SaaS などのノードを後から追加できるようにしました。Studio のサイドバーの「拡張機能」で、zip ファイル・URL・GitHub のリポジトリから、追加されるノード・外部へ送るデータ・必要なシークレットを確認してインストールでき、有効/無効・更新の確認・アンインストール、JSON の一覧（URL を設定）からの導入もできます。CLI は `shikigami plugin install / update / remove / enable / disable / registry`。拡張機能のノードはパレットに拡張機能ごとに並び、AI にも渡ります。外部へ送るノードは確認パネルの「外への影響」に表示します（[docs/ja/extensions.md](docs/ja/extensions.md)）
+- 見本の拡張機能 `examples/plugins/azure-ocr`（Azure AI Document Intelligence で画像・PDF の文字・表・請求書や領収書の項目を読み取り）
+- 拡張機能のマニフェスト（`shikigami-plugin.json`）に `publisher`・`homepage`・`tag`・`icon`・`credentials`、ノードの `summary`・`external`・`pathParams` を追加（すべて省略可、既存の拡張機能はそのまま動きます）
+
 ### 変更
 
 - Studio：AI チャットの返答の Markdown（見出し・箇条書き・表・コード・太字・リンクなど）を整形して表示するようにしました。コードにはコピーのボタンが付き、リンクはいつものブラウザで開きます

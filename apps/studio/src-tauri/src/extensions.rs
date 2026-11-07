@@ -95,14 +95,19 @@ pub async fn stage_extension(ext: State<'_, Extensions>, source: String) -> CmdR
     let staged = install::stage(&root, source, &taken)
         .await
         .map_err(install_err)?;
-    let preview = staged.preview(&root);
+    Ok(keep(&ext, &root, staged))
+}
+
+/// Keeps `staged` for [`install_extension`] and returns what it is. Only
+/// the latest one waits: an earlier preview the person left is thrown away.
+fn keep(ext: &Extensions, root: &std::path::Path, staged: Staged) -> Value {
+    let preview = staged.preview(root);
     let mut waiting = ext.staged.lock().unwrap_or_else(|e| e.into_inner());
-    // Only the latest one waits: an earlier preview the person left is thrown away.
     for (id, _) in waiting.drain() {
-        install::discard(&root, &id);
+        install::discard(root, &id);
     }
     waiting.insert(staged.id.clone(), staged);
-    Ok(preview)
+    preview
 }
 
 /// Gets a new version of an installed extension from where it came from,
@@ -110,13 +115,12 @@ pub async fn stage_extension(ext: State<'_, Extensions>, source: String) -> CmdR
 #[tauri::command]
 pub async fn stage_extension_update(ext: State<'_, Extensions>, name: String) -> CmdResult<Value> {
     let root = root()?;
-    let Some(record) = install::source_of(&root, &name) else {
-        return Err(err(
-            "EXTENSION_SOURCE_UNKNOWN",
-            format!("「{name}」の入手先が記録されていないため、更新を確認できません"),
-        ));
-    };
-    stage_extension(ext, record.source.display()).await
+    let names = builtin_names();
+    let taken: Vec<&str> = names.iter().map(String::as_str).collect();
+    let staged = install::stage_update(&root, &name, &taken)
+        .await
+        .map_err(install_err)?;
+    Ok(keep(&ext, &root, staged))
 }
 
 /// Installs the staged extension `id` (replacing the installed version).

@@ -406,8 +406,10 @@ fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    let install = |source: Source, yes: bool, current: Option<String>| -> Result<ExitCode> {
-        let staged = rt.block_on(install::stage(&root, source, &taken))?;
+    let install = |staged: install::Staged,
+                   yes: bool,
+                   current: Option<String>|
+     -> Result<ExitCode> {
         let preview = staged.preview(&root);
         if let Some(current) = current
             && current == staged.manifest.version
@@ -434,19 +436,18 @@ fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
         Ok(ExitCode::SUCCESS)
     };
     match cmd {
-        PluginCmd::Install { source, yes } => install(Source::parse(source)?, *yes, None),
+        PluginCmd::Install { source, yes } => {
+            let staged = rt.block_on(install::stage(&root, Source::parse(source)?, &taken))?;
+            install(staged, *yes, None)
+        }
         PluginCmd::Update { name, yes } => {
-            let Some(record) = install::source_of(&root, name) else {
-                bail!(
-                    "'{name}' was not installed by `shikigami plugin install`, so there is nowhere to update it from"
-                );
-            };
+            let staged = rt.block_on(install::stage_update(&root, name, &taken))?;
             let current =
                 shikigami_plugins::install::list(std::slice::from_ref(&root), Some(&root), &taken)
                     .into_iter()
                     .find(|p| p.summary["name"] == name.as_str())
                     .and_then(|p| p.summary["version"].as_str().map(str::to_owned));
-            install(record.source, *yes, current)
+            install(staged, *yes, current)
         }
         PluginCmd::Remove { name } => {
             install::remove(&root, name)?;
