@@ -20,11 +20,27 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { Plus, StickyNote } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, StickyNote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
-import { type FrameKind, layoutFlow, NODE_W, READ_ROOM, type SlotNodeData, SLOT_H, type StepNodeData, TAIL_SIZE, WRITE_ROOM } from "../flow/layout";
+import {
+  CASE_H,
+  type FrameKind,
+  HEAD_H,
+  JOIN_SIZE,
+  type JoinNodeData,
+  layoutFlow,
+  NODE_W,
+  READ_ROOM,
+  type SlotNodeData,
+  SLOT_H,
+  type StepNodeData,
+  TAIL_SIZE,
+  WRITE_ROOM,
+} from "../flow/layout";
+import { headSummary } from "../lib/keywords";
+import { listToText } from "../lib/listText";
 import { nodeIcon } from "../lib/nodeIcons";
 import { isUnset, PERSON_CODES, todosByStep } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
@@ -195,12 +211,13 @@ function Socket({ side, id, color, title, lit }: { side: "in" | "out"; id: strin
 // Flow handles only anchor the lines: nothing connects by hand, so they are not drawn.
 const FLOW_HANDLE = "!h-px !min-h-0 !w-px !min-w-0 !border-0 !bg-transparent";
 
-/** Where step-to-step flow enters (top) and leaves (bottom) a node. */
-function FlowHandles() {
+/** Where step-to-step flow enters (top) and leaves (bottom) a node; `x` from its left edge, else its middle. */
+function FlowHandles({ x }: { x?: number }) {
+  const style = x === undefined ? undefined : { left: x };
   return (
     <>
-      <Handle id="flow" type="target" position={Position.Top} className={FLOW_HANDLE} />
-      <Handle id="flow" type="source" position={Position.Bottom} className={FLOW_HANDLE} />
+      <Handle id="flow" type="target" position={Position.Top} className={FLOW_HANDLE} style={style} />
+      <Handle id="flow" type="source" position={Position.Bottom} className={FLOW_HANDLE} style={style} />
     </>
   );
 }
@@ -229,6 +246,8 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
  */
 type BlockEdgeData = {
   detourX?: number;
+  /** From the head of a frame into one of its columns. */
+  split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
   insert?: InsertAt;
   /** The pointer is on the line or its "+". */
@@ -270,42 +289,22 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
   if (detourX !== undefined) {
-    // Around a loop's body: out of the step, along to the side of the body,
-    // then back up into the loop's head (a back edge) or down into the next step.
+    // A loop's line back: out of the end of its body, along to the side of
+    // the body, then up into the bottom of the loop's head (the frame's top edge).
     const r = 4;
     const outY = sourceY + 12;
-    const back = targetY < sourceY;
-    const toward = (from: number, to: number) => (to > from ? 1 : -1);
-    const sx = toward(sourceX, detourX);
-    const path = back
-      ? [
-          `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
-          `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
-          `V ${targetY + 12 + r} Q ${detourX} ${targetY + 12} ${detourX - sx * r} ${targetY + 12}`,
-          `H ${targetX + NODE_W / 2 + 2}`,
-        ].join(" ")
-      : [
-          `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
-          `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY + r}`,
-          `V ${targetY - 16 - r} Q ${detourX} ${targetY - 16} ${detourX - sx * r} ${targetY - 16}`,
-          `H ${targetX - toward(targetX, detourX) * r} Q ${targetX} ${targetY - 16} ${targetX} ${targetY - 16 + r}`,
-          `V ${targetY}`,
-        ].join(" ");
-    return (
-      <>
-        <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
-        {!back && (
-          <EdgeLabelRenderer>
-            <InsertButton edgeId={id} data={edge} x={targetX} y={targetY - 8} />
-          </EdgeLabelRenderer>
-        )}
-      </>
-    );
+    const sx = detourX > sourceX ? 1 : -1;
+    const path = [
+      `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX + sx * r} ${outY}`,
+      `H ${detourX - sx * r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
+      `V ${targetY + HEAD_H}`,
+    ].join(" ");
+    return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
   }
   // Splits turn just below their step; joins turn just above the next step, so
   // branches of different lengths meet on one line instead of at staggered heights.
   const down = sourcePosition === Position.Bottom && targetY > sourceY;
-  const centerY = down && label ? sourceY + 12 : down && Math.abs(sourceX - targetX) > 1 ? targetY - 16 : undefined;
+  const centerY = down && (label || edge.split) ? sourceY + 12 : down && Math.abs(sourceX - targetX) > 1 ? targetY - 16 : undefined;
   // The offset must not reach past the turn, or the line runs on below it and doubles back.
   const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset: centerY === undefined ? 20 : 12, borderRadius: 4 });
   const straight = Math.abs(sourceX - targetX) <= 1;
@@ -320,7 +319,7 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
             className="pointer-events-none absolute flex items-center"
           >
             {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
-            <span className="max-w-[300px] truncate rounded-md border border-slate-200 bg-sheet px-1.5 text-[11px] leading-4 text-slate-600">{label}</span>
+            <span className="max-w-[300px] truncate rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium text-ink">{label}</span>
             <InsertButton edgeId={id} data={edge} inline />
           </div>
         ) : (
@@ -660,25 +659,34 @@ function InnerSteps({ call, defs }: { call: CallView; defs: Map<string, StepType
 }
 
 function StepNode({ data }: StepNodeProps) {
+  if (data.tab) return <CaseTab data={data} />;
   const category = data.def?.category ?? data.step.type.split(".")[0] ?? "other";
   const latest = data.reviews.at(-1);
   const known = useMemo(() => new Set(data.vars.keys()), [data.vars]);
   const rows = nodeRows(data.step, data.def, known);
   const title = typeTitle(data.step, data.def);
   const Icon = nodeIcon(data.step.type, category);
+  const head = data.head;
+  // A call holds a flow of its own: drawn as a stack of sheets.
+  const stack = data.step.type === CALL;
   return (
     <div
-      style={{ width: NODE_W }}
+      style={{ width: head?.width ?? NODE_W, height: head ? HEAD_H : undefined }}
       // Linear's cards: one hairline border and the faintest shadow. Colour only
       // says something: the selection (primary), an AI change (blue), a run state.
-      className={`group relative rounded-lg border bg-sheet shadow-node transition-[border-color,box-shadow] ${
+      // The head of a frame is the frame's top edge: no shadow, its border the frame's.
+      className={`group relative border bg-sheet transition-[border-color,box-shadow] ${
+        head ? (head.collapsed ? "rounded-lg shadow-node" : "rounded-t-lg") : stack ? "flow-call-stack rounded-lg" : "rounded-lg shadow-node"
+      } ${
         data.diff
           ? DIFF_STYLE[data.diff].border
           : data.selected
             ? "border-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_16%,transparent)]"
             : data.byAi
               ? "border-brand-500"
-              : "border-slate-200 hover:border-slate-300"
+              : head
+                ? "border-slate-300 hover:border-slate-400"
+                : "border-slate-200 hover:border-slate-300"
       } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
     >
       {(latest || (data.primary && !data.readOnly)) && (
@@ -691,7 +699,7 @@ function StepNode({ data }: StepNodeProps) {
           </div>
         </NodeToolbar>
       )}
-      <FlowHandles />
+      <FlowHandles x={head?.lineX} />
       {/* Read-only inside a call, but a run still stops there. */}
       <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} owner={data.owner} />
       {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
@@ -718,6 +726,10 @@ function StepNode({ data }: StepNodeProps) {
           {DIFF_STYLE[data.diff].label()}
         </span>
       )}
+      {head ? (
+        <FrameHead data={data} Icon={Icon} title={title} />
+      ) : (
+      <>
       <div style={{ height: NODE_HEAD_H }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
         <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
         <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>
@@ -742,6 +754,116 @@ function StepNode({ data }: StepNodeProps) {
         </div>
       )}
       {data.call?.unfolded && <InnerSteps call={data.call} defs={data.defs} />}
+      </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The head of a frame (a loop, if, try, group, …): what it is, its name and
+ * condition on one line, and what can be added to it; it folds the frame.
+ */
+function FrameHead({ data, Icon, title }: { data: StepNodeProps["data"]; Icon: ReturnType<typeof nodeIcon>; title: string }) {
+  const head = data.head!;
+  const toggleFold = useStudio((s) => s.toggleFold);
+  const select = useStudio((s) => s.select);
+  const addStep = useStudio((s) => s.addStep);
+  const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
+  const id = data.step.id ?? "";
+  const summary = headSummary(data.step);
+  const editable = !data.readOnly;
+  const Fold = head.collapsed ? ChevronRight : ChevronDown;
+  return (
+    <div style={{ height: HEAD_H - 2 }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
+      <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+      <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>
+      {data.step.name && <span className="min-w-0 shrink truncate text-[12.5px] font-medium text-ink">{data.step.name}</span>}
+      {summary && (
+        <span className="min-w-0 shrink truncate rounded bg-slate-100 px-1.5 font-mono text-[11.5px] leading-[20px] text-ink">{summary}</span>
+      )}
+      {head.collapsed && <span className="shrink-0 text-[11.5px] whitespace-nowrap text-slate-500">{t.flow.inside(head.count)}</span>}
+      <NodeStatus data={data} />
+      <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        {editable && head.addCase && !head.collapsed && (
+          <button
+            type="button"
+            title={t.flow.addCase}
+            onClick={(e) => {
+              e.stopPropagation();
+              select({ kind: "slot", parentId: id, block: "cases" });
+              void addStep(CASE);
+            }}
+            className="nodrag flex h-[22px] items-center gap-1 rounded-md border border-dashed border-slate-300 px-2 text-[11.5px] text-slate-600 hover:border-solid hover:border-primary hover:text-primary"
+          >
+            <Plus size={12} strokeWidth={2} aria-hidden="true" />
+            {t.flow.case}
+          </button>
+        )}
+        {editable && head.addFinally && !head.collapsed && (
+          <button
+            type="button"
+            title={t.flow.addFinallyTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              select({ kind: "slot", parentId: id, block: "finally" });
+              setPaletteOpen(true, null, e.currentTarget.getBoundingClientRect());
+            }}
+            className="nodrag flex h-[22px] items-center gap-1 rounded-md border border-dashed border-slate-300 px-2 text-[11.5px] text-slate-600 hover:border-solid hover:border-primary hover:text-primary"
+          >
+            <Plus size={12} strokeWidth={2} aria-hidden="true" />
+            {t.flow.addFinally}
+          </button>
+        )}
+        <button
+          type="button"
+          title={head.collapsed ? t.flow.unfoldFrame : t.flow.foldFrame}
+          aria-label={head.collapsed ? t.flow.unfoldFrame : t.flow.foldFrame}
+          aria-expanded={!head.collapsed}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFold(id, data.owner);
+          }}
+          className="nodrag flex h-[22px] w-[22px] items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"
+        >
+          <Fold size={14} strokeWidth={2} aria-hidden="true" />
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/** A case of a switch: the tab over its column, saying the values it matches. */
+function CaseTab({ data }: { data: StepNodeProps["data"] }) {
+  const p = (data.step.params ?? {}) as Record<string, unknown>;
+  const values = listToText(p.values);
+  const condition = typeof p.condition === "string" ? p.condition.replace(/^\{\{\s*([\s\S]*?)\s*\}\}$/, "$1") : "";
+  const text = [values, condition].filter(Boolean).join(" ・ ") || t.flow.caseEmpty;
+  return (
+    <div style={{ width: NODE_W, height: CASE_H }} className="group relative flex items-center justify-center">
+      <FlowHandles />
+      <span
+        title={plain(sentence(data.step, data.def))}
+        className={`flex h-full max-w-full cursor-pointer items-center gap-1.5 rounded-md border bg-sheet px-2 text-[11.5px] font-medium text-ink ${
+          data.selected
+            ? "border-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_16%,transparent)]"
+            : data.byAi
+              ? "border-brand-500"
+              : "border-slate-300 hover:border-slate-400"
+        } ${data.runState ? RUN_STYLE[data.runState] : ""}`}
+      >
+        <span className="truncate">{text}</span>
+        <NodeStatus data={data} />
+      </span>
+    </div>
+  );
+}
+
+/** Where the columns of a frame meet again, on its bottom edge. A loop's only lets its line out, unmarked. */
+function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
+  return (
+    <div style={{ width: JOIN_SIZE, height: JOIN_SIZE }} className={data.shown ? "rounded-full bg-[var(--flow-edge)]" : ""}>
+      <FlowHandles />
     </div>
   );
 }
@@ -805,7 +927,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
       style={{ width: NODE_W, height: SLOT_H }}
       // The empty flow's block: Ctrl+K opens the palette under it, not over it.
       data-add-first={data.parentId === null || undefined}
-      title={data.addCase ? t.flow.addCase : t.addStep}
+      title={t.addStep}
       className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed text-[13px] ${
         data.selected
           ? "border-brand-500 bg-brand-50 text-brand-600"
@@ -816,7 +938,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
     >
       {!data.end && <FlowHandles />}
       <Plus size={14} strokeWidth={2} aria-hidden="true" />
-      {data.addCase ? t.flow.addCase : t.addStep}
+      {t.addStep}
     </div>
   );
 }
@@ -824,24 +946,17 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
 type FrameData = { kind: FrameKind; type: string; width: number; height: number };
 
 /**
- * The frame around a loop (if, try, …) and everything in its blocks, so the
- * nodes that run inside it read apart from the ones after it. A loop's frame
- * is tinted, and frames inside it tint deeper; the others are only outlined.
- * The tag on its top edge names what it is.
+ * The frame of a loop (if, try, …) around everything in its blocks, so the
+ * nodes that run inside it read apart from the ones after it. Its head is
+ * the step's own node over its top edge. A loop's frame is tinted, and
+ * frames inside it tint deeper; the others are only a hairline.
  */
 function FrameNode({ data }: NodeProps<Node<FrameData>>) {
-  const Icon = nodeIcon(data.type, "control");
-  const loop = data.kind === "loop";
   return (
     <div
       style={{ width: data.width, height: data.height }}
-      className={`flow-frame pointer-events-none relative rounded-lg border ${loop ? "flow-frame-loop" : "border-dashed"}`}
-    >
-      <span className="flow-frame-tag absolute -top-[9px] left-2.5 flex items-center gap-1 rounded-md px-1.5 text-[11px] leading-4 font-medium">
-        <Icon size={11} strokeWidth={2} aria-hidden="true" />
-        {t.flow.frame[data.kind]}
-      </span>
-    </div>
+      className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""}`}
+    />
   );
 }
 
@@ -995,7 +1110,7 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
   );
 }
 
-const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode };
+const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode, join: JoinNode };
 const NO_BREAKPOINTS: string[] = [];
 const NO_TODOS: string[] = [];
 const NO_STATES: Record<string, StepRunState> = {};
@@ -1088,7 +1203,9 @@ export function FlowCanvas() {
       ),
     [calls],
   );
-  const layout = useMemo(() => layoutFlow(flow?.steps ?? [], defs, extra), [flow, defs, extra]);
+  const foldedIds = useStudio((s) => (flow ? s.folded[flow.id] : undefined));
+  const folded = useMemo(() => new Set(foldedIds ?? []), [foldedIds]);
+  const layout = useMemo(() => layoutFlow(flow?.steps ?? [], defs, extra, folded), [flow, defs, extra, folded]);
   // A file dropped on the chart becomes the node that reads it: after the
   // node it is dropped on, into the empty block it is dropped on, or at the end.
   const fileDrop = useFileDropTarget("canvas", async (paths, el) => {
@@ -1103,7 +1220,11 @@ export function FlowCanvas() {
     // Each one goes after the one before it (the new node is selected).
     for (const spec of specs) await addStep(spec.type, spec.params);
   });
-  const tails = useMemo(() => new Set(layout.nodes.filter((n) => n.data.kind === "slot" && n.data.tail).map((n) => n.id)), [layout]);
+  // Points a run only passes through: the "+" at the end of a block, where a frame's columns meet.
+  const tails = useMemo(
+    () => new Set(layout.nodes.filter((n) => (n.data.kind === "slot" && n.data.tail) || n.data.kind === "join").map((n) => n.id)),
+    [layout],
+  );
   // Steps whose failure the run goes on past (onError: continue, their own or the flow's).
   const continues = useMemo(() => {
     const flowDefault = flow?.settings?.onError;
@@ -1161,6 +1282,7 @@ export function FlowCanvas() {
     zIndex: -1,
   }));
   const nodes: Node[] = layout.nodes.map((n) => {
+    if (n.data.kind === "join") return { ...n, draggable: false, selectable: false, focusable: false };
     if (n.data.kind === "step") {
       const id = n.data.step.id ?? n.id;
       return {
@@ -1210,8 +1332,10 @@ export function FlowCanvas() {
     () => dataLinks(flow?.steps ?? [], flow?.variables, defs, new Set(vars.keys())),
     [flow, defs, vars],
   );
+  // The head of a frame and a case's tab show no setting rows, so no sockets to link to.
+  const bare = new Set(layout.nodes.flatMap((n) => (n.data.kind === "step" && (n.data.head || n.data.tab) ? [n.id] : [])));
   const linkEdges: Edge[] = links
-    .filter((l) => l.from !== INPUT_NODE && l.to !== OUTPUT_NODE)
+    .filter((l) => l.from !== INPUT_NODE && l.to !== OUTPUT_NODE && !bare.has(l.from) && !bare.has(l.to))
     .map((l) => ({
       id: `link:${l.from}:${l.variable}->${l.to}:${l.toHandle}`,
       source: l.from,
@@ -1237,6 +1361,7 @@ export function FlowCanvas() {
       type: "block",
       data: {
         detourX: e.detourX,
+        split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,
         hover: setHoveredEdge,
@@ -1247,8 +1372,8 @@ export function FlowCanvas() {
         strokeWidth: trail ? 2.5 : 1.5,
         ...(e.loop || trail === "now" ? { strokeDasharray: "5 4" } : {}),
       },
-      // A plain colour: the marker id is built from it, so no var().
-      markerEnd: { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
+      // A plain colour: the marker id is built from it, so no var(). Lines meeting at a join end in its dot.
+      markerEnd: e.target.startsWith("join:") ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
       // A taken line over the others where they share a stretch (a join, a loop's side).
       zIndex: trail ? 1 : 0,
     };
@@ -1295,7 +1420,7 @@ export function FlowCanvas() {
       // React Flow is MIT licensed; its corner credit is optional and sat over the work.
       proOptions={{ hideAttribution: true }}
       onNodeClick={(event, node) => {
-        if (inside || node.type === "frame") return;
+        if (inside || node.type === "frame" || node.type === "join") return;
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") {
           const id = data.step.id ?? node.id;
@@ -1305,8 +1430,6 @@ export function FlowCanvas() {
         } else {
           // An empty block is there to be filled: clicking it opens the palette for it.
           select({ kind: "slot", parentId: data.parentId, block: data.block });
-          // Beside a switch's cases it adds the next case.
-          if (data.addCase) return void addStep(CASE);
           const box = (event.target as Element).closest(".react-flow__node")?.getBoundingClientRect();
           setPaletteOpen(true, null, box);
         }
@@ -1317,7 +1440,7 @@ export function FlowCanvas() {
       onNodeContextMenu={(event, node) =>
         menuFor(() => {
           const data = node.data as StepNodeData | SlotNodeData;
-          if (node.type === "frame") return [];
+          if (node.type === "frame" || node.type === "join") return [];
           if (data.kind === "slot") return inside ? [] : slotMenu(data.parentId, data.block);
           const id = data.step.id ?? node.id;
           const call = calls.get(id);
