@@ -75,14 +75,13 @@ impl WindowsCredentials for NoCredentials {
     }
 }
 
-/// A credential's password as text. Windows' own dialogs and most tools
-/// (cmdkey, PowerShell's CredentialManager) write UTF-16; some programs
-/// write UTF-8 bytes.
+/// A credential's password as text. The bytes alone cannot tell UTF-16
+/// from UTF-8 (あいう in UTF-16 is the same bytes as "B0D0F0"), so the rule
+/// is fixed: UTF-16LE, which Windows' own dialogs, cmdkey and PowerShell
+/// write; UTF-8 only when the bytes cannot be UTF-16 (an odd length or a
+/// broken surrogate pair). A NUL terminator some programs store is dropped.
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
 pub(crate) fn blob_text(blob: &[u8]) -> Option<String> {
-    if blob.is_empty() {
-        return Some(String::new());
-    }
     if blob.len().is_multiple_of(2) {
         let units: Vec<u16> = blob
             .as_chunks::<2>()
@@ -90,21 +89,17 @@ pub(crate) fn blob_text(blob: &[u8]) -> Option<String> {
             .iter()
             .map(|c| u16::from_le_bytes(*c))
             .collect();
-        // Text written as UTF-16 has zero high bytes for ASCII, and is not
-        // valid UTF-8 for kana and kanji; a short UTF-8 ASCII password
-        // ("ab") would decode as UTF-16 too, but is valid UTF-8 with no
-        // zero bytes, so it stays UTF-8.
-        if let Ok(text) = String::from_utf16(&units)
-            && !text.contains('\0')
-            && (blob.iter().skip(1).step_by(2).any(|b| *b == 0)
-                || std::str::from_utf8(blob).is_err())
-        {
-            return Some(text);
+        if let Ok(text) = String::from_utf16(&units) {
+            let text = text.trim_end_matches('\0');
+            if !text.contains('\0') {
+                return Some(text.to_owned());
+            }
         }
     }
     std::str::from_utf8(blob)
         .ok()
         .map(|t| t.trim_end_matches('\0').to_owned())
+        .filter(|t| !t.contains('\0'))
 }
 
 #[cfg(windows)]

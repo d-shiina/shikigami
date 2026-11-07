@@ -696,10 +696,16 @@ fn windows_passwords_are_read_as_utf16_or_utf8() {
         wincred::blob_text(&utf16("パス12")).as_deref(),
         Some("パス12")
     );
-    assert_eq!(wincred::blob_text(b"ab").as_deref(), Some("ab"));
+    // Their UTF-16 bytes are also valid UTF-8 ("B0D0F0"): still UTF-16.
+    let both = |t: &str| wincred::blob_text(&utf16(t));
+    assert_eq!(both("あいう").as_deref(), Some("あいう"));
+    assert_eq!(both("你好").as_deref(), Some("你好"));
+    assert_eq!(both("pw\0").as_deref(), Some("pw"));
+    // Not UTF-16 (odd length): UTF-8.
+    assert_eq!(wincred::blob_text(b"abc").as_deref(), Some("abc"));
     assert_eq!(
-        wincred::blob_text("パス".as_bytes()).as_deref(),
-        Some("パス")
+        wincred::blob_text("パス1".as_bytes()).as_deref(),
+        Some("パス1")
     );
     assert_eq!(wincred::blob_text(b"").as_deref(), Some(""));
 }

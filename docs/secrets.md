@@ -42,6 +42,7 @@ When company rules keep passwords in Credential Manager, another tool uses the s
 - The user name and password are read from Credential Manager each time a flow uses them; the vault keeps no values for that secret. A password changed in Credential Manager is typed from the next run.
 - The name, allowed sites and MFA setup key are still registered in Shikigami, and site checks and masking work the same.
 - Only **generic credentials** can be read: Windows does not hand domain ("Windows") credentials or web credentials to other programs.
+- Passwords are read as UTF-16, as Credential Manager, `cmdkey` and PowerShell write them (credentials another tool wrote as UTF-8 may not read correctly).
 - Credentials belong to the Windows user. For unattended runs, add the same address to the Credential Manager of the user the runs run as.
 - Switching back to Shikigami empties the user name and password: type them again.
 
