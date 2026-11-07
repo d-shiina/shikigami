@@ -53,6 +53,7 @@ import { ancestorsOf } from "./flow/layout";
 import { resultName } from "./lib/resultName";
 import { summarize } from "./lib/review";
 import { setFlowNames } from "./lib/sentence";
+import { readClipboardText } from "./lib/clipboard";
 
 export type Selection =
   | { kind: "step"; stepId: string }
@@ -1268,7 +1269,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (!flow) return;
         let text = "";
         try {
-          text = await navigator.clipboard.readText();
+          text = await readClipboardText();
         } catch (e) {
           set({ error: message(e) });
           return;

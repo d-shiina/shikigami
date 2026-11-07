@@ -7,6 +7,7 @@
 import { ClipboardPaste, Copy, type LucideIcon, Scissors, TextSelect } from "lucide-react";
 import { createStore } from "zustand/vanilla";
 import { t } from "./i18n";
+import { readClipboardText } from "./clipboard";
 
 export type MenuItem = {
   label: string;
@@ -105,7 +106,7 @@ function readOnly(field: Field): boolean {
 async function paste(field: Field) {
   field.focus();
   try {
-    const text = await navigator.clipboard.readText();
+    const text = await readClipboardText();
     // insertText keeps the field's own undo and fires its input event.
     if (!document.execCommand("insertText", false, text)) throw new Error("insertText");
   } catch {

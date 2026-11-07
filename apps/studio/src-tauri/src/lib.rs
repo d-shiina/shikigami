@@ -158,6 +158,7 @@ pub fn run() {
             schedules::stop_agent,
             commands::decide_approval,
             commands::list_pick_requests,
+            commands::read_clipboard_text,
             commands::cancel_pick_request,
             commands::export_flow,
             commands::import_flow,
