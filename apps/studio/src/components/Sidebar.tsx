@@ -100,7 +100,7 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
   const go = (p: Place) => () => setPlace(p);
   const store = useStudioApi();
   return (
-    <aside aria-label={t.shell.places} style={{ width }} className="flex h-full shrink-0 flex-col border-r border-slate-200 bg-paper">
+    <aside aria-label={t.shell.places} style={{ width }} className="flex h-full shrink-0 flex-col bg-frame">
       {/* The top of the window: room to drag it by, level with the title bar. */}
       <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pr-1.5 pl-2 select-none">
         <Workspace />

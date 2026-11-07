@@ -173,7 +173,7 @@ function Samples() {
           <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
-      <ul className="overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+      <ul className="border-y border-slate-200">
         {SAMPLES.map((sample) => {
           const item = t.samples.items[sample.id] ?? { name: sample.id, uses: "" };
           return (
@@ -343,7 +343,7 @@ export function FlowsPage() {
         <div className="mb-3 flex items-center gap-2">
           {/* The page's name is in the title bar; here only how many there are. */}
           <span className="text-[12px] text-slate-500">{t.list.count(summaries.length)}</span>
-          <div className="ml-2 flex h-8 w-64 min-w-36 shrink items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
+          <div className="ml-2 flex h-7 w-64 min-w-36 shrink items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
             <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
             <input
               value={query}
@@ -358,7 +358,7 @@ export function FlowsPage() {
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
             title={t.list.sort}
-            className="h-8 rounded-lg border border-slate-200 bg-sheet px-1.5 text-[12px] text-slate-600 focus:outline-none"
+            className="h-7 rounded-lg border border-slate-200 bg-sheet px-1.5 text-[12px] text-slate-600 focus:outline-none"
           >
             <option value="updated">{t.list.byUpdated}</option>
             <option value="name">{t.list.byName}</option>
@@ -368,7 +368,7 @@ export function FlowsPage() {
           <button
             type="button"
             onClick={() => picker.current?.click()}
-            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
+            className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
           >
             <Upload size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.importFlow}
@@ -378,13 +378,13 @@ export function FlowsPage() {
             onClick={() => setPasteOpen("new")}
             hidden={agentOpen}
             title={t.paste.lead}
-            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
+            className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
           >
             <ClipboardPaste size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.paste.title}
           </button>
           {/* While naming a new flow, its form's "作成" is the one filled button. */}
-          <button type="button" onClick={() => setCreating(true)} hidden={creating} className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
+          <button type="button" onClick={() => setCreating(true)} hidden={creating} className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover">
             ＋ {t.newFlow}
           </button>
         </div>
@@ -414,9 +414,9 @@ export function FlowsPage() {
               onKeyDown={(e) => e.key === "Escape" && setCreating(false)}
               onBlur={() => !name && setCreating(false)}
               placeholder={t.newFlowPrompt}
-              className="h-8 w-80 rounded-lg border border-brand-500 bg-sheet px-2 text-[13px] focus:outline-none"
+              className="h-7 w-80 rounded-lg border border-brand-500 bg-sheet px-2 text-[13px] focus:outline-none"
             />
-            <button type="submit" className="h-8 rounded-lg bg-primary px-3 text-[13px] text-on-primary">
+            <button type="submit" className="h-7 rounded-lg bg-primary px-3 text-[13px] text-on-primary">
               {t.list.create}
             </button>
           </form>
@@ -424,7 +424,7 @@ export function FlowsPage() {
         {summaries.length === 0 ? (
           <FirstSteps onCreate={() => setCreating(true)} />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+          <div className="border-y border-slate-200">
             <table className="w-full table-fixed border-collapse text-left">
               <colgroup>
                 <col />
@@ -433,12 +433,12 @@ export function FlowsPage() {
                 <col className="w-[110px]" />
                 <col className="w-[88px]" />
               </colgroup>
-              <thead className="bg-slate-50 text-[11px] text-slate-500">
+              <thead className="text-[11px] text-slate-500">
                 <tr>
-                  <th className="border-b border-slate-200 px-3 py-2 font-semibold">{t.name}</th>
-                  <th className="border-b border-slate-200 px-3 py-2 font-semibold">{t.versionField.tags}</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-right font-semibold">{t.list.steps}</th>
-                  <th className="border-b border-slate-200 px-3 py-2 font-semibold">{t.list.updatedColumn}</th>
+                  <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.name}</th>
+                  <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.versionField.tags}</th>
+                  <th className="border-b border-slate-200 px-3 py-2 text-right font-medium">{t.list.steps}</th>
+                  <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.list.updatedColumn}</th>
                   <th className="border-b border-slate-200" />
                 </tr>
               </thead>
