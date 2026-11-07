@@ -50,7 +50,7 @@
 | G23 | P2 | Studio | フローの中の検索（ノード名・設定値・変数名で探す）がない | UiPath：Find / Find References／PAD：アクションの検索 | 済み |
 | G24 | P2 | デバッグ | 一時停止中に変数の値を書き換えられない | UiPath：Locals パネルの値の変更・Immediate | 済み |
 | G25 | P2 | デスクトップ | 部品の指定は「ウィンドウ＋部品」の 2 段だけ。親の部品をたどる指定がなく、同じ名前の部品は `nth` 頼み | UiPath：Selector の階層・Anchor／PAD：UI 要素のセレクター | 後で |
-| G26 | P2 | 資格情報 | Windows の資格情報マネージャーにある資格情報を使えない | UiPath：Get Secure Credential | 後で |
+| G26 | P2 | 資格情報 | Windows の資格情報マネージャーにある資格情報を使えない | UiPath：Get Secure Credential | 済み |
 | G27 | P2 | 帳票 | 帳票の項目を読む AI-OCR がない | UiPath：Document Understanding／WinActor：AI-OCR 連携 | プラグイン候補 |
 | G28 | P2 | テスト | 入力と期待する出力を保存して繰り返し流すテストがない | UiPath：Test Suite | 後で |
 | G29 | P2 | 連携 | kintone・Box・Slack などの個別ノード、端末エミュレーター、FTP / SFTP がない | UiPath：Integration Service・Terminal・FTP／PAD：コネクター・FTP | プラグイン候補 |
@@ -138,7 +138,13 @@
 
 - 方式を比べて決める：（a）実行の間だけ RDP のループバックでセッションを作る、（b）自動サインインの仕組みを使う、（c）デスクトップのノードがある実行はロックを解いて終わったらロックし直す。どれも資格情報の扱いが要るので、設計メモを先に書く
 
-### G25・G26 は需要を見て。G27・G29 はプラグインの見本として作る候補。
+### G26 Windows の資格情報マネージャー
+
+- シークレットの値の保存先に「Windows の資格情報マネージャー」を足す。名前・サイト・MFA キーは Shikigami 側に残し、ユーザー名とパスワードだけを使うたびに汎用資格情報から読む（UiPath の Get Secure Credential と同じく、変更はそちらだけで済む）。参照の書き方・サイト照合・伏せ字は変えない
+
+**対応**：済み。読めるのは汎用資格情報だけ（ドメインの資格情報のパスワードは Windows が渡さない）。実機の Windows ではまだ試していない。
+
+### G25 は需要を見て。G27・G29 はプラグインの見本として作る候補。
 
 ## 進める順
 

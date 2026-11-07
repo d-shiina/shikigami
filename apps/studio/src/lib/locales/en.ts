@@ -15,6 +15,17 @@ export const en: Dict = {
   secretUsername: "Username",
   secretPassword: "Password",
   secretPasswordKeep: "Leave empty to keep the current one",
+  secretStore: "Where the values are kept",
+  secretStores: { vault: "Shikigami", windows: "Windows Credential Manager" },
+  secretStoreHints: {
+    vault: "Encrypted in this workspace",
+    windows: "Read from a generic credential of Credential Manager each time it is used. A password changed there is used from the next run",
+  },
+  secretWindowsTarget: "Credential address",
+  secretWindowsUser: (user: string) => `User name: ${user}`,
+  secretWindowsNone:
+    "No generic credentials yet. Add one in Control Panel → Credential Manager → Windows Credentials → Add a generic credential, then pick it",
+  secretWindowsBadge: "Credential Manager",
   secretTotp: "MFA setup key (optional)",
   secretTotpHint: "The key shown next to the authenticator QR code, or an otpauth:// string. One-time codes are filled in automatically",
   secretSites: "Sites and apps allowed (one per line)",

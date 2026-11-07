@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
-import type { SecretInfo, SecretKind } from "../lib/api";
+import { api, type SecretInfo, type SecretKind, type WindowsCredentialInfo } from "../lib/api";
 import { locale, t } from "../lib/i18n";
 import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
 
@@ -15,9 +15,22 @@ type Draft = {
   totp: string;
   sites: string;
   description: string;
+  /** "windows": the user name and password are read from `windowsCredential`. */
+  store: "vault" | "windows";
+  windowsCredential: string;
 };
 
-const empty: Draft = { name: "", kind: "login", username: "", password: "", totp: "", sites: "", description: "" };
+const empty: Draft = {
+  name: "",
+  kind: "login",
+  username: "",
+  password: "",
+  totp: "",
+  sites: "",
+  description: "",
+  store: "vault",
+  windowsCredential: "",
+};
 
 function draftOf(secret: SecretInfo): Draft {
   return {
@@ -27,7 +40,40 @@ function draftOf(secret: SecretInfo): Draft {
     username: secret.username,
     sites: secret.sites.join("\n"),
     description: secret.description ?? "",
+    store: secret.windowsCredential ? "windows" : "vault",
+    windowsCredential: secret.windowsCredential ?? "",
   };
+}
+
+/** The generic credentials of Windows Credential Manager, read once the form asks for them. */
+function useWindowsCredentials(wanted: boolean): WindowsCredentialInfo[] | null {
+  const [list, setList] = useState<WindowsCredentialInfo[] | null>(null);
+  useEffect(() => {
+    if (!wanted || list) return;
+    api.listWindowsCredentials().then(setList, () => setList([]));
+  }, [wanted, list]);
+  return list;
+}
+
+function Choice<T extends string>({ value, options, label, onChange }: { value: T; options: Record<T, string>; label: string; onChange: (v: T) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={label}>
+      {(Object.keys(options) as T[]).map((key) => (
+        <button
+          key={key}
+          type="button"
+          role="radio"
+          aria-checked={value === key}
+          className={`rounded-lg border px-2.5 py-1 text-sm ${
+            value === key ? "border-slate-400 bg-slate-100 font-medium text-ink" : "border-slate-300 text-slate-700 hover:bg-slate-100"
+          }`}
+          onClick={() => onChange(key)}
+        >
+          {options[key]}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -82,6 +128,9 @@ function SecretForm({
   const [draft, setDraft] = useState(initial);
   const edit = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
   const fields = KIND_FIELDS[draft.kind];
+  const fromWindows = draft.store === "windows";
+  const credentials = useWindowsCredentials(fromWindows);
+  const picked = credentials?.find((c) => c.target === draft.windowsCredential.trim());
 
   return (
     <form
@@ -92,8 +141,10 @@ function SecretForm({
         const saved = await saveSecret({
           name: draft.name.trim(),
           kind: draft.kind,
-          username: fields.includes("username") ? draft.username : undefined,
-          password: draft.password === "" ? undefined : draft.password,
+          username: fields.includes("username") && !fromWindows ? draft.username : undefined,
+          password: draft.password === "" || fromWindows ? undefined : draft.password,
+          // Back from Credential Manager: an empty address keeps the values here again.
+          windowsCredential: fromWindows ? draft.windowsCredential.trim() : initial.store === "windows" ? "" : undefined,
           totp: draft.totp === "" || !fields.includes("totp") ? undefined : draft.totp,
           sites: draft.sites.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
           description: draft.description,
@@ -139,7 +190,33 @@ function SecretForm({
         </div>
         <span className="block text-[11px] text-slate-500">{t.secretKindHints[draft.kind]}</span>
       </fieldset>
-      {fields.includes("username") && (
+      <fieldset className="space-y-1">
+        <legend className="text-xs font-medium text-slate-600">{t.secretStore}</legend>
+        <Choice value={draft.store} options={t.secretStores} label={t.secretStore} onChange={(store) => edit({ store })} />
+        <span className="block text-[11px] text-slate-500">{t.secretStoreHints[draft.store]}</span>
+      </fieldset>
+      {fromWindows && (
+        <Labeled
+          label={t.secretWindowsTarget}
+          hint={picked?.username ? t.secretWindowsUser(picked.username) : credentials?.length === 0 ? t.secretWindowsNone : undefined}
+        >
+          <input
+            className={`${inputClass} font-mono text-xs`}
+            list="windows-credentials"
+            required
+            value={draft.windowsCredential}
+            onChange={(e) => edit({ windowsCredential: e.target.value })}
+          />
+          <datalist id="windows-credentials">
+            {(credentials ?? []).map((c) => (
+              <option key={c.target} value={c.target}>
+                {c.username}
+              </option>
+            ))}
+          </datalist>
+        </Labeled>
+      )}
+      {fields.includes("username") && !fromWindows && (
         <Labeled label={fieldLabel(draft.kind, "username")}>
           <input
             className={inputClass}
@@ -149,15 +226,17 @@ function SecretForm({
           />
         </Labeled>
       )}
-      <Labeled label={fieldLabel(draft.kind, "password")} hint={isNew ? undefined : t.secretPasswordKeep}>
-        <input
-          className={inputClass}
-          type="password"
-          autoComplete="new-password"
-          value={draft.password}
-          onChange={(e) => edit({ password: e.target.value })}
-        />
-      </Labeled>
+      {!fromWindows && (
+        <Labeled label={fieldLabel(draft.kind, "password")} hint={isNew || initial.store === "windows" ? undefined : t.secretPasswordKeep}>
+          <input
+            className={inputClass}
+            type="password"
+            autoComplete="new-password"
+            value={draft.password}
+            onChange={(e) => edit({ password: e.target.value })}
+          />
+        </Labeled>
+      )}
       <Labeled label={draft.kind === "login" ? t.secretSites : t.secretSitesApi} hint={t.secretSitesHintKind[draft.kind]}>
         <textarea
           className={`${inputClass} font-mono text-xs`}
@@ -284,6 +363,11 @@ export function SecretsPage() {
                     <span className="rounded-lg border border-slate-300 px-1 text-[11px] text-slate-600">
                       {t.secretKinds[s.kind ?? "login"]}
                     </span>
+                    {s.windowsCredential && (
+                      <span className="rounded-lg border border-slate-300 px-1 text-[11px] text-slate-600" title={s.windowsCredential}>
+                        {t.secretWindowsBadge}
+                      </span>
+                    )}
                     <span className="text-xs text-slate-500">{s.username}</span>
                     <button
                       type="button"

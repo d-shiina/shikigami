@@ -1054,6 +1054,7 @@ pub fn list_secrets(state: State<'_, AppState>) -> CmdResult<SecretList> {
                 description: s.description,
                 signed_in: s.signed_in,
                 oauth: None,
+                windows_credential: s.windows_credential,
                 updated_at: String::new(),
             })
             .collect()
@@ -1075,6 +1076,15 @@ pub fn reset_secrets(state: State<'_, AppState>) -> CmdResult<usize> {
 #[tauri::command]
 pub fn set_secret(state: State<'_, AppState>, input: SecretInput) -> CmdResult<SecretInfo> {
     state.vault.set(input).map_err(secret_err)
+}
+
+/// Generic credentials of Windows Credential Manager a secret can be
+/// linked to (addresses and user names only).
+#[tauri::command]
+pub fn list_windows_credentials(
+    state: State<'_, AppState>,
+) -> CmdResult<Vec<shikigami_secrets::WindowsCredentialInfo>> {
+    state.vault.windows_credentials().map_err(secret_err)
 }
 
 #[tauri::command]

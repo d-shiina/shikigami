@@ -15,6 +15,7 @@
 
 mod keys;
 mod totp;
+mod wincred;
 
 use std::path::{Path, PathBuf};
 
@@ -34,6 +35,10 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 pub use keys::{Key, KeyStore, MemoryKeyStore, platform_key_store};
+pub use wincred::{
+    MemoryWindowsCredentials, WindowsCredentialInfo, WindowsCredentials, WindowsLogin,
+    platform_windows_credentials,
+};
 
 const VAULT_FILE: &str = "vault.json";
 const SESSIONS_DIR: &str = "sessions";
@@ -62,6 +67,10 @@ pub struct SecretInfo {
     /// When the saved OAuth tokens expire and were last obtained.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth: Option<OAuthStatus>,
+    /// The user name and password are read from this generic credential of
+    /// Windows Credential Manager each time they are used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub windows_credential: Option<String>,
     pub updated_at: String,
 }
 
@@ -96,6 +105,9 @@ pub struct SecretSummary {
     /// `{ "field": "accessToken" }` works without a person.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub signed_in: bool,
+    /// The values live in Windows Credential Manager under this name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub windows_credential: Option<String>,
 }
 
 /// Registers or updates a secret. `None` keeps the stored value.
@@ -118,6 +130,11 @@ pub struct SecretInput {
     pub sites: Option<Vec<String>>,
     #[serde(default)]
     pub description: Option<String>,
+    /// Read the user name and password from this generic credential of
+    /// Windows Credential Manager instead of keeping them in the vault;
+    /// empty goes back to values kept in the vault.
+    #[serde(default)]
+    pub windows_credential: Option<String>,
 }
 
 /// A login an AI client asked the user to register in Studio, or to
@@ -210,6 +227,9 @@ struct StoredEntry {
     fields: Vec<SecretField>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     description: String,
+    /// Where the user name and password live instead (see [`wincred`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    windows_credential: Option<String>,
     updated_at: String,
     #[serde(flatten)]
     sealed: Sealed,
@@ -240,6 +260,7 @@ const MASK: &str = "***";
 pub struct Vault {
     dir: PathBuf,
     keys: Box<dyn KeyStore>,
+    windows: Box<dyn WindowsCredentials>,
 }
 
 impl std::fmt::Debug for Vault {
@@ -256,6 +277,15 @@ fn not_found(name: &str) -> SecretError {
     SecretError::new("SECRET_NOT_FOUND", format!("no secret named '{name}'"))
         .with_hint(REGISTER_HINT)
         .with_secret(name)
+}
+
+fn windows_missing(name: &str, target: &str) -> SecretError {
+    SecretError::new(
+        "WINDOWS_CREDENTIAL_NOT_FOUND",
+        format!("Windows Credential Manager has no generic credential '{target}' (used by secret '{name}')"),
+    )
+    .with_hint("Ask the user to add it in Windows Credential Manager (資格情報マネージャー → Windows 資格情報 → 汎用資格情報の追加) with this address, or to change the secret in Studio.")
+    .with_secret(name)
 }
 
 fn now() -> String {
@@ -276,7 +306,34 @@ impl Vault {
         Self {
             dir: workspace_root.join("secrets"),
             keys,
+            windows: platform_windows_credentials(),
         }
+    }
+
+    /// The same vault reading Windows credentials from `windows` (tests).
+    pub fn with_windows_credentials(mut self, windows: Box<dyn WindowsCredentials>) -> Self {
+        self.windows = windows;
+        self
+    }
+
+    /// The generic credentials Studio offers to link a secret to.
+    pub fn windows_credentials(&self) -> Result<Vec<WindowsCredentialInfo>, SecretError> {
+        self.windows.list()
+    }
+
+    /// The stored values of `entry`, with the user name and password read
+    /// from Windows Credential Manager when it points there.
+    fn values(&self, key: &Key, entry: &StoredEntry) -> Result<Values, SecretError> {
+        let mut values = open(key, entry)?;
+        if let Some(target) = &entry.windows_credential {
+            let login = self
+                .windows
+                .read(target)?
+                .ok_or_else(|| windows_missing(&entry.name, target))?;
+            values.username = login.username;
+            values.password = login.password;
+        }
+        Ok(values)
     }
 
     /// Where the key is kept, for display.
@@ -293,7 +350,13 @@ impl Vault {
         file.entries
             .iter()
             .map(|entry| {
-                let values = open(&key, entry)?;
+                // A credential missing from Credential Manager shows as an
+                // empty user name; using the secret says what is wrong.
+                let values = match self.values(&key, entry) {
+                    Ok(values) => values,
+                    Err(_) if entry.windows_credential.is_some() => Values::default(),
+                    Err(e) => return Err(e),
+                };
                 let oauth = self.oauth_status(&key, &entry.name);
                 Ok(SecretInfo {
                     name: entry.name.clone(),
@@ -304,6 +367,7 @@ impl Vault {
                     description: entry.description.clone(),
                     signed_in: oauth.is_some(),
                     oauth,
+                    windows_credential: entry.windows_credential.clone(),
                     updated_at: entry.updated_at.clone(),
                 })
             })
@@ -323,6 +387,7 @@ impl Vault {
                 sites: e.sites,
                 fields: e.fields,
                 description: e.description,
+                windows_credential: e.windows_credential,
             })
             .collect())
     }
@@ -344,7 +409,7 @@ impl Vault {
         let mut values: Vec<String> = file
             .entries
             .iter()
-            .filter_map(|e| open(&key, e).ok())
+            .filter_map(|e| self.values(&key, e).ok())
             .flat_map(|v| [Some(v.password), v.totp])
             .flatten()
             // Very short values would mask ordinary words.
@@ -367,7 +432,7 @@ impl Vault {
             file = self.read()?;
         }
         let existing = file.entries.iter().position(|e| e.name == input.name);
-        let (mut values, mut sites, mut description, old_kind) = match existing {
+        let (mut values, mut sites, mut description, old_kind, mut windows) = match existing {
             Some(i) => {
                 let e = &file.entries[i];
                 (
@@ -375,10 +440,15 @@ impl Vault {
                     e.sites.clone(),
                     e.description.clone(),
                     Some(self.kind_of(e)),
+                    e.windows_credential.clone(),
                 )
             }
-            None => (Values::default(), Vec::new(), String::new(), None),
+            None => (Values::default(), Vec::new(), String::new(), None, None),
         };
+        if let Some(target) = input.windows_credential {
+            let target = target.trim().to_owned();
+            windows = (!target.is_empty()).then_some(target);
+        }
         let kind = input.kind.or(old_kind).unwrap_or_default();
         if let Some(username) = input.username {
             values.username = username;
@@ -418,11 +488,30 @@ impl Vault {
         if !used.contains(&SecretField::Totp) {
             values.totp = None;
         }
+        // Linked to Credential Manager: the vault keeps no user name or
+        // password of its own, and the credential must be there now.
+        let (username, password) = match &windows {
+            Some(target) => {
+                values.username.clear();
+                values.password.clear();
+                let login = self
+                    .windows
+                    .read(target)?
+                    .ok_or_else(|| windows_missing(&input.name, target))?;
+                (login.username, login.password)
+            }
+            None => (values.username.clone(), values.password.clone()),
+        };
+        let username = if used.contains(&SecretField::Username) {
+            username
+        } else {
+            String::new()
+        };
         let mut fields = Vec::new();
-        if !values.username.is_empty() {
+        if !username.is_empty() {
             fields.push(SecretField::Username);
         }
-        if !values.password.is_empty() {
+        if !password.is_empty() {
             fields.push(SecretField::Password);
         }
         if values.totp.is_some() {
@@ -435,18 +524,20 @@ impl Vault {
             sites: sites.clone(),
             fields: fields.clone(),
             description: description.clone(),
+            windows_credential: windows.clone(),
             updated_at: now(),
         };
         let oauth = self.oauth_status(&key, &input.name);
         let info = SecretInfo {
             name: entry.name.clone(),
             kind,
-            username: values.username,
+            username,
             sites,
             fields,
             description,
             signed_in: oauth.is_some(),
             oauth,
+            windows_credential: windows,
             updated_at: entry.updated_at.clone(),
         };
         match existing {
@@ -842,7 +933,7 @@ impl SecretProvider for Vault {
             .iter()
             .find(|e| e.name == reference.secret)
             .ok_or_else(|| not_found(&reference.secret))?;
-        let values = open(&self.key(&file, false)?, entry)?;
+        let values = self.values(&self.key(&file, false)?, entry)?;
         let missing = || {
             SecretError::new(
                 "SECRET_FIELD_EMPTY",

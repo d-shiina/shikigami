@@ -328,7 +328,15 @@ enum SecretCmd {
         sites: Vec<String>,
         #[arg(long)]
         description: Option<String>,
+        /// Read the user name and password from this generic credential of
+        /// Windows Credential Manager each time they are used ("" goes back
+        /// to values kept by Shikigami).
+        #[arg(long, value_name = "ADDRESS", conflicts_with_all = ["password", "password_stdin"])]
+        windows_credential: Option<String>,
     },
+    /// List the generic credentials of Windows Credential Manager a secret
+    /// can be linked to (addresses and user names, never passwords).
+    WindowsCredentials,
     /// Delete a secret.
     Remove { name: String },
     /// Forget a saved browser login (`session` of browser.open).
@@ -766,8 +774,12 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
             } else {
                 for s in list {
                     let fields: Vec<_> = s.fields.iter().map(|f| f.as_str()).collect();
+                    let windows = s
+                        .windows_credential
+                        .map(|t| format!("\twindows={t}"))
+                        .unwrap_or_default();
                     println!(
-                        "{}\tkind={}\tuser={}\tfields={}\tsites={}",
+                        "{}\tkind={}\tuser={}\tfields={}\tsites={}{windows}",
                         s.name,
                         s.kind.as_str(),
                         s.username,
@@ -786,6 +798,7 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
             totp,
             sites,
             description,
+            windows_credential,
         } => {
             let known = vault.summaries()?.into_iter().find(|s| &s.name == name);
             let is_new = known.is_none();
@@ -798,7 +811,11 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
                 let mut line = String::new();
                 std::io::stdin().read_line(&mut line)?;
                 Some(line.trim_end_matches(['\r', '\n']).to_owned())
-            } else if *password || (is_new && std::io::stdin().is_terminal()) {
+            } else if *password
+                || (is_new
+                    && windows_credential.as_deref().is_none_or(str::is_empty)
+                    && std::io::stdin().is_terminal())
+            {
                 Some(rpassword::prompt_password(format!("{name} の{what}: "))?)
             } else {
                 None
@@ -811,6 +828,7 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
                 totp: totp.clone(),
                 sites: (!sites.is_empty()).then(|| sites.clone()),
                 description: description.clone(),
+                windows_credential: windows_credential.clone(),
             })?;
             if info.sites.is_empty() {
                 eprintln!(
@@ -818,6 +836,15 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
                 );
             }
             println!("saved secret '{}' ({})", info.name, vault.key_location());
+        }
+        SecretCmd::WindowsCredentials => {
+            let list = vault.windows_credentials()?;
+            if list.is_empty() {
+                println!("(no generic credentials in Windows Credential Manager)");
+            }
+            for c in list {
+                println!("{}\tuser={}", c.target, c.username);
+            }
         }
         SecretCmd::Remove { name } => {
             vault.remove(name)?;

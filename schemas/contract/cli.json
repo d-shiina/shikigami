@@ -829,8 +829,19 @@
               "repeatable": false,
               "global": false,
               "long": "description"
+            },
+            {
+              "id": "windows_credential",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "windows-credential"
             }
           ]
+        },
+        {
+          "name": "windows-credentials"
         },
         {
           "name": "remove",

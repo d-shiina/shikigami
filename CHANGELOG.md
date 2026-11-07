@@ -11,6 +11,7 @@
 - Word：「Word 文字の置換」（`word.replaceText`、書式はそのまま、Word なし）、「Word 表の読み取り」（`word.readTables`、1 行目を見出しにした行の一覧、Word なし）、「Word PDF 出力」（`word.exportPdf`、Word が必要）
 - Studio：一時停止中に、パネルの「この時点の変数」をクリックして値を変えられるようにしました。続行すると以降のノードは変えた値を使います（シークレットと長すぎる値は変更できません）。Runtime の実行の操作に `setVariable`（`name`・`value`）を追加
 - Studio：フローの中の検索（Ctrl+F、フロー図の左上の虫眼鏡）。ノードの名前・種類・内容・メモ・結果の変数・設定値で探し、ブロックの中のノードも見つけます。変数名で探すと、その変数を使うノードが並びます。結果を上下キーで選ぶとフロー図がそのノードへ動きます
+- シークレット：値の保存先に「Windows の資格情報マネージャー」を選べるようにしました。汎用資格情報のアドレスを選ぶと、ユーザー名とパスワードを使うたびにそこから読みます（資格情報マネージャーでパスワードを変えると次の実行から新しいものを使います）。CLI は `shikigami secret set --windows-credential <アドレス>` と `shikigami secret windows-credentials`。シークレットの一覧・入力に `windowsCredential` を追加
 
 ## [0.1.10] - 2026-11-07
 
