@@ -9,7 +9,7 @@ describe("nodeRows", () => {
   it("lists params as rows and the written variable as an output", () => {
     const rows = nodeRows(set, undefined, new Set(["total", "invoice"]));
     expect(rows).toEqual([
-      { kind: "param", key: "expression", label: "式", value: "total + invoice.amount", refs: ["total", "invoice"] },
+      { kind: "param", key: "expression", label: "式", value: "total + invoice.amount", raw: "total + invoice.amount", refs: ["total", "invoice"] },
       { kind: "output", label: "書き込む", variable: "total" },
     ]);
   });
@@ -26,11 +26,21 @@ describe("nodeRows", () => {
       params: { flow: "scn_tax", inputs: { amount: "{{ price }}" }, outputs: { taxed: "total" } },
     };
     expect(nodeRows(call, undefined, new Set(["price"]))).toEqual([
-      { kind: "param", key: "inputs.amount", label: "amount", value: "{{ price }}", refs: ["price"] },
+      { kind: "param", key: "inputs.amount", label: "amount", value: "{{ price }}", raw: "{{ price }}", refs: ["price"] },
       { kind: "output", label: "taxed", variable: "total" },
     ]);
     expect(nodeHeight(call, undefined)).toBe(NODE_HEAD_H + CALL_BAR_H + 2 * ROW_H + NODE_PAD_B);
     expect(knownVariables([], [call]).has("total")).toBe(true);
+  });
+
+  it("keeps the whole text of a value cut short, and the setting as stored", () => {
+    const long = "こんにちは、山田様。ご注文いただいた商品の発送が完了しましたのでお知らせします。お届けまでしばらくお待ちください。";
+    const step: Step = { id: "m1", type: "mail.send", params: { body: long } };
+    const [row] = nodeRows(step, undefined);
+    expect(row).toMatchObject({ kind: "param", raw: long, full: long });
+    expect(row?.kind === "param" && row.value.endsWith("…")).toBe(true);
+    const short: Step = { id: "m2", type: "mail.send", params: { body: "短い" } };
+    expect(nodeRows(short, undefined)[0]).not.toHaveProperty("full");
   });
 
   it("sizes nodes by their rows", () => {

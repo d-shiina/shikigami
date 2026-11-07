@@ -13,6 +13,7 @@ import { plain, sentence } from "../lib/sentence";
 import { diveChain, findStep, isActive } from "../store";
 import { usePendingReview } from "./Timeline";
 import { shortText } from "./ValueView";
+import { HoverPreview } from "./HoverPreview";
 import { stepLabel as typeName, t } from "../lib/i18n";
 
 const MAX_VARS = 14;
@@ -54,7 +55,9 @@ function Variables({ values }: { values: Record<string, unknown> }) {
         >
           <span className="shrink-0 font-semibold text-slate-600">{name}</span>
           <span className="text-slate-400">=</span>
-          <span className="truncate text-ink">{shortText(value)}</span>
+          <HoverPreview value={value} longText className="truncate text-ink">
+            {shortText(value)}
+          </HoverPreview>
         </span>
       ))}
       {entries.length > MAX_VARS && <span className="text-[12px] text-slate-400">{t.pause.moreVariables(entries.length - MAX_VARS)}</span>}
