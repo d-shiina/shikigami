@@ -179,10 +179,24 @@ fn words(lines: &[OcrLine]) -> Vec<(String, Rect)> {
 
 /// Joins the words of one cell as a line reads them.
 fn cell_text(mut words: Vec<(String, Rect)>) -> String {
-    words.sort_by_key(|(_, r)| (r.center().1 / 8, r.x));
+    // Lines first: a word whose middle is within the line's first word
+    // (glyphs of different heights) is on that line. Then left to right.
+    words.sort_by_key(|(_, r)| r.center().1);
+    let mut lines: Vec<Vec<(String, Rect)>> = Vec::new();
+    for word in words {
+        let cy = word.1.center().1;
+        match lines.last_mut() {
+            Some(line) if cy >= line[0].1.y && cy <= line[0].1.bottom() => line.push(word),
+            _ => lines.push(vec![word]),
+        }
+    }
+    for line in &mut lines {
+        line.sort_by_key(|(_, r)| r.x);
+    }
     let line = OcrLine {
-        words: words
+        words: lines
             .into_iter()
+            .flatten()
             .map(|(text, rect)| crate::vision::OcrWord {
                 text,
                 rect,
@@ -370,9 +384,39 @@ fn column_gaps(lines: &[OcrLine]) -> Option<Vec<i32>> {
     (!gaps.is_empty()).then_some(gaps)
 }
 
-/// Lines' boxes grouped into rows (by their vertical middle), top to bottom.
+/// The boxes of the pieces of text in `lines`: a line is split where its
+/// words are a column gap apart (an engine may return a whole table row
+/// as one line).
+fn pieces(lines: &[OcrLine]) -> Vec<Rect> {
+    let mut out = Vec::new();
+    for line in lines {
+        let mut words: Vec<Rect> = line
+            .words
+            .iter()
+            .filter(|w| !w.text.trim().is_empty())
+            .map(|w| w.rect)
+            .collect();
+        words.sort_by_key(|r| r.x);
+        let mut piece: Option<Rect> = None;
+        for r in words {
+            piece = Some(match piece {
+                Some(p) if r.x - p.right() >= MIN_GAP.max(p.height.min(r.height) as i32) => {
+                    out.push(p);
+                    r
+                }
+                Some(p) => p.union(&r),
+                None => r,
+            });
+        }
+        out.extend(piece);
+    }
+    out
+}
+
+/// Pieces of text grouped into rows (by their vertical middle), top to
+/// bottom.
 fn rows_of(lines: &[OcrLine]) -> Vec<Vec<Rect>> {
-    let mut rects: Vec<Rect> = lines.iter().filter_map(OcrLine::rect).collect();
+    let mut rects: Vec<Rect> = pieces(lines);
     rects.sort_by_key(|r| r.center().1);
     let mut rows: Vec<Vec<Rect>> = Vec::new();
     for r in rects {
@@ -534,6 +578,42 @@ mod tests {
             table_json(&table, 1)["rows"],
             json!([{ "列1": "1", "金額": "100", "金額_": "200" }])
         );
+    }
+
+    /// A whole row as one line of words (as Windows OCR may give it) is
+    /// still split at the gaps between its columns.
+    #[test]
+    fn rows_read_as_one_line_are_split_at_column_gaps() {
+        let table = aligned_table(&[
+            line(&[("品名", 10, 10, 40), ("金額", 200, 10, 40)]),
+            line(&[("用紙", 10, 40, 40), ("450", 200, 40, 30)]),
+            line(&[("トナー", 10, 70, 60), ("12,800", 200, 70, 60)]),
+        ])
+        .unwrap();
+        assert_eq!(
+            table.cells,
+            vec![
+                vec!["品名", "金額"],
+                vec!["用紙", "450"],
+                vec!["トナー", "12,800"]
+            ]
+        );
+    }
+
+    /// Words of one line whose middles differ by a pixel keep their order.
+    #[test]
+    fn a_cell_reads_its_words_left_to_right() {
+        let at = |x, y| Rect {
+            x,
+            y,
+            width: 30,
+            height: 16,
+        };
+        let text = cell_text(vec![
+            ("東京".into(), at(0, 16)),
+            ("本店".into(), at(40, 15)),
+        ]);
+        assert_eq!(text, "東京本店");
     }
 
     /// The invoices and spreadsheets of the OCR benchmark, read as tables
