@@ -63,6 +63,10 @@ struct EmitterInner {
     snapshot: Arc<Mutex<RunSnapshot>>,
     /// The readable log in the flow's `logs/` folder, for full runs.
     log: Mutex<Option<RunLog>>,
+    /// The last step that failed for good and its params as it rendered
+    /// them, in whichever flow it ran (a called flow's variables are gone
+    /// by the time the failure reaches the top).
+    failed: Mutex<Option<(StepId, Value)>>,
 }
 
 impl Emitter {
@@ -80,6 +84,7 @@ impl Emitter {
                 secrets: RwLock::new(Vec::new()),
                 snapshot,
                 log: Mutex::new(log),
+                failed: Mutex::new(None),
             }),
             call_path: Arc::from([]),
         }
@@ -235,6 +240,22 @@ impl Emitter {
     pub(crate) fn failure_shot_path(&self) -> Option<PathBuf> {
         let log = self.inner.log.lock().ok()?;
         log.as_ref().map(RunLog::failure_shot)
+    }
+
+    /// Keeps the params a step failed with, for [`Executor::capture_failure`].
+    fn failed_with(&self, step: &StepId, params: &Value) {
+        if let Ok(mut failed) = self.inner.failed.lock() {
+            *failed = Some((step.clone(), params.clone()));
+        }
+    }
+
+    /// The rendered params of `step`, when it is the step that failed last.
+    fn failed_params(&self, step: &StepId) -> Option<Value> {
+        let failed = self.inner.failed.lock().ok()?;
+        failed
+            .as_ref()
+            .filter(|(id, _)| id == step)
+            .map(|(_, params)| params.clone())
     }
 
     /// Names the run's log after how it ended. Call after `RunFinished`.
@@ -1737,6 +1758,7 @@ impl Executor {
                         will_retry,
                     });
                     if !will_retry {
+                        self.emitter.failed_with(&step.id, &params);
                         return Err(error.into());
                     }
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -1792,13 +1814,29 @@ impl Executor {
                 .and_then(|f| f.find_step(step_id)),
             None => flow.find_step(step_id),
         };
+        // The context or window as the step rendered it (it may be a
+        // template, and inside a called flow it used that flow's variables);
+        // rendered here again when the step failed before it ran.
+        let rendered = self.emitter.failed_params(step_id);
+        let param = |pointer: &str| -> Option<Value> {
+            match &rendered {
+                Some(rendered) => rendered.pointer(pointer).cloned(),
+                None => {
+                    let raw = Value::Object(step?.params.clone());
+                    expr::render_value(raw.pointer(pointer)?, &self.vars).ok()
+                }
+            }
+        };
         let mut params = Map::new();
         params.insert("path".into(), Value::String(path.display().to_string()));
         let shot_type = match step_type.split('.').next() {
             Some("browser") => {
-                if let Some(context) = step.and_then(|s| s.params.get("context")) {
-                    // Rendered as the step was: the context may be a template.
-                    let Ok(context) = expr::render_value(context, &self.vars) else {
+                let declared = match &rendered {
+                    Some(rendered) => rendered.get("context").is_some(),
+                    None => step.is_some_and(|s| s.params.contains_key("context")),
+                };
+                if declared {
+                    let Some(context) = param("/context") else {
                         return;
                     };
                     params.insert("context".into(), context);
@@ -1806,14 +1844,7 @@ impl Executor {
                 "browser.screenshot"
             }
             Some("desktop") => {
-                let Some(window) = step
-                    .and_then(|s| s.params.get("target"))
-                    .and_then(|t| t.get("window"))
-                else {
-                    return;
-                };
-                // Rendered as the step was: a title may be a template.
-                let Ok(window) = expr::render_value(window, &self.vars) else {
+                let Some(window) = param("/target/window") else {
                     return;
                 };
                 params.insert("target".into(), json!({ "window": window }));

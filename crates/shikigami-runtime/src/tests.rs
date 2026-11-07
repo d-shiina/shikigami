@@ -2316,12 +2316,20 @@ async fn a_failed_browser_step_leaves_a_picture_of_the_page_beside_the_log() {
     assert!(report.error.unwrap().details.is_none());
     assert_eq!(shots.lock().unwrap().len(), 1);
 
-    // A step that fails inside a called flow leaves one too.
+    // A step that fails inside a called flow leaves one too, of the context
+    // it rendered with the called flow's variables.
     let mut sub = flow(vec![
-        Step::new("browser.click").with_param("context", "共通"),
+        Step::new("browser.click").with_param("context", "{{ ctx }}"),
     ]);
     sub.id = "scn_sub".into();
-    let caller = flow(vec![Step::new("flow.call").with_param("flow", "scn_sub")]);
+    sub.variables.push(var(
+        "ctx",
+        VarType::String,
+        VarDirection::Local,
+        Some(json!("共通")),
+    ));
+    let mut caller = flow(vec![Step::new("flow.call").with_param("flow", "scn_sub")]);
+    caller.variables = s.variables.clone();
     let (report, _) = run_project(
         &runtime,
         caller,
