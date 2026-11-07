@@ -649,6 +649,15 @@ export const en: Dict = {
     frame: { loop: "Loop", if: "If", switch: "Switch", try: "Try", parallel: "Parallel", group: "Group" },
     /** Beside a switch's cases. */
     addCase: "Add case",
+    case: "Case",
+    /** On the head of a try that has no "finally" yet. */
+    addFinally: "Always at the end",
+    addFinallyTitle: "Add a node that runs at the end, failed or not",
+    foldFrame: "Fold",
+    unfoldFrame: "Unfold",
+    inside: (n: number) => `${n} node${n === 1 ? "" : "s"} inside`,
+    /** A case that matches nothing yet. */
+    caseEmpty: "(no value)",
   },
   fileDrop: {
     files: "Files of this flow",

@@ -99,3 +99,69 @@ function blockLabelJa(step: Step, block: string, label: string): string {
       return label;
   }
 }
+
+/**
+ * The short heading of a block's column on the chart, under the head of its
+ * frame: はい／いいえ for an if, 実行／失敗したとき for a try. Empty where the
+ * head already says it (a loop's body, a group's) or the column has its own
+ * tab (a switch's cases).
+ */
+export function laneLabel(step: Step, block: string, label: string): string {
+  const ja = locale === "ja";
+  const p = (step.params ?? {}) as Record<string, unknown>;
+  switch (`${step.type}:${block}`) {
+    case "control.if:then":
+      return ja ? "はい" : "Yes";
+    case "control.if:else":
+      return ja ? "いいえ" : "No";
+    case "control.switch:default":
+      return ja ? "その他" : "Other";
+    case "control.try:try":
+      return ja ? "実行" : "Run";
+    case "control.try:catch":
+      return ja ? `失敗したとき（→ ${p.errorVar ?? "error"}）` : `On failure (→ ${p.errorVar ?? "error"})`;
+    case "control.try:finally":
+      return ja ? "最後に必ず" : "Always at the end";
+    case "control.switch:cases":
+    case "control.case:body":
+    case "control.group:body":
+    case "control.parallel:branches":
+    case "control.forEach:body":
+    case "control.repeat:body":
+    case "control.while:body":
+      return "";
+    default:
+      return blockLabel(step, block, label);
+  }
+}
+
+/** Beside a loop's line back up to its head. */
+export function loopBackLabel(step: Step): string {
+  const ja = locale === "ja";
+  if (step.type === "control.forEach") return ja ? "次の 1 件へ" : "Next item";
+  return ja ? "次の回へ" : "Next round";
+}
+
+/** What the head of a frame says after its name: the condition of an if, the value a switch compares, what a loop walks over. */
+export function headSummary(step: Step): string {
+  const p = (step.params ?? {}) as Record<string, unknown>;
+  switch (step.type) {
+    case "control.if":
+      return plainExpr(p.condition);
+    case "control.switch":
+      return plainExpr(p.value);
+    case "control.forEach":
+    case "control.repeat":
+    case "control.while":
+      return blockLabel(step, "body", "").replace(/\{\{\s*([\s\S]*?)\s*\}\}/g, "$1");
+    default:
+      return "";
+  }
+}
+
+/** `{{ a > 1 }}` as `a > 1`. */
+function plainExpr(value: unknown): string {
+  const s = text(value).trim();
+  const m = /^\{\{\s*([\s\S]*?)\s*\}\}$/.exec(s);
+  return m ? (m[1] ?? "") : s;
+}

@@ -648,6 +648,15 @@ export const ja = {
     frame: { loop: "繰り返し", if: "条件分岐", switch: "値による分岐", try: "エラー処理", parallel: "並列実行", group: "グループ" },
     /** Beside a switch's cases. */
     addCase: "ケースを追加",
+    case: "ケース",
+    /** On the head of a try that has no "finally" yet. */
+    addFinally: "最後に必ず",
+    addFinallyTitle: "成功でも失敗でも最後に実行するノードを追加",
+    foldFrame: "たたむ",
+    unfoldFrame: "広げる",
+    inside: (n: number) => `中に ${n} ノード`,
+    /** A case that matches nothing yet. */
+    caseEmpty: "（値なし）",
   },
   fileDrop: {
     files: "このフローのファイル",

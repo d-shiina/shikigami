@@ -234,9 +234,10 @@ textarea,
 }
 
 /*
- * The frame around a loop (if, try, …) and its blocks. A loop's frame is
- * tinted with the control colour, so a loop inside a loop reads deeper; the
- * others are a dashed outline only. The tag is opaque to cut the border.
+ * The frame of a loop (if, try, …) around its blocks; the step's own node is
+ * its head, over the top edge. A loop's frame is tinted with the control
+ * colour, so a loop inside a loop reads deeper; the others are a hairline
+ * over the faintest wash of the sheet.
  */
 /* Clicks and the pointer go through to the pane and the lines beneath. */
 .react-flow__node-frame {
@@ -244,16 +245,18 @@ textarea,
 }
 .flow-frame {
   border-color: var(--color-slate-300);
+  background-color: color-mix(in srgb, var(--color-sheet) 40%, transparent);
 }
 .flow-frame-loop {
-  border-color: var(--color-slate-200);
-  border-style: solid;
-  background-color: color-mix(in srgb, var(--color-slate-100) 45%, transparent);
+  background-color: color-mix(in srgb, var(--color-slate-100) 55%, transparent);
 }
-.flow-frame-tag {
-  color: var(--color-slate-500);
-  background-color: var(--color-desk);
-  border: 1px solid var(--color-slate-200);
+/* A call holds a flow of its own: two sheets peek out from under it. */
+.flow-call-stack {
+  box-shadow:
+    4px 4px 0 -1px var(--color-sheet),
+    4px 4px 0 0 var(--color-slate-200),
+    8px 8px 0 -1px var(--color-sheet),
+    8px 8px 0 0 var(--color-slate-200);
 }
 
 .react-flow__edge-text {
