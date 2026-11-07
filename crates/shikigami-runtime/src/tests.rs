@@ -1578,6 +1578,63 @@ async fn time_paused_inside_a_wait_does_not_count_towards_its_timeout() {
 }
 
 #[tokio::test]
+async fn a_value_set_while_paused_is_what_the_next_steps_read() {
+    let mut s = flow(vec![set("n", "41"), log("n = {{ n }}")]);
+    let mut pin = var("pin", VarType::String, VarDirection::Local, None);
+    pin.secret = true;
+    s.variables.push(pin);
+    let mut handle = Runtime::new()
+        .start(s, debug_options(&["s2"]))
+        .expect("start");
+    let control = handle.debug_control().expect("control");
+    let set_variable = |name: &str, value: Value| DebugCommand::SetVariable {
+        name: name.into(),
+        value,
+    };
+    // Not paused yet: nothing to set.
+    let early = control.send(set_variable("n", json!(1)));
+    let mut events = Vec::new();
+    while let Some(event) = tokio::time::timeout(Duration::from_secs(5), handle.next_event())
+        .await
+        .expect("the run stalled")
+    {
+        if let RunEvent::Paused { .. } = event.event {
+            let refused = |name: &str| {
+                control
+                    .send(set_variable(name, json!("0000")))
+                    .expect_err("refused")
+                    .code
+            };
+            assert_eq!(refused("pin"), "VARIABLE_NOT_EDITABLE");
+            assert_eq!(refused("nowhere"), "VARIABLE_NOT_EDITABLE");
+            control.send(set_variable("n", json!(100))).expect("set");
+            control.send(DebugCommand::Continue).expect("continue");
+        }
+        events.push(event);
+    }
+    let report = handle.wait().await.expect("wait");
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    if let Err(e) = early {
+        assert_eq!(e.code, "RUN_NOT_PAUSED");
+    }
+    assert!(logs(&events).contains(&"n = 100".to_owned()));
+    // Reported like any other change, before the run resumes.
+    let paused = events
+        .iter()
+        .position(|e| matches!(e.event, RunEvent::Paused { .. }))
+        .expect("paused");
+    let resumed = events
+        .iter()
+        .position(|e| matches!(e.event, RunEvent::Resumed { .. }))
+        .expect("resumed");
+    assert!(events[paused..resumed].iter().any(|e| matches!(
+        &e.event,
+        RunEvent::VariableChanged { variable, value, step_id: None, .. }
+            if variable == "n" && value == &json!(100)
+    )));
+}
+
+#[tokio::test]
 async fn skip_leaves_the_failed_step_undone() {
     let s = flow(vec![fail("boom"), log("after")]);
     let (report, events, _) = debug_run(&Runtime::new(), s, debug_options(&[]), |_, _| {

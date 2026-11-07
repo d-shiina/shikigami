@@ -817,6 +817,25 @@
             "action",
             "stepIds"
           ]
+        },
+        {
+          "description": "While paused: give a variable another value before going on (the\nrun stays paused). Secret variables cannot be set this way; the\nchange is reported as `variableChanged` without a step.",
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "setVariable"
+            },
+            "name": {
+              "type": "string"
+            },
+            "value": true
+          },
+          "required": [
+            "action",
+            "name",
+            "value"
+          ]
         }
       ]
     }

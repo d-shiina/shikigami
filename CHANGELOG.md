@@ -26,6 +26,7 @@
 
 ### 追加
 
+- Studio：一時停止中に、パネルの「この時点の変数」をクリックして値を変えられるようにしました。続行すると以降のノードは変えた値を使います（シークレットと長すぎる値は変更できません）。Runtime の実行の操作に `setVariable`（`name`・`value`）を追加
 - 拡張機能：クラウド型 AI-OCR・社内システム・SaaS などのノードを後から追加できるようにしました。Studio のサイドバーの「拡張機能」で、zip ファイル・URL・GitHub のリポジトリから、追加されるノード・外部へ送るデータ・必要なシークレットを確認してインストールでき、有効/無効・更新の確認・アンインストール、JSON の一覧（URL を設定）からの導入もできます。CLI は `shikigami plugin install / update / remove / enable / disable / registry`。拡張機能のノードはパレットに拡張機能ごとに並び、AI にも渡ります。外部へ送るノードは確認パネルの「外への影響」に表示します（[docs/ja/extensions.md](docs/ja/extensions.md)）
 - 見本の拡張機能 `examples/plugins/azure-ocr`（Azure AI Document Intelligence で画像・PDF の文字・表・請求書や領収書の項目を読み取り）
 - 拡張機能のマニフェスト（`shikigami-plugin.json`）に `publisher`・`homepage`・`tag`・`icon`・`credentials`、ノードの `summary`・`external`・`pathParams` を追加（すべて省略可、既存の拡張機能はそのまま動きます）

@@ -1228,6 +1228,13 @@ export const en: Dict = {
     captureFailed: "Could not capture the screen",
     original: "Details",
     variablesNow: "Variables at this point",
+    clickToEdit: "Click to change the value (the next nodes use it when the run goes on)",
+    editHint: "Enter to change, Esc to cancel. Other than text, write 123, true or [1, 2]",
+    notAValue: "Not a value. Write numbers as 123, true / false, lists as [1, 2]",
+    valueOf: (name: string) => `Value of ${name}`,
+    secretNotEditable: "Secret values cannot be changed here",
+    tooLongToEdit: "Only part of a long value is shown, so it cannot be changed here",
+    notEditable: "This variable cannot be changed while paused",
   },
   firstSteps: {
     title: "Make a flow",

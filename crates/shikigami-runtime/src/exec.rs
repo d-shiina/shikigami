@@ -25,7 +25,7 @@ use tokio::sync::{OwnedMutexGuard, Semaphore, mpsc};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
-use crate::debug::{BlockKey, DebugCommand, Debugger, PauseReason, ResumeAction};
+use crate::debug::{BlockKey, DebugCommand, Debugger, PauseReason, ResumeAction, Waited};
 use crate::event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunSnapshot, RunStatus, StepOutcome,
 };
@@ -755,7 +755,13 @@ impl Executor {
         step: &Step,
         error: Option<&RunError>,
     ) -> Result<(DebugCommand, bool), Interrupt> {
-        debug.enter_pause(reason);
+        let editable = self
+            .vars
+            .keys()
+            .filter(|name| !self.secret_vars.contains(name))
+            .cloned()
+            .collect();
+        debug.enter_pause(reason, editable);
         self.emitter.update_snapshot(|s| {
             s.status = RunStatus::Paused;
             s.current_step = Some(step.id.clone());
@@ -769,13 +775,20 @@ impl Executor {
             revision: debug.flow().revision,
         });
         let waited = Instant::now();
-        let command = tokio::select! {
-            biased;
-            () = self.cancel.cancelled() => {
-                debug.leave_pause();
-                return Err(Interrupt::Cancelled);
+        let command = loop {
+            let waited = tokio::select! {
+                biased;
+                () = self.cancel.cancelled() => {
+                    debug.leave_pause();
+                    return Err(Interrupt::Cancelled);
+                }
+                waited = debug.wait() => waited,
+            };
+            match waited {
+                Waited::Resume(command) => break command,
+                // A person changed a value while looking at the pause.
+                Waited::Set(name, value) => self.set_var(&name, value, None),
             }
-            command = debug.wait() => command,
         };
         debug.add_paused(duration_ms(waited));
         // Inside a call the steps and variables are the callee's: the caller
