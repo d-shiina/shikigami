@@ -27,9 +27,9 @@
 |---|---|---|---|---|---|
 | G1 | P0 | 実機 | 実際の業務アプリ・SAP GUI・Citrix・Edge の IE モード・`browser.attach` が実機で未確認 | （実績・事例の比較） | 待ち |
 | G2 | P0 | 配布 | インストーラーが未署名、MSI・サイレントインストール・社内配布先の指定がない | 署名済みインストーラー・MSI・Intune 配布 | 待ち（後回し） |
-| G3 | P1 | Studio | ノードのコピー・貼り付け・複製ができない。複数のノードをまとめて選べない | UiPath・PAD・WinActor：Ctrl+C / Ctrl+V・複数選択 | 着手順 1 |
-| G4 | P1 | 例外処理 | 複数のノードをまとめて再試行できない（`control.group` の `retry` は黙って無視される） | UiPath：Retry Scope／PAD：「エラー発生時」のブロックの再試行 | 着手順 2 |
-| G5 | P1 | ログ | 無人実行で失敗したときの画面が残らない（Studio の一時停止のときだけ撮る） | UiPath：REFramework の Take Screenshot・Orchestrator のログ／AA：エラー時のスクリーンショット | 着手順 3 |
+| G3 | P1 | Studio | ノードのコピー・貼り付け・複製ができない。複数のノードをまとめて選べない | UiPath・PAD・WinActor：Ctrl+C / Ctrl+V・複数選択 | 済み（#151） |
+| G4 | P1 | 例外処理 | 複数のノードをまとめて再試行できない（`control.group` の `retry` は黙って無視される） | UiPath：Retry Scope／PAD：「エラー発生時」のブロックの再試行 | 済み（#153） |
+| G5 | P1 | ログ | 無人実行で失敗したときの画面が残らない（Studio の一時停止のときだけ撮る） | UiPath：REFramework の Take Screenshot・Orchestrator のログ／AA：エラー時のスクリーンショット | 済み |
 | G6 | P1 | ブラウザ | クリックの種類（右クリック・ダブルクリック・Ctrl / Shift を押しながら）がない | UiPath：Click の ClickType・MouseButton・KeyModifiers／PAD：「Web ページのリンクまたはボタンをクリック」のクリックの種類 | 着手順 4 |
 | G7 | P1 | ブラウザ・デスクトップ | チェックボックスを「オンにする／オフにする」ができない（クリックで切り替えるだけなので、2 回流すと逆になる） | UiPath：Check / Uncheck／PAD：「Web ページのチェック ボックスの状態を設定します」「ウィンドウのチェック ボックスの状態を設定」／WinActor：チェックボックス操作 | 着手順 4 |
 | G8 | P1 | デスクトップ | ウィンドウの最大化・最小化・元に戻す・前面に出す・移動・サイズ変更がない | WinActor：ウィンドウ状態変更・ウィンドウ位置変更／UiPath：Maximize / Minimize / Restore / Move Window / Activate／PAD：「ウィンドウの状態の設定」「ウィンドウの移動」「ウィンドウのサイズ変更」「ウィンドウにフォーカスする」 | 着手順 5 |
@@ -46,7 +46,7 @@
 | G19 | P1 | 画像 | 画像認識で「画面から切り取る」・一致率・探す範囲がない | UiPath：Click Image・Find Image の Indicate on screen／PAD：画像をキャプチャ | 別（画像部品のスレッド） |
 | G20 | P2 | ブラウザ | 戻る・進む・再読み込みがない（同じタブでの移動は `browser.open` で済む） | UiPath：Go Back / Go Forward / Refresh／PAD：「Web ページに移動します」の戻る・進む・再読み込み | 着手順 4 に含める |
 | G21 | P2 | ブラウザ | 1 文字ずつ打つ入力がない（キーの動きを見ているサイトで `browser.fill` が効かない） | UiPath：Type Into の入力方式／PAD：「Web ページ内のテキスト フィールドに入力する」の入力をエミュレート | 着手順 4 に含める |
-| G22 | P2 | Studio | ノードのメモ（注釈）を Studio で書けない（フローの `description` はあるが画面に出ない） | UiPath：Annotation／PAD：コメント／WinActor：コメント | 着手順 1 に含める |
+| G22 | P2 | Studio | ノードのメモ（注釈）を Studio で書けない（フローの `description` はあるが画面に出ない） | UiPath：Annotation／PAD：コメント／WinActor：コメント | 済み（#151） |
 | G23 | P2 | Studio | フローの中の検索（ノード名・設定値・変数名で探す）がない | UiPath：Find / Find References／PAD：アクションの検索 | 着手順 13 |
 | G24 | P2 | デバッグ | 一時停止中に変数の値を書き換えられない | UiPath：Locals パネルの値の変更・Immediate | 着手順 13 |
 | G25 | P2 | デスクトップ | 部品の指定は「ウィンドウ＋部品」の 2 段だけ。親の部品をたどる指定がなく、同じ名前の部品は `nth` 頼み | UiPath：Selector の階層・Anchor／PAD：UI 要素のセレクター | 後で |

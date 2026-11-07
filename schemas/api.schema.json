@@ -2797,6 +2797,13 @@
           ],
           "format": "uint32",
           "minimum": 0
+        },
+        "failureScreenshots": {
+          "description": "When a run fails at a browser or desktop step, keep a picture of that\nscreen beside the run's log (`logs/<time>_failed.png`). On unless `false`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
