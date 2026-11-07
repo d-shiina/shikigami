@@ -355,18 +355,20 @@ function Shell() {
       <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
         {showSidebar && (
           <div className="relative flex">
-            <Sidebar width={sizes.sidebar} onCollapse={() => setSidebar("closed")} />
+            <Sidebar width={sizes.sidebar} onToggle={() => setSidebar("closed")} />
             {grip("sidebar")}
           </div>
         )}
+        {/* Folded, the sidebar keeps its icons; its button unfolds it, or lays it over the chart without room. */}
+        {!showSidebar && <Sidebar width={sizes.sidebar} onToggle={toggleSidebar} mini />}
         {!showSidebar && peek && (
           <Peek onClose={() => setPeek(false)}>
-            <Sidebar width={sizes.sidebar} onCollapse={() => setPeek(false)} />
+            <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
           </Peek>
         )}
         {/* The work floats on the window's ground, framed and rounded, as in Linear. */}
         <div className="mt-1.5 mr-1.5 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
-          <TitleBar view={view} onView={setView} onShowSidebar={showSidebar ? undefined : toggleSidebar} />
+          <TitleBar view={view} onView={setView} />
           <HumanBanner />
           <Banner />
           <div className="flex min-h-0 flex-1">
