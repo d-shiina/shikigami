@@ -422,6 +422,53 @@ async fn retries_exhausted_fail_and_on_error_continue_records_last_error() {
     assert_eq!(report.outputs["code"], json!("ELEMENT_NOT_FOUND"));
 }
 
+/// A group whose body fails on its first `fails` runs: it counts its runs in `n`.
+fn retried_group(fails: u32, max_attempts: u32) -> Flow {
+    let mut group = Step::new("control.group").with_block(
+        "body",
+        vec![
+            set("n", "n + 1"),
+            Step::new("control.if")
+                .with_param("condition", format!("n <= {fails}"))
+                .with_block("then", vec![fail("not yet")]),
+            log("signed in"),
+        ],
+    );
+    group.retry = Some(RetryPolicy {
+        max_attempts,
+        backoff_ms: 1,
+        backoff_multiplier: 1.0,
+    });
+    let mut s = flow(vec![group]);
+    s.variables.push(var(
+        "n",
+        VarType::Number,
+        VarDirection::Output,
+        Some(json!(0)),
+    ));
+    s
+}
+
+#[tokio::test]
+async fn a_group_with_retry_runs_its_body_again_from_the_start() {
+    let (report, events) = run(&Runtime::builder().build(), retried_group(2, 3), json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["n"], json!(3));
+    let logs = logs(&events);
+    assert_eq!(
+        logs.iter()
+            .filter(|l| l.contains("最初からやり直します"))
+            .count(),
+        2
+    );
+    assert_eq!(logs.iter().filter(|l| *l == "signed in").count(), 1);
+
+    // Out of attempts, the last failure is the group's.
+    let (report, _) = run(&Runtime::builder().build(), retried_group(5, 2), json!({})).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    assert_eq!(report.error.map(|e| e.message), Some("not yet".into()));
+}
+
 #[tokio::test]
 async fn steps_time_out() {
     let mut step = Step::new("test.flaky").with_param("sleepMs", 5_000);
@@ -2180,4 +2227,86 @@ async fn an_adapter_that_never_closes_does_not_hold_a_stopped_run() {
     let report = handle.wait().await.unwrap();
     assert_eq!(report.status, RunStatus::Cancelled);
     assert!(started.elapsed() <= Duration::from_secs(20));
+}
+
+#[tokio::test]
+async fn a_group_that_will_try_again_does_not_pause_until_its_last_attempt() {
+    // Two failures, two attempts: the first is retried quietly, the second pauses.
+    let (report, _, pauses) = debug_run(
+        &Runtime::new(),
+        retried_group(5, 2),
+        debug_options(&[]),
+        |_, _| Answer::Send(DebugCommand::Abort),
+    )
+    .await;
+    assert_eq!(pauses.len(), 1);
+    assert_eq!(report.status, RunStatus::Failed);
+    // It paused on the second run of the body.
+    assert_eq!(report.outputs["n"], json!(2));
+}
+
+fn fake_def(step_type: &str) -> StepTypeDef {
+    StepTypeDef {
+        step_type: step_type.into(),
+        params_schema: json!({ "type": "object" }),
+        has_output: false,
+        ..flaky_def()
+    }
+}
+
+/// `test` fails; `browser.screenshot` writes its `path` and remembers the params.
+struct Screen(Arc<std::sync::Mutex<Vec<Value>>>);
+
+impl ActionHandler for Screen {
+    fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+        Box::pin(async move {
+            if input.step_type.ends_with(".screenshot") {
+                let path = input.params["path"].as_str().unwrap().to_owned();
+                std::fs::write(&path, b"png").unwrap();
+                self.0.lock().unwrap().push(input.params);
+                Ok(json!(path))
+            } else {
+                Err(StepError::permanent("ELEMENT_NOT_FOUND", "no such button"))
+            }
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_failed_browser_step_leaves_a_picture_of_the_page_beside_the_log() {
+    let dir = tempfile::tempdir().unwrap();
+    let shots = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let runtime = Runtime::builder()
+        .register(fake_def("browser.click"), Screen(shots.clone()))
+        .register(fake_def("browser.screenshot"), Screen(shots.clone()))
+        .build();
+    let s = flow(vec![
+        Step::new("browser.click").with_param("context", "受注"),
+    ]);
+    let options = || RunOptions {
+        project_dir: Some(dir.path().to_path_buf()),
+        full_run: true,
+        ..RunOptions::default()
+    };
+    let (report, _) = run_project(&runtime, s.clone(), options()).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let error = report.error.unwrap();
+    let shot = error.details.as_ref().unwrap()["screenshot"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(shot.ends_with("_failed.png"), "{shot}");
+    assert!(std::path::Path::new(&shot).is_file());
+    assert_eq!(shots.lock().unwrap()[0]["context"], json!("受注"));
+    let log = std::fs::read_dir(dir.path().join("logs"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.extension().is_some_and(|e| e == "log"))
+        .unwrap();
+    assert_eq!(log.with_extension("png").display().to_string(), shot);
+
+    // A run without a log (a single step an AI tries) takes no picture.
+    let (report, _) = run_project(&runtime, s, RunOptions::default()).await;
+    assert!(report.error.unwrap().details.is_none());
+    assert_eq!(shots.lock().unwrap().len(), 1);
 }

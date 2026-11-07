@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 use shikigami_runtime::StepError;
 
 use crate::backend::MouseButton;
+use crate::hover;
 use crate::keys::{self, Held};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -41,12 +42,13 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
     GetClientRect, GetSystemMetrics, HHOOK, HWND_TOPMOST, KBDLLHOOKSTRUCT, LLKHF_EXTENDED,
-    LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG, MSLLHOOKSTRUCT, PM_REMOVE, PeekMessageW,
-    RegisterClassW, SM_CXSCREEN, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-    SetLayeredWindowAttributes, SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage,
-    UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_PAINT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG, MSLLHOOKSTRUCT, MWMO_INPUTAVAILABLE,
+    MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW, QS_ALLINPUT, RegisterClassW, SM_CXSCREEN,
+    SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetLayeredWindowAttributes,
+    SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx,
+    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_PAINT,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
 
@@ -57,6 +59,12 @@ const BANNER_BG: COLORREF = COLORREF(0x003B_291E);
 const BANNER_TEXT: COLORREF = COLORREF(0x00FF_FFFF);
 const BANNER_DIM: COLORREF = COLORREF(0x00E1_D5CB);
 const THICKNESS: i32 = 3;
+/// The frame of the window the picked part belongs to (the window the node
+/// will act on): the logo's orange (BGR), drawn just inside the window so it
+/// stays on screen when the window is maximised, and so the part's blue
+/// frame (outside the part) still shows when the part is the whole window.
+const WINDOW_FRAME: COLORREF = COLORREF(0x0000_8CF5);
+const WINDOW_THICKNESS: i32 = 4;
 
 /// What the user did while recording, in order. Times are the system's
 /// tick count in milliseconds (`MSLLHOOKSTRUCT::time`).
@@ -126,6 +134,7 @@ static BANNER: Mutex<(String, String)> = Mutex::new((String::new(), String::new(
 
 enum Cmd {
     Frame(Option<RECT>),
+    Window(Option<RECT>),
     Title(String),
     Detail(String),
     Close,
@@ -235,6 +244,11 @@ impl Overlay {
         let _ = self.tx.send(Cmd::Frame(rect));
     }
 
+    /// Frames the window the part under the mouse is in (`None` hides it).
+    pub fn window(&self, rect: Option<RECT>) {
+        let _ = self.tx.send(Cmd::Window(rect));
+    }
+
     /// The banner's first line.
     pub fn title(&self, text: String) {
         let _ = self.tx.send(Cmd::Title(text));
@@ -301,6 +315,7 @@ impl Drop for Overlay {
 
 struct Classes {
     frame: PCWSTR,
+    window: PCWSTR,
     banner: PCWSTR,
 }
 
@@ -321,6 +336,13 @@ fn classes(instance: HINSTANCE) -> Result<&'static Classes, String> {
                     hbrBackground: CreateSolidBrush(FRAME),
                     ..WNDCLASSW::default()
                 };
+                let window = WNDCLASSW {
+                    lpfnWndProc: Some(frame_proc),
+                    hInstance: instance,
+                    lpszClassName: w!("ShikigamiPickWindowFrame"),
+                    hbrBackground: CreateSolidBrush(WINDOW_FRAME),
+                    ..WNDCLASSW::default()
+                };
                 let banner = WNDCLASSW {
                     lpfnWndProc: Some(banner_proc),
                     hInstance: instance,
@@ -328,11 +350,15 @@ fn classes(instance: HINSTANCE) -> Result<&'static Classes, String> {
                     hbrBackground: CreateSolidBrush(BANNER_BG),
                     ..WNDCLASSW::default()
                 };
-                if RegisterClassW(&frame) == 0 || RegisterClassW(&banner) == 0 {
+                if RegisterClassW(&frame) == 0
+                    || RegisterClassW(&window) == 0
+                    || RegisterClassW(&banner) == 0
+                {
                     return Err("cannot register the overlay's window classes".into());
                 }
                 Ok(Classes {
                     frame: frame.lpszClassName,
+                    window: window.lpszClassName,
                     banner: banner.lpszClassName,
                 })
             }
@@ -392,6 +418,13 @@ fn run(
             let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA);
             Some(hwnd)
         };
+        // The window's frame first: windows made later start above it, so
+        // the part's frame stays on top where the two meet.
+        let window_edges: Vec<HWND> = if picking {
+            (0..4).filter_map(|_| window(classes.window)).collect()
+        } else {
+            Vec::new()
+        };
         let edges: Vec<HWND> = (0..4).filter_map(|_| window(classes.frame)).collect();
         let banner = if hooked { window(classes.banner) } else { None };
         let mut hooks: Vec<HHOOK> = Vec::new();
@@ -445,9 +478,31 @@ fn run(
         'running: loop {
             loop {
                 match rx.try_recv() {
-                    Ok(Cmd::Frame(Some(rect))) => place_frame(&edges, rect),
+                    Ok(Cmd::Frame(Some(rect))) => {
+                        place_edges(&edges, frame_sides(rect, THICKNESS, false));
+                    }
+                    Ok(Cmd::Window(Some(rect))) => {
+                        place_edges(&window_edges, frame_sides(rect, WINDOW_THICKNESS, true));
+                        // Keep the part's frame above the window's.
+                        for edge in &edges {
+                            let _ = SetWindowPos(
+                                *edge,
+                                Some(HWND_TOPMOST),
+                                0,
+                                0,
+                                0,
+                                0,
+                                SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+                            );
+                        }
+                    }
                     Ok(Cmd::Frame(None)) => {
                         for edge in &edges {
+                            let _ = ShowWindow(*edge, SW_HIDE);
+                        }
+                    }
+                    Ok(Cmd::Window(None)) => {
+                        for edge in &window_edges {
                             let _ = ShowWindow(*edge, SW_HIDE);
                         }
                     }
@@ -480,7 +535,14 @@ fn run(
             if started.elapsed() > life {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(8));
+            // Wait for the next message, not a fixed sleep: Windows calls the
+            // low-level hooks by sending this thread a message for every
+            // mouse move and waits for the answer before the cursor moves on.
+            // A sleep here held each move until the thread woke (about 16 ms),
+            // so a fast mouse queued up hundreds of moves a second and the
+            // cursor crawled. The timeout only bounds how late a command
+            // from the picker (frame, banner text, close) is seen.
+            let _ = MsgWaitForMultipleObjectsEx(None, 8, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         }
         // Only the picker owns the hooks: a highlight that ends while a
         // picker runs must not stop it from taking the click.
@@ -492,26 +554,23 @@ fn run(
         for hook in hooks {
             let _ = UnhookWindowsHookEx(hook);
         }
-        for hwnd in edges.into_iter().chain(banner) {
+        for hwnd in edges.into_iter().chain(window_edges).chain(banner) {
             let _ = DestroyWindow(hwnd);
         }
     }
 }
 
-/// Puts the four edges just outside `rect`.
-fn place_frame(edges: &[HWND], rect: RECT) {
-    let (l, t, r, b) = (
-        rect.left - THICKNESS,
-        rect.top - THICKNESS,
-        rect.right + THICKNESS,
-        rect.bottom + THICKNESS,
-    );
-    let sides = [
-        (l, t, r - l, THICKNESS),
-        (l, b - THICKNESS, r - l, THICKNESS),
-        (l, t, THICKNESS, b - t),
-        (r - THICKNESS, t, THICKNESS, b - t),
-    ];
+/// The four sides of a frame around `rect` (see [`hover::frame_sides`]).
+fn frame_sides(rect: RECT, thickness: i32, inside: bool) -> [(i32, i32, i32, i32); 4] {
+    hover::frame_sides(
+        (rect.left, rect.top, rect.right, rect.bottom),
+        thickness,
+        inside,
+    )
+}
+
+/// Puts the four edge windows at `sides` (x, y, width, height).
+fn place_edges(edges: &[HWND], sides: [(i32, i32, i32, i32); 4]) {
     for (edge, (x, y, w, h)) in edges.iter().zip(sides) {
         // SAFETY: moving windows this thread owns.
         unsafe {
@@ -548,6 +607,38 @@ unsafe extern "system" fn banner_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    // SAFETY: the arguments Windows gave this window procedure.
+    guarded(
+        "banner",
+        || unsafe { paint_banner(hwnd, msg, wparam, lparam) },
+        || unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    )
+}
+
+/// Runs a callback Windows calls (hook, window procedure). A panic must not
+/// leave it: unwinding out of an `extern "system"` function aborts the whole
+/// app (Studio closes with no message). It is written to the log, and
+/// `fallback` answers Windows instead (the event passes on untouched).
+fn guarded(
+    what: &str,
+    body: impl FnOnce() -> LRESULT,
+    fallback: impl FnOnce() -> LRESULT,
+) -> LRESULT {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)) {
+        Ok(result) => result,
+        Err(panic) => {
+            let message = panic
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_owned())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_default();
+            tracing::error!(%message, "the picker's {what} panicked; the event was passed on");
+            fallback()
+        }
+    }
+}
+
+unsafe fn paint_banner(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if msg != WM_PAINT {
         // SAFETY: the default handling of our own window's messages.
         return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
@@ -667,6 +758,15 @@ fn record_mouse(msg: u32, info: &MSLLHOOKSTRUCT) -> Option<LRESULT> {
 }
 
 unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // SAFETY: the arguments Windows gave this hook.
+    guarded(
+        "mouse hook",
+        || unsafe { on_mouse(code, wparam, lparam) },
+        || unsafe { CallNextHookEx(None, code, wparam, lparam) },
+    )
+}
+
+unsafe fn on_mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 && RECORDING.load(Ordering::SeqCst) {
         // SAFETY: for mouse messages lparam points at an MSLLHOOKSTRUCT.
         let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
@@ -781,6 +881,15 @@ fn record_key(msg: u32, info: &KBDLLHOOKSTRUCT) -> Option<LRESULT> {
 }
 
 unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // SAFETY: the arguments Windows gave this hook.
+    guarded(
+        "keyboard hook",
+        || unsafe { on_key(code, wparam, lparam) },
+        || unsafe { CallNextHookEx(None, code, wparam, lparam) },
+    )
+}
+
+unsafe fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 && RECORDING.load(Ordering::SeqCst) {
         // SAFETY: for keyboard messages lparam points at a KBDLLHOOKSTRUCT.
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };

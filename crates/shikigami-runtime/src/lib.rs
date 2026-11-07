@@ -348,7 +348,11 @@ impl Runtime {
                 Ok(()) => executor.top_block(&flow.steps).await,
                 Err(e) => Err(exec::Interrupt::Failed(e)),
             };
-            let (status, error) = exec::final_status(&result);
+            let (status, mut error) = exec::final_status(&result);
+            // While the browser or window is still open (the hooks below close them).
+            if let Some(error) = error.as_mut() {
+                executor.capture_failure(&flow, error).await;
+            }
             let error = error.map(|e| emitter.mask_error(e));
 
             let outputs: Map<String, Value> = flow

@@ -95,7 +95,7 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "control.repeat": { summary: "Repeat the nodes inside a set number of times", words: "loop times count" },
   "control.while": { summary: "Repeat the nodes inside while a condition holds", words: "loop condition" },
   "control.try": { summary: "Catch an error with other nodes", words: "error exception catch finally" },
-  "control.group": { summary: "Gather nodes under a name", words: "group section" },
+  "control.group": { summary: "Gather nodes under a name. With a retry count, runs them again from the start when one fails", words: "group section retry scope try again" },
   "control.parallel": { summary: "Run several flows at the same time", words: "parallel concurrent" },
   "control.break": { summary: "Leave the loop early", words: "loop exit stop" },
   "control.continue": { summary: "Skip to the loop's next item", words: "loop skip next" },

@@ -231,6 +231,12 @@ impl RunLog {
         })
     }
 
+    /// Where the picture of the screen at a failure goes: beside the log,
+    /// under the same stamp (`20261029-141003_failed.png`).
+    pub(crate) fn failure_shot(&self) -> PathBuf {
+        self.dir.join(format!("{}_failed.png", self.stamp))
+    }
+
     /// Renames the file after how the run ended and deletes the oldest
     /// logs beyond [`LOGS_KEPT`].
     pub(crate) fn finish(mut self, status: RunStatus) {
@@ -290,6 +296,8 @@ fn prune(dir: &Path) {
     logs.sort();
     let excess = logs.len() - LOGS_KEPT;
     for path in logs.into_iter().take(excess) {
+        // The picture of a failed run goes with its log.
+        let _ = fs::remove_file(path.with_extension("png"));
         let _ = fs::remove_file(path);
     }
 }

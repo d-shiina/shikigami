@@ -1,6 +1,6 @@
 # 実機での確認手順（デスクトップ操作・SAP・Java）
 
-目的：CI では確かめられない操作を、実際の PC と業務アプリで確かめ、結果をここに残す（[competitive-gaps.md](competitive-gaps.md) の 5・12）。結果が出たら [desktop.md](../desktop.md)「Verified and limits」に「動作確認済み」として写す。
+目的：CI では確かめられない操作を、実際の PC と業務アプリで確かめ、結果をここに残す（[competitive-gaps.md](competitive-gaps.md) の G1）。結果が出たら [desktop.md](../desktop.md)「Verified and limits」に「動作確認済み」として写す。
 
 CI で確かめているもの（ここではやらなくてよい）：WinForms の画面でのメニュー・スクロール・`desktop.getTable`（`tests/uia_smoke.rs`）、小さな Swing の画面での Java Access Bridge（`tests/java_smoke.rs`）。
 

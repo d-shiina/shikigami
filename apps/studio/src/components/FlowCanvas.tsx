@@ -20,7 +20,7 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { Plus } from "lucide-react";
+import { Plus, StickyNote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
@@ -59,7 +59,7 @@ import { plain, sentence, typeTitle } from "../lib/sentence";
 import { AppTag } from "./AppTag";
 import { HoverPreview } from "./HoverPreview";
 import { previewSource } from "../lib/preview";
-import { callKey, diveChain, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
+import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { ChangeView, changeText } from "./ValueView";
@@ -89,7 +89,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; primary: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -681,13 +681,13 @@ function StepNode({ data }: StepNodeProps) {
               : "border-slate-200 hover:border-slate-300"
       } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
     >
-      {(latest || (data.selected && !data.readOnly)) && (
+      {(latest || (data.primary && !data.readOnly)) && (
         // Beside the step's head: the flow line runs through the top and bottom
         // centres, and variable chips sit beside the rows below the head.
         <NodeToolbar isVisible position={Position.Right} align="start" offset={8}>
           <div className="flex items-center gap-1.5">
             {latest && <ReviewToolbar entry={latest} />}
-            {data.selected && !data.readOnly && <StepTools step={data.step} />}
+            {data.primary && !data.readOnly && <StepTools step={data.step} />}
           </div>
         </NodeToolbar>
       )}
@@ -725,6 +725,11 @@ function StepNode({ data }: StepNodeProps) {
           <span className="min-w-0 truncate text-[12px] text-slate-500">{data.step.name}</span>
         ) : (
           <AppTag def={data.def} title={title} />
+        )}
+        {data.step.description && (
+          <StickyNote size={13} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-label={t.memo}>
+            <title>{`${t.memo}${t.colon}${data.step.description}`}</title>
+          </StickyNote>
         )}
         <NodeStatus data={data} />
       </div>
@@ -1007,6 +1012,9 @@ export function FlowCanvas() {
   const flow = inside ? chain.at(-1)!.flow : root;
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
+  const range = useStudio((s) => s.range);
+  const selectTo = useStudio((s) => s.selectTo);
+  const picked = useMemo(() => new Set(selectedIds({ selection, range })), [selection, range]);
   const validation = useStudio((s) => s.validation);
   // The open flow's last run, until it is edited or run again.
   const run = useStudio(trailOf);
@@ -1166,7 +1174,9 @@ export function FlowCanvas() {
           issueCount: issueCounts.get(id) ?? 0,
           unsetCount: inside ? 0 : unsetParams(n.data.step, n.data.def).length,
           todos: todos.get(id) ?? NO_TODOS,
-          selected: !inside && selection?.kind === "step" && selection.stepId === id,
+          selected: !inside && picked.has(id),
+          // The toolbar beside a node acts on the selected one only.
+          primary: !inside && selection?.kind === "step" && selection.stepId === id,
           byAi: !inside && !reviewing && reviews.has(id),
           reviews: inside || reviewing ? [] : (reviews.get(id) ?? []),
           diff: !inside && reviewing ? diffs.get(id) : undefined,
@@ -1285,8 +1295,12 @@ export function FlowCanvas() {
       onNodeClick={(event, node) => {
         if (inside || node.type === "frame") return;
         const data = node.data as StepNodeData | SlotNodeData;
-        if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
-        else {
+        if (data.kind === "step") {
+          const id = data.step.id ?? node.id;
+          // Shift+click picks the nodes from the selected one to this one, to copy or remove them together.
+          if (event.shiftKey) selectTo(id);
+          else select({ kind: "step", stepId: id });
+        } else {
           // An empty block is there to be filled: clicking it opens the palette for it.
           select({ kind: "slot", parentId: data.parentId, block: data.block });
           // Beside a switch's cases it adds the next case.

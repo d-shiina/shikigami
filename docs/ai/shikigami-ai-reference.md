@@ -449,7 +449,7 @@ Example: `{"type":"control.forEach","name":"請求書を4件ずつ同時に処�
 
 #### control.group (グループ)
 
-Runs `body` in order. Use it to name a set of steps or as one branch of `control.parallel`.
+Runs `body` in order. Use it to name a set of steps or as one branch of `control.parallel`. With `retry` (e.g. { "maxAttempts": 3, "backoffMs": 2000 }) the whole body runs again from its first step when any step in it fails, e.g. to open the site, sign in and go to the page again. Only a group is retried as a whole; `retry` on other control steps is not used.
 
 Params: none.
 Blocks: `body` (処理)
