@@ -2,15 +2,14 @@
 // top (where the work is stored), then the places: the flow library with
 // the open flow under it, what waits for review, logins, and settings at
 // the foot, apart from the work. Lists live in their places, not here. Runs
-// (schedules now, run history next) are one row here. Above the places,
-// the AI: its chat opens right beside this column, as Notion AI and Linear's
-// agent do, since it works on whatever place is open.
+// (schedules now, run history next) are one row here. The AI is not a place
+// but a helper on whatever is open, so it is not here: its button sits at the
+// window's top right and its chat opens on the right (AgentButton).
 //
 // Folded (Ctrl+B, or a window too narrow for it), the column keeps its icons
 // as a strip, as Linear and VS Code do: the places stay one click away and
 // their counts stay in sight. Hovering an icon names it.
-import { AppWindow, Blocks, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
-import { anyBusy, useAgent } from "../agent";
+import { AppWindow, Blocks, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
 import { useStudio, useStudioApi } from "../context";
 import { SIDEBAR_MINI } from "../lib/fit";
 import { t } from "../lib/i18n";
@@ -95,19 +94,6 @@ function MiniItem({ icon: Icon, label, on, onClick, count, tone, dot, busy, titl
   );
 }
 
-/** Opens and closes the AI's chat, which sits right of the sidebar. */
-function AgentItem({ mini }: { mini?: boolean }) {
-  const open = useAgent((s) => s.open);
-  const setOpen = useAgent((s) => s.setOpen);
-  const busy = useAgent(anyBusy);
-  // A conversation finished while the pane was closed or showing another.
-  const news = useAgent((s) => s.chats.some((c) => c.unread));
-  // Named by what it is, not by the AI in use (Claude Code, Codex, …): which
-  // one is set in Settings and shown in the pane's head.
-  const name = useAgent((s) => s.info?.name ?? "AI");
-  return <Item icon={MessageSquareText} label={t.shell.aiChat} on={open} onClick={() => setOpen(!open)} busy={busy} dot={news} title={`${t.shell.aiChat}：${name}（Ctrl+J）`} mini={mini} />;
-}
-
 /** The folder the flows live in; the full path and the change are in Settings. */
 function Workspace() {
   const workspace = useStudio((s) => s.workspace);
@@ -163,10 +149,7 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
           {mini ? <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden="true" /> : <PanelLeftClose size={16} strokeWidth={1.75} aria-hidden="true" />}
         </button>
       </div>
-      <div className={mini ? "px-1.5 pt-1 pb-2" : "px-2 pt-1 pb-2"}>
-        <AgentItem mini={mini} />
-      </div>
-      <nav className={`flex-1 border-t border-slate-200 pt-2 ${mini ? "space-y-1 px-1.5" : "space-y-px px-2"}`}>
+      <nav className={`flex-1 pt-1 ${mini ? "space-y-1 px-1.5" : "space-y-px px-2"}`}>
         <Item icon={LayoutList} label={t.flows} on={place === "library"} onClick={go("library")} mini={mini} />
         {/* The open flow, under the library it came from: the way back to the editor. */}
         {flow && <Item icon={Workflow} label={flow.name} on={place === "flows"} onClick={go("flows")} indent mini={mini} />}

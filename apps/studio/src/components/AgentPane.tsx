@@ -53,7 +53,7 @@ export function AgentPane({ width }: { width: number }) {
     if (!(await sendIn(id, text, ref, context))) setDraftOf(id, (now) => now || text);
   };
   return (
-    <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col border-r border-slate-200 bg-sheet">
+    <aside style={{ width }} className="flex h-full min-h-0 shrink-0 flex-col border-l border-slate-200 bg-sheet">
       <div className="flex items-center gap-1 border-b border-slate-200 py-2 pr-3 pl-2">
         <ChatSwitcher chat={chat} />
         <button
