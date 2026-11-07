@@ -48,6 +48,7 @@ import { copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } 
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
+import { ancestorsOf } from "./flow/layout";
 import { resultName } from "./lib/resultName";
 import { summarize } from "./lib/review";
 import { setFlowNames } from "./lib/sentence";
@@ -268,6 +269,8 @@ export type StudioState = {
   followRun: boolean;
   /** Steps to pause before, per flow (this PC only). */
   breakpoints: Record<string, string[]>;
+  /** Frames (a loop, if, group, …) folded to their head on the chart, per flow (this PC only). */
+  folded: Record<string, string[]>;
   outlineOpen: boolean;
   paletteOpen: boolean;
   /** Where the palette adds, when it was opened from a "+" between nodes; otherwise after the selection. */
@@ -389,6 +392,10 @@ export type StudioState = {
   toggleBreakpoint(stepId: string, flowId?: string): void;
   /** Removes every breakpoint of the open flow and of the flows it calls. */
   clearBreakpoints(): void;
+  /** Folds a frame to its head on the chart, or opens it again. */
+  toggleFold(stepId: string, flowId?: string): void;
+  /** Opens the folded frames around a step of the open flow, so it can be shown. */
+  unfoldTo(stepId: string): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -578,6 +585,24 @@ function loadBreakpoints(): Record<string, string[]> {
     return JSON.parse(globalThis.localStorage?.getItem(BREAKPOINTS_KEY) ?? "{}") as Record<string, string[]>;
   } catch {
     return {};
+  }
+}
+
+const FOLDED_KEY = "shikigami.studio.folded";
+
+function loadFolded(): Record<string, string[]> {
+  try {
+    return JSON.parse(globalThis.localStorage?.getItem(FOLDED_KEY) ?? "{}") as Record<string, string[]>;
+  } catch {
+    return {};
+  }
+}
+
+function saveFolded(folded: Record<string, string[]>) {
+  try {
+    globalThis.localStorage?.setItem(FOLDED_KEY, JSON.stringify(folded));
+  } catch {
+    // Only how the chart is shown on this PC.
   }
 }
 
@@ -850,6 +875,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       tested: {},
       followRun: true,
       breakpoints: loadBreakpoints(),
+      folded: loadFolded(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
       paletteAt: null,
@@ -1079,6 +1105,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       goTo(stepId) {
+        get().unfoldTo(stepId);
         set({ selection: { kind: "step", stepId }, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 }, dive: [] });
       },
 
@@ -1487,6 +1514,30 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
+      toggleFold(stepId, flowId) {
+        const id = flowId ?? get().flow?.id;
+        if (!id) return;
+        const current = get().folded[id] ?? [];
+        const next = current.includes(stepId) ? current.filter((s) => s !== stepId) : [...current, stepId];
+        const folded = { ...get().folded, [id]: next };
+        if (next.length === 0) delete folded[id];
+        saveFolded(folded);
+        set({ folded });
+      },
+
+      unfoldTo(stepId) {
+        const flow = get().flow;
+        const current = flow ? get().folded[flow.id] : undefined;
+        if (!flow || !current) return;
+        const around = new Set(ancestorsOf(flow.steps ?? [], stepId));
+        const next = current.filter((id) => !around.has(id));
+        if (next.length === current.length) return;
+        const folded = { ...get().folded, [flow.id]: next };
+        if (next.length === 0) delete folded[flow.id];
+        saveFolded(folded);
+        set({ folded });
+      },
+
       toggleBreakpoint(stepId, flowId) {
         const id = flowId ?? get().flow?.id;
         if (!id) return;
@@ -1652,6 +1703,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           }
           return { run, human, secretFix, reveal, ...moved };
         });
+        // Where a run pauses is shown, even inside a folded frame.
+        const reveal = get().reveal;
+        if (env.type === "paused" && reveal?.stepId === env.stepId) get().unfoldTo(env.stepId);
         // 「ここまで実行」: the pause before the node is only a way to get there; run it and pause after.
         const trying = get().trying;
         if (trying && env.type === "paused" && env.stepId === trying && env.reason === "breakpoint") {

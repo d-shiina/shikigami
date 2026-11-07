@@ -3,10 +3,11 @@
 // always render identically and no layout data leaks into flow files.
 //
 // Steps run top to bottom; a step's blocks sit side by side below it, framed
-// together with it, and loops draw a back-edge from the end of their body.
+// together with it (the step is the frame's head), and loops draw a line
+// back up from the end of their body.
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { CASE, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
-import { blockLabel } from "../lib/keywords";
+import { laneLabel, loopBackLabel } from "../lib/keywords";
 import { nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
@@ -29,34 +30,58 @@ const TAIL_GAP = 16;
  */
 export const READ_ROOM = 16 + 80 + 4 + 80;
 export const WRITE_ROOM = 16 + 80;
-/**
- * Beside a loop's body, on each side: room for the line that returns to the
- * loop (right) and the line that leaves it for the next step (left), outside
- * the body's value chips so the lines never run through steps or chips.
- */
+/** Beside a loop's body: room for the line that returns to the loop's head (see LOOP_LINE_X). */
 const LOOP_ROOM = 32;
-/** How far outside a loop body's steps its detour lines run: left past the read chips, right past the written ones. */
-const DETOUR_LEFT = READ_ROOM + 12;
-const DETOUR_RIGHT = WRITE_ROOM + 12;
 /** Between side-by-side lanes: one lane's write chips, a loop's detour, the next one's read chips. */
 const GAP_X = READ_ROOM + WRITE_ROOM + LOOP_ROOM;
 /**
- * Every step with blocks (a loop, if, try, …) is drawn inside a frame that
- * holds it and everything in its blocks, so what runs inside it and what
- * comes after it read apart at a glance. The frame starts just above the
- * step and ends this far below its blocks: under the line that returns to a
- * loop, and nested frames end one inside the other.
+ * Every step with blocks (a loop, if, try, …) is drawn as a frame that holds
+ * everything in its blocks; the step itself is the frame's head (HEAD_H tall,
+ * as wide as the frame), so the frame is the node. Its blocks hang below the
+ * head side by side as columns, and their lines meet again at one point (a
+ * join) on the frame's bottom edge, where the line goes on to the next step.
  */
-export const FRAME_TOP = 8;
-const FRAME_BOTTOM = 24;
-/** A loop's frame runs outside its detour lines; other frames outside their chips. */
-const LOOP_FRAME = { left: DETOUR_LEFT + 20, right: DETOUR_RIGHT + 20 };
+export const HEAD_H = 38;
+export const FRAME_TOP = 0;
+/** Under the blocks: room for the lines to turn into the join, then the join, then the frame's edge. */
+const JOIN_GAP = 28;
+export const JOIN_SIZE = 8;
+const JOIN_BELOW = 14;
+/**
+ * A loop's line back runs up the left of its frame, LOOP_LINE_X in from the
+ * edge: straight under the loop's icon in its head, so it plainly returns to
+ * that loop. Its frame has room for it outside the frames of steps inside.
+ */
+export const LOOP_LINE_X = 19.5;
+const LOOP_FRAME = { left: READ_ROOM + 12 + 24, right: WRITE_ROOM + 12 };
 const BLOCK_FRAME = { left: READ_ROOM + 12, right: WRITE_ROOM + 12 };
 /**
  * Beside the blocks of a step that is not a loop: room for its frame to sit
  * inside the frame or detour lines of a step around it.
  */
 const BLOCK_ROOM = 16;
+/**
+ * A case of a switch is the heading of its column, not a node: a small tab
+ * (CASE_H tall) with the values it matches, where the other columns have
+ * their heading (はい, その他, …: on the line, CASE_LIFT above the column).
+ * Its steps start at the top of the column like theirs.
+ */
+export const CASE_H = 20;
+const CASE_LIFT = 10;
+
+/** What the head of a frame shows besides the step (see HEAD_H). */
+export type HeadData = {
+  width: number;
+  /** Where the flow line enters and leaves the head, from its left edge: over its blocks, not always its middle. */
+  lineX: number;
+  collapsed: boolean;
+  /** Nodes inside, said on a folded head. */
+  count: number;
+  /** The try has no "finally" yet: the head offers to add one. */
+  addFinally?: boolean;
+  /** A switch: the head offers to add a case. */
+  addCase?: boolean;
+};
 
 export type StepNodeData = {
   kind: "step";
@@ -65,7 +90,14 @@ export type StepNodeData = {
   parentId: string | null;
   block: string | null;
   index: number;
+  /** The step is the head of a frame (a loop, if, …): drawn as the frame's top edge. */
+  head?: HeadData;
+  /** A case of a switch: drawn as the tab over its column. */
+  tab?: boolean;
 };
+
+/** Where the blocks of a frame meet again, on its bottom edge (a loop's is only where its line leaves). */
+export type JoinNodeData = { kind: "join"; parentId: string; shown: boolean };
 
 export type SlotNodeData = {
   kind: "slot";
@@ -74,17 +106,15 @@ export type SlotNodeData = {
   label: string;
   /** The faint "+" under the flow's last node, to keep adding at the end. */
   end?: boolean;
-  /** Beside a switch's cases: adds another case. */
-  addCase?: boolean;
   /** The small "+" under a block's last node, to add at the end of the block (see TAIL_SIZE). */
   tail?: boolean;
 };
 
 export type LayoutNode = {
   id: string;
-  type: "step" | "slot";
+  type: "step" | "slot" | "join";
   position: { x: number; y: number };
-  data: StepNodeData | SlotNodeData;
+  data: StepNodeData | SlotNodeData | JoinNodeData;
 };
 
 export type LayoutEdge = {
@@ -93,11 +123,12 @@ export type LayoutEdge = {
   target: string;
   label?: string;
   loop?: boolean;
-  /**
-   * For a loop's back edge and the edge leaving a loop: the x the line runs
-   * down or up at, beside the loop's body instead of through it.
-   */
+  /** For a loop's back edge: the x the line runs up at, under the loop's icon instead of through its body. */
   detourX?: number;
+  /** From the head of a frame down into one of its columns: turns just under the head. */
+  split?: boolean;
+  /** Not drawn: from a loop's head to where its line leaves, so a run's trail carries on past the loop. */
+  hidden?: boolean;
 };
 
 export type FrameKind = "loop" | "if" | "switch" | "try" | "parallel" | "group";
@@ -134,24 +165,32 @@ function frameKind(type: string): FrameKind {
 }
 /** Blocks whose children are branches of their own: each child gets its own lane. */
 const FAN_OUT_BLOCKS: Record<string, string> = { [PARALLEL]: "branches", [SWITCH]: "cases" };
-/**
- * The cases of a switch get one more lane, empty, to add the next case in:
- * a case is a branch beside the others, never a node under one.
- */
-const ADD_LANE_BLOCKS: Record<string, string> = { [SWITCH]: "cases" };
 /** Steps that are one branch of the step around them: framed by it, not on their own. */
 const UNFRAMED = new Set([CASE]);
+/** Blocks shown only once they have nodes: the head of their step offers to add the first. */
+const OPTIONAL_BLOCKS: Record<string, string> = { [TRY]: "finally" };
 
 /** `tail`: ends in a "+" to add at its end (not a lane of one of a parallel's branches, where that would start another branch). */
 type Lane = { name: string; label: string; steps: Step[]; start: number; tail: boolean };
 
+/** A step drawn as a frame with a head (see HEAD_H). */
+function isHead(step: Step, defs: Defs): boolean {
+  if (UNFRAMED.has(step.type)) return false;
+  return (defs.get(step.type)?.blocks?.length ?? 0) > 0 || Object.keys(step.blocks ?? {}).length > 0;
+}
+
+/** Frames folded to their head, by step id. */
+export type Collapsed = ReadonlySet<string>;
+const NONE: Collapsed = new Set();
+
 /** Block lanes of a step: declared blocks in registry order, then unknown ones. */
-function lanes(step: Step, defs: Defs): Lane[] {
+function lanes(step: Step, defs: Defs, collapsed: Collapsed = NONE): Lane[] {
+  if (step.id && collapsed.has(step.id) && isHead(step, defs)) return [];
   const def = defs.get(step.type);
   const declared = def?.blocks ?? [];
   const result: Lane[] = declared.map((b) => ({
     name: b.name,
-    label: blockLabel(step, b.name, b.label),
+    label: laneLabel(step, b.name, b.label),
     steps: step.blocks?.[b.name] ?? [],
     start: 0,
     tail: true,
@@ -160,15 +199,31 @@ function lanes(step: Step, defs: Defs): Lane[] {
     if (!declared.some((b) => b.name === name)) result.push({ name, label: name, steps, start: 0, tail: true });
   }
   const fanOut = FAN_OUT_BLOCKS[step.type];
-  const addLane = ADD_LANE_BLOCKS[step.type];
+  const optional = OPTIONAL_BLOCKS[step.type];
   return result.flatMap((lane) =>
-    lane.name === fanOut && lane.steps.length > 0
-      ? [
-          ...lane.steps.map((child, i) => ({ ...lane, steps: [child], start: i, tail: false })),
-          ...(lane.name === addLane ? [{ ...lane, label: "", steps: [], start: lane.steps.length, tail: false }] : []),
-        ]
-      : [lane],
+    lane.name === optional && lane.steps.length === 0
+      ? []
+      : lane.name === fanOut && lane.steps.length > 0
+        ? lane.steps.map((child, i) => ({ ...lane, label: "", steps: [child], start: i, tail: false }))
+        : [lane],
   );
+}
+
+/** The steps around step `id`, outermost first (empty when it is at the top or not found). */
+export function ancestorsOf(steps: Step[], id: string): string[] {
+  for (const step of steps) {
+    if (step.id === id) return [];
+    for (const children of Object.values(step.blocks ?? {})) {
+      const inner = ancestorsOf(children, id);
+      if (inner.length > 0 || children.some((c) => c.id === id)) return [...(step.id ? [step.id] : []), ...inner];
+    }
+  }
+  return [];
+}
+
+/** How many steps are inside a step's blocks, all the way down. */
+function countInside(step: Step): number {
+  return Object.values(step.blocks ?? {}).reduce((n, list) => n + list.reduce((m, s) => m + 1 + countInside(s), 0), 0);
 }
 
 type Size = { w: number; h: number };
@@ -176,15 +231,16 @@ type Size = { w: number; h: number };
 const SLOT: Size = { w: NODE_W, h: SLOT_H };
 
 function nodeSize(step: Step, defs: Defs, extra: Extra): Size {
+  if (isHead(step, defs)) return { w: NODE_W, h: HEAD_H };
   return { w: NODE_W, h: nodeHeight(step, defs.get(step.type), extra.get(step.id ?? "") ?? 0) };
 }
 
-function measureList(steps: Step[], defs: Defs, extra: Extra, tail = false): Size {
+function measureList(steps: Step[], defs: Defs, extra: Extra, collapsed: Collapsed, tail = false): Size {
   if (steps.length === 0) return SLOT;
   let w = 0;
   let h = 0;
   for (const s of steps) {
-    const m = measure(s, defs, extra);
+    const m = measure(s, defs, extra, collapsed);
     w = Math.max(w, m.w);
     h += m.h;
   }
@@ -192,13 +248,15 @@ function measureList(steps: Step[], defs: Defs, extra: Extra, tail = false): Siz
   return tail ? { w: Math.max(w, TAIL_SIZE), h: h + TAIL_GAP + TAIL_SIZE } : { w, h };
 }
 
-function measure(step: Step, defs: Defs, extra: Extra): Size {
-  const ls = lanes(step, defs);
+function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Size {
+  const ls = lanes(step, defs, collapsed);
   const own = nodeSize(step, defs, extra);
   if (ls.length === 0) return own;
-  const ms = ls.map((l) => measureList(l.steps, defs, extra, l.tail));
+  const ms = ls.map((l) => measureList(l.steps, defs, extra, collapsed, l.tail));
   const w = ms.reduce((acc, m) => acc + m.w, 0) + GAP_X * (ms.length - 1);
-  const h = own.h + GAP_Y + Math.max(...ms.map((m) => m.h)) + FRAME_BOTTOM;
+  const inner = Math.max(...ms.map((m) => m.h));
+  if (UNFRAMED.has(step.type)) return { w: Math.max(own.w, w), h: inner };
+  const h = own.h + GAP_Y + inner + JOIN_GAP + JOIN_SIZE + JOIN_BELOW;
   const room = (LOOP_TYPES.has(step.type) ? LOOP_ROOM : BLOCK_ROOM) * 2;
   return { w: Math.max(own.w, w + room), h };
 }
@@ -212,13 +270,20 @@ class Builder {
   constructor(
     private defs: Defs,
     private extra: Extra,
+    private collapsed: Collapsed,
   ) {}
 
-  /** Left and right edges of each loop's body, by loop step id. */
-  bodies = new Map<string, { left: number; right: number }>();
-
-  edge(source: string, target: string, label?: string, loop?: boolean, detourX?: number) {
-    this.edges.push({ id: `${source}->${target}${label ? `:${label}` : ""}`, source, target, label, loop, detourX });
+  edge(source: string, target: string, label?: string, loop?: boolean, detourX?: number, hidden?: boolean, split?: boolean) {
+    this.edges.push({
+      id: `${source}->${target}${label ? `:${label}` : ""}`,
+      source,
+      target,
+      label,
+      loop,
+      detourX,
+      ...(hidden ? { hidden } : {}),
+      ...(split ? { split } : {}),
+    });
   }
 
   /** Places a list centred in [x, x + span); returns its entry node id and the ids that flow into the next step. */
@@ -232,7 +297,6 @@ class Builder {
     slotLabel: string,
     start = 0,
     tail = false,
-    addCase = false,
   ): { entry: string; exits: string[] } {
     if (steps.length === 0) {
       const id = `slot:${parentId ?? "root"}:${block ?? ""}`;
@@ -240,7 +304,7 @@ class Builder {
         id,
         type: "slot",
         position: { x: x + (span - SLOT.w) / 2, y },
-        data: { kind: "slot", parentId, block, label: slotLabel, ...(addCase ? { addCase } : {}) },
+        data: { kind: "slot", parentId, block, label: slotLabel },
       });
       return { entry: id, exits: [id] };
     }
@@ -250,13 +314,9 @@ class Builder {
     steps.forEach((step, index) => {
       const placed = this.step(step, cursor, x, span, parentId, block, start + index);
       if (index === 0) entry = placed.entry;
-      for (const p of previous) {
-        // Leaving a loop: down its body's left side, not through the body.
-        const body = this.bodies.get(p);
-        this.edge(p, placed.entry, undefined, undefined, body ? body.left - DETOUR_LEFT : undefined);
-      }
+      for (const p of previous) this.edge(p, placed.entry);
       previous = placed.exits;
-      cursor += measure(step, this.defs, this.extra).h + GAP_Y;
+      cursor += measure(step, this.defs, this.extra, this.collapsed).h + GAP_Y;
     });
     if (tail) {
       const id = `end:${parentId ?? "root"}:${block ?? ""}`;
@@ -266,10 +326,7 @@ class Builder {
         position: { x: x + (span - TAIL_SIZE) / 2, y: cursor - GAP_Y + TAIL_GAP },
         data: { kind: "slot", parentId, block, label: slotLabel, tail: true },
       });
-      for (const p of previous) {
-        const body = this.bodies.get(p);
-        this.edge(p, id, undefined, undefined, body ? body.left - DETOUR_LEFT : undefined);
-      }
+      for (const p of previous) this.edge(p, id);
       previous = [id];
     }
     return { entry, exits: previous };
@@ -287,58 +344,83 @@ class Builder {
     const id = step.id ?? `anon-${this.nodes.length}`;
     const def = this.defs.get(step.type);
     const own = nodeSize(step, this.defs, this.extra);
+    const base = { kind: "step", step, def, parentId, block, index } as const;
+    const ls = lanes(step, this.defs, this.collapsed);
+    const head = isHead(step, this.defs);
+    const cx = x + span / 2;
+
+    if (UNFRAMED.has(step.type)) {
+      // A case: the tab over its column, its steps under it.
+      this.nodes.push({ id, type: "step", position: { x: cx - NODE_W / 2, y: y - CASE_LIFT - CASE_H }, data: { ...base, tab: true } });
+      const lane = ls[0];
+      if (!lane) return { entry: id, exits: [id] };
+      const size = measureList(lane.steps, this.defs, this.extra, this.collapsed, lane.tail);
+      const placed = this.list(lane.steps, y, cx - size.w / 2, size.w, id, lane.name, lane.label, lane.start, lane.tail);
+      this.edge(id, placed.entry);
+      return { entry: id, exits: placed.exits };
+    }
+    if (!head) {
+      this.nodes.push({ id, type: "step", position: { x: cx - own.w / 2, y }, data: base });
+      return { entry: id, exits: [id] };
+    }
+    const optional = OPTIONAL_BLOCKS[step.type];
+    const extras = {
+      ...(optional && !(step.blocks?.[optional]?.length) ? { addFinally: true } : {}),
+      ...(step.type === SWITCH ? { addCase: true } : {}),
+    };
+    if (ls.length === 0) {
+      // Folded: the head alone, saying how much is inside.
+      this.nodes.push({
+        id,
+        type: "step",
+        position: { x: cx - own.w / 2, y },
+        data: { ...base, head: { width: own.w, lineX: own.w / 2, collapsed: true, count: countInside(step) } },
+      });
+      return { entry: id, exits: [id] };
+    }
+
+    const sizes = ls.map((l) => measureList(l.steps, this.defs, this.extra, this.collapsed, l.tail));
+    const isLoop = LOOP_TYPES.has(step.type);
+    const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (ls.length - 1);
+    let laneX = x + (span - total) / 2;
+    const side = isLoop ? LOOP_FRAME : BLOCK_FRAME;
+    const left = Math.min(laneX, cx - own.w / 2) - side.left;
+    const right = Math.max(laneX + total, cx + own.w / 2) + side.right;
+    const height = measure(step, this.defs, this.extra, this.collapsed).h;
     this.nodes.push({
       id,
       type: "step",
-      position: { x: x + (span - own.w) / 2, y },
-      data: { kind: "step", step, def, parentId, block, index },
+      position: { x: left, y },
+      data: { ...base, head: { width: right - left, lineX: cx - left, collapsed: false, count: countInside(step), ...extras } },
     });
-    const ls = lanes(step, this.defs);
-    if (ls.length === 0) return { entry: id, exits: [id] };
+    this.frames.push({ id, kind: frameKind(step.type), type: step.type, depth: this.depth, x: left, y: y - FRAME_TOP, width: right - left, height: height + FRAME_TOP });
 
-    const sizes = ls.map((l) => measureList(l.steps, this.defs, this.extra, l.tail));
-    const isLoop = LOOP_TYPES.has(step.type);
-    const exits: string[] = [];
-    const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (ls.length - 1);
-    let laneX = x + (span - total) / 2;
-    if (isLoop) this.bodies.set(id, { left: laneX, right: laneX + total });
-    const side = isLoop ? LOOP_FRAME : BLOCK_FRAME;
-    const left = Math.min(laneX, x + (span - own.w) / 2) - side.left;
-    const right = Math.max(laneX + total, x + (span + own.w) / 2) + side.right;
-    const framed = !UNFRAMED.has(step.type);
-    if (framed) {
-      this.frames.push({
-        id,
-        kind: frameKind(step.type),
-        type: step.type,
-        depth: this.depth,
-        x: left,
-        y: y - FRAME_TOP,
-        width: right - left,
-        height: measure(step, this.defs, this.extra).h + FRAME_TOP,
-      });
-    }
-    if (framed) this.depth += 1;
+    const joinY = y + height - JOIN_BELOW - JOIN_SIZE;
+    const join = `join:${id}`;
+    this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: joinY }, data: { kind: "join", parentId: id, shown: !isLoop && ls.length > 1 } });
+
+    this.depth += 1;
     ls.forEach((lane, i) => {
       const size = sizes[i] ?? SLOT;
-      const addCase = ADD_LANE_BLOCKS[step.type] === lane.name;
-      const placed = this.list(lane.steps, y + own.h + GAP_Y, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail, addCase);
-      this.edge(id, placed.entry, lane.label);
+      const placed = this.list(lane.steps, y + own.h + GAP_Y, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
+      this.edge(id, placed.entry, lane.label || undefined, undefined, undefined, undefined, true);
       if (isLoop) {
-        for (const e of placed.exits) this.edge(e, id, undefined, true, laneX + size.w + DETOUR_RIGHT);
+        for (const e of placed.exits) this.edge(e, id, loopBackLabel(step), true, left + LOOP_LINE_X);
       } else {
-        exits.push(...placed.exits);
+        for (const e of placed.exits) this.edge(e, join);
       }
       laneX += size.w + GAP_X;
     });
-    if (framed) this.depth -= 1;
-    return { entry: id, exits: isLoop ? [id] : exits };
+    this.depth -= 1;
+    // A loop leaves from the bottom of its frame once it is done: no line through its body.
+    if (isLoop) this.edge(id, join, undefined, undefined, undefined, true);
+    return { entry: id, exits: [join] };
   }
 }
 
-export function layoutFlow(steps: Step[], defs: Defs, extra: Extra = NO_EXTRA): Layout {
-  const builder = new Builder(defs, extra);
-  const size = measureList(steps, defs, extra);
+export function layoutFlow(steps: Step[], defs: Defs, extra: Extra = NO_EXTRA, collapsed: Collapsed = NONE): Layout {
+  const builder = new Builder(defs, extra, collapsed);
+  const size = measureList(steps, defs, extra, collapsed);
   builder.list(steps, 0, 0, size.w, null, null, "");
   const { nodes, edges, frames } = builder;
   if (steps.length === 0) return { nodes, edges, frames, width: size.w, height: size.h };

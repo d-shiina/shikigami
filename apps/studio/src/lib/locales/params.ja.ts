@@ -155,7 +155,15 @@ export const paramsJa = {
     params: "SQL に渡す値",
   } as Record<string, string>,
   /** Names that differ by node: what `path` or `to` is depends on what the node does with it. */
+  /** Names of the items of a list of records, by node and setting. */
+  items: {
+    "dialog.form.fields": { name: "結果のキー", label: "項目名", type: "種類", required: "必須", default: "初期値", options: "選択肢" },
+    "excel.sort.by": { column: "列", order: "順序" },
+    "excel.pivot.values": { column: "列", function: "集計方法" },
+    "excel.filter.filters": { column: "列", values: "残す値" },
+  } as Record<string, Record<string, string>>,
   for: {
+    "dialog.form": { fields: "項目" },
     "desktop.setWindow": { state: "ウィンドウの状態", front: "前面に表示", x: "左端の位置", y: "上端の位置", width: "幅", height: "高さ" },
     "process.list": { name: "プログラム名" },
     "process.kill": { name: "プログラム名" },
@@ -212,6 +220,8 @@ export const paramsJa = {
   } as Record<string, Record<string, string>>,
   /** A choice's words, by the setting it belongs to. */
   choices: {
+    order: { asc: "小さい順", desc: "大きい順" },
+    function: { sum: "合計", count: "件数", average: "平均", max: "最大", min: "最小" },
     action: { back: "戻る", forward: "進む", reload: "再読み込み" },
     level: { debug: "詳細", info: "情報", warn: "警告", warning: "警告", error: "エラー" },
     state: { visible: "表示されている", hidden: "表示されていない", attached: "ページにある", detached: "ページから消えた", enabled: "操作できる", maximized: "最大化", minimized: "最小化", normal: "元のサイズ" },
@@ -225,7 +235,7 @@ export const paramsJa = {
     buttons: { ok: "OK", okCancel: "OK・キャンセル", yesNo: "はい・いいえ", yesNoCancel: "はい・いいえ・キャンセル" },
     kind: { file: "ファイルを 1 つ", files: "ファイルを複数", folder: "フォルダー", save: "保存先を指定" },
     align: { left: "左揃え", center: "中央揃え", right: "右揃え" },
-    type: { all: "すべて", file: "ファイル", folder: "フォルダー" },
+    type: { all: "すべて", file: "ファイル", folder: "フォルダー", text: "文字", multiline: "複数行の文字", number: "数値", date: "日付", select: "選択肢から選ぶ", checkbox: "チェックボックス" },
     encoding: { auto: "自動判定", "utf-8": "UTF-8", "utf-8-bom": "UTF-8（BOM 付き）", shift_jis: "Shift_JIS" },
     authType: { basic: "ユーザー名とパスワード（Basic）", bearer: "トークン（Bearer）", header: "任意のヘッダー" },
     via: { outlook: "Outlook", microsoft365: "Microsoft 365", smtp: "SMTP サーバー" },

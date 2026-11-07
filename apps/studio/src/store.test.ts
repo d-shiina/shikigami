@@ -150,6 +150,19 @@ describe("studio store", () => {
     expect(store.getState().notice).toBe(t.externalChange);
   });
 
+  it("opens the folded frames around a step it goes to, and only those", () => {
+    const steps: Flow["steps"] = [
+      { id: "g", type: "control.group", blocks: { body: [{ id: "l", type: "control.repeat", blocks: { body: [{ id: "x", type: "log.message" }] } }] } },
+      { id: "h", type: "control.group", blocks: { body: [] } },
+    ];
+    const store = createStudioStore(fakeApi());
+    store.setState({ flow: flow(1, steps) });
+    for (const id of ["g", "l", "h"]) store.getState().toggleFold(id);
+    store.getState().goTo("x");
+    expect(store.getState().folded.scn_a).toEqual(["h"]);
+    expect(store.getState().selection).toEqual({ kind: "step", stepId: "x" });
+  });
+
   it("shows that a run waits for the person until the step ends", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };

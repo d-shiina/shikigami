@@ -163,6 +163,7 @@ pub fn run() {
             commands::import_flow,
             commands::list_flows,
             commands::project_files,
+            commands::read_project_image,
             commands::read_project_text,
             commands::table_columns,
             commands::preview_file,

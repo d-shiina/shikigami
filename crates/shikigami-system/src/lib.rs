@@ -41,6 +41,7 @@ pub mod types {
     pub const CLIPBOARD_SET: &str = "clipboard.set";
     pub const DIALOG_MESSAGE: &str = "dialog.message";
     pub const DIALOG_INPUT: &str = "dialog.input";
+    pub const DIALOG_FORM: &str = "dialog.form";
     pub const DIALOG_SELECT_FILE: &str = "dialog.selectFile";
 }
 
@@ -88,6 +89,7 @@ enum Kind {
     ClipboardSet,
     DialogMessage,
     DialogInput,
+    DialogForm,
     DialogSelectFile,
 }
 
@@ -115,13 +117,17 @@ impl ActionHandler for SystemStep {
                 Kind::ProcessKill => blocking(move || procs::kill(&params)).await,
                 Kind::ClipboardGet => blocking(desktop::clipboard_get).await,
                 Kind::ClipboardSet => blocking(move || desktop::clipboard_set(&params)).await,
-                Kind::DialogMessage | Kind::DialogInput | Kind::DialogSelectFile => {
+                Kind::DialogMessage
+                | Kind::DialogInput
+                | Kind::DialogForm
+                | Kind::DialogSelectFile => {
                     input.request_human("Shikigami のダイアログに答えてください");
                     // Each dialog is its own process: a stop or timeout kills
                     // it and closes the window.
                     match kind {
                         Kind::DialogMessage => desktop::message(&params).await,
                         Kind::DialogInput => desktop::input(&params).await,
+                        Kind::DialogForm => desktop::form(&params).await,
                         _ => desktop::select_file(&params).await,
                     }
                 }
@@ -366,6 +372,50 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 vec![json!({ "type": types::DIALOG_INPUT, "params": { "message": "対象月を入力してください（例: 2026-10）", "default": "{{ formatDate(today(), 'yyyy-MM') }}" }, "saveAs": "month" })],
             ),
             Kind::DialogInput,
+        ),
+        (
+            dialog(
+                types::DIALOG_FORM,
+                "入力フォーム",
+                "Asks the person at the PC for several values at once in one dialog, and outputs them as an object keyed by each field's `name` (null when they cancel). Field types: text (default), multiline, number (a number, or null when left empty), date (\"2026-10-28\" or null), select (one of `options`) and checkbox (true / false). `required: true` keeps OK from closing the form until the field has a value. Use it only in flows that someone watches; unattended runs would wait until the timeout (10 minutes unless timeoutMs is set). Never ask for passwords: use registered secrets. Windows only.",
+                object_schema(
+                    json!({
+                        "message": text,
+                        "title": text,
+                        "fields": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 30,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": { "type": "string", "minLength": 1, "description": "結果のキー（例 month）" },
+                                    "label": { "type": "string", "description": "画面に出す項目名（省略すると name）" },
+                                    "type": { "enum": desktop::FIELD_TYPES },
+                                    "required": { "type": "boolean" },
+                                    "default": {},
+                                    "options": { "type": "array", "items": { "type": ["string", "number"] } }
+                                },
+                                "required": ["name"],
+                                "additionalProperties": false
+                            }
+                        }
+                    }),
+                    &["fields"],
+                ),
+                vec![json!({ "type": types::DIALOG_FORM, "params": {
+                    "title": "請求書の発行",
+                    "message": "今回の条件を入れてください",
+                    "fields": [
+                        { "name": "month", "label": "対象月", "default": "{{ formatDate(today(), 'yyyy-MM') }}", "required": true },
+                        { "name": "dueDate", "label": "支払期限", "type": "date" },
+                        { "name": "office", "label": "営業所", "type": "select", "options": ["東京", "大阪", "名古屋"], "required": true },
+                        { "name": "minAmount", "label": "対象にする最低金額", "type": "number", "default": 10000 },
+                        { "name": "sendMail", "label": "メールでも送る", "type": "checkbox", "default": true }
+                    ]
+                }, "saveAs": "form" })],
+            ),
+            Kind::DialogForm,
         ),
         (
             dialog(

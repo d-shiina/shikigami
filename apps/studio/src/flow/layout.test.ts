@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { layoutFlow, NODE_W } from "./layout";
+import { ancestorsOf, CASE_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -21,6 +21,8 @@ const defs = new Map(
     def("control.parallel", ["branches"]),
     def("control.switch", ["cases", "default"]),
     def("control.case", ["body"]),
+    def("control.try", ["try", "catch", "finally"]),
+    def("control.group", ["body"]),
   ].map(
     (d) => [d.type, d] as const,
   ),
@@ -38,7 +40,7 @@ describe("layoutFlow", () => {
     expect(open.height - folded.height).toBe(120);
   });
 
-  it("gives each case of a switch its own branch, then one to add a case, then default", () => {
+  it("gives each case of a switch its own column under a tab, then default, and joins them", () => {
     const steps: Step[] = [
       {
         id: "sw",
@@ -56,16 +58,66 @@ describe("layoutFlow", () => {
     ];
     const layout = layoutFlow(steps, defs);
     const node = (id: string) => layout.nodes.find((n) => n.id === id)!;
-    // Cases side by side under the switch, in order, then "add a case", then default.
-    const xs = ["c1", "slot:c2:body", "slot:sw:cases", "d"].map((id) => node(id).position.x);
+    // Cases side by side under the switch, in order, then default.
+    const xs = ["c1", "slot:c2:body", "d"].map((id) => node(id).position.x);
     expect(xs).toEqual([...xs].sort((p, q) => p - q));
+    // A case is the tab over its column, which starts where the default's does.
+    expect(node("c1").data).toMatchObject({ kind: "step", tab: true });
     expect(node("c1").position.y).toBe(node("c2").position.y);
-    expect(node("slot:sw:cases").data).toMatchObject({ kind: "slot", parentId: "sw", block: "cases", addCase: true });
-    // Every branch joins the next step.
-    const into = layout.edges.filter((e) => e.target === "after").map((e) => e.source);
-    expect(into.sort()).toEqual(["end:c1:body", "end:sw:default", "slot:c2:body", "slot:sw:cases"].sort());
+    expect(node("c1").position.y + CASE_H).toBeLessThan(node("a").position.y);
+    expect(node("a").position.y).toBe(node("d").position.y);
+    // No column to add a case: the switch's head offers it.
+    expect(layout.nodes.some((n) => n.id === "slot:sw:cases")).toBe(false);
+    expect((node("sw").data as StepNodeData).head).toMatchObject({ addCase: true, collapsed: false });
+    // Every column meets at the switch's join, and that goes on to the next step.
+    const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
+    expect(into("join:sw")).toEqual(["end:c1:body", "end:sw:default", "slot:c2:body"]);
+    expect(into("after")).toEqual(["join:sw"]);
     // One frame, around the switch: a case is a branch of it, not a frame of its own.
     expect(layout.frames.map((f) => [f.id, f.kind])).toEqual([["sw", "switch"]]);
+  });
+
+  it("makes the step of a frame its head, as wide as the frame, with the line through its middle", () => {
+    const steps: Step[] = [log("a"), { id: "g", type: "control.group", blocks: { body: [log("x")] } }, log("after")];
+    const layout = layoutFlow(steps, defs);
+    const node = (id: string) => layout.nodes.find((n) => n.id === id)!;
+    const frame = layout.frames.find((f) => f.id === "g")!;
+    const head = (node("g").data as StepNodeData).head!;
+    expect(node("g").position).toEqual({ x: frame.x, y: frame.y });
+    expect(head.width).toBe(frame.width);
+    expect(node("g").position.x + head.lineX).toBe(node("a").position.x + NODE_W / 2);
+    expect(node("x").position.y).toBeGreaterThan(frame.y + HEAD_H);
+    // One column: its join is not marked, only where the line leaves the frame.
+    expect(node("join:g").data).toMatchObject({ kind: "join", shown: false });
+    expect(node("join:g").position.y).toBeLessThan(frame.y + frame.height);
+  });
+
+  it("folds a frame to its head, saying how much is inside", () => {
+    const steps: Step[] = [{ id: "g", type: "control.group", blocks: { body: [log("x"), { id: "l", type: "control.repeat", blocks: { body: [log("y")] } }] } }, log("after")];
+    const layout = layoutFlow(steps, defs, undefined, new Set(["g"]));
+    expect(layout.nodes.map((n) => n.id)).toEqual(["g", "after", "slot:end"]);
+    expect(layout.frames).toEqual([]);
+    expect((layout.nodes[0]!.data as StepNodeData).head).toMatchObject({ collapsed: true, count: 3, width: NODE_W });
+    expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual(["g>after"]);
+  });
+
+  it("finds the steps around a step, outermost first", () => {
+    const steps: Step[] = [log("a"), { id: "g", type: "control.group", blocks: { body: [{ id: "l", type: "control.repeat", blocks: { body: [log("x")] } }] } }];
+    expect(ancestorsOf(steps, "x")).toEqual(["g", "l"]);
+    expect(ancestorsOf(steps, "l")).toEqual(["g"]);
+    expect(ancestorsOf(steps, "a")).toEqual([]);
+    expect(ancestorsOf(steps, "nope")).toEqual([]);
+  });
+
+  it("shows a try's finally only once it has nodes; until then the head offers it", () => {
+    const at = (finallySteps: Step[]) =>
+      layoutFlow([{ id: "t", type: "control.try", blocks: { try: [log("a")], catch: [log("b")], finally: finallySteps } }], defs);
+    const without = at([]);
+    expect(without.nodes.some((n) => n.id === "slot:t:finally")).toBe(false);
+    expect((without.nodes.find((n) => n.id === "t")!.data as StepNodeData).head).toMatchObject({ addFinally: true });
+    const withIt = at([log("f")]);
+    expect(withIt.nodes.some((n) => n.id === "f")).toBe(true);
+    expect((withIt.nodes.find((n) => n.id === "t")!.data as StepNodeData).head?.addFinally).toBeUndefined();
   });
 
   it("renders an empty flow as a single slot", () => {
@@ -92,14 +144,16 @@ describe("layoutFlow", () => {
     expect(elseSlot?.id).toBe("slot:if:else");
     // then-lane is left of the else-lane
     expect(pos.t1!.x).toBeLessThan(elseSlot!.position.x);
-    // both branches flow into "after"
-    const intoAfter = layout.edges.filter((e) => e.target === "after").map((e) => e.source);
-    expect(intoAfter.sort()).toEqual(["end:if:then", "slot:if:else"]);
+    // both branches meet at the if's join, which flows into "after"
+    const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
+    expect(into("join:if")).toEqual(["end:if:then", "slot:if:else"]);
+    expect(into("after")).toEqual(["join:if"]);
+    expect(layout.nodes.find((n) => n.id === "join:if")?.data).toMatchObject({ kind: "join", shown: true });
     expect(layout.edges.some((e) => e.source === "t2" && e.target === "end:if:then")).toBe(true);
     expect(layout.width).toBeGreaterThanOrEqual(NODE_W * 2);
   });
 
-  it("draws loop back-edges and exits from the loop node", () => {
+  it("draws loop back-edges, and leaves a loop from the bottom of its frame", () => {
     const steps: Step[] = [
       { id: "loop", type: "control.repeat", blocks: { body: [log("x")] } },
       log("after"),
@@ -107,7 +161,10 @@ describe("layoutFlow", () => {
     const layout = layoutFlow(steps, defs);
     expect(layout.edges.some((e) => e.source === "x" && e.target === "end:loop:body")).toBe(true);
     expect(layout.edges.find((e) => e.source === "end:loop:body" && e.target === "loop")?.loop).toBe(true);
-    expect(layout.edges.some((e) => e.source === "loop" && e.target === "after")).toBe(true);
+    // Out of the frame's bottom; a hidden line from the head carries a run's trail there.
+    expect(layout.edges.find((e) => e.source === "loop" && e.target === "join:loop")?.hidden).toBe(true);
+    expect(layout.edges.some((e) => e.source === "join:loop" && e.target === "after")).toBe(true);
+    expect(layout.nodes.find((n) => n.id === "join:loop")?.data).toMatchObject({ shown: false });
   });
 
   it("puts each parallel branch in its own lane and joins them", () => {
@@ -122,8 +179,8 @@ describe("layoutFlow", () => {
     expect(byId.b!.position.x).toBeLessThan(byId.c!.position.x);
     // indexes still address the shared "branches" block
     expect(["a", "b", "c"].map((id) => (byId[id]!.data as { index: number }).index)).toEqual([0, 1, 2]);
-    const intoAfter = layout.edges.filter((e) => e.target === "after").map((e) => e.source);
-    expect(intoAfter.sort()).toEqual(["a", "b", "c"]);
+    const intoJoin = layout.edges.filter((e) => e.target === "join:par").map((e) => e.source);
+    expect(intoJoin.sort()).toEqual(["a", "b", "c"]);
   });
 
   it("keeps the main line on one column, with blocks below their step", () => {
@@ -134,7 +191,8 @@ describe("layoutFlow", () => {
     ];
     const layout = layoutFlow(steps, defs);
     const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
-    expect(pos.a!.x).toBe(pos.if!.x);
+    const head = (layout.nodes.find((n) => n.id === "if")!.data as StepNodeData).head!;
+    expect(pos.if!.x + head.lineX).toBe(pos.a!.x + NODE_W / 2);
     expect(pos.a!.x).toBe(pos.after!.x);
     expect(pos.t!.y).toBeGreaterThan(pos.if!.y);
     expect(pos.t!.y).toBe(pos.e!.y);
@@ -162,7 +220,7 @@ describe("layoutFlow", () => {
     const outer = frame("outer");
     const inner = frame("inner");
     expect([outer.kind, outer.depth, inner.kind, inner.depth]).toEqual(["loop", 0, "loop", 1]);
-    for (const id of ["outer", "x", "inner", "y"]) expect(contains(outer, box(id))).toBe(true);
+    for (const id of ["x", "inner", "y"]) expect(contains(outer, box(id))).toBe(true);
     expect(contains(inner, box("y"))).toBe(true);
     expect(contains(inner, box("x"))).toBe(false);
     expect(contains(outer, box("before"))).toBe(false);
@@ -171,12 +229,15 @@ describe("layoutFlow", () => {
     expect(inner.x).toBeGreaterThan(outer.x);
     expect(inner.right).toBeLessThan(outer.right);
     expect(inner.bottom).toBeLessThan(outer.bottom);
-    // The lines around a loop's body run inside its frame, outside the inner one.
+    // The line back up runs inside the loop's frame, left of the inner one, under the loop's icon.
     const back = layout.edges.find((e) => e.source === "end:outer:body" && e.target === "outer")!;
-    expect(back.detourX).toBeGreaterThan(inner.right);
-    expect(back.detourX).toBeLessThan(outer.right);
-    const exit = layout.edges.find((e) => e.source === "outer" && e.target === "after")!;
-    expect(exit.detourX).toBeGreaterThan(outer.x);
+    expect(back.detourX).toBe(outer.x + LOOP_LINE_X);
+    expect(back.detourX! + 12).toBeLessThan(inner.x);
+    expect(back.label).toBe("次の回へ");
+    // It is left from the bottom of the frame, after everything in it.
+    const exit = layout.nodes.find((n) => n.id === "join:outer")!;
+    expect(exit.position.y).toBeGreaterThan(inner.bottom);
+    expect(exit.position.y).toBeLessThan(outer.bottom);
   });
 
   it("frames branches too, and keeps side-by-side frames apart", () => {
@@ -223,7 +284,8 @@ describe("layoutFlow", () => {
     const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
     expect(into("end:if:then")).toEqual(["t"]);
     expect(into("end:if:else")).toEqual(["e2"]);
-    expect(into("end:loop:body")).toEqual(["end:if:else", "end:if:then"]);
+    expect(into("join:if")).toEqual(["end:if:else", "end:if:then"]);
+    expect(into("end:loop:body")).toEqual(["join:if"]);
     expect(layout.edges.find((e) => e.source === "end:loop:body")?.target).toBe("loop");
     // Inside the frames: the branches' in the if's, the body's below it but in the loop's.
     const frame = (id: string) => layout.frames.find((f) => f.id === id)!;

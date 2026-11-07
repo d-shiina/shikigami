@@ -13,6 +13,7 @@ Crate `shikigami-system`. Built-in nodes for things outside app windows. Value p
 | `clipboard.get` / `clipboard.set` | Reads / sets the clipboard text (Windows) | text | safe / interactive |
 | `dialog.message` | Shows a message and returns the button pressed (Windows) | `ok` `cancel` `yes` `no` | interactive |
 | `dialog.input` | Asks for one line of text (Windows; empty on cancel) | text | interactive |
+| `dialog.form` | Asks for several values (text, multi-line, number, date, choice, checkbox) in one form (Windows) | an object keyed by each field's `name`; null when cancelled | interactive |
 | `dialog.selectFile` | Lets the person pick a file, several files, a folder or where to save (Windows) | the path (a list for `files`), null on cancel | interactive |
 
 ## `http.request`
@@ -47,3 +48,4 @@ Crate `shikigami-system`. Built-in nodes for things outside app windows. Value p
 - Messages and text input look like Studio: white (dark when Windows apps are set to dark), navy text, Japanese text in Yu Gothic UI, button labels in the Windows display language. Enter presses the filled button; Esc and × cancel (with `yesNo` an answer is required, as in a Windows message box). Ctrl+C copies the message. File and folder pickers are the Windows Explorer ones.
 - Use dialogs only in runs a person is watching. They wait 10 minutes by default (change with `timeoutMs`); unattended runs stop there until the timeout. While waiting, Studio asks the person to answer the dialog.
 - Never ask for passwords with `dialog.input` (use secrets).
+- `dialog.form` takes `fields`, a list of `{ name, label, type, required, default, options }`. `type` is `text` (default), `multiline`, `number` (null when left empty), `date` (`"2026-10-28"`, null when empty), `select` (one of `options`) or `checkbox` (true / false). With `required: true`, OK does not close the form while the field is empty. Enter is OK (Ctrl+Enter in a multi-line field). In Studio the fields are added one at a time in the node's settings.

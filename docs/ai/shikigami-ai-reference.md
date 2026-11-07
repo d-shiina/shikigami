@@ -38,7 +38,7 @@ Everything an AI needs to write a Shikigami flow without tools. Read shikigami-a
 
 ## The screen
 
-A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Studio and Studio fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }.
+A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Studio and Studio fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }. A picture cut out of the screen (an image part) is a desktop target too: { "window": { "process": "wfica32.exe" }, "image": { "path": "templates/image1.png", "threshold": 0.9 }, "offset": { "x": 0, "y": 0 } }; only desktop steps whose target lists `image` can use it. Keep image parts as they are.
 
 ## Expression functions
 
@@ -668,7 +668,7 @@ Params:
 - `button`: "left" | "right"
 - `double`: true | false
 Example: `{"type":"desktop.mouseClick","name":"行をダブルクリック","params":{"target":{"window":{"process":"billing.exe"},"element":{"role":"row","name":"{{ orderNo }}"}},"double":true}}`
-Example: `{"type":"desktop.mouseClick","name":"保存ボタン（画像）を押す","params":{"target":{"window":{"title":"Citrix"},"image":{"path":"C:\\RPA\\images\\保存ボタン.png"}}}}`
+Example: `{"type":"desktop.mouseClick","name":"保存ボタン（画像）を押す","params":{"target":{"window":{"title":"Citrix"},"image":{"path":"templates/保存ボタン.png"}}}}`
 Example: `{"type":"desktop.mouseClick","name":"「検索」を押す","params":{"target":{"window":{"title":"Citrix"},"ocr":{"text":"検索"}}}}`
 
 #### desktop.mouseScroll (マウススクロール)
@@ -795,6 +795,17 @@ Example: `{"type":"desktop.waitFor","name":"「登録完了」が出るのを待
 
 
 ### dialog.*
+
+#### dialog.form (入力フォーム)
+
+Asks the person at the PC for several values at once in one dialog, and outputs them as an object keyed by each field's `name` (null when they cancel). Field types: text (default), multiline, number (a number, or null when left empty), date ("2026-10-28" or null), select (one of `options`) and checkbox (true / false). `required: true` keeps OK from closing the form until the field has a value. Use it only in flows that someone watches; unattended runs would wait until the timeout (10 minutes unless timeoutMs is set). Never ask for passwords: use registered secrets. Windows only.
+
+Params:
+- `message`: text
+- `title`: text
+- `fields`*: list of { name*: text, label: text, type: "text" | "multiline" | "number" | "date" | "select" | "checkbox", required: true | false, default: any, options: list of text or number }
+Output: yes (saveAs)
+Example: `{"type":"dialog.form","params":{"title":"請求書の発行","message":"今回の条件を入れてください","fields":[{"name":"month","label":"対象月","default":"{{ formatDate(today(), 'yyyy-MM') }}","required":true},{"name":"dueDate","label":"支払期限","type":"date"},{"name":"office","label":"営業所","type":"select","options":["東京","大阪","名古屋"],"required":true},{"name":"minAmount","label":"対象にする最低金額","type":"number","default":10000},{"name":"sendMail","label":"メールでも送る","type":"checkbox","default":true}]},"saveAs":"form"}`
 
 #### dialog.input (入力ダイアログ)
 

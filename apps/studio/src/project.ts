@@ -33,6 +33,8 @@ export const projectApi = {
   /** Files from Explorer (full paths) into `folder`, keeping their names. */
   copyIn: (id: string, folder: string, paths: string[], overwrite: boolean) =>
     call<ProjectFile[]>("copy_into_project", { id, folder, paths, overwrite }),
+  /** A picture of the folder as a data URL (null when it is not there). */
+  readImage: (id: string, path: string) => call<string | null>("read_project_image", { id, path }),
   rename: (id: string, from: string, to: string) => call<ProjectFile>("rename_project_file", { id, from, to }),
   /** To the workspace's trash; a standard folder (work/) is emptied instead. */
   remove: (id: string, path: string) => call<void>("delete_project_file", { id, path }),
@@ -105,7 +107,17 @@ const norm = (path: string) => path.replace(/\\/g, "/").replace(/^\.\//, "").toL
 export function usersOf(flow: Flow | null, path: string): Step[] {
   if (!flow) return [];
   const needle = norm(path);
-  return [...walkSteps(flow.steps)].filter((step) => norm(JSON.stringify(step.params ?? {})).includes(needle));
+  // A picture an image part keeps (templates/image1.png) is used by the nodes that use the part.
+  const parts = new Set(
+    Object.entries(flow.parts ?? {})
+      .filter(([, part]) => norm(JSON.stringify(part.target ?? null)).includes(needle))
+      .map(([name]) => name),
+  );
+  return [...walkSteps(flow.steps)].filter((step) => {
+    const target = step.params?.target as { part?: unknown } | undefined;
+    if (typeof target?.part === "string" && parts.has(target.part)) return true;
+    return norm(JSON.stringify(step.params ?? {})).includes(needle);
+  });
 }
 
 /**

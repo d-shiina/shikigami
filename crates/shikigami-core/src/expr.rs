@@ -22,9 +22,11 @@ use serde_json::{Map, Number, Value};
 
 mod date;
 mod functions;
+mod mistakes;
 mod width;
 
 pub use functions::{FUNCTION_DOCS, FunctionDoc, function_names};
+pub use mistakes::{describe as describe_function, mistake_hint, unknown_function_hint};
 
 const MAX_DEPTH: usize = 64;
 

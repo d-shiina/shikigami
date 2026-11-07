@@ -1,4 +1,4 @@
-# The dialogs of dialog.message, dialog.input and dialog.selectFile.
+# The dialogs of dialog.message, dialog.input, dialog.form and dialog.selectFile.
 #
 # desktop.rs runs this in its own powershell.exe (-STA) per dialog, so a stop
 # or timeout kills the process and the dialog closes with it. Values arrive
@@ -19,9 +19,9 @@ $mode = $env:SHIKIGAMI_MODE
 $language = if ($env:SHIKIGAMI_LANG) { $env:SHIKIGAMI_LANG } else { [Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName }
 $ja = $language -eq 'ja'
 $words = if ($ja) {
-    @{ ok = 'OK'; cancel = 'キャンセル'; yes = 'はい'; no = 'いいえ'; close = '閉じる' }
+    @{ ok = 'OK'; cancel = 'キャンセル'; yes = 'はい'; no = 'いいえ'; close = '閉じる'; required = '入力してください'; number = '数値で入力してください'; choose = '選んでください' }
 } else {
-    @{ ok = 'OK'; cancel = 'Cancel'; yes = 'Yes'; no = 'No'; close = 'Close' }
+    @{ ok = 'OK'; cancel = 'Cancel'; yes = 'Yes'; no = 'No'; close = 'Close'; required = 'Fill this in'; number = 'Enter a number'; choose = 'Choose one' }
 }
 
 if ($mode -eq 'file') {
@@ -299,6 +299,9 @@ $xaml = @'
             <TextBlock x:Name="Message" TextWrapping="Wrap" LineHeight="22"/>
           </ScrollViewer>
           <TextBox x:Name="Answer" Margin="0,14,0,0" Height="34" Visibility="Collapsed"/>
+          <ScrollViewer x:Name="FieldsScroll" MaxHeight="520" VerticalScrollBarVisibility="Auto" Focusable="False" Visibility="Collapsed">
+            <StackPanel x:Name="Fields" Width="400"/>
+          </ScrollViewer>
         </StackPanel>
       </Grid>
 
@@ -335,7 +338,73 @@ if ($env:SHIKIGAMI_MARK) {
 # The buttons, left to right as in Studio: the quiet way out first, the
 # answer that goes ahead last (filled, and pressed by Enter).
 # Each: answer, style, Enter, Esc.
-if ($mode -eq 'input') {
+$fields = @()
+if ($mode -eq 'form') {
+    # One row per field: its name above, its control, and a line for what
+    # is missing. SHIKIGAMI_FIELDS is JSON checked by desktop.rs.
+    if (-not $env:SHIKIGAMI_MESSAGE) { $window.FindName('Message').Visibility = 'Collapsed' }
+    $window.FindName('FieldsScroll').Visibility = 'Visible'
+    $fieldPanel = $window.FindName('Fields')
+    $brush = [System.Windows.Media.BrushConverter]::new()
+    foreach ($spec in ($env:SHIKIGAMI_FIELDS | ConvertFrom-Json)) {
+        $row = New-Object System.Windows.Controls.StackPanel
+        $row.Margin = '0,12,0,0'
+        if ($spec.type -ne 'checkbox') {
+            $name = New-Object System.Windows.Controls.TextBlock
+            $name.Text = if ($spec.required) { "$($spec.label) *" } else { $spec.label }
+            $name.FontSize = 13
+            $name.Margin = '0,0,0,4'
+            [void]$row.Children.Add($name)
+        }
+        switch ($spec.type) {
+            'checkbox' {
+                $control = New-Object System.Windows.Controls.CheckBox
+                $control.Content = $spec.label
+                $control.Foreground = $brush.ConvertFromString($colors.INK)
+                $control.IsChecked = [bool]$spec.default
+            }
+            'select' {
+                $control = New-Object System.Windows.Controls.ComboBox
+                $control.Height = 34
+                $control.VerticalContentAlignment = 'Center'
+                foreach ($option in $spec.options) { [void]$control.Items.Add([string]$option) }
+                if ($null -ne $spec.default) { $control.SelectedItem = [string]$spec.default }
+            }
+            'date' {
+                $control = New-Object System.Windows.Controls.DatePicker
+                $control.Height = 34
+                $control.VerticalContentAlignment = 'Center'
+                $control.SelectedDateFormat = 'Short'
+                if ($spec.default) {
+                    $control.SelectedDate = [datetime]::ParseExact([string]$spec.default, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
+                }
+            }
+            default {
+                $control = New-Object System.Windows.Controls.TextBox
+                if ($null -ne $spec.default) { $control.Text = [string]$spec.default }
+                if ($spec.type -eq 'multiline') {
+                    $control.AcceptsReturn = $true
+                    $control.TextWrapping = 'Wrap'
+                    $control.Height = 88
+                    $control.VerticalScrollBarVisibility = 'Auto'
+                } else {
+                    $control.Height = 34
+                }
+            }
+        }
+        [void]$row.Children.Add($control)
+        $hint = New-Object System.Windows.Controls.TextBlock
+        $hint.FontSize = 12
+        $hint.Margin = '0,4,0,0'
+        $hint.Foreground = $brush.ConvertFromString($colors.ERROR)
+        $hint.Visibility = 'Collapsed'
+        [void]$row.Children.Add($hint)
+        [void]$fieldPanel.Children.Add($row)
+        $fields += , @($spec, $control, $hint)
+    }
+    $buttons = @(@('cancel', 'Quiet', $false, $true), @('ok', 'Primary', $false, $false))
+    $dismiss = 'cancel'
+} elseif ($mode -eq 'input') {
     $answer = $window.FindName('Answer')
     $answer.Text = $env:SHIKIGAMI_DEFAULT
     $answer.Visibility = 'Visible'
@@ -371,8 +440,59 @@ if ($mode -eq 'input') {
     }
 }
 
+# The form's answers by field name, or $null (and the fields that need
+# something are marked) when one is missing or not a number.
+$collect = {
+    $values = [ordered]@{}
+    $complete = $true
+    foreach ($entry in $fields) {
+        $spec, $control, $hint = $entry
+        $hint.Visibility = 'Collapsed'
+        $value = $null
+        $problem = $null
+        switch ($spec.type) {
+            'checkbox' { $value = [bool]$control.IsChecked }
+            'select' {
+                if ($null -ne $control.SelectedItem) { $value = [string]$control.SelectedItem }
+                elseif ($spec.required) { $problem = $words.choose }
+            }
+            'date' { if ($control.SelectedDate) { $value = ([datetime]$control.SelectedDate).ToString('yyyy-MM-dd') } }
+            'number' {
+                $typed = $control.Text.Trim() -replace '[,，]', ''
+                if ($typed) {
+                    $number = 0.0
+                    if ([double]::TryParse($typed, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$number)) {
+                        $value = $number
+                    } else {
+                        $problem = $words.number
+                    }
+                }
+            }
+            default { $value = $control.Text }
+        }
+        if (-not $problem -and $spec.required -and ($null -eq $value -or "$value" -eq '')) { $problem = $words.required }
+        if ($problem) {
+            $hint.Text = $problem
+            $hint.Visibility = 'Visible'
+            if ($complete) { $control.Focus() | Out-Null }
+            $complete = $false
+        }
+        $values[[string]$spec.name] = $value
+    }
+    if ($complete) { return $values }
+    return $null
+}
+
 $panel = $window.FindName('Buttons')
-$choose = { param($sender, $e) $window.Tag = $sender.Tag; $window.Close() }
+$choose = {
+    param($sender, $e)
+    if ($mode -eq 'form' -and $sender.Tag -eq 'ok') {
+        $script:answers = & $collect
+        if ($null -eq $script:answers) { return }
+    }
+    $window.Tag = $sender.Tag
+    $window.Close()
+}
 foreach ($b in $buttons) {
     $button = New-Object System.Windows.Controls.Button
     $button.Tag = $b[0]
@@ -403,7 +523,7 @@ $window.Add_MouseLeftButtonDown({ try { $window.DragMove() } catch { } })
 # Ctrl+C copies the message, as in a Windows message box.
 $window.Add_KeyDown({
     param($sender, $e)
-    if ($e.Key -eq 'C' -and [System.Windows.Input.Keyboard]::Modifiers -eq 'Control' -and $mode -ne 'input') {
+    if ($e.Key -eq 'C' -and [System.Windows.Input.Keyboard]::Modifiers -eq 'Control' -and $mode -eq 'message') {
         [System.Windows.Clipboard]::SetText($env:SHIKIGAMI_MESSAGE)
     }
 })
@@ -413,7 +533,22 @@ $window.Add_ContentRendered({
         $answer.Focus() | Out-Null
         $answer.SelectAll()
     }
+    if ($mode -eq 'form' -and $fields.Count -gt 0) { $fields[0][1].Focus() | Out-Null }
 })
+if ($mode -eq 'form') {
+    # Enter goes ahead from a one-line field (a multi-line one takes it as a
+    # new line), Ctrl+Enter from anywhere.
+    $window.Add_PreviewKeyDown({
+        param($sender, $e)
+        if ($e.Key -ne 'Return') { return }
+        $multiline = $e.OriginalSource -is [System.Windows.Controls.TextBox] -and $e.OriginalSource.AcceptsReturn
+        $dropped = $e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.IsDropDownOpen
+        if ($dropped -or ($multiline -and [System.Windows.Input.Keyboard]::Modifiers -ne 'Control')) { return }
+        $e.Handled = $true
+        $ok = $panel.Children | Where-Object { $_.Tag -eq 'ok' } | Select-Object -First 1
+        & $choose $ok $null
+    })
+}
 
 if ($env:SHIKIGAMI_SNAPSHOT) {
     # Tests: draw the dialog into a PNG instead of showing it, and answer as
@@ -434,10 +569,19 @@ if ($env:SHIKIGAMI_SNAPSHOT) {
     $file = [IO.File]::Create($env:SHIKIGAMI_SNAPSHOT)
     try { $png.Save($file) } finally { $file.Dispose() }
     $window.Tag = ($panel.Children | Where-Object IsDefault | Select-Object -First 1).Tag
+    if ($mode -eq 'form') {
+        $script:answers = & $collect
+        $window.Tag = if ($null -eq $script:answers) { 'incomplete' } else { 'ok' }
+    }
 } else {
     [void]$window.ShowDialog()
 }
 $result = $window.Tag
+if ($mode -eq 'form') {
+    if ($result -ne 'ok') { exit 3 }
+    Write-Output ($script:answers | ConvertTo-Json -Compress -Depth 3)
+    exit 0
+}
 if ($mode -eq 'input') {
     if ($result -ne 'ok') { exit 3 }
     Write-Output $answer.Text

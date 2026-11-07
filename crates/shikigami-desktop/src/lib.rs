@@ -57,6 +57,8 @@ mod sap;
 pub mod sapgui;
 #[cfg(windows)]
 pub mod session;
+#[cfg(windows)]
+mod snip;
 pub mod table;
 pub mod target;
 #[cfg(windows)]
@@ -166,7 +168,8 @@ impl Adapter for DesktopAdapter {
     /// Without `window`: the open windows. With it: that window's element
     /// tree (`element` narrows it to one part, `maxNodes` caps its size).
     /// `action: "pick"` lets the user point at an element on screen and
-    /// returns its target; `action: "highlight"` frames `target` on screen;
+    /// returns its target; `action: "snip"` lets the user cut a picture out
+    /// of the screen (`Op::Snip`); `action: "highlight"` frames `target` on screen;
     /// `action: "record"` writes down what the user does until they click
     /// the banner (`Op::Record`).
     fn inspect<'a>(
@@ -189,6 +192,23 @@ impl Adapter for DesktopAdapter {
                     return self
                         .backend
                         .call(Op::Pick {
+                            message,
+                            timeout_ms,
+                        })
+                        .await;
+                }
+                Some("snip") => {
+                    let message = params
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned);
+                    let timeout_ms = params
+                        .get("timeoutMs")
+                        .and_then(Value::as_u64)
+                        .map_or(PICK_TIMEOUT_MS, |ms| ms.clamp(1_000, 600_000));
+                    return self
+                        .backend
+                        .call(Op::Snip {
                             message,
                             timeout_ms,
                         })
@@ -244,7 +264,7 @@ impl Adapter for DesktopAdapter {
                 }
                 Some(other) => {
                     return Err(StepError::invalid_params(format!(
-                        "unknown action {other:?}: use \"pick\" or \"highlight\", or leave it out to read the windows"
+                        "unknown action {other:?}: use \"pick\", \"snip\" or \"highlight\", or leave it out to read the windows"
                     )));
                 }
             }
@@ -1047,9 +1067,9 @@ fn target_schema(allow: Allow) -> Value {
     });
     let image = json!({
         "type": "object",
-        "description": "画面上で探す画像（部品が inspect_ui に出ないアプリ用）。同じアプリの画面から desktop.screenshot で切り出した PNG",
+        "description": "画面上で探す画像（部品が inspect_ui に出ないアプリ用）。同じアプリの画面から切り出した PNG（Studio の「画面から切り取る」、または desktop.screenshot）。何度も使う画像は image 部品にする",
         "properties": {
-            "path": { "type": "string", "minLength": 1, "description": "PNG ファイルのフルパス" },
+            "path": { "type": "string", "minLength": 1, "description": "PNG ファイル。フローのフォルダーからの相対パス（templates/保存ボタン.png）かフルパス" },
             "threshold": { "type": "number", "minimum": 0.5, "maximum": 1, "description": "似ている度合いの下限（既定 0.9）" },
             "nth": { "type": "integer", "minimum": 0, "description": "複数見つかったときの 0 始まりの番号（上から、同じ行は左から）" }
         },
@@ -1127,7 +1147,8 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
     let target = target_schema(Allow::Plain);
     let visual = target_schema(Allow::Visual);
     let picture = target_schema(Allow::Picture);
-    let citrix = json!({ "window": { "title": "Citrix" }, "image": { "path": "C:\\RPA\\images\\保存ボタン.png" } });
+    let citrix =
+        json!({ "window": { "title": "Citrix" }, "image": { "path": "templates/保存ボタン.png" } });
     let save = json!({ "window": { "title": "請求システム", "process": "billing.exe" }, "element": { "id": "btnSave" } });
     let customer =
         json!({ "window": { "process": "billing.exe" }, "element": { "id": "txtCustomer" } });
