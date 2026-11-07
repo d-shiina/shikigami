@@ -803,6 +803,8 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
+      // The empty flow's block: Ctrl+K opens the palette under it, not over it.
+      data-add-first={data.parentId === null || undefined}
       title={data.addCase ? t.flow.addCase : t.addStep}
       className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed text-[13px] ${
         data.selected

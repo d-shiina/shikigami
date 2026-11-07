@@ -681,7 +681,7 @@ export function insertPlace(
   steps: Step[],
   selection: Selection,
   at: InsertAt | null,
-): { position: Position; before?: Step; after?: Step; into?: { parent: Step; block: string } } {
+): { position: Position; before?: Step; after?: Step; into?: { parent: Step; block: string }; prev?: Step } {
   if (at) {
     const siblings = at.parentId === null ? steps : (findStep(steps, at.parentId)?.blocks?.[at.block ?? ""] ?? []);
     const before = siblings[at.index];
@@ -690,6 +690,8 @@ export function insertPlace(
     return {
       position: { parentId: at.parentId, block: at.block, index: at.index },
       ...(before ? { before } : after ? { after } : parent && at.block ? { into: { parent, block: at.block } } : {}),
+      // The step the new one follows, when adding on a line between two (the palette offers what usually comes next).
+      ...(before && after ? { prev: after } : {}),
     };
   }
   if (selection?.kind === "slot") {
