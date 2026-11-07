@@ -27,6 +27,7 @@ import { VariablesPanel } from "./VariablesPanel";
 import { columnsByVariable, InsertProvider, ListSourceField, TemplateInput, useInsertChoices } from "./InsertVariable";
 import { listToText, textToList } from "../lib/listText";
 import { pageAbove } from "../lib/loopScope";
+import { useFileDropTarget } from "./FileDrag";
 
 type JsonSchema = {
   type?: string;
@@ -97,9 +98,15 @@ function PathField({ value, folder, onChange }: { value: string; folder: boolean
     const [copied] = await copyIn([picked], null);
     if (copied) onChange(copied.path);
   };
+  // A file dragged from the project panel or Explorer lands here too.
+  const drop = useFileDropTarget(folder ? "folder" : "file", (paths) => onChange(paths[0]));
   return (
-    <div className="flex gap-1">
-      <CommitInput value={value} list={listId} placeholder={t.props.pathPlaceholder} onCommit={(text) => onChange(text === "" ? null : text)} />
+    <div
+      {...drop.attrs}
+      title={drop.armed ? undefined : t.fileDrop.fieldHint}
+      className={`flex gap-1 rounded-[4px] ${drop.over ? "bg-brand-50 outline-2 outline-brand-500" : drop.armed ? "outline-1 outline-dashed outline-brand-500/60" : ""}`}
+    >
+      <CommitInput value={value} list={listId} placeholder={drop.over ? t.fileDrop.putHere : t.props.pathPlaceholder} onCommit={(text) => onChange(text === "" ? null : text)} />
       <datalist id={listId}>
         {(folder ? (files?.folders ?? []) : (files?.files ?? []).map((f) => f.path))
           .filter((p) => !p.startsWith("work/") && !p.startsWith("logs/"))

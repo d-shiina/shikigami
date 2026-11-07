@@ -6,7 +6,7 @@
 // gave: the flow runs up to the node, runs it, pauses, and its result and
 // log lines show here.
 import type { Step } from "@shikigami/schema";
-import { ChevronLeft, Play, Square } from "lucide-react";
+import { ChevronLeft, FileText, Play, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
@@ -15,6 +15,8 @@ import { TYPE_COLOR, knownVariables } from "../lib/nodeRows";
 import { runScope, sampleOf, shortValue } from "../lib/runScope";
 import { sentence, typeTitle } from "../lib/sentence";
 import { findStep, isActive } from "../store";
+import { useProjectMaybe } from "../project";
+import { startFileDrag } from "./FileDrag";
 import { StepInspector } from "./Inspector";
 import { useActiveField, useInsertChoices } from "./InsertVariable";
 import { Sentence } from "./StoryView";
@@ -77,6 +79,7 @@ function Editor({ step }: { step: Step }) {
           <h3 className="shrink-0 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-bold tracking-wider text-slate-600">{t.editor.usable}</h3>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <Usable step={step} />
+            <Files />
           </div>
         </section>
         <section className="flex min-h-0 flex-col">
@@ -181,6 +184,30 @@ function Usable({ step }: { step: Step }) {
           {choices.variables.map((v) => row(`v:${v}`, v, v, shortValue(scope.values[v], 24), TYPE_COLOR[vars.get(v) ?? "any"]))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The flow's files, to drag into a file setting (the project panel is under this editor). */
+function Files() {
+  const files = useProjectMaybe((s) => s.files?.files, undefined);
+  const list = (files ?? []).filter((f) => !f.path.startsWith("work/") && !f.path.startsWith("logs/"));
+  if (list.length === 0) return null;
+  return (
+    <div className="border-t border-slate-100 pt-2 pb-3">
+      <div className="px-4 pb-0.5 text-[11px] font-semibold text-slate-600">{t.fileDrop.files}</div>
+      <p className="px-4 pb-1 text-[11px] leading-snug text-slate-500">{t.fileDrop.dragHint}</p>
+      {list.map((f) => (
+        <div
+          key={f.path}
+          onPointerDown={(e) => startFileDrag(e, f.path)}
+          title={f.path}
+          className="flex cursor-grab items-center gap-2 px-4 py-1 text-[12.5px] select-none hover:bg-brand-50 active:cursor-grabbing"
+        >
+          <FileText size={13} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
+          <span className="truncate font-mono text-[11.5px] text-ink">{f.path}</span>
+        </div>
+      ))}
     </div>
   );
 }

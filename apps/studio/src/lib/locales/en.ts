@@ -553,6 +553,14 @@ export const en: Dict = {
     /** Beside a switch's cases. */
     addCase: "Add case",
   },
+  fileDrop: {
+    files: "Files of this flow",
+    dragHint: "Drag one onto a setting to use that file",
+    fieldHint: "Drag a file here from the project or Explorer",
+    putHere: "Put it here",
+    makeNode: "Add a node that reads this file",
+    where: "Drop it on a file setting or on the chart",
+  },
   project: {
     title: "Project",
     toggle: "Project",

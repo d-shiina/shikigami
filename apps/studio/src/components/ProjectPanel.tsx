@@ -3,9 +3,9 @@
 // one of the logo's colours, with which nodes use them and whether Excel has
 // them open. Work and logs sit at the foot. Files dropped from Explorer land
 // on the shelf under the pointer, or are sorted by name when dropped
-// anywhere else on the editor.
+// anywhere else on the panel. A file dragged out of the panel goes into a
+// file setting, or onto the chart as the node that reads it (FileDrag).
 import type { ProjectFile, Flow, Step, StepTypeDef } from "@shikigami/schema";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   Boxes,
   Copy,
@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
+import { startFileDrag, useFileDrag } from "./FileDrag";
 import { useStudio } from "../context";
 import { copyText, menuFor, type MenuSpec } from "../lib/contextMenu";
 import { locale, stepLabel, t } from "../lib/i18n";
@@ -78,8 +79,9 @@ function FileRow({ file, role }: { file: ProjectFile; role: Role }) {
     <button
       type="button"
       onClick={() => void openFile(file.path)}
+      onPointerDown={(e) => startFileDrag(e, file.path)}
       onContextMenu={menuFor(() => fileMenu(file.path))}
-      title={file.path}
+      title={`${file.path}\n${t.fileDrop.dragHint}`}
       className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left ${open ? "bg-brand-50" : "hover:bg-slate-100"} ${dim ? "opacity-75" : ""}`}
     >
       <span
@@ -179,49 +181,6 @@ function readAll(list: FileList): Promise<{ name: string; data: string }[]> {
   );
 }
 
-/** Where a drop from Explorer goes: the shelf under the pointer, or sorted by name. */
-function useFileDrop(onOver: (shelf: Role | "panel" | null) => void) {
-  const copyIn = useProject((s) => s.copyIn);
-  const hasFlow = useProject((s) => s.flowId !== null);
-  const latest = useRef(onOver);
-  latest.current = onOver;
-  useEffect(() => {
-    if (!hasFlow) return;
-    const shelfAt = (x: number, y: number): Role | "panel" | null => {
-      const el = document.elementFromPoint(x / devicePixelRatio, y / devicePixelRatio);
-      const shelf = el?.closest("[data-shelf]")?.getAttribute("data-shelf");
-      if (shelf && (ROLES as string[]).includes(shelf)) return shelf as Role;
-      return el?.closest("[data-project-panel]") ? "panel" : null;
-    };
-    let off: (() => void) | null = null;
-    let gone = false;
-    getCurrentWebview()
-      .onDragDropEvent((e) => {
-        const payload = e.payload;
-        if (payload.type === "over") latest.current(shelfAt(payload.position.x, payload.position.y) ?? "panel");
-        else if (payload.type === "enter") latest.current("panel");
-        else if (payload.type === "leave") latest.current(null);
-        else if (payload.type === "drop") {
-          const shelf = shelfAt(payload.position.x, payload.position.y);
-          latest.current(null);
-          // Bundles and flow files are imported from the library, not added here.
-          void copyIn(payload.paths, shelf === "panel" ? null : shelf);
-        }
-      })
-      .then((unlisten) => {
-        if (gone) unlisten();
-        else off = unlisten;
-      })
-      .catch(() => {
-        // Outside Tauri (tests, the browser preview) there is nothing to drop.
-      });
-    return () => {
-      gone = true;
-      off?.();
-    };
-  }, [hasFlow, copyIn]);
-}
-
 export function ProjectButton() {
   const setOpen = useProject((s) => s.setPanelOpen);
   const count = useProject((s) => s.files?.files.filter((f) => roleOf(f.path) !== "logs" && roleOf(f.path) !== "work").length ?? 0);
@@ -283,10 +242,9 @@ export function ProjectPanel() {
   const p = useProject((s) => s);
   const keepWork = useStudio((s) => s.flow?.settings?.keepWork ?? false);
   const fileMenu = useFileMenu();
-  const [over, setOver] = useState<Role | "panel" | null>(null);
+  const over = useFileDrag((s) => s.shelf);
   const picker = useRef<HTMLInputElement>(null);
   const [adding, setAdding] = useState(false);
-  useFileDrop(setOver);
   useEffect(() => {
     if (!p.notice) return;
     const timer = setTimeout(() => p.dismiss(), 4000);
@@ -364,6 +322,7 @@ export function ProjectPanel() {
                 key={f.path}
                 type="button"
                 onClick={() => void p.openFile(f.path)}
+                onPointerDown={(e) => startFileDrag(e, f.path)}
                 onContextMenu={menuFor(() => fileMenu(f.path))}
                 className="flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-[12px] text-slate-600 hover:bg-slate-100"
               >
