@@ -19,6 +19,11 @@ use shikigami_runtime::{
 };
 
 mod desktop;
+/// The clipboard's text, for Studio's own paste: reading it from Windows
+/// avoids the WebView asking the person for clipboard access.
+pub fn clipboard_text() -> Result<String, StepError> {
+    desktop::clipboard_get().map(|v| v.as_str().unwrap_or_default().to_owned())
+}
 /// The file dialog of `dialog.selectFile`, for Studio's run window.
 pub use desktop::select_file;
 mod http;
