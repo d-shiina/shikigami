@@ -105,9 +105,11 @@ function LastAiEdit() {
 /** The open flow's run, in its title bar. While it runs the bar's Run control says so; this names the node and goes to it. */
 export function RunStatus() {
   const run = useStudio((s) => s.run);
+  const flowId = useStudio((s) => s.flow?.id);
   const steps = useStudio((s) => s.flow?.steps);
   const goTo = useStudio((s) => s.goTo);
-  if (!run) return null;
+  // It sits in the open flow's title bar, so a run of another flow says nothing here.
+  if (!run || (run.flowId && run.flowId !== flowId)) return null;
   const current = run.status === "paused" ? run.pause?.stepId : run.status === "running" ? run.starts.at(-1)?.stepId : undefined;
   const name = current ? findName(steps ?? [], current) : undefined;
   const color =
