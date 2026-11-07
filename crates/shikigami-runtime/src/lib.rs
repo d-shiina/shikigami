@@ -47,7 +47,7 @@ pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunOrigin, RunReport, RunSnapshot, RunStatus,
     RunTrigger, StepOutcome, SubflowRef,
 };
-pub use exec::DesktopProbe;
+pub use exec::{DesktopProbe, KeepAwake};
 pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
 pub use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef, ResourceKind};
 
@@ -131,9 +131,24 @@ impl Runtime {
         self.resources = Arc::new(exec::ResourceLocks {
             pc_lock_dir: Some(dir),
             desktop_probe: self.resources.desktop_probe.clone(),
+            keep_awake: self.resources.keep_awake.clone(),
             ..exec::ResourceLocks::default()
         });
         self
+    }
+
+    /// Whether a node of `flow` or of a flow it can call takes
+    /// [`DESKTOP_INPUT`].
+    fn uses_input(&self, flow: &Flow, library: &HashMap<FlowId, Arc<Flow>>) -> bool {
+        std::iter::once(flow)
+            .chain(library.values().map(|f| &**f))
+            .flat_map(Flow::walk)
+            .any(|step| {
+                self.resource_defs.get(&step.step_type).is_some_and(|defs| {
+                    defs.iter()
+                        .any(|d| matches!(d, ResourceDef::Static(name) if name == DESKTOP_INPUT))
+                })
+            })
     }
 
     /// Whether the screen can be used now (signed in, not locked): `None`
@@ -228,6 +243,14 @@ impl Runtime {
             None => None,
         };
         let start_values = options.start_values.clone();
+        // A run with nodes that use the mouse and keyboard keeps the screen
+        // on until it ends, so it does not lock between them.
+        let awake = self
+            .resources
+            .keep_awake
+            .as_ref()
+            .filter(|_| self.uses_input(&flow, &library))
+            .map(|keep| keep());
 
         let policy = match &self.policy_path {
             Some(path) => Policy::load(path).map_err(|e| RunError {
@@ -359,6 +382,7 @@ impl Runtime {
             self.run_finished_hooks.clone()
         };
         let join = tokio::spawn(async move {
+            let _awake = awake;
             let started_at = OffsetDateTime::now_utc();
             let clock = Instant::now();
             emitter.update_snapshot(|s| s.status = RunStatus::Running);
@@ -533,9 +557,18 @@ pub struct RuntimeBuilder {
     handlers: HashMap<String, Arc<dyn ActionHandler>>,
     run_finished_hooks: Vec<RunFinishedHook>,
     desktop_probe: Option<exec::DesktopProbe>,
+    keep_awake: Option<exec::KeepAwake>,
 }
 
 impl RuntimeBuilder {
+    /// How a run that has nodes using the mouse and keyboard keeps the
+    /// screen from turning off and locking while it runs (installed by the
+    /// desktop adapter).
+    pub fn keep_awake(mut self, keep: KeepAwake) -> Self {
+        self.keep_awake = Some(keep);
+        self
+    }
+
     /// How steps that take [`DESKTOP_INPUT`] find out whether the desktop
     /// can take input now (installed by the desktop adapter). Without it they
     /// just try.
@@ -550,6 +583,7 @@ impl RuntimeBuilder {
             handlers: HashMap::new(),
             run_finished_hooks: Vec::new(),
             desktop_probe: None,
+            keep_awake: None,
         };
         builder.handlers.insert(
             builtin_types::LOG_MESSAGE.into(),
@@ -601,6 +635,7 @@ impl RuntimeBuilder {
             ),
             resources: Arc::new(exec::ResourceLocks {
                 desktop_probe: self.desktop_probe,
+                keep_awake: self.keep_awake,
                 ..exec::ResourceLocks::default()
             }),
             default_timeouts: Arc::new(

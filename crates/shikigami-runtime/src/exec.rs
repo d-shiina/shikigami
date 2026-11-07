@@ -349,6 +349,10 @@ fn preview(value: Value) -> (Value, bool) {
 /// in, the remote session is disconnected).
 pub type DesktopProbe = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
+/// Keeps the screen on and the PC awake (so it does not lock or sleep
+/// between nodes) until the returned value is dropped.
+pub type KeepAwake = Arc<dyn Fn() -> Box<dyn Send + Sync> + Send + Sync>;
+
 #[derive(Default)]
 pub(crate) struct ResourceLocks {
     pub(crate) locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
@@ -356,6 +360,7 @@ pub(crate) struct ResourceLocks {
     /// processes (Studio, the MCP server, the CLI, the agent).
     pub(crate) pc_lock_dir: Option<PathBuf>,
     pub(crate) desktop_probe: Option<DesktopProbe>,
+    pub(crate) keep_awake: Option<KeepAwake>,
 }
 
 /// Held while a step uses a resource.
