@@ -58,7 +58,6 @@ function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => 
   );
 }
 
-/** Opens the outline, which unfolds from the canvas corner this button sits in. */
 /** Opens the search over the chart (also Ctrl+F). */
 export function SearchButton() {
   const setOpen = useStudio((s) => s.setSearchOpen);
@@ -75,6 +74,7 @@ export function SearchButton() {
   );
 }
 
+/** Opens the outline, which unfolds from the canvas corner this button sits in. */
 export function OutlineButton() {
   const setOpen = useStudio((s) => s.setOutlineOpen);
   return (

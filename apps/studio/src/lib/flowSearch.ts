@@ -36,14 +36,43 @@ function valueTexts(value: unknown, out: string[] = []): string[] {
   return out;
 }
 
-/** `text` cut to about SNIPPET characters around [start, start + length). */
-function around(text: string, start: number, length: number): Pick<SearchHit, "text" | "start" | "length"> {
-  const line = text.replace(/\s+/g, " ");
-  if (line.length <= SNIPPET) return { text: line, start, length };
-  const from = Math.max(0, Math.min(start - 16, line.length - SNIPPET));
-  const head = from > 0 ? "…" : "";
-  const tail = from + SNIPPET < line.length ? "…" : "";
-  return { text: head + line.slice(from, from + SNIPPET) + tail, start: start - from + head.length, length };
+/**
+ * `text` as a row shows it (runs of white space as one space), folded for
+ * matching, with where each folded code unit came from in the shown text.
+ * A character is folded with the marks after it (ｶﾞ → ガ), so a match
+ * found in the folded text covers whole shown characters.
+ */
+function foldShown(text: string): { shown: string; folded: string; from: number[]; to: number[] } {
+  let shown = "";
+  let folded = "";
+  const from: number[] = [];
+  const to: number[] = [];
+  for (const [piece] of text.matchAll(/\s+|.(?:[\uFF9E\uFF9F]|\p{M})*/gsu)) {
+    const visible = /^\s/u.test(piece) ? " " : piece;
+    const f = fold(visible);
+    for (let i = 0; i < f.length; i++) {
+      from.push(shown.length);
+      to.push(shown.length + visible.length);
+    }
+    shown += visible;
+    folded += f;
+  }
+  return { shown, folded, from, to };
+}
+
+/** Where `q` (folded) is in `text`, as a cut of the shown text around it. */
+function match(text: string, q: string): Pick<SearchHit, "text" | "start" | "length"> | null {
+  const { shown, folded, from, to } = foldShown(text);
+  const at = folded.indexOf(q);
+  if (at < 0) return null;
+  const start = from[at]!;
+  const length = to[at + q.length - 1]! - start;
+  if (shown.length <= SNIPPET) return { text: shown, start, length };
+  const cut = Math.max(0, Math.min(start - 16, shown.length - SNIPPET));
+  const head = cut > 0 ? "…" : "";
+  const end = Math.max(cut + SNIPPET, start + length);
+  const tail = end < shown.length ? "…" : "";
+  return { text: head + shown.slice(cut, end) + tail, start: start - cut + head.length, length };
 }
 
 /**
@@ -68,11 +97,10 @@ export function searchFlow(steps: Step[], defs: Map<string, StepTypeDef>, query:
     let first: SearchHit | null = null;
     let more = 0;
     for (const [field, text] of places) {
-      // NFKC keeps the length of what people type in nodes (kana, letters).
-      const at = fold(text).indexOf(q);
-      if (at < 0) continue;
+      const found = match(text, q);
+      if (!found) continue;
       if (first) more += 1;
-      else first = { id, step, depth, field, ...around(text, at, q.length), more: 0 };
+      else first = { id, step, depth, field, ...found, more: 0 };
     }
     if (first) hits.push({ ...first, more });
   }

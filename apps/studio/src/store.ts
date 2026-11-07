@@ -276,6 +276,8 @@ export type StudioState = {
   paletteOpen: boolean;
   /** The search over the chart (Ctrl+F). */
   searchOpen: boolean;
+  /** Counts each Ctrl+F (or search button), so an open box takes the focus again. */
+  searchAsked: number;
   /** Where the palette adds, when it was opened from a "+" between nodes; otherwise after the selection. */
   paletteAt: InsertAt | null;
   paletteAnchor: PaletteAnchor | null;
@@ -885,6 +887,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
       searchOpen: false,
+      searchAsked: 0,
       paletteAt: null,
       paletteAnchor: null,
       place: "library",
@@ -1974,7 +1977,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       setSearchOpen(open) {
-        set({ searchOpen: open });
+        set((s) => ({ searchOpen: open, searchAsked: open ? s.searchAsked + 1 : s.searchAsked }));
       },
 
       setPaletteOpen(open, at, anchor) {

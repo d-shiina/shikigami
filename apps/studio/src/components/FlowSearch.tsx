@@ -46,6 +46,7 @@ function Hit({ hit, def, active, onPick }: { hit: SearchHit; def: StepTypeDef | 
 
 export function FlowSearch() {
   const open = useStudio((s) => s.searchOpen);
+  const asked = useStudio((s) => s.searchAsked);
   const setOpen = useStudio((s) => s.setSearchOpen);
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
@@ -64,7 +65,7 @@ export function FlowSearch() {
       input.current?.focus();
       input.current?.select();
     }
-  }, [open]);
+  }, [open, asked]);
   useEffect(() => setActive(0), [query]);
   useEffect(() => {
     list.current?.querySelector("[data-active]")?.scrollIntoView({ block: "nearest" });

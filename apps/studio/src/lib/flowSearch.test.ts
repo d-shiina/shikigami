@@ -39,6 +39,16 @@ describe("searchFlow", () => {
     expect(searchFlow(steps, defs, "done").map((h) => h.id)).toEqual(["d"]);
   });
 
+  it("marks exactly the matched text, after folded white space and half-width kana", () => {
+    const marked = (memo: string, query: string) => {
+      const [hit] = searchFlow([{ id: "m", type: "log.message", description: memo, params: {} }], defs, query);
+      return hit && hit.text.slice(hit.start, hit.start + hit.length);
+    };
+    expect(marked("start\n        target", "target")).toBe("target");
+    expect(marked("ｶﾞｲﾄﾞ を 読む", "ガイド")).toBe("ｶﾞｲﾄﾞ");
+    expect(marked("ﾃｽﾄ".repeat(30) + "\n\n   終わりの印", "終わり")).toBe("終わり");
+  });
+
   it("finds nothing for an empty query", () => {
     expect(searchFlow(steps, defs, "  ")).toEqual([]);
   });
