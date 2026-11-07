@@ -26,6 +26,7 @@ import { VarIcon } from "./VarIcon";
 import { VariablesPanel } from "./VariablesPanel";
 import { columnsByVariable, InsertProvider, ListSourceField, TemplateInput, useInsertChoices } from "./InsertVariable";
 import { listToText, textToList } from "../lib/listText";
+import { pageAbove } from "../lib/loopScope";
 
 type JsonSchema = {
   type?: string;
@@ -317,6 +318,7 @@ function ParamField({
   socket,
   secretCapable,
   pointer,
+  stepId,
   isPath,
   binds,
   onRemove,
@@ -332,6 +334,8 @@ function ParamField({
   secretCapable: boolean;
   /** The adapter that can pick this target on screen and highlight it. */
   pointer?: string;
+  /** The node, for the picker to find its 「ページを開く」. */
+  stepId?: string;
   /** A file or folder of the flow's folder (`input/orders.xlsx`). */
   isPath?: boolean;
   /** A variable name the node defines (a repeat's 要素): plain text, nothing to insert. */
@@ -410,7 +414,7 @@ function ParamField({
         <div className="mb-1 flex flex-wrap items-center gap-1.5 pl-1 text-[11px] text-slate-500" title={schema.description ?? name}>
           {socket && <span className="h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
           {label}
-          {pointer && <PointTools adapter={pointer} schema={schema} value={value} onChange={onChange} />}
+          {pointer && <PointTools adapter={pointer} schema={schema} value={value} stepId={stepId} onChange={onChange} />}
         </div>
         <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} onChange={onChange} />
       </div>
@@ -507,6 +511,7 @@ function TargetField({
             schema={schema}
             value={value}
             context={typeof step.params?.context === "string" ? step.params.context : undefined}
+            stepId={step.id}
             onChange={onChange}
           />
         )}
@@ -656,6 +661,7 @@ function PartInspector({ name }: { name: string }) {
               schema={schema}
               value={part.target}
               context={partContext(uses)}
+              stepId={uses[0]?.id}
               onChange={(target) => target && set({ target: target as Part["target"] })}
             />
           )}
@@ -697,6 +703,8 @@ function PartInspector({ name }: { name: string }) {
 const partContext = (uses: readonly Step[]) =>
   uses.map((u) => u.params?.context).find((c): c is string => typeof c === "string" && c !== "");
 
+/** The browser Studio opens to pick parts with no run going (the adapter keeps it by this name). */
+const STUDIO_BROWSER = "studio-pick";
 /** The adapters whose targets can be picked on screen from Studio. */
 const POINTERS = new Set(["desktop", "browser"]);
 const pointerOf = (type: string) => {
@@ -713,6 +721,7 @@ function PointTools({
   schema,
   value,
   context,
+  stepId,
   onChange,
 }: {
   adapter: string;
@@ -720,18 +729,25 @@ function PointTools({
   value: unknown;
   /** The browser context the node uses (`context` param). */
   context?: string;
+  /** The node, to find the 「ページを開く」 above it. */
+  stepId?: string;
   onChange: (value: unknown) => void;
 }) {
   const run = useStudio((s) => s.run);
+  const flow = useStudio((s) => s.flow);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; warn?: boolean } | null>(null);
   const canPoint = Boolean(schema.properties?.point);
-  // A browser part is picked in the browser a run opened: there is none
-  // until the flow runs (or is paused at a node).
+  // A browser part is picked in the browser a run opened. With no run going,
+  // Studio opens the page of the nearest 「ページを開く」 above in a browser of
+  // its own, which stays open for the next pick.
   const browser = adapter === "browser";
-  const session = browser && run && isActive(run) ? run.runId : undefined;
-  const unavailable = browser && !session;
-  const extra = browser && context ? { context } : {};
+  const running = browser && run && isActive(run) ? run.runId : undefined;
+  const page = browser && !running && stepId ? pageAbove(flow?.steps ?? [], stepId, context) : null;
+  const session = running ?? (browser ? STUDIO_BROWSER : undefined);
+  const unavailable = browser && !running && !page?.url;
+  const extra = browser ? { ...(context ? { context } : {}), ...(page?.url ? { url: page.url } : {}) } : {};
+  const why = !browser || running || page?.url ? undefined : page ? t.picker.urlIsExpression : t.picker.needsOpen;
   const pick = async () => {
     setBusy(true);
     setNote(null);
@@ -769,7 +785,7 @@ function PointTools({
         <button
           type="button"
           className={button}
-          title={unavailable ? t.picker.needsRun : browser ? t.picker.pickBrowserTitle : t.picker.pickTitle}
+          title={why ?? (running ? t.picker.pickBrowserTitle : page?.url ? t.picker.pickOpensTitle(page.url) : t.picker.pickTitle)}
           disabled={busy || unavailable}
           onClick={() => void pick()}
         >
@@ -779,7 +795,7 @@ function PointTools({
         <button
           type="button"
           className={button}
-          title={unavailable ? t.picker.needsRun : t.picker.highlightTitle}
+          title={why ?? t.picker.highlightTitle}
           disabled={busy || unavailable || !isRecord(value)}
           onClick={() => void highlight()}
         >
@@ -1069,6 +1085,7 @@ function ParamsEditor({
               socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}
               secretCapable={def?.secretParams?.includes(key) ?? false}
               pointer={key === "target" ? pointerOf(step.type) : undefined}
+              stepId={step.id}
               isPath={def?.pathParams?.includes(key) ?? false}
               binds={def?.bindsVariables?.includes(key) ?? false}
               // The whole params, not a merge patch: a merge would keep the

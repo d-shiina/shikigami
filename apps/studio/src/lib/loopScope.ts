@@ -73,23 +73,7 @@ export function listSources(variables: VariableDef[] | undefined, steps: Step[],
     seen.add(source.name);
     out.push(source);
   };
-  const before: Step[] = [];
-  let found = false;
-  const walk = (list: Step[]) => {
-    for (const s of list) {
-      if (s.id === loopId) {
-        found = true;
-        return;
-      }
-      before.push(s);
-      for (const children of Object.values(s.blocks ?? {})) {
-        walk(children);
-        if (found) return;
-      }
-    }
-  };
-  walk(steps);
-  for (const s of before.reverse()) if (s.saveAs) add({ name: s.saveAs, step: s });
+  for (const s of stepsBefore(steps, loopId).reverse()) if (s.saveAs) add({ name: s.saveAs, step: s });
   for (const v of variables ?? []) if (v.type === "array" || v.type === "any" || v.type === undefined) add({ name: v.name });
   // Results saved further down (a flow being built out of order) last.
   const rest = (list: Step[]) => {
@@ -115,4 +99,50 @@ export function otherVariables(variables: VariableDef[] | undefined, steps: Step
   walk(steps);
   for (const l of loops) names.delete(l.itemVar);
   return [...names];
+}
+
+/** The nodes before `id` in running order, outermost blocks included. */
+function stepsBefore(steps: Step[], id: string): Step[] {
+  const before: Step[] = [];
+  let found = false;
+  const walk = (list: Step[]) => {
+    for (const s of list) {
+      if (s.id === id) {
+        found = true;
+        return;
+      }
+      before.push(s);
+      for (const children of Object.values(s.blocks ?? {})) {
+        walk(children);
+        if (found) return;
+      }
+    }
+  };
+  walk(steps);
+  return found ? before : [];
+}
+
+export interface PageAbove {
+  /** The address, when it is written out (not an expression). */
+  url?: string;
+  /** The nearest 「ページを開く」 above. */
+  step: Step;
+}
+
+/**
+ * The page a browser node works on: the nearest 「ページを開く」 (browser.open)
+ * above it on the same browser context. Studio opens it to pick a part
+ * on screen when no run is going.
+ */
+export function pageAbove(steps: Step[], id: string, context?: string): PageAbove | null {
+  const wanted = context || "default";
+  for (const s of stepsBefore(steps, id).reverse()) {
+    if (s.type !== "browser.open") continue;
+    const p = s.params ?? {};
+    const ctx = typeof p.context === "string" && p.context ? p.context : "default";
+    if (ctx !== wanted) continue;
+    const url = typeof p.url === "string" ? p.url.trim() : "";
+    return url && !url.includes("{{") ? { url, step: s } : { step: s };
+  }
+  return null;
 }

@@ -157,7 +157,7 @@ By meaning; CSS is the last resort.
 // common: exact (exact match), nth (0-based index when several match), frame (the iframe it is in)
 ```
 
-In Studio, a browser node's target has **Pick on screen** and **Highlight** while the flow runs (or is paused at a node): Studio steps aside and the person clicks the element in the run's browser (Esc to cancel, the page never gets the click). Before a run there is no browser to pick in, so the buttons are off. Elements inside iframes can be picked and highlighted too (iframes from other sites and frames inside frames as well).
+In Studio, a browser node's target has **Pick on screen** and **Highlight** while the flow runs (or is paused at a node): Studio steps aside and the person clicks the element in the run's browser (Esc to cancel, the page never gets the click). With no run going, Studio opens the page of the nearest **Open page** node above (its `url` must be written out, not an expression) in a browser of its own and picks there; that browser stays open for the next pick, on whatever page the person has moved to. Without an Open page node above, the buttons are off and say so. Elements inside iframes can be picked and highlighted too (iframes from other sites and frames inside frames as well).
 
 Waiting uses Playwright's auto-waiting, so no `flow.delay` is needed in between. The limit is the node's `timeoutMs` (default 30 s), and the adapter stops its action just before it, so a timed-out click never fires late after a retry.
 

@@ -1,6 +1,6 @@
 import type { Step } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { enclosingLoops, listSources, otherVariables, resultStep } from "./loopScope";
+import { enclosingLoops, listSources, otherVariables, pageAbove, resultStep } from "./loopScope";
 
 const read: Step = { id: "s1", type: "excel.readRows", params: { path: "input/受注.xlsx" }, saveAs: "orders" };
 const fill: Step = { id: "s3", type: "browser.fill", params: { target: {}, value: "" } };
@@ -32,5 +32,26 @@ describe("what a node can use while the flow is built", () => {
 
   it("list the other variables a field can insert, without the repeats' own names", () => {
     expect(otherVariables([{ name: "today" }], steps, enclosingLoops(steps, "s3"))).toEqual(["today", "orders", "rows"]);
+  });
+});
+
+describe("the page a browser node works on", () => {
+  const open: Step = { id: "o1", type: "browser.open", params: { url: "https://example.test/login" } };
+  const other: Step = { id: "o2", type: "browser.open", params: { url: "https://other.test/", context: "second" } };
+  const byVar: Step = { id: "o3", type: "browser.open", params: { url: "{{ settings.url }}" } };
+  const click: Step = { id: "c1", type: "browser.click", params: { target: {} } };
+  const loop: Step = { id: "l1", type: "control.forEach", params: { items: "rows" }, blocks: { body: [click] } };
+
+  it("finds the nearest 「ページを開く」 above, on the same context", () => {
+    expect(pageAbove([open, other, loop], "c1")?.url).toBe("https://example.test/login");
+    expect(pageAbove([open, other, loop], "c1", "second")?.url).toBe("https://other.test/");
+    expect(pageAbove([open, other, loop], "c1", "third")).toBeNull();
+    expect(pageAbove([loop, open], "c1")).toBeNull();
+  });
+
+  it("tells when the address is an expression it cannot open", () => {
+    const found = pageAbove([open, byVar, loop], "c1");
+    expect(found?.step.id).toBe("o3");
+    expect(found?.url).toBeUndefined();
   });
 });
