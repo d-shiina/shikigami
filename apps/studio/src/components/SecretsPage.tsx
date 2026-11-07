@@ -181,12 +181,12 @@ function SecretForm({
       <Labeled label={t.secretDescription}>
         <input className={inputClass} value={draft.description} onChange={(e) => edit({ description: e.target.value })} />
       </Labeled>
-      <div className="flex gap-2">
-        <button type="submit" className="rounded bg-primary px-3 py-1 text-sm text-on-primary">
-          {t.secretSave}
-        </button>
-        <button type="button" className="rounded px-3 py-1 text-sm text-slate-500 hover:bg-slate-100" onClick={onDone}>
+      <div className="flex justify-end gap-2">
+        <button type="button" className="rounded-lg px-3 py-1 text-sm text-slate-600 hover:bg-slate-100" onClick={onDone}>
           {t.cancel}
+        </button>
+        <button type="submit" className="rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover">
+          {t.secretSave}
         </button>
       </div>
     </form>

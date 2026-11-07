@@ -23,6 +23,8 @@ pub(crate) const RUNNER_WINDOW: &str = "runner";
 const RUNNER_EVENT: &str = "runner-event";
 /// How many recorded runs to look through for each flow's last run.
 const RECENT_RUNS: usize = 300;
+/// How the run window names itself in a run's origin.
+const RUNNER_REQUESTER: &str = "runner";
 
 type CmdResult<T> = Result<T, ErrorPayload>;
 
@@ -77,6 +79,10 @@ fn list_published(svc: &FlowService) -> CmdResult<Vec<RunnerItem>> {
         let Ok(Some(report)) = read_report(root, &run_id) else {
             continue;
         };
+        // A try in the editor or by an AI runs the draft: not what is handed out.
+        if !runs_published(&report.origin) {
+            continue;
+        }
         // Newest first, so the first report of a flow is its last run.
         last.entry(report.flow_id.clone()).or_insert(LastRun {
             run_id,
@@ -101,6 +107,17 @@ fn list_published(svc: &FlowService) -> CmdResult<Vec<RunnerItem>> {
     }
     items.sort_by(|a, b| a.flow.name.cmp(&b.flow.name));
     Ok(items)
+}
+
+/// Whether a run carried out the published version: from this window, a
+/// schedule, a management server or the command line. Studio's own runs
+/// and an AI's tries run the draft.
+fn runs_published(origin: &RunOrigin) -> bool {
+    match origin.trigger {
+        Some(RunTrigger::Studio) => origin.requested_by.as_deref() == Some(RUNNER_REQUESTER),
+        Some(RunTrigger::Mcp) => false,
+        _ => true,
+    }
 }
 
 /// Runs the published version of `id` with `inputs`. Events arrive as
@@ -136,7 +153,7 @@ pub async fn runner_run(
                 inputs,
                 version: Some(run.version),
                 subflows: run.subflows,
-                origin: RunOrigin::new(RunTrigger::Studio).requested_by("runner"),
+                origin: RunOrigin::new(RunTrigger::Studio).requested_by(RUNNER_REQUESTER),
                 ..RunOptions::default()
             },
         )
@@ -225,4 +242,22 @@ pub(crate) fn show_runner(app: &AppHandle) -> tauri::Result<()> {
 /// shortcut for the people who only run flows).
 pub(crate) fn wants_runner_only() -> bool {
     std::env::args().any(|a| a == "--runner")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_runs_of_the_published_version_count() {
+        assert!(runs_published(
+            &RunOrigin::new(RunTrigger::Studio).requested_by(RUNNER_REQUESTER)
+        ));
+        assert!(runs_published(&RunOrigin::new(RunTrigger::Schedule)));
+        assert!(runs_published(&RunOrigin::new(RunTrigger::Cli)));
+        assert!(!runs_published(&RunOrigin::new(RunTrigger::Studio)));
+        assert!(!runs_published(
+            &RunOrigin::new(RunTrigger::Mcp).requested_by("claude-code")
+        ));
+    }
 }

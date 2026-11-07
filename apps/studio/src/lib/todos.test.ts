@@ -1,6 +1,6 @@
 import type { Flow, StepTypeDef, ValidationReport } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { authorIssues, flowForChat, handOffText, personTodos, returnText, todosByStep } from "./todos";
+import { authorIssues, flowForChat, handOffText, isUnset, personTodos, returnText, todosByStep } from "./todos";
 
 const defs = new Map<string, StepTypeDef>([["excel.readRows", { type: "excel.readRows", pathParams: ["path"] } as unknown as StepTypeDef]]);
 
@@ -78,5 +78,15 @@ describe("text for the AI", () => {
     const text = flowForChat(withSecret);
     expect(text).not.toContain("hunter2");
     expect(text).toContain('"default": 3');
+  });
+});
+
+describe("isUnset", () => {
+  const issue = (path: string) => ({ code: "INVALID_PARAMS", message: '"path" is a required property', path });
+  it("takes a node's own empty setting as not set up yet", () => {
+    expect(isUnset(issue("/steps/0/params"))).toBe(true);
+  });
+  it("keeps a required item inside a list as an error", () => {
+    expect(isUnset(issue("/steps/0/params/by/0"))).toBe(false);
   });
 });

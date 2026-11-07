@@ -8,7 +8,7 @@ import { activity, useAgentMaybe } from "../agent";
 import { useStudio } from "../context";
 import { actorLabel, relativeTime } from "../lib/changes";
 import { outline } from "../lib/outline";
-import { type Locale, setLocale, t, useLocale } from "../lib/i18n";
+import { type Locale, setLocale, stepLabel, t, useLocale } from "../lib/i18n";
 import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
 import { useAppVersion, useUpdate } from "./AppMenu";
 import { SettingsGroup, SettingsRow, settingsInput, settingsPrimary } from "./settingsLayout";
@@ -120,7 +120,7 @@ function RunStatus() {
 
 function findName(steps: Step[], id: string): string | undefined {
   for (const step of steps) {
-    if (step.id === id) return step.name || step.type;
+    if (step.id === id) return step.name || stepLabel(step.type);
     for (const inner of Object.values(step.blocks ?? {})) {
       const found = findName(inner, id);
       if (found) return found;

@@ -33,7 +33,7 @@ import { StoryView } from "./components/StoryView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
 import { CanvasDock, OutlineButton, type View } from "./components/Toolbar";
-import { StudioContext, useStudio } from "./context";
+import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
 import { installContextMenu } from "./lib/contextMenu";
 import { t, useLocale } from "./lib/i18n";
@@ -62,6 +62,15 @@ function Banner() {
   const notice = useStudio((s) => s.notice);
   const error = useStudio((s) => s.error);
   const dismiss = useStudio((s) => s.dismiss);
+  const store = useStudioApi();
+  // A notice says something went as asked; it leaves by itself. Errors stay until closed.
+  useEffect(() => {
+    if (!notice || error) return;
+    const timer = setTimeout(() => {
+      if (store.getState().notice === notice) store.setState({ notice: null });
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [notice, error, store]);
   if (!notice && !error) return null;
   return (
     <div

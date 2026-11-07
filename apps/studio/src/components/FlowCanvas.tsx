@@ -26,7 +26,7 @@ import { createPortal } from "react-dom";
 import { useStudio } from "../context";
 import { type FrameKind, layoutFlow, NODE_W, READ_ROOM, type SlotNodeData, SLOT_H, type StepNodeData, TAIL_SIZE, WRITE_ROOM } from "../flow/layout";
 import { nodeIcon } from "../lib/nodeIcons";
-import { PERSON_CODES, todosByStep } from "../lib/todos";
+import { isUnset, PERSON_CODES, todosByStep } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
@@ -47,6 +47,7 @@ import {
   NODE_PAD_B,
   nodeRows,
   rootOf,
+  unsetParams,
   splitRefs,
   knownVariables,
   ROW_H,
@@ -86,7 +87,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; todos: string[]; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -97,6 +98,10 @@ const MIN_READABLE_ZOOM = 0.85;
 const OUTLINE_W = 284;
 /** The project panel over the left of the chart, with its margins. */
 const PROJECT_W = 288;
+/** The selected node's tools beside it (↑ ↓ まとめる…), kept clear of the inspector. */
+const TOOLS_W = 200;
+/** The dock floating over the bottom of the chart. */
+const DOCK_H = 72;
 
 const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: () => string }> = {
   added: { border: "border-moegi-500", tag: "border-moegi-500 text-moegi-500", label: () => t.flow.aiAdded },
@@ -483,7 +488,12 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
       <span className="w-[72px] shrink-0 truncate text-[12px] text-slate-500" title={row.key}>
         {row.label}
       </span>
-      {row.file ? (
+      {row.unset ? (
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[12px] text-amber-700">
+          <span className="h-[10px] w-[10px] shrink-0 rounded-full border-[1.5px] border-dashed border-amber-600" />
+          {t.flow.unsetValue}
+        </span>
+      ) : row.file ? (
         <FileValue file={row.file} />
       ) : (
         <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-ink" title={row.value}>
@@ -728,6 +738,7 @@ function NodeStatus({ data }: { data: StepNodeProps["data"] }) {
   if (data.runState === "paused") marks.push(<StatusMark key="run" kind="paused" />);
   if (data.runState === "failed") marks.push(<StatusMark key="run" kind="error" text={t.flow.ranFailed} />);
   if (data.byAi) marks.push(<StatusMark key="ai" kind="ai" text="AI" title={t.unreviewed} />);
+  if (data.unsetCount > 0) marks.push(<StatusMark key="unset" kind="todo" text={t.flow.unset(data.unsetCount)} title={t.flow.unsetTitle} />);
   if (data.todos.length > 0) marks.push(<StatusMark key="todo" kind="todo" text={t.todos.badge} title={data.todos.join("\n")} />);
   if (data.issueCount > 0 && data.runState !== "failed") marks.push(<StatusMark key="issue" kind="error" text={String(data.issueCount)} title={t.flow.issues(data.issueCount)} />);
   if (marks.length === 0) return null;
@@ -833,12 +844,16 @@ function useBringIntoView() {
       const margin = 48;
       const left = x * view.zoom + view.x;
       const top = y * view.zoom + view.y;
+      // Room on the right for the node's tools, and at the bottom for the dock.
       const inside =
-        left >= covered + margin && top >= margin && left + w * view.zoom <= width - margin && top + h * view.zoom <= height - margin;
+        left >= covered + margin &&
+        top >= margin &&
+        left + w * view.zoom <= width - margin - TOOLS_W &&
+        top + h * view.zoom <= height - margin - DOCK_H;
       if (inside && view.zoom >= MIN_READABLE_ZOOM) return;
       const zoom = Math.max(view.zoom, MIN_READABLE_ZOOM);
-      // Centre in the part of the canvas the outline leaves free.
-      void rf.setCenter(x + w / 2 - covered / 2 / zoom, y + h / 2, { zoom, duration: 250 });
+      // Centre in the part of the canvas the outline, the tools and the dock leave free.
+      void rf.setCenter(x + w / 2 + (TOOLS_W - covered) / 2 / zoom, y + h / 2 + DOCK_H / 2 / zoom, { zoom, duration: 250 });
     },
     [rf, width, height, covered],
   );
@@ -1082,10 +1097,12 @@ export function FlowCanvas() {
   useEffect(() => () => clearTimeout(hideTimer.current), []);
   const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
 
+  // Errors only: a required setting still empty shows as "未設定" on its row instead.
   const issueCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const issue of inside ? [] : (validation?.issues ?? [])) {
-      if (issue.stepId && issue.severity === "error" && !PERSON_CODES.has(issue.code)) counts.set(issue.stepId, (counts.get(issue.stepId) ?? 0) + 1);
+      if (!issue.stepId || issue.severity !== "error" || PERSON_CODES.has(issue.code) || isUnset(issue)) continue;
+      counts.set(issue.stepId, (counts.get(issue.stepId) ?? 0) + 1);
     }
     return counts;
   }, [validation, inside]);
@@ -1118,6 +1135,7 @@ export function FlowCanvas() {
           owner: flow?.id ?? "",
           pausedHere: run?.pause?.stepId === id && callKey(run.pause.callPath) === callKey(path),
           issueCount: issueCounts.get(id) ?? 0,
+          unsetCount: inside ? 0 : unsetParams(n.data.step, n.data.def).length,
           todos: todos.get(id) ?? NO_TODOS,
           selected: !inside && selection?.kind === "step" && selection.stepId === id,
           byAi: !inside && !reviewing && reviews.has(id),
@@ -1233,6 +1251,8 @@ export function FlowCanvas() {
 
       }}
       minZoom={0.2}
+      // React Flow is MIT licensed; its corner credit is optional and sat over the work.
+      proOptions={{ hideAttribution: true }}
       onNodeClick={(event, node) => {
         if (inside || node.type === "frame") return;
         const data = node.data as StepNodeData | SlotNodeData;

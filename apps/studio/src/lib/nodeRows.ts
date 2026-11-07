@@ -40,6 +40,8 @@ export type Row =
       label: string;
       value: string;
       refs: string[];
+      /** A required setting still empty: shown as "未設定", not as a value. */
+      unset?: boolean;
       /** A file of the flow's folder (`input/orders.xlsx`) in a path param: shown in its shelf's colour. */
       file?: { path: string; role: "input" | "config" | "templates" | "output" | "work" | "logs" };
     }
@@ -172,9 +174,34 @@ export function paramRows(step: Step, def: StepTypeDef | undefined, known: Reado
     }));
 }
 
+/** Whether a setting holds nothing yet: blank text, the "https://" a new page starts with, or a target naming nothing. */
+function isBlank(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value === "string") return value.trim() === "" || value.trim() === "https://";
+  if (Array.isArray(value)) return value.every(isBlank);
+  if (typeof value === "object") return Object.entries(value).every(([k, v]) => k === "role" || isBlank(v));
+  return false;
+}
+
+/**
+ * The required settings of a node that are still empty, in schema order:
+ * what a node just added has. Shown as "未設定" (amber), never as an error.
+ */
+export function unsetParams(step: Step, def: StepTypeDef | undefined): string[] {
+  if (step.type === CALL || step.disabled) return [];
+  const required = (def?.paramsSchema as { required?: string[] } | undefined)?.required ?? [];
+  return required.filter((key) => !BINDS[step.type]?.includes(key) && isBlank(step.params?.[key]));
+}
+
 export function nodeRows(step: Step, def: StepTypeDef | undefined, known: ReadonlySet<string> = new Set()): Row[] {
   if (step.type === CALL) return callRows(step, known);
-  const params = paramRows(step, def, known);
+  const unset = unsetParams(step, def);
+  const shown = paramRows(step, def, known).map((r) => (unset.includes(r.key) ? { ...r, unset: true } : r));
+  // A required setting not written at all still gets its row, to be filled in.
+  const missing = unset
+    .filter((key) => !shown.some((r) => r.key === key))
+    .map((key): Extract<Row, { kind: "param" }> => ({ kind: "param", key, label: paramLabel(key, step.type), value: "", refs: [], unset: true }));
+  const params = [...shown, ...missing];
   const rows: Row[] = params.slice(0, MAX_PARAM_ROWS);
   if (params.length > MAX_PARAM_ROWS) rows.push({ kind: "more", count: params.length - MAX_PARAM_ROWS });
   for (const o of outputs(step)) rows.push({ kind: "output", ...o });
