@@ -98,30 +98,59 @@ impl AgentConfig {
         }
     }
 
-    /// Switches to `kind`, found on this PC by itself. The settings of a
-    /// `command` agent are kept, so choosing it again brings them back.
+    /// Switches to `kind`. The settings that belong to one agent (its own
+    /// `command`, `args`, `name`) are put aside under `saved.<kind>` and come
+    /// back when that agent is chosen again, so trying another is harmless.
     fn select(kind: AgentKind) -> CmdResult<()> {
         let mut config = UserConfig::load();
-        let mut agent = config
+        let agent = config.extra.get("agent").cloned().unwrap_or_default();
+        config
             .extra
-            .get("agent")
-            .cloned()
-            .unwrap_or_else(|| json!({}));
-        if !agent.is_object() {
-            agent = json!({});
-        }
-        agent["kind"] = json!(kind);
-        if kind != AgentKind::Command
-            && let Some(map) = agent.as_object_mut()
-        {
-            // A path set for another agent is not this one's.
-            map.remove("command");
-            map.remove("name");
-        }
-        config.extra.insert("agent".to_owned(), agent);
+            .insert("agent".to_owned(), Self::switched(agent, kind));
         config
             .save()
             .map_err(|e| err("STORAGE_ERROR", e.to_string()))
+    }
+
+    fn switched(agent: Value, kind: AgentKind) -> Value {
+        const OWN: [&str; 3] = ["command", "args", "name"];
+        let mut agent = match agent {
+            Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        let from = agent
+            .get("kind")
+            .cloned()
+            .and_then(|k| serde_json::from_value::<AgentKind>(k).ok())
+            .unwrap_or_default();
+        if from == kind {
+            return Value::Object(agent);
+        }
+        let mut saved = match agent.remove("saved") {
+            Some(Value::Object(map)) => map,
+            _ => serde_json::Map::new(),
+        };
+        let own: serde_json::Map<String, Value> = OWN
+            .iter()
+            .filter_map(|k| agent.remove(*k).map(|v| ((*k).to_owned(), v)))
+            .collect();
+        let key = |k: AgentKind| {
+            serde_json::to_value(k)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default()
+        };
+        if !own.is_empty() {
+            saved.insert(key(from), Value::Object(own));
+        }
+        if let Some(Value::Object(back)) = saved.remove(&key(kind)) {
+            agent.extend(back);
+        }
+        agent.insert("kind".to_owned(), json!(kind));
+        if !saved.is_empty() {
+            agent.insert("saved".to_owned(), Value::Object(saved));
+        }
+        Value::Object(agent)
     }
 }
 
@@ -1554,6 +1583,13 @@ mod tests {
         .unwrap();
         assert_eq!(c.kind, AgentKind::Command);
         assert_eq!(c.name(), "Gemini CLI");
+        // Trying another agent keeps a custom one's settings for later.
+        let custom =
+            json!({ "kind": "command", "command": "my-ai", "args": ["-p"], "name": "My AI" });
+        let codex = AgentConfig::switched(custom.clone(), AgentKind::Codex);
+        assert_eq!(codex["kind"], "codex");
+        assert!(codex.get("command").is_none());
+        assert_eq!(AgentConfig::switched(codex, AgentKind::Command), custom);
         let c: AgentConfig = serde_json::from_value(json!({ "kind": "codex" })).unwrap();
         assert_eq!(c.kind, AgentKind::Codex);
         assert_eq!(c.name(), "Codex");

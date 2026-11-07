@@ -237,6 +237,8 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       chats.filter((c) => c.flowId === flowId).sort((a, b) => b.updatedAt - a.updatedAt)[0];
     // Events can outrun the reply that names their turn.
     const early = new Map<string, AgentEvent[]>();
+    // Which agent ran each turn: the person may switch agents while one runs.
+    const turnAgent = new Map<string, AgentKind>();
     // Sends the message already shown as the last person item and adds the reply.
     const dispatch = async (chatId: string, text: string, flow: AgentRequest["flow"] | null): Promise<boolean> => {
       // The reply shows at once, so the person sees the message was taken
@@ -259,6 +261,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         const sameAgent = (c?.agent ?? "claudeCode") === info?.kind;
         const sessionId = info?.remembers && sameAgent ? (c?.sessionId ?? null) : null;
         const turnId = await api.send({ message: text, sessionId, flow });
+        if (info) turnAgent.set(turnId, info.kind);
         update(chatId, (c) => ({ ...c, turnId, sending: false, items: reply(c, { turnId }) }));
         for (const e of early.get(turnId) ?? []) get().onEvent(e);
         early.delete(turnId);
@@ -500,7 +503,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         }
         switch (event.kind) {
           case "session":
-            update(owner.id, (c) => ({ ...c, sessionId: event.sessionId, agent: get().info?.kind }));
+            update(owner.id, (c) => ({ ...c, sessionId: event.sessionId, agent: turnAgent.get(event.turnId) ?? get().info?.kind }));
             save(get().chats);
             return;
           case "created": {
@@ -537,6 +540,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
             }));
             return;
           case "done": {
+            turnAgent.delete(event.turnId);
             // Stopped for a correction: not a failure, the conversation goes on.
             const cut = owner.interrupting !== null && !event.ok;
             updateTurn(event.turnId, (i) => ({

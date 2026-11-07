@@ -51,6 +51,19 @@ describe("agent store", () => {
     expect(now(store.getState())).toMatchObject({ sessionId: "codex-1", agent: "codex" });
   });
 
+  it("keeps a conversation with the AI that ran it when the AI is switched mid-turn", async () => {
+    const api = fakeAgent();
+    const store = createAgentStore(api);
+    await store.getState().init();
+    await store.getState().send("作って", { id: "scn_a", name: "A" });
+    await store.getState().chooseAgent("copilot");
+    // Copilot-like agents name the conversation only at the end of the turn.
+    store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "claude-1" });
+    expect(now(store.getState())).toMatchObject({ sessionId: "claude-1", agent: "claudeCode" });
+    await store.getState().send("続けて", { id: "scn_a", name: "A" });
+    expect(api.send).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: null }));
+  });
+
   it("says what the AI is writing before the tool call arrives, and what it works on", async () => {
     const store = createAgentStore(fakeAgent());
     await store.getState().init();
