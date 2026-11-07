@@ -59,6 +59,7 @@ You cannot see the screen, so never write a CSS selector, an element id or coord
 - The label says what it is and where, so the person can find it: Studio asks them to pick each part on the screen.
 - Use one part for the same thing in several steps. Write { "part": "<name>" } and nothing else beside it.
 - A desktop part covers the window too: do not write "window" in those steps.
+- Some screens show no buttons or fields to pick (Citrix, remote desktops, drawn screens). There, use desktop.mouseClick, desktop.waitFor or desktop.isVisible with a part whose label starts with "画像：" and says what the picture shows (画像：保存ボタンのアイコン). The person cuts its picture out of the screen in Studio (画面から切り取る); Studio keeps it in templates/ and fills the target in.
 
 ## Logins, files and settings
 

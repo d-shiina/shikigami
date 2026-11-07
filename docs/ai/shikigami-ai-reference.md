@@ -38,7 +38,7 @@ Everything an AI needs to write a Shikigami flow without tools. Read shikigami-a
 
 ## The screen
 
-A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Studio and Studio fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }.
+A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Studio and Studio fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }. A picture cut out of the screen (an image part) is a desktop target too: { "window": { "process": "wfica32.exe" }, "image": { "path": "templates/image1.png", "threshold": 0.9 }, "offset": { "x": 0, "y": 0 } }; only desktop steps whose target lists `image` can use it. Keep image parts as they are.
 
 ## Expression functions
 
@@ -668,7 +668,7 @@ Params:
 - `button`: "left" | "right"
 - `double`: true | false
 Example: `{"type":"desktop.mouseClick","name":"行をダブルクリック","params":{"target":{"window":{"process":"billing.exe"},"element":{"role":"row","name":"{{ orderNo }}"}},"double":true}}`
-Example: `{"type":"desktop.mouseClick","name":"保存ボタン（画像）を押す","params":{"target":{"window":{"title":"Citrix"},"image":{"path":"C:\\RPA\\images\\保存ボタン.png"}}}}`
+Example: `{"type":"desktop.mouseClick","name":"保存ボタン（画像）を押す","params":{"target":{"window":{"title":"Citrix"},"image":{"path":"templates/保存ボタン.png"}}}}`
 Example: `{"type":"desktop.mouseClick","name":"「検索」を押す","params":{"target":{"window":{"title":"Citrix"},"ocr":{"text":"検索"}}}}`
 
 #### desktop.mouseScroll (マウススクロール)

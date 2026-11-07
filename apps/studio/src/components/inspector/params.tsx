@@ -3,11 +3,13 @@
 import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../../context";
-import { Boxes, Crosshair, ScanSearch } from "lucide-react";
+import { Boxes, Crosshair, Image as ImageIcon, ScanSearch } from "lucide-react";
 import { api, type SecretField } from "../../lib/api";
 import { locale, t } from "../../lib/i18n";
 import { choiceLabel, paramLabel, plainHint, referencedVariables, TYPE_COLOR } from "../../lib/nodeRows";
 import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../../lib/parts";
+import { imageOf, partChoices, takesImage } from "../../lib/imageParts";
+import { type Cut, NewImagePart, Picture, SnipButton, useProjectImage } from "./ImagePart";
 import { runScope } from "../../lib/runScope";
 import { targetText } from "../../lib/sentence";
 import { isActive } from "../../store";
@@ -302,12 +304,19 @@ function TargetField({
   const [making, setMaking] = useState(false);
   const [label, setLabel] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [cut, setCut] = useState<Cut | null>(null);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const def = stepTypes.find((d) => d.type === step.type);
   const app = appOf(step.type)!;
   const all = flow?.parts ?? {};
-  const choices = Object.entries(all).filter(([, p]) => p.app === app);
+  const choices = partChoices(all, app, def);
   const ref = partRef(value);
   const part = ref ? all[ref] : undefined;
   const pointer = pointerOf(step.type);
+  // Nodes that find their place by a picture can cut one out of the screen.
+  const snips = app === "desktop" && takesImage(def);
+  const image = imageOf(part);
+  const picture = useProjectImage(image?.path);
   const title = `${paramLabel("target")}${required ? " *" : ""}`;
 
   const choose = (name: string) => {
@@ -341,9 +350,29 @@ function TargetField({
             context={typeof step.params?.context === "string" ? step.params.context : undefined}
             stepId={step.id}
             onChange={onChange}
+            more={
+              snips && (
+                <SnipButton
+                  onCut={(c) => {
+                    setNote(null);
+                    setCut(c);
+                  }}
+                />
+              )
+            }
           />
         )}
       </div>
+      {cut && (
+        <NewImagePart
+          cut={cut}
+          step={step}
+          onDone={(made) => {
+            setCut(null);
+            if (made) setNote(t.parts.imageMade(made));
+          }}
+        />
+      )}
       {(choices.length > 0 || ref) && (
         <div className="mb-1 flex items-center gap-1.5">
           <Boxes size={13} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
@@ -351,6 +380,7 @@ function TargetField({
             <option value="">{ref ? t.parts.direct : t.parts.choose}</option>
             {choices.map(([name, p]) => (
               <option key={name} value={name}>
+                {imageOf(p) ? `${t.parts.app.image}：` : ""}
                 {p.label ? `${p.label}（${name}）` : name}
               </option>
             ))}
@@ -362,13 +392,19 @@ function TargetField({
         part ? (
           <div className={`rounded-lg border px-2.5 py-2 text-[12px] ${part.target ? "border-slate-200 bg-paper" : "border-amber-300 bg-amber-50"}`}>
             <div className="flex items-center gap-2">
+              {image && <ImageIcon size={13} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />}
               <span className={`min-w-0 flex-1 truncate ${part.target ? "" : "text-amber-700"}`}>
-                {part.target ? targetText(part.target) : t.todos.notPickedNode(part.label || ref)}
+                {part.target ? (image ? part.label || ref : targetText(part.target)) : t.todos.notPickedNode(part.label || ref)}
               </span>
               <button type="button" className="shrink-0 text-[11px] text-brand-600 hover:underline" onClick={() => select({ kind: "part", name: ref })}>
                 {t.parts.open}
               </button>
             </div>
+            {image && (
+              <div className="pt-1.5">
+                <Picture src={picture} alt={part.label || ref} maxHeight={80} offset={(part.target as { offset?: { x: number; y: number } }).offset} />
+              </div>
+            )}
             <p className="pt-1 text-[11px] text-slate-500">{t.parts.shared(partUses(flow?.steps ?? [], ref).length)}</p>
           </div>
         ) : (
@@ -442,8 +478,14 @@ export function PointTools({
   stepId,
   onChange,
   large = false,
+  pick: canPick = true,
+  more,
 }: {
+  /** More buttons beside these (画面から切り取る). */
+  more?: React.ReactNode;
   adapter: string;
+  /** Offer 画面から選ぶ (an image part only highlights: its picture is cut out instead). */
+  pick?: boolean;
   schema: JsonSchema;
   value: unknown;
   /** As the main action of the place (a part's screen), not a small link by a field. */
@@ -492,7 +534,7 @@ export function PointTools({
   const highlight = async () => {
     setNote(null);
     try {
-      const result = await api.pointAt(adapter, { action: "highlight", target: value, ...extra }, session);
+      const result = await api.pointAt(adapter, { action: "highlight", target: value, ...extra }, session, flow?.id);
       const found = browser ? Number(result.shown ?? 0) > 0 : Boolean(result.found);
       setNote(!found ? { text: t.picker.notFound, warn: true } : result.visible === false ? { text: t.picker.hidden, warn: true } : { text: t.picker.found });
     } catch (e) {
@@ -505,16 +547,19 @@ export function PointTools({
   return (
     <>
       <span className={large ? "flex items-center gap-2" : "ml-auto flex items-center gap-0.5"}>
-        <button
-          type="button"
-          className={button}
-          title={why ?? (running ? t.picker.pickBrowserTitle : page?.url ? t.picker.pickOpensTitle(page.url) : t.picker.pickTitle)}
-          disabled={busy || unavailable}
-          onClick={() => void pick()}
-        >
-          <Crosshair size={13} strokeWidth={1.75} />
-          {t.picker.pick}
-        </button>
+        {more}
+        {canPick && (
+          <button
+            type="button"
+            className={button}
+            title={why ?? (running ? t.picker.pickBrowserTitle : page?.url ? t.picker.pickOpensTitle(page.url) : t.picker.pickTitle)}
+            disabled={busy || unavailable}
+            onClick={() => void pick()}
+          >
+            <Crosshair size={13} strokeWidth={1.75} />
+            {t.picker.pick}
+          </button>
+        )}
         <button
           type="button"
           className={button}

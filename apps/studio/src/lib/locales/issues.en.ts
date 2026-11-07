@@ -5,7 +5,11 @@ export const issuesEn: Record<string, IssueText> = {
   INVALID_PARAMS: (c) => (c.missing ? `Enter "${c.label(c.missing)}"` : c.field ? `"${c.label(c.field)}" is not in the right form` : "A setting of this node is wrong"),
   UNDEFINED_VARIABLE: (c) => (c.name ? `There is no variable "${c.name}". Add it, or check the name` : "Uses a variable that does not exist"),
   EXPR_SYNTAX: (c) => (c.field ? `The expression in "${c.label(c.field)}" is not written correctly` : "An expression is not written correctly"),
-  EXPR_UNKNOWN_FUNCTION: "An expression uses a function that does not exist. Check its name",
+  EXPR_UNKNOWN_FUNCTION: (c) => (c.fn ? `There is no function "${c.fn}". Check its name` : "An expression uses a function that does not exist. Check its name"),
+  EXPR_OTHER_LANGUAGE: (c) =>
+    `${c.field ? `"${c.label(c.field)}"` : "An expression"} is written the way another language does it, so it will not give the value you expect`,
+  EXPR_UNDEFINED_VARIABLE: (c) => (c.name ? `There is no variable "${c.name}"` : "Uses a variable that does not exist"),
+  EXPR_TYPE: (c) => (c.field ? `The expression in "${c.label(c.field)}" mixes kinds of values` : "An expression mixes kinds of values"),
   VARIABLE_TYPE_MISMATCH: (c) => (c.name ? `The initial value of "${c.name}" does not match its type` : "A variable's initial value does not match its type"),
   INVALID_VARIABLE_NAME: (c) => `Variable names${c.name ? ` ("${c.name}")` : ""} use only letters, digits and _, starting with a letter`,
   DUPLICATE_VARIABLE: (c) => `The variable${c.name ? ` "${c.name}"` : ""} is added twice`,

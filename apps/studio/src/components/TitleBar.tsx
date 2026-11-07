@@ -26,7 +26,7 @@ export function TitleBar({ view, onView }: { view: View; onView: (view: View) =>
   const editing = (place === "flows" || place === "review") && hasFlow;
   const page = PAGE_TITLE[place]?.();
   return (
-    <header data-tauri-drag-region className="@container/title relative flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-sheet pl-3 select-none">
+    <header data-tauri-drag-region className="@container/title relative flex h-10 shrink-0 items-center gap-2 bg-frame pl-3 select-none">
       {editing ? <FlowTitle /> : page && <span className="truncate text-[13px] font-bold">{page}</span>}
       <span data-tauri-drag-region className="min-w-4 flex-1 self-stretch" />
       {editing && <FlowActions view={view} onView={onView} />}

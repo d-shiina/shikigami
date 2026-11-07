@@ -8,9 +8,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { agent, api, type AnswerProblem } from "../lib/api";
 import { locale, t } from "../lib/i18n";
+import { issueText } from "../lib/issueText";
+import { answerProblemText, writtenAt } from "../lib/problemText";
 import { authorIssues, handOffText, personTodos, returnText } from "../lib/todos";
 import { useProjectMaybe } from "../project";
-import { CopyForAi, TodoList } from "./IssuesPanel";
+import { CopyForAi, TodoList, Written } from "./IssuesPanel";
 
 const GUIDE_URL = `https://github.com/d-shiina/shikigami/blob/main/docs/${locale === "ja" ? "ja/" : ""}ai-chat.md`;
 
@@ -191,11 +193,13 @@ function Problems({ problems }: { problems: AnswerProblem[] }) {
         </div>
         <CopyForAi text={returnText(problems)} primary />
       </div>
-      <ol className="mt-2 list-decimal space-y-1 pl-5 text-[12px] text-ink">
+      <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-[12px] text-ink">
         {problems.map((p, i) => (
-          <li key={i}>
-            {p.path && <span className="mr-1 font-mono text-[11px] text-slate-500">{p.path}</span>}
-            {p.message}
+          // The AI's own words (English, with the place in its JSON) stay one hover away.
+          <li key={i} title={[p.path, p.message].filter(Boolean).join("\n")}>
+            {p.step && <span className="mr-1 font-semibold">{t.quote(p.step)}</span>}
+            {answerProblemText(p)}
+            {p.found && <Written text={p.found} />}
           </li>
         ))}
       </ol>
@@ -259,14 +263,18 @@ function Done({ outcome, fresh, onAct }: { outcome: EditOutcome; fresh: boolean;
             </div>
             <CopyForAi text={returnText(forAi, flow)} />
           </div>
-          <ol className="mt-2 list-decimal space-y-1 pl-5 text-[12px] text-ink">
-            {forAi.map((issue, i) => (
-              <li key={i}>
-                {issue.stepId && names.get(issue.stepId) && <span className="mr-1 font-semibold">「{names.get(issue.stepId)}」</span>}
-                {issue.message}
-                {issue.hint && <div className="text-[11px] text-slate-600">→ {issue.hint}</div>}
-              </li>
-            ))}
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-[12px] text-ink">
+            {forAi.map((issue, i) => {
+              const written = writtenAt(flow, issue);
+              return (
+                // Core's own words for the AI (English, with how to fix it) stay one hover away.
+                <li key={i} title={[issue.message, issue.hint].filter(Boolean).join("\n")}>
+                  {issue.stepId && names.get(issue.stepId) && <span className="mr-1 font-semibold">{t.quote(names.get(issue.stepId) ?? "")}</span>}
+                  {issueText(issue, flow)}
+                  {written && <Written text={written} />}
+                </li>
+              );
+            })}
           </ol>
         </section>
       )}
