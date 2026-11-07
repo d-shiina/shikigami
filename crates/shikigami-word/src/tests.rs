@@ -184,3 +184,111 @@ fn a_stopped_attempt_never_replaces_the_document() {
     // No temporary file is left behind.
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
 }
+
+fn saving(mut step: Step) -> Step {
+    step.save_as = Some("out".into());
+    step
+}
+
+#[tokio::test]
+async fn text_is_replaced_in_place_and_tables_are_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = template(&dir);
+    // " 様" is in a run of its own after the name.
+    let report = run(vec![
+        step(
+            types::REPLACE_TEXT,
+            json!({ "path": path, "find": "宛名}} 様", "replace": "宛名}} 御中" }),
+        ),
+        saving(step(
+            types::REPLACE_TEXT,
+            json!({ "path": path, "find": "合計", "replace": "総額" }),
+        )),
+    ])
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["out"]["replaced"], json!(1));
+    let text = body(&read_parts(&path).unwrap());
+    assert!(text.starts_with("{{宛名}} 御中"), "{text}");
+    assert!(text.contains("総額 {{金額}} 円"), "{text}");
+
+    // Nothing found leaves the file as it was.
+    let before = std::fs::read(&path).unwrap();
+    let report = run(vec![saving(step(
+        types::REPLACE_TEXT,
+        json!({ "path": path, "find": "ない", "replace": "x" }),
+    ))])
+    .await;
+    assert_eq!(report.outputs["out"]["replaced"], json!(0));
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+
+    let report = run(vec![saving(step(
+        types::READ_TABLES,
+        json!({ "path": path, "header": false }),
+    ))])
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(
+        report.outputs["out"],
+        json!([[["{{ 明細.品名 }}", "{{ 明細.数量 }}"]]])
+    );
+    let report = run(vec![saving(step(
+        types::READ_TABLES,
+        json!({ "path": path, "table": 2 }),
+    ))])
+    .await;
+    assert_eq!(report.error.unwrap().code, "TABLE_NOT_FOUND");
+}
+
+#[test]
+fn tables_become_records_by_their_first_row() {
+    let cell = |t: &str| format!("<w:tc><w:tcPr/><w:p><w:r><w:t>{t}</w:t></w:r></w:p></w:tc>");
+    let row = |cells: &[&str]| {
+        format!(
+            "<w:tr><w:trPr/>{}</w:tr>",
+            cells.iter().map(|c| cell(c)).collect::<String>()
+        )
+    };
+    let nested = format!(
+        "<w:tc><w:p><w:r><w:t>外</w:t></w:r></w:p><w:tbl>{}</w:tbl></w:tc>",
+        row(&["内"])
+    );
+    let xml = format!(
+        "<w:body><w:tbl><w:tblPr/>{}{}<w:tr>{}{}</w:tr></w:tbl></w:body>",
+        row(&["品名", "数量"]),
+        row(&["りんご", "3"]),
+        cell("みかん"),
+        nested
+    );
+    let tables = docx::tables(&xml);
+    assert_eq!(
+        tables,
+        vec![vec![
+            vec!["品名".to_owned(), "数量".to_owned()],
+            vec!["りんご".to_owned(), "3".to_owned()],
+            vec!["みかん".to_owned(), "外\n内".to_owned()],
+        ]]
+    );
+    let (out, n) = docx::replace_text(
+        "<w:p><w:r><w:t>Abc a</w:t></w:r><w:r><w:t>bc</w:t></w:r></w:p>",
+        "ABC",
+        "x",
+        false,
+    );
+    assert_eq!(n, 2);
+    assert_eq!(docx::plain_text(&out), "x x");
+}
+
+#[cfg(not(windows))]
+#[tokio::test]
+async fn pdf_needs_word_on_windows() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = template(&dir);
+    let to = dir.path().join("out.pdf").to_string_lossy().into_owned();
+    let report = run(vec![step(
+        types::EXPORT_PDF,
+        json!({ "path": path, "to": to }),
+    )])
+    .await;
+    assert_eq!(report.error.unwrap().code, "PLATFORM_UNSUPPORTED");
+}

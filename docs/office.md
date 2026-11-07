@@ -124,12 +124,15 @@ Some work needs Excel itself (COM). It needs Windows and desktop Excel (`PLATFOR
 
 ## Word (`word.*`, implemented)
 
-Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`) directly; Word is not needed (`.doc` gives `UNSUPPORTED_FORMAT`).
+Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`) directly; Word is not needed (`.doc` gives `UNSUPPORTED_FORMAT`), except for `word.exportPdf`.
 
 | type | Main params | Output |
 |---|---|---|
 | `word.fillTemplate` | `template`, `path` (the document to create), `values` | `{ path, replaced }` |
 | `word.readText` | `path` | The body text (a line break per paragraph) |
+| `word.replaceText` | `path`, `find`, `replace`, `matchCase` (default true) | `{ path, replaced }` |
+| `word.readTables` | `path`, `table` (1 = the first; all when left out), `header` (default true) | Rows as records keyed by the first row (or rows of cell texts with `header: false`) |
+| `word.exportPdf` | `path` (.docx / .doc / .rtf), `to` (.pdf), `overwrite` | `{ path }` (needs Windows with Word) |
 
 - Write `{{ name }}` in the template's body, headers and footers and it is replaced with the value from `values`. Formatting (bold, fonts…) stays as in the template. `\n` in a value becomes a line break. `{{ customer.name }}` is a field of a record
 - **Repeating table rows**: write `{{ items.product }}` `{{ items.qty }}` in a table row and pass `"items": [ { "product": …, "qty": … }, … ]` in `values`; the row repeats once per record (an empty list removes the row)
@@ -138,6 +141,9 @@ Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`)
 - The template is never changed. `path` is written as a temporary file in the same folder, then replaced. Writing to a document open in Word gives `FILE_IN_USE`
 - Both `template` and `path` are resources, so nodes on the same file wait their turn automatically
 - Running `word.readText` on a template with MCP's `test_step` adds the list of placeholders to `state`
+- `word.replaceText` changes the document in place (copy it first with `file.copy` to keep the original) and keeps the formatting where the found text starts; it finds text Word split over runs too, in the body, tables, headers and footers. Nothing found leaves the file untouched (`replaced: 0`)
+- `word.readTables` reads the body's tables in order. A cell's paragraphs are joined with line breaks; a table inside a cell is part of that cell's text. An empty or repeated heading becomes `列1`, `名前_2` … (`TABLE_NOT_FOUND` for a number past the last table)
+- `word.exportPdf` opens the file read-only in a hidden Word of its own (macros do not run) and saves it as Word prints it. A Word the person already has open is never closed
 
 ## Mail (`mail.*`, implemented)
 
@@ -202,5 +208,4 @@ Every step but `mail.send` (which has its own `via`) takes `via: "microsoft365"`
 
 ## Next (planned)
 
-1. **Word PDF export**: through COM (the same way as Excel macros)
-2. **Reading mail over IMAP**: for mailboxes other than Outlook and Microsoft 365
+1. **Reading mail over IMAP**: for mailboxes other than Outlook and Microsoft 365

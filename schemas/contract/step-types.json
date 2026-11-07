@@ -13043,6 +13043,37 @@
       "deprecated": null
     },
     {
+      "type": "word.exportPdf",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overwrite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
       "type": "word.fillTemplate",
       "params": {
         "type": "object",
@@ -13083,6 +13114,36 @@
       "deprecated": null
     },
     {
+      "type": "word.readTables",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "table": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "header": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
       "type": "word.readText",
       "params": {
         "type": "object",
@@ -13100,6 +13161,41 @@
       "blocks": [],
       "hasOutput": true,
       "risk": "safe",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [],
+      "deprecated": null
+    },
+    {
+      "type": "word.replaceText",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "find": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replace": {
+            "type": "string"
+          },
+          "matchCase": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "find",
+          "replace"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
       "expressionParams": [],
       "bindsVariables": [],
       "secretParams": [],

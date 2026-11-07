@@ -1,6 +1,6 @@
 [package]
 name = "shikigami-word"
-description = "Word document steps for Shikigami (word.*): fill .docx templates and read their text directly, without Word"
+description = "Word document steps for Shikigami (word.*): fill .docx templates, replace text and read text and tables directly, without Word; export PDF through Word"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 shikigami-core.workspace = true
 shikigami-runtime.workspace = true
+shikigami-com.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

@@ -31,6 +31,7 @@ const NAMES: Record<string, string> = {
   "mail.list": "mails",
   "pdf.readText": "text",
   "word.readText": "text",
+  "word.readTables": "tables",
   "clipboard.get": "clipboard",
   "config.read": "config",
   "process.run": "output",
