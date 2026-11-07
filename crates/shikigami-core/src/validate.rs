@@ -146,7 +146,7 @@ pub const STRUCTURAL_CODES: &[&str] = &["MISSING_STEP_ID", "INVALID_STEP_ID", "D
 /// Every variable name that can be in scope somewhere in the flow.
 /// Scoping is intentionally flat (like most RPA tools): a name bound anywhere
 /// is considered known everywhere; the Runtime reports actual undefined uses.
-fn known_variables(flow: &Flow, registry: &StepRegistry) -> BTreeSet<String> {
+pub fn known_variables(flow: &Flow, registry: &StepRegistry) -> BTreeSet<String> {
     let mut names: BTreeSet<String> = flow.variables.iter().map(|v| v.name.clone()).collect();
     names.insert(LAST_ERROR_VAR.to_owned());
     names.insert("error".to_owned());

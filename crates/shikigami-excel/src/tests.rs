@@ -368,6 +368,7 @@ async fn rows_and_sheets_are_inserted_deleted_renamed_and_copied() {
     let report = run(vec![
         step(types::WRITE_RANGE, json!({ "path": path, "sheet": "ひな形", "cell": "A1", "values": [["品目", "金額"], ["a", 1], ["b", 2], ["c", 3]] })),
         step(types::WRITE_CELL, json!({ "path": path, "sheet": "ひな形", "cell": "B6", "value": { "formula": "SUM(B2:B4)" } })),
+        step(types::WRITE_CELL, json!({ "path": path, "sheet": "ひな形", "cell": "C1", "value": { "formula": "ひな形!B1" } })),
         step(types::ADD_SHEET, json!({ "path": path, "sheet": "集計" })),
         step(types::WRITE_CELL, json!({ "path": path, "sheet": "集計", "cell": "A1", "value": { "formula": "ひな形!B6*2" } })),
         // b goes, an empty row comes in under the header.
@@ -411,6 +412,17 @@ async fn rows_and_sheets_are_inserted_deleted_renamed_and_copied() {
         .formula()
         .to_owned();
     assert_eq!(total, "'元 データ'!B7*2");
+    // The copy's own references point at the copy.
+    let own = |sheet: &str| {
+        book.sheet_by_name(sheet)
+            .unwrap()
+            .cell("C1")
+            .unwrap()
+            .formula()
+            .to_owned()
+    };
+    assert_eq!(own("4月"), "'4月'!B1");
+    assert_eq!(own("元 データ"), "'元 データ'!B1");
     // Cells outside the cleared range stay.
     assert!(
         book.sheet_by_name("4月")

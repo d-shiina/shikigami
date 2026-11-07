@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use serde_json::Map;
 use shikigami_agent::ipc::{self, Request};
-use shikigami_agent::schedule::new_id;
+use shikigami_agent::schedule::{HolidayShift, new_id};
 use shikigami_agent::{Agent, Schedule, Schedules, When};
 use shikigami_core::{FlowId, FlowService, Policy};
 use shikigami_runtime::Runtime;
@@ -86,7 +86,7 @@ pub enum ScheduleCmd {
         json: bool,
     },
     /// Add a schedule. Give exactly one of --daily, --monthly, --every,
-    /// --once, --file-added.
+    /// --once, --file-added, --mail-received.
     Add(Box<AddArgs>),
     /// Delete a schedule.
     Remove { id: String },
@@ -112,6 +112,18 @@ pub struct AddArgs {
     /// Every month: DAY@HH:MM, e.g. 25@09:00, or -1@18:00 for the last day.
     #[arg(long, value_name = "DAY@HH:MM", allow_hyphen_values = true)]
     monthly: Option<String>,
+    /// Not on national holidays and the company's days off (holidays.json),
+    /// with --daily or --every.
+    #[arg(long)]
+    skip_holidays: bool,
+    /// With --monthly: DAY counts business days (3@09:00 = the third
+    /// business day; -1@18:00 = the last).
+    #[arg(long)]
+    business_day: bool,
+    /// With --monthly: when the day is not a business day, run on the
+    /// business day before or after it, or skip that month.
+    #[arg(long, value_name = "before|after|skip")]
+    on_holiday: Option<String>,
     /// Every N minutes (with --from / --to for working hours).
     #[arg(long, value_name = "MINUTES")]
     every: Option<u32>,
@@ -125,6 +137,18 @@ pub struct AddArgs {
     /// When a file appears in FOLDER (relative to the flow's folder, e.g. input).
     #[arg(long, value_name = "FOLDER")]
     file_added: Option<String>,
+    /// When a mail arrives in FOLDER (e.g. 受信トレイ, or "" for the inbox),
+    /// looked for every --every minutes (default 5); narrow it with
+    /// --subject-contains / --from-contains. Outlook on this PC.
+    #[arg(long, value_name = "FOLDER")]
+    mail_received: Option<String>,
+    #[arg(long, value_name = "TEXT")]
+    subject_contains: Option<String>,
+    #[arg(long, value_name = "TEXT")]
+    from_contains: Option<String>,
+    /// Input variable that gets the new mail (--mail-received).
+    #[arg(long, value_name = "NAME")]
+    mail_input: Option<String>,
     /// File name pattern for --file-added, e.g. *.xlsx.
     #[arg(long, default_value = "*")]
     pattern: String,
@@ -142,6 +166,8 @@ fn when_of(a: &AddArgs) -> Result<When> {
         found.push(When::Daily {
             at: at.clone(),
             days: a.days.clone(),
+
+            skip_holidays: a.skip_holidays,
         });
     }
     if let Some(m) = &a.monthly {
@@ -151,14 +177,35 @@ fn when_of(a: &AddArgs) -> Result<When> {
         found.push(When::Monthly {
             day: day.trim().parse().context("--monthly day")?,
             at: at.to_owned(),
+
+            business_day: a.business_day,
+            on_holiday: match a.on_holiday.as_deref() {
+                None => None,
+                Some("before") => Some(HolidayShift::Before),
+                Some("after") => Some(HolidayShift::After),
+                Some("skip") => Some(HolidayShift::Skip),
+                Some(other) => bail!("--on-holiday is before, after or skip, not {other}"),
+            },
         });
     }
-    if let Some(minutes) = a.every {
+    if let Some(folder) = &a.mail_received {
+        found.push(When::MailReceived {
+            folder: (!folder.trim().is_empty()).then(|| folder.clone()),
+            subject_contains: a.subject_contains.clone(),
+            from_contains: a.from_contains.clone(),
+            via: None,
+            account: None,
+            minutes: a.every,
+            input: a.mail_input.clone(),
+        });
+    } else if let Some(minutes) = a.every {
         found.push(When::Every {
             minutes,
             from: a.from.clone(),
             to: a.to.clone(),
             days: a.days.clone(),
+
+            skip_holidays: a.skip_holidays,
         });
     }
     if let Some(at) = &a.once {
@@ -172,7 +219,9 @@ fn when_of(a: &AddArgs) -> Result<When> {
         });
     }
     if found.len() != 1 {
-        bail!("give exactly one of --daily, --monthly, --every, --once, --file-added");
+        bail!(
+            "give exactly one of --daily, --monthly, --every, --once, --file-added, --mail-received"
+        );
     }
     let when = found.remove(0);
     if let Some(problem) = when.problem() {

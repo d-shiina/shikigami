@@ -1427,7 +1427,19 @@ impl Uia {
             ));
         }
         if let Some(checked) = node.checked {
-            return Ok(Value::Bool(checked));
+            // A three-state checkbox that is neither on nor off reads null.
+            // SAFETY: UIA calls on the UIA thread.
+            let mixed = node.role == "checkbox"
+                && unsafe {
+                    pattern::<IUIAutomationTogglePattern>(&found.el, UIA_TogglePatternId)
+                        .and_then(|p| p.CurrentToggleState())
+                        .is_ok_and(|state| state == ToggleState_Indeterminate)
+                };
+            return Ok(if mixed {
+                Value::Null
+            } else {
+                Value::Bool(checked)
+            });
         }
         // SAFETY: UIA calls on the UIA thread.
         let value = unsafe {

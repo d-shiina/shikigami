@@ -63,6 +63,10 @@ struct EmitterInner {
     snapshot: Arc<Mutex<RunSnapshot>>,
     /// The readable log in the flow's `logs/` folder, for full runs.
     log: Mutex<Option<RunLog>>,
+    /// The last step that failed for good and its params as it rendered
+    /// them, in whichever flow it ran (a called flow's variables are gone
+    /// by the time the failure reaches the top).
+    failed: Mutex<Option<(StepId, Value)>>,
 }
 
 impl Emitter {
@@ -80,6 +84,7 @@ impl Emitter {
                 secrets: RwLock::new(Vec::new()),
                 snapshot,
                 log: Mutex::new(log),
+                failed: Mutex::new(None),
             }),
             call_path: Arc::from([]),
         }
@@ -235,6 +240,22 @@ impl Emitter {
     pub(crate) fn failure_shot_path(&self) -> Option<PathBuf> {
         let log = self.inner.log.lock().ok()?;
         log.as_ref().map(RunLog::failure_shot)
+    }
+
+    /// Keeps the params a step failed with, for [`Executor::capture_failure`].
+    fn failed_with(&self, step: &StepId, params: &Value) {
+        if let Ok(mut failed) = self.inner.failed.lock() {
+            *failed = Some((step.clone(), params.clone()));
+        }
+    }
+
+    /// The rendered params of `step`, when it is the step that failed last.
+    fn failed_params(&self, step: &StepId) -> Option<Value> {
+        let failed = self.inner.failed.lock().ok()?;
+        failed
+            .as_ref()
+            .filter(|(id, _)| id == step)
+            .map(|(_, params)| params.clone())
     }
 
     /// Names the run's log after how it ended. Call after `RunFinished`.
@@ -1737,6 +1758,7 @@ impl Executor {
                         will_retry,
                     });
                     if !will_retry {
+                        self.emitter.failed_with(&step.id, &params);
                         return Err(error.into());
                     }
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -1761,34 +1783,68 @@ impl Executor {
         if self.policy.records.failure_screenshots == Some(false) {
             return;
         }
-        let (Some(step_id), Some(step_type)) = (&error.step_id, &error.step_type) else {
-            return;
+        // A step that failed in a called flow is named in `subFlow` (the
+        // error itself points at the call).
+        let inner = error
+            .details
+            .as_ref()
+            .and_then(|d| d.get("subFlow"))
+            .and_then(|sub| {
+                Some((
+                    sub.get("flowId")?.as_str()?.to_owned(),
+                    StepId::new(sub.get("stepId")?.as_str()?),
+                    sub.get("stepType")?.as_str()?.to_owned(),
+                ))
+            });
+        let (step_id, step_type, called) = match (&inner, &error.step_id, &error.step_type) {
+            (Some((flow_id, id, ty)), _, _) => (id.clone(), ty.clone(), Some(flow_id.as_str())),
+            (None, Some(id), Some(ty)) => (id.clone(), ty.clone(), None),
+            _ => return,
         };
+        let step_id = &step_id;
+        let step_type = &step_type;
         let Some(path) = self.emitter.failure_shot_path() else {
             return;
         };
-        // The failed step may be in a called flow.
-        let step = flow
-            .find_step(step_id)
-            .or_else(|| self.library.values().find_map(|f| f.find_step(step_id)));
+        let step = match called {
+            Some(flow_id) => self
+                .library
+                .values()
+                .find(|f| f.id.as_str() == flow_id)
+                .and_then(|f| f.find_step(step_id)),
+            None => flow.find_step(step_id),
+        };
+        // The context or window as the step rendered it (it may be a
+        // template, and inside a called flow it used that flow's variables);
+        // rendered here again when the step failed before it ran.
+        let rendered = self.emitter.failed_params(step_id);
+        let param = |pointer: &str| -> Option<Value> {
+            match &rendered {
+                Some(rendered) => rendered.pointer(pointer).cloned(),
+                None => {
+                    let raw = Value::Object(step?.params.clone());
+                    expr::render_value(raw.pointer(pointer)?, &self.vars).ok()
+                }
+            }
+        };
         let mut params = Map::new();
         params.insert("path".into(), Value::String(path.display().to_string()));
         let shot_type = match step_type.split('.').next() {
             Some("browser") => {
-                if let Some(context) = step.and_then(|s| s.params.get("context")) {
-                    params.insert("context".into(), context.clone());
+                let declared = match &rendered {
+                    Some(rendered) => rendered.get("context").is_some(),
+                    None => step.is_some_and(|s| s.params.contains_key("context")),
+                };
+                if declared {
+                    let Some(context) = param("/context") else {
+                        return;
+                    };
+                    params.insert("context".into(), context);
                 }
                 "browser.screenshot"
             }
             Some("desktop") => {
-                let Some(window) = step
-                    .and_then(|s| s.params.get("target"))
-                    .and_then(|t| t.get("window"))
-                else {
-                    return;
-                };
-                // Rendered as the step was: a title may be a template.
-                let Ok(window) = expr::render_value(window, &self.vars) else {
+                let Some(window) = param("/target/window") else {
                     return;
                 };
                 params.insert("target".into(), json!({ "window": window }));
@@ -1827,7 +1883,7 @@ impl Executor {
         self.emitter.log(
             LogLevel::Info,
             format!("失敗したときの画面を保存しました: {shown}"),
-            Some(step_id.clone()),
+            error.step_id.clone(),
         );
     }
 

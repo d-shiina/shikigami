@@ -114,6 +114,7 @@ async fn a_schedule_runs_the_published_version_when_due() {
             when: When::Daily {
                 at: at.strftime("%H:%M").to_string(),
                 days: vec![],
+                skip_holidays: false,
             },
             inputs: Map::new(),
         }],
@@ -174,6 +175,7 @@ async fn an_unpublished_flow_is_reported_as_failed() {
                 from: None,
                 to: None,
                 days: vec![],
+                skip_holidays: false,
             },
             inputs: Map::new(),
         }],
@@ -248,6 +250,7 @@ async fn a_broken_schedules_file_stops_every_schedule() {
                 from: None,
                 to: None,
                 days: vec![],
+                skip_holidays: false,
             },
             inputs: Map::new(),
         }],
@@ -316,4 +319,281 @@ async fn other_processes_talk_to_it_over_the_pipe() {
         .unwrap()
         .unwrap()
         .unwrap();
+}
+
+// -- mail triggers --------------------------------------------------------------
+
+use shikigami_core::registry::{RiskLevel, StepCategory, StepTypeDef};
+use shikigami_runtime::{ActionHandler, ActionInput, BoxFuture, StepError};
+
+/// A stand-in for `mail.list`: answers with `mails`, remembering the params.
+struct FakeMailbox {
+    mails: Arc<Mutex<Result<Vec<serde_json::Value>, &'static str>>>,
+    asked: Arc<Mutex<Vec<serde_json::Value>>>,
+    /// When set, each look waits for a permit before it answers.
+    gate: Option<Arc<tokio::sync::Semaphore>>,
+}
+
+impl ActionHandler for FakeMailbox {
+    fn execute<'a>(
+        &'a self,
+        input: ActionInput,
+    ) -> BoxFuture<'a, Result<serde_json::Value, StepError>> {
+        Box::pin(async move {
+            self.asked.lock().unwrap().push(input.params.clone());
+            if let Some(gate) = &self.gate {
+                gate.acquire().await.unwrap().forget();
+            }
+            match &*self.mails.lock().unwrap() {
+                // Newest first, as many as `limit`, before `before`.
+                Ok(mails) => Ok(serde_json::Value::Array(
+                    mails
+                        .iter()
+                        .filter(|m| {
+                            input.params["before"].as_str().is_none_or(|before| {
+                                m["receivedAt"].as_str().unwrap_or_default() < before
+                            })
+                        })
+                        .take(input.params["limit"].as_u64().unwrap_or(50) as usize)
+                        .cloned()
+                        .collect(),
+                )),
+                Err(code) => Err(StepError::permanent(*code, "Outlook is not ready")),
+            }
+        })
+    }
+}
+
+fn mail_list_def() -> StepTypeDef {
+    StepTypeDef {
+        targets: Vec::new(),
+        step_type: "mail.list".into(),
+        category: StepCategory::Other,
+        label: "mail".into(),
+        description: String::new(),
+        params_schema: json!({ "type": "object" }),
+        blocks: vec![],
+        has_output: true,
+        expression_params: vec![],
+        binds_variables: vec![],
+        risk: RiskLevel::Safe,
+        examples: vec![],
+        resources: vec![],
+        secret_params: vec![],
+        default_timeout_ms: None,
+        deprecated: None,
+        plugin: None,
+        path_params: Vec::new(),
+    }
+}
+
+fn mail(id: &str, subject: &str) -> serde_json::Value {
+    json!({ "id": id, "subject": subject, "from": "株式会社サンプル", "fromAddress": "billing@sample.co.jp", "receivedAt": "2026-11-07T09:00:00", "unread": true, "attachments": ["請求書.pdf"] })
+}
+
+type Reports = Arc<Mutex<Vec<RunReport>>>;
+
+/// An agent with a published flow that keeps the mail's subject in `got`,
+/// and a mail trigger "請求書メール" on it, looking every 5 minutes.
+fn mail_agent(
+    dir: &std::path::Path,
+    mails: &Arc<Mutex<Result<Vec<serde_json::Value>, &'static str>>>,
+    asked: &Arc<Mutex<Vec<serde_json::Value>>>,
+    gate: Option<Arc<tokio::sync::Semaphore>>,
+) -> (Arc<Agent>, Reports) {
+    let runtime = Runtime::builder()
+        .register(
+            mail_list_def(),
+            FakeMailbox {
+                mails: Arc::clone(mails),
+                asked: Arc::clone(asked),
+                gate,
+            },
+        )
+        .build();
+    let svc = Arc::new(FlowService::new(
+        FileStore::open(dir).unwrap(),
+        runtime.registry().clone(),
+    ));
+    let agent = Agent::new(svc, runtime);
+    let reports = Arc::new(Mutex::new(Vec::new()));
+    let sink = reports.clone();
+    agent.on_finished(Arc::new(move |r: &RunReport| {
+        sink.lock().unwrap().push(r.clone())
+    }));
+    let mut input = VariableDef::new("mail", VarType::Any);
+    input.direction = VarDirection::Input;
+    input.default = Some(json!(null));
+    let mut got = VariableDef::new("got", VarType::String);
+    got.direction = VarDirection::Output;
+    let id = agent
+        .service()
+        .create(
+            NewFlow {
+                name: "請求書の受付".into(),
+                variables: vec![input, got],
+                steps: vec![
+                    Step::new("variable.set")
+                        .with_param("name", "got")
+                        .with_param("expression", "mail.subject")
+                        .with_id("s1"),
+                ],
+                ..NewFlow::default()
+            },
+            person(),
+        )
+        .unwrap()
+        .flow
+        .id;
+    agent
+        .service()
+        .publish(&id, PublishInput::default(), person())
+        .unwrap();
+    Schedules {
+        format_version: 1,
+        schedules: vec![Schedule {
+            id: "sch_mail".into(),
+            name: "請求書メール".into(),
+            flow_id: id,
+            enabled: true,
+            when: When::MailReceived {
+                folder: Some("受信トレイ".into()),
+                subject_contains: Some("請求書".into()),
+                from_contains: None,
+                via: None,
+                account: None,
+                minutes: Some(5),
+                input: Some("mail".into()),
+            },
+            inputs: Map::new(),
+        }],
+    }
+    .save(&Schedules::path(agent.local_root()))
+    .unwrap();
+
+    (agent, reports)
+}
+
+#[tokio::test]
+async fn a_new_mail_starts_one_run_with_the_mail() {
+    let dir = tempfile::tempdir().unwrap();
+    let mails = Arc::new(Mutex::new(Ok(vec![mail("old", "【請求書】9月分")])));
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let (agent, reports) = mail_agent(dir.path(), &mails, &asked, None);
+    let settle = || async {
+        for _ in 0..30 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    };
+    let now = Zoned::now();
+    // The first look only learns what is there.
+    agent.tick(&now, false);
+    settle().await;
+    assert!(reports.lock().unwrap().is_empty());
+    let first = asked.lock().unwrap()[0].clone();
+    assert_eq!(first["folder"], "受信トレイ");
+    assert_eq!(first["subjectContains"], "請求書");
+    assert!(first["since"].as_str().is_some());
+    // Not before its minutes are up.
+    mails
+        .lock()
+        .unwrap()
+        .as_mut()
+        .unwrap()
+        .insert(0, mail("new", "【請求書】10月分"));
+    agent.tick(&now.checked_add(1.minute()).unwrap(), false);
+    settle().await;
+    assert_eq!(asked.lock().unwrap().len(), 1);
+    // Then the new mail starts one run, with the mail in `mail`.
+    let later = now.checked_add(6.minutes()).unwrap();
+    agent.tick(&later, false);
+    let deadline = std::time::Instant::now() + Duration::from_secs(4);
+    while reports.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let got = reports.lock().unwrap().clone();
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(got[0].outputs["got"], "【請求書】10月分");
+    // Not again; a failed look is shown in the status.
+    *mails.lock().unwrap() = Err("OUTLOOK_NOT_READY");
+    agent.tick(&later.checked_add(6.minutes()).unwrap(), false);
+    settle().await;
+    let status = agent.status();
+    assert!(
+        status.schedules[0]
+            .problem
+            .as_deref()
+            .is_some_and(|p| p.contains("OUTLOOK_NOT_READY")),
+        "{status:?}"
+    );
+    assert_eq!(reports.lock().unwrap().len(), 1);
+}
+
+/// Waits until `reports` has `n` runs (or a while).
+async fn wait_for(reports: &Reports, n: usize, secs: u64) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(secs);
+    while reports.lock().unwrap().len() < n && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+#[tokio::test]
+async fn more_new_mails_than_one_page_all_start_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let mails = Arc::new(Mutex::new(Ok(Vec::new())));
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let (agent, reports) = mail_agent(dir.path(), &mails, &asked, None);
+    let now = Zoned::now();
+    agent.tick(&now, false);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // 600 arrive before the next look, newest first, a second apart.
+    let start: jiff::civil::DateTime = "2026-11-07T09:00:00".parse().unwrap();
+    *mails.lock().unwrap() = Ok((0..600)
+        .rev()
+        .map(|i| {
+            let mut m = mail(&format!("m{i}"), &format!("【請求書】{i}"));
+            let at = start.checked_add(i64::from(i).seconds()).unwrap();
+            m["receivedAt"] = json!(at.strftime("%Y-%m-%dT%H:%M:%S").to_string());
+            m
+        })
+        .collect());
+    agent.tick(&now.checked_add(6.minutes()).unwrap(), false);
+    wait_for(&reports, 600, 60).await;
+    let got = reports.lock().unwrap().clone();
+    assert_eq!(got.len(), 600);
+    // The oldest one too, which the first page did not hold.
+    assert!(got.iter().any(|r| r.outputs["got"] == "【請求書】0"));
+    let asked = asked.lock().unwrap().clone();
+    assert_eq!(asked.len(), 3, "{asked:?}");
+    assert_eq!(asked[2]["before"], "2026-11-07T09:01:41");
+}
+
+#[tokio::test]
+async fn a_trigger_turned_off_while_looking_starts_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let mails = Arc::new(Mutex::new(Ok(vec![mail("old", "【請求書】9月分")])));
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let gate = Arc::new(tokio::sync::Semaphore::new(1));
+    let (agent, reports) = mail_agent(dir.path(), &mails, &asked, Some(gate.clone()));
+    let now = Zoned::now();
+    agent.tick(&now, false);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    mails
+        .lock()
+        .unwrap()
+        .as_mut()
+        .unwrap()
+        .insert(0, mail("new", "【請求書】10月分"));
+    // The look starts and waits; meanwhile the trigger is turned off.
+    agent.tick(&now.checked_add(6.minutes()).unwrap(), false);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(asked.lock().unwrap().len(), 2);
+    let path = Schedules::path(agent.local_root());
+    let mut schedules = Schedules::load(&path).unwrap();
+    schedules.schedules[0].enabled = false;
+    schedules.save(&path).unwrap();
+    agent.tick(&now.checked_add(7.minutes()).unwrap(), false);
+    gate.add_permits(1);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(reports.lock().unwrap().is_empty());
 }

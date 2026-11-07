@@ -141,6 +141,7 @@ export const paramsEn = {
     read: "Read",
     limit: "Most",
     since: "Received since",
+    before: "Received before",
     fromContains: "Sender contains",
     subjectContains: "Subject contains",
     nameContains: "File name contains",

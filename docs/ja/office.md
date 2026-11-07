@@ -146,7 +146,7 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 | type | 主な params | 出力 |
 |---|---|---|
 | `mail.createDraft` | `to` / `cc` / `bcc`（アドレスの配列）, `subject`, `body`, `html`, `attachments`（フルパスの配列） | `{ id }` |
-| `mail.list` | `folder`（例 `受信トレイ/請求書`、省略で受信トレイ）, `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit`（既定 50）, `includeBody` | 新しい順のメールの配列 `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
+| `mail.list` | `folder`（例 `受信トレイ/請求書`、省略で受信トレイ）, `unreadOnly`, `since`, `before`（この日時より前）, `subjectContains`, `fromContains`, `limit`（既定 50）, `includeBody` | 新しい順のメールの配列 `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
 | `mail.saveAttachments` | `id`（`mail.list` の id）, `folder`（保存先）, `nameContains` | 保存したファイルのフルパスの配列 |
 | `mail.move` | `id`, `folder`（移動先。例 `受信トレイ/処理済み`） | `{ id }`（移動後の新しい id） |
 | `mail.markRead` | `id`, `read`（既定 `true`。`false` で未読に戻す） | `null` |
@@ -189,7 +189,7 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 
 - 片方のメールボックスの id はもう片方では使えません。同じ `via`・`account` の `mail.list` の `id` を使います（`MESSAGE_NOT_FOUND`）
 - フォルダーは Outlook と同じく表示名のパス（`受信トレイ/請求書`）。先頭は Graph の名前（`inbox`・`drafts`・`sentitems`・`deleteditems`・`archive`・`junkemail`）でも書けます
-- `receivedAt` と `since` は Outlook と同じくこの PC の時刻です
+- `receivedAt`・`since`・`before` は Outlook と同じくこの PC の時刻です
 - 返信・転送に足す添付は 1 つ 3 MB まで
 - エラー：`OAUTH_SIGN_IN_REQUIRED`、`MAIL_PERMISSION_DENIED`（Mail.ReadWrite がない）、`MESSAGE_NOT_FOUND`、`FOLDER_NOT_FOUND`、`MAIL_REQUEST_FAILED`
 

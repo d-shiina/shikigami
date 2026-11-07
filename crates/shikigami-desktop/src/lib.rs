@@ -796,7 +796,8 @@ impl DesktopStep {
                 .await?;
             match now {
                 Value::Bool(checked) if checked == want => return Ok(Value::Null),
-                Value::Bool(_) => {
+                // null: a three-state box that is neither (press on).
+                Value::Bool(_) | Value::Null => {
                     self.until_found(
                         Op::Click {
                             target: target.clone(),
@@ -1219,7 +1220,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: GET_VALUE,
             kind: Kind::GetValue,
             label: "値の取得",
-            description: "Reads `target`: the text of an input or combo box, true/false for a checkbox or radio button, otherwise the element's name (e.g. a label's text). Use saveAs to keep it.",
+            description: "Reads `target`: the text of an input or combo box, true/false for a checkbox or radio button (null for a three-state checkbox that is neither), otherwise the element's name (e.g. a label's text). Use saveAs to keep it.",
             params: json!({ "target": target }),
             required: &["target"],
             has_output: true,

@@ -145,6 +145,7 @@ export const paramsJa = {
     read: "既読",
     limit: "最大の件数",
     since: "受信日（以降）",
+    before: "受信日（より前）",
     fromContains: "差出人に含む文字",
     subjectContains: "件名に含む文字",
     nameContains: "ファイル名に含む文字",
