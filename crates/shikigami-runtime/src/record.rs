@@ -254,6 +254,7 @@ fn close_one(dir: &Path, id: &RunId) -> std::io::Result<()> {
         outputs: serde_json::Map::new(),
         subflows: Vec::new(),
         origin,
+        secrets_used: Vec::new(),
     };
     fs::write(dir.join("report.json"), serde_json::to_vec_pretty(&report)?)
 }

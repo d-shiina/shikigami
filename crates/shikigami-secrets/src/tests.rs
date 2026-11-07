@@ -295,6 +295,7 @@ fn a_copied_workspace_can_be_reset_and_registered_again() {
 fn ask(name: &str, sites: &[&str], fields: &[SecretField]) -> NewSecretRequest {
     NewSecretRequest {
         name: name.into(),
+        kind: None,
         sites: sites.iter().map(|s| (*s).to_owned()).collect(),
         fields: fields.to_vec(),
         reason: Some("ログイン画面が出たため".into()),
@@ -433,4 +434,132 @@ fn empty_fields_name_the_field() {
         .unwrap_err();
     assert_eq!(e.code, "SECRET_FIELD_EMPTY");
     assert_eq!(e.details().unwrap()["field"], "totp");
+}
+
+#[test]
+fn kinds_name_what_a_secret_holds() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    v.set(input("受注システム")).unwrap();
+    let key = v
+        .set(SecretInput {
+            name: "受注 API".into(),
+            kind: Some(SecretKind::ApiKey),
+            password: Some("sk-live-1234".into()),
+            sites: Some(vec!["https://api.example.com".into()]),
+            ..SecretInput::default()
+        })
+        .unwrap();
+    assert_eq!(key.kind, SecretKind::ApiKey);
+    assert_eq!(key.fields, [SecretField::Password]);
+    let raw = std::fs::read_to_string(dir.path().join("secrets/vault.json")).unwrap();
+    let stored: Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(stored["entries"][1]["kind"], "apiKey");
+    assert!(!raw.contains("sk-live"));
+
+    let kinds: Vec<_> = v.summaries().unwrap().into_iter().map(|s| s.kind).collect();
+    assert_eq!(kinds, [SecretKind::Login, SecretKind::ApiKey]);
+    // An update without a kind keeps it.
+    let kept = v
+        .set(SecretInput {
+            name: "受注 API".into(),
+            description: Some("本番".into()),
+            ..SecretInput::default()
+        })
+        .unwrap();
+    assert_eq!(kept.kind, SecretKind::ApiKey);
+    // A kind without a user name drops one left from before.
+    let changed = v
+        .set(SecretInput {
+            kind: Some(SecretKind::ApiKey),
+            ..input("受注システム")
+        })
+        .unwrap();
+    assert_eq!(changed.username, "");
+    assert_eq!(changed.fields, [SecretField::Password]);
+    // The value is used exactly as before.
+    assert_eq!(
+        v.resolve(&reference("受注 API", SecretField::Password))
+            .unwrap()
+            .value,
+        "sk-live-1234"
+    );
+}
+
+#[test]
+fn entries_from_before_kinds_are_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    v.set(input("Box")).unwrap();
+    v.set(input("社内")).unwrap();
+    // Remove the kinds, as in a vault written by an older version.
+    let path = dir.path().join("secrets/vault.json");
+    let mut stored: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for entry in stored["entries"].as_array_mut().unwrap() {
+        entry.as_object_mut().unwrap().remove("kind").unwrap();
+    }
+    std::fs::write(&path, stored.to_string()).unwrap();
+    v.save_oauth_tokens("Box", &json!({ "accessToken": "x" }))
+        .unwrap();
+    let kinds: Vec<_> = v
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|s| (s.name, s.kind))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            ("Box".to_owned(), SecretKind::Oauth),
+            ("社内".to_owned(), SecretKind::Login)
+        ]
+    );
+}
+
+#[test]
+fn oauth_status_shows_expiry_never_tokens() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    v.set(SecretInput {
+        kind: Some(SecretKind::Oauth),
+        ..input("Box")
+    })
+    .unwrap();
+    assert_eq!(v.list().unwrap()[0].oauth, None);
+    v.save_oauth_tokens(
+        "Box",
+        &json!({
+            "accessToken": "at-secret",
+            "refreshToken": "rt-secret",
+            "expiresAt": 1_800_000_000,
+            "obtainedAt": 1_799_996_400,
+        }),
+    )
+    .unwrap();
+    let info = &v.list().unwrap()[0];
+    assert!(info.signed_in);
+    let status = info.oauth.clone().unwrap();
+    assert_eq!(status.expires_at.as_deref(), Some("2027-01-15T08:00:00Z"));
+    assert_eq!(status.obtained_at.as_deref(), Some("2027-01-15T07:00:00Z"));
+    assert!(status.refreshable);
+    let shown = serde_json::to_string(info).unwrap();
+    assert!(!shown.contains("secret\""), "{shown}");
+    assert!(!shown.contains("at-secret") && !shown.contains("rt-secret"));
+}
+
+#[test]
+fn api_key_requests_ask_for_the_key_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let v = vault(dir.path());
+    let request = v
+        .request(NewSecretRequest {
+            kind: Some(SecretKind::ApiKey),
+            ..ask("受注 API", &["https://api.example.com/v1/orders"], &[])
+        })
+        .unwrap();
+    assert_eq!(request.kind, Some(SecretKind::ApiKey));
+    assert_eq!(request.fields, [SecretField::Password]);
+    // Asked again without a kind: the kind stays.
+    let again = v.request(ask("受注 API", &[], &[])).unwrap();
+    assert_eq!(again.kind, Some(SecretKind::ApiKey));
 }

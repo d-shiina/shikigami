@@ -665,6 +665,14 @@
               "positional": true
             },
             {
+              "id": "kind",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "kind"
+            },
+            {
               "id": "username",
               "required": false,
               "takesValue": true,

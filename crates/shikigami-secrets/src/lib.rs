@@ -27,7 +27,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha1::{Digest, Sha1};
 use shikigami_core::secret::{
-    self, REGISTER_HINT, ResolvedSecret, SecretError, SecretField, SecretProvider, SecretRef,
+    self, REGISTER_HINT, ResolvedSecret, SecretError, SecretField, SecretKind, SecretProvider,
+    SecretRef,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -47,6 +48,7 @@ const MAX_REASON_LEN: usize = 300;
 #[serde(rename_all = "camelCase")]
 pub struct SecretInfo {
     pub name: String,
+    pub kind: SecretKind,
     pub username: String,
     /// Origins the secret may be typed into, e.g. `https://example.com`.
     pub sites: Vec<String>,
@@ -57,7 +59,26 @@ pub struct SecretInfo {
     /// `oauth.signIn` has saved tokens for this secret.
     #[serde(default)]
     pub signed_in: bool,
+    /// When the saved OAuth tokens expire and were last obtained.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth: Option<OAuthStatus>,
     pub updated_at: String,
+}
+
+/// The state of the OAuth tokens `oauth.signIn` saved (never the tokens).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthStatus {
+    /// When the access token expires (RFC 3339); none when the provider
+    /// gave no lifetime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+    /// When the provider last gave tokens (sign-in or refresh).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub obtained_at: Option<String>,
+    /// A refresh token is kept, so an expired access token is renewed
+    /// without a person.
+    pub refreshable: bool,
 }
 
 /// What AI clients may know about a secret: everything except the values
@@ -66,6 +87,7 @@ pub struct SecretInfo {
 #[serde(rename_all = "camelCase")]
 pub struct SecretSummary {
     pub name: String,
+    pub kind: SecretKind,
     pub sites: Vec<String>,
     pub fields: Vec<SecretField>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -81,6 +103,9 @@ pub struct SecretSummary {
 #[serde(rename_all = "camelCase")]
 pub struct SecretInput {
     pub name: String,
+    /// Fields the kind does not use are removed. `None` keeps the kind.
+    #[serde(default)]
+    pub kind: Option<SecretKind>,
     #[serde(default)]
     pub username: Option<String>,
     #[serde(default)]
@@ -102,6 +127,9 @@ pub struct SecretInput {
 #[serde(rename_all = "camelCase")]
 pub struct SecretRequest {
     pub name: String,
+    /// What to register; none for a login.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<SecretKind>,
     /// Origins (or `app:<exe>`) the secret should be typed into.
     pub sites: Vec<String>,
     pub fields: Vec<SecretField>,
@@ -117,6 +145,10 @@ pub struct SecretRequest {
 #[serde(rename_all = "camelCase")]
 pub struct NewSecretRequest {
     pub name: String,
+    /// `apiKey` for a key of a web API, `oauth` for an app registered at an
+    /// OAuth provider. Defaults to a login.
+    #[serde(default)]
+    pub kind: Option<SecretKind>,
     #[serde(default)]
     pub sites: Vec<String>,
     /// Defaults to username and password.
@@ -171,6 +203,9 @@ struct VaultFile {
 #[serde(rename_all = "camelCase")]
 struct StoredEntry {
     name: String,
+    /// None in vaults written before kinds: see [`Vault::kind_of`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kind: Option<SecretKind>,
     sites: Vec<String>,
     fields: Vec<SecretField>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -259,13 +294,16 @@ impl Vault {
             .iter()
             .map(|entry| {
                 let values = open(&key, entry)?;
+                let oauth = self.oauth_status(&key, &entry.name);
                 Ok(SecretInfo {
                     name: entry.name.clone(),
+                    kind: self.kind_of(entry),
                     username: values.username,
                     sites: entry.sites.clone(),
                     fields: entry.fields.clone(),
                     description: entry.description.clone(),
-                    signed_in: self.oauth_path(&entry.name).is_file(),
+                    signed_in: oauth.is_some(),
+                    oauth,
                     updated_at: entry.updated_at.clone(),
                 })
             })
@@ -280,6 +318,7 @@ impl Vault {
             .into_iter()
             .map(|e| SecretSummary {
                 signed_in: self.oauth_path(&e.name).is_file(),
+                kind: self.kind_of(&e),
                 name: e.name,
                 sites: e.sites,
                 fields: e.fields,
@@ -328,13 +367,19 @@ impl Vault {
             file = self.read()?;
         }
         let existing = file.entries.iter().position(|e| e.name == input.name);
-        let (mut values, mut sites, mut description) = match existing {
+        let (mut values, mut sites, mut description, old_kind) = match existing {
             Some(i) => {
                 let e = &file.entries[i];
-                (open(&key, e)?, e.sites.clone(), e.description.clone())
+                (
+                    open(&key, e)?,
+                    e.sites.clone(),
+                    e.description.clone(),
+                    Some(self.kind_of(e)),
+                )
             }
-            None => (Values::default(), Vec::new(), String::new()),
+            None => (Values::default(), Vec::new(), String::new(), None),
         };
+        let kind = input.kind.or(old_kind).unwrap_or_default();
         if let Some(username) = input.username {
             values.username = username;
         }
@@ -365,6 +410,14 @@ impl Vault {
         if let Some(text) = input.description {
             description = text.trim().to_owned();
         }
+        // A value the kind has no field for would be kept but never shown.
+        let used = kind.fields();
+        if !used.contains(&SecretField::Username) {
+            values.username.clear();
+        }
+        if !used.contains(&SecretField::Totp) {
+            values.totp = None;
+        }
         let mut fields = Vec::new();
         if !values.username.is_empty() {
             fields.push(SecretField::Username);
@@ -378,18 +431,22 @@ impl Vault {
         let entry = StoredEntry {
             sealed: seal(&key, &input.name, &values)?,
             name: input.name.clone(),
+            kind: Some(kind),
             sites: sites.clone(),
             fields: fields.clone(),
             description: description.clone(),
             updated_at: now(),
         };
+        let oauth = self.oauth_status(&key, &input.name);
         let info = SecretInfo {
             name: entry.name.clone(),
+            kind,
             username: values.username,
             sites,
             fields,
             description,
-            signed_in: self.oauth_path(&input.name).is_file(),
+            signed_in: oauth.is_some(),
+            oauth,
             updated_at: entry.updated_at.clone(),
         };
         match existing {
@@ -434,8 +491,9 @@ impl Vault {
             .into_iter()
             .filter(|f| *f != SecretField::AccessToken)
             .collect();
+        let mut kind = input.kind;
         let mut fields = if asked.is_empty() {
-            vec![SecretField::Username, SecretField::Password]
+            kind.unwrap_or_default().default_request_fields()
         } else {
             asked
         };
@@ -452,6 +510,7 @@ impl Vault {
         let previous = file.requests.iter().position(|r| r.name == input.name);
         if let Some(i) = previous {
             let old = file.requests.remove(i);
+            kind = kind.or(old.kind);
             sites = merge(old.sites, sites);
             fields = merge(old.fields, fields);
             if reason.is_empty() {
@@ -462,6 +521,7 @@ impl Vault {
         fields = merge(Vec::new(), fields);
         let request = SecretRequest {
             name: input.name,
+            kind,
             sites,
             fields,
             reason,
@@ -664,6 +724,42 @@ impl Vault {
             entries: file.entries.clone(),
         })?;
         Ok(key)
+    }
+
+    /// The kind of an entry. Entries written before kinds count as OAuth
+    /// apps once `oauth.signIn` saved tokens for them, as logins otherwise.
+    fn kind_of(&self, entry: &StoredEntry) -> SecretKind {
+        entry.kind.unwrap_or_else(|| {
+            if self.oauth_path(&entry.name).is_file() {
+                SecretKind::Oauth
+            } else {
+                SecretKind::Login
+            }
+        })
+    }
+
+    /// What Studio shows about the OAuth tokens of `name`: none when there
+    /// are none (or they cannot be read, which means signing in again).
+    fn oauth_status(&self, key: &Key, name: &str) -> Option<OAuthStatus> {
+        let text = std::fs::read(self.oauth_path(name)).ok()?;
+        let sealed: Sealed = serde_json::from_slice(&text).ok()?;
+        let plain = unseal(key, &oauth_aad(name), &sealed).ok()?;
+        let tokens: Value = serde_json::from_slice(&plain).ok()?;
+        let time = |field: &str| {
+            tokens
+                .get(field)
+                .and_then(Value::as_i64)
+                .and_then(|secs| OffsetDateTime::from_unix_timestamp(secs).ok())
+                .and_then(|at| at.format(&Rfc3339).ok())
+        };
+        Some(OAuthStatus {
+            expires_at: time("expiresAt"),
+            obtained_at: time("obtainedAt"),
+            refreshable: tokens
+                .get("refreshToken")
+                .and_then(Value::as_str)
+                .is_some_and(|t| !t.is_empty()),
+        })
     }
 
     fn session_path(&self, name: &str) -> PathBuf {

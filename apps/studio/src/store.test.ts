@@ -258,10 +258,12 @@ describe("studio store", () => {
   });
 
   it("fills the secret form from a request, flagging sites added to a saved secret", () => {
-    const saved = { name: "Google", username: "me", sites: ["https://accounts.google.com"], fields: ["username", "password"] as never, updatedAt: "" };
+    const saved = { name: "Google", kind: "login" as const, username: "me", sites: ["https://accounts.google.com"], fields: ["username", "password"] as never, updatedAt: "" };
     const fresh = draftFor([], { name: "社内", sites: ["https://intra.example"] });
     expect(fresh.isNew).toBe(true);
-    expect(fresh.draft).toMatchObject({ name: "社内", sites: "https://intra.example", password: "" });
+    expect(fresh.draft).toMatchObject({ name: "社内", kind: "login", sites: "https://intra.example", password: "" });
+    const key = draftFor([], { name: "受注 API", sites: ["https://api.example.com"], kind: "apiKey" });
+    expect(key.draft.kind).toBe("apiKey");
 
     const more = draftFor([saved], { name: "Google", sites: ["https://accounts.google.com", "https://mail.google.com"] });
     expect(more.isNew).toBe(false);

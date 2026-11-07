@@ -11,7 +11,7 @@ shikigami audit --flow scn_01a1… --json      # one flow, one JSON object per l
 ```
 
 ```text
-2026-11-06T08:00:01Z  schedule (毎朝)  run  scn_01a1… FAILED ELEMENT_NOT_FOUND
+2026-11-06T08:00:01Z  schedule (毎朝)  run  scn_01a1… FAILED ELEMENT_NOT_FOUND  secrets: 受注システム
 2026-11-06T09:12:40Z  mcp (claude-code)  update_step  scn_01a1…  Wait for the save dialog
 2026-11-06T09:15:02Z  studio  publish  scn_01a1…  v4
 ```
@@ -25,7 +25,7 @@ Nothing is written twice. The trail is read from the records each part already k
 | `mcp` | Every MCP tool call, including reads and refused calls (`ok: false`, `errorCode`) | `audit/mcp.jsonl` (per PC) |
 | `run` | Every run, with where it came from (`studio`, `cli`, `mcp`, `schedule`, `remote`), who asked and how it ended | `runs/<run-id>/report.json` (per PC) |
 
-Fields of `--json`: `at`, `source`, `actor`, `who` (client, schedule name or the person on the management server), `action`, `flowId`, `revision`, `version`, `runId`, `ok`, `errorCode`, `detail`.
+Fields of `--json`: `at`, `source`, `actor`, `who` (client, schedule name or the person on the management server), `action`, `flowId`, `revision`, `version`, `runId`, `ok`, `errorCode`, `detail`, `secrets` (runs only: the names of the secrets the run used, such as typed passwords, API keys, saved logins and OAuth tokens; never their values. Also `secretsUsed` in the run's `report.json`).
 
 ## How long it is kept
 

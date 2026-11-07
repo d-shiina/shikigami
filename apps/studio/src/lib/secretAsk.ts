@@ -1,12 +1,14 @@
 // What the login dialog asks for when an AI requests a secret
 // (request_secret) or a run stops on one. Kept free of React so it can be
 // tested on its own.
-import type { SecretField, SecretInfo, SecretRequest } from "./api";
+import type { SecretField, SecretInfo, SecretKind, SecretRequest } from "./api";
 
 export type SecretAsk = {
   /** "ai": an AI called request_secret; "run": a run stopped on the secret. */
   source: "ai" | "run";
   name: string;
+  /** What is asked for: names the fields and picks the site hint. */
+  kind: SecretKind;
   /** The AI's own words, shown as a quote. */
   reason?: string;
   /** The run's error code (source "run"). */
@@ -40,6 +42,7 @@ export function nextSecretAsk(
     return {
       source: "ai",
       name: request.name,
+      kind: existing?.kind ?? request.kind ?? "login",
       reason: request.reason || undefined,
       existing,
       fields: request.missing.fields,
@@ -50,7 +53,14 @@ export function nextSecretAsk(
   }
   if (!fix) return null;
   const existing = secrets.find((s) => s.name === fix.name);
-  const base = { source: "run" as const, name: fix.name, code: fix.code, existing, sites: [] as string[] };
+  const base = {
+    source: "run" as const,
+    name: fix.name,
+    kind: existing?.kind ?? ("login" as SecretKind),
+    code: fix.code,
+    existing,
+    sites: [] as string[],
+  };
   switch (fix.code) {
     case "SECRET_NOT_FOUND":
       return existing

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { SecretInfo, SecretRequest } from "./api";
+import { t } from "./i18n";
 import { nextSecretAsk } from "./secretAsk";
+import { fieldLabel, KIND_FIELDS } from "./secretKinds";
 
 const request = (over: Partial<SecretRequest> = {}): SecretRequest => ({
   name: "Google",
@@ -14,6 +16,7 @@ const request = (over: Partial<SecretRequest> = {}): SecretRequest => ({
 
 const saved: SecretInfo = {
   name: "Google",
+  kind: "login",
   username: "me",
   sites: ["https://accounts.google.com"],
   fields: ["username", "password"],
@@ -21,6 +24,32 @@ const saved: SecretInfo = {
 };
 
 describe("nextSecretAsk", () => {
+  it("asks for an API key by its own name when the AI asks for one", () => {
+    const ask = nextSecretAsk(
+      [
+        request({
+          name: "受注 API",
+          kind: "apiKey",
+          fields: ["password"],
+          missing: { registered: false, fields: ["password"], sites: ["https://api.example.com"] },
+        }),
+      ],
+      null,
+      [],
+    );
+    expect(ask).toMatchObject({ kind: "apiKey", fields: ["password"], sites: ["https://api.example.com"] });
+    expect(fieldLabel(ask?.kind, "password")).toBe(t.secretKindField.apiKey.password);
+  });
+
+  it("keeps the kind of a saved secret", () => {
+    const ask = nextSecretAsk(
+      [request({ kind: "apiKey", missing: { registered: true, fields: [], sites: ["https://mail.google.com"] } })],
+      null,
+      [saved],
+    );
+    expect(ask?.kind).toBe("login");
+  });
+
   it("asks only for the values of a new login, with name and site filled in", () => {
     const ask = nextSecretAsk([request()], null, []);
     expect(ask).toMatchObject({
@@ -70,5 +99,14 @@ describe("nextSecretAsk", () => {
     expect(
       nextSecretAsk([], { name: "Google", code: "SECRET_SITE_MISMATCH", site: "https://evil.example" }, [saved]),
     ).toMatchObject({ quick: false, page: "https://evil.example", sites: [] });
+  });
+});
+
+describe("secret kinds", () => {
+  it("name the fields by what they hold", () => {
+    expect(fieldLabel("oauth", "username")).toBe(t.secretKindField.oauth.username);
+    expect(fieldLabel("login", "password")).toBe(t.secretField.password);
+    expect(fieldLabel(undefined, "totp")).toBe(t.secretField.totp);
+    expect(KIND_FIELDS.apiKey).toEqual(["password"]);
   });
 });

@@ -622,6 +622,7 @@ impl Agent {
                 job_id: Some(s.id.clone()),
                 ..RunOrigin::new(RunTrigger::Schedule).requested_by(s.name.clone())
             },
+            secrets_used: Vec::new(),
         };
         let hooks = lock(&self.hooks).clone();
         for hook in hooks {
