@@ -508,6 +508,7 @@ export function App() {
       events.onPickRequestsChanged(() => void store.getState().loadPickRequests()),
       agent.onEvent((e) => agentStore.getState().onEvent(e)),
       agent.onLogin((e) => agentStore.getState().onLoginEvent(e)),
+      agent.onInstall((e) => agentStore.getState().onInstallEvent(e)),
     ];
     void agentStore.getState().init();
     // The files follow the open flow, and the watcher's word that its folder changed.

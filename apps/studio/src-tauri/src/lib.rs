@@ -79,6 +79,7 @@ pub fn run() {
         .manage(updater::PendingUpdate::default())
         .manage(agent::AgentTurns::default())
         .manage(agent::AgentLogin::default())
+        .manage(agent::AgentInstall::default())
         .setup(move |app| {
             fit_to_screen(app);
             if let Err(e) = tray::create(app.handle()) {
@@ -199,6 +200,8 @@ pub fn run() {
             agent::agent_login,
             agent::agent_login_code,
             agent::agent_login_cancel,
+            agent::agent_install,
+            agent::agent_install_cancel,
             agent::agent_open_url,
             runner::runner_list,
             runner::runner_run,

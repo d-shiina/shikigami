@@ -1,7 +1,7 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
 // agent (Claude Code by default) with Shikigami's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
-import { Check, ChevronDown, ClipboardPaste, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ClipboardPaste, Download, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
 import { agent } from "../lib/api";
@@ -85,7 +85,11 @@ export function AgentPane({ width }: { width: number }) {
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {info && !info.available && (
           <>
-            <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
+            {info.installable ? (
+              <SetupCard />
+            ) : (
+              <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
+            )}
             <div className="rounded-[4px] border border-slate-200 bg-paper px-3 py-2 text-[12px] leading-relaxed text-slate-700">
               {t.paste.other}
               <button
@@ -375,6 +379,65 @@ function Part({ part }: { part: AgentPart }) {
     case "toolFailed":
       return <div className="pl-3 text-[11px] text-shu-600">{t.agent.toolFailed}{part.message}</div>;
   }
+}
+
+/**
+ * The agents Studio can set up from the pane. One today; the list is where
+ * another kind (its own installer and sign-in) is added later.
+ */
+const AGENT_CHOICES = [{ kind: "claudeCode", name: "Claude Code", note: () => t.agent.setup.claudeNote }] as const;
+
+/** Installs the agent and signs in, in one go, without a terminal. */
+function SetupCard() {
+  const install = useAgent((s) => s.install);
+  const login = useAgent((s) => s.login);
+  const start = useAgent((s) => s.startInstall);
+  const cancel = useAgent((s) => s.cancelInstall);
+  const choice = AGENT_CHOICES[0];
+  const primary =
+    "flex h-8 items-center gap-1.5 rounded-[4px] bg-ink px-3 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400";
+  // The sign-in box takes over once the installer has done its part.
+  if (login.phase !== "idle") return null;
+  return (
+    <div className="space-y-2 rounded-[4px] border border-brand-100 bg-brand-50 px-3 py-2.5 text-[12px] text-ink">
+      <div className="font-semibold">{t.agent.setup.title}</div>
+      <div className="leading-relaxed text-slate-700">{t.agent.setup.lead}</div>
+      <label className="flex items-center gap-2">
+        <span className="shrink-0 text-slate-600">{t.agent.setup.which}</span>
+        <select className="h-7 min-w-0 flex-1 rounded-[4px] border border-slate-300 bg-sheet px-1.5 text-[12px]" value={choice.kind} onChange={() => undefined}>
+          {AGENT_CHOICES.map((c) => (
+            <option key={c.kind} value={c.kind}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="leading-relaxed text-slate-600">{choice.note()}</div>
+      {install.phase === "running" || install.phase === "stopping" ? (
+        <>
+          <div className="flex items-center gap-1.5 text-slate-700">
+            <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+            {install.phase === "stopping" ? t.agent.setup.stopping : t.agent.setup.installing}
+          </div>
+          {install.phase === "running" && install.lines.length > 0 && (
+            <pre className="max-h-24 overflow-y-auto rounded-[3px] bg-sheet px-2 py-1 font-mono text-[10.5px] leading-snug whitespace-pre-wrap text-slate-600">{install.lines.slice(-6).join("\n")}</pre>
+          )}
+          <button type="button" disabled={install.phase === "stopping"} onClick={() => void cancel()} className="text-slate-500 enabled:hover:text-ink disabled:opacity-50">
+            {t.cancel}
+          </button>
+        </>
+      ) : (
+        <>
+          {install.phase === "failed" && <div className="whitespace-pre-wrap text-shu-600">{install.message}</div>}
+          <button type="button" onClick={() => void start(choice.kind)} className={primary}>
+            <Download size={13} strokeWidth={2} aria-hidden="true" />
+            {install.phase === "failed" ? t.agent.setup.retry : t.agent.setup.install(choice.name)}
+          </button>
+          <div className="text-[11px] leading-relaxed text-slate-500">{t.agent.setup.whatHappens}</div>
+        </>
+      )}
+    </div>
+  );
 }
 
 /** Signs the agent in without leaving the pane, after a turn failed on an expired login. */

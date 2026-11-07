@@ -394,6 +394,18 @@ export const en: Dict = {
     loginExpired: (name: string) => `${name}: signed out`,
     login: "Sign in",
     loginFailed: "Could not sign in",
+    installFailed: "Could not install",
+    setup: {
+      title: "Set up the AI",
+      lead: "To have the AI build flows, install it on this PC and sign in. No terminal needed.",
+      which: "AI to use",
+      claudeNote: "Claude Code is Anthropic's AI. It runs on your Claude account and bills that account. Other AIs will be added later.",
+      install: (name: string) => `Install ${name}`,
+      retry: "Try again",
+      installing: "Installing… (1–2 minutes)",
+      stopping: "Stopping…",
+      whatHappens: "It goes into your user folder (no administrator rights). The sign-in screen follows when it is done.",
+    },
   },
   runMsg: {
     reviewBeforeResume: "Review the AI's fix before resuming",
