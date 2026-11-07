@@ -20,6 +20,11 @@ use shikigami_secrets::KeyStore;
 use tokio_util::sync::CancellationToken;
 
 use crate::schedule::{MAIL_MINUTES, Schedule, ScheduleState, Schedules, When, name_matches};
+
+/// Mails one `mail.list` of a mail trigger reads (the most it gives).
+const MAIL_PAGE: usize = 500;
+/// Pages one look reads at most.
+const MAIL_PAGES: usize = 20;
 use shikigami_core::calendar::Calendar;
 
 /// A run the agent is asked for. Agent runs are unattended: they execute
@@ -632,8 +637,54 @@ impl Agent {
         }
     }
 
-    /// The mails `mail.list` finds for a mail trigger, newest first.
+    /// The mails `mail.list` finds for a mail trigger, newest first. More
+    /// than one look's worth are read page by page, each before the oldest
+    /// of the last, so none drop out of the window unseen.
     async fn list_mail(&self, s: &Schedule, now: &Zoned) -> Result<Vec<Value>, String> {
+        let mut all = Vec::new();
+        let mut ids = HashSet::new();
+        let mut before: Option<String> = None;
+        for _ in 0..MAIL_PAGES {
+            let page = self.list_mail_page(s, now, before.as_deref()).await?;
+            let full = page.len() >= MAIL_PAGE;
+            let oldest = page
+                .last()
+                .and_then(|m| m["receivedAt"].as_str())
+                .map(str::to_owned);
+            let mut added = false;
+            for mail in page {
+                if let Some(id) = mail["id"].as_str()
+                    && ids.insert(id.to_owned())
+                {
+                    all.push(mail);
+                    added = true;
+                }
+            }
+            if !full || !added {
+                return Ok(all);
+            }
+            // The next page ends one second after the oldest mail, so mails
+            // of that same second come again (and are known by their id).
+            before = oldest.and_then(|at| {
+                let at: jiff::civil::DateTime = at.get(..19)?.parse().ok()?;
+                let next = at.checked_add(1.second()).ok()?;
+                Some(next.strftime("%Y-%m-%dT%H:%M:%S").to_string())
+            });
+            if before.is_none() {
+                break;
+            }
+        }
+        tracing::warn!(schedule = %s.name, mails = all.len(), "too many new mails to read in one look");
+        Ok(all)
+    }
+
+    /// One page of [`Self::list_mail`]: mails received before `before`.
+    async fn list_mail_page(
+        &self,
+        s: &Schedule,
+        now: &Zoned,
+        before: Option<&str>,
+    ) -> Result<Vec<Value>, String> {
         let When::MailReceived {
             folder,
             subject_contains,
@@ -674,7 +725,8 @@ impl Agent {
                     .into(),
             ),
         );
-        put("limit", Some(200.into()));
+        put("before", before.map(Value::from));
+        put("limit", Some(MAIL_PAGE.into()));
         put("includeBody", Some(false.into()));
         let mut step = Step::new("mail.list").with_id("look");
         step.params = params;
@@ -710,6 +762,18 @@ impl Agent {
         let fresh: Vec<Value> = {
             let mut state = lock(&self.state);
             state.mail_checking.remove(&s.id);
+            // Turned off, changed or removed while looking (or the file
+            // broke): what was found is not this trigger's to start. A
+            // changed folder or filter learns what is there again at its
+            // next look.
+            let current = state.schedules.iter().find(|c| c.id == s.id);
+            if current != Some(s) {
+                if current.is_some_and(|c| c.when != s.when) {
+                    state.mail_seen.remove(&s.id);
+                    state.mail_since.remove(&s.id);
+                }
+                return;
+            }
             let mails = match result {
                 Ok(mails) => mails,
                 Err(problem) => {

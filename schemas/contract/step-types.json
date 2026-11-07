@@ -11826,6 +11826,10 @@
             "type": "string",
             "minLength": 4
           },
+          "before": {
+            "type": "string",
+            "minLength": 4
+          },
           "subjectContains": {
             "type": "string",
             "minLength": 1

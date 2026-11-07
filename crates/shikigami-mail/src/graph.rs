@@ -228,7 +228,7 @@ pub fn local_time(utc: &str, tz: &TimeZone) -> String {
 pub fn utc_time(since: &str, tz: &TimeZone) -> Result<String, StepError> {
     let bad = || {
         StepError::invalid_params(format!(
-            "'since' must be a date like 2026-10-01 or a time like 2026-10-01T09:00, not '{since}'"
+            "'since' / 'before' must be a date like 2026-10-01 or a time like 2026-10-01T09:00, not '{since}'"
         ))
     };
     let at = match since.parse::<jiff::Timestamp>() {
@@ -300,6 +300,9 @@ async fn list(graph: &Graph, query: &ListQuery) -> Result<Value, StepError> {
     }
     if let Some(since) = &query.since {
         filters[0] = format!("receivedDateTime ge {}", utc_time(since, &tz)?);
+    }
+    if let Some(before) = &query.before {
+        filters.push(format!("receivedDateTime lt {}", utc_time(before, &tz)?));
     }
     let mut path = format!(
         "/me/mailFolders/{}/messages?$top=100&$orderby=receivedDateTime%20desc&$select=id,subject,from,toRecipients,receivedDateTime,isRead,body&$expand=attachments($select=name)",

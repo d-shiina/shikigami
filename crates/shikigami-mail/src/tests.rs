@@ -832,6 +832,22 @@ async fn a_microsoft_365_mailbox_is_read_and_sorted_through_graph() {
         ),
         "{path}"
     );
+    // A window: received at or after `since`, before `before`.
+    graph::run_at(
+        &base,
+        "tok",
+        request(
+            Kind::List,
+            json!({ "since": "2026-10-28T00:00:00Z", "before": "2026-10-29T00:00:00Z" }),
+        ),
+    )
+    .await
+    .unwrap();
+    let (_, path, _) = seen.lock().unwrap().last().unwrap().clone();
+    assert!(
+        path.contains("receivedDateTime%20ge%202026-10-28T00:00:00Z%20and%20receivedDateTime%20lt%202026-10-29T00:00:00Z"),
+        "{path}"
+    );
 
     let dir = tempfile::tempdir().unwrap();
     let folder = dir.path().to_string_lossy().into_owned();
