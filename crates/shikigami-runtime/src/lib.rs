@@ -244,7 +244,7 @@ impl Runtime {
         };
         let start_values = options.start_values.clone();
         // A run with nodes that use the mouse and keyboard keeps the screen
-        // on until it ends, so it does not lock between them.
+        // on and the PC awake until it ends.
         let awake = self
             .resources
             .keep_awake
@@ -562,7 +562,7 @@ pub struct RuntimeBuilder {
 
 impl RuntimeBuilder {
     /// How a run that has nodes using the mouse and keyboard keeps the
-    /// screen from turning off and locking while it runs (installed by the
+    /// screen from turning off and the PC from sleeping while it runs (installed by the
     /// desktop adapter).
     pub fn keep_awake(mut self, keep: KeepAwake) -> Self {
         self.keep_awake = Some(keep);

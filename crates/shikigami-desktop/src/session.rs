@@ -53,10 +53,11 @@ pub fn desktop_unavailable() -> Option<String> {
 }
 
 /// Asks Windows to keep the display on and the PC awake (so the screen
-/// does not turn off, lock or sleep for being idle) until the returned
-/// value is dropped. Held for the whole of a run that has nodes using the
-/// mouse and keyboard. A lock that a policy forces after a set time, or
-/// one the user starts (Win+L), still happens.
+/// does not turn off and the PC does not sleep for being idle) until the
+/// returned value is dropped. Held for the whole of a run that has nodes
+/// using the mouse and keyboard. It does not stop locking: a
+/// password-protected screen saver, an inactivity limit set by policy and
+/// Win+L still lock the screen (they are security settings, left alone).
 pub fn keep_awake() -> Box<dyn Send + Sync> {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Power::{

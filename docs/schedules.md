@@ -22,7 +22,7 @@ shikigami agent uninstall
 
 - Runs the agent starts are **unattended runs**: they execute the published version (and `flows.<id>.unattended: false` in `policy.json` refuses them), exactly as `shikigami run <id>`. A flow that is not published fails with `NOT_PUBLISHED`.
 - They are recorded like any run, with `origin.trigger: "schedule"`, `origin.requestedBy` the schedule's name and `origin.jobId` its ID.
-- The mouse and keyboard are shared with Studio, the CLI and the MCP server: nodes that use them take turns across processes. While the screen is locked they stop with `DESKTOP_UNAVAILABLE` (browser and file work still runs). While a flow with such nodes runs, the screen is kept on so it does not turn off and lock for being idle (a lock forced by a policy after a set time, or Win+L, still stops them). Keep the PC signed in and unlocked when desktop flows are due.
+- The mouse and keyboard are shared with Studio, the CLI and the MCP server: nodes that use them take turns across processes. While the screen is locked they stop with `DESKTOP_UNAVAILABLE` (browser and file work still runs). While a flow with such nodes runs, the display is kept on and the PC awake, so it does not turn off or sleep. Locking is not prevented: a password-protected screen saver, an inactivity limit set by policy, or Win+L still stops them. Keep the PC signed in and unlocked when desktop flows are due.
 - Other processes talk to the agent over a local named pipe that only your user can write to (`\\.\pipe\shikigami-agent-…`).
 
 ## Schedules

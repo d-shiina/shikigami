@@ -349,7 +349,7 @@ fn preview(value: Value) -> (Value, bool) {
 /// in, the remote session is disconnected).
 pub type DesktopProbe = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
-/// Keeps the screen on and the PC awake (so it does not lock or sleep
+/// Keeps the screen on and the PC awake (so it does not turn off or sleep
 /// between nodes) until the returned value is dropped.
 pub type KeepAwake = Arc<dyn Fn() -> Box<dyn Send + Sync> + Send + Sync>;
 
