@@ -1448,7 +1448,7 @@ impl ShikigamiMcp {
                     ),
                 ));
             }
-            if !p.overwrite && shikigami_core::testcase::load(&dir, &p.name).is_ok() {
+            if !p.overwrite && shikigami_core::testcase::exists(&dir, &p.name)? {
                 return Err(err(
                     "TEST_CASE_EXISTS",
                     format!(
@@ -1472,7 +1472,8 @@ impl ShikigamiMcp {
     /// with the working content, and compare each with what it expects. Returns `passed`,
     /// `failed` and `cases[]` (`passed`, `runId`, `status`, `error`, `mismatches[]` of `at`,
     /// `expected`, `actual`). Each case is an ordinary run (get_run_logs with its runId).
-    /// Waits until all have run.
+    /// Waits until all have run; stop_flow with the running case's runId (list_runs)
+    /// stops it and the cases after it.
     #[tool(annotations(
         read_only_hint = false,
         destructive_hint = false,
@@ -2236,6 +2237,18 @@ impl ShikigamiMcp {
                 .map(|name| testcase::load(&dir, name).map(|case| (name.clone(), case)))
                 .collect::<Result<Vec<_>, _>>()?,
         };
+        // One run per case named once: the approval below covers exactly these runs.
+        if let Some((name, _)) = cases
+            .iter()
+            .enumerate()
+            .find(|(i, (name, _))| cases[..*i].iter().any(|(other, _)| other == name))
+            .map(|(_, c)| c)
+        {
+            return Err(err(
+                "TEST_CASE_REPEATED",
+                format!("'{name}' is named more than once in `cases`"),
+            ));
+        }
         if cases.is_empty() {
             return Err(err(
                 "NO_TEST_CASES",
@@ -2265,9 +2278,10 @@ impl ShikigamiMcp {
         let ids: Vec<&str> = std::iter::once(flow.id.as_str())
             .chain(subflows.iter().map(|s| s.flow.id.as_str()))
             .collect();
-        let inputs: serde_json::Map<String, Value> = cases
+        // In the order they run.
+        let planned: Vec<Value> = cases
             .iter()
-            .map(|(name, case)| (name.clone(), Value::Object(case.inputs.clone())))
+            .map(|(name, case)| json!({ "name": name, "inputs": case.inputs }))
             .collect();
         self.gate(
             peer,
@@ -2282,7 +2296,7 @@ impl ShikigamiMcp {
                     "revision": flow.revision,
                     "version": version,
                     "published": false,
-                    "testCases": inputs,
+                    "testCases": planned,
                     "flows": snapshot_ids(&subflows),
                 }),
             },
@@ -2306,7 +2320,10 @@ impl ShikigamiMcp {
                 workspace: self.svc().store().local_root(),
                 policy: &policy_path,
             };
-            let result = testing::run_case(
+            // Listed among the active runs, so stop_flow with its runId stops it
+            // (and the cases after it).
+            let mut listed = None;
+            let result = testing::run_case_with(
                 &self.inner.runtime,
                 records,
                 &interrupt,
@@ -2314,14 +2331,35 @@ impl ShikigamiMcp {
                 case,
                 flow.clone(),
                 options,
+                |handle| {
+                    if let Ok(mut runs) = self.inner.runs.lock() {
+                        runs.insert(
+                            handle.run_id.clone(),
+                            ActiveRun {
+                                cancel: handle.stopper(),
+                                snapshot: handle.snapshot_cell(),
+                            },
+                        );
+                        listed = Some(handle.run_id.clone());
+                    }
+                },
             )
-            .await
-            .map_err(|e| ErrorPayload {
+            .await;
+            if let Some(id) = listed
+                && let Ok(mut runs) = self.inner.runs.lock()
+            {
+                runs.remove(&id);
+            }
+            let result = result.map_err(|e| ErrorPayload {
                 code: e.code,
                 message: format!("{name}: {}", e.message),
                 details: e.details,
             })?;
+            let stopped = result.status == shikigami_runtime::RunStatus::Cancelled;
             results.push(result);
+            if stopped {
+                break;
+            }
         }
         let failed = results.iter().filter(|r| !r.passed).count();
         Ok(json!({

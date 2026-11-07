@@ -14,7 +14,9 @@ use shikigami_core::testcase::{self, Expect, ExpectedStatus, TestCase};
 use crate::record::RunRecorder;
 use tokio_util::sync::CancellationToken;
 
-use crate::{RunError, RunEvent, RunEventEnvelope, RunOptions, RunReport, RunStatus, Runtime};
+use crate::{
+    RunError, RunEvent, RunEventEnvelope, RunHandle, RunOptions, RunReport, RunStatus, Runtime,
+};
 
 /// One test case's run, compared with what it expects.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -83,7 +85,34 @@ pub async fn run_case(
     flow: Flow,
     options: RunOptions,
 ) -> Result<CaseResult, RunError> {
+    run_case_with(
+        runtime,
+        records,
+        interrupt,
+        name,
+        case,
+        flow,
+        options,
+        |_| {},
+    )
+    .await
+}
+
+/// `run_case`, telling `started` about the run once it has begun (so a
+/// caller can list it among its active runs, for stopping it by run ID).
+#[allow(clippy::too_many_arguments)]
+pub async fn run_case_with(
+    runtime: &Runtime,
+    records: Records<'_>,
+    interrupt: &Interrupt,
+    name: &str,
+    case: &TestCase,
+    flow: Flow,
+    options: RunOptions,
+    started: impl FnOnce(&RunHandle),
+) -> Result<CaseResult, RunError> {
     let handle = runtime.start(flow, options)?;
+    started(&handle);
     interrupt.running(Some(handle.cancel_token()));
     let run_id = handle.run_id.to_string();
     let mut recorder = RunRecorder::create(records.workspace, &handle.run_id)

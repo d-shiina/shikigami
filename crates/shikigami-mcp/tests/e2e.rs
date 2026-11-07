@@ -1118,4 +1118,25 @@ async fn ai_writes_test_cases_and_runs_them() {
         .ok("run_tests", json!({ "flowId": id, "cases": ["21"] }))
         .await;
     assert_eq!(one["cases"].as_array().unwrap().len(), 1);
+    // One approval covers each case once.
+    let (is_error, twice) = h
+        .call("run_tests", json!({ "flowId": id, "cases": ["21", "21"] }))
+        .await;
+    assert!(is_error);
+    assert_eq!(twice["code"], "TEST_CASE_REPEATED");
+
+    // A case file someone broke by hand is not replaced without overwrite.
+    h.ok(
+        "write_project_file",
+        json!({ "flowId": id, "path": "tests/壊れた.json", "text": "{ not json" }),
+    )
+    .await;
+    let (is_error, kept) = h
+        .call(
+            "save_test_case",
+            json!({ "flowId": id, "name": "壊れた", "case": {} }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(kept["code"], "TEST_CASE_EXISTS");
 }

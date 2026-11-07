@@ -260,6 +260,11 @@ pub fn save(project_dir: &Path, name: &str, case: &TestCase) -> CoreResult<PathB
     Ok(path)
 }
 
+/// Whether a file for this case name is there (readable or not).
+pub fn exists(project_dir: &Path, name: &str) -> CoreResult<bool> {
+    Ok(case_path(project_dir, name)?.exists())
+}
+
 /// Delete a case. One that is not there is not an error.
 pub fn remove(project_dir: &Path, name: &str) -> CoreResult<()> {
     match fs::remove_file(case_path(project_dir, name)?) {
