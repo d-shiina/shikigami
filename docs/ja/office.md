@@ -18,7 +18,7 @@ AI が覚える書き方を増やさないため、同じ操作を 2 通りで�
 
 ## Excel（`excel.*`、実装済み）
 
-クレート `crates/shikigami-excel`。`.xlsx` / `.xlsm` を直接読み書きします（`.xls` は `UNSUPPORTED_FORMAT`、Excel で `.xlsx` に保存し直してもらう）。
+クレート `crates/shikigami-excel`。`.xlsx` / `.xlsm` を直接読み書きします（`.xls` は `UNSUPPORTED_FORMAT`。`excel.saveAs` で `.xlsx` にしてから使う）。
 
 | type | 主な params | 出力 |
 |---|---|---|
@@ -30,10 +30,18 @@ AI が覚える書き方を増やさないため、同じ操作を 2 通りで�
 | `excel.writeRange` | `path`, `sheet`, `cell`（左上）, `values`（行の配列） | `{ range }` |
 | `excel.listSheets` | `path` | シート名の配列 |
 | `excel.addSheet` | `path`, `sheet` | –（同名があれば何もしない） |
+| `excel.insertRows` | `path`, `sheet`, `row`, `count`（既定 1） | –（`row` の位置に空の行を入れ、下の行をずらす） |
+| `excel.deleteRows` | `path`, `sheet`, `row`, `count`（既定 1） | –（下の行を詰める） |
+| `excel.clearRange` | `path`, `sheet`, `range` | –（値と数式を消し、書式は残す） |
+| `excel.deleteSheet` | `path`, `sheet` | –（なければ何もしない） |
+| `excel.renameSheet` | `path`, `sheet`, `name` | –（数式・名前付き範囲の参照も新しい名前に） |
+| `excel.copySheet` | `path`, `sheet`, `name` | –（元のシートのすぐ後ろに） |
 
 - `sheet` を省略すると先頭のシート。名前違いは `SHEET_NOT_FOUND`（`details.sheets` にシート名の一覧）
 - 書き込むノードは、ファイルがなければブックを作ります（フォルダーは作らない）。シートは作らないので、新しいシートは `excel.addSheet` で足します
 - **よくある形**：`excel.readRows` → `control.forEach` → 行ごとに処理 → `excel.writeCell`（`cell: "F{{ row._row }}"`）で同じ行に結果を書く。結果を別のブックに貯めるときは `excel.appendRows`（空のシートなら見出し行もレコードのキーから書く）
+- 行の挿入・削除では、ずれた行を指す数式・名前付き範囲も Excel と同じように付いていきます。`excel.readRows` で見つけた行を消すときは、`_row` を使って**下の行から**消します（`control.forEach` の `items` を `reverse(filter(rows, r => …))` に）
+- シートの削除は、ほかのシートの数式や名前付き範囲がそのシートを使っていれば `SHEET_REFERENCED`（`details.usedBy` に場所）で止めます（消すと `#REF!` になるため）。ただ 1 つのシートは消せません（`LAST_SHEET`）。テーブル・ピボットテーブルのあるシートのコピーは Excel でしかできないので `SHEET_NOT_COPYABLE`。どちらもブックをこの PC の Excel で開いておけば、Excel 自身が行います
 - `excel.appendRows` のキーは見出しと完全一致。合わないキーは `UNKNOWN_COLUMN`（`details.columns` に見出しの一覧）。勝手に列は増やしません
 
 ### 値の決まり
@@ -61,7 +69,7 @@ AI が覚える書き方を増やさないため、同じ操作を 2 通りで�
 
 - ノードごとにブック全体を読み書きするので、大きなブックでは 1 ノードに時間がかかります。行ごとに `excel.writeCell` するより、結果を貯めて最後に `excel.appendRows` / `excel.writeRange` 1 回で書くほうが速い
 - 書式・結合セル・条件付き書式・マクロ（`.xlsm`）は保ったまま保存するよう作っていますが、ピボットテーブルやグラフなど一部の要素はライブラリ（umya-spreadsheet）の対応範囲に依存します。大事なブックはコピーで確かめてから使ってください
-- パスワード付きのブックは開けません（`WORKBOOK_UNREADABLE`）
+- パスワード付きのブックは直接は開けません（`WORKBOOK_UNREADABLE`）。`excel.saveAs` に `password`（登録済みのシークレット）を付けて、パスワードのない `.xlsx` にしてから使います
 
 ### MCP
 
@@ -102,6 +110,7 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 | `excel.filter` | `path`, `sheet`, `headerRow`, `filters`（`[{ "column": "状態", "values": ["未処理", "保留"] }]`、すべてを満たす行を残す）か `clear: true` | 表示されている行数 `{ visible }` |
 | `excel.pivot` | `path`, `sheet`（元の表）, `headerRow`, `toSheet`（新しいシート）, `rows` / `columns`（まとめる見出し）, `values`（`[{ "column": "金額", "function": "sum" }]`、`sum` `count` `average` `max` `min`） | `{ sheet }` |
 | `excel.exportPdf` | `path`, `sheet`（省略でブック全体）, `to`, `overwrite` | `{ path }` |
+| `excel.saveAs` | `path`（`.xls`・パスワード付きも可）, `to`（拡張子 `.xlsx` `.xlsm` `.xlsb` `.xls` `.csv` `.pdf` で形式が決まる）, `sheet`（CSV・PDF にするシート）, `password`（登録済みのシークレット）, `encoding`（CSV：`utf-8` は BOM 付き、`shift_jis`）, `overwrite` | `{ path }` |
 
 - ブックが開いていればそれを使い、開いていなければ `excel.runMacro` と同じく**見えない別の Excel** でファイルを開いて（`excel.exportPdf` は読み取り専用）、終わったら終了させます
 - `excel.sort` の列は見出しの文字で指定（違えば `UNKNOWN_COLUMN` に見出しの一覧）。Excel 自身の並べ替えなので書式も行と一緒に動きます
@@ -109,6 +118,7 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 - `excel.filter` はシートの（テーブルとして書式設定した表ならそのテーブルの）フィルターを `filters` で置き換えます。値は Excel の表示どおりに比べます（桁区切りで表示している数値なら `"1,200"`）。行はブックに残るので、`excel.readRows` はすべての行を読みます
 - `excel.pivot` は新しいシートに作ります（`toSheet` がすでにあれば `SHEET_EXISTS`）。作れなかったときはシートを残しません（`PIVOT_FAILED`）。集計結果は `toSheet` を `excel.readRange` で読みます
 - `excel.exportPdf` は Excel で印刷したときと同じページ割り（印刷範囲・ページ設定）。`to` があると `FILE_EXISTS`（`overwrite: true` で上書き）
+- `excel.saveAs` はいつも見えない別の Excel で `path` を読み取り専用で開いて保存します（開いているユーザーのブックを別のファイルに切り替えないため。まだ保存していない変更はコピーに入りません）。保存したブックにはパスワードを付けません。マクロを残すなら `.xlsm`。CSV は 1 シートだけ
 - 既定のタイムアウトは 5 分。時間切れのときは自分で起動した Excel を保存せずに終了させます（`EXCEL_TIMEOUT`）
 - ファイルは変えますがブックのコードは動かさないので、リスクは `Interactive` です
 

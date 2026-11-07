@@ -18,7 +18,7 @@ To keep the number of ways the AI has to learn small, the same action is never a
 
 ## Excel (`excel.*`, implemented)
 
-Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.xls` gives `UNSUPPORTED_FORMAT`; save it as `.xlsx` in Excel).
+Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.xls` gives `UNSUPPORTED_FORMAT`; save it as `.xlsx` with `excel.saveAs` first).
 
 | type | Main params | Output |
 |---|---|---|
@@ -30,10 +30,18 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 | `excel.writeRange` | `path`, `sheet`, `cell` (top-left), `values` (list of rows) | `{ range }` |
 | `excel.listSheets` | `path` | list of sheet names |
 | `excel.addSheet` | `path`, `sheet` | – (does nothing if it exists) |
+| `excel.insertRows` | `path`, `sheet`, `row`, `count` (default 1) | – (empty rows at `row`, the rows below move down) |
+| `excel.deleteRows` | `path`, `sheet`, `row`, `count` (default 1) | – (the rows below move up) |
+| `excel.clearRange` | `path`, `sheet`, `range` | – (values and formulas go, formats stay) |
+| `excel.deleteSheet` | `path`, `sheet` | – (does nothing if it is not there) |
+| `excel.renameSheet` | `path`, `sheet`, `name` | – (formulas and named ranges follow) |
+| `excel.copySheet` | `path`, `sheet`, `name` | – (right after the original) |
 
 - Without `sheet`, the first sheet. A wrong name gives `SHEET_NOT_FOUND` (`details.sheets` lists the sheets)
 - Writing nodes create the workbook when the file does not exist (but not the folder). They do not create sheets; add new sheets with `excel.addSheet`
 - **A common shape**: `excel.readRows` → `control.forEach` → work on each row → `excel.writeCell` (`cell: "F{{ row._row }}"`) to write the result on the same row. To collect results in another workbook use `excel.appendRows` (on an empty sheet it also writes the header row from the record keys)
+- Inserting and deleting rows moves the formulas and named ranges that point at the moved rows, as Excel does. To delete rows found with `excel.readRows`, use `_row` and go **from the bottom up** (`control.forEach` over `reverse(filter(rows, r => …))`)
+- Deleting a sheet that formulas or named ranges of other sheets use stops with `SHEET_REFERENCED` (`details.usedBy` lists them), because they would turn into `#REF!`. The only sheet cannot be deleted (`LAST_SHEET`). Sheets with tables or pivot tables can only be copied by Excel (`SHEET_NOT_COPYABLE`). With the workbook open in this PC's Excel, Excel does both itself
 - `excel.appendRows` keys must match the headers exactly. Others give `UNKNOWN_COLUMN` (`details.columns` lists the headers). Columns are never added on their own
 
 ### Values
@@ -61,7 +69,7 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 
 - Each node reads and writes the whole workbook, so a node on a large workbook takes time. Collecting the results and writing them once at the end with `excel.appendRows` / `excel.writeRange` is faster than `excel.writeCell` per row
 - Formatting, merged cells, conditional formatting and macros (`.xlsm`) are meant to be kept on save, but some parts such as pivot tables and charts depend on what the library (umya-spreadsheet) supports. Try important workbooks on a copy first
-- Password-protected workbooks cannot be opened (`WORKBOOK_UNREADABLE`)
+- Password-protected workbooks cannot be opened directly (`WORKBOOK_UNREADABLE`). Save a copy without the password with `excel.saveAs` and `password` (a registered secret) first
 
 ### MCP
 
@@ -102,6 +110,7 @@ Some work needs Excel itself (COM). It needs Windows and desktop Excel (`PLATFOR
 | `excel.filter` | `path`, `sheet`, `headerRow`, `filters` (`[{ "column": "Status", "values": ["Open", "On hold"] }]`, all must hold) or `clear: true` | `{ visible }` rows left showing |
 | `excel.pivot` | `path`, `sheet` (the table), `headerRow`, `toSheet` (a new sheet), `rows` / `columns` (header texts to group by), `values` (`[{ "column": "Amount", "function": "sum" }]`; `sum` `count` `average` `max` `min`) | `{ sheet }` |
 | `excel.exportPdf` | `path`, `sheet` (the whole workbook when omitted), `to`, `overwrite` | `{ path }` |
+| `excel.saveAs` | `path` (`.xls` and password-protected too), `to` (the extension `.xlsx` `.xlsm` `.xlsb` `.xls` `.csv` `.pdf` picks the format), `sheet` (for CSV and PDF), `password` (a registered secret), `encoding` (CSV: `utf-8` with BOM, or `shift_jis`), `overwrite` | `{ path }` |
 
 - They use the open workbook when it is open, otherwise they open the file in **their own hidden Excel** like `excel.runMacro` (read-only for `excel.exportPdf`) and quit it afterwards
 - `excel.sort` names columns by header text (`UNKNOWN_COLUMN` lists them) and uses Excel's own sort, so formatting moves with the rows
@@ -109,6 +118,7 @@ Some work needs Excel itself (COM). It needs Windows and desktop Excel (`PLATFOR
 - `excel.filter` replaces the sheet's filter (or the table's, for Format as Table) with `filters`; values are matched as Excel shows them (`"1,200"` for a number shown with a separator). The rows stay in the workbook: `excel.readRows` still reads all of them
 - `excel.pivot` builds on a new sheet (`SHEET_EXISTS` when `toSheet` is taken) and leaves no sheet behind when it fails (`PIVOT_FAILED`). Read the totals with `excel.readRange` on `toSheet`
 - `excel.exportPdf` lays out the pages as Excel prints them (print area, page setup). `FILE_EXISTS` when `to` exists unless `overwrite: true`
+- `excel.saveAs` always opens `path` read-only in a separate, hidden Excel and saves from there (so a person's open workbook is never switched to the new file; changes not yet saved there are not in the copy). The copy has no password. Keep macros with `.xlsm`. A CSV holds one sheet
 - The default timeout is 5 minutes; on timeout their own Excel is quit without saving (`EXCEL_TIMEOUT`)
 - They change files but run no code of the workbook, so their risk is `Interactive`
 
