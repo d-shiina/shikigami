@@ -10,6 +10,7 @@ In Studio, people rarely type these. A `variable.set` whose expression has a com
 
 ## Basics
 
+- Variable names can be in Japanese: `受注番号`, `請求金額 * 1.1`, `"{{ 氏名 }} 様"`. A name is letters of any language, digits and `_`, with no spaces or symbols, and does not start with a digit. The same rule applies to `saveAs`, loop variables and part names
 - Join text with `+` or a template, not a function: `sei + mei`, `sei + '様'`, `"{{ sei }} {{ mei }} 様"`. `+` on a number and a string gives a string
 - A table is "a list of objects", the same shape `browser.getTable`, `excel.readRows` and `file.readCsv` return
 - The second argument of `map` / `filter` / `find` / `some` / `every` / `sortBy` / `groupBy` is `r => expression` (`r` is each element). It cannot be written anywhere else

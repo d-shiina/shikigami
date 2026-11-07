@@ -17,6 +17,7 @@ describe("expressions", () => {
       .map((p) => `${p.text}:${p.role}`);
     expect(roles).toEqual(["sum:function", "map:function", "rows:variable", "r:param", "num:function", "r:param", "金額:field", "pass:variable", "nope:unknown"]);
     expect(readsVariables("filter(rows, r => r.a == code)")).toEqual(["rows", "code"]);
+    expect(readsVariables("請求金額 * 1.1 + num(受注.金額)")).toEqual(["請求金額", "受注"]);
   });
 
   it("know where the cursor is", () => {

@@ -22,7 +22,9 @@ describe("parts", () => {
   it("names a new part from an ASCII id, else part1, part2…", () => {
     expect(newPartName(save, [])).toBe("btnSave");
     expect(newPartName(save, ["btnSave"])).toBe("btnSave1");
-    expect(newPartName({ role: "button", name: "保存" }, ["part1"])).toBe("part2");
+    expect(newPartName({ role: "button", name: "保存" }, ["part1"])).toBe("保存");
+    expect(newPartName({ label: "お客様 番号（必須）" }, ["お客様番号必須"])).toBe("お客様番号必須1");
+    expect(newPartName({ role: "button", name: "…" }, ["part1"])).toBe("part2");
     expect(newPartName({ label: "User name" }, [])).toBe("userName");
   });
 

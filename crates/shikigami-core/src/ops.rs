@@ -312,7 +312,7 @@ fn apply_inner(flow: &mut Flow, op: EditOp) -> CoreResult<EditOp> {
         EditOp::SetPart { name, part } => {
             if !crate::registry::is_identifier(&name) {
                 return Err(CoreError::InvalidEdit(format!(
-                    "part name '{name}' must be letters, digits and _ (not starting with a digit), like a variable"
+                    "part name '{name}' must be letters (Japanese is fine), digits and _ (not starting with a digit), like a variable"
                 )));
             }
             Ok(match flow.parts.insert(name.clone(), part) {
@@ -584,11 +584,21 @@ mod tests {
         let bad = apply_all(
             &sample(),
             vec![EditOp::SetPart {
-                name: "保存".into(),
+                name: "保存 ボタン".into(),
                 part: part("a.exe"),
             }],
         );
         assert!(bad.is_err());
+        // Japanese names are names like any other.
+        let ja = apply_all(
+            &sample(),
+            vec![EditOp::SetPart {
+                name: "保存ボタン".into(),
+                part: part("a.exe"),
+            }],
+        )
+        .unwrap();
+        assert_eq!(ja.0.parts["保存ボタン"], part("a.exe"));
         assert!(
             apply_all(
                 &sample(),

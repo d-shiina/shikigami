@@ -17,8 +17,10 @@ export type Token = {
 
 const PUNCT = ["=>", "==", "!=", "<=", ">=", "&&", "||", "(", ")", "[", "]", "{", "}", ",", ".", ":", "+", "-", "*", "/", "%", "!", "<", ">"];
 
-const isIdentStart = (c: string) => /[\p{L}_]/u.test(c);
-const isIdentPart = (c: string) => /[\p{L}\p{N}_]/u.test(c);
+// Names are letters of any script (受注番号), digits and _: Rust's
+// char::is_alphabetic / is_alphanumeric, as Core reads them.
+const isIdentStart = (c: string) => /[\p{Alphabetic}_]/u.test(c);
+const isIdentPart = (c: string) => /[\p{Alphabetic}\p{N}_]/u.test(c);
 
 /** Splits an expression into tokens, keeping spaces; never throws (bad input becomes `error` tokens). */
 export function tokenize(source: string): Token[] {
@@ -127,7 +129,7 @@ export function quote(text: string): string {
 }
 
 /** Whether a name can be written after `.` (else it needs `['…']`). */
-export const isPlainName = (name: string) => /^[\p{L}_][\p{L}\p{N}_]*$/u.test(name) && !KEYWORDS.has(name);
+export const isPlainName = (name: string) => /^[\p{Alphabetic}_][\p{Alphabetic}\p{N}_]*$/u.test(name) && !KEYWORDS.has(name);
 
 /** A field access: `.金額`, or `['税込 金額']` when the name has spaces or symbols. */
 export const fieldAccess = (name: string) => (isPlainName(name) ? `.${name}` : `[${quote(name)}]`);

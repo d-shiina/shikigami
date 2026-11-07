@@ -86,6 +86,8 @@ describe("readable", () => {
     expect(readable("len(invoices)")).toBe("invoicesの件数");
     expect(readable("invoice.amount >= threshold && invoice.status != 'paid'")).toBe("invoice.amount ≥ threshold かつ invoice.status ≠ 'paid'");
     expect(readable("!isEmpty(flagged)")).toBe("flaggedが空でない");
+    expect(readable("len(受注一覧)")).toBe("受注一覧の件数");
+    expect(readable("isEmpty(受注.備考)")).toBe("受注.備考が空");
   });
 });
 
@@ -96,5 +98,8 @@ describe("referencedVariables", () => {
     expect(referencedVariables({ window: { process: "billing.exe" } }, known)).toEqual([]);
     expect(referencedVariables({ name: "{{ user }}" }, known)).toEqual(["user"]);
     expect(referencedVariables("billing.total > 1", known)).toEqual(["billing"]);
+    const ja = new Set(["請求金額", "宛名"]);
+    expect(referencedVariables("請求金額 * 1.1", ja)).toEqual(["請求金額"]);
+    expect(referencedVariables("{{ 宛名 }} 様", ja)).toEqual(["宛名"]);
   });
 });
