@@ -801,6 +801,19 @@ pub async fn test_step(
             message: e.message,
             details: e.details,
         })?;
+    // 「中止」 stops it like any run (`stop_run` with this id).
+    let run_id = handle.run_id.clone();
+    if let Ok(mut runs) = state.runs.lock() {
+        runs.insert(
+            run_id.clone(),
+            ActiveRun {
+                cancel: handle.stopper(),
+                snapshot: handle.snapshot_cell(),
+                flow_id: id.clone(),
+                debug: None,
+            },
+        );
+    }
     let mut logs = Vec::new();
     let report = handle
         .wait_with(|event: &RunEventEnvelope| {
@@ -811,8 +824,11 @@ pub async fn test_step(
                 });
             }
         })
-        .await
-        .map_err(|e| err("INTERNAL", e.message))?;
+        .await;
+    if let Ok(mut runs) = state.runs.lock() {
+        runs.remove(&run_id);
+    }
+    let report = report.map_err(|e| err("INTERNAL", e.message))?;
     Ok(StepTest {
         status: report.status,
         output: single.result(&report.outputs),

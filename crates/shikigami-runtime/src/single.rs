@@ -113,7 +113,10 @@ pub fn flow_for(
         }
     }
     for name in inputs.keys() {
-        if flow.variables.iter().any(|v| &v.name == name) {
+        // A value it reads and also writes (`saveAs` onto a variable it
+        // reads, a call's output onto one of its inputs) is both.
+        if let Some(existing) = flow.variables.iter_mut().find(|v| &v.name == name) {
+            existing.direction = VarDirection::InOut;
             continue;
         }
         flow.variables.push(VariableDef {
@@ -182,6 +185,38 @@ mod tests {
             .expect("wait");
         assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
         assert_eq!(one.result(&report.outputs), json!(42));
+    }
+
+    #[tokio::test]
+    async fn a_value_it_reads_and_writes_is_given_and_returned() {
+        let runtime = Runtime::builder().build();
+        let mut step = Step::new("variable.set")
+            .with_param("name", "x")
+            .with_param("expression", "total + 1");
+        step.save_as = Some("total".into());
+        let values = inputs(json!({ "total": 1 }));
+        let one = flow_for(step, runtime.registry(), &values, Context::default()).unwrap();
+        let total = one
+            .flow
+            .variables
+            .iter()
+            .find(|v| v.name == "total")
+            .unwrap();
+        assert_eq!(total.direction, VarDirection::InOut);
+        let report = runtime
+            .start(
+                one.flow.clone(),
+                RunOptions {
+                    inputs: values,
+                    ..RunOptions::default()
+                },
+            )
+            .expect("start")
+            .wait()
+            .await
+            .expect("wait");
+        assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+        assert_eq!(one.result(&report.outputs), json!(2));
     }
 
     #[test]

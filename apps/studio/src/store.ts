@@ -131,6 +131,9 @@ function asVariableChange(env: RunEventEnvelope): VariableChange | null {
   };
 }
 
+/** The run id a node run alone has (Tauri `test_step`; also the browser 「画面から選ぶ」 opens). */
+export const STEP_TEST_RUN = "studio-pick";
+
 /** A node run alone (「ノードの単体実行」) and what it gave. */
 export type StepTest = {
   flowId: string;
@@ -357,6 +360,8 @@ export type StudioState = {
   runTo(stepId: string): Promise<void>;
   /** 「ノードの単体実行」: runs only `stepId`, with `values` for the variables it reads. */
   testStep(stepId: string, values: Record<string, unknown>): Promise<void>;
+  /** 「中止」 for the node running alone. */
+  stopStepTest(): Promise<void>;
   stopRun(): Promise<void>;
   /** Step command for the paused (or running) run; false when it was refused. */
   debug(command: DebugCommand): Promise<boolean>;
@@ -1234,6 +1239,15 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           set({ stepTest: { flowId: flow.id, stepId, running: false, result, error: null } });
         } catch (e) {
           set({ stepTest: { flowId: flow.id, stepId, running: false, result: null, error: message(e) } });
+        }
+      },
+
+      async stopStepTest() {
+        if (!get().stepTest?.running) return;
+        try {
+          await api.stopRun(STEP_TEST_RUN);
+        } catch {
+          // It already ended: its result is on its way.
         }
       },
 

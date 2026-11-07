@@ -808,6 +808,7 @@ export const en: Dict = {
     testTitle: "Runs only this node. The nodes before it do not run; the variables it reads take the values the last run left",
     testing: "Running this node only…",
     testMissing: (names: string) => `Some variables it reads have no value from a previous run (${names}). Use "Run up to here" first, then run the node alone`,
+    testPartial: (names: string) => `The last run recorded only part of some values it reads, as they are large (${names}). Use "Run up to here" so it does not run on part of them`,
     tested: "The node ran on its own",
     testFailed: "The node failed when run on its own",
     usedValues: "Values used",

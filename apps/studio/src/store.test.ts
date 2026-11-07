@@ -424,6 +424,17 @@ describe("studio store", () => {
     expect(run).not.toHaveBeenCalled();
     expect(store.getState().stepTest).toMatchObject({ stepId: "s2", running: false, result });
     expect(store.getState().run).toBeNull();
+    // While it runs, 「中止」 stops it by its run id.
+    let finish: (v: unknown) => void = () => {};
+    const stopRun = vi.fn(async () => undefined);
+    const slow = createStudioStore(fakeApi({ stopRun, testStep: vi.fn(() => new Promise((r) => (finish = r))), getFlow: vi.fn(async () => flow(1, [{ id: "s2", type: "log.message" }])) } as never));
+    await slow.getState().open("scn_a");
+    const running = slow.getState().testStep("s2", {});
+    await slow.getState().stopStepTest();
+    expect(stopRun).toHaveBeenCalledWith("studio-pick");
+    finish({ status: "cancelled", output: null, logs: [] });
+    await running;
+    expect(slow.getState().stepTest).toMatchObject({ running: false });
   });
 
   it("does not resume onto AI edits nobody has reviewed", async () => {

@@ -109,7 +109,12 @@ function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undefined })
   const testStep = useStudio((s) => s.testStep);
   const stopRun = useStudio((s) => s.stopRun);
   const scope = useMemo(() => runScope(run, flow?.id), [run, flow?.id]);
-  const inputs = useMemo(() => stepInputs(flow?.steps ?? [], step, def, flow?.variables, scope.values), [flow, step, def, scope]);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const stopStepTest = useStudio((s) => s.stopStepTest);
+  const inputs = useMemo(
+    () => stepInputs(flow?.steps ?? [], step, (type) => (type === step.type ? def : stepTypes.find((d) => d.type === type)), flow?.variables, scope),
+    [flow, step, def, stepTypes, scope],
+  );
   const active = run !== null && isActive(run);
   const button = "flex items-center gap-1.5 rounded-[4px] border border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-700 enabled:hover:border-brand-500 enabled:hover:text-brand-600 disabled:opacity-50";
   if (active)
@@ -119,7 +124,15 @@ function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undefined })
         {trying ? t.editor.trying : t.editor.stopRun}
       </button>
     );
-  const blocked = inputs.missing.length > 0;
+  if (stepTest?.running)
+    return (
+      <button type="button" onClick={() => void stopStepTest()} className={button}>
+        <Square size={12} aria-hidden="true" />
+        {t.editor.testing}
+      </button>
+    );
+  const blocked = inputs.missing.length > 0 || inputs.partial.length > 0;
+  const why = inputs.missing.length > 0 ? t.editor.testMissing(inputs.missing.join("・")) : t.editor.testPartial(inputs.partial.join("・"));
   return (
     <>
       <button type="button" title={t.editor.runToTitle} onClick={() => void runTo(step.id!)} className={button}>
@@ -128,13 +141,13 @@ function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undefined })
       </button>
       <button
         type="button"
-        disabled={blocked || stepTest?.running}
-        title={blocked ? t.editor.testMissing(inputs.missing.join("・")) : t.editor.testTitle}
+        disabled={blocked}
+        title={blocked ? why : t.editor.testTitle}
         onClick={() => void testStep(step.id!, inputs.values)}
         className={button}
       >
         <Play size={12} aria-hidden="true" />
-        {stepTest?.running ? t.editor.testing : t.editor.testNode}
+        {t.editor.testNode}
       </button>
     </>
   );
