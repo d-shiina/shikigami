@@ -1228,7 +1228,7 @@ export const ja = {
     original: "詳しい内容",
     variablesNow: "この時点の変数",
     clickToEdit: "クリックで値を変更（続行すると以降のノードはこの値を使います）",
-    editHint: "Enter で変更・Esc で取り消し。文字列以外は 123・true・[1, 2] のように書きます",
+    editHint: "Enter で変更・Shift+Enter で改行・Esc で取り消し。文字列以外は 123・true・[1, 2] のように書きます",
     notAValue: "値として読めません。数値は 123、真偽値は true / false、リストは [1, 2] のように書きます",
     valueOf: (name: string) => `${name} の値`,
     secretNotEditable: "シークレットの値はここでは変更できません",

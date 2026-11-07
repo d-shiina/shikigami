@@ -89,8 +89,9 @@ function Variable({ name, value, secret }: { name: string; value: unknown; secre
       <span className="flex items-center gap-1 rounded-lg bg-slate-100 px-1.5 text-[12px] leading-[20px]">
         <span className="shrink-0 font-semibold text-slate-600">{name}</span>
         <span className="text-slate-400">=</span>
-        <input
+        <textarea
           autoFocus
+          rows={Math.min(6, text.split("\n").length)}
           aria-label={t.pause.valueOf(name)}
           aria-invalid={wrong}
           title={wrong ? t.pause.notAValue : t.pause.editHint}
@@ -100,11 +101,15 @@ function Variable({ name, value, secret }: { name: string; value: unknown; secre
             setWrong(false);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") void save();
+            // Shift+Enter starts a new line: a text keeps its line breaks.
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void save();
+            }
             if (e.key === "Escape") setText(null);
           }}
           onBlur={() => void save()}
-          className={`h-5 w-[140px] rounded-md border bg-paper px-1 text-[12px] text-ink outline-none ${wrong ? "border-shu-500" : "border-brand-500"}`}
+          className={`min-h-5 w-[140px] resize-none rounded-md border bg-paper px-1 text-[12px] leading-[18px] text-ink outline-none ${wrong ? "border-shu-500" : "border-brand-500"}`}
         />
       </span>
     );
@@ -188,7 +193,6 @@ export function RunPausePanel() {
 
   if (!run || !flow || (run.flowId && run.flowId !== flow.id)) return null;
   const pause = run.status === "paused" ? run.pause : null;
-  const secretNames = new Set((flow?.variables ?? []).filter((v) => v.secret).map((v) => v.name));
   const failure = !isActive(run) ? run.failure : null;
   if (!pause && !failure) return null;
 
@@ -197,6 +201,8 @@ export function RunPausePanel() {
   const inCall = pause?.callPath ?? [];
   const owner = inCall.length > 0 ? (diveChain(flow, called, inCall).at(-1)?.flow ?? flow) : flow;
   const step = stepId ? findStep(owner.steps ?? [], stepId) : null;
+  // The paused values are the owner's (a called flow has its own variables).
+  const secretNames = new Set((owner.variables ?? []).filter((v) => v.secret).map((v) => v.name));
   const show = () => {
     if (!stepId) return;
     if (inCall.length === 0) return goTo(stepId);
