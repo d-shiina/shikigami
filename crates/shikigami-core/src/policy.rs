@@ -220,6 +220,10 @@ pub struct RecordsPolicy {
     /// Keep at most this many run records (the newest).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep_runs: Option<u32>,
+    /// When a run fails at a browser or desktop step, keep a picture of that
+    /// screen beside the run's log (`logs/<time>_failed.png`). On unless `false`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_screenshots: Option<bool>,
 }
 
 impl RecordsPolicy {

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use shikigami_core::call::MAX_CALL_DEPTH;
 use shikigami_core::expr::{self, Expr};
 use shikigami_core::policy::{Policy, TargetDef};
@@ -34,6 +34,8 @@ use crate::runlog::RunLog;
 
 pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS: u64 = 500;
+/// How long the picture of the screen at a failure may take.
+const FAILURE_SHOT_LIMIT: Duration = Duration::from_secs(10);
 const DEFAULT_MAX_ITERATIONS: u64 = 1000;
 const MASK: &str = "***";
 /// Longest value (in characters, as JSON text for arrays and objects)
@@ -226,6 +228,13 @@ impl Emitter {
         // The receiver may have been dropped (fire-and-forget runs); the run
         // continues regardless.
         let _ = self.inner.tx.send(envelope);
+    }
+
+    /// Where a picture of the screen at the failure goes, when the run
+    /// writes a readable log (whole runs of a flow in its folder).
+    pub(crate) fn failure_shot_path(&self) -> Option<PathBuf> {
+        let log = self.inner.log.lock().ok()?;
+        log.as_ref().map(RunLog::failure_shot)
     }
 
     /// Names the run's log after how it ended. Call after `RunFinished`.
@@ -1741,6 +1750,85 @@ impl Executor {
                 }
             }
         }
+    }
+
+    /// Saves a picture of the screen the failed step worked on (its browser
+    /// context or its window) beside the run's log, and adds its path to the
+    /// error as `details.screenshot`, so an unattended failure can be seen
+    /// afterwards. Uses the adapter's own screenshot step; does nothing for
+    /// other steps, when the run writes no log, or when the screen is gone.
+    pub(crate) async fn capture_failure(&self, flow: &Flow, error: &mut RunError) {
+        if self.policy.records.failure_screenshots == Some(false) {
+            return;
+        }
+        let (Some(step_id), Some(step_type)) = (&error.step_id, &error.step_type) else {
+            return;
+        };
+        let Some(path) = self.emitter.failure_shot_path() else {
+            return;
+        };
+        // The failed step may be in a called flow.
+        let step = flow
+            .find_step(step_id)
+            .or_else(|| self.library.values().find_map(|f| f.find_step(step_id)));
+        let mut params = Map::new();
+        params.insert("path".into(), Value::String(path.display().to_string()));
+        let shot_type = match step_type.split('.').next() {
+            Some("browser") => {
+                if let Some(context) = step.and_then(|s| s.params.get("context")) {
+                    params.insert("context".into(), context.clone());
+                }
+                "browser.screenshot"
+            }
+            Some("desktop") => {
+                let Some(window) = step
+                    .and_then(|s| s.params.get("target"))
+                    .and_then(|t| t.get("window"))
+                else {
+                    return;
+                };
+                // Rendered as the step was: a title may be a template.
+                let Ok(window) = expr::render_value(window, &self.vars) else {
+                    return;
+                };
+                params.insert("target".into(), json!({ "window": window }));
+                "desktop.screenshot"
+            }
+            _ => return,
+        };
+        let Some(handler) = self.handlers.get(shot_type).cloned() else {
+            return;
+        };
+        let cancel = CancellationToken::new();
+        let input = ActionInput {
+            run_id: self.run_id.clone(),
+            step_id: step_id.clone(),
+            step_type: shot_type.to_owned(),
+            attempt: 1,
+            params: Value::Object(params),
+            cancel: cancel.clone(),
+            timeout_ms: FAILURE_SHOT_LIMIT.as_millis() as u64,
+            emitter: self.emitter.clone(),
+            secrets: self.secrets.clone(),
+            sites_restricted: false,
+        };
+        let taken = tokio::time::timeout(FAILURE_SHOT_LIMIT, handler.execute(input)).await;
+        cancel.cancel();
+        if !matches!(taken, Ok(Ok(_))) || !path.is_file() {
+            return;
+        }
+        let shown = path.display().to_string();
+        match error.details.get_or_insert_with(|| json!({})) {
+            Value::Object(details) => {
+                details.insert("screenshot".into(), Value::String(shown.clone()));
+            }
+            _ => return,
+        }
+        self.emitter.log(
+            LogLevel::Info,
+            format!("失敗したときの画面を保存しました: {shown}"),
+            Some(step_id.clone()),
+        );
     }
 
     /// `control.group`: its `body`, and with `retry` the whole body again from

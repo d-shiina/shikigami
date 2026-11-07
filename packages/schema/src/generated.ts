@@ -1526,6 +1526,11 @@ export interface RecordsPolicy {
    * Keep at most this many run records (the newest).
    */
   keepRuns?: number | null;
+  /**
+   * When a run fails at a browser or desktop step, keep a picture of that
+   * screen beside the run's log (`logs/<time>_failed.png`). On unless `false`.
+   */
+  failureScreenshots?: boolean | null;
 }
 /**
  * Runs asked for by a management server (see
@@ -1735,6 +1740,11 @@ export interface RecordsPolicy1 {
    * Keep at most this many run records (the newest).
    */
   keepRuns?: number | null;
+  /**
+   * When a run fails at a browser or desktop step, keep a picture of that
+   * screen beside the run's log (`logs/<time>_failed.png`). On unless `false`.
+   */
+  failureScreenshots?: boolean | null;
 }
 /**
  * Runs a management server may ask this PC for. Everything is closed by

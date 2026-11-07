@@ -2244,3 +2244,69 @@ async fn a_group_that_will_try_again_does_not_pause_until_its_last_attempt() {
     // It paused on the second run of the body.
     assert_eq!(report.outputs["n"], json!(2));
 }
+
+fn fake_def(step_type: &str) -> StepTypeDef {
+    StepTypeDef {
+        step_type: step_type.into(),
+        params_schema: json!({ "type": "object" }),
+        has_output: false,
+        ..flaky_def()
+    }
+}
+
+/// `test` fails; `browser.screenshot` writes its `path` and remembers the params.
+struct Screen(Arc<std::sync::Mutex<Vec<Value>>>);
+
+impl ActionHandler for Screen {
+    fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
+        Box::pin(async move {
+            if input.step_type.ends_with(".screenshot") {
+                let path = input.params["path"].as_str().unwrap().to_owned();
+                std::fs::write(&path, b"png").unwrap();
+                self.0.lock().unwrap().push(input.params);
+                Ok(json!(path))
+            } else {
+                Err(StepError::permanent("ELEMENT_NOT_FOUND", "no such button"))
+            }
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_failed_browser_step_leaves_a_picture_of_the_page_beside_the_log() {
+    let dir = tempfile::tempdir().unwrap();
+    let shots = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let runtime = Runtime::builder()
+        .register(fake_def("browser.click"), Screen(shots.clone()))
+        .register(fake_def("browser.screenshot"), Screen(shots.clone()))
+        .build();
+    let s = flow(vec![
+        Step::new("browser.click").with_param("context", "受注"),
+    ]);
+    let options = || RunOptions {
+        project_dir: Some(dir.path().to_path_buf()),
+        full_run: true,
+        ..RunOptions::default()
+    };
+    let (report, _) = run_project(&runtime, s.clone(), options()).await;
+    assert_eq!(report.status, RunStatus::Failed);
+    let error = report.error.unwrap();
+    let shot = error.details.as_ref().unwrap()["screenshot"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(shot.ends_with("_failed.png"), "{shot}");
+    assert!(std::path::Path::new(&shot).is_file());
+    assert_eq!(shots.lock().unwrap()[0]["context"], json!("受注"));
+    let log = std::fs::read_dir(dir.path().join("logs"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.extension().is_some_and(|e| e == "log"))
+        .unwrap();
+    assert_eq!(log.with_extension("png").display().to_string(), shot);
+
+    // A run without a log (a single step an AI tries) takes no picture.
+    let (report, _) = run_project(&runtime, s, RunOptions::default()).await;
+    assert!(report.error.unwrap().details.is_none());
+    assert_eq!(shots.lock().unwrap().len(), 1);
+}
