@@ -242,6 +242,10 @@ pub struct RunReport {
     /// Who asked for the run, from where, on which PC.
     #[serde(default, skip_serializing_if = "RunOrigin::is_empty")]
     pub origin: RunOrigin,
+    /// Names of the secrets the run used (typed values, API auth, saved
+    /// logins, OAuth tokens), never their values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secrets_used: Vec<String>,
 }
 
 /// How a run was started.

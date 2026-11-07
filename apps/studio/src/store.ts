@@ -37,8 +37,11 @@ import {
   type SecretInput,
   type PasteOutcome,
   type PickRequest,
+  type SecretKind,
   type SecretRequest,
+  type StepTestResult,
 } from "./lib/api";
+import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
@@ -129,6 +132,19 @@ function asVariableChange(env: RunEventEnvelope): VariableChange | null {
   };
 }
 
+/** The run id a node run alone has (Tauri `test_step`; also the browser 「画面から選ぶ」 opens). */
+export const STEP_TEST_RUN = "studio-pick";
+
+/** A node run alone (「ノードの単体実行」) and what it gave. */
+export type StepTest = {
+  flowId: string;
+  stepId: string;
+  running: boolean;
+  result: StepTestResult | null;
+  /** Why it could not start (not a failure of the node: that is in `result`). */
+  error: string | null;
+};
+
 export type RunState = {
   runId: string;
   /** The flow being run (known from `runStarted`). */
@@ -177,7 +193,7 @@ export function diveChain(root: Flow | null, called: Record<string, Flow>, path:
   let current = root;
   for (const stepId of path) {
     const step = current ? findStep(current.steps ?? [], stepId) : undefined;
-    const target = step?.type === "flow.call" ? step.params?.flow : undefined;
+    const target = step?.type === CALL ? step.params?.flow : undefined;
     const callee = typeof target === "string" ? called[target] : undefined;
     if (!callee) break;
     chain.push({ stepId, flow: callee });
@@ -201,7 +217,7 @@ export function calledIds(steps: Step[]): string[] {
   const ids = new Set<string>();
   const walk = (list: Step[]) => {
     for (const step of list) {
-      const target = step.type === "flow.call" ? step.params?.flow : undefined;
+      const target = step.type === CALL ? step.params?.flow : undefined;
       if (typeof target === "string" && target) ids.add(target);
       for (const children of Object.values(step.blocks ?? {})) walk(children);
     }
@@ -237,8 +253,10 @@ export type StudioState = {
   reveal: { stepId: string; seq: number } | null;
   /** The node open in the full-size editor (double-click on the chart). */
   editing: string | null;
-  /** 「このノードだけ試す」: the run pauses before this node, runs it, and pauses again after. */
+  /** 「ここまで実行」: the run pauses before this node, runs it, and pauses again after. */
   trying: string | null;
+  /** The last 「ノードの単体実行」 (only that node ran), until another node is run alone. */
+  stepTest: StepTest | null;
   /** While running, keep the running step in view. */
   followRun: boolean;
   /** Steps to pause before, per flow (this PC only). */
@@ -339,8 +357,12 @@ export type StudioState = {
   startRun(options?: { step?: boolean; stopAt?: string }): Promise<void>;
   openEditor(stepId: string): void;
   closeEditor(): void;
-  /** Runs the flow up to and through `stepId`, then pauses, so its result can be looked at. */
-  tryStep(stepId: string): Promise<void>;
+  /** 「ここまで実行」: runs the flow up to and through `stepId`, then pauses, so its result can be looked at. */
+  runTo(stepId: string): Promise<void>;
+  /** 「ノードの単体実行」: runs only `stepId`, with `values` for the variables it reads. */
+  testStep(stepId: string, values: Record<string, unknown>): Promise<void>;
+  /** 「中止」 for the node running alone. */
+  stopStepTest(): Promise<void>;
   stopRun(): Promise<void>;
   /** Step command for the paused (or running) run; false when it was refused. */
   debug(command: DebugCommand): Promise<boolean>;
@@ -420,7 +442,7 @@ export type StudioState = {
   dismissSecretFix(): void;
 };
 
-export type SecretPrefill = { name: string; sites: string[]; fields: SecretField[] };
+export type SecretPrefill = { name: string; sites: string[]; fields: SecretField[]; kind?: SecretKind };
 
 export type SecretFix = { name: string; code: string; site?: string; field?: SecretField };
 
@@ -704,9 +726,6 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "browser.press": { key: "Enter" },
 };
 
-const SWITCH = "control.switch";
-const FOR_EACH = "control.forEach";
-const CASE = "control.case";
 
 /** A case of a switch, with nothing to compare to yet. */
 function newCase(body: Step[] = []): Step {
@@ -785,6 +804,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       reveal: null,
       editing: null,
       trying: null,
+      stepTest: null,
       followRun: true,
       breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
@@ -1211,7 +1231,28 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ editing: null });
       },
 
-      async tryStep(stepId) {
+      async testStep(stepId, values) {
+        const flow = get().flow;
+        if (!flow || get().stepTest?.running || (get().run && isActive(get().run))) return;
+        set({ stepTest: { flowId: flow.id, stepId, running: true, result: null, error: null } });
+        try {
+          const result = await api.testStep(flow.id, stepId, values);
+          set({ stepTest: { flowId: flow.id, stepId, running: false, result, error: null } });
+        } catch (e) {
+          set({ stepTest: { flowId: flow.id, stepId, running: false, result: null, error: message(e) } });
+        }
+      },
+
+      async stopStepTest() {
+        if (!get().stepTest?.running) return;
+        try {
+          await api.stopRun(STEP_TEST_RUN);
+        } catch {
+          // It already ended: its result is on its way.
+        }
+      },
+
+      async runTo(stepId) {
         if (get().run && isActive(get().run)) return;
         set({ trying: stepId });
         await get().startRun({ stopAt: stepId });
@@ -1227,6 +1268,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           set((s) => ({
             // Events may have arrived before the command returned.
             run: s.run?.runId === runId ? s.run : newRun(runId, flow.id),
+            // A new run's result replaces what a node run alone gave.
+            stepTest: null,
             error: null,
             followRun: true,
             // A run's log opens under the chart.
@@ -1447,7 +1490,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           }
           return { run, human, secretFix, reveal, ...moved };
         });
-        // 「このノードだけ試す」: the pause before the node is only a way to get there; run it and pause after.
+        // 「ここまで実行」: the pause before the node is only a way to get there; run it and pause after.
         const trying = get().trying;
         if (trying && env.type === "paused" && env.stepId === trying && env.reason === "breakpoint") {
           set({ trying: null });

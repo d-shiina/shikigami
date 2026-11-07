@@ -47,6 +47,10 @@ pub struct Tokens {
     /// of the answer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_scope: Option<String>,
+    /// Unix seconds when the token endpoint last answered (sign-in or
+    /// refresh), shown in Studio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub obtained_at: Option<i64>,
 }
 
 impl std::fmt::Debug for Tokens {
@@ -497,6 +501,7 @@ async fn token_request(
         expires_at: expires_in.map(|secs| now_secs() + secs),
         scope: text("scope").or_else(|| old.and_then(|o| o.scope.clone())),
         requested_scope: old.and_then(|o| o.requested_scope.clone()),
+        obtained_at: Some(now_secs()),
     })
 }
 

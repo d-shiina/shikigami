@@ -8,7 +8,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WebviewWindowBuilder, Wry};
 
-use crate::runner::show_runner;
+use crate::runner::show_runner_later;
 
 const TRAY_ID: &str = "shikigami";
 const OPEN_RUNNER: &str = "open-runner";
@@ -67,17 +67,13 @@ pub(crate) fn create(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .menu(&menu(app, &labels)?)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
-            let done = match event.id().as_ref() {
-                OPEN_RUNNER => show_runner(app),
-                OPEN_STUDIO => show_studio(app),
-                QUIT => {
-                    app.exit(0);
-                    Ok(())
-                }
-                _ => Ok(()),
-            };
-            if let Err(e) = done {
-                tracing::warn!(error = %e, "tray menu");
+            // Windows are made off the main thread: making one inside an
+            // event handler deadlocks on Windows (tauri-apps/wry#583).
+            match event.id().as_ref() {
+                OPEN_RUNNER => show_runner_later(app),
+                OPEN_STUDIO => show_studio_later(app),
+                QUIT => app.exit(0),
+                _ => {}
             }
         })
         .on_tray_icon_event(|tray, event| {
@@ -87,15 +83,25 @@ pub(crate) fn create(app: &AppHandle) -> tauri::Result<TrayIcon> {
                 button_state: MouseButtonState::Up,
                 ..
             } = event
-                && let Err(e) = show_runner(tray.app_handle())
             {
-                tracing::warn!(error = %e, "tray click");
+                show_runner_later(tray.app_handle());
             }
         });
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
     builder.build(app)
+}
+
+/// [`show_studio`] from an event handler, off the main thread (see
+/// [`show_runner_later`]).
+fn show_studio_later(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = show_studio(&app) {
+            tracing::warn!(error = %e, "cannot open Studio");
+        }
+    });
 }
 
 /// Opens Studio's main window, making it again when it was closed (as at

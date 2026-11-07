@@ -65,6 +65,9 @@ pub struct AuditEntry {
     /// A change's label, a publish note, a run's outcome.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub detail: String,
+    /// The secrets a run used (names only).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<String>,
 }
 
 /// What to read.
@@ -160,6 +163,7 @@ fn changes(store: &FileStore, q: &AuditQuery, out: &mut Vec<AuditEntry>) {
                 ok: true,
                 error_code: None,
                 detail: e.summary.clone().unwrap_or(e.label),
+                secrets: Vec::new(),
             });
         }
         for p in store.read_publish_log(&id).unwrap_or_default() {
@@ -185,6 +189,7 @@ fn changes(store: &FileStore, q: &AuditQuery, out: &mut Vec<AuditEntry>) {
                 ok: true,
                 error_code: None,
                 detail: p.note,
+                secrets: Vec::new(),
             });
         }
     }
@@ -228,6 +233,7 @@ fn mcp_calls(local_root: &Path, q: &AuditQuery, out: &mut Vec<AuditEntry>) {
             ok: v.get("ok").and_then(Value::as_bool).unwrap_or(true),
             error_code: text(&v, "errorCode"),
             detail: text(&v, "class").unwrap_or_default(),
+            secrets: Vec::new(),
         });
     }
 }
@@ -268,6 +274,7 @@ fn runs(local_root: &Path, q: &AuditQuery, out: &mut Vec<AuditEntry>) {
             ok: r.status == RunStatus::Succeeded,
             error_code: r.error.as_ref().map(|e| e.code.clone()),
             detail: status,
+            secrets: r.secrets_used.clone(),
         });
     }
 }
@@ -417,6 +424,7 @@ mod tests {
             outputs: serde_json::Map::new(),
             subflows: Vec::new(),
             origin,
+            secrets_used: vec!["受注システム".into()],
         };
         record::RunRecorder::create(&local, &run)
             .unwrap()
@@ -435,6 +443,7 @@ mod tests {
         let ran = all.iter().find(|e| e.source == AuditSource::Run).unwrap();
         assert_eq!(ran.actor, "schedule");
         assert_eq!(ran.who.as_deref(), Some("毎朝"));
+        assert_eq!(ran.secrets, ["受注システム"]);
         assert!(!ran.ok);
 
         // Filters: by time and by flow.

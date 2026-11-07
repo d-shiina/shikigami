@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useStudio } from "../context";
-import type { SecretInfo } from "../lib/api";
-import { t } from "../lib/i18n";
+import type { SecretInfo, SecretKind } from "../lib/api";
+import { locale, t } from "../lib/i18n";
+import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
 
 const inputClass =
-  "w-full rounded border border-slate-300 px-2 py-1 text-sm focus:border-ink focus:outline-none";
+  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-ink dark:bg-paper focus:outline-none";
 
 type Draft = {
   name: string;
+  kind: SecretKind;
   username: string;
   password: string;
   totp: string;
@@ -15,12 +17,13 @@ type Draft = {
   description: string;
 };
 
-const empty: Draft = { name: "", username: "", password: "", totp: "", sites: "", description: "" };
+const empty: Draft = { name: "", kind: "login", username: "", password: "", totp: "", sites: "", description: "" };
 
 function draftOf(secret: SecretInfo): Draft {
   return {
     ...empty,
     name: secret.name,
+    kind: secret.kind ?? "login",
     username: secret.username,
     sites: secret.sites.join("\n"),
     description: secret.description ?? "",
@@ -34,11 +37,12 @@ function draftOf(secret: SecretInfo): Draft {
  */
 export function draftFor(
   secrets: SecretInfo[],
-  prefill: { name: string; sites: string[] },
+  prefill: { name: string; sites: string[]; kind?: SecretKind },
 ): { draft: Draft; isNew: boolean; added: string[] } {
   const existing = secrets.find((s) => s.name === prefill.name);
   if (!existing) {
-    return { draft: { ...empty, name: prefill.name, sites: prefill.sites.join("\n") }, isNew: true, added: [] };
+    const draft = { ...empty, name: prefill.name, kind: prefill.kind ?? "login", sites: prefill.sites.join("\n") };
+    return { draft, isNew: true, added: [] };
   }
   const added = prefill.sites.filter((site) => !existing.sites.includes(site));
   return { draft: { ...draftOf(existing), sites: [...existing.sites, ...added].join("\n") }, isNew: false, added };
@@ -77,18 +81,20 @@ function SecretForm({
   const saveSecret = useStudio((s) => s.saveSecret);
   const [draft, setDraft] = useState(initial);
   const edit = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const fields = KIND_FIELDS[draft.kind];
 
   return (
     <form
-      className="space-y-3"
+      className="space-y-3 rounded-[4px] border border-slate-200 bg-sheet p-4 shadow-sheet"
       autoComplete="off"
       onSubmit={async (e) => {
         e.preventDefault();
         const saved = await saveSecret({
           name: draft.name.trim(),
-          username: draft.username,
+          kind: draft.kind,
+          username: fields.includes("username") ? draft.username : undefined,
           password: draft.password === "" ? undefined : draft.password,
-          totp: draft.totp === "" ? undefined : draft.totp,
+          totp: draft.totp === "" || !fields.includes("totp") ? undefined : draft.totp,
           sites: draft.sites.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
           description: draft.description,
         });
@@ -111,15 +117,39 @@ function SecretForm({
           onChange={(e) => edit({ name: e.target.value })}
         />
       </Labeled>
-      <Labeled label={t.secretUsername} hint={t.secretUsernameHint}>
-        <input
-          className={inputClass}
-          value={draft.username}
-          autoFocus={asked}
-          onChange={(e) => edit({ username: e.target.value })}
-        />
-      </Labeled>
-      <Labeled label={t.secretPassword} hint={isNew ? undefined : t.secretPasswordKeep}>
+      <fieldset className="space-y-1">
+        <legend className="text-xs font-medium text-slate-600">{t.secretKind}</legend>
+        <div className="flex gap-1" role="radiogroup">
+          {SECRET_KINDS.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              role="radio"
+              aria-checked={draft.kind === kind}
+              className={`rounded-[4px] border px-2.5 py-1 text-sm ${
+                draft.kind === kind
+                  ? "border-ink bg-ink text-paper"
+                  : "border-slate-300 text-slate-700 hover:bg-slate-100"
+              }`}
+              onClick={() => edit({ kind })}
+            >
+              {t.secretKinds[kind]}
+            </button>
+          ))}
+        </div>
+        <span className="block text-[11px] text-slate-500">{t.secretKindHints[draft.kind]}</span>
+      </fieldset>
+      {fields.includes("username") && (
+        <Labeled label={fieldLabel(draft.kind, "username")}>
+          <input
+            className={inputClass}
+            value={draft.username}
+            autoFocus={asked}
+            onChange={(e) => edit({ username: e.target.value })}
+          />
+        </Labeled>
+      )}
+      <Labeled label={fieldLabel(draft.kind, "password")} hint={isNew ? undefined : t.secretPasswordKeep}>
         <input
           className={inputClass}
           type="password"
@@ -128,24 +158,26 @@ function SecretForm({
           onChange={(e) => edit({ password: e.target.value })}
         />
       </Labeled>
-      <Labeled label={t.secretSites} hint={t.secretSitesHint}>
+      <Labeled label={draft.kind === "login" ? t.secretSites : t.secretSitesApi} hint={t.secretSitesHintKind[draft.kind]}>
         <textarea
           className={`${inputClass} font-mono text-xs`}
           rows={2}
           value={draft.sites}
-          placeholder="https://example.com"
+          placeholder={draft.kind === "login" ? "https://example.com" : "https://api.example.com"}
           onChange={(e) => edit({ sites: e.target.value })}
         />
       </Labeled>
-      <Labeled label={t.secretTotp} hint={t.secretTotpHint}>
-        <input
-          className={`${inputClass} font-mono text-xs`}
-          type="password"
-          autoComplete="off"
-          value={draft.totp}
-          onChange={(e) => edit({ totp: e.target.value })}
-        />
-      </Labeled>
+      {fields.includes("totp") && (
+        <Labeled label={t.secretTotp} hint={t.secretTotpHint}>
+          <input
+            className={`${inputClass} font-mono text-xs`}
+            type="password"
+            autoComplete="off"
+            value={draft.totp}
+            onChange={(e) => edit({ totp: e.target.value })}
+          />
+        </Labeled>
+      )}
       <Labeled label={t.secretDescription}>
         <input className={inputClass} value={draft.description} onChange={(e) => edit({ description: e.target.value })} />
       </Labeled>
@@ -158,6 +190,28 @@ function SecretForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function when(at: string): string {
+  return new Date(at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** Whether an OAuth app is signed in, until when, and whether that renews itself. */
+function OAuthLine({ secret, now = Date.now() }: { secret: SecretInfo; now?: number }) {
+  const status = secret.oauth;
+  if (!status) return <p className="mt-1 text-[11px] text-slate-500">{t.secretOauthNotSignedIn}</p>;
+  const expired = status.expiresAt !== undefined && Date.parse(status.expiresAt) <= now;
+  const parts = [
+    status.expiresAt && t.secretOauthExpires(when(status.expiresAt)),
+    status.obtainedAt && t.secretOauthObtained(when(status.obtainedAt)),
+    status.refreshable ? t.secretOauthRefreshable : t.secretOauthNotRefreshable,
+  ].filter(Boolean);
+  return (
+    <p className="mt-1 text-[11px] text-slate-600">
+      {expired && <span className="mr-1 rounded bg-shu-600/10 px-1 text-shu-600">{t.secretOauthExpired}</span>}
+      {parts.join(locale === "ja" ? "・" : " · ")}
+    </p>
   );
 }
 
@@ -227,6 +281,9 @@ export function SecretsPage() {
                 <li key={s.name} className="rounded-[4px] border border-slate-200 bg-sheet p-3 shadow-sheet">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{s.name}</span>
+                    <span className="rounded-[4px] border border-slate-300 px-1 text-[11px] text-slate-600">
+                      {t.secretKinds[s.kind ?? "login"]}
+                    </span>
                     <span className="text-xs text-slate-500">{s.username}</span>
                     <button
                       type="button"
@@ -246,7 +303,7 @@ export function SecretsPage() {
                   <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-slate-500">
                     {s.fields.map((f) => (
                       <span key={f} className="rounded bg-slate-100 px-1">
-                        {t.secretField[f]}
+                        {fieldLabel(s.kind, f)}
                       </span>
                     ))}
                     {s.signedIn && (
@@ -267,6 +324,7 @@ export function SecretsPage() {
                       </span>
                     ))}
                   </div>
+                  {s.kind === "oauth" && <OAuthLine secret={s} />}
                 </li>
               ))}
             </ul>

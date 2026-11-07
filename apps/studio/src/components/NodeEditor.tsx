@@ -2,20 +2,23 @@
 // Left, the values the node can use (the row being repeated and its
 // columns, read from the Excel/CSV file before any run; the other
 // variables), a click away from the field being edited. Middle, the same
-// settings as the right pane, with room. Right, what 「このノードだけ試す」
-// gave: the flow runs up to the node, runs it, pauses, and its result and
-// log lines show here.
-import type { Step } from "@shikigami/schema";
-import { ChevronLeft, Play, Square } from "lucide-react";
+// settings, with room. Right, what the node gave: 「ノードの単体実行」 runs
+// only this node with the values the last run left (lib/stepTest.ts);
+// 「ここまで実行」 runs the flow from the start through it and pauses.
+import type { Step, StepTypeDef } from "@shikigami/schema";
+import { ChevronLeft, FileText, Play, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { resultStep } from "../lib/loopScope";
+import { enclosingLoops, resultStep } from "../lib/loopScope";
 import { TYPE_COLOR, knownVariables } from "../lib/nodeRows";
 import { runScope, sampleOf, shortValue } from "../lib/runScope";
 import { sentence, typeTitle } from "../lib/sentence";
-import { findStep, isActive } from "../store";
-import { StepInspector } from "./Inspector";
+import { stepInputs } from "../lib/stepTest";
+import { findStep, isActive, type StepTest } from "../store";
+import { useProjectMaybe } from "../project";
+import { startFileDrag } from "./FileDrag";
+import { StepInspector } from "./inspector/StepInspector";
 import { useActiveField, useInsertChoices } from "./InsertVariable";
 import { Sentence } from "./StoryView";
 import { ValueView } from "./ValueView";
@@ -66,7 +69,7 @@ function Editor({ step }: { step: Step }) {
           <Sentence parts={sentence(step, def)} />
         </span>
         <span className="ml-auto flex items-center gap-2">
-          <TryButton stepId={step.id!} />
+          <RunButtons step={step} def={def} />
           <button type="button" onClick={close} className="rounded-[4px] bg-ink px-3 py-1.5 text-[12.5px] font-semibold text-paper hover:bg-ink/90">
             {t.close}
           </button>
@@ -77,6 +80,7 @@ function Editor({ step }: { step: Step }) {
           <h3 className="shrink-0 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-bold tracking-wider text-slate-600">{t.editor.usable}</h3>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <Usable step={step} />
+            <Files />
           </div>
         </section>
         <section className="flex min-h-0 flex-col">
@@ -96,24 +100,56 @@ function Editor({ step }: { step: Step }) {
   );
 }
 
-function TryButton({ stepId }: { stepId: string }) {
+function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undefined }) {
   const run = useStudio((s) => s.run);
+  const flow = useStudio((s) => s.flow);
   const trying = useStudio((s) => s.trying);
-  const tryStep = useStudio((s) => s.tryStep);
+  const stepTest = useStudio((s) => s.stepTest);
+  const runTo = useStudio((s) => s.runTo);
+  const testStep = useStudio((s) => s.testStep);
   const stopRun = useStudio((s) => s.stopRun);
+  const scope = useMemo(() => runScope(run, flow?.id), [run, flow?.id]);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const stopStepTest = useStudio((s) => s.stopStepTest);
+  const inputs = useMemo(
+    () => stepInputs(flow?.steps ?? [], step, (type) => (type === step.type ? def : stepTypes.find((d) => d.type === type)), flow?.variables, scope),
+    [flow, step, def, stepTypes, scope],
+  );
   const active = run !== null && isActive(run);
+  const button = "flex items-center gap-1.5 rounded-[4px] border border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-700 enabled:hover:border-brand-500 enabled:hover:text-brand-600 disabled:opacity-50";
   if (active)
     return (
-      <button type="button" onClick={() => void stopRun()} className="flex items-center gap-1.5 rounded-[4px] border border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50">
+      <button type="button" onClick={() => void stopRun()} className={button}>
         <Square size={12} aria-hidden="true" />
         {trying ? t.editor.trying : t.editor.stopRun}
       </button>
     );
+  if (stepTest?.running)
+    return (
+      <button type="button" onClick={() => void stopStepTest()} className={button}>
+        <Square size={12} aria-hidden="true" />
+        {t.editor.testing}
+      </button>
+    );
+  const blocked = inputs.missing.length > 0 || inputs.partial.length > 0;
+  const why = inputs.missing.length > 0 ? t.editor.testMissing(inputs.missing.join("・")) : t.editor.testPartial(inputs.partial.join("・"));
   return (
-    <button type="button" title={t.editor.tryTitle} onClick={() => void tryStep(stepId)} className="flex items-center gap-1.5 rounded-[4px] border border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-700 hover:border-brand-500 hover:text-brand-600">
-      <Play size={12} aria-hidden="true" />
-      {t.editor.tryNode}
-    </button>
+    <>
+      <button type="button" title={t.editor.runToTitle} onClick={() => void runTo(step.id!)} className={button}>
+        <Play size={12} aria-hidden="true" />
+        {t.editor.runTo}
+      </button>
+      <button
+        type="button"
+        disabled={blocked}
+        title={blocked ? why : t.editor.testTitle}
+        onClick={() => void testStep(step.id!, inputs.values)}
+        className={button}
+      >
+        <Play size={12} aria-hidden="true" />
+        {t.editor.testNode}
+      </button>
+    </>
   );
 }
 
@@ -136,7 +172,7 @@ function Usable({ step }: { step: Step }) {
   const sourceOf = (itemVar: string): string | undefined => {
     const loop = choices.loops.find((l) => l.itemVar === itemVar);
     if (!loop) return undefined;
-    const items = findLoopItems(flow?.steps ?? [], step.id ?? "", itemVar);
+    const items = enclosingLoops(flow?.steps ?? [], step.id ?? "").find((l) => l.itemVar === itemVar)?.items ?? null;
     const reader = items ? resultStep(flow?.steps ?? [], items) : null;
     const path = typeof reader?.params?.path === "string" ? reader.params.path : undefined;
     return path ?? (reader ? reader.name || typeTitle(reader, stepTypes.find((d) => d.type === reader.type)) : (items ?? undefined));
@@ -185,31 +221,76 @@ function Usable({ step }: { step: Step }) {
   );
 }
 
+/** The flow's files, to drag into a file setting (the project panel is under this editor). */
+function Files() {
+  const files = useProjectMaybe((s) => s.files?.files, undefined);
+  const list = (files ?? []).filter((f) => !f.path.startsWith("work/") && !f.path.startsWith("logs/"));
+  if (list.length === 0) return null;
+  return (
+    <div className="border-t border-slate-100 pt-2 pb-3">
+      <div className="px-4 pb-0.5 text-[11px] font-semibold text-slate-600">{t.fileDrop.files}</div>
+      <p className="px-4 pb-1 text-[11px] leading-snug text-slate-500">{t.fileDrop.dragHint}</p>
+      {list.map((f) => (
+        <div
+          key={f.path}
+          onPointerDown={(e) => startFileDrag(e, f.path)}
+          title={f.path}
+          className="flex cursor-grab items-center gap-2 px-4 py-1 text-[12.5px] select-none hover:bg-brand-50 active:cursor-grabbing"
+        >
+          <FileText size={13} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
+          <span className="truncate font-mono text-[11.5px] text-ink">{f.path}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** `item.顧客`, or `item['税込 金額']` for a name that is not a plain word. */
 function access(column: string): string {
   return /^[\p{L}_][\p{L}\p{N}_]*$/u.test(column) ? `.${column}` : `['${column.replace(/'/g, "\\'")}']`;
 }
 
-/** The list the repeat binding `itemVar` around `id` walks over, when it is a plain variable. */
-function findLoopItems(steps: Step[], id: string, itemVar: string): string | null {
-  const walk = (list: Step[], around: Step[]): Step[] | null => {
-    for (const s of list) {
-      if (s.id === id) return around;
-      const inner = s.type === "control.forEach" ? [s, ...around] : around;
-      for (const children of Object.values(s.blocks ?? {})) {
-        const found = walk(children, inner);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-  const loop = (walk(steps, []) ?? []).find((l) => (typeof l.params?.itemVar === "string" ? l.params.itemVar : "item") === itemVar);
-  const items = loop?.params?.items;
-  return typeof items === "string" && /^[\p{L}_][\p{L}\p{N}_]*$/u.test(items.trim()) ? items.trim() : null;
+/** The node's result: its run alone, or else what the last run did there. */
+function Result({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }) {
+  const stepTest = useStudio((s) => s.stepTest);
+  const flow = useStudio((s) => s.flow);
+  if (stepTest && stepTest.stepId === stepId && stepTest.flowId === flow?.id) return <TestResult test={stepTest} hasOutput={hasOutput} />;
+  return <RunResult stepId={stepId} hasOutput={hasOutput} />;
+}
+
+/** What 「ノードの単体実行」 gave. */
+function TestResult({ test, hasOutput }: { test: StepTest; hasOutput: boolean }) {
+  if (test.running) return <p className="px-4 py-3 text-[12.5px] font-semibold text-slate-600">{t.editor.testing}</p>;
+  const r = test.result;
+  const ok = r?.status === "succeeded";
+  return (
+    <div className="space-y-3 px-4 py-3 text-[12.5px]">
+      <div className={`font-semibold ${ok ? "text-moegi-600" : "text-shu-600"}`}>{ok ? t.editor.tested : t.editor.testFailed}</div>
+      {(test.error || r?.error) && <p className="text-[12px] leading-relaxed text-shu-600">{test.error ?? r?.error?.message}</p>}
+      {r && hasOutput && (
+        <div>
+          <div className="pb-1 text-[11px] font-semibold text-slate-600">{t.editor.output}</div>
+          <ValueView value={r.output} />
+        </div>
+      )}
+      {r && r.logs.length > 0 && (
+        <div>
+          <div className="pb-1 text-[11px] font-semibold text-slate-600">{t.editor.log}</div>
+          <ul className="space-y-0.5 font-mono text-[11px] leading-snug">
+            {r.logs.map((l, i) => (
+              <li key={i} className={l.level === "error" ? "text-shu-600" : l.level === "warn" ? "text-accent-600" : "text-slate-600"}>
+                {l.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** What the last run did at this node: its state, the value it saved, and its log lines. */
-function Result({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }) {
+function RunResult({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }) {
   const run = useStudio((s) => s.run);
   const flow = useStudio((s) => s.flow);
   const trying = useStudio((s) => s.trying);

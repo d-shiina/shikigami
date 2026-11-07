@@ -337,13 +337,20 @@ pub struct RequestSecretParams {
     /// Name to register the login under, e.g. `Google` or `受注システム`. Use an
     /// existing name (list_secrets) to ask for a missing field or site.
     pub name: String,
+    /// What to register: `login` (default; a user name and password typed into
+    /// a site or app), `apiKey` (a fixed key or token of a web API, used as
+    /// http.request `auth` with field `password`) or `oauth` (an app registered
+    /// at an OAuth provider: client ID and client secret, for oauth.signIn).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<shikigami_core::secret::SecretKind>,
     /// Addresses it will be typed into, e.g. the login page's URL
     /// (`https://accounts.google.com/...`; kept as its origin). Desktop apps:
     /// `app:<exe name>`.
     #[serde(default)]
     pub sites: Vec<String>,
-    /// Fields needed. Default: username and password. Add `totp` when the site
-    /// asks for an authenticator-app code.
+    /// Fields needed. Default: username and password (for `apiKey`: password,
+    /// which holds the key). Add `totp` when the site asks for an
+    /// authenticator-app code.
     #[serde(default)]
     pub fields: Vec<shikigami_core::secret::SecretField>,
     /// Why you need it, in one sentence for the user (Japanese is fine).

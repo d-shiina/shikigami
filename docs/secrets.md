@@ -2,7 +2,7 @@
 
 English | [日本語](ja/secrets.md)
 
-How IDs and passwords for business sites and apps are handled. Three principles:
+How IDs and passwords for business sites and apps, and keys for web APIs, are handled. Three principles:
 
 1. **People register the values**, under a name, in Studio's 🔑 Secrets (or with the CLI), e.g. "Order system".
 2. **Flows and the AI only get the name.** A flow says only `{ "secret": "Order system", "field": "password" }`. The value is handed only to the running node and never appears in flow files, MCP results, logs or screenshots.
@@ -17,15 +17,29 @@ How IDs and passwords for business sites and apps are handled. Three principles:
 | Field | Contents |
 |---|---|
 | Name | The name flows and the AI use. 1–64 characters |
+| Kind | **Login** (a username and password typed into a site or app), **API key** (a fixed key or token sent to a web API) or **OAuth app** (an app registered at an OAuth provider, [oauth.md](oauth.md)). The kind names the fields and shows only the ones it uses: an API key has just the key, an OAuth app the client ID and client secret |
 | Username / Password | The login values. When editing, an empty password keeps the previous one |
 | Sites and apps allowed | One per line. `https://example.com/login` is treated as `https://example.com` (the origin). Desktop apps as `app:billing.exe` (the executable name; [desktop.md](desktop.md)) |
 | MFA setup key | Optional. The key next to the authenticator QR code (base32) or an `otpauth://` string. One-time codes are filled in automatically |
+
+All kinds are one vault and one way to write them in flows (below): the kind changes no storage, site check or masking. Kept apart they would need a second place to look and a second way to reference, for the AI too.
+
+| Kind | Fields (as stored) | Used by | Who fills it in |
+|---|---|---|---|
+| `login` | `username`, `password`, `totp` | input nodes (`browser.fill`, `desktop.*`, `db.*`…) | a person |
+| `apiKey` | `password` (the key) | `http.request` `auth` with `authType` `bearer` or `header` | a person |
+| `oauth` | `username` (client ID), `password` (client secret) | `oauth.signIn`; the access token it gets is `field: "accessToken"` | a person enters the client; the tokens are obtained and renewed automatically |
+
+Changing the kind of a saved secret removes the fields the new kind does not use (e.g. the username when it becomes an API key). Secrets registered before kinds existed count as OAuth apps once they have tokens, as logins otherwise.
+
+For an OAuth app the list shows when the access token expires, when it was last obtained, and whether it renews itself (a refresh token is kept) or needs signing in again.
 
 ### CLI
 
 ```powershell
 shikigami secret set "Order system" --username tanaka --site https://orders.example.com   # asks for the password without echo
 shikigami secret set "Order system" --totp JBSWY3DPEHPK3PXP                                 # only the fields to change
+shikigami secret set "Orders API" --kind api-key --site https://api.example.com          # asks for the key without echo
 shikigami secret list
 shikigami secret remove "Order system"
 shikigami secret logout "Order system"     # removes only the saved sign-in state (below)
@@ -81,7 +95,7 @@ With `session: "<name>"` on `browser.open`, that context starts with the saved c
 
 ## From AI (MCP)
 
-- The AI never asks for passwords in the chat. `list_secrets` shows it only **names, sites and which fields are set** (neither values nor usernames).
+- The AI never asks for passwords in the chat. `list_secrets` shows it only **names, kinds, sites and which fields are set** (neither values nor usernames).
 - When it runs into a login page while exploring, the results of `inspect_page` / `test_step` carry `login` (a mark that login is needed, with hints).
   - If a secret fits, it logs in with `{ "secret": …, "field": … }` in a `browser.fill` through `test_step`.
   - If not, it asks the person to register one with `request_secret` (below). For a manual login, `test_step` with `browser.waitForHuman`.
@@ -100,6 +114,7 @@ Instead of asking for passwords in the chat, the AI asks Studio to register one 
 - The "reason" is text written by the AI; Studio shows it as "From the AI". Input is limited to the registered sites, so whatever the reason says, nothing is typed into another site.
 - `status` in the result: `registered` (use it in `browser.fill`) / `waiting` (not yet; call again with `waitMs`, or `list_secrets`) / `dismissed` (the person closed it with Later).
 - `fields` defaults to `username` and `password`. Add `totp` when an authenticator code is needed.
+- `kind: "apiKey"` asks for a web API key (`fields` then defaults to `password`, which holds the key); `kind: "oauth"` for an OAuth app. Studio's form then names the fields that way.
 - If Studio is not running, the AI tells the person in the chat to open Studio and register it. The request stays and shows up once Studio opens.
 
 ### When a run fails

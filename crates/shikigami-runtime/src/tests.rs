@@ -1167,6 +1167,9 @@ async fn secrets_are_resolved_for_steps_and_masked_everywhere() {
     assert_eq!(report.outputs["user"]["typed"], json!("tanaka"));
     let all = serde_json::to_string(&events).unwrap();
     assert!(!all.contains("hunter2"));
+    // The report names the secrets used, for the audit trail.
+    assert_eq!(report.secrets_used, ["受注"]);
+    assert!(!serde_json::to_string(&report).unwrap().contains("hunter2"));
 }
 
 #[tokio::test]

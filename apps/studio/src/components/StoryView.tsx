@@ -1,4 +1,5 @@
 import type { HistoryEntry, Step, StepTypeDef } from "@shikigami/schema";
+import { IF } from "../lib/stepTypes";
 import { useEffect, useMemo } from "react";
 import { useStudio } from "../context";
 import { actorLabel, describe, formatValue, relativeTime } from "../lib/changes";
@@ -197,7 +198,7 @@ function StepItem({ step, ctx }: { step: Step; ctx: Ctx }) {
       </div>
       {lanes.map((lane) => (
         <div key={lane.name} className="ml-[21px] border-l-2 border-slate-200 pl-3">
-          {lanes.length > 1 || step.type === "control.if" ? (
+          {lanes.length > 1 || step.type === IF ? (
             <div className="mt-1 ml-2.5 text-xs font-semibold text-slate-500">{lane.label}</div>
           ) : null}
           <StepList steps={step.blocks?.[lane.name] ?? []} ctx={ctx} parentId={id} block={lane.name} />

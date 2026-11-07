@@ -1,3 +1,4 @@
+import { CASE, PARALLEL, SWITCH } from "../lib/stepTypes";
 import {
   Background,
   BaseEdge,
@@ -31,6 +32,8 @@ import { PERSON_CODES, todosByStep } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { t } from "../lib/i18n";
 import { useProjectMaybe } from "../project";
+import { nodeForFile } from "../lib/fileDrop";
+import { useFileDropTarget } from "./FileDrag";
 import type { HistoryEntry, Flow, StepTypeDef } from "@shikigami/schema";
 import { dataLinks, INPUT_NODE, inHandle, OUTPUT_NODE, outHandle } from "../lib/dataFlow";
 import { focus, useFocus, varFocus } from "../lib/focus";
@@ -1038,6 +1041,20 @@ export function FlowCanvas() {
     [calls],
   );
   const layout = useMemo(() => layoutFlow(flow?.steps ?? [], defs, extra), [flow, defs, extra]);
+  // A file dropped on the chart becomes the node that reads it: after the
+  // node it is dropped on, into the empty block it is dropped on, or at the end.
+  const fileDrop = useFileDropTarget("canvas", async (paths, el) => {
+    if (inside) return;
+    const id = el.closest(".react-flow__node")?.getAttribute("data-id");
+    const hit = id ? layout.nodes.find((n) => n.id === id) : undefined;
+    const specs = paths.flatMap((p) => nodeForFile(p, stepTypes) ?? []);
+    if (specs.length === 0) return;
+    if (hit?.data.kind === "step") select({ kind: "step", stepId: hit.data.step.id ?? hit.id });
+    else if (hit?.data.kind === "slot") select({ kind: "slot", parentId: hit.data.parentId, block: hit.data.block });
+    else select(null);
+    // Each one goes after the one before it (the new node is selected).
+    for (const spec of specs) await addStep(spec.type, spec.params);
+  });
   const tails = useMemo(() => new Set(layout.nodes.filter((n) => n.data.kind === "slot" && n.data.tail).map((n) => n.id)), [layout]);
   // Steps whose failure the run goes on past (onError: continue, their own or the flow's).
   const continues = useMemo(() => {
@@ -1055,7 +1072,7 @@ export function FlowCanvas() {
       if (n.data.kind !== "step") continue;
       // Nor among a switch's cases: what goes there is a case (see the "+" beside them).
       const parentType = n.data.parentId ? types.get(n.data.parentId) : undefined;
-      if (parentType === "control.parallel" || (parentType === "control.switch" && n.data.block === "cases")) continue;
+      if (parentType === PARALLEL || (parentType === SWITCH && n.data.block === "cases")) continue;
       map.set(n.id, { parentId: n.data.parentId, block: n.data.block, index: n.data.index });
     }
     return map;
@@ -1195,7 +1212,7 @@ export function FlowCanvas() {
   return (
     <ReactFlow
       key={`${root.id}/${callKey(path)}`}
-      className="canvas-bg"
+      className={`canvas-bg ${fileDrop.over ? "outline-2 -outline-offset-8 outline-dashed outline-brand-500" : ""}`}
       colorMode={theme}
       nodes={[...frames, ...nodes]}
       edges={edges}
@@ -1203,6 +1220,7 @@ export function FlowCanvas() {
       edgeTypes={edgeTypes}
       nodesConnectable={false}
       ref={wrapper}
+      {...(inside ? {} : fileDrop.attrs)}
       onInit={(flow) => {
         flowRef.current = flow;
         // Fit the chart, but never shrink it below reading size: a long
@@ -1229,7 +1247,7 @@ export function FlowCanvas() {
           // An empty block is there to be filled: clicking it opens the palette for it.
           select({ kind: "slot", parentId: data.parentId, block: data.block });
           // Beside a switch's cases it adds the next case.
-          if (data.addCase) return void addStep("control.case");
+          if (data.addCase) return void addStep(CASE);
           const box = (event.target as Element).closest(".react-flow__node")?.getBoundingClientRect();
           setPaletteOpen(true, null, box);
         }

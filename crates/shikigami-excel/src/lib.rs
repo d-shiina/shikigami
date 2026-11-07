@@ -75,6 +75,10 @@ impl Adapter for ExcelAdapter {
         "excel"
     }
 
+    fn table_columns(&self, step_type: &str, params: &Value) -> Option<Vec<String>> {
+        (step_type == types::READ_ROWS).then(|| read_rows_columns(params).ok())?
+    }
+
     fn install(&self, mut builder: RuntimeBuilder) -> RuntimeBuilder {
         for (def, kind) in step_defs() {
             builder = builder.register(def, ExcelStep { kind });

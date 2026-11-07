@@ -2,6 +2,7 @@
 // plus output rows for the variables the step writes. Display only; the
 // layout uses the same rows to size nodes, so both always agree.
 import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
+import { BINDS, CALL, FOR_EACH, REPEAT, TRY, VARIABLE_SET } from "./stepTypes";
 import { formatValue } from "./changes";
 import { listToText } from "./listText";
 import { readable, targetText } from "./sentence";
@@ -98,7 +99,7 @@ function paramKeys(step: Step, def: StepTypeDef | undefined): string[] {
   return keys;
 }
 
-export const CALL = "flow.call";
+export { CALL } from "./stepTypes";
 
 /** A call's `inputs` / `outputs` map, keyed by the called flow's variables. */
 export function callMap(step: Step, key: "inputs" | "outputs"): Record<string, unknown> {
@@ -110,35 +111,36 @@ export function callMap(step: Step, key: "inputs" | "outputs"): Record<string, u
 export function outputs(step: Step): { label: string; variable: string }[] {
   const p = step.params ?? {};
   const out: { label: string; variable: string }[] = [];
-  if (step.type === "variable.set" && typeof p.name === "string") out.push({ label: t.outputLabels.writes, variable: p.name });
+  if (step.type === VARIABLE_SET && typeof p.name === "string") out.push({ label: t.outputLabels.writes, variable: p.name });
   if (step.type === CALL) {
     for (const [name, target] of Object.entries(callMap(step, "outputs"))) {
       if (typeof target === "string" && target) out.push({ label: name, variable: target });
     }
   }
-  if (step.type === "control.forEach") {
-    out.push({ label: t.outputLabels.item, variable: typeof p.itemVar === "string" ? p.itemVar : "item" });
-    if (typeof p.indexVar === "string") out.push({ label: t.outputLabels.index, variable: p.indexVar });
-  }
+  if (step.type === FOR_EACH) out.push({ label: t.outputLabels.item, variable: typeof p.itemVar === "string" ? p.itemVar : "item" });
+  if ((step.type === FOR_EACH || step.type === REPEAT) && typeof p.indexVar === "string") out.push({ label: t.outputLabels.index, variable: p.indexVar });
+  if (step.type === TRY && typeof p.errorVar === "string") out.push({ label: t.outputLabels.error, variable: p.errorVar });
   if (step.saveAs) out.push({ label: t.outputLabels.result, variable: step.saveAs });
   return out;
 }
 
-const OUTPUT_KEYS: Record<string, string[]> = {
-  "variable.set": ["name"],
-  "control.forEach": ["itemVar", "indexVar"],
-};
+/** Params shown as outputs (the variables a node binds), not as rows of their own. */
+const OUTPUT_KEYS = BINDS;
 
 /** A call shows one row per input it passes, labelled with the called flow's variable. */
-function callRows(step: Step, known: ReadonlySet<string>): Row[] {
-  const inputs = Object.entries(callMap(step, "inputs"));
-  const rows: Row[] = inputs.slice(0, MAX_PARAM_ROWS).map(([name, value]) => ({
+function callInputRows(step: Step, known: ReadonlySet<string>): Extract<Row, { kind: "param" }>[] {
+  return Object.entries(callMap(step, "inputs")).map(([name, value]) => ({
     kind: "param",
     key: `inputs.${name}`,
     label: name,
     value: display(name, value),
     refs: referencedVariables(value, known),
   }));
+}
+
+function callRows(step: Step, known: ReadonlySet<string>): Row[] {
+  const inputs = callInputRows(step, known);
+  const rows: Row[] = inputs.slice(0, MAX_PARAM_ROWS);
   if (inputs.length > MAX_PARAM_ROWS) rows.push({ kind: "more", count: inputs.length - MAX_PARAM_ROWS });
   for (const o of outputs(step)) rows.push({ kind: "output", ...o });
   return rows;
@@ -154,18 +156,26 @@ function projectFile(key: string, value: unknown, def: StepTypeDef | undefined):
   return FOLDERS.has(role) && path.includes("/") ? { path, role: role as "input" } : undefined;
 }
 
+/** Every set param of a node as a line (label: value), for the chart and the right pane's summary. */
+export function paramRows(step: Step, def: StepTypeDef | undefined, known: ReadonlySet<string> = new Set()): Extract<Row, { kind: "param" }>[] {
+  if (step.type === CALL) return callInputRows(step, known);
+  const skip = new Set(OUTPUT_KEYS[step.type] ?? []);
+  return paramKeys(step, def)
+    .filter((k) => !skip.has(k))
+    .map((key) => ({
+      kind: "param",
+      key,
+      label: paramLabel(key, step.type),
+      value: display(key, step.params?.[key]),
+      refs: referencedVariables(step.params?.[key], known),
+      ...(projectFile(key, step.params?.[key], def) ? { file: projectFile(key, step.params?.[key], def) } : {}),
+    }));
+}
+
 export function nodeRows(step: Step, def: StepTypeDef | undefined, known: ReadonlySet<string> = new Set()): Row[] {
   if (step.type === CALL) return callRows(step, known);
-  const skip = new Set(OUTPUT_KEYS[step.type] ?? []);
-  const params = paramKeys(step, def).filter((k) => !skip.has(k));
-  const rows: Row[] = params.slice(0, MAX_PARAM_ROWS).map((key) => ({
-    kind: "param",
-    key,
-    label: paramLabel(key, step.type),
-    value: display(key, step.params?.[key]),
-    refs: referencedVariables(step.params?.[key], known),
-    ...(projectFile(key, step.params?.[key], def) ? { file: projectFile(key, step.params?.[key], def) } : {}),
-  }));
+  const params = paramRows(step, def, known);
+  const rows: Row[] = params.slice(0, MAX_PARAM_ROWS);
   if (params.length > MAX_PARAM_ROWS) rows.push({ kind: "more", count: params.length - MAX_PARAM_ROWS });
   for (const o of outputs(step)) rows.push({ kind: "output", ...o });
   return rows;

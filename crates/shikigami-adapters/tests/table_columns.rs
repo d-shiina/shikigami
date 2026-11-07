@@ -1,5 +1,19 @@
 use serde_json::json;
-use shikigami_adapters::table_columns;
+use std::sync::Arc;
+
+use shikigami_runtime::Adapter;
+
+fn table_columns(
+    step_type: &str,
+    params: &serde_json::Value,
+    folder: &std::path::Path,
+) -> Option<Vec<String>> {
+    let adapters: Vec<Arc<dyn Adapter>> = vec![
+        Arc::new(shikigami_files::FileAdapter::new()),
+        Arc::new(shikigami_excel::ExcelAdapter::new()),
+    ];
+    shikigami_adapters::table_columns(&adapters, step_type, params, folder)
+}
 
 #[test]
 fn reads_the_header_of_a_csv_in_the_flow_folder() {

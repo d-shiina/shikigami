@@ -604,6 +604,13 @@
         "origin": {
           "description": "Who asked for the run, from where, on which PC.",
           "$ref": "#/$defs/RunOrigin"
+        },
+        "secretsUsed": {
+          "description": "Names of the secrets the run used (typed values, API auth, saved\nlogins, OAuth tokens), never their values.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

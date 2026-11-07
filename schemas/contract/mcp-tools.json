@@ -1370,6 +1370,22 @@
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$defs": {
+          "SecretKind": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "login"
+              },
+              {
+                "type": "string",
+                "const": "apiKey"
+              },
+              {
+                "type": "string",
+                "const": "oauth"
+              }
+            ]
+          },
           "SecretField": {
             "oneOf": [
               {
@@ -1394,6 +1410,16 @@
         "properties": {
           "name": {
             "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SecretKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sites": {
             "type": "array",
