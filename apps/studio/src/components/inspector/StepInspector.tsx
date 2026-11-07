@@ -216,6 +216,14 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
             <Row label={t.stepName}>
               <CommitInput value={step.name ?? ""} onCommit={(name) => update({ name })} />
             </Row>
+            <Row label={t.memo}>
+              <CommitInput
+                multiline
+                value={step.description ?? ""}
+                placeholder={t.memoPlaceholder}
+                onCommit={(description) => update({ description: description.trim() })}
+              />
+            </Row>
           </Section>
           {isCall ? (
             <CallEditor step={step} vars={vars} update={update} />
@@ -283,10 +291,11 @@ function StepSummary({ step, def, vars, isCall }: { step: Step; def: StepTypeDef
     <>
       <Section title={t.props.settingsSummary}>
         {step.name && line(t.stepName, step.name, "name")}
+        {step.description && line(t.memo, <span className="whitespace-pre-wrap">{step.description}</span>, "memo")}
         {rows.map((r) =>
           line(r.label, unset.has(r.key) ? <span className="text-amber-700">{t.flow.unsetValue}</span> : r.value, r.key),
         )}
-        {rows.length === 0 && !step.name && <p className="py-1 text-[12px] text-slate-500">{t.props.noSettings}</p>}
+        {rows.length === 0 && !step.name && !step.description && <p className="py-1 text-[12px] text-slate-500">{t.props.noSettings}</p>}
         <button
           type="button"
           title={t.props.editSettingsTitle}
