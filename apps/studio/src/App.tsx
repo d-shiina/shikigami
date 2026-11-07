@@ -34,6 +34,7 @@ import { StatusBar } from "./components/StatusBar";
 import { StoryView } from "./components/StoryView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
+import { WindowControls } from "./components/WindowControls";
 import { CanvasDock, OutlineButton, SearchButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
@@ -370,11 +371,14 @@ function Shell() {
             <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
           </Peek>
         )}
-        {/* The title bar lies on the window's ground, so the window buttons sit in its corner as
-            on any Windows window; the work under it floats, framed and rounded, as in Linear. */}
+        {/* The window buttons keep to a thin strip of the window's ground, in its corner as on any
+            Windows window; the work under it floats, framed and rounded, title bar and all, as in Linear. */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <TitleBar view={view} onView={setView} />
+          <div data-tauri-drag-region className="flex h-8 shrink-0 justify-end select-none">
+            <WindowControls />
+          </div>
           <div className="mr-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+            <TitleBar view={view} onView={setView} />
             <HumanBanner />
             <Banner />
             <div className="flex min-h-0 flex-1">
