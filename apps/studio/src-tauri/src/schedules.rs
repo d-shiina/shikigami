@@ -4,13 +4,15 @@
 //! its local pipe, as `shikigami schedule` and `shikigami agent` do.
 //! See docs/schedules.md.
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use serde::Serialize;
 use shikigami_agent::ipc::{self, Request};
 use shikigami_agent::{AgentStatus, Schedule, Schedules, When};
-use shikigami_core::{ErrorPayload, FlowService, VariableDef};
+use shikigami_core::call::called_ids;
+use shikigami_core::{ErrorPayload, Flow, FlowId, FlowService, VariableDef};
 use tauri::State;
 
 use crate::AppState;
@@ -35,6 +37,9 @@ pub struct ScheduleView {
     pub flow_name: Option<String>,
     /// The flow has a published version (schedules run only that).
     pub published: bool,
+    /// It (or a flow it calls) has nodes that use the mouse and keyboard,
+    /// which stop while the screen is locked.
+    pub uses_screen: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -43,13 +48,41 @@ pub struct ScheduleList {
     pub schedules: Vec<ScheduleView>,
     /// Where they are kept, for the person who wants to look.
     pub path: String,
+    /// When this PC locks its screen by itself (a password-protected
+    /// screen saver, the inactivity limit of a policy).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub screen_lock: Option<shikigami_desktop::screen_lock::ScreenLock>,
 }
 
 fn path(svc: &FlowService) -> PathBuf {
     Schedules::path(svc.store().local_root())
 }
 
-fn list(svc: &FlowService) -> CmdResult<ScheduleList> {
+/// The flow a schedule runs (its published version) and the flows it
+/// calls, as they would run.
+fn flows_run_by(svc: &FlowService, id: &FlowId) -> Vec<Flow> {
+    let mut seen = BTreeSet::new();
+    let mut todo = vec![id.clone()];
+    let mut flows = Vec::new();
+    while let Some(id) = todo.pop() {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        let flow = match svc.published_version(&id).ok().flatten() {
+            Some(v) => v.flow,
+            None => match svc.get(&id) {
+                Ok(f) => f,
+                Err(_) => continue,
+            },
+        };
+        todo.extend(called_ids(&flow));
+        flows.push(flow);
+    }
+    flows
+}
+
+fn list(state: &AppState) -> CmdResult<ScheduleList> {
+    let svc = &state.service;
     let path = path(svc);
     let schedules = Schedules::load(&path)?
         .schedules
@@ -61,18 +94,22 @@ fn list(svc: &FlowService) -> CmdResult<ScheduleList> {
                 .ok()
                 .flatten()
                 .is_some(),
+            uses_screen: state
+                .runtime
+                .uses_desktop_input(&flows_run_by(svc, &schedule.flow_id)),
             schedule,
         })
         .collect();
     Ok(ScheduleList {
         schedules,
         path: path.display().to_string(),
+        screen_lock: shikigami_desktop::screen_lock::current(),
     })
 }
 
 #[tauri::command]
 pub fn list_schedules(state: State<'_, AppState>) -> CmdResult<ScheduleList> {
-    list(&state.service)
+    list(&state)
 }
 
 /// Adds a schedule (empty `id`) or replaces the one with its id.
@@ -121,7 +158,7 @@ pub fn save_schedule(state: State<'_, AppState>, schedule: Schedule) -> CmdResul
         ));
     }
     all.save(&path)?;
-    list(svc)
+    list(&state)
 }
 
 #[tauri::command]
@@ -131,7 +168,7 @@ pub fn delete_schedule(state: State<'_, AppState>, id: String) -> CmdResult<Sche
     let mut all = Schedules::load(&path)?;
     all.schedules.retain(|s| s.id != id);
     all.save(&path)?;
-    list(svc)
+    list(&state)
 }
 
 /// The input variables without a default that the schedule gives no value

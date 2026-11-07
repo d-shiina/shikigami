@@ -56,6 +56,7 @@ pub mod roles;
 #[cfg(windows)]
 mod sap;
 pub mod sapgui;
+pub mod screen_lock;
 #[cfg(windows)]
 pub mod session;
 #[cfg(windows)]

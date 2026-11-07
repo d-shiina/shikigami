@@ -5,7 +5,7 @@
 import { CalendarClock, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useStudio } from "../context";
-import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleView, type ScheduleWhen } from "../lib/api";
+import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleView, type ScheduleWhen, type ScreenLock } from "../lib/api";
 import { t } from "../lib/i18n";
 import { blankWhen, DAYS, describeWhen, KINDS, normalizeDays, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
 
@@ -478,19 +478,24 @@ function AgentCard({ status, onChange, idle }: { status: AgentStatus | null | un
 function ScheduleRow({
   item,
   status,
+  screenLock,
   onEdit,
   onList,
 }: {
   item: ScheduleView;
   status: AgentStatus | null | undefined;
+  screenLock: ScreenLock | undefined;
   onEdit: () => void;
   onList: (list: ScheduleList) => void;
 }) {
   const [confirm, setConfirm] = useState(false);
   const r = t.runs;
   const live = status?.schedules.find((s) => s.id === item.id);
-  const { flowName, published, ...schedule } = item;
+  const { flowName, published, usesScreen, ...schedule } = item;
   const warn = !flowName ? r.flowMissing : !published ? r.notPublished : null;
+  // Said before the night it stops (docs/design/locked-runs.md).
+  const locks =
+    item.enabled && usesScreen && screenLock ? r.locksScreen(Math.max(1, Math.round(screenLock.afterSecs / 60)), screenLock.by === "inactivityLimit") : null;
   return (
     <li className={`rounded-lg border border-slate-200 bg-sheet p-3 shadow-sheet ${item.enabled ? "" : "opacity-70"}`}>
       <div className="flex items-center gap-2">
@@ -527,6 +532,7 @@ function ScheduleRow({
         {live?.last && <span className="text-slate-500">{r.last(shortTime(live.last))}</span>}
       </div>
       {warn && <p className="mt-1 pl-6 text-xs text-shu-600">{warn}</p>}
+      {locks && <p className="mt-1 pl-6 text-xs leading-5 text-amber-700">{locks}</p>}
     </li>
   );
 }
@@ -630,12 +636,13 @@ export function RunsPage() {
             <ul className="space-y-2">
               {list.schedules.length === 0 && !editing && <li className="text-sm text-slate-500">{r.none}</li>}
               {list.schedules.map((item) => {
-                const { flowName: _n, published: _p, ...schedule } = item;
+                const { flowName: _n, published: _p, usesScreen: _u, ...schedule } = item;
                 return (
                   <ScheduleRow
                     key={item.id}
                     item={item}
                     status={status}
+                    screenLock={list.screenLock}
                     onEdit={() => setEditing(schedule)}
                     onList={(next) => {
                       setList(next);

@@ -1711,6 +1711,8 @@ export const en: Dict = {
     paused: "Off",
     notPublished: "Does not run: no published version",
     flowMissing: "Flow not found",
+    locksScreen: (minutes: number, byPolicy: boolean) =>
+      `This flow uses the mouse and keyboard. This PC locks after ${minutes} min without input (${byPolicy ? "a policy of your company" : "a password-protected screen saver"}), and the flow stops while it is locked. Unlock it before the time, or run it on a PC that does not lock.`,
     problem: (text: string) => `Cannot read the schedules file: ${text}`,
     describe: {
       daily: (at: string, days: string) => (days ? `${days} at ${at}` : `Every day at ${at}`),
