@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
 import { draftFor } from "./components/SecretsPage";
-import { calledIds, createStudioStore, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps, trailOf } from "./store";
+import { calledIds, createStudioStore, extractChoices, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps, trailOf } from "./store";
 
 const flow = (revision: number, steps: Flow["steps"] = []): Flow => ({
   schemaVersion: 1,
@@ -893,5 +893,23 @@ describe("copying nodes", () => {
       { op: "moveStep", stepId: "s3", position: { parentId: wrapper.id, block: "body", index: 1 } },
     ]);
     expect(store.getState().selection).toEqual({ kind: "step", stepId: wrapper.id });
+  });
+
+  it("extracts the Shift+click range as it is, and offers the nodes after a single one", async () => {
+    const store = createStudioStore(fakeApi({ getFlow: vi.fn(async () => flow(1, steps)) }));
+    await store.getState().open("scn_a");
+    store.getState().select({ kind: "step", stepId: "s2" });
+    const one = extractChoices(store.getState().flow!.steps ?? [], store.getState());
+    expect(one && "from" in one && one.from.map((s) => s.id)).toEqual(steps.slice(1).map((s) => s.id));
+    // Picking upwards still gives the nodes in flow order.
+    store.getState().select({ kind: "step", stepId: "s3" });
+    store.getState().setExtractOpen(true);
+    store.getState().selectTo("s2");
+    expect(store.getState().extractOpen).toBe(true);
+    const picked = extractChoices(store.getState().flow!.steps ?? [], store.getState());
+    expect(picked && "picked" in picked && picked.picked.map((s) => s.id)).toEqual(["s2", "s3"]);
+    // Picking another node closes the form.
+    store.getState().select({ kind: "step", stepId: "s1" });
+    expect(store.getState().extractOpen).toBe(false);
   });
 });
