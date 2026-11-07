@@ -1189,6 +1189,7 @@ export const en: Dict = {
     direction: { input: "Takes", output: "Returns", inOut: "Takes and returns", local: "Uses" },
   },
   shell: {
+    aiChat: "AI chat",
     places: "Places",
     settings: "Settings",
     flow: "Flow",

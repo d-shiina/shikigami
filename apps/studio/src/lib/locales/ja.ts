@@ -1188,6 +1188,7 @@ export const ja = {
     direction: { input: "受け取る", output: "返す", inOut: "受け取って返す", local: "使う" },
   },
   shell: {
+    aiChat: "AI チャット",
     places: "場所",
     settings: "設定",
     flow: "フロー",

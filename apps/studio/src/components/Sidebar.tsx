@@ -57,8 +57,10 @@ function AgentItem() {
   const busy = useAgent(anyBusy);
   // A conversation finished while the pane was closed or showing another.
   const news = useAgent((s) => s.chats.some((c) => c.unread));
+  // Named by what it is, not by the AI in use (Claude Code, Codex, …): which
+  // one is set in Settings and shown in the pane's head.
   const name = useAgent((s) => s.info?.name ?? "AI");
-  return <Item icon={MessageSquareText} label={name} on={open} onClick={() => setOpen(!open)} busy={busy} dot={news} title={`${name}（Ctrl+J）`} />;
+  return <Item icon={MessageSquareText} label={t.shell.aiChat} on={open} onClick={() => setOpen(!open)} busy={busy} dot={news} title={`${t.shell.aiChat}：${name}（Ctrl+J）`} />;
 }
 
 /** The folder the flows live in; the full path and the change are in Settings. */
