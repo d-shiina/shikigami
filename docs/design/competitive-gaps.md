@@ -30,8 +30,8 @@
 | G3 | P1 | Studio | ノードのコピー・貼り付け・複製ができない。複数のノードをまとめて選べない | UiPath・PAD・WinActor：Ctrl+C / Ctrl+V・複数選択 | 済み（#151） |
 | G4 | P1 | 例外処理 | 複数のノードをまとめて再試行できない（`control.group` の `retry` は黙って無視される） | UiPath：Retry Scope／PAD：「エラー発生時」のブロックの再試行 | 済み（#153） |
 | G5 | P1 | ログ | 無人実行で失敗したときの画面が残らない（Studio の一時停止のときだけ撮る） | UiPath：REFramework の Take Screenshot・Orchestrator のログ／AA：エラー時のスクリーンショット | 済み |
-| G6 | P1 | ブラウザ | クリックの種類（右クリック・ダブルクリック・Ctrl / Shift を押しながら）がない | UiPath：Click の ClickType・MouseButton・KeyModifiers／PAD：「Web ページのリンクまたはボタンをクリック」のクリックの種類 | 着手順 4 |
-| G7 | P1 | ブラウザ・デスクトップ | チェックボックスを「オンにする／オフにする」ができない（クリックで切り替えるだけなので、2 回流すと逆になる） | UiPath：Check / Uncheck／PAD：「Web ページのチェック ボックスの状態を設定します」「ウィンドウのチェック ボックスの状態を設定」／WinActor：チェックボックス操作 | 着手順 4 |
+| G6 | P1 | ブラウザ | クリックの種類（右クリック・ダブルクリック・Ctrl / Shift を押しながら）がない | UiPath：Click の ClickType・MouseButton・KeyModifiers／PAD：「Web ページのリンクまたはボタンをクリック」のクリックの種類 | 済み |
+| G7 | P1 | ブラウザ・デスクトップ | チェックボックスを「オンにする／オフにする」ができない（クリックで切り替えるだけなので、2 回流すと逆になる） | UiPath：Check / Uncheck／PAD：「Web ページのチェック ボックスの状態を設定します」「ウィンドウのチェック ボックスの状態を設定」／WinActor：チェックボックス操作 | ブラウザは済み・デスクトップは着手順 5 |
 | G8 | P1 | デスクトップ | ウィンドウの最大化・最小化・元に戻す・前面に出す・移動・サイズ変更がない | WinActor：ウィンドウ状態変更・ウィンドウ位置変更／UiPath：Maximize / Minimize / Restore / Move Window / Activate／PAD：「ウィンドウの状態の設定」「ウィンドウの移動」「ウィンドウのサイズ変更」「ウィンドウにフォーカスする」 | 着手順 5 |
 | G9 | P1 | システム | 動いているプロセスの終了・有無の確認がない（固まった業務アプリを落として立ち上げ直せない） | UiPath：Kill Process・Get Processes／PAD：「プロセスを終了する」「プロセスを待機する」／WinActor：プロセス終了 | 着手順 5 |
 | G10 | P1 | Excel | 行・列の挿入と削除、範囲のクリア、シートの削除・名前変更・コピーがない | WinActor：Excel 操作（行削除・シート名変更・シートコピー…）／UiPath：Insert/Delete Rows・Delete Range・Rename Sheet・Copy Sheet／PAD：「Excel ワークシートから行を削除」など | 着手順 6 |
@@ -44,8 +44,8 @@
 | G17 | P1 | Word | PDF で保存・文字の置換・表の読み取りがない（`word.fillTemplate` / `word.readText` だけ） | UiPath：Save Document As PDF・Replace Text／PAD：「Word 文書を保存」の PDF・「Word 文書内の語句の検索と置換」 | 着手順 12 |
 | G18 | P1 | 無人実行 | 画面がロックされた・サインアウトした PC ではデスクトップのノードが止まる（`DESKTOP_UNAVAILABLE`） | UiPath：無人ロボットがセッションを作る／PAD：ロックされた PC での無人実行 | 設計が要る |
 | G19 | P1 | 画像 | 画像認識で「画面から切り取る」・一致率・探す範囲がない | UiPath：Click Image・Find Image の Indicate on screen／PAD：画像をキャプチャ | 別（画像部品のスレッド） |
-| G20 | P2 | ブラウザ | 戻る・進む・再読み込みがない（同じタブでの移動は `browser.open` で済む） | UiPath：Go Back / Go Forward / Refresh／PAD：「Web ページに移動します」の戻る・進む・再読み込み | 着手順 4 に含める |
-| G21 | P2 | ブラウザ | 1 文字ずつ打つ入力がない（キーの動きを見ているサイトで `browser.fill` が効かない） | UiPath：Type Into の入力方式／PAD：「Web ページ内のテキスト フィールドに入力する」の入力をエミュレート | 着手順 4 に含める |
+| G20 | P2 | ブラウザ | 戻る・進む・再読み込みがない（同じタブでの移動は `browser.open` で済む） | UiPath：Go Back / Go Forward / Refresh／PAD：「Web ページに移動します」の戻る・進む・再読み込み | 済み |
+| G21 | P2 | ブラウザ | 1 文字ずつ打つ入力がない（キーの動きを見ているサイトで `browser.fill` が効かない） | UiPath：Type Into の入力方式／PAD：「Web ページ内のテキスト フィールドに入力する」の入力をエミュレート | 済み |
 | G22 | P2 | Studio | ノードのメモ（注釈）を Studio で書けない（フローの `description` はあるが画面に出ない） | UiPath：Annotation／PAD：コメント／WinActor：コメント | 済み（#151） |
 | G23 | P2 | Studio | フローの中の検索（ノード名・設定値・変数名で探す）がない | UiPath：Find / Find References／PAD：アクションの検索 | 着手順 13 |
 | G24 | P2 | デバッグ | 一時停止中に変数の値を書き換えられない | UiPath：Locals パネルの値の変更・Immediate | 着手順 13 |
@@ -78,8 +78,11 @@
 
 ### G6・G7・G20・G21 ブラウザ・デスクトップの細かい操作
 
+**対応**：ブラウザの分は済み。デスクトップのチェックボックスは G8・G9 と一緒に。
+
+
 - `browser.click` に `button`（`left` / `right`）・`double`・`modifiers`（`["Control"]` など）。`desktop.mouseClick` の書き方にそろえる
-- チェックボックスは新しいノードを作らず、`browser.fill` と `desktop.setValue` の `value` に `true` / `false` を書けるようにする（`desktop.getValue` がチェックボックスで true / false を返すのと対になる）。今の状態と同じなら何もしない
+- チェックボックスは「チェック状態」のノード（`browser.check` / `desktop.check`、`checked`: true / false）。今の状態と同じなら何もしない。`fill` に true / false を混ぜるより、図とパレットで探しやすいので別のノードにした
 - `browser.open` は同じタブで開き直せるので、戻る・進む・再読み込みは `browser.press` ではなく `browser.navigate`（`action`: `back` / `forward` / `reload`）を 1 つ足す
 - 1 文字ずつ打つのは `browser.fill` に `typing: true`（キーの間隔は固定）
 
