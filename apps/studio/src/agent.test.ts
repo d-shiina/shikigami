@@ -14,7 +14,7 @@ function fakeStorage() {
 
 const now = (s: AgentState) => currentChat(s);
 
-const ready: AgentInfo = { available: true, name: "Claude Code", command: "claude", problem: null, remembers: true };
+const ready: AgentInfo = { available: true, name: "Claude Code", command: "claude", problem: null, remembers: true, installable: false };
 
 function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
   return {
@@ -24,6 +24,8 @@ function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
     login: vi.fn(async () => undefined),
     loginCode: vi.fn(async () => undefined),
     cancelLogin: vi.fn(async () => undefined),
+    install: vi.fn(async () => undefined),
+    cancelInstall: vi.fn(async () => undefined),
     openUrl: vi.fn(async () => undefined),
     ...overrides,
   };
@@ -314,5 +316,29 @@ describe("agent store", () => {
     await vi.waitFor(() => expect(api.send).toHaveBeenCalledTimes(3));
     await new Promise((r) => setTimeout(r, 10));
     expect(api.send).toHaveBeenCalledTimes(3);
+  });
+
+  it("installs the AI from the pane, then signs in when the account is not there yet", async () => {
+    const missing: AgentInfo = { ...ready, available: false, command: null, problem: "Claude Code がまだありません", installable: true };
+    let found = false;
+    const login = vi.fn(async () => undefined);
+    const store = createAgentStore(fakeAgent({ info: vi.fn(async () => (found ? ready : missing)), login }));
+    await store.getState().init();
+    expect(store.getState().info?.installable).toBe(true);
+    await store.getState().startInstall();
+    expect(store.getState().install).toEqual({ phase: "running", lines: [] });
+    store.getState().onInstallEvent({ kind: "progress", line: "Downloading…" });
+    expect(store.getState().install).toMatchObject({ phase: "running", lines: ["Downloading…"] });
+    // The installer failed: its words, and a way to try again.
+    store.getState().onInstallEvent({ kind: "done", ok: false, message: "no network", needsLogin: false });
+    expect(store.getState().install).toEqual({ phase: "failed", message: "no network" });
+    await store.getState().startInstall();
+    found = true;
+    store.getState().onInstallEvent({ kind: "done", ok: true, message: null, needsLogin: true });
+    await vi.waitFor(() => expect(store.getState().info?.available).toBe(true));
+    expect(store.getState().install).toEqual({ phase: "idle" });
+    // Installed and signed out: the sign-in starts by itself.
+    expect(login).toHaveBeenCalledTimes(1);
+    expect(store.getState().login.phase).toBe("waiting");
   });
 });

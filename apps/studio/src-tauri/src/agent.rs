@@ -113,6 +113,8 @@ pub struct AgentInfo {
     problem: Option<String>,
     /// Whether a conversation continues across messages (`--resume`).
     remembers: bool,
+    /// Studio can install the agent itself (Claude Code, not found yet).
+    installable: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -239,7 +241,7 @@ pub fn agent_info() -> AgentInfo {
     let command = config.executable();
     let problem = match (&command, cli_path()) {
         (None, _) if config.kind == AgentKind::ClaudeCode => Some(
-            "Claude Code が見つかりません。インストールしてログインすると、ここから作業を依頼できます。"
+            "Claude Code がまだありません。下の「導入する」を押すと、この場で入れてサインインできます。"
                 .to_owned(),
         ),
         (None, _) => Some("config.json の agent.command が見つかりません。".to_owned()),
@@ -251,11 +253,175 @@ pub fn agent_info() -> AgentInfo {
     };
     AgentInfo {
         available: problem.is_none(),
+        installable: command.is_none() && config.kind == AgentKind::ClaudeCode,
         name: config.name(),
         command: command.map(|p| p.display().to_string()),
         problem,
         remembers: config.kind == AgentKind::ClaudeCode,
     }
+}
+
+pub(crate) const INSTALL_EVENT: &str = "agent-install";
+
+/// Progress of the agent's installer run in the background for the pane.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum InstallEvent {
+    /// A line the installer printed (downloading, done…).
+    Progress {
+        line: String,
+    },
+    Done {
+        ok: bool,
+        message: Option<String>,
+        /// Installed but not signed in yet: `agent_login` is the next step.
+        needs_login: bool,
+    },
+}
+
+/// The installer in flight, so the pane can stop it.
+#[derive(Default)]
+pub(crate) struct AgentInstall {
+    cancel: Mutex<Option<CancellationToken>>,
+}
+
+/// Installs Claude Code from the pane with its own installer (the one its
+/// documentation gives: a PowerShell script on Windows, a shell script
+/// elsewhere), for the person's own account, without a terminal. Progress
+/// arrives as `agent-install`. Other kinds of agent are installed by hand.
+#[tauri::command]
+pub async fn agent_install(app: AppHandle, install: State<'_, AgentInstall>) -> CmdResult<()> {
+    let config = AgentConfig::load();
+    if config.kind != AgentKind::ClaudeCode {
+        return Err(err(
+            "AGENT_INSTALL_UNSUPPORTED",
+            format!("{} は、その AI の手順でインストールしてください", config.name()),
+        ));
+    }
+    if let Some(previous) = lock(&install.cancel).take() {
+        previous.cancel();
+    }
+    let mut command = if cfg!(windows) {
+        let mut c = Command::new("powershell");
+        c.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "irm https://claude.ai/install.ps1 | iex",
+        ]);
+        c
+    } else {
+        let mut c = Command::new("sh");
+        c.args(["-c", "curl -fsSL https://claude.ai/install.sh | bash"]);
+        c
+    };
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let mut child = command
+        .spawn()
+        .map_err(|e| err("AGENT_FAILED", format!("インストールを始められません: {e}")))?;
+    let cancel = CancellationToken::new();
+    *lock(&install.cancel) = Some(cancel.clone());
+
+    tauri::async_runtime::spawn(async move {
+        let emit = |event: InstallEvent| {
+            let _ = app.emit(INSTALL_EVENT, event);
+        };
+        let mut stderr = child.stderr.take();
+        let stderr_task = tauri::async_runtime::spawn(async move {
+            let mut buf = Vec::new();
+            if let Some(s) = stderr.as_mut() {
+                let _ = s.read_to_end(&mut buf).await;
+            }
+            String::from_utf8_lossy(&buf).into_owned()
+        });
+        let mut stopped = false;
+        if let Some(stdout) = child.stdout.take() {
+            let mut lines = BufReader::new(stdout).lines();
+            loop {
+                tokio::select! {
+                    () = cancel.cancelled() => {
+                        let _ = child.start_kill();
+                        stopped = true;
+                        break;
+                    }
+                    line = lines.next_line() => match line {
+                        Ok(Some(line)) => {
+                            let line = strip_ansi(line.trim());
+                            if !line.is_empty() {
+                                emit(InstallEvent::Progress { line });
+                            }
+                        }
+                        Ok(None) | Err(_) => break,
+                    }
+                }
+            }
+        }
+        let status = child.wait().await;
+        let stderr = stderr_task.await.unwrap_or_default();
+        if stopped {
+            return;
+        }
+        let installed = find_claude();
+        let ok = status.as_ref().is_ok_and(std::process::ExitStatus::success) && installed.is_some();
+        let needs_login = match &installed {
+            Some(program) if ok => !logged_in(program).await,
+            _ => false,
+        };
+        let message = (!ok).then(|| {
+            let tail = tail(strip_ansi(stderr.trim()).trim(), STDERR_TAIL);
+            if tail.is_empty() {
+                "インストールできませんでした".to_owned()
+            } else {
+                tail
+            }
+        });
+        emit(InstallEvent::Done {
+            ok,
+            message,
+            needs_login,
+        });
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn agent_install_cancel(install: State<'_, AgentInstall>) {
+    if let Some(cancel) = lock(&install.cancel).take() {
+        cancel.cancel();
+    }
+}
+
+/// Installers colour their output; the pane shows plain lines.
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for d in chars.by_ref() {
+                    if d.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Starts one turn and returns its id; progress arrives as `agent-event`.

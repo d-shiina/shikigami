@@ -393,6 +393,17 @@ export const ja = {
     loginExpired: (name: string) => `${name} のログインが切れています`,
     login: "ログイン",
     loginFailed: "ログインできませんでした",
+    installFailed: "インストールできませんでした",
+    setup: {
+      title: "AI を使う準備",
+      lead: "AI にフローを作ってもらうには、AI をこの PC に入れてサインインします。ターミナルは要りません。",
+      which: "使う AI",
+      claudeNote: "Claude Code は Anthropic の AI です。あなたの Claude アカウントで動き、料金もそのアカウントにかかります。ほかの AI は今後追加します。",
+      install: (name: string) => `${name} を導入する`,
+      retry: "もう一度",
+      installing: "インストールしています…（1〜2 分）",
+      whatHappens: "あなたのユーザーフォルダーに入ります（管理者権限は不要）。終わるとサインインの画面が出ます。",
+    },
   },
   runMsg: {
     reviewBeforeResume: "AIの修正を確認してから再開できます",
