@@ -1,4 +1,4 @@
-// The parameters of a "変数に代入": the variable, and what goes in it as a
+// The parameters of a "変数への代入": the variable, and what goes in it as a
 // form ("表の列を集計" · 表 · 列) when the expression has one of the shapes in
 // lib/transforms.ts, or an expression field otherwise. The form only writes
 // the expression; the flow keeps `{ name, expression }` as before.

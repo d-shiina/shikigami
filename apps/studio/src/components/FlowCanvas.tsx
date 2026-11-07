@@ -55,6 +55,7 @@ import {
 } from "../lib/nodeRows";
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence, typeTitle } from "../lib/sentence";
+import { AppTag } from "./AppTag";
 import { callKey, diveChain, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { CATEGORY_COLOR } from "./CommandPalette";
@@ -697,8 +698,9 @@ function StepNode({ data }: StepNodeProps) {
           </span>
         )}
         {/* With a keyword the type is clear enough: make room for the name. */}
+        {!(KEYWORD[data.step.type] && data.step.name) && <AppTag def={data.def} title={typeTitle(data.step, data.def)} color={color} />}
         {!(KEYWORD[data.step.type] && data.step.name) && (
-          <span className="truncate text-[12px] font-bold" style={{ color }}>
+          <span className="shrink-0 text-[12px] font-bold whitespace-nowrap" style={{ color }}>
             {typeTitle(data.step, data.def)}
           </span>
         )}

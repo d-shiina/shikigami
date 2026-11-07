@@ -1032,7 +1032,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: LAUNCH,
             kind: Kind::Launch,
-            label: "アプリを起動",
+            label: "アプリ起動",
             description: "Starts the program `path` (full path, or a program on PATH) with `args`. Output: { pid }. The following steps wait for its window by themselves, so no wait step is needed.",
             params: json!({
                 "path": { "type": "string", "minLength": 1 },
@@ -1066,7 +1066,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: SET_VALUE,
             kind: Kind::SetValue,
-            label: "値を入力",
+            label: "値の設定",
             description: "Replaces the text of the input `target` with `value`, without the keyboard: a template, or a registered secret { \"secret\": \"<name>\", \"field\": \"username\" | \"password\" } (typed only into the apps registered with it as app:<exe>). Never write a password as text. If the field ignores it (some apps react only to keystrokes), use desktop.type.",
             params: json!({ "target": target, "value": text_or_secret_schema("入力する文字。パスワードは登録済みシークレット { \"secret\": \"名前\", \"field\": \"password\" }") }),
             required: &["target", "value"],
@@ -1081,7 +1081,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: GET_VALUE,
             kind: Kind::GetValue,
-            label: "値を取得",
+            label: "値の取得",
             description: "Reads `target`: the text of an input or combo box, true/false for a checkbox or radio button, otherwise the element's name (e.g. a label's text). Use saveAs to keep it.",
             params: json!({ "target": target }),
             required: &["target"],
@@ -1095,7 +1095,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: SELECT,
             kind: Kind::Select,
-            label: "選択",
+            label: "項目選択",
             description: "Selects the option named `value` in the combo box or list `target` (exact name first, then a unique partial match). Fails with the available options when none fits.",
             params: json!({ "target": target, "value": { "type": "string", "minLength": 1 } }),
             required: &["target", "value"],
@@ -1109,7 +1109,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: MOUSE_CLICK,
             kind: Kind::MouseClick,
-            label: "マウスでクリック",
+            label: "マウスクリック",
             description: "Brings the window to the front and clicks `target` with the real mouse (`button`: left or right; `double: true` for a double click). Use desktop.click first; this is for elements that ignore it. When the element is not in inspect_ui (Citrix, remote desktops, drawn screens), find the place on the screen instead: `target.ocr` { text } clicks a text OCR reads, `target.image` { path } clicks where a PNG cut from the screen appears (waits until it does), `target.offset` moves the click from its centre. `target.point` (pixels from the window's top-left) is the very last resort.",
             params: json!({
                 "target": target_schema(Allow::Mouse),
@@ -1129,7 +1129,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: TYPE,
             kind: Kind::Type,
-            label: "キーボードで入力",
+            label: "キーボード入力",
             description: "Brings the window to the front, focuses `target` and types `text` with the keyboard (does not clear the field first). For apps that ignore desktop.setValue. With `target.image` / `target.ocr` it first clicks that place (e.g. a label's text with `offset` to the field beside it). `text` may be a registered secret, typed only into the apps registered with it.",
             params: json!({ "target": visual, "text": text_or_secret_schema("打ち込む文字。パスワードは登録済みシークレット") }),
             required: &["target", "text"],
@@ -1158,7 +1158,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: WAIT_FOR,
             kind: Kind::WaitFor,
-            label: "画面を待つ",
+            label: "要素の待機",
             description: "Waits until `target` reaches `state`: visible (default), hidden (closed or gone, e.g. a progress dialog), or enabled. The limit is the step's timeoutMs (default 30000). Other desktop steps already wait for their target, so use this for screens that must disappear or for slow apps. `target.image` / `target.ocr` wait for a picture or text on the screen (visible or hidden).",
             params: json!({ "target": visual, "state": { "enum": ["visible", "hidden", "enabled"] } }),
             required: &["target"],
@@ -1173,7 +1173,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: IS_VISIBLE,
             kind: Kind::IsVisible,
-            label: "表示されているか",
+            label: "表示の確認",
             description: "Output: true when `target` is shown (waiting up to `waitMs`, default 2000), otherwise false. Never fails for a missing window or element: use it with control.if, e.g. to close a dialog only when it appears. Works with `target.image` / `target.ocr` too (is that picture or text on the screen).",
             params: json!({ "target": visual, "waitMs": { "type": "integer", "minimum": 0, "maximum": 20000 } }),
             required: &["target"],
@@ -1188,7 +1188,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: CLOSE_WINDOW,
             kind: Kind::CloseWindow,
-            label: "ウィンドウを閉じる",
+            label: "ウィンドウ終了",
             description: "Closes the window `target.window` as its close button would (the app may still ask to save).",
             params: json!({ "target": target }),
             required: &["target"],
@@ -1202,7 +1202,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: READ_TEXT,
             kind: Kind::ReadText,
-            label: "文字を読み取る（OCR）",
+            label: "文字認識（OCR）",
             description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"; accurate: true reads with larger models, much better on handwriting but several times slower): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height }], engine, warning? } (places in window pixels; engine is \"paddle\", \"paddle-accurate\" or \"windows\", and warning says when the default fell back to Windows OCR). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
             params: json!({
                 "target": picture,
@@ -1258,7 +1258,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: MOUSE_SCROLL,
             kind: Kind::MouseScroll,
-            label: "マウスでスクロール",
+            label: "マウススクロール",
             description: "Brings the window to the front, puts the real mouse over `target` and turns the wheel `amount` notches (default 3) in `direction` (up, down, left, right). Use desktop.scroll first; this is for apps that ignore it and for screens without elements (`target.ocr`, `target.image`, `target.point`).",
             params: json!({
                 "target": target_schema(Allow::Mouse),
@@ -1296,7 +1296,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: HOVER,
             kind: Kind::Hover,
-            label: "マウスを重ねる",
+            label: "マウスオーバー",
             description: "Brings the window to the front and moves the real mouse onto `target` without clicking: shows a tooltip or a menu that opens on hover. Read the tooltip afterwards with desktop.getValue on { \"role\": \"tooltip\" } or desktop.readText.",
             params: json!({ "target": target_schema(Allow::Mouse) }),
             required: &["target"],
@@ -1310,7 +1310,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: GET_TABLE,
             kind: Kind::GetTable,
-            label: "表を読み取る",
+            label: "表の取得",
             description: "Reads a grid, table or list view of an app at once into a list of objects keyed by the column headers, like browser.getTable (cell text as strings; use num() for amounts; an empty header becomes 列1, 列2..., a repeated one gets \" 2\"). `target.element` is the grid (role table, grid or list in inspect_ui), or omit it for the first one in the window. Rows with every cell empty are left out. Grids that support it are read whole, including rows scrolled out of view; other lists give the rows the app has created (read, then desktop.scroll, in a loop). Fails with TABLE_TOO_LARGE over 10000 rows unless `maxRows` says how many to read. Use with control.forEach.",
             params: json!({
                 "target": target,
@@ -1328,7 +1328,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: SAP_RUN_TRANSACTION,
             kind: Kind::SapTransaction,
-            label: "SAP のトランザクションを開始",
+            label: "SAP トランザクション開始",
             description: "Starts the SAP transaction `code` (e.g. VA03, /nVA03 is not needed) in the SAP GUI window `target.window`, as typing it into the command field does. Output: the status bar then, { type, text } (type S success, W warning, E error, A abort, I info, or empty). Needs SAP GUI Scripting (enabled on the SAP server with sapgui/user_scripting and in SAP GUI's options). The other steps on SAP GUI are the usual desktop.* ones with SAP component ids from inspect_ui.",
             params: json!({
                 "target": target,
@@ -1345,7 +1345,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: SELECT_MENU,
             kind: Kind::SelectMenu,
-            label: "メニューを選ぶ",
+            label: "メニュー選択",
             description: "Picks a menu item by its names from the top, e.g. path [\"ファイル\", \"名前を付けて保存\"], without the mouse. With only `target.window`, starts at the window's menu bar (or at a menu that is already open, e.g. after desktop.mouseClick with button right). With `target.element`, opens that element's context (right-click) menu first. Each name is matched as shown, without access keys like (F), a trailing ... or the shortcut; the same name first, then the only item containing it. Each menu is waited for as it opens.",
             params: json!({
                 "target": target,

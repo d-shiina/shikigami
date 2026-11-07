@@ -104,7 +104,7 @@ function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: 
   const applyOps = useStudio((s) => s.applyOps);
   const hasReader = useStudio((s) => [...walkSteps(s.flow?.steps ?? [])].some((step) => step.type === "config.read"));
   // A settings file is only useful once a node reads it: the first one gets
-  // its 「設定ファイルを読む」 at the start of the flow, saved as `settings`.
+  // its 「設定ファイル読み込み」 at the start of the flow, saved as `settings`.
   const createSettings = async () => {
     const path = await newSettings();
     if (path && !hasReader) await applyOps([{ op: "addStep", step: { type: "config.read", params: { path }, saveAs: "settings" }, position: { index: 0 } }]);

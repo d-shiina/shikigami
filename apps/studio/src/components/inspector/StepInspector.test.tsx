@@ -13,7 +13,7 @@ afterEach(cleanup);
 const setDef = {
   type: "variable.set",
   category: "variable",
-  label: "変数に代入",
+  label: "変数への代入",
   description: "",
   paramsSchema: { type: "object", properties: { name: { type: "string" }, expression: { type: "string" } }, required: ["name"] },
   blocks: [],

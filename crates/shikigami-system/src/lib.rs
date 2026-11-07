@@ -202,7 +202,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             Def {
                 step_type: types::HTTP_REQUEST,
                 category: StepCategory::Network,
-                label: "Web API を呼ぶ",
+                label: "Web API 呼び出し",
                 description: "Sends an HTTP request and outputs { status, headers, body }. `body` is parsed into a value when the response is JSON, otherwise it is text (or, with `saveTo`, the response is saved to that file and body is the path). Send data as `json` (a value), `form` (fields) or `body` (text); add URL parameters with `query`. `auth` takes a registered secret (sent only to the sites registered with it), or { \"secret\": \"<name>\", \"field\": \"accessToken\" } for the OAuth access token oauth.signIn obtained (refreshed automatically when it expires): authType bearer (default, Authorization: Bearer), basic (the secret's username and password) or header (the value in the header named by authHeader). A status of 400 or more fails the step with HTTP_ERROR (details: status, body); 5xx and 429 are retried when the step has retry.",
                 params_schema: json!({
                     "type": "object",
@@ -239,7 +239,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             Def {
                 step_type: types::PROCESS_RUN,
                 category: StepCategory::System,
-                label: "プログラムを実行",
+                label: "プログラム実行",
                 description: "Runs a command-line program with `args` (a list; no shell, so no quoting needed), waits for it and outputs { exitCode, stdout, stderr } (text, UTF-8 or Shift_JIS detected). An exit code not in `okExitCodes` (default [0]) fails the step with PROCESS_FAILED. The step's timeoutMs stops the program. For shell built-ins use program \"cmd\" with args [\"/c\", ...]. To open an application window use desktop.launch instead.",
                 params_schema: object_schema(
                     json!({
@@ -269,7 +269,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             Def {
                 step_type: types::CLIPBOARD_GET,
                 category: StepCategory::System,
-                label: "クリップボードを読む",
+                label: "クリップボード読み取り",
                 description: "Outputs the text on the clipboard (\"\" when it holds no text). Windows only.",
                 params_schema: object_schema(json!({}), &[]),
                 risk: RiskLevel::Safe,
@@ -284,7 +284,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             Def {
                 step_type: types::CLIPBOARD_SET,
                 category: StepCategory::System,
-                label: "クリップボードに入れる",
+                label: "クリップボード書き込み",
                 description: "Puts `text` on the clipboard (e.g. before desktop.press Ctrl+V into an app that ignores typing). Windows only.",
                 params_schema: object_schema(json!({ "text": {} }), &["text"]),
                 risk: RiskLevel::Interactive,
@@ -298,7 +298,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             dialog(
                 types::DIALOG_MESSAGE,
-                "メッセージを表示",
+                "メッセージ表示",
                 "Shows a message box to the person at the PC and waits (up to 10 minutes unless timeoutMs is set). Outputs the button pressed: \"ok\", \"cancel\", \"yes\" or \"no\". Use it only in flows that someone watches; unattended runs would wait until the timeout. Windows only.",
                 object_schema(
                     json!({
@@ -316,7 +316,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             dialog(
                 types::DIALOG_INPUT,
-                "入力してもらう",
+                "入力ダイアログ",
                 "Asks the person at the PC for one line of text and outputs it (\"\" when they cancel). Never use it for passwords: use registered secrets. Windows only.",
                 object_schema(
                     json!({ "message": { "type": "string", "minLength": 1 }, "title": text, "default": text }),
@@ -329,7 +329,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             dialog(
                 types::DIALOG_SELECT_FILE,
-                "ファイルを選んでもらう",
+                "ファイル選択ダイアログ",
                 "Lets the person pick a file (kind \"file\", default), several files (\"files\", outputs a list), a folder (\"folder\") or where to save (\"save\"). Outputs the path, or null when cancelled. `extensions` limits the files shown, e.g. [\"csv\", \"xlsx\"]. Windows only.",
                 object_schema(
                     json!({

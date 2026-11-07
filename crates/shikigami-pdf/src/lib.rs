@@ -149,7 +149,7 @@ fn read_text_def() -> StepTypeDef {
     StepTypeDef {
         step_type: types::READ_TEXT.into(),
         category: StepCategory::File,
-        label: "PDF の文字を読む".into(),
+        label: "PDF 読み取り".into(),
         description: "Reads the text of a PDF and outputs { text, pages }: `text` is the whole document, `pages` the text of each page (pages[0] is page 1). Only PDFs with a text layer (made by Word, Excel, a printer driver, a web system, …) have text; a scanned image gives empty text. Pick values out with expression functions such as regexFind(res.text, '請求金額\\\\s*([\\\\d,]+)', 1). A password-protected PDF takes `password`, best as a registered secret.".into(),
         params_schema: json!({
             "type": "object",
@@ -433,7 +433,7 @@ fn page_defs() -> Vec<(StepTypeDef, PageKind)> {
         (
             def(
                 types::MERGE,
-                "PDF を結合",
+                "PDF 結合",
                 &format!(
                     "Joins PDFs into one new PDF `to`, in the order of `files` (each file's pages in their order). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. {KEPT} Output: {{ path, pageCount }}."
                 ),
@@ -462,7 +462,7 @@ fn page_defs() -> Vec<(StepTypeDef, PageKind)> {
         (
             def(
                 types::EXTRACT_PAGES,
-                "PDF のページを抜き出す",
+                "PDF ページ抽出",
                 &format!(
                     "Makes a new PDF `to` from some pages of the PDF `path`. `pages` names them like \"1-3,5\" or \"2-\" (page 2 to the last); page 1 is the first page, and the pages go out in the order written. A page past the end gives PDF_PAGE_OUT_OF_RANGE. Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. {KEPT} Output: {{ path, pageCount }}."
                 ),
@@ -488,7 +488,7 @@ fn page_defs() -> Vec<(StepTypeDef, PageKind)> {
         (
             def(
                 types::SPLIT,
-                "PDF を分割",
+                "PDF 分割",
                 &format!(
                     "Splits the PDF `path` into files of `pagesPerFile` pages each (default 1) in the folder `folder` (created if missing), named after it: 請求書_01.pdf, 請求書_02.pdf, …. Fails with FILE_EXISTS before writing anything if a file would be replaced, unless `overwrite` is true. {KEPT} Output: the new files' full paths, in page order."
                 ),

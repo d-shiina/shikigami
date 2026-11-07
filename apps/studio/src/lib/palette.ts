@@ -7,7 +7,7 @@ import { stepLabel, t } from "./i18n";
 import { KEYWORD } from "./keywords";
 import { presets } from "./presets";
 
-/** One line of the palette: a node type, or a ready-made "変数に代入" (preset). */
+/** One line of the palette: a node type, or a ready-made "変数への代入" (preset). */
 export type PaletteItem = {
   key: string;
   /** The palette group it is listed under (see GROUPS). */
@@ -276,4 +276,20 @@ export function remember(recent: readonly string[], key: string): string[] {
     // Only a convenience.
   }
   return next;
+}
+
+const APP_GROUPS = new Set(SECTIONS.find((s) => s.id === "apps")?.groups ?? []);
+
+/**
+ * Where a node works, for its header: "ブラウザ", "デスクトップアプリ",
+ * "Excel"… so 「文字入力」 says which screen it types into. Null for nodes
+ * that work on nothing outside, and when the name already says it
+ * ("Word 読み取り").
+ */
+export function appTag(def: Pick<StepTypeDef, "type" | "category"> | undefined, title: string): string | null {
+  if (!def) return null;
+  const group = groupOf(def);
+  if (!APP_GROUPS.has(group) || group === "system") return null;
+  const label = groupLabel(group);
+  return title.includes(label) ? null : label;
 }

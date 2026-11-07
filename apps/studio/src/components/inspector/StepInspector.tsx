@@ -10,6 +10,7 @@ import { stepSummary } from "../../lib/palette";
 import { issueText } from "../../lib/issueText";
 import { CALL, knownVariables, outputs, paramRows, TYPE_COLOR } from "../../lib/nodeRows";
 import { sentence, typeTitle } from "../../lib/sentence";
+import { AppTag } from "../AppTag";
 import { findStep, revertBlocker, touchedSteps } from "../../store";
 import { CATEGORY_COLOR } from "../CommandPalette";
 import { Sentence } from "../StoryView";
@@ -168,6 +169,7 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
         <div className="overflow-hidden rounded-[4px] border border-slate-200">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+            <AppTag def={def} title={typeTitle(step, def)} color={color} />
             <span className="text-sm font-bold" style={{ color }} title={`${step.type} · ID: ${id}`}>
               {typeTitle(step, def)}
             </span>

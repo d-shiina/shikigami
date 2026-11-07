@@ -9,15 +9,15 @@ const def = (type: string, category: string, label: string, description = ""): S
   ({ type, category, label, description, params: {}, blocks: [] }) as unknown as StepTypeDef;
 
 const DEFS: StepTypeDef[] = [
-  def("control.break", "control", "ループを抜ける", "Exits the innermost loop."),
+  def("control.break", "control", "繰り返しの終了", "Exits the innermost loop."),
   def("control.if", "control", "条件分岐"),
   def("browser.click", "browser", "クリック", "Clicks the element."),
-  def("browser.open", "browser", "ブラウザで開く"),
+  def("browser.open", "browser", "ページ表示"),
   def("desktop.click", "windows", "クリック"),
-  def("excel.readRows", "office", "表を行ごとに読む"),
-  def("excel.addSheet", "office", "シートを追加", "Adds an empty sheet; does nothing when it already exists."),
-  def("word.readText", "office", "Word の文章を読む"),
-  def("mail.list", "office", "メールを探す"),
+  def("excel.readRows", "office", "行の読み取り"),
+  def("excel.addSheet", "office", "シート追加", "Adds an empty sheet; does nothing when it already exists."),
+  def("word.readText", "office", "Word 読み取り"),
+  def("mail.list", "office", "メール検索"),
   def("flow.delay", "flow", "待機（時間指定）"),
   def("acme.stamp", "acme", "はんこを押す", "Stamps a document. Then more."),
 ];
