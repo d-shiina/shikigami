@@ -36,6 +36,17 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
     }
 }
 
+/// The clipboard's text for Studio's paste. `navigator.clipboard.readText`
+/// in WebView2 asks the person for clipboard access first, which looks
+/// alarming in a desktop app, so Studio reads it from Windows itself.
+#[tauri::command]
+pub async fn read_clipboard_text() -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(shikigami_system::clipboard_text)
+        .await
+        .map_err(|e| err("INTERNAL", e.to_string()))?
+        .map_err(|e| err("CLIPBOARD_BUSY", e.message))
+}
+
 #[tauri::command]
 pub fn workspace_info(state: State<'_, AppState>) -> WorkspaceInfo {
     state.service.store().info()

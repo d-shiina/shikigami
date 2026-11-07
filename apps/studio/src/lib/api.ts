@@ -258,6 +258,8 @@ export const extensionsApi = {
 };
 
 export const api = {
+  /** The clipboard's text, read by Studio itself (no WebView permission prompt). */
+  readClipboardText: () => call<string>("read_clipboard_text"),
   workspaceInfo: () => call<WorkspaceInfo>("workspace_info"),
   /** Saves the default workspace and restarts Studio on it. */
   setWorkspace: (path: string, shared: boolean) => call<void>("set_workspace", { path, shared }),
