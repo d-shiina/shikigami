@@ -970,11 +970,13 @@ pub fn list_secrets(state: State<'_, AppState>) -> CmdResult<SecretList> {
             .into_iter()
             .map(|s| SecretInfo {
                 name: s.name,
+                kind: s.kind,
                 username: String::new(),
                 sites: s.sites,
                 fields: s.fields,
                 description: s.description,
                 signed_in: s.signed_in,
+                oauth: None,
                 updated_at: String::new(),
             })
             .collect()

@@ -3,9 +3,10 @@ import { useStudio } from "../context";
 import type { SecretField } from "../lib/api";
 import { t } from "../lib/i18n";
 import { nextSecretAsk, type SecretAsk } from "../lib/secretAsk";
+import { fieldLabel } from "../lib/secretKinds";
 
 const inputClass =
-  "w-full rounded border border-slate-300 px-2 py-1 text-sm focus:border-ink focus:outline-none";
+  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-ink dark:bg-paper focus:outline-none";
 const primary = "rounded bg-ink px-3 py-1 text-sm text-paper";
 const quiet = "rounded px-3 py-1 text-sm text-slate-500 hover:bg-slate-100";
 
@@ -40,7 +41,7 @@ function AskForm({ ask }: { ask: SecretAsk }) {
   const fullForm = () => {
     // A run's ask is handled there; an AI's request stays until it is answered.
     if (ask.source === "run") dismissFix();
-    openForm({ name: ask.name, sites: ask.sites, fields: ask.fields });
+    openForm({ name: ask.name, sites: ask.sites, fields: ask.fields, kind: ask.kind });
   };
 
   return (
@@ -54,6 +55,8 @@ function AskForm({ ask }: { ask: SecretAsk }) {
         await saveSecret(
           {
             name: ask.name,
+            // A new secret gets the kind asked for; a saved one keeps its own.
+            kind: ask.existing ? undefined : ask.kind,
             username: ask.fields.includes("username") ? (values.username ?? "") : undefined,
             password: ask.fields.includes("password") ? values.password : undefined,
             totp: ask.fields.includes("totp") ? values.totp : undefined,
@@ -77,7 +80,7 @@ function AskForm({ ask }: { ask: SecretAsk }) {
         <>
           {ask.fields.map((field, i) => (
             <label key={field} className="block space-y-1">
-              <span className="text-xs font-medium text-slate-600">{t.secretField[field]}</span>
+              <span className="text-xs font-medium text-slate-600">{fieldLabel(ask.kind, field)}</span>
               <input
                 className={`${inputClass} ${FIELD_INPUT[field].mono ? "font-mono text-xs" : ""}`}
                 type={FIELD_INPUT[field].type}
@@ -92,12 +95,14 @@ function AskForm({ ask }: { ask: SecretAsk }) {
           ))}
           {ask.needsSite && (
             <label className="block space-y-1">
-              <span className="text-xs font-medium text-slate-600">{t.secretAskSiteInput}</span>
+              <span className="text-xs font-medium text-slate-600">
+                {ask.kind === "login" ? t.secretAskSiteInput : t.secretAskSiteInputApi}
+              </span>
               <input
                 className={`${inputClass} font-mono text-xs`}
                 required
                 autoFocus={ask.fields.length === 0}
-                placeholder="https://example.com/login"
+                placeholder={ask.kind === "login" ? "https://example.com/login" : "https://api.example.com"}
                 value={site}
                 onChange={(e) => setSite(e.target.value)}
               />

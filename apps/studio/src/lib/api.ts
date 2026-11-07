@@ -84,21 +84,40 @@ export type AgentStatus = {
 /** `accessToken` is obtained by oauth.signIn, not typed by a person. */
 export type SecretField = "username" | "password" | "totp" | "accessToken";
 
+/**
+ * What a secret holds. Stored, referenced and checked the same way: the kind
+ * only names the fields and picks the ones a person fills in.
+ */
+export type SecretKind = "login" | "apiKey" | "oauth";
+
+/** The OAuth tokens oauth.signIn saved (never the tokens themselves). */
+export type OAuthStatus = {
+  expiresAt?: string;
+  /** When the provider last gave tokens (sign-in or refresh). */
+  obtainedAt?: string;
+  /** A refresh token is kept: an expired access token is renewed without a person. */
+  refreshable: boolean;
+};
+
 /** A registered secret as Studio lists it: never the password or TOTP key. */
 export type SecretInfo = {
   name: string;
+  kind: SecretKind;
   username: string;
   sites: string[];
   fields: SecretField[];
   description?: string;
   /** oauth.signIn saved tokens for it. */
   signedIn?: boolean;
+  oauth?: OAuthStatus;
   updatedAt: string;
 };
 
 /** Registers or updates a secret; fields left out keep their stored value. */
 export type SecretInput = {
   name: string;
+  /** Fields the kind does not use are removed. */
+  kind?: SecretKind;
   username?: string;
   password?: string;
   totp?: string;
@@ -109,6 +128,8 @@ export type SecretInput = {
 /** A login an AI asked the user for (request_secret): names and sites only. */
 export type SecretRequest = {
   name: string;
+  /** What the AI asked for; a login when left out. */
+  kind?: SecretKind;
   sites: string[];
   fields: SecretField[];
   /** Written by the AI: shown as its words. */

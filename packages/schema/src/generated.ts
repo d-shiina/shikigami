@@ -2011,6 +2011,11 @@ export interface RunReport {
    */
   subflows?: SubflowRef[];
   origin?: RunOrigin1;
+  /**
+   * Names of the secrets the run used (typed values, API auth, saved
+   * logins, OAuth tokens), never their values.
+   */
+  secretsUsed?: string[];
 }
 /**
  * A called flow's content as used by a run.

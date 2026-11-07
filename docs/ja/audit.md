@@ -11,7 +11,7 @@ shikigami audit --flow scn_01a1… --json      # 1 つのフローだけ、1 行
 ```
 
 ```text
-2026-11-06T08:00:01Z  schedule (毎朝)  run  scn_01a1… FAILED ELEMENT_NOT_FOUND
+2026-11-06T08:00:01Z  schedule (毎朝)  run  scn_01a1… FAILED ELEMENT_NOT_FOUND  secrets: 受注システム
 2026-11-06T09:12:40Z  mcp (claude-code)  update_step  scn_01a1…  保存ダイアログを待つ
 2026-11-06T09:15:02Z  studio  publish  scn_01a1…  v4
 ```
@@ -25,7 +25,7 @@ shikigami audit --flow scn_01a1… --json      # 1 つのフローだけ、1 行
 | `mcp` | MCP のツール呼び出しすべて。読み取りと、拒否された呼び出し（`ok: false`、`errorCode`）も含む | `audit/mcp.jsonl`（PC ごと） |
 | `run` | 実行すべて。どこから始まったか（`studio`・`cli`・`mcp`・`schedule`・`remote`）、依頼した人、結果 | `runs/<run-id>/report.json`（PC ごと） |
 
-`--json` の項目：`at`、`source`、`actor`、`who`（クライアント・スケジュール名・管理サーバーで依頼した人）、`action`、`flowId`、`revision`、`version`、`runId`、`ok`、`errorCode`、`detail`。
+`--json` の項目：`at`、`source`、`actor`、`who`（クライアント・スケジュール名・管理サーバーで依頼した人）、`action`、`flowId`、`revision`、`version`、`runId`、`ok`、`errorCode`、`detail`、`secrets`（実行のみ。その実行が使ったシークレットの名前。入力したパスワード・API キー・保存したログイン状態・OAuth のトークンを含み、値は記録しません。実行の `report.json` にも `secretsUsed` として残ります）。
 
 ## 保存期間
 

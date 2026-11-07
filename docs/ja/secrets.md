@@ -2,7 +2,7 @@
 
 [English](../secrets.md) | 日本語
 
-業務サイトや業務アプリのログインに使う ID・パスワードの扱いです。基本の考え方は 3 つです。
+業務サイトや業務アプリのログインに使う ID・パスワードと、Web API のキーの扱いです。基本の考え方は 3 つです。
 
 1. **値は人が登録する**。Studio の「🔑 シークレット」（または CLI）で、名前を付けて登録します（例：「受注システム」）。
 2. **フローと AI には名前だけ**。フローには `{ "secret": "受注システム", "field": "password" }` とだけ書きます。値は実行中のノードが受け取るだけで、フローファイル・MCP の結果・ログ・スクリーンショットのどこにも出ません。
@@ -17,15 +17,29 @@
 | 項目 | 内容 |
 |---|---|
 | 名前 | フローと AI に伝える名前。1〜64 文字 |
+| 種類 | **ログイン**（サイトやアプリに入力するユーザー名とパスワード）、**API キー**（Web API に送る固定のキー・トークン）、**OAuth アプリ**（OAuth の提供元に登録したアプリ、[oauth.md](oauth.md)）。種類によって入力欄の名前が変わり、使う欄だけが出ます（API キーはキーだけ、OAuth アプリはクライアント ID とクライアント シークレット） |
 | ユーザー名 / パスワード | ログインに使う値。編集時、パスワード欄を空のままにすると前の値を残す |
 | 入力してよいサイト・アプリ | 1 行に 1 つ。`https://example.com/login` と書いても `https://example.com`（オリジン）として扱う。デスクトップアプリは `app:billing.exe`（実行ファイル名、[desktop.md](desktop.md)） |
 | MFA の設定キー | 任意。認証アプリ用 QR コードの横に出るキー（base32）か `otpauth://` の文字列。ワンタイムコードを自動入力する |
+
+種類が違っても金庫は 1 つで、フローでの書き方も同じです（下記）。保存・サイトの照合・伏せ字の扱いは種類で変わりません。別々に管理すると、見る場所も参照の書き方も 2 通りになり、AI も迷うためです。
+
+| 種類 | 項目（保存上の名前） | 使うところ | 入力する人 |
+|---|---|---|---|
+| `login` | `username`・`password`・`totp` | 入力ノード（`browser.fill`・`desktop.*`・`db.*` など） | 人 |
+| `apiKey` | `password`（キー） | `http.request` の `auth`（`authType` は `bearer` か `header`） | 人 |
+| `oauth` | `username`（クライアント ID）・`password`（クライアント シークレット） | `oauth.signIn`。取得したアクセストークンは `field: "accessToken"` | クライアントは人が入力し、トークンは自動で取得・更新 |
+
+登録済みのシークレットの種類を変えると、新しい種類で使わない項目は消えます（API キーにするとユーザー名が消える、など）。種類ができる前に登録したシークレットは、トークンがあれば OAuth アプリ、なければログインとして扱います。
+
+OAuth アプリは一覧に、アクセストークンの有効期限・最後に取得した日時・自動で更新されるか（リフレッシュトークンがあるか）、再度サインインが必要かを表示します。
 
 ### CLI
 
 ```powershell
 shikigami secret set 受注システム --username tanaka --site https://orders.example.com   # パスワードは伏せ字で聞かれる
 shikigami secret set 受注システム --totp JBSWY3DPEHPK3PXP                                 # 変えたい項目だけ
+shikigami secret set 受注API --kind api-key --site https://api.example.com               # キーは伏せ字で聞かれる
 shikigami secret list
 shikigami secret remove 受注システム
 shikigami secret logout 受注システム        # 保存したログイン状態（下記）だけ消す
@@ -81,7 +95,7 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 
 ## AI（MCP）から
 
-- AI はパスワードをチャットで聞きません。`list_secrets` で **名前・サイト・設定済みの項目** だけを見ます（値もユーザー名も返しません）。
+- AI はパスワードをチャットで聞きません。`list_secrets` で **名前・種類・サイト・設定済みの項目** だけを見ます（値もユーザー名も返しません）。
 - 調査中にログイン画面に当たると、`inspect_page` / `test_step` の結果に `login`（ログインが必要という印と対処のヒント）が付きます。
   - 合うシークレットがあれば、`test_step` の `browser.fill` で `{ "secret": …, "field": … }` を使ってログインします。
   - なければ、`request_secret` でユーザーに登録を頼みます（下記）。手でログインしてもらう場合は `test_step` の `browser.waitForHuman`。
@@ -100,6 +114,7 @@ AI はパスワードをチャットで聞く代わりに、`request_secret` で
 - 「理由」は AI が書いた文章です。Studio では「AI からのメッセージ」として表示します。入力先は登録したサイトに限られるので、理由にどう書かれていても別のサイトには入力されません。
 - 結果の `status`：`registered`（登録された。`browser.fill` で使う）／`waiting`（まだ。`waitMs` を付けて呼び直すか `list_secrets`）／`dismissed`（ユーザーが「あとで」で閉じた）。
 - `fields` の既定は `username` と `password`。MFA の認証アプリのコードが要るなら `totp` も入れます。
+- `kind: "apiKey"` で Web API のキーを依頼します（`fields` の既定は、キーを入れる `password`）。`kind: "oauth"` は OAuth アプリ。Studio のフォームはその種類の欄の名前で表示します。
 - Studio が起動していなければ、AI がチャットで「Studio を開いて登録してください」と伝えます。依頼は残っているので、開いた時点で表示されます。
 
 ### 実行が失敗したとき

@@ -20,6 +20,7 @@ pub mod record;
 mod runlog;
 pub mod sidecar;
 pub mod single;
+mod used_secrets;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -241,6 +242,14 @@ impl Runtime {
             ))
         });
 
+        // Names of the secrets the run uses, for its report.
+        let (run_secrets, secrets_used) = match self.secrets.clone() {
+            Some(inner) => {
+                let (wrapped, used) = used_secrets::Recording::wrap(inner);
+                (Some(wrapped), Some(used))
+            }
+            None => (None, None),
+        };
         let mut executor = Executor::new_from(
             &flow,
             Executor {
@@ -251,7 +260,7 @@ impl Runtime {
                 project_dir: options.project_dir.clone().map(Arc::from),
                 project_dirs: Arc::new(project_dirs),
                 default_timeouts: self.default_timeouts.clone(),
-                secrets: self.secrets.clone(),
+                secrets: run_secrets.clone(),
                 vars: Map::new(),
                 secret_vars: flow
                     .variables
@@ -293,7 +302,7 @@ impl Runtime {
         if origin.machine.is_none() {
             origin.machine = event::machine_name();
         }
-        let secrets = self.secrets.clone();
+        let secrets = run_secrets;
         let hooks = if options.keep_adapter_state {
             Arc::new(Vec::new())
         } else {
@@ -395,6 +404,9 @@ impl Runtime {
                 outputs,
                 subflows,
                 origin,
+                secrets_used: secrets_used
+                    .and_then(|used| used.lock().ok().map(|u| u.iter().cloned().collect()))
+                    .unwrap_or_default(),
             }
         });
 

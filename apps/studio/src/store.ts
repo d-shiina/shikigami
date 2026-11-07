@@ -37,6 +37,7 @@ import {
   type SecretInput,
   type PasteOutcome,
   type PickRequest,
+  type SecretKind,
   type SecretRequest,
   type StepTestResult,
 } from "./lib/api";
@@ -441,7 +442,7 @@ export type StudioState = {
   dismissSecretFix(): void;
 };
 
-export type SecretPrefill = { name: string; sites: string[]; fields: SecretField[] };
+export type SecretPrefill = { name: string; sites: string[]; fields: SecretField[]; kind?: SecretKind };
 
 export type SecretFix = { name: string; code: string; site?: string; field?: SecretField };
 

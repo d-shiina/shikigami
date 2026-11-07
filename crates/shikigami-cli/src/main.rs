@@ -14,6 +14,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use serde_json::{Map, Value};
+use shikigami_core::secret::SecretKind;
 use shikigami_core::{
     Actor, ActorKind, ApprovalId, ApprovalStore, DiffKind, FileStore, Flow, FlowDiff, FlowId,
     FlowService, ImportConflict, NewFlow, NewVersion, Policy, PublishInput, UserConfig,
@@ -307,6 +308,10 @@ enum SecretCmd {
     /// Register a secret or update it (options left out keep their value).
     Set {
         name: String,
+        /// What it holds: login (default), api-key (a key for a web API, given as the
+        /// password) or oauth (an OAuth app: --username = client ID, password = client secret).
+        #[arg(long, value_parser = parse_secret_kind)]
+        kind: Option<SecretKind>,
         #[arg(long)]
         username: Option<String>,
         /// Read the password from the first line of stdin instead of asking.
@@ -610,6 +615,10 @@ fn real_main() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn parse_secret_kind(text: &str) -> Result<SecretKind, String> {
+    SecretKind::parse(text).ok_or_else(|| "login, api-key or oauth".to_owned())
+}
+
 fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
     match cmd {
         SecretCmd::List { json } => {
@@ -622,8 +631,9 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
                 for s in list {
                     let fields: Vec<_> = s.fields.iter().map(|f| f.as_str()).collect();
                     println!(
-                        "{}\tuser={}\tfields={}\tsites={}",
+                        "{}\tkind={}\tuser={}\tfields={}\tsites={}",
                         s.name,
+                        s.kind.as_str(),
                         s.username,
                         fields.join(","),
                         s.sites.join(" ")
@@ -633,6 +643,7 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
         }
         SecretCmd::Set {
             name,
+            kind,
             username,
             password_stdin,
             password,
@@ -640,20 +651,25 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
             sites,
             description,
         } => {
-            let is_new = !vault.summaries()?.iter().any(|s| &s.name == name);
+            let known = vault.summaries()?.into_iter().find(|s| &s.name == name);
+            let is_new = known.is_none();
+            let what = match kind.or(known.map(|s| s.kind)).unwrap_or_default() {
+                SecretKind::Login => "パスワード",
+                SecretKind::ApiKey => "API キー",
+                SecretKind::Oauth => "クライアント シークレット",
+            };
             let password = if *password_stdin {
                 let mut line = String::new();
                 std::io::stdin().read_line(&mut line)?;
                 Some(line.trim_end_matches(['\r', '\n']).to_owned())
             } else if *password || (is_new && std::io::stdin().is_terminal()) {
-                Some(rpassword::prompt_password(format!(
-                    "{name} のパスワード: "
-                ))?)
+                Some(rpassword::prompt_password(format!("{name} の{what}: "))?)
             } else {
                 None
             };
             let info = vault.set(SecretInput {
                 name: name.clone(),
+                kind: *kind,
                 username: username.clone(),
                 password,
                 totp: totp.clone(),
@@ -1335,8 +1351,13 @@ fn audit_cmd(
         } else {
             format!("  {}", e.detail)
         };
+        let secrets = if e.secrets.is_empty() {
+            String::new()
+        } else {
+            format!("  secrets: {}", e.secrets.join(", "))
+        };
         println!(
-            "{at}  {}{who}  {}  {flow}{ok}{code}{detail}",
+            "{at}  {}{who}  {}  {flow}{ok}{code}{detail}{secrets}",
             e.actor, e.action
         );
     }

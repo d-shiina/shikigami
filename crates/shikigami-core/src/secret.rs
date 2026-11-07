@@ -57,6 +57,70 @@ impl SecretField {
     }
 }
 
+/// What a secret holds, so Studio can name its fields and the AI can tell
+/// a login from an API key. Every kind is stored, referenced (`{ "secret",
+/// "field" }`), site-checked and masked the same way: the kind only changes
+/// how the fields are called and which ones a person fills in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SecretKind {
+    /// A user name and password typed into a site or app (and an MFA key).
+    #[default]
+    Login,
+    /// A fixed key or token for a web API, kept in `password` and sent by
+    /// `http.request` (`authType` `bearer` or `header`).
+    ApiKey,
+    /// An app registered at an OAuth provider: `username` = client ID,
+    /// `password` = client secret. `oauth.signIn` gets the access token.
+    Oauth,
+}
+
+impl SecretKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Login => "login",
+            Self::ApiKey => "apiKey",
+            Self::Oauth => "oauth",
+        }
+    }
+
+    /// Reads `login`, `apiKey` (or `api-key`) and `oauth`.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text
+            .trim()
+            .to_ascii_lowercase()
+            .replace(['-', '_'], "")
+            .as_str()
+        {
+            "login" => Some(Self::Login),
+            "apikey" => Some(Self::ApiKey),
+            "oauth" => Some(Self::Oauth),
+            _ => None,
+        }
+    }
+
+    /// The fields a person fills in for this kind.
+    pub fn fields(self) -> &'static [SecretField] {
+        match self {
+            Self::Login => &[
+                SecretField::Username,
+                SecretField::Password,
+                SecretField::Totp,
+            ],
+            Self::ApiKey => &[SecretField::Password],
+            Self::Oauth => &[SecretField::Username, SecretField::Password],
+        }
+    }
+
+    /// The fields asked for when a request names none.
+    pub fn default_request_fields(self) -> Vec<SecretField> {
+        match self {
+            Self::Login | Self::Oauth => vec![SecretField::Username, SecretField::Password],
+            Self::ApiKey => vec![SecretField::Password],
+        }
+    }
+}
+
 impl SecretRef {
     /// Reads a reference from a param value; `None` when the value is not
     /// an object with a `secret` key.
