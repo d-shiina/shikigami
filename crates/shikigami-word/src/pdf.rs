@@ -114,6 +114,22 @@ fn word(
                 // A Word that already has documents is the person's: it is
                 // never killed, even when the step gives up.
                 own = docs.get("Count").and_then(|n| n.to_i64()).unwrap_or(1) == 0;
+                // Its process is known before opening (which can hang on a
+                // damaged file), so giving up can end it: Word tells it only
+                // through a document's window.
+                if own
+                    && let Some(id) = docs.object("Add", vec![]).ok().and_then(|blank| {
+                        let id = blank
+                            .get("ActiveWindow")
+                            .ok()
+                            .and_then(|w| w.object("ActiveWindow").ok())
+                            .and_then(|w| w.window_process());
+                        let _ = blank.call("Close", vec![Var::bool(false)]);
+                        id
+                    })
+                {
+                    session.report_process(id);
+                }
                 // Open(FileName, ConfirmConversions, ReadOnly, AddToRecentFiles,
                 // PasswordDocument): an empty password keeps Word from asking.
                 let doc = docs
@@ -131,14 +147,6 @@ fn word(
                         StepError::permanent("DOCUMENT_UNREADABLE", format!("Word could not open {source}: {}", e.message))
                             .with_details(json!({ "hint": "The file may be damaged or have a password to open it." }))
                     })?;
-                if let Some(id) = own
-                    .then(|| doc.get("ActiveWindow"))
-                    .and_then(Result::ok)
-                    .and_then(|w| w.object("ActiveWindow").ok())
-                    .and_then(|w| w.window_process())
-                {
-                    session.report_process(id);
-                }
                 session.check()?;
                 let saved = doc
                     .call("ExportAsFixedFormat", vec![Var::str(&target), Var::i32(PDF)])

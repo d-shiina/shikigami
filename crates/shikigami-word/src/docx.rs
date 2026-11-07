@@ -41,6 +41,13 @@ fn segments(xml: &str) -> Vec<Segment> {
             i = at + 6;
             continue;
         }
+        // A tab or a line break inside a paragraph is not text a search can
+        // run across: the text on each side is matched on its own.
+        if is_tag(xml, at, "<w:tab") || is_tag(xml, at, "<w:br") || is_tag(xml, at, "<w:cr") {
+            paragraph += 1;
+            i = at + 1;
+            continue;
+        }
         if is_tag(xml, at, "<w:t") {
             let Some(close) = xml[at..].find('>').map(|c| at + c) else {
                 break;

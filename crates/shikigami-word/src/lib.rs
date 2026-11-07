@@ -12,7 +12,7 @@
 #![allow(clippy::result_large_err)]
 
 use std::collections::BTreeSet;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -381,6 +381,36 @@ fn replace_text(params: &Value, cancel: &CancellationToken) -> Result<Value, Ste
     }
     Ok(json!({ "path": path, "replaced": replaced }))
 }
+/// The keys of a table's records: its headings, an empty one named by its
+/// column (列3), a repeated one numbered after it with a number no other
+/// heading has (名前, 名前, 名前_2 → 名前, 名前_3, 名前_2).
+pub(crate) fn heading_keys(names: &[String]) -> Vec<String> {
+    let bases: Vec<String> = names
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            let n = n.trim().replace('\n', " ");
+            if n.is_empty() {
+                format!("列{}", i + 1)
+            } else {
+                n
+            }
+        })
+        .collect();
+    let mut taken: HashSet<String> = HashSet::new();
+    let mut keys: Vec<String> = Vec::with_capacity(bases.len());
+    for (i, base) in bases.iter().enumerate() {
+        let mut key = base.clone();
+        let mut n = 1;
+        while taken.contains(&key) || (key != *base && bases[i + 1..].contains(&key)) {
+            n += 1;
+            key = format!("{base}_{n}");
+        }
+        taken.insert(key.clone());
+        keys.push(key);
+    }
+    keys
+}
 
 /// `word.readTables`: the tables of the body as rows.
 fn read_tables(params: &Value) -> Result<Value, StepError> {
@@ -394,27 +424,7 @@ fn read_tables(params: &Value) -> Result<Value, StepError> {
         }
         let mut rows = rows.into_iter();
         let names = rows.next().unwrap_or_default();
-        let mut seen: HashMap<String, usize> = HashMap::new();
-        // Empty or repeated headings get a column-number name.
-        let keys: Vec<String> = names
-            .iter()
-            .enumerate()
-            .map(|(i, n)| {
-                let n = n.trim().replace('\n', " ");
-                let key = if n.is_empty() {
-                    format!("列{}", i + 1)
-                } else {
-                    n
-                };
-                let count = seen.entry(key.clone()).or_insert(0);
-                *count += 1;
-                if *count > 1 {
-                    format!("{key}_{count}")
-                } else {
-                    key
-                }
-            })
-            .collect();
+        let keys = heading_keys(&names);
         Value::Array(
             rows.map(|row| {
                 let mut record = Map::new();

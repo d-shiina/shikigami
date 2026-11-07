@@ -292,3 +292,29 @@ async fn pdf_needs_word_on_windows() {
     .await;
     assert_eq!(report.error.unwrap().code, "PLATFORM_UNSUPPORTED");
 }
+
+#[test]
+fn table_headings_become_keys_no_two_columns_share() {
+    let names = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+    assert_eq!(
+        crate::heading_keys(&names(&["名前", "名前", "名前_2", "", " 数量 "])),
+        names(&["名前", "名前_3", "名前_2", "列4", "数量"])
+    );
+}
+
+#[test]
+fn a_search_does_not_run_across_a_tab_or_a_line_break() {
+    for between in ["<w:tab/>", "<w:br/>", "<w:cr/>"] {
+        let xml = format!("<w:p><w:r><w:t>foo</w:t>{between}<w:t>bar</w:t></w:r></w:p>");
+        let (out, n) = docx::replace_text(&xml, "foobar", "x", true);
+        assert_eq!((n, out), (0, xml.clone()), "{between}");
+    }
+    // Runs split by formatting still match.
+    let (_, n) = docx::replace_text(
+        "<w:p><w:r><w:t>foo</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>bar</w:t></w:r></w:p>",
+        "foobar",
+        "x",
+        true,
+    );
+    assert_eq!(n, 1);
+}
