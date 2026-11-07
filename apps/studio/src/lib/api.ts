@@ -86,9 +86,11 @@ export type Schedule = {
   inputs?: Record<string, unknown>;
 };
 
-export type ScheduleView = Schedule & { flowName: string | null; published: boolean };
+export type ScheduleView = Schedule & { flowName: string | null; published: boolean; usesScreen: boolean };
 
-export type ScheduleList = { schedules: ScheduleView[]; path: string };
+/** When this PC locks its screen by itself after no input. */
+export type ScreenLock = { afterSecs: number; by: "screenSaver" | "inactivityLimit" };
+export type ScheduleList = { schedules: ScheduleView[]; path: string; screenLock?: ScreenLock };
 
 /** The agent of this PC and workspace, which fires the schedules. */
 export type AgentStatus = {

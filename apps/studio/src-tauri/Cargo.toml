@@ -19,6 +19,7 @@ tauri-build = { version = "2.7.4", features = [] }
 shikigami-core.workspace = true
 shikigami-runtime.workspace = true
 shikigami-adapters.workspace = true
+shikigami-desktop.workspace = true
 shikigami-secrets.workspace = true
 shikigami-agent.workspace = true
 shikigami-system.workspace = true

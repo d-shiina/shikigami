@@ -1711,6 +1711,8 @@ export const ja = {
     paused: "無効",
     notPublished: "公開版がないため実行されません",
     flowMissing: "フローが見つかりません",
+    locksScreen: (minutes: number, byPolicy: boolean) =>
+      `マウス・キーボードを使うフローです。この PC は操作がないと ${minutes} 分で${byPolicy ? "画面がロックされ（会社の設定）" : "パスワード付きのスクリーンセーバーでロックされ"}、ロック中はそこで止まります。予定の時刻にはロックを解いておくか、ロックしない PC で動かしてください。`,
     problem: (text: string) => `スケジュールのファイルを読めません：${text}`,
     describe: {
       daily: (at: string, days: string) => (days ? `毎週 ${days} の ${at}` : `毎日 ${at}`),

@@ -140,15 +140,18 @@ impl Runtime {
     /// Whether a node of `flow` or of a flow it can call takes
     /// [`DESKTOP_INPUT`].
     fn uses_input(&self, flow: &Flow, library: &HashMap<FlowId, Arc<Flow>>) -> bool {
-        std::iter::once(flow)
-            .chain(library.values().map(|f| &**f))
-            .flat_map(Flow::walk)
-            .any(|step| {
-                self.resource_defs.get(&step.step_type).is_some_and(|defs| {
-                    defs.iter()
-                        .any(|d| matches!(d, ResourceDef::Static(name) if name == DESKTOP_INPUT))
-                })
+        self.uses_desktop_input(std::iter::once(flow).chain(library.values().map(|f| &**f)))
+    }
+
+    /// Whether a node of any of `flows` uses the mouse and keyboard (takes
+    /// [`DESKTOP_INPUT`]), so a run of them stops while the screen is locked.
+    pub fn uses_desktop_input<'a>(&self, flows: impl IntoIterator<Item = &'a Flow>) -> bool {
+        flows.into_iter().flat_map(Flow::walk).any(|step| {
+            self.resource_defs.get(&step.step_type).is_some_and(|defs| {
+                defs.iter()
+                    .any(|d| matches!(d, ResourceDef::Static(name) if name == DESKTOP_INPUT))
             })
+        })
     }
 
     /// Whether the screen can be used now (signed in, not locked): `None`
