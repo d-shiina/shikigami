@@ -146,6 +146,15 @@ impl Runtime {
         self
     }
 
+    /// Binds the runtime to a workspace: its secrets (the vault opened at
+    /// `root`) and its `policy.json`. Every process that runs flows of a
+    /// workspace (Studio, the MCP server, `shikigami run`, `shikigami
+    /// agent`) builds its runtime with this one call, so something a
+    /// workspace run needs is added here once, not in each of them.
+    pub fn for_workspace(self, root: &std::path::Path, secrets: Arc<dyn SecretProvider>) -> Self {
+        self.with_secrets(secrets).with_policy(Policy::path(root))
+    }
+
     /// Step types this runtime can execute. Use the same registry for the
     /// `FlowService` so validation and execution agree.
     pub fn registry(&self) -> &StepRegistry {

@@ -579,10 +579,10 @@ fn real_main() -> Result<ExitCode> {
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            let runtime = runtime
-                .clone()
-                .with_secrets(Arc::new(Vault::open(svc.store().root())))
-                .with_policy(Policy::path(svc.store().root()));
+            let runtime = runtime.clone().for_workspace(
+                svc.store().root(),
+                Arc::new(Vault::open(svc.store().root())),
+            );
             let status = rt.block_on(run(
                 &runtime,
                 svc.store().local_root(),

@@ -248,9 +248,7 @@ impl ShikigamiMcp {
         // Steps look secrets up in the workspace's vault; this server only
         // ever reveals their names.
         let vault = Arc::new(Vault::open(service.store().root()));
-        let runtime = runtime
-            .with_secrets(vault.clone())
-            .with_policy(Policy::path(service.store().root()));
+        let runtime = runtime.for_workspace(service.store().root(), vault.clone());
         let approvals = ApprovalStore::new(service.store().local_root());
         let picks = PickRequestStore::new(service.store().local_root());
         Self {
