@@ -3,7 +3,7 @@
 //
 //   node examples/build-tutorials.mjs
 //
-// The folder (flow.json and the files under input/ config/ templates/) is
+// The folder (flow.json and the files under input/ config/ templates/ tests/) is
 // the source of truth. In Studio, "Import from file" on the Flows page
 // opens a bundle as a flow with its folder; the CLI runs it directly
 // (`shikigami run examples/tutorials/<name>.shikigami.json`). Re-run this
@@ -17,7 +17,7 @@ const root = fileURLToPath(new URL("./tutorials/", import.meta.url));
 // A fixed timestamp keeps the generated bundles stable across rebuilds.
 const EXPORTED_AT = "2026-11-06T00:00:00Z";
 // What a flow's folder carries; runs make output/ work/ logs/.
-const CARRIED = ["input", "config", "templates"];
+const CARRIED = ["input", "config", "templates", "tests"];
 
 /** Files under `dir`, as `/`-separated paths relative to `base`, sorted. */
 function walk(base, dir) {

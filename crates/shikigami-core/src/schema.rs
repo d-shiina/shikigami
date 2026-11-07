@@ -35,6 +35,10 @@ pub fn all() -> Vec<(&'static str, Value)> {
         ("flow.schema.json", schema::<Flow>("flow")),
         ("edit-op.schema.json", schema::<EditOp>("edit-op")),
         ("api.schema.json", api_schema()),
+        (
+            "test-case.schema.json",
+            schema::<crate::testcase::TestCase>("test-case"),
+        ),
     ]
 }
 
