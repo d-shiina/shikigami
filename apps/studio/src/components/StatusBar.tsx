@@ -1,7 +1,9 @@
-// The bar along the bottom reports and never asks: what the AI and the runner
-// are doing, where the selection is, then this PC's preferences (language,
-// theme) and the version. What waits on the person has
-// its badge on the control that answers it (確認待ち, シークレット), not here.
+// The bar along the bottom holds what belongs to the window, not to what is
+// open: this PC's preferences (language, theme) and the version. What the
+// open flow's run is doing and where the selection is sit with the flow (the
+// title bar, the inspector); what the AI is doing sits by the AI's button.
+// What waits on the person has its badge on the control that answers it
+// (確認待ち, シークレット), not here.
 import type { HistoryEntry, Step } from "@shikigami/schema";
 import { type ReactNode, useMemo, useState } from "react";
 import { activity, useAgentMaybe } from "../agent";
@@ -66,7 +68,7 @@ export function WorkspaceSection() {
  * from every place, not only in the pane. Otherwise the latest edit an AI
  * made through MCP, in any flow loaded so far.
  */
-function AiActivity() {
+export function AiActivity() {
   const working = useAgentMaybe((s) => activity(s) !== null, false);
   const tool = useAgentMaybe((s) => activity(s)?.tool ?? null, null);
   const name = useAgentMaybe((s) => s.info?.name ?? "AI", "AI");
@@ -100,7 +102,8 @@ function LastAiEdit() {
   );
 }
 
-function RunStatus() {
+/** The open flow's run, in its title bar. While it runs the bar's Run control says so; this names the node and goes to it. */
+export function RunStatus() {
   const run = useStudio((s) => s.run);
   const steps = useStudio((s) => s.flow?.steps);
   const goTo = useStudio((s) => s.goTo);
@@ -111,9 +114,9 @@ function RunStatus() {
     run.status === "running" ? "bg-accent-500 animate-pulse" : run.status === "paused" ? (run.pause?.reason === "error" ? "bg-shu-500" : "bg-mizu-500") : run.status === "succeeded" ? "bg-moegi-500" : run.status === "failed" ? "bg-shu-500" : "bg-slate-400";
   return (
     <button type="button" className={BUTTON} onClick={() => current && goTo(current)} title={current ? t.bar.goToRunning : undefined}>
-      <span className={`h-2 w-2 rounded-full ${color}`} />
-      {(t.bar.run as Record<string, string>)[run.status] ?? run.status}
-      {name && <span className="max-w-[200px] truncate text-slate-400">{name}</span>}
+      {!current && <span className={`h-2 w-2 rounded-full ${color}`} />}
+      {!current && ((t.bar.run as Record<string, string>)[run.status] ?? run.status)}
+      {name && <span className="max-w-[200px] truncate">{name}</span>}
     </button>
   );
 }
@@ -130,7 +133,7 @@ function findName(steps: Step[], id: string): string | undefined {
 }
 
 /** "ノード 3 / 12" for the selected step, in reading order. */
-function Position() {
+export function Position() {
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
@@ -248,10 +251,7 @@ function Version() {
 export function StatusBar() {
   return (
     <footer className="col-span-full flex h-7 min-w-0 items-center bg-frame px-2 text-[11px] text-slate-500">
-      <AiActivity />
       <span className="flex-1" />
-      <RunStatus />
-      <Position />
       <LanguageSwitch />
       <ThemeSwitch />
       <Version />

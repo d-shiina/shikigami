@@ -4,6 +4,7 @@ import { t } from "../lib/i18n";
 import { authorIssues, unsetIssues } from "../lib/todos";
 import { useTodos, useUnsetCount } from "../lib/useTodos";
 import { RecordButton } from "./RecordButton";
+import { RunStatus } from "./StatusBar";
 
 function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   const { label, children, className, ...rest } = props;
@@ -159,6 +160,9 @@ export function FlowTitle() {
           {[errors ? t.toolbar.errors(errors) : "", unset ? t.toolbar.unset(unset) : "", todos ? t.todos.chip(todos) : ""].filter(Boolean).join(" · ") || t.toolbar.valid}
         </span>
       </button>
+      <span className="flex h-6 shrink-0 items-center rounded-md text-[12px] text-slate-500 @max-[920px]/title:hidden">
+        <RunStatus />
+      </span>
     </div>
   );
 }

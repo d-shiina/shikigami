@@ -31,7 +31,7 @@ import { ExtensionsPage } from "./components/ExtensionsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { FlowsPage } from "./components/FlowsPage";
 import { Sidebar } from "./components/Sidebar";
-import { StatusBar } from "./components/StatusBar";
+import { AiActivity, StatusBar } from "./components/StatusBar";
 import { StoryView } from "./components/StoryView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
@@ -373,13 +373,19 @@ function Shell() {
           </Peek>
         )}
         {/* The window buttons keep to a thin strip of the window's ground, in its corner as on any
-            Windows window; the work under it floats, framed and rounded, title bar and all, as in Linear. */}
+            Windows window; the work under it floats, framed and rounded, title bar and all, as in Linear,
+            and the AI's chat floats beside it as a panel of its own. */}
         <div className="flex min-w-0 flex-1 flex-col">
           <div data-tauri-drag-region className="flex h-8 shrink-0 justify-end select-none">
+            {/* What the AI is doing, by the button that opens it, seen from every place. */}
+            <span className="flex min-w-0 items-center text-[11px] text-slate-500">
+              <AiActivity />
+            </span>
             <AgentButton />
             <WindowControls />
           </div>
-          <div className="mr-1.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
+          <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <TitleBar view={view} onView={setView} />
             <HumanBanner />
             <Banner />
@@ -412,13 +418,15 @@ function Shell() {
                   <SettingsPage />
                 </div>
               )}
-              {/* The AI's chat, on the right under the button that opens it. */}
-              {/* Kept mounted while closed, so an unsent draft survives (the pane draws nothing then). */}
-              <div className="relative flex">
-                <AgentPane width={fit.agent} />
-                {fit.agent > 0 && grip("agent")}
-              </div>
             </div>
+          </div>
+          {/* The AI's chat floats on the window's ground beside the work, under the button that
+              opens it: it is not part of any place (it makes new flows too), so it is not in the
+              work's frame. Kept mounted while closed, so an unsent draft survives (it draws nothing then). */}
+          <div className={fit.agent > 0 ? "relative flex overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet" : "contents"}>
+            <AgentPane width={fit.agent} />
+            {fit.agent > 0 && grip("agent")}
+          </div>
           </div>
         </div>
       </div>
