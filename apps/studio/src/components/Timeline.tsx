@@ -109,7 +109,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
         <ActorMark entry={entry} size={20} />
         <span className="text-xs font-semibold">{actorLabel(entry)}</span>
         <span className="text-xs text-slate-500">
-          rev {entry.revision} · {relativeTime(entry.at)}
+          {t.changeNumber(entry.revision)} · {relativeTime(entry.at)}
         </span>
       </div>
       <Lines lines={lines} detailed />

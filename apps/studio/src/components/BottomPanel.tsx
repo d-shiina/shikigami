@@ -82,7 +82,7 @@ export function BottomPanel() {
         ))}
         {tab === "log" && run && (
           <span className="ml-2 truncate text-xs text-slate-500">
-            {t.status[run.status]} · <span className="font-mono">{run.runId}</span>
+            <span title={run.runId}>{t.status[run.status]}</span>
           </span>
         )}
         <span className="flex-1" />

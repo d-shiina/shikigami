@@ -247,14 +247,16 @@ export function RunPausePanel() {
 
       {error && explained && (
         <div className="mt-1.5 flex items-baseline gap-2 text-[13px]">
-          <code className="shrink-0 rounded-md bg-shu-50 px-1.5 text-[12px] font-semibold text-shu-600">{error.code}</code>
+          <span className="mt-[5px] h-2 w-2 shrink-0 rounded-full bg-shu-500" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <div className="break-words font-semibold text-ink">{explained.what}</div>
             {explained.todo && <div className="break-words text-slate-600">{explained.todo}</div>}
             {explained.known && (
               <details className="text-[12px] text-slate-600">
                 <summary className="w-fit cursor-pointer select-none hover:text-ink">{t.pause.original}</summary>
-                <div lang="en" className="break-words font-mono">{error.message}</div>
+                <div lang="en" className="break-words font-mono">
+                  {error.code}: {error.message}
+                </div>
               </details>
             )}
           </div>

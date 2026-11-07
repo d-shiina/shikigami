@@ -1433,7 +1433,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = "running";
               run.flowId = env.flowId;
               run.revision = env.revision;
-              push("info", `▶ ${env.flowName} (rev ${env.revision})`);
+              push("info", `▶ ${env.flowName}${t.runMsg.atRevision(env.revision)}`);
               break;
             case "stepStarted":
               run.steps[env.stepId] = "running";
@@ -1498,7 +1498,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = env.status;
               run.pause = null;
               run.failure = env.status === "failed" ? (env.error ?? null) : null;
-              push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]} (${env.durationMs} ms)`);
+              push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]}${t.runMsg.took(env.durationMs)}`);
               break;
           }
           return { run, human, secretFix, reveal, ...moved };

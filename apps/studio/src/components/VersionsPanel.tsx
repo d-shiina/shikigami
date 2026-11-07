@@ -156,7 +156,7 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
         </div>
         <div className="text-xs text-slate-500">
           {t.actor[version.createdBy.kind]}
-          {version.createdBy.name ? t.paren(version.createdBy.name) : ""} · rev {version.revision} · {version.stepCount} steps
+          {version.createdBy.name ? t.paren(version.createdBy.name) : ""} · {t.versionMeta(version.revision, version.stepCount)}
         </div>
         {version.note && <p className="mt-1 text-xs whitespace-pre-wrap text-slate-700">{version.note}</p>}
         <div className="mt-1 flex gap-3 text-xs">
