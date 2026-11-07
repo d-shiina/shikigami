@@ -1,9 +1,9 @@
 // Move, extract and delete for the selected step, shown beside it in both the
 // flow chart and the procedure: actions on one step sit on that step.
 import type { Step } from "@shikigami/schema";
-import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
+import { selectedIds } from "../store";
 import { ExtractForm } from "./inspector/StepInspector";
 
 const STEP_TOOL = "grid h-6 w-6 place-items-center rounded-md text-[13px] text-slate-600 hover:bg-slate-100 hover:text-ink";
@@ -12,23 +12,38 @@ const STEP_TOOL = "grid h-6 w-6 place-items-center rounded-md text-[13px] text-s
 export function StepTools({ step }: { step: Step }) {
   const moveSelected = useStudio((s) => s.moveSelected);
   const removeSelected = useStudio((s) => s.removeSelected);
-  const [extracting, setExtracting] = useState(false);
+  const extracting = useStudio((s) => s.extractOpen);
+  const setExtractOpen = useStudio((s) => s.setExtractOpen);
+  // Several nodes picked with Shift+click: say how many, so the actions read as acting on all of them.
+  const count = useStudio((s) => selectedIds(s).length);
   return (
     <div className="relative">
       <div role="toolbar" aria-label={t.toolbar.stepTools} className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-sheet p-0.5 shadow-raised">
-        <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL}>
-          ↑
-        </button>
-        <button type="button" title={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} className={STEP_TOOL}>
-          ↓
-        </button>
-        <span className="mx-0.5 h-4 w-px bg-slate-200" />
+        {count > 1 && (
+          <>
+            <span className="px-1.5 text-[11px] font-medium whitespace-nowrap text-primary" title={t.shell.pickedTitle}>
+              {t.shell.pickedCount(count)}
+            </span>
+            <span className="mx-0.5 h-4 w-px bg-slate-200" />
+          </>
+        )}
+        {count <= 1 && (
+          <>
+            <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL}>
+              ↑
+            </button>
+            <button type="button" title={`${t.moveDown} (Alt+↓)`} onClick={() => moveSelected(1)} className={STEP_TOOL}>
+              ↓
+            </button>
+            <span className="mx-0.5 h-4 w-px bg-slate-200" />
+          </>
+        )}
         <button
           type="button"
           title={t.shell.extractTitle}
-          onClick={() => setExtracting(!extracting)}
+          onClick={() => setExtractOpen(!extracting)}
           aria-expanded={extracting}
-          className={`h-6 rounded-md px-1.5 text-[11px] ${extracting ? "bg-slate-200 text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
+          className={`h-6 rounded-md px-1.5 text-[11px] whitespace-nowrap ${extracting ? "bg-slate-200 text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
         >
           {t.shell.extract}
         </button>
@@ -45,4 +60,3 @@ export function StepTools({ step }: { step: Step }) {
     </div>
   );
 }
-

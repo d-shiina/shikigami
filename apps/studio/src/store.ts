@@ -45,7 +45,7 @@ import {
 } from "./lib/api";
 import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
 import { registerExtensions } from "./lib/extensions";
-import { copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
+import { boxRange, copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
@@ -244,6 +244,10 @@ export type StudioState = {
   selection: Selection;
   /** Nodes picked with Shift+click: siblings from the anchor to `focus` (the selected node). */
   range: { anchor: string; focus: string; ids: string[] } | null;
+  /** The "サブフローにまとめる" form is open beside the selected node. */
+  extractOpen: boolean;
+  /** The new flow's name typed in that form: kept while Shift+click moves the form to another node. */
+  extractName: string;
   notice: string | null;
   error: string | null;
   run: RunState | null;
@@ -358,8 +362,13 @@ export type StudioState = {
   removeSelected(): Promise<void>;
   /** Shift+click: selects the nodes from the selected one to `stepId` (same block only). */
   selectTo(stepId: string): void;
+  /** Shift+drag: selects the nodes the box was drawn around (as one run of siblings, see `boxRange`). */
+  selectBox(stepIds: string[]): void;
   /** Puts the selected nodes inside a new control node (繰り返し・条件分岐・エラー処理・グループ), where they were. */
   wrapSelected(type: string): Promise<void>;
+  /** Opens or closes the "サブフローにまとめる" form beside the selected node. */
+  setExtractOpen(open: boolean): void;
+  setExtractName(name: string): void;
   /** Puts the selected nodes on the clipboard (`cut` also removes them). */
   copySelected(cut?: boolean): Promise<void>;
   /** Adds the nodes on the clipboard after the selection (or at the "+" / empty block). */
@@ -793,6 +802,33 @@ export function selectedIds(state: Pick<StudioState, "selection" | "range">): st
   return [selection.stepId];
 }
 
+/**
+ * What "サブフローにまとめる" offers for the selection. Several picked nodes
+ * (Shift+click) are taken as they are; one node offers itself and the nodes
+ * after it in the same block, to choose how many.
+ */
+export function extractChoices(steps: Step[], state: Pick<StudioState, "selection" | "range">): { picked: Step[] } | { from: Step[] } | null {
+  const ids = selectedIds(state);
+  if (ids.length === 0) return null;
+  const found = ids.map((id) => findStep(steps, id)).filter((s): s is Step => !!s);
+  if (found.length !== ids.length) return null;
+  if (ids.length > 1) return { picked: found };
+  return { from: siblingsAfter(steps, ids[0]!) ?? found };
+}
+
+/** The step and the ones after it, in its block. */
+function siblingsAfter(steps: Step[], id: string): Step[] | null {
+  const i = steps.findIndex((s) => s.id === id);
+  if (i >= 0) return steps.slice(i);
+  for (const step of steps) {
+    for (const children of Object.values(step.blocks ?? {})) {
+      const found = siblingsAfter(children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 /** A case of a switch, with nothing to compare to yet. */
 function newCase(body: Step[] = []): Step {
   return { id: newStepId(), type: CASE, params: { ...(DEFAULT_PARAMS[CASE] ?? {}) }, ...(body.length > 0 ? { blocks: { body } } : {}) };
@@ -869,6 +905,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       canRedo: false,
       selection: null,
       range: null,
+      extractOpen: false,
+      extractName: "",
       notice: null,
       error: null,
       run: null,
@@ -1112,7 +1150,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       // Picking a step of the open flow brings the chart back up to it.
       select(selection) {
-        set(selection ? { selection, range: null, dive: [] } : { selection, range: null });
+        set(selection ? { selection, range: null, dive: [], extractOpen: false, extractName: "" } : { selection, range: null, extractOpen: false, extractName: "" });
       },
 
       goTo(stepId) {
@@ -1231,6 +1269,23 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (!ok || !wrapper.id || !first) return;
         set({ selection: { kind: "step", stepId: wrapper.id }, range: null });
         if (unsetParams(wrapper, get().stepTypes.find((d) => d.type === type)).length > 0) get().openEditor(wrapper.id);
+      },
+
+      setExtractOpen(open) {
+        set({ extractOpen: open && get().selection?.kind === "step", extractName: "" });
+      },
+
+      setExtractName(name) {
+        set({ extractName: name });
+      },
+
+      selectBox(stepIds) {
+        const { flow } = get();
+        if (!flow) return;
+        const ids = boxRange(flow.steps ?? [], stepIds, CASE);
+        if (ids.length === 0) return;
+        const focus = ids.at(-1)!;
+        set({ selection: { kind: "step", stepId: focus }, range: ids.length > 1 ? { anchor: ids[0]!, focus, ids } : null, dive: [] });
       },
 
       selectTo(stepId) {
@@ -1377,7 +1432,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const outcome = await api.extractSubflow(flow.id, flow.revision ?? 0, stepIds, name);
           applyOutcome(outcome.caller);
-          set({ selection: { kind: "step", stepId: outcome.callStepId }, notice: t.extracted(outcome.subflow.flow.name) });
+          set({ selection: { kind: "step", stepId: outcome.callStepId }, range: null, extractOpen: false, extractName: "", notice: t.extracted(outcome.subflow.flow.name) });
           await Promise.all([get().refreshList(), get().loadHistory(), get().loadCalled()]);
           return true;
         } catch (e) {

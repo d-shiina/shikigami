@@ -13,7 +13,7 @@ import { issueText } from "../../lib/issueText";
 import { CALL, knownVariables, outputs, paramRows, TYPE_COLOR, unsetParams } from "../../lib/nodeRows";
 import { sentence, typeTitle } from "../../lib/sentence";
 import { AppTag } from "../AppTag";
-import { findStep, revertBlocker, touchedSteps } from "../../store";
+import { extractChoices, findStep, revertBlocker, touchedSteps } from "../../store";
 import { Sentence } from "../StoryView";
 import { ActorMark, usePendingReview } from "../Timeline";
 import { VarIcon } from "../VarIcon";
@@ -67,45 +67,40 @@ function Connections({ stepId, links, vars }: { stepId: string; links: DataLink[
   );
 }
 
-/** The selected step and the ones after it, in the same block. */
-function siblingsFrom(steps: Step[], id: string): Step[] | null {
-  const i = steps.findIndex((s) => s.id === id);
-  if (i >= 0) return steps.slice(i);
-  for (const step of steps) {
-    for (const children of Object.values(step.blocks ?? {})) {
-      const found = siblingsFrom(children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-/** Moves this step (and the next few) into a new flow called from here. */
-/** Moves the selected step (and the ones after it) into a new sub-flow. Opened from the step's tools. */
+/** Moves the selected nodes (Shift+click), or this one and the next few, into a new sub-flow. Opened from the step's tools. */
 export function ExtractForm({ step }: { step: Step }) {
   const flow = useStudio((s) => s.flow);
+  const selection = useStudio((s) => s.selection);
+  const range = useStudio((s) => s.range);
   const extract = useStudio((s) => s.extract);
-  const after = useMemo(() => siblingsFrom(flow?.steps ?? [], step.id ?? "") ?? [step], [flow, step]);
+  const choices = useMemo(() => extractChoices(flow?.steps ?? [], { selection, range }) ?? { from: [step] }, [flow, selection, range, step]);
   const [count, setCount] = useState(1);
-  const [name, setName] = useState("");
+  // In the store: Shift+click to widen the range moves the form to another node.
+  const name = useStudio((s) => s.extractName);
+  const setName = useStudio((s) => s.setExtractName);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     setCount(1);
-    setName("");
   }, [step.id]);
-  const picked = after.slice(0, Math.min(count, after.length));
+  const picked = "picked" in choices ? choices.picked : choices.from.slice(0, Math.min(count, choices.from.length));
+  const names = picked.map((s) => s.name || s.type).join(" → ");
   return (
     <div className="w-[320px] p-3">
       <div className="pb-1 text-[11px] font-bold tracking-wider text-slate-600">{t.props.extract}</div>
-      <Row label={t.props.extractRange} hint={picked.map((s) => s.name || s.type).join(" → ")}>
-        <select className={inputClass} value={count} onChange={(e) => setCount(Number(e.target.value))}>
-          {after.map((_, i) => (
-            <option key={i} value={i + 1}>
-              {i === 0 ? t.props.thisStep : t.props.stepsFromHere(i + 1)}
-            </option>
-          ))}
-        </select>
+      <Row label={t.props.extractRange} hint={names}>
+        {"picked" in choices ? (
+          <div className="py-1 text-[13px] text-ink">{t.props.pickedSteps(picked.length)}</div>
+        ) : (
+          <select className={inputClass} value={count} onChange={(e) => setCount(Number(e.target.value))}>
+            {choices.from.map((_, i) => (
+              <option key={i} value={i + 1}>
+                {i === 0 ? t.props.thisStep : t.props.stepsFromHere(i + 1)}
+              </option>
+            ))}
+          </select>
+        )}
       </Row>
+      {!("picked" in choices) && <p className="pb-2 text-[11px] leading-snug text-slate-500">{t.props.extractShiftHint}</p>}
       <Row label={t.props.newName}>
         <input className={inputClass} value={name} placeholder={t.props.newNamePlaceholder} onChange={(e) => setName(e.target.value)} />
       </Row>

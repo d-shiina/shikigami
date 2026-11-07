@@ -106,3 +106,54 @@ function place(
   }
   return null;
 }
+
+/**
+ * The nodes a box drawn around `picked` stands for: one run of siblings in
+ * one block, from the first picked to the last. A node picked inside a frame
+ * counts as the frame when the box also reaches outside it, and a switch's
+ * cases count as the switch (a case cannot leave it). Empty when nothing was
+ * picked.
+ */
+export function boxRange(steps: readonly Step[], picked: readonly string[], caseType = "control.case"): string[] {
+  const paths = picked.map((id) => pathTo(steps, id)).filter((p): p is PathItem[] => p !== null);
+  if (paths.length === 0) return [];
+  const first = paths[0]!;
+  // How many ancestors (outermost first) every picked node shares.
+  let shared = 0;
+  while (paths.every((p) => p.length > shared && p[shared]!.step === first[shared]!.step)) shared++;
+  // Below the shared ones, one run of siblings: only when all are in the same block.
+  let depth = shared;
+  const sameBlock = paths.every((p) => p.length > depth && p[depth]!.siblings === first[depth]!.siblings);
+  if (!sameBlock) {
+    // The shared node itself (e.g. its head and some of what is inside it, or two of its branches).
+    depth = shared - 1;
+    if (depth < 0) return [];
+    // A case belongs to its switch.
+    while (depth > 0 && first[depth]!.step.type === caseType) depth--;
+    return [first[depth]!.step.id ?? ""];
+  }
+  if (first[depth]!.step.type === caseType) {
+    // Cases of one switch: the switch.
+    let up = depth - 1;
+    while (up > 0 && first[up]!.step.type === caseType) up--;
+    return up >= 0 ? [first[up]!.step.id ?? ""] : [];
+  }
+  const indexes = paths.map((p) => p[depth]!.index);
+  return first[depth]!.siblings.slice(Math.min(...indexes), Math.max(...indexes) + 1).map((s) => s.id ?? "");
+}
+
+type PathItem = { step: Step; index: number; siblings: readonly Step[] };
+
+/** The node and its ancestors, outermost first. */
+function pathTo(steps: readonly Step[], id: string): PathItem[] | null {
+  for (let index = 0; index < steps.length; index++) {
+    const step = steps[index]!;
+    const here = { step, index, siblings: steps };
+    if (step.id === id) return [here];
+    for (const children of Object.values(step.blocks ?? {})) {
+      const rest = pathTo(children, id);
+      if (rest) return [here, ...rest];
+    }
+  }
+  return null;
+}

@@ -709,7 +709,9 @@ function StepNode({ data }: StepNodeProps) {
         // Beside the step's head: the flow line runs through the top and bottom
         // centres, and variable chips sit beside the rows below the head.
         <NodeToolbar isVisible position={Position.Right} align="start" offset={8}>
-          <div className="flex items-center gap-1.5">
+          {/* The toolbar is a portal, but React still bubbles its clicks to the node:
+              a click there would reselect the node alone and drop a Shift+click range. */}
+          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             {latest && <ReviewToolbar entry={latest} />}
             {data.primary && !data.readOnly && <StepTools step={data.step} />}
           </div>
@@ -1154,6 +1156,9 @@ export function FlowCanvas() {
   const selection = useStudio((s) => s.selection);
   const range = useStudio((s) => s.range);
   const selectTo = useStudio((s) => s.selectTo);
+  const selectBox = useStudio((s) => s.selectBox);
+  // Where a Shift+drag box started, on the chart.
+  const boxStart = useRef<{ x: number; y: number } | null>(null);
   const picked = useMemo(() => new Set(selectedIds({ selection, range })), [selection, range]);
   const validation = useStudio((s) => s.validation);
   // The open flow's last run, until it is edited or run again.
@@ -1458,6 +1463,27 @@ export function FlowCanvas() {
         }
       }}
       onPaneClick={() => select(null)}
+      // Shift+drag draws a box (plain drag still moves the view): the nodes in it become the selection.
+      selectionKeyCode="Shift"
+      onSelectionStart={(event) => {
+        // In chart coordinates: the view may scroll while the box is drawn.
+        boxStart.current = inside || !flowRef.current ? null : flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      }}
+      onSelectionEnd={(event) => {
+        const start = boxStart.current;
+        const rf = flowRef.current;
+        boxStart.current = null;
+        if (!start || !rf) return;
+        const a = start;
+        const b = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        const rect = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y) };
+        if (rect.width < 4 && rect.height < 4) return;
+        const ids = rf
+          .getIntersectingNodes(rect, true)
+          .filter((n) => n.type === "step")
+          .map((n) => (n.data as StepNodeData).step.id ?? n.id);
+        if (ids.length > 0) selectBox(ids);
+      }}
       onEdgeMouseEnter={(_, edge) => edge.type === "block" && setHoveredEdge(edge.id)}
       onEdgeMouseLeave={() => setHoveredEdge(null)}
       onNodeContextMenu={(event, node) =>

@@ -3,6 +3,7 @@
 // with the same words and keys — and never holds an action found nowhere else.
 import type { Step } from "@shikigami/schema";
 import {
+  Workflow,
   SquareDashed,
   ArrowDown,
   ArrowUp,
@@ -94,6 +95,8 @@ export function useStepMenu() {
         : Object.keys(WRAP_BLOCK).map(
             (type): MenuEntry => ({ label: t.menu.wrapIn(stepLabel(type, s.stepTypes.find((d) => d.type === type)?.label)), icon: SquareDashed, run: () => void store.getState().wrapSelected(type) }),
           )),
+      // Beside 囲む: the same picked nodes, moved into a flow of their own.
+      step.type !== "control.case" && { label: t.menu.extract, icon: Workflow, run: () => store.getState().setExtractOpen(true) },
       "-",
       {
         label: step.disabled ? t.menu.enable : t.menu.disable,
