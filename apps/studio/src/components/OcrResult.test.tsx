@@ -33,6 +33,13 @@ describe("OcrResult", () => {
     expect(screen.getByText("このエンジンは信頼度を返しません")).toBeTruthy();
   });
 
+  it("shows the table it split into rows and columns", () => {
+    const { container } = render(<OcrResult value={{ ...read, cells: [["品名", "金額"], ["用紙", "1,200"]], rows: [{ 品名: "用紙", 金額: "1,200" }] }} />);
+    expect(screen.getByText("表（2 行 × 2 列）")).toBeTruthy();
+    const cells = [...container.querySelectorAll("table[data-ocr-table] td")].map((td) => td.textContent);
+    expect(cells).toEqual(["品名", "金額", "用紙", "1,200"]);
+  });
+
   it("is used only for desktop.readText's output", () => {
     expect(isOcrOutput("desktop.readText", read)).toBe(true);
     expect(isOcrOutput("desktop.getValue", read)).toBe(false);

@@ -54,6 +54,7 @@ export const paramsEn = {
     language: "Language",
     engine: "OCR engine",
     accurate: "High accuracy (handwriting, slow)",
+    table: "Read as a table",
     maxRows: "Row limit",
     // Files
     path: "File",
