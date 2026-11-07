@@ -1410,6 +1410,7 @@ export const en: Dict = {
     askAgent: (name: string) => `Ask ${name}`,
     copyId: "Copy ID",
     addHere: "Add node here",
+    wrapIn: (name: string) => `Wrap in ${name}`,
     fitView: "Fit to view",
     outlineOpen: "Open outline",
     outlineClose: "Close outline",

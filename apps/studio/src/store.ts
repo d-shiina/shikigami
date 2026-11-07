@@ -348,6 +348,8 @@ export type StudioState = {
   removeSelected(): Promise<void>;
   /** Shift+click: selects the nodes from the selected one to `stepId` (same block only). */
   selectTo(stepId: string): void;
+  /** Puts the selected nodes inside a new control node (繰り返し・条件分岐・エラー処理・グループ), where they were. */
+  wrapSelected(type: string): Promise<void>;
   /** Puts the selected nodes on the clipboard (`cut` also removes them). */
   copySelected(cut?: boolean): Promise<void>;
   /** Adds the nodes on the clipboard after the selection (or at the "+" / empty block). */
@@ -761,6 +763,15 @@ function newCase(body: Step[] = []): Step {
   return { id: newStepId(), type: CASE, params: { ...(DEFAULT_PARAMS[CASE] ?? {}) }, ...(body.length > 0 ? { blocks: { body } } : {}) };
 }
 
+/** The control nodes selected nodes can be put inside, and the block they go into. */
+export const WRAP_BLOCK: Record<string, string> = {
+  "control.forEach": "body",
+  "control.repeat": "body",
+  "control.if": "then",
+  "control.try": "try",
+  "control.group": "body",
+};
+
 export function newStepId(): string {
   return `stp_${crypto.randomUUID().replaceAll("-", "")}`;
 }
@@ -1156,6 +1167,30 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (ids.length === 0) return;
         const ok = await get().applyOps(ids.map((stepId) => ({ op: "removeStep", stepId }) as EditOp));
         if (ok) set({ selection: null, range: null });
+      },
+
+      async wrapSelected(type) {
+        const { flow } = get();
+        const ids = selectedIds(get());
+        const block = WRAP_BLOCK[type];
+        if (!flow || ids.length === 0 || !block) return;
+        const steps = flow.steps ?? [];
+        const loc = locate(steps, ids[0]!);
+        // A case belongs to its switch: it cannot move into another node.
+        if (!loc || ids.some((id) => findStep(steps, id)?.type === CASE)) return;
+        const first = findStep(steps, ids[0]!);
+        const wrapper: Step = { id: newStepId(), type, params: { ...(DEFAULT_PARAMS[type] ?? {}) } };
+        // A repeat over the list the node before it read, like adding one there.
+        const before = loc.index > 0 ? (loc.parentId === null ? steps : (findStep(steps, loc.parentId)?.blocks?.[loc.block ?? ""] ?? []))[loc.index - 1] : undefined;
+        if (type === FOR_EACH && before?.saveAs) wrapper.params = { ...wrapper.params, items: before.saveAs };
+        const ops: EditOp[] = [
+          { op: "addStep", step: wrapper, position: { parentId: loc.parentId, block: loc.block, index: loc.index } },
+          ...ids.map((stepId, index) => ({ op: "moveStep", stepId, position: { parentId: wrapper.id, block, index } }) as EditOp),
+        ];
+        const ok = await get().applyOps(ops);
+        if (!ok || !wrapper.id || !first) return;
+        set({ selection: { kind: "step", stepId: wrapper.id }, range: null });
+        if (unsetParams(wrapper, get().stepTypes.find((d) => d.type === type)).length > 0) get().openEditor(wrapper.id);
       },
 
       selectTo(stepId) {

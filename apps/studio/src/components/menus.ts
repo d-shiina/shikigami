@@ -3,6 +3,7 @@
 // with the same words and keys — and never holds an action found nowhere else.
 import type { Step } from "@shikigami/schema";
 import {
+  SquareDashed,
   ArrowDown,
   ArrowUp,
   CircleDot,
@@ -28,9 +29,9 @@ import {
 } from "lucide-react";
 import { useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
-import { isActive, runBreakpoints, selectedIds, trailOf } from "../store";
+import { isActive, runBreakpoints, selectedIds, trailOf, WRAP_BLOCK } from "../store";
 import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
-import { t } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
 import { handOffText } from "../lib/todos";
 
 /** A call step as the chart shows it. */
@@ -71,6 +72,13 @@ export function useStepMenu() {
       "-",
       { label: t.moveUp, icon: ArrowUp, shortcut: "Alt+↑", run: () => void store.getState().moveSelected(-1) },
       { label: t.moveDown, icon: ArrowDown, shortcut: "Alt+↓", run: () => void store.getState().moveSelected(1) },
+      "-",
+      // Flow control is mostly put around nodes already there: pick them (Shift+click) and wrap them.
+      ...(step.type === "control.case"
+        ? []
+        : Object.keys(WRAP_BLOCK).map(
+            (type): MenuEntry => ({ label: t.menu.wrapIn(stepLabel(type, s.stepTypes.find((d) => d.type === type)?.label)), icon: SquareDashed, run: () => void store.getState().wrapSelected(type) }),
+          )),
       "-",
       {
         label: step.disabled ? t.menu.enable : t.menu.disable,

@@ -1409,6 +1409,7 @@ export const ja = {
     askAgent: (name: string) => `${name} に聞く`,
     copyId: "ID をコピー",
     addHere: "ここにノードを追加",
+    wrapIn: (name: string) => `${name}で囲む`,
     fitView: "全体を表示",
     outlineOpen: "目次を開く",
     outlineClose: "目次を閉じる",
