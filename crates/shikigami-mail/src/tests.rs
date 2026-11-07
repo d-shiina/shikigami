@@ -12,14 +12,14 @@ fn runtime() -> Runtime {
 fn examples_validate() {
     let validator = Validator::new(runtime().registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 4);
+    assert_eq!(defs.len(), 10);
     for def in &defs {
         assert!(def.step_type.starts_with("mail."));
         for example in &def.examples {
             let mut step: Step = serde_json::from_value(example.clone()).unwrap();
             shikigami_core::ops::assign_missing_ids(&mut step);
             let mut s = Flow::new("example");
-            s.variables = ["order", "invoice", "mails", "mail", "files"]
+            s.variables = ["order", "invoice", "mails", "mail", "files", "reply", "fwd"]
                 .iter()
                 .map(|n| VariableDef::new(*n, VarType::Any))
                 .collect();
@@ -34,11 +34,11 @@ fn examples_validate() {
             );
         }
     }
-    // Only mail.send sends, and it is approved like other outside effects.
+    // Only the steps that send are approved like other outside effects.
     for def in &defs {
         assert_eq!(
             def.risk == RiskLevel::Dangerous,
-            def.step_type == types::SEND,
+            def.step_type == types::SEND || def.step_type == types::SEND_DRAFT,
             "{}",
             def.step_type
         );
@@ -592,4 +592,428 @@ async fn an_smtp_connection_cut_after_the_message_is_never_retried() {
         .unwrap_err();
     assert_eq!(e.code, "MAIL_SERVER_UNREACHABLE", "{}", e.message);
     assert!(e.retryable);
+}
+
+// -- other mailboxes and the new steps ----------------------------------------
+
+#[test]
+fn the_mailbox_is_outlook_unless_a_microsoft_365_account_is_given() {
+    assert_eq!(Mailbox::parse(&json!({})).unwrap(), Mailbox::Outlook);
+    let account = json!({ "secret": "m365", "field": "accessToken" });
+    assert_eq!(
+        Mailbox::parse(&json!({ "via": "microsoft365", "account": account })).unwrap(),
+        Mailbox::Microsoft365 {
+            account: "m365".into()
+        }
+    );
+    for bad in [
+        json!({ "via": "microsoft365" }),
+        json!({ "via": "microsoft365", "account": "token" }),
+        json!({ "via": "microsoft365", "account": { "secret": "m365", "field": "password" } }),
+        json!({ "account": account }),
+        json!({ "via": "imap" }),
+    ] {
+        assert_eq!(
+            Mailbox::parse(&bad).unwrap_err().code,
+            "INVALID_PARAMS",
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn replies_and_forwards_are_read_from_their_params() {
+    let Ok(Request::Reply(a)) = parse(
+        Kind::Reply,
+        &json!({ "id": "M1", "all": true, "body": "承知しました" }),
+    ) else {
+        panic!("reply");
+    };
+    assert!(a.all && a.to.is_empty());
+    assert_eq!(a.body, "承知しました");
+    let e = parse(Kind::Forward, &json!({ "id": "M1" })).err().unwrap();
+    assert_eq!(e.code, "INVALID_ADDRESS");
+    let Ok(Request::Forward(a)) = parse(
+        Kind::Forward,
+        &json!({ "id": "M1", "to": ["k@example.jp"] }),
+    ) else {
+        panic!("forward");
+    };
+    assert_eq!(a.to, ["k@example.jp"]);
+    let Ok(Request::MarkRead { read, .. }) = parse(Kind::MarkRead, &json!({ "id": "M1" })) else {
+        panic!("markRead");
+    };
+    assert!(read);
+    assert!(parse(Kind::Move, &json!({ "id": "M1" })).is_err());
+}
+
+#[test]
+fn microsoft_365_times_are_this_pcs_times() {
+    let tokyo = jiff::tz::TimeZone::get("Asia/Tokyo").unwrap();
+    assert_eq!(
+        graph::local_time("2026-10-28T00:30:00Z", &tokyo),
+        "2026-10-28T09:30:00"
+    );
+    assert_eq!(
+        graph::utc_time("2026-10-28", &tokyo).unwrap(),
+        "2026-10-27T15:00:00Z"
+    );
+    assert_eq!(
+        graph::utc_time("2026-10-28T09:30", &tokyo).unwrap(),
+        "2026-10-28T00:30:00Z"
+    );
+    assert_eq!(
+        graph::utc_time("2026-10-28T09:30:00+09:00", &tokyo).unwrap(),
+        "2026-10-28T00:30:00Z"
+    );
+    assert_eq!(
+        graph::utc_time("先週", &tokyo).unwrap_err().code,
+        "INVALID_PARAMS"
+    );
+}
+
+#[test]
+fn a_reply_goes_above_the_quoted_message() {
+    assert_eq!(
+        prepend_html("<html><BODY class=x><p>元</p></body></html>", "新"),
+        "<html><BODY class=x><div>新</div><br><p>元</p></body></html>"
+    );
+    assert_eq!(
+        prepend_html("<p>元</p>", "新"),
+        "<div>新</div><br><p>元</p>"
+    );
+    assert_eq!(html_text("a<b>\n&c"), "a&lt;b&gt;<br>&amp;c");
+}
+
+type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
+
+/// A Graph stand-in: answers each request with `answer(method, path)`
+/// (status and JSON) and keeps the method, path and body it was sent.
+async fn graph_server(answer: fn(&str, &str) -> (u16, Value)) -> (String, Seen) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let seen: Seen = Arc::new(Mutex::new(Vec::new()));
+    let keep = seen.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                break;
+            };
+            let keep = keep.clone();
+            tokio::spawn(async move {
+                let mut data = Vec::new();
+                let mut buf = [0u8; 8192];
+                let (head, body) = loop {
+                    let n = socket.read(&mut buf).await.unwrap();
+                    data.extend_from_slice(&buf[..n]);
+                    if let Some(end) = data.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&data[..end]).to_string();
+                        let length = head
+                            .lines()
+                            .find_map(|l| {
+                                l.to_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .map(|v| v.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap_or(0);
+                        if data.len() >= end + 4 + length {
+                            break (
+                                head,
+                                String::from_utf8_lossy(&data[end + 4..end + 4 + length])
+                                    .to_string(),
+                            );
+                        }
+                    }
+                    if n == 0 {
+                        return;
+                    }
+                };
+                let mut first = head.lines().next().unwrap_or_default().split(' ');
+                let method = first.next().unwrap_or_default().to_owned();
+                let path = first.next().unwrap_or_default().to_owned();
+                let (status, reply) = answer(&method, &path);
+                keep.lock().unwrap().push((
+                    method,
+                    path,
+                    serde_json::from_str(&body).unwrap_or(Value::Null),
+                ));
+                let reply = reply.to_string();
+                let response = format!(
+                    "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                    reply.len()
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+                socket.shutdown().await.ok();
+            });
+        }
+    });
+    (format!("http://{addr}/v1.0"), seen)
+}
+
+fn mailbox(method: &str, path: &str) -> (u16, Value) {
+    let path = path.split('?').next().unwrap_or_default();
+    match (method, path) {
+        ("GET", "/v1.0/me/mailFolders") => (
+            200,
+            json!({ "value": [{ "id": "F-INBOX", "displayName": "受信トレイ" }] }),
+        ),
+        ("GET", "/v1.0/me/mailFolders/F-INBOX/childFolders") => (
+            200,
+            json!({ "value": [{ "id": "F-DONE", "displayName": "処理済み" }] }),
+        ),
+        ("GET", "/v1.0/me/mailFolders/inbox/messages") => (
+            200,
+            json!({ "value": [
+            { "id": "M1", "subject": "【請求書】10月分", "from": { "emailAddress": { "name": "株式会社サンプル", "address": "billing@sample.co.jp" } },
+              "toRecipients": [{ "emailAddress": { "address": "me@example.jp" } }], "receivedDateTime": "2026-10-28T00:30:00Z",
+              "isRead": false, "body": { "content": "本文" }, "attachments": [{ "name": "請求書.pdf" }] },
+            { "id": "M2", "subject": "ご案内", "from": { "emailAddress": { "name": "別の会社", "address": "x@other.jp" } },
+              "receivedDateTime": "2026-10-27T00:00:00Z", "isRead": true }
+        ] }),
+        ),
+        ("GET", "/v1.0/me/messages/M1/attachments") => (
+            200,
+            json!({ "value": [
+            { "@odata.type": "#microsoft.graph.fileAttachment", "name": "請求書.pdf", "contentBytes": "JVBERg==" },
+            { "@odata.type": "#microsoft.graph.itemAttachment", "name": "転送されたメール" }
+        ] }),
+        ),
+        ("POST", "/v1.0/me/messages/M1/move") => (201, json!({ "id": "M1-moved" })),
+        ("PATCH", "/v1.0/me/messages/M1") | ("PATCH", "/v1.0/me/messages/D1") => (200, json!({})),
+        ("POST", "/v1.0/me/messages/M1/createReplyAll")
+        | ("POST", "/v1.0/me/messages/M1/createForward") => (
+            201,
+            json!({ "id": "D1", "body": { "contentType": "text", "content": "> 元のメール" }, "ccRecipients": [] }),
+        ),
+        ("POST", "/v1.0/me/messages/D1/attachments") => (201, json!({})),
+        ("POST", "/v1.0/me/messages/D1/send") => (202, Value::Null),
+        ("POST", "/v1.0/me/messages/GONE/send") => {
+            (404, json!({ "error": { "code": "ErrorItemNotFound" } }))
+        }
+        ("POST", "/v1.0/me/messages") => (201, json!({ "id": "D2" })),
+        _ => (
+            400,
+            json!({ "error": { "message": format!("unexpected {method} {path}") } }),
+        ),
+    }
+}
+
+fn request(kind: Kind, params: Value) -> Request {
+    parse(kind, &params).unwrap_or_else(|e| panic!("{e:?}"))
+}
+
+#[tokio::test]
+async fn a_microsoft_365_mailbox_is_read_and_sorted_through_graph() {
+    let (base, seen) = graph_server(mailbox).await;
+    let list = graph::run_at(
+        &base,
+        "tok",
+        request(
+            Kind::List,
+            json!({ "unreadOnly": true, "subjectContains": "請求書" }),
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(list.as_array().unwrap().len(), 1, "{list}");
+    assert_eq!(list[0]["id"], "M1");
+    assert_eq!(list[0]["fromAddress"], "billing@sample.co.jp");
+    let tz = jiff::tz::TimeZone::system();
+    assert_eq!(
+        list[0]["receivedAt"],
+        graph::local_time("2026-10-28T00:30:00Z", &tz)
+    );
+    assert_eq!(list[0]["attachments"], json!(["請求書.pdf"]));
+    assert_eq!(list[0]["body"], "本文");
+    let (_, path, _) = seen.lock().unwrap()[0].clone();
+    assert!(
+        path.contains(
+            "$filter=receivedDateTime%20ge%201900-01-01T00:00:00Z%20and%20isRead%20eq%20false"
+        ),
+        "{path}"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().to_string_lossy().into_owned();
+    let saved = graph::run_at(
+        &base,
+        "tok",
+        request(
+            Kind::SaveAttachments,
+            json!({ "id": "M1", "folder": folder }),
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(saved.as_array().unwrap().len(), 1);
+    assert_eq!(
+        std::fs::read(dir.path().join("請求書.pdf")).unwrap(),
+        b"%PDF"
+    );
+
+    let moved = graph::run_at(
+        &base,
+        "tok",
+        request(
+            Kind::Move,
+            json!({ "id": "M1", "folder": "受信トレイ/処理済み" }),
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(moved, json!({ "id": "M1-moved" }));
+    graph::run_at(
+        &base,
+        "tok",
+        request(Kind::MarkRead, json!({ "id": "M1", "read": false })),
+    )
+    .await
+    .unwrap();
+    graph::run_at(&base, "tok", request(Kind::Delete, json!({ "id": "M1" })))
+        .await
+        .unwrap();
+    let seen = seen.lock().unwrap().clone();
+    let sent = |method: &str, path: &str| {
+        seen.iter()
+            .filter(|(m, p, _)| m == method && p == path)
+            .map(|(_, _, b)| b.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        sent("POST", "/v1.0/me/messages/M1/move"),
+        [
+            json!({ "destinationId": "F-DONE" }),
+            json!({ "destinationId": "deleteditems" })
+        ]
+    );
+    assert_eq!(
+        sent("PATCH", "/v1.0/me/messages/M1"),
+        [json!({ "isRead": false })]
+    );
+    assert!(seen.len() >= 7);
+}
+
+#[tokio::test]
+async fn replies_and_forwards_are_left_in_drafts_until_sent() {
+    let (base, seen) = graph_server(mailbox).await;
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("回答.txt");
+    std::fs::write(&file, "回答").unwrap();
+    let reply = graph::run_at(
+        &base,
+        "tok",
+        request(Kind::Reply, json!({ "id": "M1", "all": true, "body": "承知しました", "cc": ["boss@example.jp"], "attachments": [file.to_string_lossy()] })),
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply, json!({ "id": "D1" }));
+    let forward = graph::run_at(
+        &base,
+        "tok",
+        request(
+            Kind::Forward,
+            json!({ "id": "M1", "to": ["keiri@example.jp"] }),
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(forward, json!({ "id": "D1" }));
+    graph::run_at(
+        &base,
+        "tok",
+        request(Kind::SendDraft, json!({ "id": "D1" })),
+    )
+    .await
+    .unwrap();
+    let seen = seen.lock().unwrap().clone();
+    let body = |method: &str, path: &str| {
+        seen.iter()
+            .find(|(m, p, _)| m == method && p == path)
+            .map(|(_, _, b)| b.clone())
+            .unwrap()
+    };
+    let patch = body("PATCH", "/v1.0/me/messages/D1");
+    assert_eq!(patch["body"]["content"], "承知しました\r\n\r\n> 元のメール");
+    assert_eq!(
+        patch["ccRecipients"][0]["emailAddress"]["address"],
+        "boss@example.jp"
+    );
+    assert_eq!(
+        body("POST", "/v1.0/me/messages/D1/attachments")["name"],
+        "回答.txt"
+    );
+    assert_eq!(
+        body("POST", "/v1.0/me/messages/M1/createForward")["message"]["toRecipients"][0]["emailAddress"]
+            ["address"],
+        "keiri@example.jp"
+    );
+
+    let e = graph::run_at(
+        &base,
+        "tok",
+        request(Kind::SendDraft, json!({ "id": "GONE" })),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(e.code, "MESSAGE_NOT_FOUND");
+    assert!(!e.retryable);
+    let e = graph::run_at(
+        &base,
+        "tok",
+        request(
+            Kind::Move,
+            json!({ "id": "M1", "folder": "受信トレイ/無い" }),
+        ),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(e.code, "FOLDER_NOT_FOUND");
+    assert_eq!(e.details.as_ref().unwrap()["folders"], json!(["処理済み"]));
+}
+
+#[tokio::test]
+async fn an_html_reply_over_a_text_quote_is_all_html() {
+    let (base, seen) = graph_server(mailbox).await;
+    graph::run_at(
+        &base,
+        "tok",
+        request(
+            Kind::Reply,
+            json!({ "id": "M1", "all": true, "body": "<b>承知</b>", "html": true }),
+        ),
+    )
+    .await
+    .unwrap();
+    let seen = seen.lock().unwrap().clone();
+    let (_, _, patch) = seen
+        .iter()
+        .find(|(m, p, _)| m == "PATCH" && p == "/v1.0/me/messages/D1")
+        .unwrap();
+    assert_eq!(patch["body"]["contentType"], "HTML");
+    let content = patch["body"]["content"].as_str().unwrap();
+    assert!(content.starts_with("<div><b>承知</b></div>"), "{content}");
+    assert!(content.contains("&gt; 元のメール"), "{content}");
+}
+
+#[tokio::test]
+async fn a_draft_send_whose_answer_is_lost_is_not_retried() {
+    // A server that takes the request and closes without answering.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 4096];
+            let _ = socket.read(&mut buf).await;
+            drop(socket);
+        }
+    });
+    let e = graph::run_at(
+        &format!("http://{addr}/v1.0"),
+        "tok",
+        request(Kind::SendDraft, json!({ "id": "D1" })),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(e.code, "MAIL_DELIVERY_UNKNOWN", "{}", e.message);
+    assert!(!e.retryable);
 }
