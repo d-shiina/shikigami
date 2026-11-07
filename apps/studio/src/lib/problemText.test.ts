@@ -9,6 +9,7 @@ const flow = {
   name: "請求",
   revision: 1,
   metadata: {},
+  variables: [{ name: "password", type: "string", secret: true, default: "hunter2" }],
   steps: [
     {
       id: "a",
@@ -27,6 +28,9 @@ describe("what was written where a problem is", () => {
     expect(writtenAt(flow, { path: "/steps/0/params/condition" })).toBe('"total === 3"');
     // A whole node says nothing new.
     expect(writtenAt(flow, { path: "/steps/0" })).toBeNull();
+    // A secret's value never goes to the AI.
+    expect(writtenAt(flow, { path: "/variables/0/default" })).toBeNull();
+    expect(writtenAt(flow, { path: "/variables/0" })).toBeNull();
     expect(shortJson("x".repeat(400)).endsWith("…")).toBe(true);
   });
 

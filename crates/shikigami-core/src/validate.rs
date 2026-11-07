@@ -1005,10 +1005,7 @@ impl Cx<'_> {
             if def.expression_params.contains(key) {
                 if let Value::String(src) = value {
                     match Expr::parse(src) {
-                        Ok(expr) => {
-                            self.check_vars(expr.variables(), &param_path, id);
-                            self.habit(src, false, &param_path, id);
-                        }
+                        Ok(expr) => self.check_vars(expr.variables(), &param_path, id),
                         Err(e) => {
                             self.error(e.code(), e.to_string(), param_path, id);
                             if src.contains("{{") {
@@ -1027,13 +1024,13 @@ impl Cx<'_> {
             visit_strings(value, &mut |s| texts.push(s.to_owned()));
             for text in texts {
                 if !text.contains("{{") {
-                    self.habit(&text, true, &param_path, id);
+                    self.habit(&text, &param_path, id);
                     continue;
                 }
                 match expr::Template::parse(&text) {
                     Ok(template) => {
                         self.check_vars(template.variables(), &param_path, id);
-                        self.habit(&text, true, &param_path, id);
+                        self.habit(&text, &param_path, id);
                     }
                     Err(e) => {
                         self.error(e.code(), e.to_string(), param_path.clone(), id);
@@ -1128,24 +1125,20 @@ impl Cx<'_> {
         }
     }
 
-    /// A value that works but was most likely written in another
-    /// language's way, so it would quietly give the wrong value:
-    /// `${total}` in a text (stays as written) or `items.length` (empty).
-    fn habit(&mut self, src: &str, template: bool, path: &str, id: Option<&StepId>) {
-        let hint = if template && self.dollar_variable(src) {
-            Some("Embed values with {{ name }}, not ${name}.".to_owned())
-        } else {
-            expr::length_member_hint(src, template)
-        };
-        if let Some(hint) = hint {
-            self.warn(
-                "EXPR_OTHER_LANGUAGE",
-                format!("'{src}' looks written the way another language does it"),
-                path.to_owned(),
-                id,
-            );
-            self.hint(hint);
+    /// A text that works but was most likely written in another language's
+    /// way, so it would quietly give the wrong value: `${total}` stays as
+    /// written.
+    fn habit(&mut self, src: &str, path: &str, id: Option<&StepId>) {
+        if !self.dollar_variable(src) {
+            return;
         }
+        self.warn(
+            "EXPR_OTHER_LANGUAGE",
+            format!("'{src}' looks written the way another language does it"),
+            path.to_owned(),
+            id,
+        );
+        self.hint("Embed values with {{ name }}, not ${name}.");
     }
 
     /// `${name}` naming a variable of the flow.
@@ -1941,6 +1934,7 @@ mod tests {
             Step::new("log.message")
                 .with_id("b")
                 .with_param("message", "合計 ${total} 円"),
+            // x.length works for lists and text.
             Step::new("control.if")
                 .with_id("c")
                 .with_param("condition", "items.length > 0"),
@@ -1962,7 +1956,7 @@ mod tests {
             .iter()
             .filter(|i| i.code == "EXPR_OTHER_LANGUAGE")
             .collect();
-        assert_eq!(other.len(), 2, "{other:?}");
+        assert_eq!(other.len(), 1, "{other:?}");
         assert!(other.iter().all(|i| i.severity == Severity::Warning));
         assert!(
             other[0]
@@ -1971,7 +1965,6 @@ mod tests {
                 .unwrap_or("")
                 .contains("{{ name }}")
         );
-        assert!(other[1].hint.as_deref().unwrap_or("").contains("len(x)"));
         assert!(hint_of(&report, "EXPR_UNKNOWN_FUNCTION").contains("upper()"));
     }
 

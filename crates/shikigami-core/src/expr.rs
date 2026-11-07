@@ -26,9 +26,7 @@ mod mistakes;
 mod width;
 
 pub use functions::{FUNCTION_DOCS, FunctionDoc, function_names};
-pub use mistakes::{
-    describe as describe_function, length_member_hint, mistake_hint, unknown_function_hint,
-};
+pub use mistakes::{describe as describe_function, mistake_hint, unknown_function_hint};
 
 const MAX_DEPTH: usize = 64;
 

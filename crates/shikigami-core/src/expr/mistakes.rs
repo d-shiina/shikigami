@@ -158,8 +158,6 @@ pub fn mistake_hint(src: &str, template: bool) -> Option<String> {
             ),
             None => format!("Functions are not methods: there is no x.{method}(); call a function with the value as its first argument, e.g. trim(x)."),
         });
-    } else if ends_with_member(&code, "length") {
-        found.push("Use len(x) for a length, not x.length.".to_owned());
     }
     if scope.chars().any(|c| matches!(c, '‘' | '’' | '“' | '”')) {
         found.push("Use straight quotes ' or \" around text, not ‘ ’ or “ ”.".to_owned());
@@ -189,18 +187,6 @@ fn inner_parts(src: &str) -> String {
         rest = after.get(end + 2..).unwrap_or("");
     }
     out.join("\n")
-}
-
-/// The hint for `x.length` in an expression (or inside a template's
-/// `{{ }}`): it parses, but gives nothing.
-pub fn length_member_hint(src: &str, template: bool) -> Option<String> {
-    let scope = if template {
-        inner_parts(src)
-    } else {
-        src.to_owned()
-    };
-    ends_with_member(&code_only(&scope), "length")
-        .then(|| "Use len(x) for a length, not x.length.".to_owned())
 }
 
 /// `src` with the inside of string literals blanked out, so `'a = b'` is
@@ -283,17 +269,6 @@ fn method_call(code: &str) -> Option<String> {
     None
 }
 
-/// `x.length` (not followed by more of the name).
-fn ends_with_member(code: &str, member: &str) -> bool {
-    let needle = format!(".{member}");
-    code.match_indices(&needle).any(|(i, _)| {
-        !code[i + needle.len()..]
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_alphanumeric() || c == '_')
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,7 +288,6 @@ mod tests {
         assert!(hint("name ?? '未入力'").contains("coalesce"));
         assert!(hint("name.trim()").contains("trim(x)"));
         assert!(hint("name.toUpperCase()").contains("upper(x)"));
-        assert!(hint("items.length > 0").contains("len(x)"));
         assert!(hint("a <> b").contains("!="));
         assert!(hint("len（items）").contains("half-width"));
         assert!(hint("‘済’").contains("straight quotes"));
@@ -336,7 +310,8 @@ mod tests {
             "len(items) > 0",
             "price * 1.08",
             "row['length']",
-            "x.lengthy",
+            // x.length works for lists and text.
+            "items.length > 0",
         ] {
             assert_eq!(mistake_hint(src, false), None, "{src}");
         }

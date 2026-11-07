@@ -46,6 +46,9 @@ export function stepAt(flow: Flow, pointer: string): Step | undefined {
 export function writtenAt(flow: Flow, issue: Pick<ValidationIssue, "path">): string | null {
   // A whole node or the whole flow says nothing the AI cannot see.
   if (!issue.path || /\/steps\/\d+$/.test(issue.path)) return null;
+  // A secret's value never leaves Studio (as in flowForChat).
+  const variable = /^\/variables\/(\d+)/.exec(issue.path);
+  if (variable && flow.variables?.[Number(variable[1])]?.secret) return null;
   const value = valueAt(flow, issue.path);
   return value === undefined ? null : shortJson(value);
 }
