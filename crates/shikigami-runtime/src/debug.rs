@@ -180,11 +180,20 @@ pub(crate) struct Debugger {
     state: Mutex<State>,
     wake: Notify,
     validator: Arc<Validator>,
+    /// 「ここから実行」's start: a newer revision swapped in is cut there
+    /// too, so the steps before it never run.
+    start: Option<StepId>,
 }
 
 impl Debugger {
-    pub(crate) fn new(options: DebugOptions, flow: Flow, validator: Arc<Validator>) -> Self {
+    pub(crate) fn new(
+        options: DebugOptions,
+        flow: Flow,
+        validator: Arc<Validator>,
+        start: Option<StepId>,
+    ) -> Self {
         Self {
+            start,
             pause_on_error: options.pause_on_error,
             state: Mutex::new(State {
                 mode: if options.pause_at_start {
@@ -408,6 +417,9 @@ impl Debugger {
         }
         let mut flow = flow;
         flow.inline_parts();
+        if let Some(start) = &self.start {
+            flow.steps = crate::start::steps_from(&flow.steps, start)?;
+        }
         if flow.revision == state.flow.revision && flow == *state.flow {
             return Ok(false);
         }

@@ -1761,22 +1761,47 @@ impl Executor {
         if self.policy.records.failure_screenshots == Some(false) {
             return;
         }
-        let (Some(step_id), Some(step_type)) = (&error.step_id, &error.step_type) else {
-            return;
+        // A step that failed in a called flow is named in `subFlow` (the
+        // error itself points at the call).
+        let inner = error
+            .details
+            .as_ref()
+            .and_then(|d| d.get("subFlow"))
+            .and_then(|sub| {
+                Some((
+                    sub.get("flowId")?.as_str()?.to_owned(),
+                    StepId::new(sub.get("stepId")?.as_str()?),
+                    sub.get("stepType")?.as_str()?.to_owned(),
+                ))
+            });
+        let (step_id, step_type, called) = match (&inner, &error.step_id, &error.step_type) {
+            (Some((flow_id, id, ty)), _, _) => (id.clone(), ty.clone(), Some(flow_id.as_str())),
+            (None, Some(id), Some(ty)) => (id.clone(), ty.clone(), None),
+            _ => return,
         };
+        let step_id = &step_id;
+        let step_type = &step_type;
         let Some(path) = self.emitter.failure_shot_path() else {
             return;
         };
-        // The failed step may be in a called flow.
-        let step = flow
-            .find_step(step_id)
-            .or_else(|| self.library.values().find_map(|f| f.find_step(step_id)));
+        let step = match called {
+            Some(flow_id) => self
+                .library
+                .values()
+                .find(|f| f.id.as_str() == flow_id)
+                .and_then(|f| f.find_step(step_id)),
+            None => flow.find_step(step_id),
+        };
         let mut params = Map::new();
         params.insert("path".into(), Value::String(path.display().to_string()));
         let shot_type = match step_type.split('.').next() {
             Some("browser") => {
                 if let Some(context) = step.and_then(|s| s.params.get("context")) {
-                    params.insert("context".into(), context.clone());
+                    // Rendered as the step was: the context may be a template.
+                    let Ok(context) = expr::render_value(context, &self.vars) else {
+                        return;
+                    };
+                    params.insert("context".into(), context);
                 }
                 "browser.screenshot"
             }
@@ -1827,7 +1852,7 @@ impl Executor {
         self.emitter.log(
             LogLevel::Info,
             format!("失敗したときの画面を保存しました: {shown}"),
-            Some(step_id.clone()),
+            error.step_id.clone(),
         );
     }
 

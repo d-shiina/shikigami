@@ -760,12 +760,10 @@ export class Adapter {
         session.secrets.add(value);
         session.secretFields.push(locator);
       }
-      if (typing) {
-        await handle.fill("", { timeout });
-        await handle.type(value, { delay: TYPING_DELAY_MS, timeout });
-      } else {
-        await handle.fill(value, { timeout });
-      }
+      // A secret is always filled at once, even with `typing`: keys typed
+      // one by one go to whatever page has focus, so a page that navigates
+      // part-way could receive the rest of it on another site.
+      await handle.fill(value, { timeout });
     } finally {
       await handle.dispose().catch(() => {});
     }
@@ -792,13 +790,16 @@ export class Adapter {
     const page = session.page;
     const timeout = this.limit(params);
     const action = params.action;
+    const before = page.url();
     let response: unknown;
     if (action === "back") response = await page.goBack({ waitUntil: "load", timeout });
     else if (action === "forward") response = await page.goForward({ waitUntil: "load", timeout });
     else if (action === "reload") response = await page.reload({ waitUntil: "load", timeout });
     else throw new AdapterError("INVALID_PARAMS", "action must be back, forward or reload");
-    // goBack / goForward give null when there is no page to go to.
-    if (response === null && action !== "reload") {
+    // goBack / goForward give null when there is no page to go to, and
+    // also after an in-page move (a #link or history.pushState), which
+    // changes the URL without loading a document.
+    if (response === null && action !== "reload" && page.url() === before) {
       throw new AdapterError("NAVIGATION_FAILED", `there is no page to go ${action} to`, {
         details: { action, url: page.url(), hint: "The tab has no page in that direction. Open the page with browser.open instead." },
       });
