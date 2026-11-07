@@ -42,6 +42,7 @@ mod bridge;
 #[cfg(windows)]
 mod capture;
 pub mod engine;
+pub mod hover;
 #[cfg(windows)]
 mod jab;
 pub mod jabmap;
