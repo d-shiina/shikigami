@@ -34,8 +34,8 @@
 | G7 | P1 | ブラウザ・デスクトップ | チェックボックスを「オンにする／オフにする」ができない（クリックで切り替えるだけなので、2 回流すと逆になる） | UiPath：Check / Uncheck／PAD：「Web ページのチェック ボックスの状態を設定します」「ウィンドウのチェック ボックスの状態を設定」／WinActor：チェックボックス操作 | 済み |
 | G8 | P1 | デスクトップ | ウィンドウの最大化・最小化・元に戻す・前面に出す・移動・サイズ変更がない | WinActor：ウィンドウ状態変更・ウィンドウ位置変更／UiPath：Maximize / Minimize / Restore / Move Window / Activate／PAD：「ウィンドウの状態の設定」「ウィンドウの移動」「ウィンドウのサイズ変更」「ウィンドウにフォーカスする」 | 済み |
 | G9 | P1 | システム | 動いているプロセスの終了・有無の確認がない（固まった業務アプリを落として立ち上げ直せない） | UiPath：Kill Process・Get Processes／PAD：「プロセスを終了する」「プロセスを待機する」／WinActor：プロセス終了 | 済み |
-| G10 | P1 | Excel | 行・列の挿入と削除、範囲のクリア、シートの削除・名前変更・コピーがない | WinActor：Excel 操作（行削除・シート名変更・シートコピー…）／UiPath：Insert/Delete Rows・Delete Range・Rename Sheet・Copy Sheet／PAD：「Excel ワークシートから行を削除」など | 着手順 6 |
-| G11 | P1 | Excel | `.xls`・パスワード付きのブックが開けない、CSV や `.xlsx` への変換（名前を付けて保存）がない | UiPath：Save Workbook As・Password／PAD：「Excel の起動」のパスワード・「Excel を閉じる」の名前を付けて保存 | 着手順 6 |
+| G10 | P1 | Excel | 行・列の挿入と削除、範囲のクリア、シートの削除・名前変更・コピーがない | WinActor：Excel 操作（行削除・シート名変更・シートコピー…）／UiPath：Insert/Delete Rows・Delete Range・Rename Sheet・Copy Sheet／PAD：「Excel ワークシートから行を削除」など | 済み |
+| G11 | P1 | Excel | `.xls`・パスワード付きのブックが開けない、CSV や `.xlsx` への変換（名前を付けて保存）がない | UiPath：Save Workbook As・Password／PAD：「Excel の起動」のパスワード・「Excel を閉じる」の名前を付けて保存 | 済み |
 | G12 | P1 | 人とのやりとり | フローの途中で複数の項目（選択肢・日付・チェック）を一度に入れてもらう画面がない（`dialog.input` は 1 行だけ） | UiPath：Create Form／PAD：「カスタム フォームを表示」／WinActor：ユーザー入力（複数項目） | 着手順 7 |
 | G13 | P1 | Studio・デバッグ | 選んだノードから実行する（前のノードを飛ばす）ことができない | UiPath：Run from this Activity／PAD：「ここから実行」 | 着手順 8 |
 | G14 | P1 | メール | メールの移動・既読にする・返信・転送・削除がない。Outlook（クラシック）なしで受信できない（Microsoft 365・IMAP） | UiPath：Move / Mark as Read / Reply To / Delete Outlook Mail Message・Get IMAP Mail／PAD：「メール メッセージの処理」・Exchange / Outlook / IMAP | 着手順 9 |
@@ -94,6 +94,8 @@
 - `process.kill`（`name` または `pid`、危険度 Dangerous、`policy.json` の許可した program と同じ確認）と、`process.list`（`name` で絞って `{ pid, name, startedAt }` の一覧）。固まった業務アプリを落として `desktop.launch` で立ち上げ直す書き方を docs に
 
 ### G10・G11 Excel の行・シート・形式
+
+**対応**：済み。行・シートの操作はファイルを直接変え（数式の参照も付いていく）、`excel.saveAs` は Excel で。`.xls` とパスワード付きは `excel.saveAs` で `.xlsx` にしてから使う形にした。
 
 - `excel.insertRows` / `excel.deleteRows`（`sheet`・`row`・`count`。readRows の `_row` をそのまま使える）、`excel.clearRange`、`excel.deleteSheet` / `excel.renameSheet` / `excel.copySheet`
 - `.xls`・パスワード付きのブックは COM（この PC の Excel）で開く。`excel.saveAs`（`to` の拡張子で `.xlsx` / `.xls` / `.csv` / `.pdf` を決める。`excel.exportPdf` はそのまま残す）
