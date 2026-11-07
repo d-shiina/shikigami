@@ -14,13 +14,17 @@
     },
     "debug_command": {
       "$ref": "#/$defs/DebugCommand"
+    },
+    "case_result": {
+      "$ref": "#/$defs/CaseResult"
     }
   },
   "required": [
     "run_event_envelope",
     "run_report",
     "run_snapshot",
-    "debug_command"
+    "debug_command",
+    "case_result"
   ],
   "$defs": {
     "RunEventEnvelope": {
@@ -837,6 +841,75 @@
             "value"
           ]
         }
+      ]
+    },
+    "CaseResult": {
+      "description": "One test case's run, compared with what it expects.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/RunStatus"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mismatches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mismatch"
+          }
+        },
+        "durationMs": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "name",
+        "passed",
+        "runId",
+        "status",
+        "mismatches",
+        "durationMs"
+      ]
+    },
+    "Mismatch": {
+      "description": "One difference between what the case expects and what the run did.\n`actual` is `null` when the run had no such value.",
+      "type": "object",
+      "properties": {
+        "at": {
+          "description": "`status`, `outputs.total`, `outputs.rows[2].金額`, `errorCode`, `errorStep`.",
+          "type": "string"
+        },
+        "expected": true,
+        "actual": true
+      },
+      "required": [
+        "at",
+        "expected",
+        "actual"
       ]
     }
   },

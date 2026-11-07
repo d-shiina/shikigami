@@ -821,6 +821,179 @@ pub async fn run_flow(
     track_run(app, &state, id, handle, RUN_EVENT)
 }
 
+/// A test case with its name (`tests/<name>.json`).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NamedTestCase {
+    name: String,
+    case: shikigami_core::testcase::TestCase,
+}
+
+/// The flow's test cases, in name order.
+#[tauri::command]
+pub fn list_test_cases(state: State<'_, AppState>, id: FlowId) -> CmdResult<Vec<NamedTestCase>> {
+    let dir = state.service.project_dir(&id)?;
+    Ok(shikigami_core::testcase::load_all(&dir)?
+        .into_iter()
+        .map(|(name, case)| NamedTestCase { name, case })
+        .collect())
+}
+
+#[tauri::command]
+pub fn save_test_case(
+    state: State<'_, AppState>,
+    id: FlowId,
+    name: String,
+    case: shikigami_core::testcase::TestCase,
+) -> CmdResult<()> {
+    let dir = state.service.project_dir(&id)?;
+    shikigami_core::testcase::save(&dir, &name, &case)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_test_case(state: State<'_, AppState>, id: FlowId, name: String) -> CmdResult<()> {
+    let dir = state.service.project_dir(&id)?;
+    shikigami_core::testcase::remove(&dir, &name)?;
+    Ok(())
+}
+
+/// What 「この実行をテストケースにする」 saved, and the values it left out
+/// (secret inputs and outputs, values the record cut short).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaseFromRun {
+    name: String,
+    case: shikigami_core::testcase::TestCase,
+    left_out: Vec<String>,
+}
+
+/// Save a finished run of the flow as a test case that expects what it did.
+#[tauri::command]
+pub fn test_case_from_run(
+    state: State<'_, AppState>,
+    id: FlowId,
+    run_id: RunId,
+    name: String,
+) -> CmdResult<CaseFromRun> {
+    let root = state.service.store().local_root();
+    let io = |e: std::io::Error| err("STORAGE_ERROR", e.to_string());
+    let report = shikigami_runtime::record::read_report(root, &run_id)
+        .map_err(io)?
+        .ok_or_else(|| err("RUN_NOT_FINISHED", format!("run {run_id} has not ended")))?;
+    if report.flow_id != id {
+        return Err(err(
+            "RUN_OF_ANOTHER_FLOW",
+            format!("run {run_id} is not a run of {id}"),
+        ));
+    }
+    let events = shikigami_runtime::record::read_events(root, &run_id).map_err(io)?;
+    let flow = state.service.get(&id)?;
+    let (case, left_out) = shikigami_runtime::testing::case_from_run(&flow, &events, &report);
+    let dir = state.service.project_dir(&id)?;
+    shikigami_core::testcase::save(&dir, &name, &case)?;
+    Ok(CaseFromRun {
+        name,
+        case,
+        left_out,
+    })
+}
+
+/// Run the flow's test cases (all, or `names`) one after another with the
+/// working content, as Run in Studio does, and compare. The runs are
+/// recorded like any other; they do not pause on errors.
+#[tauri::command]
+pub async fn run_tests(
+    state: State<'_, AppState>,
+    id: FlowId,
+    names: Option<Vec<String>>,
+) -> CmdResult<Vec<shikigami_runtime::testing::CaseResult>> {
+    use shikigami_core::testcase;
+    use shikigami_runtime::testing;
+    let flow = state.service.get_runnable(&id)?;
+    let version = state.service.matching_version(&flow).ok().flatten();
+    let subflows = state.service.subflows(&flow)?;
+    let dir = state.service.project_dir(&id)?;
+    let cases = match names {
+        None => testcase::load_all(&dir)?,
+        Some(names) => names
+            .into_iter()
+            .map(|name| testcase::load(&dir, &name).map(|case| (name, case)))
+            .collect::<Result<_, _>>()?,
+    };
+    let interrupt = testing::Interrupt::default();
+    {
+        let mut slot = state
+            .tests
+            .lock()
+            .map_err(|_| err("INTERNAL", "tests lock"))?;
+        if slot.is_some() {
+            return Err(err("TESTS_RUNNING", "the test cases are already running"));
+        }
+        *slot = Some(interrupt.clone());
+    }
+    let policy = Policy::path(state.service.store().root());
+    let mut results = Vec::new();
+    let mut failure = None;
+    for (name, case) in cases {
+        if interrupt.is_stopped() {
+            break;
+        }
+        let options = RunOptions {
+            inputs: case.inputs.clone(),
+            version,
+            subflows: subflows.clone(),
+            project_dir: Some(dir.clone()),
+            full_run: true,
+            origin: RunOrigin::new(RunTrigger::Studio).requested_by(format!("test:{name}")),
+            ..RunOptions::default()
+        };
+        let records = testing::Records {
+            workspace: state.service.store().local_root(),
+            policy: &policy,
+        };
+        match testing::run_case(
+            &state.runtime,
+            records,
+            &interrupt,
+            &name,
+            &case,
+            flow.clone(),
+            options,
+        )
+        .await
+        {
+            Ok(result) => results.push(result),
+            Err(e) => {
+                failure = Some(ErrorPayload {
+                    code: e.code,
+                    message: format!("{name}: {}", e.message),
+                    details: e.details,
+                });
+                break;
+            }
+        }
+    }
+    if let Ok(mut slot) = state.tests.lock() {
+        *slot = None;
+    }
+    match failure {
+        Some(e) => Err(e),
+        None => Ok(results),
+    }
+}
+
+/// 「中止」 while the test cases run: cancels the one running now and
+/// starts no more.
+#[tauri::command]
+pub fn stop_tests(state: State<'_, AppState>) {
+    if let Ok(slot) = state.tests.lock()
+        && let Some(interrupt) = slot.as_ref()
+    {
+        interrupt.stop();
+    }
+}
+
 /// What 「ノードの単体実行」 gave: the node ran alone, with the values the
 /// last run left (see `shikigami_runtime::single`).
 #[derive(Debug, Serialize)]

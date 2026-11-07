@@ -3,6 +3,8 @@
 // frontend never edits flow documents itself; it only sends EditOps.
 import type {
   ApprovalRequest,
+  CaseResult,
+  TestCase,
   DebugCommand,
   EditOp,
   EditOutcome,
@@ -351,6 +353,16 @@ export const api = {
   stopRun: (runId: string) => call<void>("stop_run", { runId }),
   /** 「ノードの単体実行」: only the node runs, reading `values`; not recorded as a run. */
   testStep: (id: string, stepId: string, values: Record<string, unknown>) => call<StepTestResult>("test_step", { id, stepId, values }),
+  /** The flow's test cases (tests/<name>.json), in name order. */
+  listTestCases: (id: string) => call<{ name: string; case: TestCase }[]>("list_test_cases", { id }),
+  saveTestCase: (id: string, name: string, testCase: TestCase) => call<void>("save_test_case", { id, name, case: testCase }),
+  deleteTestCase: (id: string, name: string) => call<void>("delete_test_case", { id, name }),
+  /** 「この実行をテストケースとして保存」: `leftOut` names the secret and cut values not kept. */
+  testCaseFromRun: (id: string, runId: string, name: string) =>
+    call<{ name: string; case: TestCase; leftOut: string[] }>("test_case_from_run", { id, runId, name }),
+  /** Runs the cases (all, or `names`) one after another with the working content. */
+  runTests: (id: string, names?: string[]) => call<CaseResult[]>("run_tests", { id, names }),
+  stopTests: () => call<void>("stop_tests"),
   /** The picker (`action: "pick"`) and highlight (`action: "highlight"`) of an adapter. */
   /** `flowId`: relative picture paths (templates/…) are found in that flow's folder. */
   pointAt: (adapter: string, params: Record<string, unknown>, session?: string, flowId?: string) =>

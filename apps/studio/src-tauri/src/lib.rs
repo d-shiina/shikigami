@@ -40,6 +40,8 @@ pub(crate) struct AppState {
     pub approvals: ApprovalStore,
     /// For looking at the screen where a run paused.
     pub adapters: Vec<Arc<dyn Adapter>>,
+    /// The test cases running now (`run_tests`), for 「中止」.
+    pub tests: Mutex<Option<shikigami_runtime::testing::Interrupt>>,
 }
 
 pub fn run() {
@@ -71,6 +73,7 @@ pub fn run() {
         runs: Mutex::new(HashMap::new()),
         vault,
         adapters,
+        tests: Mutex::new(None),
     };
 
     let result = tauri::Builder::default()
@@ -194,6 +197,12 @@ pub fn run() {
             commands::run_record,
             commands::run_flow,
             commands::test_step,
+            commands::list_test_cases,
+            commands::save_test_case,
+            commands::delete_test_case,
+            commands::test_case_from_run,
+            commands::run_tests,
+            commands::stop_tests,
             commands::stop_run,
             commands::run_status,
             debug::debug_run,

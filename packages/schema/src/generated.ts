@@ -296,6 +296,11 @@ export type NotifyFormat = "teams" | "slack" | "json";
  * via the `definition` "ConfigType".
  */
 export type ConfigType = ("text" | "number" | "boolean") | "date" | "list";
+/**
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ExpectedStatus".
+ */
+export type ExpectedStatus = "succeeded" | "failed" | "cancelled";
 
 /**
  * Bundle of the IPC/API payload types used by Studio and MCP tools.
@@ -333,6 +338,7 @@ export interface ShikigamiApi {
   project_files: ProjectFiles;
   project_file: ProjectFile;
   config_file: ConfigFile;
+  test_case: TestCase;
 }
 /**
  * A flow: the unit that AI clients, Studio and the Runtime share.
@@ -1761,6 +1767,52 @@ export interface ConfigItem {
   description?: string;
 }
 /**
+ * One test case, `tests/<name>.json`.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "TestCase".
+ */
+export interface TestCase {
+  /**
+   * `https://…/test-case.schema.json`, for editors (optional, not used).
+   */
+  $schema?: string | null;
+  /**
+   * What the case is about, in the author's words.
+   */
+  description?: string | null;
+  /**
+   * Values of the flow's input variables, as `shikigami run -i` takes them.
+   */
+  inputs?: {
+    [k: string]: unknown;
+  };
+  expect?: Expect;
+}
+/**
+ * What should come out of the run.
+ */
+export interface Expect {
+  /**
+   * How the run ends. `failed` for a case that checks an error is raised.
+   */
+  status?: "succeeded" | "failed" | "cancelled";
+  /**
+   * Output variables to compare (a subset, see the module docs).
+   */
+  outputs?: {
+    [k: string]: unknown;
+  };
+  /**
+   * The error's code, when `status` is `failed` (e.g. `ELEMENT_NOT_FOUND`).
+   */
+  errorCode?: string | null;
+  /**
+   * The node the run should stop at, when `status` is `failed`.
+   */
+  errorStep?: string | null;
+}
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "Metadata".
  */
@@ -1852,6 +1904,32 @@ export interface RemotePolicy1 {
    * versions in this workspace).
    */
   acceptBundles?: boolean;
+}
+/**
+ * What should come out of the run.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "Expect".
+ */
+export interface Expect1 {
+  /**
+   * How the run ends. `failed` for a case that checks an error is raised.
+   */
+  status?: "succeeded" | "failed" | "cancelled";
+  /**
+   * Output variables to compare (a subset, see the module docs).
+   */
+  outputs?: {
+    [k: string]: unknown;
+  };
+  /**
+   * The error's code, when `status` is `failed` (e.g. `ELEMENT_NOT_FOUND`).
+   */
+  errorCode?: string | null;
+  /**
+   * The node the run should stop at, when `status` is `failed`.
+   */
+  errorStep?: string | null;
 }
 
 /**
@@ -2033,6 +2111,7 @@ export interface ShikigamiRunApi {
   run_report: RunReport;
   run_snapshot: RunSnapshot;
   debug_command: DebugCommand;
+  case_result: CaseResult;
 }
 /**
  * Who asked for the run, from where, on which PC.
@@ -2160,6 +2239,37 @@ export interface RunSnapshot {
   status: RunStatus;
   currentStep?: StepId | null;
   stepsExecuted: number;
+}
+/**
+ * One test case's run, compared with what it expects.
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "CaseResult".
+ */
+export interface CaseResult {
+  name: string;
+  description?: string | null;
+  passed: boolean;
+  runId: string;
+  status: RunStatus;
+  error?: RunError | null;
+  mismatches: Mismatch[];
+  durationMs: number;
+}
+/**
+ * One difference between what the case expects and what the run did.
+ * `actual` is `null` when the run had no such value.
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "Mismatch".
+ */
+export interface Mismatch {
+  /**
+   * `status`, `outputs.total`, `outputs.rows[2].金額`, `errorCode`, `errorStep`.
+   */
+  at: string;
+  expected: unknown;
+  actual: unknown;
 }
 /**
  * Who asked for a run, from where, and on which PC. Recorded in

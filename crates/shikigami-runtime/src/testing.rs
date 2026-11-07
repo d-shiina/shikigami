@@ -7,13 +7,14 @@ use std::sync::{Arc, Mutex};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Map;
 use shikigami_core::Flow;
-use shikigami_core::testcase::{self, TestCase};
+use shikigami_core::testcase::{self, Expect, ExpectedStatus, TestCase};
 
 use crate::record::RunRecorder;
 use tokio_util::sync::CancellationToken;
 
-use crate::{RunError, RunOptions, RunStatus, Runtime};
+use crate::{RunError, RunEvent, RunEventEnvelope, RunOptions, RunReport, RunStatus, Runtime};
 
 /// One test case's run, compared with what it expects.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -120,6 +121,74 @@ pub async fn run_case(
         error: report.error,
         mismatches,
     })
+}
+
+/// A case that expects what a finished run did: its inputs, how it ended,
+/// its outputs and, for a failure, the error's code and node. 「この実行を
+/// テストケースにする」. Secret inputs and outputs, and values the record
+/// cut short, are left out (the second list names them, for the person).
+pub fn case_from_run(
+    flow: &Flow,
+    events: &[RunEventEnvelope],
+    report: &RunReport,
+) -> (TestCase, Vec<String>) {
+    let mut left_out = Vec::new();
+    let mut inputs = Map::new();
+    for event in events {
+        let RunEvent::VariableChanged {
+            variable,
+            value,
+            step_id: None,
+            truncated,
+            ..
+        } = &event.event
+        else {
+            continue;
+        };
+        let Some(def) = flow.variables.iter().find(|v| &v.name == variable) else {
+            continue;
+        };
+        if !def.direction.is_input() || inputs.contains_key(variable) {
+            continue;
+        }
+        if def.secret || *truncated {
+            left_out.push(variable.clone());
+            continue;
+        }
+        inputs.insert(variable.clone(), value.clone());
+    }
+    let mut outputs = Map::new();
+    for (name, value) in &report.outputs {
+        let secret = flow.variables.iter().any(|v| &v.name == name && v.secret);
+        if secret {
+            left_out.push(name.clone());
+        } else {
+            outputs.insert(name.clone(), value.clone());
+        }
+    }
+    let status = match report.status {
+        RunStatus::Failed => ExpectedStatus::Failed,
+        RunStatus::Cancelled => ExpectedStatus::Cancelled,
+        _ => ExpectedStatus::Succeeded,
+    };
+    let failed = status == ExpectedStatus::Failed;
+    let error = report.error.as_ref().filter(|_| failed);
+    let case = TestCase {
+        schema: None,
+        description: None,
+        inputs,
+        expect: Expect {
+            status,
+            // A failed run's outputs are whatever it reached: not worth keeping.
+            outputs: if failed { Map::new() } else { outputs },
+            error_code: error.map(|e| e.code.clone()),
+            error_step: error
+                .and_then(|e| e.step_id.as_ref())
+                .map(|s| s.to_string()),
+        },
+    };
+    left_out.dedup();
+    (case, left_out)
 }
 
 fn record_err(e: std::io::Error) -> RunError {

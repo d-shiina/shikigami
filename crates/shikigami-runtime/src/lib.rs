@@ -796,6 +796,7 @@ pub fn run_api_schema() -> Value {
         run_report: RunReport,
         run_snapshot: RunSnapshot,
         debug_command: DebugCommand,
+        case_result: testing::CaseResult,
     }
     let mut value = serde_json::to_value(schemars::schema_for!(RunApi)).unwrap_or(Value::Null);
     if let Some(obj) = value.as_object_mut() {
