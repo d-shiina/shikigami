@@ -27,7 +27,8 @@ export const choiceLabel = (key: string, value: unknown) => {
  * a plain sentence helps a person; the full text stays in the tooltip.
  */
 export function plainHint(description: string | undefined): string | undefined {
-  if (!description || locale !== "ja") return undefined;
+  // Only a Japanese sentence: a hint still in English (from a plugin, say) goes to the tooltip.
+  if (!description || locale !== "ja" || !/[ぁ-んァ-ン一-龯]/.test(description)) return undefined;
   return /[{}"`]|\btrue\b|\bfalse\b|\bnull\b|&&|==|既定 \w/.test(description) ? undefined : description;
 }
 

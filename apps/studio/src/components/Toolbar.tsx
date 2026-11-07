@@ -99,10 +99,10 @@ export function FlowTitle() {
       <button
         type="button"
         onClick={() => setHistoryOpen(true)}
-        title={t.shell.historyTitle}
+        title={`${t.shell.historyTitle}（${t.revisionCount(flow.revision ?? 0)}）`}
         className="flex h-6 shrink-0 items-center gap-1 rounded-[3px] bg-slate-100 px-1.5 text-[11px] text-slate-500 hover:bg-slate-200 hover:text-ink"
       >
-        <span className="@max-[920px]/title:hidden">{t.revision}</span> {flow.revision}
+        {t.revision}
         <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
           <path d="m1.5 3 2.5 2.5L6.5 3" fill="none" stroke="currentColor" strokeWidth="1.3" />
         </svg>

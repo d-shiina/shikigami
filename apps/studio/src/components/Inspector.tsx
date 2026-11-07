@@ -1,11 +1,14 @@
 import type { Part, Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
-import { Boxes, Crosshair, ScanSearch } from "lucide-react";
+import { Boxes, Crosshair, FolderOpen, ScanSearch } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { useProjectMaybe } from "../project";
 import { api, type SecretField } from "../lib/api";
 import { locale, stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
 import { stepSummary } from "../lib/palette";
+import { issueText } from "../lib/issueText";
 import { CALL, callMap, choiceLabel, knownVariables, outputs, paramLabel, plainHint, referencedVariables, TYPE_COLOR } from "../lib/nodeRows";
 import { outline } from "../lib/outline";
 import { appOf, detachOps, makePartOps, newPartName, partRef, partUses } from "../lib/parts";
@@ -43,6 +46,8 @@ function CommitInput(props: {
   placeholder?: string;
   mono?: boolean;
   multiline?: boolean;
+  /** A <datalist> id offering values to pick. */
+  list?: string;
 }) {
   const [draft, setDraft] = useState(props.value);
   useEffect(() => {
@@ -60,9 +65,56 @@ function CommitInput(props: {
   ) : (
     <input
       {...common}
+      list={props.list}
       onChange={(e) => setDraft(e.target.value)}
       onKeyDown={(e) => e.key === "Enter" && commit()}
     />
+  );
+}
+
+/**
+ * A file or folder of the flow: the files in its folder to choose from while
+ * typing, and "参照…" to pick one in Explorer. A file from elsewhere is
+ * copied onto its shelf (input/, templates/…) so the flow keeps working on
+ * another PC; a folder elsewhere is kept as its full path.
+ */
+function PathField({ value, folder, onChange }: { value: string; folder: boolean; onChange: (value: unknown) => void }) {
+  const files = useProjectMaybe((s) => s.files, null);
+  const copyIn = useProjectMaybe((s) => s.copyIn, null);
+  const listId = useMemo(() => `files-${Math.random().toString(36).slice(2)}`, []);
+  const browse = async () => {
+    const dir = files?.dir ?? "";
+    const picked = await invoke<string | null>("runner_pick", { kind: folder ? "folder" : "file", start: dir || null }).catch(() => null);
+    if (!picked) return;
+    const norm = (p: string) => p.replace(/\\/g, "/");
+    const inside = dir && norm(picked).toLowerCase().startsWith(`${norm(dir).toLowerCase()}/`);
+    if (inside) return onChange(norm(picked).slice(norm(dir).length + 1));
+    if (folder || !copyIn) return onChange(picked);
+    // Only once the copy is there: a file of the same name already on the
+    // shelf, or a failed copy, would otherwise point the node at other contents.
+    const [copied] = await copyIn([picked], null);
+    if (copied) onChange(copied.path);
+  };
+  return (
+    <div className="flex gap-1">
+      <CommitInput value={value} list={listId} placeholder={t.props.pathPlaceholder} onCommit={(text) => onChange(text === "" ? null : text)} />
+      <datalist id={listId}>
+        {(folder ? (files?.folders ?? []) : (files?.files ?? []).map((f) => f.path))
+          .filter((p) => !p.startsWith("work/") && !p.startsWith("logs/"))
+          .map((p) => (
+            <option key={p} value={p} />
+          ))}
+      </datalist>
+      <button
+        type="button"
+        title={t.props.browseTitle}
+        onClick={() => void browse()}
+        className="flex shrink-0 items-center gap-1 rounded-[3px] border border-slate-300 bg-sheet px-2 text-[11px] text-slate-700 hover:bg-slate-50"
+      >
+        <FolderOpen size={13} strokeWidth={1.75} aria-hidden="true" />
+        {t.props.browse}
+      </button>
+    </div>
   );
 }
 
@@ -220,6 +272,7 @@ function ParamField({
   socket,
   secretCapable,
   pointer,
+  isPath,
   onChange,
 }: {
   name: string;
@@ -231,6 +284,8 @@ function ParamField({
   secretCapable: boolean;
   /** The adapter that can pick this target on screen and highlight it. */
   pointer?: string;
+  /** A file or folder of the flow's folder (`input/orders.xlsx`). */
+  isPath?: boolean;
   onChange: (value: unknown) => void;
 }) {
   const label = `${paramLabel(name, stepType)}${required ? " *" : ""}`;
@@ -280,6 +335,8 @@ function ParamField({
         }}
       />
     );
+  } else if (schema.type === "string" && isPath) {
+    editor = <PathField value={String(value ?? "")} folder={name === "folder"} onChange={onChange} />;
   } else if (schema.type === "string") {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "array" && isScalarList(schema, value)) {
@@ -926,6 +983,7 @@ function ParamsEditor({
               socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}
               secretCapable={def?.secretParams?.includes(key) ?? false}
               pointer={key === "target" ? pointerOf(step.type) : undefined}
+              isPath={def?.pathParams?.includes(key) ?? false}
               // The whole params, not a merge patch: a merge would keep the
               // fields an object (a target) no longer has. null removes the key.
               onChange={setParam}
@@ -1201,11 +1259,8 @@ function StepInspector() {
         <div className="overflow-hidden rounded-[4px] border border-slate-200">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-            <span className="text-sm font-bold" style={{ color }}>
+            <span className="text-sm font-bold" style={{ color }} title={`${step.type} · ID: ${id}`}>
               {typeTitle(step, def)}
-            </span>
-            <span className="ml-auto font-mono text-[10px] text-slate-400" title={`ID: ${id}`}>
-              {step.type}
             </span>
           </div>
           <div className="space-y-1 px-3 py-2">
@@ -1241,7 +1296,7 @@ function StepInspector() {
           <ul className="mt-2 space-y-1 rounded-[4px] border border-shu-100 bg-shu-50 p-2 text-xs text-shu-600">
             {issues.map((i) => (
               <li key={`${i.code}${i.path}${i.message}`}>
-                {i.severity === "warning" ? "⚠" : "✕"} {i.message}
+                {i.severity === "warning" ? "⚠" : "✕"} {issueText(i, flow)}
               </li>
             ))}
           </ul>
@@ -1318,7 +1373,6 @@ function StepInspector() {
           </>
         )}
       </Section>
-      <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{id}</p>
     </div>
   );
 }
@@ -1394,7 +1448,6 @@ function FlowInspector() {
         </Row>
       </Section>
       <SchedulesSection flowId={flow.id} />
-      <p className="px-4 pt-2 font-mono text-[10px] text-slate-400 select-all">{flow.id}</p>
     </div>
   );
 }
