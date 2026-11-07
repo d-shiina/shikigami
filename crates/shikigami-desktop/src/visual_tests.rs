@@ -43,6 +43,7 @@ fn word(text: &str, x: i32, y: i32, width: u32) -> OcrWord {
             width,
             height: 20,
         },
+        confidence: None,
     }
 }
 
@@ -283,6 +284,7 @@ impl Backend for Screen {
                             width: w.rect.width * factor as u32,
                             height: w.rect.height * factor as u32,
                         },
+                        confidence: w.confidence,
                     })
                     .collect(),
             })
@@ -576,6 +578,92 @@ async fn read_text_reads_a_window_part_or_a_file() {
     assert_eq!(report.outputs["out"]["text"], json!("合計1,200円"));
 }
 
+/// An engine an extension adds reads instead of the built-in ones; how
+/// sure it is shows per line.
+struct FakeCloud;
+
+impl crate::backend::OcrProvider for FakeCloud {
+    fn name(&self) -> &str {
+        "fake-cloud"
+    }
+
+    fn recognize(
+        &self,
+        image: Bitmap,
+        _options: crate::backend::OcrOptions,
+    ) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
+        let mut sure = word("請求", 0, 0, 40);
+        sure.confidence = Some(0.99);
+        let mut unsure = word("全額", 40, 0, 40);
+        unsure.confidence = Some(0.42);
+        let mut amount = word("1,200", 90, 0, 50);
+        amount.confidence = Some(0.95);
+        let width = image.width;
+        Box::pin(async move {
+            assert!(width > 0);
+            Ok(vec![OcrLine {
+                words: vec![sure, unsure, amount],
+            }])
+        })
+    }
+}
+
+#[tokio::test]
+async fn added_ocr_engines_read_and_say_how_sure_they_are() {
+    use crate::backend::{OcrEngine, register_ocr_engine};
+    assert!(OcrEngine::parse("fake-cloud").is_err());
+    register_ocr_engine(Arc::new(FakeCloud)).unwrap();
+    assert_eq!(
+        OcrEngine::parse("fake-cloud").unwrap(),
+        OcrEngine::Other("fake-cloud".into())
+    );
+    struct Named(&'static str);
+    impl crate::backend::OcrProvider for Named {
+        fn name(&self) -> &str {
+            self.0
+        }
+        fn recognize(
+            &self,
+            _image: Bitmap,
+            _options: crate::backend::OcrOptions,
+        ) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
+            Box::pin(async { Ok(vec![]) })
+        }
+    }
+    assert!(register_ocr_engine(Arc::new(Named("paddle"))).is_err());
+    assert!(register_ocr_engine(Arc::new(Named("Cloud OCR"))).is_err());
+    let accurate = crate::visual::ocr_options(&json!({ "engine": "fake-cloud", "accurate": true }));
+    assert_eq!(accurate.unwrap_err().code, "INVALID_PARAMS");
+
+    let screen = Arc::new(ocr_screen());
+    let report = run_on(
+        screen.clone(),
+        vec![saving(step(
+            types::READ_TEXT,
+            json!({ "target": { "window": { "title": "Citrix" } }, "engine": "fake-cloud" }),
+        ))],
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let out = &report.outputs["out"];
+    assert_eq!(out["engine"], "fake-cloud");
+    assert_eq!(out["text"], "請求全額1,200");
+    // The least sure word, and the characters of the words below 0.8.
+    assert_eq!(out["lines"][0]["confidence"], json!(0.42));
+    assert_eq!(out["lines"][0]["unsure"], json!([2, 3]));
+    // Engines that do not say (the fake screen's, like Windows OCR) add neither.
+    let report = run_on(
+        screen,
+        vec![saving(step(
+            types::READ_TEXT,
+            json!({ "target": { "window": { "title": "Citrix" } } }),
+        ))],
+    )
+    .await;
+    let line = &report.outputs["out"]["lines"][0];
+    assert!(line.get("confidence").is_none() && line.get("unsure").is_none());
+}
+
 #[tokio::test]
 async fn screenshots_save_the_window_element_or_region() {
     let dir = tempfile::tempdir().unwrap();
@@ -727,7 +815,12 @@ fn ctc_output_becomes_words_with_places() {
     for (t, &c) in best.iter().enumerate() {
         scores[t * classes + c] = 0.9;
     }
-    let decoded = crate::paddle::ctc_decode(&scores, best.len(), classes, &chars, &[]);
+    let decoded = crate::paddle::ctc_decode(
+        &scores,
+        best.len(),
+        classes,
+        &crate::paddle::Vocab::new(chars),
+    );
     let text: String = decoded.chars.iter().map(|(c, _)| c.as_str()).collect();
     assert_eq!(text, "保存 OK");
     assert!((decoded.score - 0.9).abs() < 1e-6);
@@ -813,19 +906,20 @@ fn ctc_never_reads_lookalike_letters() {
         .iter()
         .map(|s| (*s).to_owned())
         .collect();
-    let skip = crate::paddle::skipped_classes(&chars);
-    assert_eq!(skip, [false, false, false, true, false]);
+    assert!(crate::paddle::skipped('ı'));
+    assert!(!crate::paddle::skipped('I') && !crate::paddle::skipped('開'));
+    let vocab = crate::paddle::Vocab::new(chars);
     let classes = 5;
     let mut scores = vec![0.0f32; 3 * classes];
     scores[1] = 0.98; // A
     scores[classes + 3] = 0.94; // ı
     scores[classes + 2] = 0.04; // I
     scores[2 * classes + 4] = 0.9; // 開
-    let decoded = crate::paddle::ctc_decode(&scores, 3, classes, &chars, &skip);
+    let decoded = crate::paddle::ctc_decode(&scores, 3, classes, &vocab);
     let text: String = decoded.chars.iter().map(|(c, _)| c.as_str()).collect();
     assert_eq!(text, "AI開");
     // "I" is as sure as "ı" was: a line of just "I" is not dropped as noise.
-    let alone = crate::paddle::ctc_decode(&scores[classes..2 * classes], 1, classes, &chars, &skip);
+    let alone = crate::paddle::ctc_decode(&scores[classes..2 * classes], 1, classes, &vocab);
     assert_eq!(alone.chars[0].0, "I");
     assert!((alone.score - 0.98).abs() < 1e-6, "{}", alone.score);
 }

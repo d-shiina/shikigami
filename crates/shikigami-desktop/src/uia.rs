@@ -166,10 +166,13 @@ impl Backend for UiaBackend {
         image: Bitmap,
         options: OcrOptions,
     ) -> BoxFuture<'static, Result<Vec<OcrLine>, StepError>> {
-        let windows = match options.engine {
+        let windows = match &options.engine {
             _ if options.accurate => false,
             Some(OcrEngine::Windows) => true,
             Some(OcrEngine::Paddle) => false,
+            Some(OcrEngine::Other(name)) => {
+                return crate::backend::other_recognize(name, image, options.clone());
+            }
             None => match crate::paddle::engine() {
                 Ok(_) => false,
                 Err(reason) => {

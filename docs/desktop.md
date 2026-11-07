@@ -117,6 +117,20 @@ Inside Citrix or a remote desktop, and on custom-drawn screens, `inspect_ui` lis
 - Without PaddleOCR, **Windows OCR** (Windows.Media.Ocr) is used. It is weak on small text and Japanese, so pictures are enlarged twice first. `engine: "windows"` asks for it; `language` (`ja`, `en-US`…) is for it
 - `accurate: true` (Studio: "Accurate") reads with PaddleOCR's larger models (PP-OCRv6 medium, in `ocr\medium\`): much better on handwriting, but several times slower (about 5 s for a 1000 × 560 picture instead of 0.4 s). It works on `desktop.readText` and on `ocr` targets. The installer includes them; in a development checkout `pnpm studio:bundle-ocr` fetches them from ModelScope when it can (`SHIKIGAMI_OCR_ACCURATE=required` makes that an error, `skip` leaves them out)
 - `desktop.readText` says which engine read the text (`engine`), and adds a `warning` when the default fell back to Windows OCR
+- PaddleOCR reads as Japanese: kanji Japanese does not use (simplified Chinese "纳", traditional "錄": outside Shift_JIS) are never chosen, so the model's next guess, the Japanese form of the same shape ("納", "録"), wins. Look-alike kana and kanji are chosen by their neighbours: "ー" after katakana ("コピ一用紙" → "コピー用紙", but "データ一覧" stays), "力" among kanji ("入カ" → "入力"), "タ" among katakana ("デー夕" → "データ"). Pictures are read 1.5 times larger (small text is found and read better)
+- Each line of `desktop.readText` has `confidence` (0–1, its least sure word) and `unsure` (positions in `text` of the characters of words below 0.8) where the engine says how sure it is (PaddleOCR; Windows OCR does not). Studio's node result shows the lines with those characters highlighted, the confidence of each line and which engine read them
+- Other engines (a cloud AI-OCR from an extension) plug in through the `OcrProvider` trait (`shikigami_desktop::backend::register_ocr_engine`); flows choose them with `engine: "<name>"`
+
+### How well OCR reads (benchmark)
+
+`crates/shikigami-desktop/src/ocr_bench.rs` measures OCR on pictures of Japanese business screens (`tests/fixtures/ocr-bench`, made by `tests/ocr-bench/make.mjs`): a spreadsheet, a browser form, an invoice and message boxes with several lines, at 9, 10.5, 12 and 14 pt, light and dark, as drawn, with ClearType's colour fringes and through a remote desktop (JPEG). "Characters" is 1 − edit distance ÷ characters; "texts" is the share of texts read exactly (full and half width alike).
+
+| PaddleOCR small | characters | texts |
+| --- | --- | --- |
+| before (v0.1.9) | 99.1 % | 94.7 % |
+| now | 99.6 % | 98.0 % |
+
+The pictures are drawn by Chromium on Linux with Noto Sans JP / IPA fonts, not by Windows, so real screens may read somewhat worse. `cargo test -p shikigami-desktop --lib ocr_bench -- --ignored --nocapture` prints the table and every miss; the 9 pt part runs on every test run and fails below 99 % / 95 %. On Windows CI the same benchmark also runs with Windows OCR (an experiment on main and on pull requests whose title names OCR; results are notices on the run).
 - In a development checkout, `pnpm studio:dev` fills `target\ocr` when it is missing or out of date (or run `pnpm studio:bundle-ocr`); development builds of Studio, the MCP server and the tests use it
 
 ### How the AI sees such screens (MCP)

@@ -1285,6 +1285,17 @@ export const en: Dict = {
     text: (n: number) => `${n.toLocaleString("en-US")} characters`,
     size: (w: number, h: number) => `${w} × ${h}`,
   },
+  ocr: {
+    engine: "OCR engine",
+    engines: { paddle: "Standard (PaddleOCR)", "paddle-accurate": "High accuracy (PaddleOCR)", windows: "Windows OCR" },
+    lines: (n: number) => `${n} line${n === 1 ? "" : "s"}`,
+    unsure: (n: number) => `${n} character${n === 1 ? "" : "s"} to check`,
+    unsureHint: "Highlighted characters were read with low confidence. Compare them with the screen.",
+    confidence: "Confidence",
+    noConfidence: "This engine does not report confidence",
+    noText: "No text was found",
+    raw: "Raw value",
+  },
   values: {
     none: "(none)",
     empty: "(empty)",

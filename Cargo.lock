@@ -4606,6 +4606,7 @@ dependencies = [
 name = "shikigami-desktop"
 version = "0.1.9"
 dependencies = [
+ "encoding_rs",
  "ort",
  "png",
  "regex",
