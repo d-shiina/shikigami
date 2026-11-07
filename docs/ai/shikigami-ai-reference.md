@@ -688,7 +688,7 @@ Params:
 - `target`: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
 - `file`: text [path] — 画面の代わりに読む画像ファイルのフルパス
 - `language`: text — Windows OCR の言語（ja, en-US など）。PaddleOCR では不要
-- `engine`: "paddle" | "windows" — OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）
+- `engine`: "paddle" | "windows" — OCR エンジン：paddle（標準、PaddleOCR）または windows（Windows 標準 OCR）。拡張機能が足したエンジンも名前で選べる。既定は PaddleOCR（入っていなければ Windows OCR）
 - `accurate`: true | false — 高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）
 Output: yes (saveAs)
 Example: `{"type":"desktop.readText","name":"合計欄を読む","params":{"target":{"window":{"title":"Citrix"},"region":{"x":620,"y":410,"width":180,"height":32}}},"saveAs":"total"}`
