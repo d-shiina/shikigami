@@ -458,7 +458,7 @@ export function PointTools({
     setBusy(true);
     setNote(null);
     try {
-      const result = await api.pointAt(adapter, { action: "pick", message: t.picker.banner, ...extra }, session);
+      const result = await api.pointAt(adapter, { action: "pick", message: browser ? t.picker.banner : t.picker.bannerDesktop, ...extra }, session);
       if (result.cancelled || result.status === "cancelled") {
         setNote({ text: t.picker.cancelled });
       } else if (result.how === "point" && !canPoint) {

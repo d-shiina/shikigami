@@ -897,6 +897,7 @@ export const ja = {
     pick: "画面から選ぶ",
     pickTitle: "Studio を最小化し、選択する部品を画面上でクリックします（Esc または右クリックでキャンセル）",
     banner: "選択する部品をクリック（Esc または右クリックでキャンセル）",
+    bannerDesktop: "部品をクリック（オレンジの枠が対象のウィンドウ・Esc でキャンセル）",
     pickedPlain: "選びました",
     pickBrowserTitle: "Studio を最小化し、実行中のブラウザで選択する部品をクリックします（Esc でキャンセル）",
     needsOpen: "このノードより上に「ページを開く」がありません。先に置くと、そのページをブラウザで開いて選べます",

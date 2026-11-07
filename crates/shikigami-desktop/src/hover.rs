@@ -1,4 +1,5 @@
-//! When the picker looks up what is under the mouse.
+//! What the picker shows while the user points: when it looks up what is
+//! under the mouse, and the frames and banner line it draws for it.
 //!
 //! Each look-up (`ElementFromPoint`) asks the app under the mouse about its
 //! screen, and some apps (browsers, Electron, Office) answer slowly or build
@@ -57,6 +58,49 @@ impl Hover {
     pub fn looked(&mut self, at: (i32, i32), started: Instant, took: Duration) {
         self.last = Some((at, started, took));
     }
+}
+
+/// The four sides (x, y, width, height) of a frame `thickness` wide around
+/// `rect` (left, top, right, bottom): just outside it, or with `inside`,
+/// just inside it (a maximised window's outside is off the screen).
+pub fn frame_sides(
+    rect: (i32, i32, i32, i32),
+    thickness: i32,
+    inside: bool,
+) -> [(i32, i32, i32, i32); 4] {
+    let (l, t, r, b) = if inside {
+        rect
+    } else {
+        (
+            rect.0 - thickness,
+            rect.1 - thickness,
+            rect.2 + thickness,
+            rect.3 + thickness,
+        )
+    };
+    [
+        (l, t, r - l, thickness),
+        (l, b - thickness, r - l, thickness),
+        (l, t, thickness, b - t),
+        (r - thickness, t, thickness, b - t),
+    ]
+}
+
+/// The banner's second line while picking: which window, then which part,
+/// e.g. `［請求書 - Excel］ button「保存」`. A long title is cut so the part
+/// still shows.
+pub fn banner_line(window: &str, part: &str) -> String {
+    const MAX: usize = 40;
+    let window = window.trim();
+    if window.is_empty() {
+        return part.to_owned();
+    }
+    let title: String = if window.chars().count() > MAX {
+        window.chars().take(MAX - 1).chain(['…']).collect()
+    } else {
+        window.to_owned()
+    };
+    format!("\u{ff3b}{title}\u{ff3d} {part}")
 }
 
 #[cfg(test)]
@@ -128,5 +172,37 @@ mod tests {
         }
         assert!(looks <= 17, "{looks} look-ups in a second");
         assert!(looks >= 10, "{looks} look-ups in a second: the frame lags");
+    }
+
+    #[test]
+    fn frame_outside_surrounds_the_part() {
+        let sides = frame_sides((100, 50, 200, 80), 3, false);
+        assert_eq!(sides[0], (97, 47, 106, 3)); // top
+        assert_eq!(sides[1], (97, 80, 106, 3)); // bottom
+        assert_eq!(sides[2], (97, 47, 3, 36)); // left
+        assert_eq!(sides[3], (200, 47, 3, 36)); // right
+    }
+
+    #[test]
+    fn frame_inside_stays_within_a_maximised_window() {
+        let sides = frame_sides((0, 0, 1920, 1080), 4, true);
+        for (x, y, w, h) in sides {
+            assert!(x >= 0 && y >= 0, "{x},{y} off screen");
+            assert!(x + w <= 1920 && y + h <= 1080, "{x},{y} {w}x{h} off screen");
+        }
+    }
+
+    #[test]
+    fn banner_names_the_window_then_the_part() {
+        assert_eq!(
+            banner_line("請求書 - Excel", "button \u{300c}保存\u{300d}"),
+            "\u{ff3b}請求書 - Excel\u{ff3d} button \u{300c}保存\u{300d}"
+        );
+        assert_eq!(banner_line("  ", "button"), "button");
+        let long = "あ".repeat(60);
+        let line = banner_line(&long, "edit");
+        assert!(line.contains('…'));
+        assert!(line.ends_with(" edit"));
+        assert_eq!(line.chars().count(), 40 + 2 + 5);
     }
 }
