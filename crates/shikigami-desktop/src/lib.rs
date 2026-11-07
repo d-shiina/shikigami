@@ -1056,6 +1056,29 @@ fn launch(params: &Value) -> Result<Value, StepError> {
 
 // -- step type definitions ----------------------------------------------------
 
+/// `within` / `after`: written like `element` (the step checks them), with
+/// `role` as plain text so the schema does not repeat the list of roles in
+/// every target.
+fn nested_schema(description: &str, levels: usize) -> Value {
+    let mut properties = json!({
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "className": { "type": "string" },
+        "exact": { "type": "boolean" },
+        "nth": { "type": "integer", "minimum": 0 }
+    });
+    if levels > 0 {
+        properties["within"] = nested_schema("この部品の中だけを探す", levels - 1);
+        properties["after"] = nested_schema("この部品より後ろで最初に一致する部品", levels - 1);
+    }
+    json!({
+        "type": "object",
+        "description": format!("{description}。書き方は element と同じ"),
+        "properties": properties
+    })
+}
+
 /// `target.element`, with `within` / `after` nesting `levels` more times.
 fn element_schema(description: &str, levels: usize) -> Value {
     let mut properties = json!({
@@ -1067,26 +1090,13 @@ fn element_schema(description: &str, levels: usize) -> Value {
         "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号（inspect_ui の表示順。after があるときはその後ろから数える）" }
     });
     if levels > 0 {
-        // Written like element itself; the step checks them (the schema
-        // would repeat the whole element in every target otherwise).
-        let nested = |description: &str| {
-            json!({
-                "type": "object",
-                "description": format!("{description}。書き方は element と同じ（id / name / role / className / exact / nth、さらに within / after を {} 段まで）", target::MAX_NESTING - 1),
-                "properties": {
-                    "id": { "type": "string" },
-                    "name": { "type": "string" },
-                    "role": { "type": "string" },
-                    "exact": { "type": "boolean" },
-                    "nth": { "type": "integer", "minimum": 0 }
-                }
-            })
-        };
-        properties["within"] = nested(
+        properties["within"] = nested_schema(
             "この部品の中だけを探す（グループ・ペイン・表の行など。inspect_ui の木で探す部品より上にある行から写す）",
+            levels - 1,
         );
-        properties["after"] = nested(
+        properties["after"] = nested_schema(
             "この部品より後ろ（inspect_ui の表示順）で最初に一致する部品を選ぶ。名前のない入力欄を、すぐ前のラベル（text \"氏名\" など）で指すときに",
+            levels - 1,
         );
     }
     json!({

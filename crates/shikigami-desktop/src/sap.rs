@@ -165,16 +165,20 @@ impl SapWindow {
 
     /// The component `query` names.
     pub fn find(&self, query: &ElementQuery) -> Result<Component, StepError> {
+        // An id is the component's full path, unless within / after narrow
+        // the search: then they must hold too.
+        let direct = query.within.is_none() && query.after.is_none();
         let id = match &query.id {
-            Some(id) => id.clone(),
-            None => {
+            Some(id) if direct => id.clone(),
+            _ => {
                 let nodes = self.tree(TREE_LIMIT);
                 nodes[pick_element(query, &nodes)?].id.clone()
             }
         };
         let object = self.by_id(&id)?;
         let (node, kind) = self.node(&object, 0);
-        if query.id.is_some()
+        if direct
+            && query.id.is_some()
             && (query.role.is_some() || query.name.is_some())
             && !query.matches(&node)
         {
