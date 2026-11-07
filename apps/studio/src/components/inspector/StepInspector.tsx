@@ -9,7 +9,7 @@ import { t } from "../../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../../lib/dataFlow";
 import { stepSummary } from "../../lib/palette";
 import { issueText } from "../../lib/issueText";
-import { CALL, knownVariables, outputs, paramRows, TYPE_COLOR } from "../../lib/nodeRows";
+import { CALL, knownVariables, outputs, paramRows, TYPE_COLOR, unsetParams } from "../../lib/nodeRows";
 import { sentence, typeTitle } from "../../lib/sentence";
 import { AppTag } from "../AppTag";
 import { findStep, revertBlocker, touchedSteps } from "../../store";
@@ -112,7 +112,7 @@ export function ExtractForm({ step }: { step: Step }) {
         <button
           type="button"
           disabled={busy || name.trim() === ""}
-          className="rounded-md bg-primary px-2.5 py-0.5 text-xs text-on-primary hover:bg-primary-hover disabled:opacity-40"
+          className="rounded-md border border-slate-300 bg-paper text-ink hover:bg-slate-100 px-2.5 py-0.5 text-xs disabled:opacity-40"
           onClick={async (e) => {
             e.preventDefault();
             setBusy(true);
@@ -262,6 +262,7 @@ function StepSummary({ step, def, vars, isCall }: { step: Step; def: StepTypeDef
   const openEditor = useStudio((s) => s.openEditor);
   const known = useMemo(() => new Set(vars.keys()), [vars]);
   const rows = paramRows(step, def, known);
+  const unset = new Set(unsetParams(step, def));
   const outs = outputs(step);
   const execution = [
     step.disabled ? [t.disabled, "✓"] : null,
@@ -282,7 +283,9 @@ function StepSummary({ step, def, vars, isCall }: { step: Step; def: StepTypeDef
     <>
       <Section title={t.props.settingsSummary}>
         {step.name && line(t.stepName, step.name, "name")}
-        {rows.map((r) => line(r.label, r.value, r.key))}
+        {rows.map((r) =>
+          line(r.label, unset.has(r.key) ? <span className="text-amber-700">{t.flow.unsetValue}</span> : r.value, r.key),
+        )}
         {rows.length === 0 && !step.name && <p className="py-1 text-[12px] text-slate-500">{t.props.noSettings}</p>}
         <button
           type="button"

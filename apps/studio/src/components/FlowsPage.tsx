@@ -3,7 +3,7 @@
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@shikigami/schema";
 import { BookOpen, ClipboardPaste, Copy, ExternalLink, FolderOpen, MessageSquareText, MousePointerClick, Search, Trash2, Upload, Workflow } from "lucide-react";
-import { useAgentApi } from "../agent";
+import { useAgent, useAgentApi } from "../agent";
 import { useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { relativeTime } from "../lib/changes";
@@ -290,6 +290,8 @@ function Row({ summary, query }: { summary: FlowSummary; query: string }) {
 }
 
 export function FlowsPage() {
+  // The AI pane has its own "paste"; the header does not say it twice.
+  const agentOpen = useAgent((a) => a.open);
   const summaries = useStudio((s) => s.summaries);
   const setPasteOpen = useStudio((s) => s.setPasteOpen);
   const create = useStudio((s) => s.create);
@@ -338,10 +340,10 @@ export function FlowsPage() {
     <div className="h-full overflow-y-auto bg-paper">
       <div className="mx-auto max-w-[1040px] px-6 py-5">
         {/* Read left to right: what this is, how to narrow it, then making one, the filled button, at the end. */}
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           {/* The page's name is in the title bar; here only how many there are. */}
           <span className="text-[12px] text-slate-500">{t.list.count(summaries.length)}</span>
-          <div className="ml-2 flex h-8 w-64 items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
+          <div className="ml-2 flex h-8 w-64 min-w-36 shrink items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
             <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
             <input
               value={query}
@@ -366,7 +368,7 @@ export function FlowsPage() {
           <button
             type="button"
             onClick={() => picker.current?.click()}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
           >
             <Upload size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.importFlow}
@@ -374,14 +376,15 @@ export function FlowsPage() {
           <button
             type="button"
             onClick={() => setPasteOpen("new")}
+            hidden={agentOpen}
             title={t.paste.lead}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
           >
             <ClipboardPaste size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.paste.title}
           </button>
           {/* While naming a new flow, its form's "作成" is the one filled button. */}
-          <button type="button" onClick={() => setCreating(true)} hidden={creating} className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
+          <button type="button" onClick={() => setCreating(true)} hidden={creating} className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
             ＋ {t.newFlow}
           </button>
         </div>

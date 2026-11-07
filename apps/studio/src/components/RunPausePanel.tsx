@@ -25,7 +25,7 @@ function Button({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "primary" | "danger" | "plain" | "ai"; keys?: string }) {
   const tones = {
     primary: "bg-primary text-on-primary hover:bg-primary-hover disabled:bg-slate-300",
-    ai: "bg-brand-500 text-paper hover:bg-brand-600 disabled:opacity-50",
+    ai: "border border-brand-300 bg-sheet text-brand-700 hover:bg-brand-50 disabled:opacity-50",
     danger: "text-shu-600 hover:bg-shu-50 disabled:text-slate-300",
     plain: "border border-slate-300 bg-sheet text-ink hover:bg-slate-50 disabled:text-slate-300",
   } as const;
