@@ -18,6 +18,7 @@ import { OutlinePanel } from "./components/Outline";
 import { FileSheet } from "./components/FileSheet";
 import { NodeEditor } from "./components/NodeEditor";
 import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
+import { FileDragLayer } from "./components/FileDrag";
 import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
 import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
@@ -399,6 +400,7 @@ function Shell() {
       <ApprovalDialog />
       <PickRequestCard />
       <ContextMenu />
+      <FileDragLayer />
     </div>
   );
 }

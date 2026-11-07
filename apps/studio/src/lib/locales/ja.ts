@@ -564,6 +564,14 @@ export const ja = {
     /** Beside a switch's cases. */
     addCase: "ケースを追加",
   },
+  fileDrop: {
+    files: "このフローのファイル",
+    dragHint: "設定欄にドラッグすると、そのファイルを使います",
+    fieldHint: "プロジェクトやエクスプローラーからファイルをドラッグして入れられます",
+    putHere: "ここに入れる",
+    makeNode: "このファイルを読むノードを作る",
+    where: "ファイルの設定欄か、フロー図の上で離してください",
+  },
   project: {
     title: "プロジェクト",
     toggle: "プロジェクト",
