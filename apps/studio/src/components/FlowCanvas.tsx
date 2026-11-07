@@ -28,7 +28,6 @@ import {
   CASE_H,
   type FrameKind,
   HEAD_H,
-  FOOT_H,
   ancestorsOf,
   JOIN_SIZE,
   type JoinNodeData,
@@ -248,6 +247,8 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
  * above the step it leads to, not halfway, where sibling edges share a line.
  */
 type BlockEdgeData = {
+  /** A loop's line back: the x it runs up at. */
+  detourX?: number;
   /** From the head of a frame into one of its columns. */
   split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
@@ -289,6 +290,35 @@ function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: Bl
 
 function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
   const edge = (data ?? {}) as BlockEdgeData;
+  const detourX = edge.detourX;
+  if (detourX !== undefined) {
+    // A loop's line back: out of the end of its body, along to the left of its
+    // frame, up, and back into the line that enters the body's first node.
+    const r = 4;
+    const outY = sourceY + 14;
+    const mergeY = targetY - 28;
+    const path = [
+      `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX - r} ${outY}`,
+      `H ${detourX + r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
+      `V ${mergeY + r} Q ${detourX} ${mergeY} ${detourX + r} ${mergeY}`,
+      `H ${targetX - r} Q ${targetX} ${mergeY} ${targetX} ${mergeY + r} V ${targetY}`,
+    ].join(" ");
+    return (
+      <>
+        <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+        {label && (
+          <EdgeLabelRenderer>
+            <span
+              style={{ transform: `translate(${detourX + 8}px, ${outY - 20}px)` }}
+              className="pointer-events-none absolute top-0 left-0 text-[11px] leading-4 whitespace-nowrap text-slate-500"
+            >
+              {label}
+            </span>
+          </EdgeLabelRenderer>
+        )}
+      </>
+    );
+  }
   // Splits turn just below their step; joins turn just above the next step, so
   // branches of different lengths meet on one line instead of at staggered heights.
   const down = sourcePosition === Position.Bottom && targetY > sourceY;
@@ -931,7 +961,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
   );
 }
 
-type FrameData = { kind: FrameKind; type: string; width: number; height: number; foot?: string };
+type FrameData = { kind: FrameKind; type: string; width: number; height: number };
 
 /**
  * The frame of a loop (if, try, …) around everything in its blocks, so the
@@ -944,28 +974,7 @@ function FrameNode({ data }: NodeProps<Node<FrameData>>) {
     <div
       style={{ width: data.width, height: data.height }}
       className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""}`}
-    >
-      {data.foot && <LoopFoot type={data.type} text={data.foot} />}
-    </div>
-  );
-}
-
-/**
- * The foot of a loop's frame, the pair of its head: the loop's icon again and
- * "次の 1 件へ", where its body ends. It says the loop goes round again in
- * words, so no line has to run back up through the frame.
- */
-function LoopFoot({ type, text }: { type: string; text: string }) {
-  const Icon = nodeIcon(type, "control");
-  return (
-    <div
-      data-loop-foot
-      style={{ height: FOOT_H }}
-      className="absolute inset-x-0 bottom-0 flex items-center gap-2 rounded-b-lg border-t border-slate-200 bg-sheet px-3 text-[11.5px] text-slate-500"
-    >
-      <Icon size={13} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-      {text}
-    </div>
+    />
   );
 }
 
@@ -1291,7 +1300,7 @@ export function FlowCanvas() {
     id: `frame:${f.id}`,
     type: "frame",
     position: { x: f.x, y: f.y },
-    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, foot: f.foot } satisfies FrameData,
+    data: { kind: f.kind, type: f.type, width: f.width, height: f.height } satisfies FrameData,
     draggable: false,
     selectable: false,
     focusable: false,
@@ -1376,20 +1385,21 @@ export function FlowCanvas() {
       targetHandle: "flow",
       type: "block",
       data: {
+        detourX: e.detourX,
         split: e.split,
-        insert: inside || reviewing ? undefined : insertBefore.get(e.target),
+        insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,
         hover: setHoveredEdge,
       } satisfies BlockEdgeData,
-      animated: trail === "now",
+      animated: e.loop || trail === "now",
       style: {
         stroke: trail ? TRAIL_STROKE[trail] : "var(--flow-edge)",
         strokeWidth: trail ? 2.5 : 1.5,
-        ...(trail === "now" ? { strokeDasharray: "5 4" } : {}),
+        ...(e.loop || trail === "now" ? { strokeDasharray: "5 4" } : {}),
       },
       // A plain colour: the marker id is built from it, so no var(). Lines meeting at a join end in its dot.
       markerEnd: e.target.startsWith("join:") ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
-      // A taken line over the others where they share a stretch (a join).
+      // A taken line over the others where they share a stretch (a join, the way into a loop's body).
       zIndex: trail ? 1 : 0,
     };
   });

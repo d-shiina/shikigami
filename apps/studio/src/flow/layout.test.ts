@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, CASE_H, HEAD_H, FOOT_H, layoutFlow, NODE_W, type StepNodeData } from "./layout";
+import { ancestorsOf, CASE_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -153,23 +153,24 @@ describe("layoutFlow", () => {
     expect(layout.width).toBeGreaterThanOrEqual(NODE_W * 2);
   });
 
-  it("ends a loop in a foot instead of a line back up, and leaves it from outside its frame", () => {
+  it("draws a loop's line back to where its body starts, and leaves it from outside its frame", () => {
     const steps: Step[] = [
       { id: "loop", type: "control.repeat", blocks: { body: [log("x")] } },
       log("after"),
     ];
     const layout = layoutFlow(steps, defs);
     expect(layout.edges.some((e) => e.source === "x" && e.target === "end:loop:body")).toBe(true);
-    // No line goes on from the end of the body: its foot says it goes round again.
-    expect(layout.edges.some((e) => e.source === "end:loop:body")).toBe(false);
+    // Back from the end of the body into its first node, not into the head.
+    const back = layout.edges.find((e) => e.source === "end:loop:body")!;
+    expect([back.target, back.loop, back.label]).toEqual(["x", true, "次の回へ"]);
     expect(layout.edges.some((e) => e.target === "loop" && e.source !== "loop")).toBe(false);
     const frame = layout.frames.find((f) => f.id === "loop")!;
-    expect(frame.foot).toBe("次の回へ");
-    // The line out starts on the frame's bottom edge, under the foot.
+    expect(back.detourX).toBe(frame.x + LOOP_LINE_X);
+    // The line out starts on the frame's bottom edge.
     const join = layout.nodes.find((n) => n.id === "join:loop")!;
     expect(join.position.y + 8).toBe(frame.y + frame.height);
     const tail = layout.nodes.find((n) => n.id === "end:loop:body")!;
-    expect(tail.position.y + 24).toBeLessThan(frame.y + frame.height - FOOT_H);
+    expect(tail.position.y + 24 + 14).toBeLessThan(frame.y + frame.height);
     // Out of the frame's bottom; a hidden line from the head carries a run's trail there.
     expect(layout.edges.find((e) => e.source === "loop" && e.target === "join:loop")?.hidden).toBe(true);
     expect(layout.edges.find((e) => e.source === "join:loop" && e.target === "after")?.label).toBe("回数を終えたら");
@@ -212,7 +213,6 @@ describe("layoutFlow", () => {
   it("draws no line back up an empty loop", () => {
     const layout = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }], defs);
     expect(layout.edges.filter((e) => !e.hidden).map((e) => `${e.source}->${e.target}`)).toEqual(["loop->slot:loop:body"]);
-    expect(layout.frames[0]!.foot).toBe("次の 1 件へ");
     // Into the "+" at the flow's end there is no line, so nothing says when it leaves.
     const after = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }, log("x")], defs);
     expect(after.edges.find((e) => e.source === "join:loop")?.label).toBe("すべて終わったら");
@@ -247,6 +247,11 @@ describe("layoutFlow", () => {
     expect(inner.x).toBeGreaterThan(outer.x);
     expect(inner.right).toBeLessThan(outer.right);
     expect(inner.bottom).toBeLessThan(outer.bottom);
+    // The line back runs inside the outer frame, left of the inner one.
+    const back = layout.edges.find((e) => e.source === "end:outer:body")!;
+    expect(back.target).toBe("x");
+    expect(back.detourX).toBe(outer.x + LOOP_LINE_X);
+    expect(back.detourX! + 12).toBeLessThan(inner.x);
     // It is left from the bottom of the frame, after everything in it.
     const exit = layout.nodes.find((n) => n.id === "join:outer")!;
     expect(exit.position.y).toBeGreaterThan(inner.bottom);
@@ -293,13 +298,13 @@ describe("layoutFlow", () => {
     expect(pos["end:if:then"]!.y).toBeGreaterThan(pos.t!.y);
     expect(pos["end:if:else"]!.y).toBeGreaterThan(pos.e2!.y);
     expect(pos["end:if:then"]!.x + 12).toBe(pos.t!.x + NODE_W / 2);
-    // The branches run through their "+" into the end of the loop's body, where the loop's foot takes over.
+    // The branches run through their "+" into the end of the loop's body, and that back to the start of the body.
     const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
     expect(into("end:if:then")).toEqual(["t"]);
     expect(into("end:if:else")).toEqual(["e2"]);
     expect(into("join:if")).toEqual(["end:if:else", "end:if:then"]);
     expect(into("end:loop:body")).toEqual(["join:if"]);
-    expect(layout.edges.some((e) => e.source === "end:loop:body")).toBe(false);
+    expect(layout.edges.find((e) => e.source === "end:loop:body")?.target).toBe("if");
     // Inside the frames: the branches' in the if's, the body's below it but in the loop's.
     const frame = (id: string) => layout.frames.find((f) => f.id === id)!;
     const inside = (id: string, n: string) => {
