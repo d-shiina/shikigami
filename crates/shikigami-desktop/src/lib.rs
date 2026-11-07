@@ -173,7 +173,9 @@ impl Adapter for DesktopAdapter {
         }
         #[cfg(windows)]
         {
-            builder = builder.desktop_probe(std::sync::Arc::new(session::desktop_unavailable));
+            builder = builder
+                .desktop_probe(std::sync::Arc::new(session::desktop_unavailable))
+                .keep_awake(std::sync::Arc::new(session::keep_awake));
         }
         builder
     }

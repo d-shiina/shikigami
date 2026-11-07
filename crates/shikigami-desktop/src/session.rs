@@ -51,3 +51,61 @@ pub fn desktop_unavailable() -> Option<String> {
         }
     }
 }
+
+/// Asks Windows to keep the display on and the PC awake (so the screen
+/// does not turn off and the PC does not sleep for being idle) until the
+/// returned value is dropped. Held for the whole of a run that has nodes
+/// using the mouse and keyboard. It does not stop locking: a
+/// password-protected screen saver, an inactivity limit set by policy and
+/// Win+L still lock the screen (they are security settings, left alone).
+pub fn keep_awake() -> Box<dyn Send + Sync> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Power::{
+        PowerClearRequest, PowerCreateRequest, PowerRequestDisplayRequired,
+        PowerRequestSystemRequired, PowerSetRequest,
+    };
+    use windows::Win32::System::SystemServices::POWER_REQUEST_CONTEXT_VERSION;
+    use windows::Win32::System::Threading::{
+        POWER_REQUEST_CONTEXT_SIMPLE_STRING, REASON_CONTEXT, REASON_CONTEXT_0,
+    };
+    use windows::core::PWSTR;
+
+    /// The power request, as a plain number so the guard can move between
+    /// threads (the handle is not tied to the thread that made it).
+    struct Awake(isize);
+    impl Drop for Awake {
+        fn drop(&mut self) {
+            let handle = HANDLE(self.0 as *mut _);
+            // SAFETY: the handle came from PowerCreateRequest and is closed
+            // only here.
+            unsafe {
+                let _ = PowerClearRequest(handle, PowerRequestDisplayRequired);
+                let _ = PowerClearRequest(handle, PowerRequestSystemRequired);
+                let _ = CloseHandle(handle);
+            }
+        }
+    }
+
+    // Shown by `powercfg /requests`.
+    let mut reason: Vec<u16> = "Shikigami: running a flow that uses the screen"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let context = REASON_CONTEXT {
+        Version: POWER_REQUEST_CONTEXT_VERSION,
+        Flags: POWER_REQUEST_CONTEXT_SIMPLE_STRING,
+        Reason: REASON_CONTEXT_0 {
+            SimpleReasonString: PWSTR(reason.as_mut_ptr()),
+        },
+    };
+    // SAFETY: `context` and the string it points to outlive the call, which
+    // copies the string.
+    unsafe {
+        let Ok(handle) = PowerCreateRequest(&raw const context) else {
+            return Box::new(());
+        };
+        let _ = PowerSetRequest(handle, PowerRequestDisplayRequired);
+        let _ = PowerSetRequest(handle, PowerRequestSystemRequired);
+        Box::new(Awake(handle.0 as isize))
+    }
+}

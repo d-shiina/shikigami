@@ -2191,6 +2191,49 @@ async fn desktop_steps_stop_while_the_screen_is_locked() {
 }
 
 #[tokio::test]
+async fn runs_with_desktop_input_keep_the_screen_awake_until_they_end() {
+    struct Held(Arc<AtomicU32>);
+    impl Drop for Held {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+    let held = Arc::new(AtomicU32::new(0));
+    let asked = Arc::new(AtomicU32::new(0));
+    let keep: KeepAwake = {
+        let (held, asked) = (held.clone(), asked.clone());
+        Arc::new(move || {
+            held.fetch_add(1, Ordering::SeqCst);
+            asked.fetch_add(1, Ordering::SeqCst);
+            Box::new(Held(held.clone()))
+        })
+    };
+    let runtime = Runtime::builder()
+        .register(
+            click_def(),
+            FakeMouse {
+                active: AtomicU32::new(0),
+                peak: AtomicU32::new(0),
+            },
+        )
+        .keep_awake(keep)
+        .build();
+    // Only files and logs: the screen may sleep.
+    let (report, _) = run(&runtime, flow(vec![log("ok")]), json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(asked.load(Ordering::SeqCst), 0);
+    // A mouse node, even nested: held for the run, released at its end.
+    let nested = flow(vec![
+        log("first"),
+        Step::new("control.try").with_block("try", vec![Step::new("test.click")]),
+    ]);
+    let (report, _) = run(&runtime, nested, json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert_eq!(asked.load(Ordering::SeqCst), 1);
+    assert_eq!(held.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn finally_still_runs_when_a_run_is_cancelled() {
     let s = flow(vec![
         Step::new("control.try")
