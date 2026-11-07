@@ -572,7 +572,8 @@ export function ObjectFields({
         if (sub.enum) {
           editor = (
             <select className={inputClass} value={String(v ?? "")} onChange={(e) => set(key, e.target.value || null)}>
-              <option value="">{t.props.unset}</option>
+              {/* A choice whose default has a name (照合方法: 含む) says so when unset. */}
+              <option value="">{t.paramNames.choices[key]?.[""] ?? t.props.unset}</option>
               {sub.enum.map((option) => (
                 <option key={String(option)} value={String(option)}>
                   {key === "role" ? roleLabel(String(option)) : choiceLabel(key, option)}

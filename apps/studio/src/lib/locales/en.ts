@@ -719,6 +719,7 @@ export const en: Dict = {
     testId: "Test ID",
     css: "CSS",
     exact: "Exact match",
+    match: "Match",
     nth: "Which one (0…)",
     window: "Window",
     element: "Control",

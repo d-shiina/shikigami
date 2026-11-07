@@ -718,6 +718,7 @@ export const ja = {
     testId: "テスト ID",
     css: "CSS",
     exact: "完全一致",
+    match: "照合方法",
     nth: "何番目（0〜）",
     window: "ウィンドウ",
     element: "部品",

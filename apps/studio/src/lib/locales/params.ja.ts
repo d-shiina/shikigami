@@ -203,6 +203,7 @@ export const paramsJa = {
     level: { debug: "詳細", info: "情報", warn: "警告", warning: "警告", error: "エラー" },
     state: { visible: "表示されている", hidden: "表示されていない", attached: "ページにある", detached: "ページから消えた", enabled: "操作できる" },
     dialog: { accept: "OK", dismiss: "キャンセル" },
+    match: { "": "含む（既定）", contains: "含む", exact: "完全一致", prefix: "で始まる", suffix: "で終わる", pattern: "パターン（正規表現）" },
     to: { top: "一番上", bottom: "一番下" },
     direction: { up: "上", down: "下", left: "左", right: "右", top: "一番上", bottom: "一番下" },
     button: { left: "左", right: "右" },
