@@ -282,6 +282,8 @@ export type Api = typeof api;
 
 /** The person's own coding agent, run in the background with Shikigami's MCP server. */
 export type AgentInfo = {
+  /** Which agent is in use (config.json → agent.kind). */
+  kind: AgentKind;
   available: boolean;
   name: string;
   command: string | null;
@@ -289,8 +291,10 @@ export type AgentInfo = {
   problem: string | null;
   /** Whether later messages continue the same conversation. */
   remembers: boolean;
-  /** Studio can install it from the pane (Claude Code, not found yet). */
+  /** Studio can install it from the pane (a known agent, not found yet). */
   installable: boolean;
+  /** The pane can sign it in. */
+  signsIn: boolean;
 };
 
 export type AgentRequest = {
@@ -322,6 +326,10 @@ export const agent = {
   /** The code the sign-in page shows when it cannot return by itself. */
   loginCode: (code: string) => call<void>("agent_login_code", { code }),
   cancelLogin: () => call<void>("agent_login_cancel"),
+  /** The agents Studio can run, and which are on this PC. */
+  choices: () => call<AgentChoice[]>("agent_choices"),
+  /** Uses this agent from the next message on. */
+  select: (kind: AgentKind) => call<AgentInfo>("agent_select", { kind }),
   /** Runs the agent's own installer in the background; progress arrives through `onInstall`. */
   install: (kind: AgentKind) => call<void>("agent_install", { kind }),
   cancelInstall: () => call<void>("agent_install_cancel"),
@@ -336,7 +344,9 @@ export const agent = {
 
 export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: boolean; message: string | null };
 /** Which AI to set up; the installer is chosen by this. */
-export type AgentKind = "claudeCode" | "command";
+export type AgentKind = "claudeCode" | "codex" | "gemini" | "copilot" | "command";
+/** An agent Studio knows how to run. */
+export type AgentChoice = { kind: AgentKind; name: string; maker: string; installed: boolean; selected: boolean };
 export type InstallEvent = { kind: "progress"; line: string } | { kind: "done"; ok: boolean; message: string | null; needsLogin: boolean } | { kind: "cancelled" };
 
 export type AgentApi = Omit<typeof agent, "onEvent" | "onLogin" | "onInstall">;

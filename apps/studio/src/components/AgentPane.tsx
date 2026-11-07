@@ -1,10 +1,10 @@
 // The agent pane: ask the AI without leaving Studio. Messages go to the person's own
-// agent (Claude Code by default) with Shikigami's MCP server; whatever it
+// agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with Shikigami's MCP server; whatever it
 // edits lands in 確認待ち like any other AI edit.
 import { Check, ChevronDown, ClipboardPaste, Download, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type AgentPart, type Chat, type ChatItem, currentChat, isBusy, flowBusy, useAgent, useAgentApi } from "../agent";
-import { agent } from "../lib/api";
+import { type AgentChoice, type AgentKind, agent } from "../lib/api";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 
@@ -381,19 +381,57 @@ function Part({ part }: { part: AgentPart }) {
   }
 }
 
-/**
- * The agents Studio can set up from the pane. One today; the list is where
- * another kind (its own installer and sign-in) is added later.
- */
-const AGENT_CHOICES = [{ kind: "claudeCode", name: "Claude Code", note: () => t.agent.setup.claudeNote }] as const;
+/** The agents Studio can run, before the list from this PC arrives. */
+const FALLBACK_CHOICES: AgentChoice[] = [
+  { kind: "claudeCode", name: "Claude Code", maker: "Anthropic", installed: false, selected: false },
+  { kind: "codex", name: "Codex", maker: "OpenAI", installed: false, selected: false },
+  { kind: "gemini", name: "Gemini CLI", maker: "Google", installed: false, selected: false },
+  { kind: "copilot", name: "GitHub Copilot", maker: "GitHub", installed: false, selected: false },
+];
+
+/** Picks which AI Studio uses, marking the ones on this PC. */
+export function AgentPicker({ id, disabled }: { id?: string; disabled?: boolean }) {
+  const info = useAgent((s) => s.info);
+  const choices = useAgent((s) => s.choices);
+  const choose = useAgent((s) => s.chooseAgent);
+  const [error, setError] = useState<string | null>(null);
+  const list = choices && choices.length > 0 ? choices : FALLBACK_CHOICES;
+  // A `command` agent from config.json is not in the list; keep it showing.
+  const custom = info?.kind === "command";
+  return (
+    <span className="flex min-w-0 flex-1 flex-col gap-1">
+      <select
+        id={id}
+        disabled={disabled}
+        className="h-7 min-w-0 rounded-[4px] border border-slate-300 bg-sheet px-1.5 text-[12px] disabled:opacity-60"
+        value={info?.kind ?? "claudeCode"}
+        onChange={(e) => {
+          setError(null);
+          choose(e.target.value as AgentKind).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+        }}
+      >
+        {custom && <option value="command">{info?.name}</option>}
+        {list.map((c) => (
+          <option key={c.kind} value={c.kind}>
+            {`${c.name}（${c.maker}）${c.installed ? "" : ` ・ ${t.agent.setup.notInstalled}`}`}
+          </option>
+        ))}
+      </select>
+      {error && <span className="text-[11.5px] text-shu-600">{error}</span>}
+    </span>
+  );
+}
 
 /** Installs the agent and signs in, in one go, without a terminal. */
 function SetupCard() {
+  const info = useAgent((s) => s.info);
   const install = useAgent((s) => s.install);
   const login = useAgent((s) => s.login);
   const start = useAgent((s) => s.startInstall);
   const cancel = useAgent((s) => s.cancelInstall);
-  const choice = AGENT_CHOICES[0];
+  const kind = info?.kind ?? "claudeCode";
+  const name = info?.name ?? "AI";
+  const busy = install.phase === "running" || install.phase === "stopping";
   const primary =
     "flex h-8 items-center gap-1.5 rounded-[4px] bg-ink px-3 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400";
   // The sign-in box takes over once the installer has done its part.
@@ -404,16 +442,10 @@ function SetupCard() {
       <div className="leading-relaxed text-slate-700">{t.agent.setup.lead}</div>
       <label className="flex items-center gap-2">
         <span className="shrink-0 text-slate-600">{t.agent.setup.which}</span>
-        <select className="h-7 min-w-0 flex-1 rounded-[4px] border border-slate-300 bg-sheet px-1.5 text-[12px]" value={choice.kind} onChange={() => undefined}>
-          {AGENT_CHOICES.map((c) => (
-            <option key={c.kind} value={c.kind}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <AgentPicker disabled={busy} />
       </label>
-      <div className="leading-relaxed text-slate-600">{choice.note()}</div>
-      {install.phase === "running" || install.phase === "stopping" ? (
+      <div className="leading-relaxed text-slate-600">{t.agent.setup.note[kind === "command" ? "claudeCode" : kind]}</div>
+      {busy ? (
         <>
           <div className="flex items-center gap-1.5 text-slate-700">
             <Loader2 size={13} className="animate-spin" aria-hidden="true" />
@@ -429,11 +461,11 @@ function SetupCard() {
       ) : (
         <>
           {install.phase === "failed" && <div className="whitespace-pre-wrap text-shu-600">{install.message}</div>}
-          <button type="button" onClick={() => void start(choice.kind)} className={primary}>
+          <button type="button" onClick={() => void start(kind)} className={primary}>
             <Download size={13} strokeWidth={2} aria-hidden="true" />
-            {install.phase === "failed" ? t.agent.setup.retry : t.agent.setup.install(choice.name)}
+            {install.phase === "failed" ? t.agent.setup.retry : t.agent.setup.install(name)}
           </button>
-          <div className="text-[11px] leading-relaxed text-slate-500">{t.agent.setup.whatHappens}</div>
+          <div className="text-[11px] leading-relaxed text-slate-500">{kind === "claudeCode" ? t.agent.setup.whatHappens : t.agent.setup.whatHappensNpm}</div>
         </>
       )}
     </div>

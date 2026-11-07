@@ -14,11 +14,13 @@ function fakeStorage() {
 
 const now = (s: AgentState) => currentChat(s);
 
-const ready: AgentInfo = { available: true, name: "Claude Code", command: "claude", problem: null, remembers: true, installable: false };
+const ready: AgentInfo = { available: true, kind: "claudeCode", name: "Claude Code", command: "claude", problem: null, remembers: true, installable: false, signsIn: true };
 
 function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
   return {
     info: vi.fn(async () => ready),
+    choices: vi.fn(async () => []),
+    select: vi.fn(async (kind) => ({ ...ready, kind, name: kind })),
     send: vi.fn(async () => "turn_1"),
     stop: vi.fn(async () => undefined),
     login: vi.fn(async () => undefined),
@@ -32,6 +34,23 @@ function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
 }
 
 describe("agent store", () => {
+  it("starts a new conversation when another AI is chosen", async () => {
+    const api = fakeAgent();
+    const store = createAgentStore(api);
+    await store.getState().init();
+    await store.getState().send("直して", { id: "scn_a", name: "A" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "claude-1" });
+    store.getState().onEvent({ turnId: "turn_1", kind: "done", ok: true, message: null, costUsd: null, needsLogin: false });
+    expect(now(store.getState())).toMatchObject({ sessionId: "claude-1", agent: "claudeCode" });
+
+    await store.getState().chooseAgent("codex");
+    expect(store.getState().info?.kind).toBe("codex");
+    await store.getState().send("続けて", { id: "scn_a", name: "A" });
+    expect(api.send).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: null }));
+    store.getState().onEvent({ turnId: "turn_1", kind: "session", sessionId: "codex-1" });
+    expect(now(store.getState())).toMatchObject({ sessionId: "codex-1", agent: "codex" });
+  });
+
   it("says what the AI is writing before the tool call arrives, and what it works on", async () => {
     const store = createAgentStore(fakeAgent());
     await store.getState().init();

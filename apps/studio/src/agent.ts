@@ -1,5 +1,5 @@
 // The AI pane's conversations. Each message starts one background turn of
-// the person's own agent (Claude Code by default) with Shikigami's MCP
+// the person's own agent (Claude Code, Codex, Gemini CLI or GitHub Copilot) with Shikigami's MCP
 // server; its edits arrive through the flow watcher and the review queue
 // like any other AI edit, so this store only keeps the conversations.
 //
@@ -9,7 +9,7 @@
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { AgentApi, AgentEvent, AgentInfo, AgentKind, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
+import type { AgentApi, AgentChoice, AgentEvent, AgentInfo, AgentKind, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
 import { t } from "./lib/i18n";
 
 export type AgentPart =
@@ -50,6 +50,8 @@ export type Chat = {
   items: ChatItem[];
   /** The agent's conversation to continue; kept across restarts. */
   sessionId: string | null;
+  /** Which agent `sessionId` belongs to (missing in chats from before there was a choice: Claude Code). */
+  agent?: AgentKind;
   /** The turn in flight. */
   turnId: string | null;
   /** A message is on its way and its turn id not known yet. */
@@ -90,7 +92,11 @@ export type AgentState = {
   current: string;
   login: LoginState;
   install: InstallState;
+  /** The agents Studio can run; null until read. */
+  choices: AgentChoice[] | null;
   init(): Promise<void>;
+  /** Uses another agent from the next message on. */
+  chooseAgent(kind: AgentKind): Promise<void>;
   setOpen(open: boolean): void;
   /** The editor opened another flow: show its conversation. */
   focus(flow: FlowLabel | null): void;
@@ -146,7 +152,7 @@ const CHATS_KEY = "shikigami.studio.agentChats";
 const OLD_SESSION_KEY = "shikigami.studio.agentSession";
 const KEEP = 30;
 
-type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "updatedAt">;
+type Saved = Pick<Chat, "id" | "flowId" | "title" | "sessionId" | "agent" | "updatedAt">;
 
 function load(): Saved[] {
   try {
@@ -169,7 +175,7 @@ function save(chats: Chat[]) {
       .filter((c) => c.sessionId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, KEEP)
-      .map(({ id, flowId, title, sessionId, updatedAt }) => ({ id, flowId, title, sessionId, updatedAt }));
+      .map(({ id, flowId, title, sessionId, agent, updatedAt }) => ({ id, flowId, title, sessionId, agent, updatedAt }));
     globalThis.localStorage?.setItem(CHATS_KEY, JSON.stringify(keep));
     globalThis.localStorage?.removeItem(OLD_SESSION_KEY);
   } catch {
@@ -247,7 +253,11 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         items: [...c.items, { role: "ai", id, turnId: "", parts: [], status: "running", preparing: null, message: null, needsLogin: false }],
       }));
       try {
-        const sessionId = get().info?.remembers ? (chat(chatId)?.sessionId ?? null) : null;
+        const info = get().info;
+        const c = chat(chatId);
+        // Another agent cannot continue this one's conversation: it starts afresh.
+        const sameAgent = (c?.agent ?? "claudeCode") === info?.kind;
+        const sessionId = info?.remembers && sameAgent ? (c?.sessionId ?? null) : null;
         const turnId = await api.send({ message: text, sessionId, flow });
         update(chatId, (c) => ({ ...c, turnId, sending: false, items: reply(c, { turnId }) }));
         for (const e of early.get(turnId) ?? []) get().onEvent(e);
@@ -277,12 +287,17 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       current: first.id,
       login: { phase: "idle" },
       install: { phase: "idle" },
+      choices: null,
 
       async init() {
+        void api.choices().then(
+          (choices) => set({ choices }),
+          () => set({ choices: [] }),
+        );
         try {
           set({ info: await api.info() });
         } catch (e) {
-          set({ info: { available: false, name: "AI", command: null, problem: errorText(e), remembers: false, installable: false } });
+          set({ info: { available: false, kind: "claudeCode", name: "AI", command: null, problem: errorText(e), remembers: false, installable: false, signsIn: false } });
         }
       },
 
@@ -415,6 +430,12 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         await api.cancelLogin().catch(() => undefined);
       },
 
+      async chooseAgent(kind) {
+        if (get().info?.kind === kind) return;
+        const info = await api.select(kind);
+        set({ info, login: { phase: "idle" }, install: { phase: "idle" }, choices: (get().choices ?? []).map((c) => ({ ...c, selected: c.kind === kind })) });
+      },
+
       async startInstall(kind) {
         set({ install: { phase: "running", lines: [] } });
         try {
@@ -479,7 +500,7 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         }
         switch (event.kind) {
           case "session":
-            update(owner.id, (c) => ({ ...c, sessionId: event.sessionId }));
+            update(owner.id, (c) => ({ ...c, sessionId: event.sessionId, agent: get().info?.kind }));
             save(get().chats);
             return;
           case "created": {

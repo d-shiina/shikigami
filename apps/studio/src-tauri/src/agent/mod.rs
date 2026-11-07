@@ -1,5 +1,7 @@
-//! The AI pane: runs the person's own coding agent (Claude Code by default)
-//! in the background with Shikigami's MCP server, one process per message.
+//! The AI pane: runs the person's own coding agent (Claude Code, Codex,
+//! Gemini CLI or GitHub Copilot) in the background with Shikigami's MCP
+//! server, one process per message. What differs between them is in
+//! `providers`.
 //!
 //! Studio never talks to a model itself. The agent sees exactly what any MCP
 //! client sees, its edits land in the review queue like any other AI edit,
@@ -22,14 +24,17 @@ use tokio_util::sync::CancellationToken;
 
 use crate::AppState;
 
+mod providers;
+pub use providers::AgentKind;
+use providers::{CodexStream, CopilotStream, GeminiStream, KNOWN, Turn, child_path};
+
 pub(crate) const AGENT_EVENT: &str = "agent-event";
 
 /// Name the MCP server is given in the agent; tool names start with
 /// `mcp__shikigami__` in Claude Code.
-const SERVER: &str = "shikigami";
-const TOOL_PREFIX: &str = "mcp__shikigami__";
+pub(crate) const SERVER: &str = "shikigami";
 const STDERR_TAIL: usize = 2000;
-const TOOL_ERROR_LEN: usize = 300;
+pub(crate) const TOOL_ERROR_LEN: usize = 300;
 
 const SYSTEM_PROMPT: &str = "\
 You are an AI called from inside Shikigami Studio (RPA for Windows). You are talking with the person using Studio.
@@ -51,28 +56,22 @@ fn err(code: &str, message: impl Into<String>) -> ErrorPayload {
 }
 
 /// `config.json` → `agent`. Without it Studio looks for Claude Code.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentConfig {
     #[serde(default)]
     kind: AgentKind,
-    /// The executable. Claude Code is looked up on PATH when omitted.
+    /// The executable. A known agent is looked up on PATH when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     command: Option<PathBuf>,
     /// For `command`: its arguments. `{mcpConfig}` becomes the path of an MCP
     /// config file for Shikigami and `{workspace}` the workspace folder. The
     /// message is written to stdin; each stdout line is shown as the reply.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     args: Vec<String>,
     /// Shown in the pane, e.g. "Gemini CLI".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     name: Option<String>,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AgentKind {
-    #[default]
-    ClaudeCode,
-    Command,
 }
 
 impl AgentConfig {
@@ -87,18 +86,42 @@ impl AgentConfig {
     }
 
     fn name(&self) -> String {
-        self.name.clone().unwrap_or_else(|| match self.kind {
-            AgentKind::ClaudeCode => "Claude Code".to_owned(),
-            AgentKind::Command => "AI".to_owned(),
-        })
+        self.name
+            .clone()
+            .unwrap_or_else(|| self.kind.label().to_owned())
     }
 
     fn executable(&self) -> Option<PathBuf> {
-        match (&self.command, self.kind) {
-            (Some(command), _) => resolve(command),
-            (None, AgentKind::ClaudeCode) => find_claude(),
-            (None, AgentKind::Command) => None,
+        match &self.command {
+            Some(command) => resolve(command),
+            None => self.kind.find(),
         }
+    }
+
+    /// Switches to `kind`, found on this PC by itself. The settings of a
+    /// `command` agent are kept, so choosing it again brings them back.
+    fn select(kind: AgentKind) -> CmdResult<()> {
+        let mut config = UserConfig::load();
+        let mut agent = config
+            .extra
+            .get("agent")
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        if !agent.is_object() {
+            agent = json!({});
+        }
+        agent["kind"] = json!(kind);
+        if kind != AgentKind::Command
+            && let Some(map) = agent.as_object_mut()
+        {
+            // A path set for another agent is not this one's.
+            map.remove("command");
+            map.remove("name");
+        }
+        config.extra.insert("agent".to_owned(), agent);
+        config
+            .save()
+            .map_err(|e| err("STORAGE_ERROR", e.to_string()))
     }
 }
 
@@ -107,14 +130,30 @@ impl AgentConfig {
 #[serde(rename_all = "camelCase")]
 pub struct AgentInfo {
     available: bool,
+    kind: AgentKind,
     name: String,
     command: Option<String>,
     /// Why the agent cannot be used, in words for the person.
     problem: Option<String>,
     /// Whether a conversation continues across messages (`--resume`).
     remembers: bool,
-    /// Studio can install the agent itself (Claude Code, not found yet).
+    /// Studio can install the agent itself (a known one, not found yet).
     installable: bool,
+    /// The pane can sign it in (`agent_login`).
+    signs_in: bool,
+}
+
+/// One of the agents Studio knows, for choosing which to use.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentChoice {
+    kind: AgentKind,
+    name: &'static str,
+    maker: &'static str,
+    /// Found on this PC.
+    installed: bool,
+    /// The one in use.
+    selected: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -194,8 +233,10 @@ impl AgentEvent {
     }
 }
 
-/// Claude Code's wording when it cannot use the account, e.g. "Failed to
-/// authenticate: OAuth session expired" or "Not logged in · Please run /login".
+/// An agent's wording when it cannot use the account, e.g. Claude Code's
+/// "Failed to authenticate: OAuth session expired" or "Not logged in · Please
+/// run /login", Codex's "401 Unauthorized", Gemini CLI's "API key not valid",
+/// Copilot's "No authentication information found".
 fn is_login_error(message: &str) -> bool {
     let m = message.to_lowercase();
     [
@@ -205,6 +246,12 @@ fn is_login_error(message: &str) -> bool {
         "/login",
         "invalid api key",
         "authentication_error",
+        "codex login",
+        "401 unauthorized",
+        "api key not valid",
+        "auth method",
+        "no authentication",
+        "not authenticated",
     ]
     .iter()
     .any(|k| m.contains(k))
@@ -240,10 +287,10 @@ pub fn agent_info() -> AgentInfo {
     let config = AgentConfig::load();
     let command = config.executable();
     let problem = match (&command, cli_path()) {
-        (None, _) if config.kind == AgentKind::ClaudeCode => Some(
-            "Claude Code がまだありません。下の「導入する」を押すと、この場で入れてサインインできます。"
-                .to_owned(),
-        ),
+        (None, _) if config.kind != AgentKind::Command && config.command.is_none() => Some(format!(
+            "{} がまだありません。下の「導入する」を押すと、この場で入れてサインインできます。",
+            config.name()
+        )),
         (None, _) => Some("config.json の agent.command が見つかりません。".to_owned()),
         (Some(_), None) => Some(
             "shikigami コマンド（MCP サーバー）が見つかりません。Studio と同じフォルダに置いてください。"
@@ -256,13 +303,38 @@ pub fn agent_info() -> AgentInfo {
         // Only the default lookup: an explicit `agent.command` that is missing
         // is the person's path to fix, and the installer would not put it there.
         installable: command.is_none()
-            && config.kind == AgentKind::ClaudeCode
+            && config.kind != AgentKind::Command
             && config.command.is_none(),
+        kind: config.kind,
+        signs_in: config.kind.login_args().is_some() || config.kind == AgentKind::Gemini,
         name: config.name(),
         command: command.map(|p| p.display().to_string()),
         problem,
-        remembers: config.kind == AgentKind::ClaudeCode,
+        remembers: config.kind.remembers(),
     }
+}
+
+/// The agents Studio can run, and which are on this PC.
+#[tauri::command]
+pub fn agent_choices() -> Vec<AgentChoice> {
+    let config = AgentConfig::load();
+    KNOWN
+        .iter()
+        .map(|&kind| AgentChoice {
+            kind,
+            name: kind.label(),
+            maker: kind.maker(),
+            installed: kind.find().is_some(),
+            selected: config.kind == kind,
+        })
+        .collect()
+}
+
+/// Uses `kind` from the next message on (`config.json` → `agent.kind`).
+#[tauri::command]
+pub fn agent_select(kind: AgentKind) -> CmdResult<AgentInfo> {
+    AgentConfig::select(kind)?;
+    Ok(agent_info())
 }
 
 pub(crate) const INSTALL_EVENT: &str = "agent-install";
@@ -293,11 +365,11 @@ pub(crate) struct AgentInstall {
     cancel: Mutex<Option<CancellationToken>>,
 }
 
-/// Installs Claude Code from the pane with its own installer (the one its
-/// documentation gives: a PowerShell script on Windows, a shell script
-/// elsewhere), for the person's own account, without a terminal. Progress
-/// arrives as `agent-install`. `kind` picks the installer; today only
-/// `claudeCode` has one, and each other kind gets its own here when it is added.
+/// Installs an agent from the pane, for the person's own account, without a
+/// terminal: Claude Code with its own installer (the one its documentation
+/// gives: a PowerShell script on Windows, a shell script elsewhere), the
+/// others with npm, after installing Node.js with winget when it is missing.
+/// Progress arrives as `agent-install`; once installed, it is the one used.
 #[tauri::command]
 pub async fn agent_install(
     app: AppHandle,
@@ -305,7 +377,7 @@ pub async fn agent_install(
     kind: AgentKind,
 ) -> CmdResult<()> {
     let config = AgentConfig::load();
-    if kind != AgentKind::ClaudeCode || config.command.is_some() {
+    if kind == AgentKind::Command || (config.kind == kind && config.command.is_some()) {
         return Err(err(
             "AGENT_INSTALL_UNSUPPORTED",
             "この AI は、その AI の手順でインストールしてください",
@@ -317,6 +389,7 @@ pub async fn agent_install(
             "インストールが進んでいます。終わるまでお待ちください",
         ));
     }
+    let script = install_script(kind);
     let mut command = if cfg!(windows) {
         let mut c = Command::new("powershell");
         c.args([
@@ -325,14 +398,17 @@ pub async fn agent_install(
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
-            "irm https://claude.ai/install.ps1 | iex",
+            &script,
         ]);
         c
     } else {
         let mut c = Command::new("sh");
-        c.args(["-c", "curl -fsSL https://claude.ai/install.sh | bash"]);
+        c.args(["-c", &script]);
         c
     };
+    if let Some(path) = child_path() {
+        command.env("PATH", path);
+    }
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -391,11 +467,14 @@ pub async fn agent_install(
             emit(InstallEvent::Cancelled);
             return;
         }
-        let installed = find_claude();
+        let installed = kind.find();
         let ok =
             status.as_ref().is_ok_and(std::process::ExitStatus::success) && installed.is_some();
+        if ok && let Err(e) = AgentConfig::select(kind) {
+            tracing::warn!(error = %e.message, "cannot switch to the installed agent");
+        }
         let needs_login = match &installed {
-            Some(program) if ok => !logged_in(program).await,
+            Some(program) if ok => !logged_in(kind, program).await,
             _ => false,
         };
         let message = (!ok).then(|| {
@@ -413,6 +492,33 @@ pub async fn agent_install(
         });
     });
     Ok(())
+}
+
+/// The installer for `kind`, run by PowerShell on Windows and `sh` elsewhere.
+fn install_script(kind: AgentKind) -> String {
+    let Some(package) = kind.npm_package() else {
+        return if cfg!(windows) {
+            "irm https://claude.ai/install.ps1 | iex".to_owned()
+        } else {
+            "curl -fsSL https://claude.ai/install.sh | bash".to_owned()
+        };
+    };
+    if cfg!(windows) {
+        // Node.js first when npm is missing (winget asks for permission
+        // itself); then npm from where that installer put it.
+        format!(
+            "$ErrorActionPreference = 'Stop'; \
+             if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {{ \
+               Write-Output 'Node.js をインストールしています…'; \
+               winget install --exact --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements; \
+               $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') \
+             }}; \
+             npm install --global {package}; \
+             if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}"
+        )
+    } else {
+        format!("npm install --global {package}")
+    }
 }
 
 /// Asks the installer to stop; `agent-install` says `cancelled` once it is gone.
@@ -494,29 +600,34 @@ pub async fn agent_send(
     let workspace = state.service.store().root().to_path_buf();
     let dir = agent_dir();
     std::fs::create_dir_all(&dir).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
-    let mcp_config = dir.join("mcp.json");
-    let server = json!({ "mcpServers": { SERVER: {
-        "command": cli,
-        "args": ["--workspace", workspace, "mcp"],
-    }}});
-    write_if_changed(&mcp_config, &server.to_string())?;
-    let system = dir.join("system-prompt.md");
-    write_if_changed(&system, SYSTEM_PROMPT)?;
-
-    let args = match config.kind {
-        AgentKind::ClaudeCode => claude_args(&mcp_config, &system, input.session_id.as_deref()),
-        AgentKind::Command => config
+    let (mut args, env) = providers::prepare(
+        config.kind,
+        &Turn {
+            dir: &dir,
+            cli: &cli,
+            workspace: &workspace,
+            system_prompt: SYSTEM_PROMPT,
+            session: input.session_id.as_deref(),
+        },
+    )
+    .map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
+    if config.kind == AgentKind::Command {
+        let mcp_config = dir.join("mcp.json").display().to_string();
+        args = config
             .args
             .iter()
             .map(|a| {
-                a.replace("{mcpConfig}", &mcp_config.display().to_string())
+                a.replace("{mcpConfig}", &mcp_config)
                     .replace("{workspace}", &workspace.display().to_string())
             })
-            .collect(),
-    };
+            .collect();
+    }
     let mut command = Command::new(&program);
+    command.args(&args).envs(env);
+    if let Some(path) = child_path() {
+        command.env("PATH", path);
+    }
     command
-        .args(&args)
         .current_dir(&dir)
         // Started from a Claude Code terminal, it would refuse to nest.
         .env_remove("CLAUDECODE")
@@ -569,7 +680,7 @@ pub async fn agent_send(
         });
         let mut finished = false;
         let mut stopped = false;
-        let mut stream = ClaudeStream::default();
+        let mut stream = Stream::new(kind);
         if let Some(stdout) = child.stdout.take() {
             let mut lines = BufReader::new(stdout).lines();
             loop {
@@ -581,10 +692,7 @@ pub async fn agent_send(
                     }
                     line = lines.next_line() => match line {
                         Ok(Some(line)) => {
-                            let events = match kind {
-                                AgentKind::ClaudeCode => stream.line(&line),
-                                AgentKind::Command => vec![AgentEvent::Text { text: format!("{line}\n") }],
-                            };
+                            let events = stream.line(&line);
                             for event in events {
                                 finished |= matches!(event, AgentEvent::Done { .. });
                                 emit(event);
@@ -610,9 +718,9 @@ pub async fn agent_send(
                 }
             });
             let mut done = AgentEvent::done(ok, message, None);
-            // Only Claude Code can be signed in from the pane; other agents keep their message.
+            // A `command` agent cannot be signed in from the pane; it keeps its message.
             if let AgentEvent::Done { needs_login, .. } = &mut done {
-                *needs_login &= kind == AgentKind::ClaudeCode;
+                *needs_login &= kind != AgentKind::Command;
             }
             emit(done);
         }
@@ -623,7 +731,7 @@ pub async fn agent_send(
 
 pub(crate) const LOGIN_EVENT: &str = "agent-login";
 
-/// Progress of `claude auth login` run in the background for the pane.
+/// Progress of the agent's sign-in (e.g. `claude auth login`) run in the background for the pane.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(
     tag = "kind",
@@ -631,7 +739,7 @@ pub(crate) const LOGIN_EVENT: &str = "agent-login";
     rename_all_fields = "camelCase"
 )]
 pub enum LoginEvent {
-    /// The sign-in page; Claude Code opens it in the browser itself.
+    /// The sign-in page; the agent opens it in the browser itself.
     Url {
         url: String,
     },
@@ -652,13 +760,25 @@ pub(crate) struct AgentLogin {
     cancel: Mutex<Option<CancellationToken>>,
 }
 
-/// Signs Claude Code in from the pane: runs `claude auth login` hidden, hands
-/// the sign-in URL to the pane and reports when the account is usable.
-/// Studio never sees the account's tokens; Claude Code stores them as usual.
+/// Signs the agent in from the pane: runs its sign-in command (e.g. `claude
+/// auth login`) hidden, hands the sign-in URL to the pane and reports when
+/// the account is usable. Studio never sees the account's tokens; the agent
+/// stores them as usual. Gemini CLI signs in only on its own screen, so that
+/// screen is opened instead.
 #[tauri::command]
 pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdResult<()> {
     let config = AgentConfig::load();
-    if config.kind != AgentKind::ClaudeCode {
+    let kind = config.kind;
+    let Some(program) = config.executable() else {
+        return Err(err(
+            "AGENT_NOT_FOUND",
+            agent_info().problem.unwrap_or_default(),
+        ));
+    };
+    if kind == AgentKind::Gemini {
+        return open_gemini(&program);
+    }
+    let Some(login_args) = kind.login_args().filter(|_| kind != AgentKind::Command) else {
         return Err(err(
             "AGENT_LOGIN_UNSUPPORTED",
             format!(
@@ -666,19 +786,16 @@ pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdRes
                 config.name()
             ),
         ));
-    }
-    let Some(program) = config.executable() else {
-        return Err(err(
-            "AGENT_NOT_FOUND",
-            agent_info().problem.unwrap_or_default(),
-        ));
     };
     if let Some(previous) = lock(&login.cancel).take() {
         previous.cancel();
     }
     let mut command = Command::new(&program);
+    if let Some(path) = child_path() {
+        command.env("PATH", path);
+    }
     command
-        .args(["auth", "login"])
+        .args(login_args)
         .env_remove("CLAUDECODE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -698,13 +815,22 @@ pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdRes
         let emit = |event: LoginEvent| {
             let _ = app.emit(LOGIN_EVENT, event);
         };
-        let mut stderr = child.stderr.take();
+        // Some agents print the sign-in page on stderr.
+        let stderr = child.stderr.take();
+        let stderr_app = app.clone();
         let stderr_task = tauri::async_runtime::spawn(async move {
-            let mut buf = Vec::new();
-            if let Some(s) = stderr.as_mut() {
-                let _ = s.read_to_end(&mut buf).await;
+            let mut text = String::new();
+            if let Some(s) = stderr {
+                let mut lines = BufReader::new(s).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if let Some(url) = login_url(kind, &line) {
+                        let _ = stderr_app.emit(LOGIN_EVENT, LoginEvent::Url { url });
+                    }
+                    text.push_str(&line);
+                    text.push('\n');
+                }
             }
-            String::from_utf8_lossy(&buf).into_owned()
+            text
         });
         let mut stopped = false;
         if let Some(stdout) = child.stdout.take() {
@@ -718,7 +844,7 @@ pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdRes
                     }
                     line = lines.next_line() => match line {
                         Ok(Some(line)) => {
-                            if let Some(url) = login_url(&line) {
+                            if let Some(url) = login_url(kind, &line) {
                                 emit(LoginEvent::Url { url });
                             }
                         }
@@ -740,7 +866,7 @@ pub async fn agent_login(app: AppHandle, login: State<'_, AgentLogin>) -> CmdRes
             return;
         }
         let ok = status.as_ref().is_ok_and(std::process::ExitStatus::success)
-            && logged_in(&program).await;
+            && logged_in(kind, &program).await;
         let message = (!ok).then(|| {
             let tail = tail(stderr.trim(), STDERR_TAIL);
             if tail.is_empty() {
@@ -805,16 +931,41 @@ pub fn agent_open_url(url: String) -> CmdResult<()> {
         .map_err(|e| err("AGENT_FAILED", format!("ブラウザを開けません: {e}")))
 }
 
+/// A sign-in page of any agent Studio knows.
 fn is_sign_in_url(url: &str) -> bool {
-    [
-        "https://claude.com/",
-        "https://claude.ai/",
-        "https://console.anthropic.com/",
-        "https://platform.claude.com/",
-    ]
-    .iter()
-    .any(|p| url.starts_with(p))
-        && !url.contains(char::is_whitespace)
+    KNOWN.iter().any(|&kind| is_sign_in_url_of(kind, url))
+}
+
+fn is_sign_in_url_of(kind: AgentKind, url: &str) -> bool {
+    kind.sign_in_pages().iter().any(|p| url.starts_with(p)) && !url.contains(char::is_whitespace)
+}
+
+/// Gemini CLI signs in only on its own screen: open it in a window of its
+/// own, where the person picks "Sign in with Google".
+fn open_gemini(program: &Path) -> CmdResult<()> {
+    let mut command = if cfg!(windows) {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/c", "start", "Gemini CLI"]).arg(program);
+        c
+    } else {
+        let mut c = std::process::Command::new("x-terminal-emulator");
+        c.arg("-e").arg(program);
+        c
+    };
+    if let Some(path) = child_path() {
+        command.env("PATH", path);
+    }
+    command.current_dir(agent_dir());
+    command.spawn().map(drop).map_err(|e| {
+        err(
+            "AGENT_FAILED",
+            format!("Gemini CLI の画面を開けません: {e}"),
+        )
+    })?;
+    Err(err(
+        "AGENT_LOGIN_OWN_SCREEN",
+        "Gemini CLI の画面を開きました。「Sign in with Google」を選んでサインインし、終わったらその画面を閉じて、もう一度送ってください。",
+    ))
 }
 
 /// Shikigami's own pages on GitHub (the tutorials Studio links to).
@@ -824,20 +975,30 @@ fn is_docs_url(url: &str) -> bool {
         && !url.contains("..")
 }
 
-fn login_url(line: &str) -> Option<String> {
+fn login_url(kind: AgentKind, line: &str) -> Option<String> {
     let start = line.find("https://")?;
     let url: String = line[start..]
         .chars()
         .take_while(|c| !c.is_whitespace())
         .collect();
-    is_sign_in_url(&url).then_some(url)
+    is_sign_in_url_of(kind, &url).then_some(url)
 }
 
-/// `claude auth status --json` → `loggedIn`.
-async fn logged_in(program: &Path) -> bool {
+/// Whether the agent has an account to use: `claude auth status --json` →
+/// `loggedIn`, `codex login status`'s exit code. The others cannot tell
+/// without a message, which says so when they are not.
+async fn logged_in(kind: AgentKind, program: &Path) -> bool {
+    let args: &[&str] = match kind {
+        AgentKind::ClaudeCode => &["auth", "status", "--json"],
+        AgentKind::Codex => &["login", "status"],
+        _ => return true,
+    };
     let mut command = Command::new(program);
+    if let Some(path) = child_path() {
+        command.env("PATH", path);
+    }
     command
-        .args(["auth", "status", "--json"])
+        .args(args)
         .env_remove("CLAUDECODE")
         .stdin(Stdio::null());
     #[cfg(windows)]
@@ -845,6 +1006,9 @@ async fn logged_in(program: &Path) -> bool {
     let Ok(out) = command.output().await else {
         return false;
     };
+    if kind == AgentKind::Codex {
+        return out.status.success();
+    }
     serde_json::from_slice::<Value>(&out.stdout)
         .ok()
         .and_then(|v| v.get("loggedIn").and_then(Value::as_bool))
@@ -856,31 +1020,6 @@ pub fn agent_stop(turns: State<'_, AgentTurns>, turn_id: String) {
     if let Some(cancel) = lock(&turns.running).remove(&turn_id) {
         cancel.cancel();
     }
-}
-
-fn claude_args(mcp_config: &Path, system: &Path, session: Option<&str>) -> Vec<String> {
-    let mut args: Vec<String> = [
-        "-p",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        // Says when a tool call begins, long before its input is written.
-        "--include-partial-messages",
-        // Only Shikigami: not the person's other MCP servers, nor files or shell.
-        "--strict-mcp-config",
-        "--mcp-config",
-    ]
-    .map(str::to_owned)
-    .into();
-    args.push(mcp_config.display().to_string());
-    args.extend(["--tools", "", "--allowedTools", "mcp__shikigami"].map(str::to_owned));
-    args.push("--append-system-prompt-file".to_owned());
-    args.push(system.display().to_string());
-    if let Some(session) = session.filter(|s| !s.is_empty()) {
-        args.push("--resume".to_owned());
-        args.push(session.to_owned());
-    }
-    args
 }
 
 fn with_context(message: &str, flow: Option<&FlowRef>) -> String {
@@ -901,14 +1040,38 @@ fn with_context(message: &str, flow: Option<&FlowRef>) -> String {
     }
 }
 
-/// Several conversations run at once, each in its own agent process, and
-/// all of them would otherwise rewrite these files on every message. On
-/// Windows a write can fail while another agent is reading the file.
-fn write_if_changed(path: &Path, contents: &str) -> CmdResult<()> {
-    if std::fs::read_to_string(path).is_ok_and(|now| now == contents) {
-        return Ok(());
+/// Reads one agent's output, line by line, as what the pane shows.
+pub(crate) enum Stream {
+    Claude(ClaudeStream),
+    Codex(CodexStream),
+    Gemini(GeminiStream),
+    Copilot(CopilotStream),
+    /// Each line is the reply.
+    Plain,
+}
+
+impl Stream {
+    fn new(kind: AgentKind) -> Self {
+        match kind {
+            AgentKind::ClaudeCode => Self::Claude(ClaudeStream::default()),
+            AgentKind::Codex => Self::Codex(CodexStream),
+            AgentKind::Gemini => Self::Gemini(GeminiStream::default()),
+            AgentKind::Copilot => Self::Copilot(CopilotStream::default()),
+            AgentKind::Command => Self::Plain,
+        }
     }
-    std::fs::write(path, contents).map_err(|e| err("STORAGE_ERROR", e.to_string()))
+
+    fn line(&mut self, line: &str) -> Vec<AgentEvent> {
+        match self {
+            Self::Claude(s) => s.line(line),
+            Self::Codex(s) => s.line(line),
+            Self::Gemini(s) => s.line(line),
+            Self::Copilot(s) => s.line(line),
+            Self::Plain => vec![AgentEvent::Text {
+                text: format!("{line}\n"),
+            }],
+        }
+    }
 }
 
 /// Reads `claude -p --output-format stream-json --verbose` line by line,
@@ -941,8 +1104,8 @@ impl ClaudeStream {
                         .filter(|t| !t.trim().is_empty())
                         .map(|text| AgentEvent::Text { text }),
                     Some("tool_use") => {
-                        let name = str_of(b, "name")?;
-                        let name = name.strip_prefix(TOOL_PREFIX).unwrap_or(&name).to_owned();
+                        let raw = str_of(b, "name")?;
+                        let name = providers::tool_name(&raw).unwrap_or(raw);
                         if let Some(id) = str_of(b, "id") {
                             self.tools.insert(id, name.clone());
                         }
@@ -961,7 +1124,7 @@ impl ClaudeStream {
                 .and_then(|e| e.get("content_block"))
                 .filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_use"))
                 .and_then(|b| str_of(b, "name"))
-                .and_then(|name| name.strip_prefix(TOOL_PREFIX).map(str::to_owned))
+                .and_then(|name| providers::tool_name(&name))
                 .map(|name| vec![AgentEvent::Preparing { name }])
                 .unwrap_or_default(),
             Some("user") => blocks(&v)
@@ -976,12 +1139,7 @@ impl ClaudeStream {
                     if tool.as_deref() != Some("create_flow") {
                         return None;
                     }
-                    let out = serde_json::from_str::<Value>(&result_text(b.get("content"))).ok()?;
-                    let flow = out.get("flow")?;
-                    Some(AgentEvent::Created {
-                        flow_id: str_of(flow, "id")?,
-                        name: str_of(flow, "name").unwrap_or_default(),
-                    })
+                    providers::created(&result_text(b.get("content")))
                 })
                 .collect(),
             Some("result") => {
@@ -1016,7 +1174,7 @@ fn result_text(content: Option<&Value>) -> String {
     }
 }
 
-fn truncate(s: &str, max: usize) -> String {
+pub(crate) fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_owned();
     }
@@ -1136,22 +1294,6 @@ fn set_aside_cli(dir: &Path) -> bool {
     std::fs::rename(dir.join(&name), dir.join(format!("{name}.old-{stamp}"))).is_ok()
 }
 
-fn find_claude() -> Option<PathBuf> {
-    let names: &[&str] = if cfg!(windows) {
-        &["claude.exe", "claude.cmd"]
-    } else {
-        &["claude"]
-    };
-    find_on_path(names).or_else(|| {
-        // The native installer's folder is not always on PATH for GUI apps.
-        let home = dirs::home_dir()?;
-        names
-            .iter()
-            .map(|n| home.join(".local").join("bin").join(n))
-            .find(|p| p.is_file())
-    })
-}
-
 fn resolve(command: &Path) -> Option<PathBuf> {
     if command.components().count() > 1 {
         return command.is_file().then(|| command.to_path_buf());
@@ -1164,7 +1306,7 @@ fn resolve(command: &Path) -> Option<PathBuf> {
     }
 }
 
-fn find_on_path(names: &[&str]) -> Option<PathBuf> {
+pub(crate) fn find_on_path(names: &[&str]) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path)
         .flat_map(|dir| names.iter().map(move |n| dir.join(n)))
@@ -1288,15 +1430,38 @@ mod tests {
     }
 
     #[test]
-    fn finds_the_sign_in_url_only_on_anthropic_pages() {
+    fn finds_the_sign_in_url_only_on_the_agents_pages() {
         assert_eq!(
             login_url(
+                AgentKind::ClaudeCode,
                 "If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&state=x"
             ),
             Some("https://claude.com/cai/oauth/authorize?code=true&state=x".into())
         );
-        assert_eq!(login_url("Opening browser to sign in…"), None);
-        assert_eq!(login_url("visit https://evil.example/claude.com/"), None);
+        assert_eq!(
+            login_url(AgentKind::ClaudeCode, "Opening browser to sign in…"),
+            None
+        );
+        assert_eq!(
+            login_url(
+                AgentKind::ClaudeCode,
+                "visit https://evil.example/claude.com/"
+            ),
+            None
+        );
+        // Each agent's own pages only.
+        assert_eq!(
+            login_url(
+                AgentKind::Codex,
+                "Open https://auth.openai.com/oauth/authorize?x=1"
+            ),
+            Some("https://auth.openai.com/oauth/authorize?x=1".into())
+        );
+        assert_eq!(login_url(AgentKind::Codex, "https://claude.com/x"), None);
+        assert!(is_sign_in_url(
+            "https://github.com/login/oauth/authorize?c=1"
+        ));
+        assert!(!is_sign_in_url("https://github.com/d-shiina/shikigami"));
         assert!(!is_sign_in_url("https://claude.com/ x"));
         assert!(is_docs_url(
             "https://github.com/d-shiina/shikigami/blob/main/docs/ja/tutorials/README.md"
@@ -1318,6 +1483,8 @@ mod tests {
             "Failed to authenticate: OAuth session expired and could not be refreshed"
         ));
         assert!(is_login_error("Invalid API key · Please run /login"));
+        assert!(is_login_error("unexpected status 401 Unauthorized"));
+        assert!(is_login_error("Please set an Auth method in your settings"));
         assert!(!is_login_error("STEP_NOT_FOUND"));
         assert!(!is_login_error("止めました"));
         let AgentEvent::Done { needs_login, .. } =
@@ -1330,7 +1497,7 @@ mod tests {
 
     #[test]
     fn claude_only_gets_shikigami_and_resumes() {
-        let args = claude_args(Path::new("m.json"), Path::new("s.md"), Some("sess"));
+        let args = providers::claude_args(Path::new("m.json"), Path::new("s.md"), Some("sess"));
         let joined = args.join(" ");
         assert!(joined.contains("--strict-mcp-config --mcp-config m.json"));
         assert!(joined.contains("--allowedTools mcp__shikigami"));
@@ -1338,7 +1505,8 @@ mod tests {
         let i = args.iter().position(|a| a == "--tools").unwrap();
         assert_eq!(args[i + 1], "");
         assert!(
-            !claude_args(Path::new("m"), Path::new("s"), Some("")).contains(&"--resume".to_owned())
+            !providers::claude_args(Path::new("m"), Path::new("s"), Some(""))
+                .contains(&"--resume".to_owned())
         );
     }
 
@@ -1386,5 +1554,8 @@ mod tests {
         .unwrap();
         assert_eq!(c.kind, AgentKind::Command);
         assert_eq!(c.name(), "Gemini CLI");
+        let c: AgentConfig = serde_json::from_value(json!({ "kind": "codex" })).unwrap();
+        assert_eq!(c.kind, AgentKind::Codex);
+        assert_eq!(c.name(), "Codex");
     }
 }

@@ -5,7 +5,8 @@
 // rail shows a dot on Settings while a new version waits.
 import { useEffect, useState } from "react";
 import { create } from "zustand";
-import { type AppInfo, type UpdateInfo, updates } from "../lib/api";
+import { useAgent } from "../agent";
+import { type AgentKind, type AppInfo, type UpdateInfo, updates } from "../lib/api";
 import { t } from "../lib/i18n";
 import { SettingsGroup, SettingsRow, settingsPrimary } from "./settingsLayout";
 
@@ -22,9 +23,18 @@ function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** MCP registration for Claude Code, pointing at the CLI installed with Studio. */
-function mcpCommand(cliPath: string): string {
-  return `claude mcp add --scope user shikigami -- "${cliPath}" mcp`;
+/** MCP registration for the AI in use, pointing at the CLI installed with Studio. */
+export function mcpCommand(kind: AgentKind, cliPath: string): string {
+  switch (kind) {
+    case "codex":
+      return `codex mcp add shikigami -- "${cliPath}" mcp`;
+    case "gemini":
+      return `gemini mcp add --scope user shikigami "${cliPath}" mcp`;
+    case "copilot":
+      return `copilot mcp add shikigami -- "${cliPath}" mcp`;
+    default:
+      return `claude mcp add --scope user shikigami -- "${cliPath}" mcp`;
+  }
 }
 
 const useApp = create<{ info: AppInfo | null; state: UpdateState; started: boolean }>(() => ({
@@ -93,6 +103,10 @@ export function AboutSection() {
   useEffect(start, []);
   const info = useApp((s) => s.info);
   const state = useApp((s) => s.state);
+  const agentInfo = useAgent((s) => s.info);
+  // A `command` agent registers Shikigami its own way; show Claude Code's.
+  const agentKind = agentInfo && agentInfo.kind !== "command" ? agentInfo.kind : "claudeCode";
+  const agentName = agentKind === "claudeCode" ? "Claude Code" : (agentInfo?.name ?? "AI");
   const [copied, setCopied] = useState(false);
   const copy = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -135,14 +149,14 @@ export function AboutSection() {
         </SettingsRow>
       )}
       {info.cliPath && (
-        <SettingsRow label={t.mcpSetup} hint={t.mcpSetupHint} align="start">
+        <SettingsRow label={t.mcpSetup} hint={t.mcpSetupHint(agentName)} align="start">
           <div className="flex items-start gap-2">
             <code className="block min-w-0 flex-1 rounded-[3px] bg-slate-100 px-2 py-1.5 font-mono text-[11px] break-all">
-              {mcpCommand(info.cliPath)}
+              {mcpCommand(agentKind, info.cliPath)}
             </code>
             <button
               type="button"
-              onClick={() => void copy(mcpCommand(info.cliPath ?? ""))}
+              onClick={() => void copy(mcpCommand(agentKind, info.cliPath ?? ""))}
               className="shrink-0 rounded-[3px] border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
             >
               {copied ? t.copied : t.copy}
