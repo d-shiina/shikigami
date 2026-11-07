@@ -94,4 +94,48 @@ describe("recordings", () => {
     expect(text).toContain('1. {"kind":"setValue"');
     setLocale("ja");
   });
+
+  it("turn browser actions into browser nodes, sharing a target used twice", () => {
+    setLocale("ja");
+    const name = { role: "textbox", name: "氏名", exact: true };
+    const search = { role: "button", name: "検索", exact: true };
+    const browser: RecordedAction[] = [
+      { app: "browser", kind: "open", url: "https://example.jp/" },
+      { app: "browser", kind: "fill", target: name, value: "山田" },
+      { app: "browser", kind: "fill", target: { label: "パスワード", exact: true }, value: "", password: true },
+      { app: "browser", kind: "select", target: { role: "combobox", name: "都道府県", exact: true }, value: "東京" },
+      { app: "browser", kind: "check", target: { role: "checkbox", name: "同意する", exact: true }, checked: true },
+      { app: "browser", kind: "press", target: name, key: "Enter" },
+      { app: "browser", kind: "click", target: search, button: "right" },
+      { app: "browser", kind: "upload", target: { label: "添付" } },
+      { app: "browser", kind: "click", failed: { message: "gone" } },
+    ];
+    const { steps, skipped } = recordedSteps(browser, counter());
+    expect(steps.map((s) => [s.type, s.params])).toEqual([
+      ["browser.open", { url: "https://example.jp/" }],
+      ["browser.fill", { target: name, value: "山田" }],
+      ["browser.fill", { target: { label: "パスワード", exact: true }, value: "" }],
+      ["browser.select", { target: { role: "combobox", name: "都道府県", exact: true }, value: "東京" }],
+      ["browser.check", { target: { role: "checkbox", name: "同意する", exact: true }, checked: true }],
+      ["browser.press", { target: name, key: "Enter" }],
+      ["browser.click", { target: search, button: "right" }],
+    ]);
+    expect(steps[2]?.name).toContain("シークレット");
+    expect(skipped).toEqual([
+      { index: 7, reason: "upload" },
+      { index: 8, reason: "failed" },
+    ]);
+    // After a 「ページを開く」, the page is not opened again.
+    expect(recordedSteps(browser.slice(0, 2), counter(), { pageOpen: true }).steps.map((s) => s.type)).toEqual(["browser.fill"]);
+    const ops = recordingOps(steps, {}, { parentId: null, block: null, index: 0 });
+    expect(ops[0]).toEqual({ op: "setPart", name: "part1", part: { app: "browser", target: name, label: "氏名" } });
+    expect(ops.filter((o) => o.op === "addStep")).toHaveLength(7);
+  });
+
+  it("ask the AI with the browser's rules for a browser recording", () => {
+    setLocale("ja");
+    const text = tidyRequest({ status: "stopped", actions: [{ app: "browser", kind: "open", url: "https://example.jp/" }] }, "受注", null, "最後");
+    expect(text).toContain("ブラウザ");
+    expect(text).toContain("browser.waitFor");
+  });
 });

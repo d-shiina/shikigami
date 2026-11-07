@@ -1,22 +1,31 @@
 // What the recorder ("記録") wrote down, and the nodes it becomes. The
 // desktop adapter records clicks (with the target of what was clicked),
-// each text field's final text and command keys (see `Op::Record`); here
-// they become one node each, and a target used more than once becomes a
-// named part. "AI に整えてもらう" hands the same recording to the AI.
+// each text field's final text and command keys (see `Op::Record`); the
+// browser adapter records clicks, what was typed, choices, check boxes,
+// Enter and addresses typed by hand (packages/browser-adapter/src/record.ts,
+// `app: "browser"`). Here they become one node each, and a target used more
+// than once becomes a named part. "AI に整えてもらう" hands the same
+// recording to the AI.
 import type { EditOp, Part, Step } from "@shikigami/schema";
 import { t } from "./i18n";
 import { newPartName } from "./parts";
 
 export type RecordedAction = {
-  kind: "click" | "setValue" | "press" | "drag";
+  /** Set by the browser recorder; desktop actions have none. */
+  app?: "browser";
+  kind: "click" | "setValue" | "press" | "drag" | "open" | "fill" | "select" | "check" | "upload";
   target?: Record<string, unknown>;
   how?: string;
   label?: string;
   window?: { title?: string; process?: string };
   button?: "left" | "right";
   double?: boolean;
-  /** The field's text (setValue). */
-  value?: string;
+  /** The field's text (setValue, fill), the chosen labels (select). */
+  value?: string | string[];
+  /** open: the address. */
+  url?: string;
+  /** check: on or off. */
+  checked?: boolean;
   /** A password field: its text is not recorded. */
   password?: boolean;
   /** The field's text could not be read. */
@@ -31,13 +40,65 @@ export type Recording = {
   actions: RecordedAction[];
 };
 
-export type Skipped = { index: number; reason: "drag" | "failed" };
+export type Skipped = { index: number; reason: "drag" | "failed" | "upload" | "opened" };
+
+export type RecordedStepsOptions = {
+  /** The browser context the nodes use (`context`), when not the default. */
+  context?: string;
+  /** The page is opened above where the nodes go: the first 「ページを開く」 is left out. */
+  pageOpen?: boolean;
+};
+
+/** The browser nodes for one recorded browser action, or why there is none. */
+function browserStep(a: RecordedAction, id: string, first: boolean, options: RecordedStepsOptions): Step | Skipped["reason"] {
+  const context = options.context ? { context: options.context } : {};
+  const step = (type: string, params: Record<string, unknown>, name?: string): Step => ({
+    id,
+    type,
+    params: { ...(a.target ? { target: a.target } : {}), ...params, ...context },
+    ...(name ? { name } : {}),
+  });
+  switch (a.kind) {
+    case "open":
+      if (first && options.pageOpen) return "opened";
+      return step("browser.open", { url: a.url ?? "" });
+    case "upload":
+      return "upload";
+  }
+  if (a.failed || !a.target) return "failed";
+  switch (a.kind) {
+    case "click":
+      return step("browser.click", { ...(a.button === "right" ? { button: "right" } : {}), ...(a.double ? { double: true } : {}) });
+    case "fill":
+      return a.password
+        ? step("browser.fill", { value: "" }, t.recording.passwordName)
+        : step("browser.fill", { value: typeof a.value === "string" ? a.value : "" });
+    case "select":
+      return step("browser.select", { value: a.value ?? "" });
+    case "check":
+      return step("browser.check", { checked: a.checked !== false });
+    case "press":
+      return step("browser.press", { key: a.key ?? "Enter" });
+    default:
+      return "failed";
+  }
+}
 
 /** One node per action, in order; what cannot be a node is listed apart. */
-export function recordedSteps(actions: readonly RecordedAction[], newId: () => string): { steps: Step[]; skipped: Skipped[] } {
+export function recordedSteps(
+  actions: readonly RecordedAction[],
+  newId: () => string,
+  options: RecordedStepsOptions = {},
+): { steps: Step[]; skipped: Skipped[] } {
   const steps: Step[] = [];
   const skipped: Skipped[] = [];
   actions.forEach((a, index) => {
+    if (a.app === "browser") {
+      const made = browserStep(a, newId(), index === 0, options);
+      if (typeof made === "string") skipped.push({ index, reason: made });
+      else steps.push(made);
+      return;
+    }
     if (a.kind === "drag") return skipped.push({ index, reason: "drag" });
     if (a.failed || !a.target) return skipped.push({ index, reason: "failed" });
     const target = a.target;
@@ -65,7 +126,7 @@ export function recordedSteps(actions: readonly RecordedAction[], newId: () => s
       }
       case "setValue": {
         const name = a.password ? t.recording.passwordName : a.unread || a.value === undefined ? t.recording.unreadName : undefined;
-        const text = a.password || a.unread || a.value === undefined ? "" : a.value;
+        const text = a.password || a.unread || typeof a.value !== "string" ? "" : a.value;
         if (byPoint) {
           steps.push(step("desktop.mouseClick", {}));
           steps.push(step("desktop.type", { text }, name, windowOnly));
@@ -99,6 +160,13 @@ function sorted(v: unknown): unknown {
 
 /** A short name for a part: the element's name or id, else the window's title. */
 export function partLabel(target: Record<string, unknown>): string {
+  if (!("window" in target) && !("element" in target)) {
+    // A page's element: role and name, label, placeholder, text.
+    for (const v of [target.name, target.label, target.placeholder, target.text, target.testId]) {
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
+  }
   const element = (target.element ?? {}) as Record<string, unknown>;
   const window = (target.window ?? {}) as Record<string, unknown>;
   for (const v of [element.name, element.id, window.title, window.process]) {
@@ -117,23 +185,32 @@ type Position = { parentId?: string | null; block?: string | null; index?: numbe
 export function recordingOps(steps: readonly Step[], parts: Readonly<Record<string, Part>>, position: Position): EditOp[] {
   const ops: EditOp[] = [];
   const existing = new Map<string, string>();
-  for (const [name, part] of Object.entries(parts)) if (part.app === "desktop") existing.set(key(part.target), name);
+  const appOf = (s: Step) => (s.type.startsWith("browser.") ? "browser" : "desktop");
+  for (const [name, part] of Object.entries(parts)) {
+    if (part.app === "desktop" || part.app === "browser") existing.set(`${part.app}:${key(part.target)}`, name);
+  }
+  // Steps without a target (opening a page) have none to share.
+  const keyOf = (s: Step) => (s.params?.target ? `${appOf(s)}:${key(s.params.target)}` : null);
   const counts = new Map<string, number>();
-  for (const s of steps) counts.set(key(s.params?.target), (counts.get(key(s.params?.target)) ?? 0) + 1);
+  for (const s of steps) {
+    const k = keyOf(s);
+    if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
   const taken = new Set(Object.keys(parts));
   const named = new Map(existing);
   for (const s of steps) {
+    const k = keyOf(s);
+    if (!k || named.has(k) || (counts.get(k) ?? 0) < 2) continue;
     const target = s.params?.target as Record<string, unknown>;
-    const k = key(target);
-    if (named.has(k) || (counts.get(k) ?? 0) < 2) continue;
     const name = newPartName(target, taken);
     taken.add(name);
     named.set(k, name);
     const label = partLabel(target);
-    ops.push({ op: "setPart", name, part: { app: "desktop", target: target as Part["target"], ...(label ? { label } : {}) } });
+    ops.push({ op: "setPart", name, part: { app: appOf(s), target: target as Part["target"], ...(label ? { label } : {}) } });
   }
   steps.forEach((s, i) => {
-    const name = named.get(key(s.params?.target));
+    const k = keyOf(s);
+    const name = k ? named.get(k) : undefined;
     const step: Step = name ? { ...s, params: { ...s.params, target: { part: name } } } : s;
     const at = typeof position.index === "number" ? { ...position, index: position.index + i } : position;
     ops.push({ op: "addStep", step, position: at });
@@ -144,11 +221,12 @@ export function recordingOps(steps: readonly Step[], parts: Readonly<Record<stri
 /** What the AI is asked when the person wants the recording tidied up. */
 export function tidyRequest(recording: Recording, flowName: string, path: string | null, where: string): string {
   const lines = recording.actions.map((a, i) => `${i + 1}. ${JSON.stringify(a)}`);
+  const browser = recording.actions.some((a) => a.app === "browser");
   return [
-    t.recording.askLead(flowName),
+    browser ? t.recording.askLeadBrowser(flowName) : t.recording.askLead(flowName),
     where,
     path ? t.recording.askFile(path) : "",
-    t.recording.askRules,
+    browser ? t.recording.askRulesBrowser : t.recording.askRules,
     ...lines,
   ]
     .filter((l) => l !== "")
