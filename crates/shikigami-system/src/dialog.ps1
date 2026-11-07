@@ -456,7 +456,7 @@ $collect = {
                 if ($null -ne $control.SelectedItem) { $value = [string]$control.SelectedItem }
                 elseif ($spec.required) { $problem = $words.choose }
             }
-            'date' { if ($control.SelectedDate) { $value = $control.SelectedDate.Value.ToString('yyyy-MM-dd') } }
+            'date' { if ($control.SelectedDate) { $value = ([datetime]$control.SelectedDate).ToString('yyyy-MM-dd') } }
             'number' {
                 $typed = $control.Text.Trim() -replace '[,，]', ''
                 if ($typed) {
