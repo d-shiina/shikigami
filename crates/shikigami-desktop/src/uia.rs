@@ -792,6 +792,13 @@ impl Uia {
     // -- pointing on screen ----------------------------------------------------------
 
     /// Lets the user point at an element (see `Op::Pick`).
+    ///
+    /// What is under the mouse is looked up on a thread of its own
+    /// ([`Looker`]): an app that answers UI Automation slowly (a browser,
+    /// Office, an app that is busy) then only makes the frame lag, and the
+    /// click or Esc is taken at once. Looked up here, each slow answer held
+    /// the click back (the hooks had already taken it from the app), so the
+    /// screen seemed frozen.
     fn pick(&self, message: Option<String>, timeout_ms: u64) -> Result<Value, StepError> {
         let message = message.unwrap_or_else(|| "Click the part to pick (Esc to cancel)".into());
         let overlay = Overlay::pick(message)?;
@@ -802,6 +809,9 @@ impl Uia {
         // The window frame on screen: its handle, place and title.
         let mut shown_window: Option<TopWindow> = None;
         let mut hover = Hover::new();
+        let looker = Looker::start();
+        // A look-up sent and not answered yet: where and when.
+        let mut asked: Option<((i32, i32), Instant)> = None;
         let clicked = loop {
             match overlay.take_input() {
                 Some(Input::Clicked(pt)) => break pt,
@@ -811,31 +821,14 @@ impl Uia {
             if Instant::now() >= deadline {
                 return Ok(json!({ "cancelled": true, "timedOut": true }));
             }
-            let mut pt = POINT::default();
-            // SAFETY: plain Win32 call.
-            let moved = unsafe { GetCursorPos(&mut pt) }.is_ok();
-            let started = Instant::now();
-            // Ask the app under the mouse only when it moved (or now and
-            // then while it rests), never faster than the app answers.
-            if !moved || !hover.due((pt.x, pt.y), started) {
-                std::thread::sleep(hover::TICK);
-                continue;
-            }
-            // SAFETY: UIA call on the UIA thread.
-            let under = unsafe { self.automation.ElementFromPoint(pt).ok() };
-            hover.looked((pt.x, pt.y), started, started.elapsed());
-            if let Some(el) = under {
-                // SAFETY: reading the element's current properties.
-                let (pid, rect) = unsafe {
-                    (
-                        el.CurrentProcessId().unwrap_or(0) as u32,
-                        el.CurrentBoundingRectangle().ok(),
-                    )
-                };
-                if let Some(rect) = rect.filter(|_| pid != own) {
+            if let Some(look) = looker.as_ref().and_then(Looker::answer)
+                && let Some((at, started)) = asked.take()
+            {
+                hover.looked(at, started, started.elapsed());
+                if let Some((_, rect, part)) = look.filter(|(pid, _, _)| *pid != own) {
                     // The window the node will act on: framed too, and
                     // named on the banner, so it is clear which one it is.
-                    let window = top_window_at(pt).filter(|w| w.pid != own);
+                    let window = top_window_at(POINT { x: at.0, y: at.1 }).filter(|w| w.pid != own);
                     let window_changed = window.as_ref().map(TopWindow::key)
                         != shown_window.as_ref().map(TopWindow::key);
                     if window_changed {
@@ -847,12 +840,28 @@ impl Uia {
                         shown = Some(key);
                         overlay.frame(Some(rect));
                         let title = shown_window.as_ref().map_or("", |w| w.title.as_str());
-                        overlay.detail(hover::banner_line(title, &self.describe_live(&el)));
+                        overlay.detail(hover::banner_line(title, &part));
                     }
                 }
             }
+            let mut pt = POINT::default();
+            // SAFETY: plain Win32 call.
+            let moved = unsafe { GetCursorPos(&mut pt) }.is_ok();
+            let now = Instant::now();
+            // Ask the app under the mouse only when it moved (or now and
+            // then while it rests), never faster than the app answers, and
+            // one question at a time.
+            if moved
+                && asked.is_none()
+                && hover.due((pt.x, pt.y), now)
+                && let Some(looker) = &looker
+                && looker.ask(pt)
+            {
+                asked = Some(((pt.x, pt.y), now));
+            }
             std::thread::sleep(hover::TICK);
         };
+        drop(looker);
         // The frame must not be under the click when it is looked up.
         drop(overlay);
         self.picked_at(clicked)
@@ -886,20 +895,9 @@ impl Uia {
             x: screen.left + cx,
             y: screen.top + cy,
         };
-        let picked = self.picked_at(middle)?;
-        let window = picked
-            .get("target")
-            .and_then(|t| t.get("window"))
-            .cloned()
-            .unwrap_or(Value::Null);
-        if window.is_null() {
-            return Err(StepError::new(
-                "WINDOW_NOT_FOUND",
-                "the place cut out is not in an app window",
-            ));
-        }
+        let picked = self.window_at(middle)?;
         Ok(json!({
-            "target": { "window": window },
+            "target": picked.get("target").cloned().unwrap_or(Value::Null),
             "window": picked.get("window").cloned().unwrap_or(Value::Null),
             "png": base64::engine::general_purpose::STANDARD.encode(image.to_png()),
             "width": image.width,
@@ -913,25 +911,72 @@ impl Uia {
         }))
     }
 
-    /// `button "保存"` for the banner, without building a cache.
-    fn describe_live(&self, el: &IUIAutomationElement) -> String {
-        // SAFETY: reading the element's current properties on the UIA thread.
-        unsafe {
-            let role = roles::of_control_type(el.CurrentControlType().map(|t| t.0).unwrap_or(0));
-            let name = el.CurrentName().map(|b| b.to_string()).unwrap_or_default();
-            let id = el
-                .CurrentAutomationId()
-                .map(|b| b.to_string())
-                .unwrap_or_default();
-            let mut line = role.to_owned();
-            if !name.trim().is_empty() {
-                line.push_str(&format!(" \u{300c}{}\u{300d}", name.trim()));
+    /// The target of the top-level window at `pt` (only the window, no
+    /// part of it), for a picture cut out of the screen.
+    ///
+    /// Unlike `picked_at`, it never reads the window's element tree: for a
+    /// browser, Excel or a business app that takes UI Automation many
+    /// seconds (a minute or more for a large page), and Studio stayed
+    /// minimised and looked frozen the whole time after the cut.
+    fn window_at(&self, pt: POINT) -> Result<Value, StepError> {
+        let not_found = || {
+            StepError::new(
+                "WINDOW_NOT_FOUND",
+                "the place cut out is not in an app window",
+            )
+        };
+        let windows = self.windows()?;
+        let infos: Vec<WindowInfo> = windows.iter().map(|(_, w, _)| w.clone()).collect();
+        // The window under the point by its handle: plain Win32 calls that
+        // never wait for the app.
+        let by_handle = top_window_at(pt).and_then(|top| {
+            let handle = top.hwnd.0 as isize;
+            infos
+                .iter()
+                .position(|w| w.handle != 0 && w.handle == handle)
+        });
+        let index = match by_handle {
+            Some(index) => index,
+            // A window UI Automation lists without its handle: walk up from
+            // the element under the point (its parents only, no tree).
+            None => {
+                // SAFETY: UIA calls on the UIA thread.
+                unsafe {
+                    let el = self.automation.ElementFromPoint(pt).or_fail()?;
+                    let root = self.automation.GetRootElement().or_fail()?;
+                    let walker = self.automation.ControlViewWalker().or_fail()?;
+                    let same = |a: &IUIAutomationElement, b: &IUIAutomationElement| {
+                        self.automation
+                            .CompareElements(a, b)
+                            .map(|b| b.as_bool())
+                            .unwrap_or(false)
+                    };
+                    let mut top = el;
+                    for _ in 0..200 {
+                        let Ok(parent) = walker.GetParentElement(&top) else {
+                            break;
+                        };
+                        if same(&parent, &root) {
+                            break;
+                        }
+                        top = parent;
+                    }
+                    windows
+                        .iter()
+                        .position(|(w, _, _)| same(w, &top))
+                        .ok_or_else(not_found)?
+                }
             }
-            if !id.is_empty() {
-                line.push_str(&format!(" id={id}"));
-            }
-            line
+        };
+        let info = &infos[index];
+        if !self.elevated && is_elevated(info.pid) == Some(true) {
+            return Err(elevation_error());
         }
+        let picked = picked_target(&infos, index, &[], None, Point { x: 0, y: 0 });
+        Ok(json!({
+            "target": picked.target,
+            "window": { "title": info.title, "process": info.process },
+        }))
     }
 
     /// The target for the element at `pt` on screen.
@@ -983,7 +1028,17 @@ impl Uia {
             if !self.elevated && is_elevated(info.pid) == Some(true) {
                 return Err(elevation_error());
             }
-            let tree = self.tree(window_el, FIND_LIMIT)?;
+            // An app that does not hand over its tree in time (UI
+            // Automation's timeout) is pointed at by the place clicked,
+            // rather than the pick failing after the wait.
+            let tree = match self.tree(window_el, FIND_LIMIT) {
+                Ok(tree) => tree,
+                Err(e) => {
+                    tracing::warn!(error = %e.message, "the picked window's tree could not be read");
+                    Vec::new()
+                }
+            };
+            let point_only = tree.is_empty();
             // The element itself, else its nearest ancestor in the tree.
             let element = chain
                 .iter()
@@ -996,7 +1051,13 @@ impl Uia {
             };
             let infos: Vec<WindowInfo> = windows.iter().map(|(_, w, _)| w.clone()).collect();
             let nodes: Vec<NodeInfo> = tree.iter().map(|(_, n)| n.clone()).collect();
-            let picked = picked_target(&infos, window, &nodes, element, point);
+            let mut picked = picked_target(&infos, window, &nodes, element, point);
+            if point_only {
+                let window_json = picked.target.get("window").cloned().unwrap_or(Value::Null);
+                picked.target =
+                    json!({ "window": window_json, "point": { "x": point.x, "y": point.y } });
+                picked.how = "point";
+            }
             let rect = match element {
                 Some(i) => tree[i].0.CurrentBoundingRectangle().unwrap_or(window_rect),
                 None => window_rect,
@@ -2664,6 +2725,101 @@ fn replay_key(vk: u16, extended: bool, held: keys::Held) {
 
 fn rect_key(rect: RECT) -> (i32, i32, i32, i32) {
     (rect.left, rect.top, rect.right, rect.bottom)
+}
+
+/// `button "保存"` for the banner, without building a cache.
+fn describe_live(el: &IUIAutomationElement) -> String {
+    // SAFETY: reading the element's current properties.
+    unsafe {
+        let role = roles::of_control_type(el.CurrentControlType().map(|t| t.0).unwrap_or(0));
+        let name = el.CurrentName().map(|b| b.to_string()).unwrap_or_default();
+        let id = el
+            .CurrentAutomationId()
+            .map(|b| b.to_string())
+            .unwrap_or_default();
+        let mut line = role.to_owned();
+        if !name.trim().is_empty() {
+            line.push_str(&format!(" \u{300c}{}\u{300d}", name.trim()));
+        }
+        if !id.is_empty() {
+            line.push_str(&format!(" id={id}"));
+        }
+        line
+    }
+}
+
+/// What the picker shows for the element under the mouse: its process,
+/// its place on screen and its banner line. `None`: nothing there.
+type Look = Option<(u32, RECT, String)>;
+
+/// Looks up what is under the mouse for the picker, on a thread of its own
+/// with its own UI Automation (and short timeouts), so a slow app never
+/// holds up the picker's loop. The thread ends when this is dropped and its
+/// last look-up returns; nobody waits for it.
+struct Looker {
+    ask: mpsc::Sender<POINT>,
+    answers: mpsc::Receiver<Look>,
+}
+
+/// How long the picker's look-ups wait for an app: a frame that lags is
+/// better than a banner stuck on an app that hangs.
+const LOOK_CONNECTION_TIMEOUT_MS: u32 = 1_000;
+const LOOK_TRANSACTION_TIMEOUT_MS: u32 = 2_000;
+
+impl Looker {
+    fn start() -> Option<Self> {
+        let (ask, questions) = mpsc::channel::<POINT>();
+        let (tell, answers) = mpsc::channel::<Look>();
+        std::thread::Builder::new()
+            .name("shikigami-pick-look".into())
+            .spawn(move || {
+                // SAFETY: COM and UIA on this thread's own apartment; the
+                // interface pointers never leave it.
+                unsafe {
+                    let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+                    let _ =
+                        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+                    let automation: IUIAutomation = match CoCreateInstance(
+                        &CUIAutomation8,
+                        None,
+                        CLSCTX_INPROC_SERVER,
+                    )
+                    .or_else(|_| CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER))
+                    {
+                        Ok(automation) => automation,
+                        Err(_) => return,
+                    };
+                    if let Ok(a2) = automation.cast::<IUIAutomation2>() {
+                        let _ = a2.SetConnectionTimeout(LOOK_CONNECTION_TIMEOUT_MS);
+                        let _ = a2.SetTransactionTimeout(LOOK_TRANSACTION_TIMEOUT_MS);
+                    }
+                    for pt in questions {
+                        let look = catch_unwind(AssertUnwindSafe(|| {
+                            let el = automation.ElementFromPoint(pt).ok()?;
+                            let pid = el.CurrentProcessId().unwrap_or(0) as u32;
+                            let rect = el.CurrentBoundingRectangle().ok()?;
+                            Some((pid, rect, describe_live(&el)))
+                        }))
+                        .unwrap_or(None);
+                        if tell.send(look).is_err() {
+                            break;
+                        }
+                    }
+                }
+            })
+            .ok()?;
+        Some(Self { ask, answers })
+    }
+
+    /// Asks what is at `pt`; false when the thread is gone.
+    fn ask(&self, pt: POINT) -> bool {
+        self.ask.send(pt).is_ok()
+    }
+
+    /// The answer to the last question, once it came.
+    fn answer(&self) -> Option<Look> {
+        self.answers.try_recv().ok()
+    }
 }
 
 /// The top-level window at `pt` on screen, as the picker frames it.

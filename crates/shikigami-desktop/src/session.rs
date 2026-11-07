@@ -109,3 +109,77 @@ pub fn keep_awake() -> Box<dyn Send + Sync> {
         Box::new(Awake(handle.0 as isize))
     }
 }
+
+/// Whether this process runs in a Remote Desktop session.
+pub fn is_remote() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_REMOTESESSION};
+    // SAFETY: plain Win32 call.
+    unsafe { GetSystemMetrics(SM_REMOTESESSION) != 0 }
+}
+
+/// Ends the Remote Desktop connection of this session without locking it:
+/// the session moves to the PC's own screen (the console) and keeps
+/// running, so desktop nodes still work after the window is closed. What
+/// it shows is visible on a monitor plugged into the PC. Needs an
+/// administrator (`tscon`): when this process is not one, Windows asks.
+pub fn release_to_console() -> Result<(), String> {
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+    if !is_remote() {
+        return Err("this is not a Remote Desktop session".into());
+    }
+    let mut session = 0u32;
+    // SAFETY: the out pointer is valid for the call.
+    unsafe { ProcessIdToSessionId(std::process::id(), &raw mut session) }
+        .map_err(|e| format!("cannot tell this session: {e}"))?;
+    let windir = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let tscon = std::path::Path::new(&windir)
+        .join("System32")
+        .join("tscon.exe");
+    let out = std::process::Command::new(&tscon)
+        .args([session.to_string().as_str(), "/dest:console"])
+        .output()
+        .map_err(|e| format!("cannot start {}: {e}", tscon.display()))?;
+    if out.status.success() {
+        return Ok(());
+    }
+    // Not an administrator: ask Windows to run it as one (the person
+    // confirms on the UAC prompt), then wait for how it went. It can
+    // still fail: another administrator's account needs the session
+    // owner's password, which is not given.
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{GetExitCodeProcess, INFINITE, WaitForSingleObject};
+    use windows::Win32::UI::Shell::{SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW};
+    use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
+    use windows::core::HSTRING;
+    let verb = HSTRING::from("runas");
+    let file = HSTRING::from(tscon.as_os_str());
+    let args = HSTRING::from(format!("{session} /dest:console"));
+    let mut info = SHELLEXECUTEINFOW {
+        cbSize: u32::try_from(std::mem::size_of::<SHELLEXECUTEINFOW>()).unwrap_or(0),
+        fMask: SEE_MASK_NOCLOSEPROCESS,
+        lpVerb: windows::core::PCWSTR(verb.as_ptr()),
+        lpFile: windows::core::PCWSTR(file.as_ptr()),
+        lpParameters: windows::core::PCWSTR(args.as_ptr()),
+        nShow: SW_HIDE.0,
+        ..Default::default()
+    };
+    // SAFETY: `info` and the strings it points to outlive the calls; the
+    // process handle is closed before returning.
+    unsafe {
+        ShellExecuteExW(&raw mut info)
+            .map_err(|_| "tscon was not run as an administrator".to_owned())?;
+        if info.hProcess.is_invalid() {
+            return Err("tscon was not run as an administrator".into());
+        }
+        WaitForSingleObject(info.hProcess, INFINITE);
+        let mut code = 1u32;
+        let got = GetExitCodeProcess(info.hProcess, &raw mut code);
+        let _ = CloseHandle(info.hProcess);
+        match got {
+            Ok(()) if code == 0 => Ok(()),
+            _ => Err(format!(
+                "tscon failed as an administrator too (exit code {code}); with another administrator's account it needs this session's password"
+            )),
+        }
+    }
+}

@@ -156,6 +156,32 @@ pub struct Policy {
     /// Who hears about unattended runs (the agent's and `shikigami run`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notify: Vec<NotifyRule>,
+    /// Nodes that use the mouse and keyboard when the screen is locked.
+    #[serde(default, skip_serializing_if = "DesktopPolicy::is_default")]
+    pub desktop: DesktopPolicy,
+}
+
+/// What nodes that use the mouse and keyboard do while the screen is
+/// locked (docs/design/locked-runs.md).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DesktopPolicy {
+    /// Wait up to this many minutes for someone to unlock the screen before
+    /// stopping with `DESKTOP_UNAVAILABLE`. Without it (or 0) they stop at
+    /// once. For PCs with people at them: the run goes on after lunch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_unlocked_minutes: Option<u32>,
+}
+
+impl DesktopPolicy {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// How long to wait for the screen to be unlocked.
+    pub fn wait_unlocked(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(u64::from(self.wait_unlocked_minutes.unwrap_or(0)) * 60)
+    }
 }
 
 /// How an unattended run ended, for [`NotifyRule::on`].
@@ -289,6 +315,7 @@ impl Default for Policy {
             records: RecordsPolicy::default(),
             remote: RemotePolicy::default(),
             notify: Vec::new(),
+            desktop: DesktopPolicy::default(),
         }
     }
 }

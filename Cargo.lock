@@ -4547,6 +4547,7 @@ dependencies = [
  "shikigami-adapters",
  "shikigami-agent",
  "shikigami-core",
+ "shikigami-desktop",
  "shikigami-manager",
  "shikigami-mcp",
  "shikigami-plugins",

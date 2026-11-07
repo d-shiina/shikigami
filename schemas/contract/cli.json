@@ -1289,6 +1289,31 @@
       ]
     },
     {
+      "name": "session",
+      "subcommands": [
+        {
+          "name": "status",
+          "args": [
+            {
+              "id": "json",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "json",
+              "values": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "release"
+        }
+      ]
+    },
+    {
       "name": "manager",
       "subcommands": [
         {

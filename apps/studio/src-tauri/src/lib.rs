@@ -154,6 +154,7 @@ pub fn run() {
             commands::save_policy,
             commands::list_approvals,
             schedules::list_schedules,
+            schedules::release_remote_session,
             schedules::save_schedule,
             schedules::delete_schedule,
             schedules::agent_status,
