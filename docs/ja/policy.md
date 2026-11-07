@@ -80,6 +80,7 @@
 | `remote.flows` | 空（なし） | 管理サーバーが始めてよいフローの ID。`"*"` ですべて。`flows.<id>.unattended: false` のものはここで許しても動かない |
 | `remote.acceptBundles` | false | このワークスペースの公開版だけでなく、管理サーバーがバンドルで送るフローも動かすか。枠の予約で、バンドルを送ることはまだできない |
 | `notify` | 空 | 無人実行（エージェントのスケジュールと `shikigami run`）の終わりを知らせる先：`{ "webhook", "on", "format", "flows" }` の並び。[schedules.md](schedules.md#通知) |
+| `desktop.waitUnlockedMinutes` | なし（すぐ止まる） | 画面ロック中、マウス・キーボードを使うノードは、だれかがロックを解くまでこの分数まで待ち、それでも解かれなければ `DESKTOP_UNAVAILABLE` で止まります。待ち始めたことを実行のログに一度書きます。人のいる PC 向けです（[schedules.md](schedules.md)） |
 
 `allow`＝承認なしで許可、`ask`＝承認が必要（人が Studio で承認してから実行）、`deny`＝禁止。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
 

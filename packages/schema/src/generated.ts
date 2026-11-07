@@ -1535,6 +1535,7 @@ export interface Policy {
    * Who hears about unattended runs (the agent's and `shikigami run`).
    */
   notify?: NotifyRule[];
+  desktop?: DesktopPolicy;
 }
 /**
  * What an AI client (MCP) may do. Studio and the CLI are people and are not
@@ -1667,6 +1668,17 @@ export interface NotifyRule {
    * The shape of the message posted to a webhook.
    */
   format?: "teams" | "slack" | "json";
+}
+/**
+ * Nodes that use the mouse and keyboard when the screen is locked.
+ */
+export interface DesktopPolicy {
+  /**
+   * Wait up to this many minutes for someone to unlock the screen before
+   * stopping with `DESKTOP_UNAVAILABLE`. Without it (or 0) they stop at
+   * once. For PCs with people at them: the run goes on after lunch.
+   */
+  waitUnlockedMinutes?: number | null;
 }
 /**
  * One request, `approvals/<id>.json`.
@@ -1905,6 +1917,21 @@ export interface RemotePolicy1 {
    * versions in this workspace).
    */
   acceptBundles?: boolean;
+}
+/**
+ * What nodes that use the mouse and keyboard do while the screen is
+ * locked (docs/design/locked-runs.md).
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "DesktopPolicy".
+ */
+export interface DesktopPolicy1 {
+  /**
+   * Wait up to this many minutes for someone to unlock the screen before
+   * stopping with `DESKTOP_UNAVAILABLE`. Without it (or 0) they stop at
+   * once. For PCs with people at them: the run goes on after lunch.
+   */
+  waitUnlockedMinutes?: number | null;
 }
 /**
  * What should come out of the run.

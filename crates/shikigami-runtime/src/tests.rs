@@ -2190,6 +2190,44 @@ async fn desktop_steps_stop_while_the_screen_is_locked() {
     assert_eq!(report.status, RunStatus::Succeeded);
 }
 
+#[tokio::test(start_paused = true)]
+async fn desktop_steps_wait_for_the_unlock_when_the_policy_says_so() {
+    // Locked for the first three looks, then unlocked.
+    let looks = Arc::new(AtomicU32::new(0));
+    let probe: DesktopProbe = {
+        let looks = looks.clone();
+        Arc::new(move || (looks.fetch_add(1, Ordering::SeqCst) < 3).then(|| "locked".to_owned()))
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let policy = dir.path().join("policy.json");
+    std::fs::write(&policy, r#"{ "desktop": { "waitUnlockedMinutes": 1 } }"#).unwrap();
+    let runtime = || {
+        Runtime::builder()
+            .register(
+                click_def(),
+                FakeMouse {
+                    active: AtomicU32::new(0),
+                    peak: AtomicU32::new(0),
+                },
+            )
+            .desktop_probe(probe.clone())
+            .build()
+    };
+    let waiting = runtime().with_policy(policy.clone());
+    let (report, events) = run(&waiting, flow(vec![Step::new("test.click")]), json!({})).await;
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let said: Vec<_> = logs(&events)
+        .into_iter()
+        .filter(|l| l.contains("ロックが解かれる"))
+        .collect();
+    assert_eq!(said.len(), 1, "{said:?}");
+    // Without the wait: stops at once, as before.
+    looks.store(0, Ordering::SeqCst);
+    std::fs::write(&policy, r#"{ "desktop": { "waitUnlockedMinutes": 0 } }"#).unwrap();
+    let (report, _) = run(&waiting, flow(vec![Step::new("test.click")]), json!({})).await;
+    assert_eq!(report.error.unwrap().code, "DESKTOP_UNAVAILABLE");
+}
+
 #[tokio::test]
 async fn runs_with_desktop_input_keep_the_screen_awake_until_they_end() {
     struct Held(Arc<AtomicU32>);

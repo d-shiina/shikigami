@@ -386,11 +386,20 @@ impl ResourceLocks {
     /// `names` must be sorted and deduplicated (see `resource_keys`).
     /// [`DESKTOP_INPUT`] is also taken PC-wide, and refused while the
     /// desktop cannot take input (`DESKTOP_UNAVAILABLE`).
-    async fn acquire(&self, names: &[String]) -> Result<Vec<ResourceGuard>, RunError> {
+    /// While the screen is locked, waits up to `unlock` for it to be
+    /// unlocked (`policy.json` `desktop.waitUnlockedMinutes`), calling
+    /// `waiting` once when it starts to wait.
+    async fn acquire(
+        &self,
+        names: &[String],
+        unlock: Duration,
+        waiting: &(dyn Fn(&str) + Sync),
+    ) -> Result<Vec<ResourceGuard>, RunError> {
         let mut guards = Vec::with_capacity(names.len() + 1);
+        let mut said = false;
         for name in names {
             if name == DESKTOP_INPUT {
-                self.check_desktop()?;
+                self.wait_desktop(unlock, waiting, &mut said).await?;
             }
             guards.push(ResourceGuard::Local(self.lock_for(name).lock_owned().await));
             if name == DESKTOP_INPUT
@@ -398,10 +407,38 @@ impl ResourceLocks {
             {
                 guards.push(ResourceGuard::Pc(pc_lock(dir, name).await?));
                 // The screen may have locked while waiting.
-                self.check_desktop()?;
+                self.wait_desktop(unlock, waiting, &mut said).await?;
             }
         }
         Ok(guards)
+    }
+
+    async fn wait_desktop(
+        &self,
+        unlock: Duration,
+        waiting: &(dyn Fn(&str) + Sync),
+        said: &mut bool,
+    ) -> Result<(), RunError> {
+        let until = Instant::now() + unlock;
+        loop {
+            match self.check_desktop() {
+                Err(e) if Instant::now() < until => {
+                    if !*said {
+                        *said = true;
+                        let reason = e
+                            .details
+                            .as_ref()
+                            .and_then(|d| d.get("reason"))
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned();
+                        waiting(&reason);
+                    }
+                    tokio::time::sleep(UNLOCK_POLL.min(until - Instant::now())).await;
+                }
+                other => return other,
+            }
+        }
     }
 
     fn check_desktop(&self) -> Result<(), RunError> {
@@ -417,6 +454,9 @@ impl ResourceLocks {
         }
     }
 }
+
+/// How often a node waiting for the screen to be unlocked looks again.
+const UNLOCK_POLL: Duration = Duration::from_secs(2);
 
 /// Waits for the PC-wide lock file of `name` (polling, so the caller's
 /// cancellation still applies while it waits).
@@ -1720,13 +1760,23 @@ impl Executor {
                 .get(&step.step_type)
                 .map(|defs| resource_keys(defs, &params))
                 .unwrap_or_default();
+            let waiting = |reason: &str| {
+                self.emitter.emit(RunEvent::Log {
+                    level: LogLevel::Warn,
+                    message: format!(
+                        "画面のロックが解かれるのを待っています（最大 {} 分）：{reason}",
+                        self.policy.desktop.wait_unlocked_minutes.unwrap_or(0)
+                    ),
+                    step_id: Some(step.id.clone()),
+                });
+            };
             let _guards = if resources.is_empty() {
                 Vec::new()
             } else {
                 tokio::select! {
                     biased;
                     () = self.cancel.cancelled() => return Err(Interrupt::Cancelled),
-                    g = self.resources.acquire(&resources) => match g {
+                    g = self.resources.acquire(&resources, self.policy.desktop.wait_unlocked(), &waiting) => match g {
                         Ok(g) => g,
                         Err(e) => return Err(e.at_step(&step.id, &step.step_type).into()),
                     },
