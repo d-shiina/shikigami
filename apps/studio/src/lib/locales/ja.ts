@@ -1711,6 +1711,12 @@ export const ja = {
     paused: "無効",
     notPublished: "公開版がないため実行されません",
     flowMissing: "フローが見つかりません",
+    remoteNote:
+      "リモートデスクトップで接続しています。この窓を閉じる（切断する）と画面がロックされ、マウス・キーボードを使うフローは止まります。「画面を残して切断」なら、ロックせずに切断できます。",
+    release: "画面を残して切断",
+    releaseConfirm: "切断の実行",
+    releaseWarn: "PC にモニターがつながっていれば、前にいる人に画面が見えます。管理者の確認が出ることがあります。",
+    releaseFailed: "切断できませんでした。管理者の権限が要ります（管理者として開いたターミナルで shikigami session release でも切断できます）。",
     locksScreen: (minutes: number, byPolicy: boolean) =>
       `マウス・キーボードを使うフローです。この PC は操作がないと ${minutes} 分で${byPolicy ? "画面がロックされ（会社の設定）" : "パスワード付きのスクリーンセーバーでロックされ"}、ロック中はそこで止まります。予定の時刻にはロックを解いておくか、ロックしない PC で動かしてください。`,
     problem: (text: string) => `スケジュールのファイルを読めません：${text}`,

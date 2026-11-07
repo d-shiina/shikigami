@@ -2796,6 +2796,10 @@
           "items": {
             "$ref": "#/$defs/NotifyRule"
           }
+        },
+        "desktop": {
+          "description": "Nodes that use the mouse and keyboard when the screen is locked.",
+          "$ref": "#/$defs/DesktopPolicy"
         }
       },
       "additionalProperties": false
@@ -3017,6 +3021,22 @@
           "const": "json"
         }
       ]
+    },
+    "DesktopPolicy": {
+      "description": "What nodes that use the mouse and keyboard do while the screen is\nlocked (docs/design/locked-runs.md).",
+      "type": "object",
+      "properties": {
+        "waitUnlockedMinutes": {
+          "description": "Wait up to this many minutes for someone to unlock the screen before\nstopping with `DESKTOP_UNAVAILABLE`. Without it (or 0) they stop at\nonce. For PCs with people at them: the run goes on after lunch.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
     },
     "ApprovalRequest": {
       "description": "One request, `approvals/<id>.json`.",

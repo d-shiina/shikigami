@@ -128,6 +128,11 @@ enum Command {
     /// minutes, once, or when a file appears.
     #[command(subcommand)]
     Schedule(agent_cmd::ScheduleCmd),
+    /// This PC's screen for desktop flows: whether it takes input, when it
+    /// locks by itself, and leaving a Remote Desktop session without
+    /// locking it.
+    #[command(subcommand)]
+    Session(SessionCmd),
     /// A small reference management server for agents (protocol v1).
     #[command(subcommand)]
     Manager(agent_cmd::ManagerCmd),
@@ -153,6 +158,21 @@ enum Command {
         #[arg(long, value_delimiter = ',', default_value = "read,write,run")]
         allow: Vec<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum SessionCmd {
+    /// Whether the screen takes mouse and keyboard input now, whether this
+    /// is a Remote Desktop session, and when the PC locks without input.
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Closes this Remote Desktop connection without locking the session
+    /// (it moves to the PC's own screen), so desktop flows keep running.
+    /// Needs an administrator (Windows asks). What runs is visible on a monitor plugged
+    /// into the PC.
+    Release,
 }
 
 #[derive(Subcommand)]
@@ -547,6 +567,7 @@ fn real_main() -> Result<ExitCode> {
     };
 
     match &cli.command {
+        Command::Session(cmd) => return session_cmd(cmd),
         Command::Agent(cmd) => {
             return agent_cmd::agent_cmd(open_service()?, &runtime, &workspace(), cmd);
         }
@@ -1749,5 +1770,71 @@ mod cli_tests {
         assert_eq!(cases, ["a", "b"]);
         // The name from before flows were renamed still works.
         assert!(Cli::try_parse_from(["shikigami", "scenario", "list"]).is_ok());
+    }
+}
+
+fn session_cmd(cmd: &SessionCmd) -> Result<ExitCode> {
+    use shikigami_desktop::screen_lock::{self, LockBy};
+    match cmd {
+        SessionCmd::Status { json } => {
+            #[cfg(windows)]
+            let (unavailable, remote) = (
+                shikigami_desktop::session::desktop_unavailable(),
+                shikigami_desktop::session::is_remote(),
+            );
+            #[cfg(not(windows))]
+            let (unavailable, remote) = (Some("not Windows".to_owned()), false);
+            let lock = screen_lock::current();
+            if *json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "desktop": unavailable.is_none(),
+                        "reason": unavailable,
+                        "remote": remote,
+                        "screenLock": lock,
+                    })
+                );
+                return Ok(ExitCode::SUCCESS);
+            }
+            match &unavailable {
+                None => println!("screen: takes mouse and keyboard input"),
+                Some(reason) => println!("screen: cannot take input ({reason})"),
+            }
+            if remote {
+                println!(
+                    "remote desktop: yes (closing the window locks it; `shikigami session release` does not)"
+                );
+            }
+            match lock {
+                Some(lock) => println!(
+                    "locks after {} min without input ({}): desktop flows stop there",
+                    lock.after_secs.div_ceil(60),
+                    match lock.by {
+                        LockBy::ScreenSaver => "password-protected screen saver",
+                        LockBy::InactivityLimit => "inactivity limit set by policy",
+                    }
+                ),
+                None => println!("does not lock by itself"),
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        SessionCmd::Release => {
+            #[cfg(windows)]
+            {
+                match shikigami_desktop::session::release_to_console() {
+                    Ok(()) => Ok(ExitCode::SUCCESS),
+                    Err(e) => {
+                        eprintln!("error: {e}");
+                        Ok(ExitCode::FAILURE)
+                    }
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                eprintln!("error: only on Windows");
+                Ok(ExitCode::FAILURE)
+            }
+        }
     }
 }

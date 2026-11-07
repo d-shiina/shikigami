@@ -537,6 +537,42 @@ function ScheduleRow({
   );
 }
 
+/**
+ * Shown in a Remote Desktop session: closing the window locks the screen
+ * and desktop flows stop, so offer to leave without locking (tscon).
+ */
+function RemoteCard() {
+  const [confirm, setConfirm] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const r = t.runs;
+  return (
+    <div className="mb-4 rounded-lg border border-amber-300/60 bg-amber-50/60 p-3 text-xs leading-5 text-slate-700">
+      <p>{r.remoteNote}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className={`rounded-lg border px-2 py-1 ${confirm ? "border-ink bg-ink text-white" : "border-slate-300 bg-sheet text-ink hover:bg-slate-100"}`}
+          onBlur={() => setConfirm(false)}
+          onClick={async () => {
+            if (!confirm) return setConfirm(true);
+            setFailed(false);
+            try {
+              await api.releaseRemoteSession();
+            } catch {
+              setFailed(true);
+            }
+            setConfirm(false);
+          }}
+        >
+          {confirm ? r.releaseConfirm : r.release}
+        </button>
+        {confirm && <span className="text-slate-600">{r.releaseWarn}</span>}
+      </div>
+      {failed && <p className="mt-1 text-shu-600">{r.releaseFailed}</p>}
+    </div>
+  );
+}
+
 /** Set by the inspector's 「スケジュールを追加」: the page opens with the form. */
 let pendingNew = false;
 export function openNewSchedule() {
@@ -625,6 +661,7 @@ export function RunsPage() {
         </div>
         <p className="mb-4 text-xs text-slate-600">{r.intro}</p>
         <AgentCard status={status} onChange={setStatus} idle={(list?.schedules.length ?? 0) === 0} />
+        {list?.remote && <RemoteCard />}
         {error && <p className="mb-3 text-xs text-shu-600">{error}</p>}
         {editing && (
           <div className="mb-4">

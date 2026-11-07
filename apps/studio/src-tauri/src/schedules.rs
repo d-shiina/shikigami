@@ -52,6 +52,9 @@ pub struct ScheduleList {
     /// screen saver, the inactivity limit of a policy).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub screen_lock: Option<shikigami_desktop::screen_lock::ScreenLock>,
+    /// Studio runs in a Remote Desktop session: closing its window locks
+    /// the screen.
+    pub remote: bool,
 }
 
 fn path(svc: &FlowService) -> PathBuf {
@@ -104,6 +107,7 @@ fn list(state: &AppState) -> CmdResult<ScheduleList> {
         schedules,
         path: path.display().to_string(),
         screen_lock: shikigami_desktop::screen_lock::current(),
+        remote: is_remote(),
     })
 }
 
@@ -271,5 +275,30 @@ pub async fn stop_agent(state: State<'_, AppState>) -> CmdResult<()> {
         Ok(_) => Ok(()),
         Err(e) if ipc::not_running(&e) => Ok(()),
         Err(e) => Err(err("AGENT_UNREACHABLE", e.to_string())),
+    }
+}
+
+#[cfg(windows)]
+fn is_remote() -> bool {
+    shikigami_desktop::session::is_remote()
+}
+
+#[cfg(not(windows))]
+fn is_remote() -> bool {
+    false
+}
+
+/// 「画面を残して切断」: ends this Remote Desktop connection without locking
+/// the session, so desktop flows keep running (docs/schedules.md).
+#[tauri::command]
+pub fn release_remote_session() -> CmdResult<()> {
+    #[cfg(windows)]
+    {
+        shikigami_desktop::session::release_to_console()
+            .map_err(|e| err("SESSION_RELEASE_FAILED", e))
+    }
+    #[cfg(not(windows))]
+    {
+        Err(err("SESSION_RELEASE_FAILED", "only on Windows"))
     }
 }
