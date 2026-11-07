@@ -190,9 +190,10 @@ pub fn form_fields(params: &Value) -> Result<Vec<Value>, StepError> {
                 .map(shikigami_core::expr::to_display)
                 .filter(|n| !n.trim().is_empty())
                 .ok_or_else(|| StepError::invalid_params("every field needs a 'name'"))?;
-            if !names.insert(name.clone()) {
+            // The form's answers are keyed without regard to case (PowerShell).
+            if !names.insert(name.to_lowercase()) {
                 return Err(StepError::invalid_params(format!(
-                    "two fields are named '{name}'"
+                    "two fields are named '{name}' (names differing only in upper / lower case count as the same)"
                 )));
             }
             let kind = field.get("type").and_then(Value::as_str).unwrap_or("text");

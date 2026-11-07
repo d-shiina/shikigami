@@ -215,7 +215,7 @@ Example: `{"type":"browser.download","name":"請求書を落とす（サイト�
 
 #### browser.fill (文字入力)
 
-Replaces the text of the input `target` with `value`: a template, or a registered secret { "secret": "<name>", "field": "username" | "password" | "totp" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text. `typing: true` clears the field and types the text one key at a time, for pages that react to each key (suggestions, inputs that format as you type) and ignore a pasted value; leave it out otherwise (it is slower).
+Replaces the text of the input `target` with `value`: a template, or a registered secret { "secret": "<name>", "field": "username" | "password" | "totp" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text. `typing: true` clears the field and types the text one key at a time, for pages that react to each key (suggestions, inputs that format as you type) and ignore a pasted value; leave it out otherwise (it is slower). A secret is always filled at once, even with `typing`.
 
 Params:
 - `target`*: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
@@ -621,7 +621,7 @@ Example: `{"type":"desktop.getTable","params":{"target":{"window":{"title":"販�
 
 #### desktop.getValue (値の取得)
 
-Reads `target`: the text of an input or combo box, true/false for a checkbox or radio button, otherwise the element's name (e.g. a label's text). Use saveAs to keep it.
+Reads `target`: the text of an input or combo box, true/false for a checkbox or radio button (null for a three-state checkbox that is neither), otherwise the element's name (e.g. a label's text). Use saveAs to keep it.
 
 Params:
 - `target`*: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }

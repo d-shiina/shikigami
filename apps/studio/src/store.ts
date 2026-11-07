@@ -1109,7 +1109,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       goTo(stepId) {
         get().unfoldTo(stepId);
-        set({ selection: { kind: "step", stepId }, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 }, dive: [] });
+        set({ selection: { kind: "step", stepId }, range: null, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 }, dive: [] });
       },
 
       stepBy(delta) {
@@ -1249,8 +1249,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           set({ error: message(e) });
           return;
         }
-        if (cut) await get().removeSelected();
-        else set({ notice: t.copiedNodes(steps.length) });
+        if (!cut) return void set({ notice: t.copiedNodes(steps.length) });
+        // The nodes copied, even if the selection moved while the clipboard was busy.
+        if (get().flow?.id !== flow.id) return;
+        const ok = await get().applyOps(ids.map((stepId) => ({ op: "removeStep", stepId }) as EditOp));
+        if (ok) set({ selection: null, range: null });
       },
 
       async paste() {

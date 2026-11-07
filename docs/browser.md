@@ -45,7 +45,7 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 | `browser.upload` | `target` (the file input, or the button that opens the file picker), `path` (a file or a list) | – |
 | `browser.hover` | `target` | – |
 | `browser.scroll` | `target` (bring into view) and/or `to` (`top` / `bottom`) | – |
-| `browser.fill` | `target`, `value` (text, or a registered secret `{ "secret": "name", "field": "password" }`), `typing` (one key at a time, for pages that react to each key) | – |
+| `browser.fill` | `target`, `value` (text, or a registered secret `{ "secret": "name", "field": "password" }`), `typing` (one key at a time, for pages that react to each key; a secret is always filled at once) | – |
 | `browser.check` | `target`, `checked` (default `true`; `false` unchecks) | – (nothing happens when it already is) |
 | `browser.navigate` | `action` (`back` / `forward` / `reload`) | `{ url, title }` |
 | `browser.select` | `target`, `value` (visible label, or a list) | – |
