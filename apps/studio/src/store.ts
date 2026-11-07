@@ -1058,13 +1058,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async addStep(type, params, name) {
         const { flow, selection, paletteAt } = get();
         if (!flow) return;
-        const { position } = insertPlace(flow.steps ?? [], selection, paletteAt);
+        const { position, after } = insertPlace(flow.steps ?? [], selection, paletteAt);
         let step: Step = { id: newStepId(), type, params: params ?? { ...(DEFAULT_PARAMS[type] ?? {}) }, ...(name ? { name } : {}) };
         // Keep the result under a name from the start, so the next node can use it without one being invented.
         const saveAs = resultName(get().stepTypes.find((d) => d.type === type), flow.variables, flow.steps ?? []);
         if (saveAs) step.saveAs = saveAs;
-        // A repeat added after a node that read a list goes over that list.
-        const after = selection?.kind === "step" ? findStep(flow.steps ?? [], selection.stepId) : null;
+        // A repeat added right after a node that read a list goes over that list.
         if (type === FOR_EACH && !params && after?.saveAs) step.params = { ...step.params, items: after.saveAs };
         // A switch starts with its first case; a node added among the cases becomes a case of its own.
         if (type === SWITCH) step.blocks = { cases: [newCase()] };

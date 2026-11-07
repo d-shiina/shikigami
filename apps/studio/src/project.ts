@@ -165,7 +165,8 @@ export type ProjectState = {
   saveSheet(): Promise<boolean>;
   newSettings(): Promise<void>;
   /** Files from Explorer; `folder` null sorts each onto its shelf. */
-  copyIn(paths: string[], folder: Role | null): Promise<void>;
+  /** Copies files into the flow's folder; the files now there (none that failed or already existed). */
+  copyIn(paths: string[], folder: Role | null): Promise<ProjectFile[]>;
   upload(files: { name: string; data: string }[], folder: Role | null): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   remove(path: string): Promise<void>;
@@ -304,21 +305,22 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
       },
       async copyIn(paths, folder) {
         const id = get().flowId;
-        if (!id || paths.length === 0) return;
+        if (!id || paths.length === 0) return [];
         const groups = new Map<Role, string[]>();
         for (const p of paths) {
           const shelf = folder ?? shelfFor(nameOf(p));
           groups.set(shelf, [...(groups.get(shelf) ?? []), p]);
         }
+        const copied: ProjectFile[] = [];
         try {
-          let count = 0;
-          for (const [shelf, list] of groups) count += (await api.copyIn(id, shelf, list, false)).length;
-          report(count, [...groups.keys()].map((g) => `${g}/`).join("・"));
+          for (const [shelf, list] of groups) copied.push(...(await api.copyIn(id, shelf, list, false)));
+          report(copied.length, [...groups.keys()].map((g) => `${g}/`).join("・"));
           await refresh();
         } catch (e) {
           set({ error: message(e) });
           await refresh();
         }
+        return copied;
       },
       async upload(files, folder) {
         const id = get().flowId;

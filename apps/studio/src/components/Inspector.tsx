@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { Boxes, Crosshair, FolderOpen, ScanSearch } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { shelfFor, useProjectMaybe } from "../project";
+import { useProjectMaybe } from "../project";
 import { api, type SecretField } from "../lib/api";
 import { locale, stepLabel, t } from "../lib/i18n";
 import { type DataLink, dataLinks, INPUT_NODE, OUTPUT_NODE } from "../lib/dataFlow";
@@ -73,36 +73,36 @@ function CommitInput(props: {
 }
 
 /**
- * A file of the flow: the files in its folder to choose from while typing,
- * and "参照…" to pick one in Explorer. A file from elsewhere is copied onto
- * its shelf (input/, templates/…) so the flow keeps working on another PC.
+ * A file or folder of the flow: the files in its folder to choose from while
+ * typing, and "参照…" to pick one in Explorer. A file from elsewhere is
+ * copied onto its shelf (input/, templates/…) so the flow keeps working on
+ * another PC; a folder elsewhere is kept as its full path.
  */
-function PathField({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
+function PathField({ value, folder, onChange }: { value: string; folder: boolean; onChange: (value: unknown) => void }) {
   const files = useProjectMaybe((s) => s.files, null);
   const copyIn = useProjectMaybe((s) => s.copyIn, null);
   const listId = useMemo(() => `files-${Math.random().toString(36).slice(2)}`, []);
   const browse = async () => {
     const dir = files?.dir ?? "";
-    const picked = await invoke<string | null>("runner_pick", { kind: "file", start: dir || null }).catch(() => null);
+    const picked = await invoke<string | null>("runner_pick", { kind: folder ? "folder" : "file", start: dir || null }).catch(() => null);
     if (!picked) return;
     const norm = (p: string) => p.replace(/\\/g, "/");
     const inside = dir && norm(picked).toLowerCase().startsWith(`${norm(dir).toLowerCase()}/`);
     if (inside) return onChange(norm(picked).slice(norm(dir).length + 1));
-    const name = picked.split(/[\\/]/).pop() ?? picked;
-    if (copyIn) {
-      await copyIn([picked], null);
-      return onChange(`${shelfFor(name)}/${name}`);
-    }
-    onChange(picked);
+    if (folder || !copyIn) return onChange(picked);
+    // Only once the copy is there: a file of the same name already on the
+    // shelf, or a failed copy, would otherwise point the node at other contents.
+    const [copied] = await copyIn([picked], null);
+    if (copied) onChange(copied.path);
   };
   return (
     <div className="flex gap-1">
       <CommitInput value={value} list={listId} placeholder={t.props.pathPlaceholder} onCommit={(text) => onChange(text === "" ? null : text)} />
       <datalist id={listId}>
-        {(files?.files ?? [])
-          .filter((f) => !f.path.startsWith("work/") && !f.path.startsWith("logs/"))
-          .map((f) => (
-            <option key={f.path} value={f.path} />
+        {(folder ? (files?.folders ?? []) : (files?.files ?? []).map((f) => f.path))
+          .filter((p) => !p.startsWith("work/") && !p.startsWith("logs/"))
+          .map((p) => (
+            <option key={p} value={p} />
           ))}
       </datalist>
       <button
@@ -336,7 +336,7 @@ function ParamField({
       />
     );
   } else if (schema.type === "string" && isPath) {
-    editor = <PathField value={String(value ?? "")} onChange={onChange} />;
+    editor = <PathField value={String(value ?? "")} folder={name === "folder"} onChange={onChange} />;
   } else if (schema.type === "string") {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "array" && isScalarList(schema, value)) {
