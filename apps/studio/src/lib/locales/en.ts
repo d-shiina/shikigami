@@ -748,7 +748,7 @@ export const en: Dict = {
     dropHere: (shelf: string) => `Add to ${shelf}`,
     add: "Add files",
     newSettings: "New settings file",
-    openFolder: "Open the folder in Explorer",
+    openFolder: "Open the flow's folder in Explorer",
     menu: {
       open: "Open",
       openWithApp: "Open with its app",
@@ -1569,6 +1569,7 @@ export const en: Dict = {
     breakpointOff: "Remove breakpoint",
     askAgent: (name: string) => `Ask ${name}`,
     copyId: "Copy ID",
+    openFlowFolder: "Open the flow's folder",
     addHere: "Add node here",
     wrapIn: (name: string) => `Wrap in ${name}`,
     fitView: "Fit to view",

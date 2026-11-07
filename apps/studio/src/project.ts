@@ -395,7 +395,9 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         try {
           await api.open(id, path, reveal);
         } catch (e) {
-          set({ error: message(e) });
+          // The error is shown in the files panel, so open it when the folder
+          // was asked for from elsewhere (the title bar, a right-click menu).
+          set({ error: message(e), panelOpen: true });
         }
       },
       dismiss() {
