@@ -559,7 +559,24 @@ fn api_key_requests_ask_for_the_key_only() {
         .unwrap();
     assert_eq!(request.kind, Some(SecretKind::ApiKey));
     assert_eq!(request.fields, [SecretField::Password]);
-    // Asked again without a kind: the kind stays.
+    // Asked again without a kind (polling with waitMs): the kind and the
+    // fields stay, so registering the key answers it.
     let again = v.request(ask("受注 API", &[], &[])).unwrap();
     assert_eq!(again.kind, Some(SecretKind::ApiKey));
+    assert_eq!(again.fields, [SecretField::Password]);
+    v.set(SecretInput {
+        name: "受注 API".into(),
+        kind: Some(SecretKind::ApiKey),
+        password: Some("sk-live-1234".into()),
+        sites: Some(vec!["https://api.example.com".into()]),
+        ..SecretInput::default()
+    })
+    .unwrap();
+    assert!(v.requests().unwrap().is_empty());
+    // A saved API key asked for a login: only what it can hold is asked.
+    let more = v
+        .request(ask("受注 API", &["https://api2.example.com"], &[]))
+        .unwrap();
+    assert_eq!(more.kind, Some(SecretKind::ApiKey));
+    assert_eq!(more.fields, [SecretField::Password]);
 }

@@ -491,12 +491,6 @@ impl Vault {
             .into_iter()
             .filter(|f| *f != SecretField::AccessToken)
             .collect();
-        let mut kind = input.kind;
-        let mut fields = if asked.is_empty() {
-            kind.unwrap_or_default().default_request_fields()
-        } else {
-            asked
-        };
         let mut reason: String = input
             .reason
             .unwrap_or_default()
@@ -507,10 +501,29 @@ impl Vault {
             .collect();
         let _guard = self.lock()?;
         let mut file = self.read_requests()?;
-        let previous = file.requests.iter().position(|r| r.name == input.name);
-        if let Some(i) = previous {
-            let old = file.requests.remove(i);
-            kind = kind.or(old.kind);
+        let previous = file
+            .requests
+            .iter()
+            .position(|r| r.name == input.name)
+            .map(|i| file.requests.remove(i));
+        // A saved secret keeps its kind (Studio adds to it as it is); else
+        // the kind asked for now, or the one asked for before.
+        let saved = self
+            .read()?
+            .entries
+            .iter()
+            .find(|e| e.name == input.name)
+            .map(|e| self.kind_of(e));
+        let kind = saved
+            .or(input.kind)
+            .or(previous.as_ref().and_then(|old| old.kind));
+        let effective = kind.unwrap_or_default();
+        let mut fields = if asked.is_empty() {
+            effective.default_request_fields()
+        } else {
+            asked
+        };
+        if let Some(old) = previous {
             sites = merge(old.sites, sites);
             fields = merge(old.fields, fields);
             if reason.is_empty() {
@@ -518,7 +531,15 @@ impl Vault {
             }
         }
         sites = merge(Vec::new(), sites);
-        fields = merge(Vec::new(), fields);
+        // A field the kind has no place for could never be filled in.
+        let usable = effective.fields();
+        fields = merge(Vec::new(), fields)
+            .into_iter()
+            .filter(|f| usable.contains(f))
+            .collect();
+        if fields.is_empty() && sites.is_empty() {
+            fields = effective.default_request_fields();
+        }
         let request = SecretRequest {
             name: input.name,
             kind,
