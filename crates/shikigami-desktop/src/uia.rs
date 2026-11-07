@@ -57,6 +57,7 @@ use crate::bitmap::{Bitmap, Rect};
 use crate::bridge::AppBridge;
 use crate::capture;
 use crate::engine::Engine;
+use crate::hover::{self, Hover};
 use crate::jab::JavaWindow;
 use crate::keys;
 use crate::keys::{Chord, Key};
@@ -775,6 +776,7 @@ impl Uia {
         // SAFETY: plain Win32 call.
         let own = unsafe { GetCurrentProcessId() };
         let mut shown: Option<(i32, i32, i32, i32)> = None;
+        let mut hover = Hover::new();
         let clicked = loop {
             match overlay.take_input() {
                 Some(Input::Clicked(pt)) => break pt,
@@ -785,12 +787,18 @@ impl Uia {
                 return Ok(json!({ "cancelled": true, "timedOut": true }));
             }
             let mut pt = POINT::default();
-            // SAFETY: UIA / Win32 calls on the UIA thread.
-            let under = unsafe {
-                GetCursorPos(&mut pt)
-                    .ok()
-                    .and_then(|()| self.automation.ElementFromPoint(pt).ok())
-            };
+            // SAFETY: plain Win32 call.
+            let moved = unsafe { GetCursorPos(&mut pt) }.is_ok();
+            let started = Instant::now();
+            // Ask the app under the mouse only when it moved (or now and
+            // then while it rests), never faster than the app answers.
+            if !moved || !hover.due((pt.x, pt.y), started) {
+                std::thread::sleep(hover::TICK);
+                continue;
+            }
+            // SAFETY: UIA call on the UIA thread.
+            let under = unsafe { self.automation.ElementFromPoint(pt).ok() };
+            hover.looked((pt.x, pt.y), started, started.elapsed());
             if let Some(el) = under {
                 // SAFETY: reading the element's current properties.
                 let (pid, rect) = unsafe {
@@ -808,7 +816,7 @@ impl Uia {
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(40));
+            std::thread::sleep(hover::TICK);
         };
         // The frame must not be under the click when it is looked up.
         drop(overlay);
