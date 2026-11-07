@@ -300,7 +300,12 @@ const BUILDERS: Record<string, Builder> = {
     return name ? [w(`サブフロー「${name}」を呼ぶ`)] : [w("サブフローを呼ぶ（呼ぶフローが未設定）")];
   },
   "browser.open": (p) => [...template(p.url), w(" をブラウザで開く")],
-  "browser.click": (p, s) => [w(`${targetText(p.target)}を押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`), ...saveAs(s)],
+  "browser.click": (p, s) =>
+    p.button === "right" || p.double === true
+      ? [w(`${targetText(p.target)}を${p.button === "right" ? "右クリック" : "ダブルクリック"}${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "する"}`), ...saveAs(s)]
+      : [w(`${targetText(p.target)}を押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`), ...saveAs(s)],
+  "browser.check": (p) => [w(`${targetText(p.target)}のチェックを${p.checked === false ? "外す" : "付ける"}`)],
+  "browser.navigate": (p) => [w(p.action === "back" ? "前のページに戻る" : p.action === "forward" ? "次のページに進む" : "ページを読み込み直す")],
   "browser.hover": (p) => [w(`${targetText(p.target)}にマウスを乗せる`)],
   "browser.attach": (p) => [w(p.title || p.url ? `開いているブラウザの「${String(p.title ?? p.url)}」のタブを使う` : "開いているブラウザを使う")],
   "browser.download": (p, s) => [w(`${targetText(p.target)}を押してダウンロードし、`), code(p.path ?? p.folder), w(p.path ? " に保存する" : " に保存する（名前はサイトのまま）"), ...saveAs(s)],
@@ -339,6 +344,10 @@ const BUILDERS: Record<string, Builder> = {
   "desktop.readText": (p, s) => [...(p.file !== undefined && p.target === undefined ? [...template(p.file), w(" の画像の文字を OCR で読む")] : [w(`${targetText(p.target)}の文字を OCR で読む`)]), ...saveAs(s)],
   "desktop.waitFor": (p) => [w(`${targetText(p.target)}が${p.state === "hidden" ? "消える" : "出る"}まで待つ`)],
   "desktop.closeWindow": (p) => [w(`${targetText(p.target)}を閉じる`)],
+  "desktop.setWindow": (p) => [w(`${targetText(p.target)}を${p.state === "maximized" ? "最大化する" : p.state === "minimized" ? "最小化する" : p.state === "normal" ? "元のサイズに戻す" : p.front === true ? "前面に出す" : "動かす"}`)],
+  "desktop.check": (p) => [w(`${targetText(p.target)}のチェックを${p.checked === false ? "外す" : "付ける"}`)],
+  "process.list": (p, s) => [...(p.name ? [code(p.name), w(" が動いているか調べる")] : [w("動いているプログラムを調べる")]), ...saveAs(s)],
+  "process.kill": (p) => [code(p.name), w(" を終了させる")],
   "desktop.getTable": (p, s) => [w(`${targetText(p.target)}${isTargetElement(p.target) ? "" : "の最初の表"}を表として読む`), ...saveAs(s)],
   "sap.runTransaction": (p, s) => [w(`${targetText(p.target)}で SAP のトランザクション `), code(p.code), w(" を開く"), ...saveAs(s)],
   "desktop.selectMenu": (p) => [w(`${targetText(p.target)}${isTargetElement(p.target) ? "の右クリックメニュー" : ""}で `), code(menuPath(p.path)), w(" を選ぶ")],
@@ -367,7 +376,12 @@ const BUILDERS_EN: Record<string, Builder> = {
     return name ? [w(`Call the subflow "${name}"`)] : [w("Call a subflow (none chosen)")];
   },
   "browser.open": (p) => [w("Open "), ...template(p.url), w(" in the browser")],
-  "browser.click": (p, s) => [w(`Click ${targetText(p.target)}${dialogText(p.dialog)}`), ...saveAs(s)],
+  "browser.click": (p, s) => [
+    w(`${p.button === "right" ? "Right-click" : p.double === true ? "Double-click" : "Click"} ${targetText(p.target)}${dialogText(p.dialog)}`),
+    ...saveAs(s),
+  ],
+  "browser.check": (p) => [w(`${p.checked === false ? "Uncheck" : "Check"} ${targetText(p.target)}`)],
+  "browser.navigate": (p) => [w(p.action === "back" ? "Go back a page" : p.action === "forward" ? "Go forward a page" : "Reload the page")],
   "browser.hover": (p) => [w(`Hover over ${targetText(p.target)}`)],
   "browser.attach": (p) => [w(p.title || p.url ? `Use the "${String(p.title ?? p.url)}" tab of the open browser` : "Use the open browser")],
   "browser.download": (p, s) => [w(`Click ${targetText(p.target)} and save the download to `), code(p.path ?? p.folder), w(p.path ? "" : " (keeping the site's name)"), ...saveAs(s)],
@@ -408,6 +422,10 @@ const BUILDERS_EN: Record<string, Builder> = {
   "desktop.readText": (p, s) => [...(p.file !== undefined && p.target === undefined ? [w("Read the text in the image "), ...template(p.file), w(" with OCR")] : [w(`Read the text of ${targetText(p.target)} with OCR`)]), ...saveAs(s)],
   "desktop.waitFor": (p) => [w(`Wait until ${targetText(p.target)} ${p.state === "hidden" ? "disappears" : "appears"}`)],
   "desktop.closeWindow": (p) => [w(`Close ${targetText(p.target)}`)],
+  "desktop.setWindow": (p) => [w(`${p.state === "maximized" ? "Maximize" : p.state === "minimized" ? "Minimize" : p.state === "normal" ? "Restore" : p.front === true ? "Bring to front" : "Move"} ${targetText(p.target)}`)],
+  "desktop.check": (p) => [w(`${p.checked === false ? "Uncheck" : "Check"} ${targetText(p.target)}`)],
+  "process.list": (p, s) => [w(p.name ? "Find running " : "List running programs"), ...(p.name ? [code(p.name)] : []), ...saveAs(s)],
+  "process.kill": (p) => [w("End "), code(p.name)],
   "desktop.getTable": (p, s) => [w(isTargetElement(p.target) ? `Read ${targetText(p.target)} as a table` : `Read the first table in ${targetText(p.target)}`), ...saveAs(s)],
   "sap.runTransaction": (p, s) => [w("Start the SAP transaction "), code(p.code), w(` in ${targetText(p.target)}`), ...saveAs(s)],
   "desktop.selectMenu": (p) => [w("Choose "), code(menuPath(p.path)), w(isTargetElement(p.target) ? ` from the right-click menu of ${targetText(p.target)}` : ` in ${targetText(p.target)}`)],

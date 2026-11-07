@@ -43,6 +43,7 @@ import {
   type StepTestResult,
 } from "./lib/api";
 import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
+import { copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
@@ -237,6 +238,8 @@ export type StudioState = {
   canUndo: boolean;
   canRedo: boolean;
   selection: Selection;
+  /** Nodes picked with Shift+click: siblings from the anchor to `focus` (the selected node). */
+  range: { anchor: string; focus: string; ids: string[] } | null;
   notice: string | null;
   error: string | null;
   run: RunState | null;
@@ -343,6 +346,18 @@ export type StudioState = {
   addStep(type: string, params?: Record<string, unknown>, name?: string): Promise<void>;
   moveSelected(delta: -1 | 1): Promise<void>;
   removeSelected(): Promise<void>;
+  /** Shift+click: selects the nodes from the selected one to `stepId` (same block only). */
+  selectTo(stepId: string): void;
+  /** Puts the selected nodes inside a new control node (繰り返し・条件分岐・エラー処理・グループ), where they were. */
+  wrapSelected(type: string): Promise<void>;
+  /** Puts the selected nodes on the clipboard (`cut` also removes them). */
+  copySelected(cut?: boolean): Promise<void>;
+  /** Adds the nodes on the clipboard after the selection (or at the "+" / empty block). */
+  paste(): Promise<void>;
+  /** Adds a copy of the selected nodes right after them. */
+  duplicateSelected(): Promise<void>;
+  /** Adds copies (new IDs) of `copied` where a new node would go. */
+  insertCopies(copied: Copied): Promise<void>;
   updateStep(stepId: string, patch: StepPatch): Promise<void>;
   setVariable(variable: VariableDef): Promise<void>;
   removeVariable(name: string): Promise<void>;
@@ -668,7 +683,7 @@ export function insertPlace(
   steps: Step[],
   selection: Selection,
   at: InsertAt | null,
-): { position: Position; before?: Step; after?: Step; into?: { parent: Step; block: string } } {
+): { position: Position; before?: Step; after?: Step; into?: { parent: Step; block: string }; prev?: Step } {
   if (at) {
     const siblings = at.parentId === null ? steps : (findStep(steps, at.parentId)?.blocks?.[at.block ?? ""] ?? []);
     const before = siblings[at.index];
@@ -677,6 +692,8 @@ export function insertPlace(
     return {
       position: { parentId: at.parentId, block: at.block, index: at.index },
       ...(before ? { before } : after ? { after } : parent && at.block ? { into: { parent, block: at.block } } : {}),
+      // The step the new one follows, when adding on a line between two (the palette offers what usually comes next).
+      ...(before && after ? { prev: after } : {}),
     };
   }
   if (selection?.kind === "slot") {
@@ -730,10 +747,30 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
 };
 
 
+/**
+ * The nodes the person has selected, in flow order: the Shift+click range when
+ * there is one for the selected node, else the selected node alone.
+ */
+export function selectedIds(state: Pick<StudioState, "selection" | "range">): string[] {
+  const { selection, range } = state;
+  if (selection?.kind !== "step") return [];
+  if (range && range.focus === selection.stepId) return range.ids;
+  return [selection.stepId];
+}
+
 /** A case of a switch, with nothing to compare to yet. */
 function newCase(body: Step[] = []): Step {
   return { id: newStepId(), type: CASE, params: { ...(DEFAULT_PARAMS[CASE] ?? {}) }, ...(body.length > 0 ? { blocks: { body } } : {}) };
 }
+
+/** The control nodes selected nodes can be put inside, and the block they go into. */
+export const WRAP_BLOCK: Record<string, string> = {
+  "control.forEach": "body",
+  "control.repeat": "body",
+  "control.if": "then",
+  "control.try": "try",
+  "control.group": "body",
+};
 
 export function newStepId(): string {
   return `stp_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -796,6 +833,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       canUndo: false,
       canRedo: false,
       selection: null,
+      range: null,
       notice: null,
       error: null,
       run: null,
@@ -1035,7 +1073,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       // Picking a step of the open flow brings the chart back up to it.
       select(selection) {
-        set(selection ? { selection, dive: [] } : { selection });
+        set(selection ? { selection, range: null, dive: [] } : { selection, range: null });
       },
 
       goTo(stepId) {
@@ -1125,10 +1163,117 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       async removeSelected() {
-        const selection = get().selection;
-        if (selection?.kind !== "step") return;
-        const ok = await get().applyOps([{ op: "removeStep", stepId: selection.stepId }]);
-        if (ok) set({ selection: null });
+        const ids = selectedIds(get());
+        if (ids.length === 0) return;
+        const ok = await get().applyOps(ids.map((stepId) => ({ op: "removeStep", stepId }) as EditOp));
+        if (ok) set({ selection: null, range: null });
+      },
+
+      async wrapSelected(type) {
+        const { flow } = get();
+        const ids = selectedIds(get());
+        const block = WRAP_BLOCK[type];
+        if (!flow || ids.length === 0 || !block) return;
+        const steps = flow.steps ?? [];
+        const loc = locate(steps, ids[0]!);
+        // A case belongs to its switch: it cannot move into another node.
+        if (!loc || ids.some((id) => findStep(steps, id)?.type === CASE)) return;
+        const first = findStep(steps, ids[0]!);
+        const wrapper: Step = { id: newStepId(), type, params: { ...(DEFAULT_PARAMS[type] ?? {}) } };
+        // A repeat over the list the node before it read, like adding one there.
+        const before = loc.index > 0 ? (loc.parentId === null ? steps : (findStep(steps, loc.parentId)?.blocks?.[loc.block ?? ""] ?? []))[loc.index - 1] : undefined;
+        if (type === FOR_EACH && before?.saveAs) wrapper.params = { ...wrapper.params, items: before.saveAs };
+        const ops: EditOp[] = [
+          { op: "addStep", step: wrapper, position: { parentId: loc.parentId, block: loc.block, index: loc.index } },
+          ...ids.map((stepId, index) => ({ op: "moveStep", stepId, position: { parentId: wrapper.id, block, index } }) as EditOp),
+        ];
+        const ok = await get().applyOps(ops);
+        if (!ok || !wrapper.id || !first) return;
+        set({ selection: { kind: "step", stepId: wrapper.id }, range: null });
+        if (unsetParams(wrapper, get().stepTypes.find((d) => d.type === type)).length > 0) get().openEditor(wrapper.id);
+      },
+
+      selectTo(stepId) {
+        const { flow, selection } = get();
+        if (selection?.kind !== "step" || !flow) return get().select({ kind: "step", stepId });
+        const range = get().range;
+        const anchor = range && range.focus === selection.stepId ? range.anchor : selection.stepId;
+        const ids = siblingRange(flow.steps ?? [], anchor, stepId);
+        set({
+          selection: { kind: "step", stepId },
+          range: ids && ids.length > 1 ? { anchor, focus: stepId, ids } : null,
+          dive: [],
+        });
+      },
+
+      async copySelected(cut = false) {
+        const { flow } = get();
+        const ids = selectedIds(get());
+        if (!flow || ids.length === 0) return;
+        const steps = ids.map((id) => findStep(flow.steps ?? [], id)).filter((s): s is Step => !!s);
+        try {
+          await navigator.clipboard.writeText(copyText(steps, flow.parts));
+        } catch (e) {
+          set({ error: message(e) });
+          return;
+        }
+        if (cut) await get().removeSelected();
+        else set({ notice: t.copiedNodes(steps.length) });
+      },
+
+      async paste() {
+        const { flow } = get();
+        if (!flow) return;
+        let text = "";
+        try {
+          text = await navigator.clipboard.readText();
+        } catch (e) {
+          set({ error: message(e) });
+          return;
+        }
+        const copied = readCopied(text);
+        if (!copied) {
+          set({ notice: t.nothingToPaste });
+          return;
+        }
+        await get().insertCopies(copied);
+      },
+
+      async duplicateSelected() {
+        const { flow } = get();
+        const ids = selectedIds(get());
+        if (!flow || ids.length === 0) return;
+        const steps = ids.map((id) => findStep(flow.steps ?? [], id)).filter((s): s is Step => !!s);
+        // Right after the last of them (ids are in flow order).
+        set({ selection: { kind: "step", stepId: ids.at(-1)! }, range: null, paletteAt: null });
+        await get().insertCopies({ steps, parts: {} });
+      },
+
+      async insertCopies(copied) {
+        const { flow, selection, paletteAt } = get();
+        if (!flow) return;
+        const { position } = insertPlace(flow.steps ?? [], selection, paletteAt);
+        const parent = position.parentId ? findStep(flow.steps ?? [], position.parentId) : null;
+        const intoCases = parent?.type === SWITCH && position.block === "cases";
+        // A case belongs in a switch: elsewhere its nodes are pasted without it,
+        // and other nodes pasted among the cases get a case of their own.
+        const steps = copied.steps
+          .flatMap((s) => (s.type === CASE && !intoCases ? (s.blocks?.body ?? []) : [s]))
+          .map((s) => withNewIds(s, newStepId))
+          .map((s) => (intoCases && s.type !== CASE ? newCase([s]) : s));
+        if (steps.length === 0) return;
+        const base = position.index ?? null;
+        const ops: EditOp[] = [
+          ...partOps(copied, flow.parts),
+          ...steps.map(
+            (step, i) => ({ op: "addStep", step, position: { ...position, index: base === null ? null : base + i } }) as EditOp,
+          ),
+        ];
+        const ok = await get().applyOps(ops);
+        if (!ok) return;
+        const ids = steps.map((s) => s.id ?? "");
+        const focus = ids.at(-1)!;
+        set({ selection: { kind: "step", stepId: focus }, range: ids.length > 1 ? { anchor: ids[0]!, focus, ids } : null, paletteAt: null });
       },
 
       async updateStep(stepId, patch) {

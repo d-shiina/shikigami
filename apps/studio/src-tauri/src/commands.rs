@@ -381,6 +381,44 @@ pub async fn table_columns(
     .unwrap_or_default())
 }
 
+/// What a file looks like at a glance, for the hover preview of a value
+/// (a picture, the first rows of a table, the start of a text). A relative
+/// path is in the flow's folder; a full path is read where it is. Never an
+/// error: a path that cannot be read says why in its `kind`.
+#[tauri::command]
+pub async fn preview_file(
+    state: State<'_, AppState>,
+    id: Option<FlowId>,
+    path: String,
+    sheet: Option<String>,
+) -> CmdResult<Value> {
+    let path = path.trim().trim_matches('"').to_owned();
+    if path.is_empty() || path.contains("{{") {
+        return Ok(serde_json::json!({ "kind": "missing" }));
+    }
+    let full = std::path::PathBuf::from(&path);
+    let target = if full.is_absolute() {
+        full
+    } else {
+        let Some(id) = id else {
+            return Ok(serde_json::json!({ "kind": "missing" }));
+        };
+        let relative = path.replace('\\', "/");
+        match state
+            .service
+            .project_path(&id, relative.trim_start_matches("./"))
+        {
+            Ok(target) => target,
+            Err(_) => return Ok(serde_json::json!({ "kind": "missing" })),
+        }
+    };
+    Ok(tokio::task::spawn_blocking(move || {
+        shikigami_adapters::preview::preview(&target, sheet.as_deref())
+    })
+    .await
+    .unwrap_or_else(|e| serde_json::json!({ "kind": "unreadable", "message": e.to_string() })))
+}
+
 #[tauri::command]
 pub fn write_project_text(
     state: State<'_, AppState>,

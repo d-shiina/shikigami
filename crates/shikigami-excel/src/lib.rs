@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use serde_json::{Value, json};
 use shikigami_core::registry::{RiskLevel, SINGLE_TEMPLATE_PATTERN, StepCategory, StepTypeDef};
 use shikigami_core::resource::{ResourceDef, resource_keys};
+use shikigami_core::secret::secret_ref_schema;
 use shikigami_runtime::{
     ActionHandler, ActionInput, Adapter, BoxFuture, RuntimeBuilder, StepError,
 };
@@ -37,6 +38,7 @@ mod live;
 pub mod macros;
 #[cfg(any(windows, test))]
 mod shape;
+mod sheets;
 #[cfg(any(windows, test))]
 mod table;
 
@@ -58,6 +60,13 @@ pub mod types {
     pub const FORMAT: &str = "excel.format";
     pub const FILTER: &str = "excel.filter";
     pub const PIVOT: &str = "excel.pivot";
+    pub const INSERT_ROWS: &str = "excel.insertRows";
+    pub const DELETE_ROWS: &str = "excel.deleteRows";
+    pub const CLEAR_RANGE: &str = "excel.clearRange";
+    pub const DELETE_SHEET: &str = "excel.deleteSheet";
+    pub const RENAME_SHEET: &str = "excel.renameSheet";
+    pub const COPY_SHEET: &str = "excel.copySheet";
+    pub const SAVE_AS: &str = "excel.saveAs";
 }
 
 /// Workbook file steps; needs nothing installed.
@@ -148,6 +157,13 @@ enum Kind {
     Format,
     Filter,
     Pivot,
+    InsertRows,
+    DeleteRows,
+    ClearRange,
+    DeleteSheet,
+    RenameSheet,
+    CopySheet,
+    SaveAs,
 }
 
 impl Kind {
@@ -162,6 +178,7 @@ impl Kind {
                 | Kind::Format
                 | Kind::Filter
                 | Kind::Pivot
+                | Kind::SaveAs
         )
     }
 }
@@ -173,12 +190,22 @@ struct ExcelStep {
 impl ActionHandler for ExcelStep {
     fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
         let kind = self.kind;
-        let params = input.params;
-        let cancel = input.cancel;
         // Excel is ended a little before the Runtime gives up on the step.
         let timeout =
             std::time::Duration::from_millis(input.timeout_ms.saturating_sub(1_000).max(1_000));
         Box::pin(async move {
+            let mut params = input.params.clone();
+            let cancel = input.cancel.clone();
+            // The workbook's password is a registered secret, looked up here
+            // (and masked in the logs) before the work leaves this thread.
+            if let Some(password) = params.get("password").filter(|v| !v.is_null()) {
+                let secret = input.resolve_secret(password)?.ok_or_else(|| {
+                    StepError::invalid_params(
+                        "'password' must be a registered secret { \"secret\": \"<name>\", \"field\": \"password\" }",
+                    )
+                })?;
+                params["password"] = Value::String(secret.value);
+            }
             blocking(move || {
                 // The Runtime's lock on the workbook ends with this future,
                 // but a timed-out attempt's file work goes on in the
@@ -315,10 +342,57 @@ fn run_step(kind: Kind, params: &Value, cancel: &CancellationToken) -> Result<Va
         | Kind::ExportPdf
         | Kind::Format
         | Kind::Filter
-        | Kind::Pivot => Err(StepError::permanent(
+        | Kind::Pivot
+        | Kind::SaveAs => Err(StepError::permanent(
             "PLATFORM_UNSUPPORTED",
-            "recalculating, sorting, formatting, filtering, pivot tables and saving as PDF need Windows with Excel installed",
+            "recalculating, sorting, formatting, filtering, pivot tables and saving in another format need Windows with Excel installed",
         )),
+        Kind::InsertRows | Kind::DeleteRows => {
+            let row = sheets::row_number(params, "row", None)?;
+            let count = sheets::row_number(params, "count", Some(1))?;
+            let mut workbook = book::open(&path)?;
+            let name = sheets::sheet_name(&workbook, sheet_name)?;
+            if kind == Kind::InsertRows {
+                sheets::insert_rows(&mut workbook, &name, row, count);
+            } else {
+                sheets::delete_rows(&mut workbook, &name, row, count);
+            }
+            save(&workbook, &path, cancel)?;
+            Ok(Value::Null)
+        }
+        Kind::ClearRange => {
+            let range = book::range_address(&string(params, "range")?)?;
+            let mut workbook = book::open(&path)?;
+            let date1904 = workbook.date1904();
+            sheets::clear_range(book::sheet_mut(&mut workbook, sheet_name)?, range, date1904)?;
+            save(&workbook, &path, cancel)?;
+            Ok(Value::Null)
+        }
+        Kind::DeleteSheet => {
+            let name = string(params, "sheet")?;
+            let mut workbook = book::open(&path)?;
+            if sheets::delete_sheet(&mut workbook, &name)? {
+                save(&workbook, &path, cancel)?;
+            }
+            Ok(Value::Null)
+        }
+        Kind::RenameSheet => {
+            let old = string(params, "sheet")?;
+            let new = string(params, "name")?;
+            let mut workbook = book::open(&path)?;
+            if sheets::rename_sheet(&mut workbook, &old, &new)? {
+                save(&workbook, &path, cancel)?;
+            }
+            Ok(Value::Null)
+        }
+        Kind::CopySheet => {
+            let from = string(params, "sheet")?;
+            let to = string(params, "name")?;
+            let mut workbook = book::open(&path)?;
+            sheets::copy_sheet(&mut workbook, &from, &to)?;
+            save(&workbook, &path, cancel)?;
+            Ok(Value::Null)
+        }
         Kind::AddSheet => {
             let name = string(params, "sheet")?;
             let mut workbook = book::open_or_create(&path, Some(&name))?;
@@ -469,6 +543,21 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         ],
         "description": "見出しの行番号（既定 1）"
     });
+    let row_number = json!({
+        "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": SINGLE_TEMPLATE_PATTERN }
+        ],
+        "description": "行番号（readRows の行なら {{ row._row }}）"
+    });
+    let count = json!({
+        "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": SINGLE_TEMPLATE_PATTERN }
+        ],
+        "description": "行の数（既定 1）"
+    });
+    let sheet_name = json!({ "type": "string", "minLength": 1, "maxLength": 31, "description": "新しいシート名" });
     let defs = vec![
         Def {
             step_type: READ_ROWS,
@@ -614,6 +703,131 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             more_paths: &[],
             examples: vec![
                 json!({ "type": ADD_SHEET, "params": { "path": "output/結果.xlsx", "sheet": "{{ month }}月" } }),
+            ],
+        },
+        Def {
+            step_type: INSERT_ROWS,
+            kind: Kind::InsertRows,
+            label: "行の挿入",
+            description: "Inserts `count` (default 1) empty rows at row `row` of `sheet`, moving that row and the ones below it down, and saves the workbook. Formulas and named ranges that point below follow the rows, as in Excel. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.",
+            params: props(json!({ "row": row_number.clone(), "count": count.clone() })),
+            required: &["path", "row"],
+            has_output: false,
+            writes: true,
+            excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": INSERT_ROWS, "name": "見出しの下に 1 行空ける", "params": { "path": PATH, "sheet": "受注", "row": 2 } }),
+            ],
+        },
+        Def {
+            step_type: DELETE_ROWS,
+            kind: Kind::DeleteRows,
+            label: "行の削除",
+            description: "Deletes `count` (default 1) rows from row `row` of `sheet`, moving the rows below up, and saves the workbook. To delete rows found with excel.readRows, use their `_row` and go from the bottom up (control.forEach over reverse(...)), because the rows below move up after each delete. Formulas that pointed at the deleted rows show #REF!, as in Excel. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.",
+            params: props(json!({ "row": row_number, "count": count })),
+            required: &["path", "row"],
+            has_output: false,
+            writes: true,
+            excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": "control.forEach", "params": { "items": "reverse(filter(orders, o => o.状態 == '取消'))", "itemVar": "order" }, "blocks": { "body": [
+                    { "type": DELETE_ROWS, "name": "取消の行を消す", "params": { "path": PATH, "sheet": "受注", "row": "{{ order._row }}" } }
+                ] } }),
+            ],
+        },
+        Def {
+            step_type: CLEAR_RANGE,
+            kind: Kind::ClearRange,
+            label: "範囲のクリア",
+            description: "Empties the cells `range` (e.g. \"A2:F1000\") of `sheet`, values and formulas, keeping their formats, and saves the workbook. Use it to empty a template's table before writing new rows. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.",
+            params: props(
+                json!({ "range": { "type": "string", "minLength": 1, "description": "空にするセル（例 A2:F1000）" } }),
+            ),
+            required: &["path", "range"],
+            has_output: false,
+            writes: true,
+            excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": CLEAR_RANGE, "name": "前回の明細を消す", "params": { "path": "templates/日報.xlsx", "sheet": "明細", "range": "A2:H500" } }),
+            ],
+        },
+        Def {
+            step_type: DELETE_SHEET,
+            kind: Kind::DeleteSheet,
+            label: "シートの削除",
+            description: "Deletes the sheet `sheet` and saves the workbook; does nothing when there is no such sheet, so re-running is safe. Refuses (SHEET_REFERENCED, with the cells in details.usedBy) when formulas or named ranges of other sheets use it, unless the workbook is open in Excel on this PC (Excel then deletes it as a person would, turning those references into #REF!). The only sheet of a workbook cannot be deleted (LAST_SHEET).",
+            params: props(json!({})),
+            required: &["path", "sheet"],
+            has_output: false,
+            writes: true,
+            excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": DELETE_SHEET, "name": "作業用のシートを消す", "params": { "path": "output/集計.xlsx", "sheet": "作業" } }),
+            ],
+        },
+        Def {
+            step_type: RENAME_SHEET,
+            kind: Kind::RenameSheet,
+            label: "シート名の変更",
+            description: "Renames the sheet `sheet` to `name` and saves the workbook. Formulas and named ranges that use the sheet are changed to the new name, as in Excel. Does nothing when `sheet` is gone and `name` exists (already renamed), so re-running is safe; fails with SHEET_EXISTS when both exist.",
+            params: props(json!({ "name": sheet_name.clone() })),
+            required: &["path", "sheet", "name"],
+            has_output: false,
+            writes: true,
+            excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": RENAME_SHEET, "params": { "path": "output/月報.xlsx", "sheet": "ひな形", "name": "{{ month }}月" } }),
+            ],
+        },
+        Def {
+            step_type: COPY_SHEET,
+            kind: Kind::CopySheet,
+            label: "シートのコピー",
+            description: "Copies the sheet `sheet` (values, formulas, formats, column widths) as a new sheet `name`, right after it, and saves the workbook. Fails with SHEET_EXISTS when `name` exists. A sheet with tables (Format as Table) or pivot tables can only be copied while the workbook is open in Excel on this PC (SHEET_NOT_COPYABLE otherwise).",
+            params: props(json!({ "name": sheet_name })),
+            required: &["path", "sheet", "name"],
+            has_output: false,
+            writes: true,
+            excel_app: false,
+            needs_excel: false,
+            more_paths: &[],
+            examples: vec![
+                json!({ "type": COPY_SHEET, "name": "ひな形から今月のシートを作る", "params": { "path": "output/月報.xlsx", "sheet": "ひな形", "name": "{{ month }}月" } }),
+            ],
+        },
+        Def {
+            step_type: SAVE_AS,
+            kind: Kind::SaveAs,
+            label: "名前を付けて保存",
+            description: "Saves a copy of the workbook `path` as `to`, in the format of `to`'s extension: .xlsx, .xlsm, .xlsb, .xls (Excel 97-2003), .csv (only `sheet`, or the first sheet; UTF-8 with BOM, or Shift_JIS with encoding \"shift_jis\") or .pdf. `path` may be an .xls or a password-protected workbook (`password`, a registered secret): save it as .xlsx first, and the other excel.* steps can then work on the copy, which has no password. Opens the saved file read-only in a separate, hidden Excel (changes not yet saved in an open Excel are not in the copy). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Needs Windows with desktop Excel. Output: { path }.",
+            params: json!({
+                "path": { "type": "string", "minLength": 1, "description": "元のブック（.xlsx・.xlsm・.xls・.xlsb・.csv）：フローのフォルダーからの相対パス（例 input/受注.xls）か絶対パス" },
+                "to": { "type": "string", "minLength": 1, "description": "保存先：拡張子（.xlsx・.xlsm・.xlsb・.xls・.csv・.pdf）で形式が決まる" },
+                "sheet": { "type": "string", "minLength": 1, "description": "CSV・PDF にするシート（省略すると CSV は先頭のシート、PDF はブック全体）" },
+                "password": secret_ref_schema(),
+                "encoding": { "enum": ["utf-8", "shift_jis"], "description": "CSV の文字コード（既定 utf-8、BOM 付き）" },
+                "overwrite": { "type": "boolean", "description": "同じ名前のファイルがあれば上書きする（既定 false）" }
+            }),
+            required: &["path", "to"],
+            has_output: true,
+            writes: true,
+            excel_app: false,
+            needs_excel: true,
+            more_paths: &["to"],
+            examples: vec![
+                json!({ "type": SAVE_AS, "name": "古い形式のブックを xlsx にする", "params": { "path": "input/受注.xls", "to": "work/受注.xlsx", "overwrite": true } }),
+                json!({ "type": SAVE_AS, "params": { "path": "input/給与.xlsx", "password": { "secret": "給与ブック", "field": "password" }, "to": "work/給与.xlsx", "overwrite": true } }),
+                json!({ "type": SAVE_AS, "params": { "path": "output/集計.xlsx", "sheet": "集計", "to": "output/集計.csv", "encoding": "shift_jis", "overwrite": true } }),
             ],
         },
         Def {
@@ -834,7 +1048,11 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                     .chain(d.more_paths.iter().copied())
                     .map(ResourceDef::file)
                     .collect(),
-                secret_params: vec![],
+                secret_params: if d.kind == Kind::SaveAs {
+                    vec!["password".into()]
+                } else {
+                    vec![]
+                },
                 default_timeout_ms: d.needs_excel.then_some(300_000),
                 deprecated: None,
                 plugin: None,

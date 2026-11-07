@@ -22,6 +22,7 @@ export const issuesEn: Record<string, IssueText> = {
   DEPRECATED_STEP_TYPE: "This node is an old kind. Replace it with the new one",
   PLUGIN_NOT_INSTALLED: "The plugin this node needs is not installed",
   INVALID_RETRY: "Set the retry count to 1 or more",
+  CONTROL_RETRY: "This kind of node does not use a retry count. To try several nodes again, put them in a group and set the group's retry count",
   NOT_A_CASE: "Only cases go inside a switch",
   CASE_OUTSIDE_SWITCH: "Put a case inside a switch",
 };

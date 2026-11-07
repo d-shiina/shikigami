@@ -634,6 +634,21 @@ impl Cx<'_> {
             self.for_each(step, path);
         }
 
+        // Of the control steps only a group is tried again as a whole;
+        // elsewhere `retry` would be silently ignored.
+        if step.retry.is_some()
+            && step.step_type.starts_with("control.")
+            && step.step_type != control::GROUP
+        {
+            self.warn(
+                "CONTROL_RETRY",
+                format!("`retry` is not used on {}", step.step_type),
+                format!("{path}/retry"),
+                Some(&step.id),
+            );
+            self.hint("Wrap the steps to try again in control.group and put `retry` on the group, or put `retry` on the step that may fail.");
+        }
+
         if step.step_type == control::WAIT_UNTIL && step.retry.is_some() {
             self.warn(
                 "REDUNDANT_RETRY",
@@ -1730,6 +1745,40 @@ mod tests {
             !c.contains("FOREACH_SHARED_WRITE") && !c.contains("FOREACH_BREAK"),
             "{c}"
         );
+    }
+
+    #[test]
+    fn retry_is_only_for_groups_among_control_steps() {
+        let retry = Some(crate::model::RetryPolicy {
+            max_attempts: 3,
+            backoff_ms: 100,
+            backoff_multiplier: 1.0,
+        });
+        let mut group = Step::new(control::GROUP).with_id("g").with_block(
+            "body",
+            vec![
+                Step::new("log.message")
+                    .with_id("l")
+                    .with_param("message", "x"),
+            ],
+        );
+        group.retry = retry;
+        let mut branch = Step::new(control::IF)
+            .with_id("i")
+            .with_param("condition", "true");
+        branch.retry = retry;
+        let mut s = Flow::new("retry");
+        s.steps = vec![group, branch];
+        let report = validator().validate(&s);
+        assert_eq!(report.error_count(), 0, "{report:?}");
+        let flagged: Vec<_> = report
+            .issues
+            .iter()
+            .filter(|i| i.code == "CONTROL_RETRY")
+            .map(|i| i.path.clone())
+            .collect();
+        assert_eq!(flagged, vec!["/steps/1/retry".to_owned()]);
+        assert!(hint_of(&report, "CONTROL_RETRY").contains("control.group"));
     }
 
     #[test]

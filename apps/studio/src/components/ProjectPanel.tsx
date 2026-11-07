@@ -5,6 +5,8 @@
 // on the shelf under the pointer, or are sorted by name when dropped
 // anywhere else on the panel. A file dragged out of the panel goes into a
 // file setting, or onto the chart as the node that reads it (FileDrag).
+import { HoverPreview } from "./HoverPreview";
+import { isImagePath } from "../lib/preview";
 import type { ProjectFile, Flow, Step, StepTypeDef } from "@shikigami/schema";
 import {
   Boxes,
@@ -77,13 +79,15 @@ function FileRow({ file, role }: { file: ProjectFile; role: Role }) {
   const { text, dim } = meta(file, flow, types, role);
   // Inside the shelf: input/2026/a.xlsx shows as 2026/a.xlsx.
   const shown = file.path.split("/").slice(1).join("/");
+  // A picture (a template, a screenshot in output/) shows itself on hover.
+  const picture = isImagePath(file.path);
   return (
     <button
       type="button"
       onClick={() => void openFile(file.path)}
       onPointerDown={(e) => startFileDrag(e, file.path)}
       onContextMenu={menuFor(() => fileMenu(file.path))}
-      title={`${file.path}\n${t.fileDrop.dragHint}`}
+      title={picture ? undefined : `${file.path}\n${t.fileDrop.dragHint}`}
       className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left ${open ? "bg-brand-50" : "hover:bg-slate-100"} ${dim ? "opacity-75" : ""}`}
     >
       <span
@@ -92,10 +96,10 @@ function FileRow({ file, role }: { file: ProjectFile; role: Role }) {
       >
         <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col leading-tight">
+      <HoverPreview source={picture ? { kind: "file", path: file.path } : null} className="flex min-w-0 flex-1 flex-col leading-tight">
         <span className="truncate text-[12.5px] text-ink">{shown}</span>
         <span className={`truncate text-[10.5px] ${file.inUse ? "text-shu-500" : "text-slate-400"}`}>{text}</span>
-      </span>
+      </HoverPreview>
       {file.inUse && <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-shu-500 ring-[3px] ring-shu-500/15" title={t.project.inUse} />}
     </button>
   );
@@ -246,7 +250,9 @@ function PartsShelf() {
             ) : (
               <span className="w-3 shrink-0" aria-hidden="true" />
             )}
-            <span className="min-w-0 flex-1 truncate">{part.label || name}</span>
+            <HoverPreview value={part.target} className="min-w-0 flex-1 truncate">
+              {part.label || name}
+            </HoverPreview>
             {!part.target && (
               <span className="shrink-0 rounded-md bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={t.todos.notPicked}>
                 {t.todos.badge}

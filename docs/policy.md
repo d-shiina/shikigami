@@ -66,7 +66,7 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | Field | Default | Meaning |
 |---|---|---|
 | `sites` | empty (anywhere) | Sites that `browser.open`, `oauth.signIn` (`authorizeUrl` and `tokenUrl`), `http.request` (and plugin nodes that declare `targets`) may open. An origin (`https://example.com`, a port allowed) or every subdomain with `https://*.example.com`. http and https are different. `about:blank` is always allowed, `file:` and the like never |
-| `apps` | empty (any) | Programs that `desktop.launch` and `process.run` may start. With a folder only that path, with a file name alone any folder. Case, `/` vs `\` and a missing `.exe` do not matter |
+| `apps` | empty (any) | Programs that `desktop.launch` and `process.run` may start and `process.kill` may end. With a folder only that path, with a file name alone any folder. Case, `/` vs `\` and a missing `.exe` do not matter |
 | `ai.runFlow` | allow for safe/interactive, ask for dangerous | The AI's `run_flow`. Decided by the highest risk among the nodes that may run (called flows included) |
 | `ai.testStep` | same | The AI's `test_step`. The highest risk including nodes inside blocks and flows called with `flow.call` |
 | `ai.deleteFlow` | ask | The AI's `delete_flow` |
@@ -74,6 +74,7 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | `flows.<id>.unattended` | true | When false, `shikigami run` does not run it, nor any flow that calls it (`UNATTENDED_NOT_ALLOWED`). Studio still can |
 | `records.keepDays` | none (keep) | Each PC deletes its run records (`runs/<run-id>/`) and MCP calls (`audit/mcp.jsonl`) older than this many days ([audit.md](audit.md)). Applied when a run ends; runs still going are never deleted |
 | `records.keepRuns` | none (keep) | Each PC keeps at most this many run records, the newest |
+| `records.failureScreenshots` | `true` | When a run of the whole flow fails at a browser or desktop node, a picture of that page or window is saved beside the run's log in the flow's folder (`logs/<time>_failed.png`, removed with its log) and its path goes in the error as `details.screenshot`. `false` turns this off, e.g. when the screens show personal data |
 | `remote.enabled` | false | Take jobs from a management server ([remote.md](remote.md)). The PC must also be enrolled (`shikigami agent enroll`) |
 | `remote.manager` | none | The management server's URL. `https://` (`http://` only for `localhost`) |
 | `remote.flows` | empty (none) | Flow IDs the management server may start, or `"*"` for all. `flows.<id>.unattended: false` still refuses one |

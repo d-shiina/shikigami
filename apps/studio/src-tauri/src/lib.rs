@@ -48,6 +48,7 @@ pub fn run() {
                 .unwrap_or_else(|_| "info,shikigami=debug".into()),
         )
         .init();
+    crash_log();
 
     updater::on_startup();
     let adapters = shikigami_adapters::all();
@@ -153,6 +154,7 @@ pub fn run() {
             commands::read_project_image,
             commands::read_project_text,
             commands::table_columns,
+            commands::preview_file,
             commands::write_project_text,
             commands::upload_project_file,
             commands::copy_into_project,
@@ -246,4 +248,46 @@ fn fit_to_screen(app: &tauri::App) {
             tracing::warn!(error = %e, "cannot maximize the window");
         }
     }
+}
+
+/// Where Studio writes its panics: `%LOCALAPPDATA%\Shikigami\logs\studio-crash.log`.
+fn crash_log_path() -> Option<std::path::PathBuf> {
+    Some(
+        dirs::data_local_dir()?
+            .join("Shikigami")
+            .join("logs")
+            .join("studio-crash.log"),
+    )
+}
+
+/// Writes every panic (with where it happened and the stack) to
+/// [`crash_log_path`] as well as the console, so a Studio that closed on its
+/// own leaves a trace to find the cause by. Panics that are caught (a
+/// request that failed alone) are written too.
+fn crash_log() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if let Some(path) = crash_log_path() {
+            let _ = std::fs::create_dir_all(path.parent().unwrap_or(&path));
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+            {
+                use std::io::Write as _;
+                let thread = std::thread::current();
+                let _ = writeln!(
+                    file,
+                    "---- {} (UTC) v{} thread '{}'\n{info}\n{}",
+                    time::OffsetDateTime::now_utc()
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .unwrap_or_default(),
+                    env!("CARGO_PKG_VERSION"),
+                    thread.name().unwrap_or("?"),
+                    std::backtrace::Backtrace::force_capture(),
+                );
+            }
+        }
+        previous(info);
+    }));
 }

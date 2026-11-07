@@ -42,6 +42,7 @@ mod bridge;
 #[cfg(windows)]
 mod capture;
 pub mod engine;
+pub mod hover;
 #[cfg(windows)]
 mod jab;
 pub mod jabmap;
@@ -65,7 +66,9 @@ mod uia;
 pub mod vision;
 pub mod visual;
 
-use backend::{Backend, Direction, MouseButton, OcrEngine, Op, ScrollUnit, Text};
+use backend::{
+    Backend, Bounds, Direction, MouseButton, OcrEngine, Op, ScrollUnit, Text, WindowState,
+};
 use target::{APP_SITE_PREFIX, Allow, ElementQuery, Target, WindowQuery};
 use visual::Looking;
 
@@ -81,6 +84,8 @@ pub mod types {
     pub const WAIT_FOR: &str = "desktop.waitFor";
     pub const IS_VISIBLE: &str = "desktop.isVisible";
     pub const CLOSE_WINDOW: &str = "desktop.closeWindow";
+    pub const SET_WINDOW: &str = "desktop.setWindow";
+    pub const CHECK: &str = "desktop.check";
     pub const READ_TEXT: &str = "desktop.readText";
     pub const SCREENSHOT: &str = "desktop.screenshot";
     pub const SCROLL: &str = "desktop.scroll";
@@ -358,6 +363,8 @@ enum Kind {
     WaitFor,
     IsVisible,
     CloseWindow,
+    SetWindow,
+    Check,
     ReadText,
     Screenshot,
     Scroll,
@@ -387,6 +394,7 @@ impl ActionHandler for DesktopStep {
                 Kind::ReadText => return self.read_text(&input, deadline).await,
                 Kind::Screenshot => return self.screenshot(&input, deadline).await,
                 Kind::GetTable => return self.get_table(&input, deadline).await,
+                Kind::Check => return self.check(&input, deadline).await,
                 Kind::Click => Op::Click {
                     target: target(params, Allow::Plain)?,
                 },
@@ -450,6 +458,53 @@ impl ActionHandler for DesktopStep {
                 Kind::CloseWindow => Op::CloseWindow {
                     target: target(params, Allow::Plain)?,
                 },
+                Kind::SetWindow => {
+                    let bound = |key: &str| -> Result<Option<i32>, StepError> {
+                        match params.get(key) {
+                            None | Some(Value::Null) => Ok(None),
+                            Some(v) => v
+                                .as_i64()
+                                .and_then(|n| i32::try_from(n).ok())
+                                .map(Some)
+                                .ok_or_else(|| {
+                                    StepError::invalid_params(format!(
+                                        "'{key}' must be a whole number of pixels"
+                                    ))
+                                }),
+                        }
+                    };
+                    let state = params
+                        .get("state")
+                        .and_then(Value::as_str)
+                        .map(WindowState::parse)
+                        .transpose()?;
+                    let bounds = Bounds {
+                        x: bound("x")?,
+                        y: bound("y")?,
+                        width: bound("width")?,
+                        height: bound("height")?,
+                    };
+                    let front = params
+                        .get("front")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    if state.is_none() && bounds.is_empty() && !front {
+                        return Err(StepError::invalid_params(
+                            "say what to change: state (maximized, minimized, normal), front: true, or x / y / width / height",
+                        ));
+                    }
+                    if state == Some(WindowState::Minimized) && (front || !bounds.is_empty()) {
+                        return Err(StepError::invalid_params(
+                            "a minimized window is neither in front nor placed; leave out front and x / y / width / height",
+                        ));
+                    }
+                    Op::SetWindow {
+                        target: Target::window_only(target(params, Allow::Plain)?.window),
+                        state,
+                        front,
+                        bounds,
+                    }
+                }
                 Kind::Scroll => Op::Scroll {
                     target: target(params, Allow::Plain)?,
                     direction: params
@@ -710,6 +765,53 @@ impl DesktopStep {
         }
     }
 
+    /// `desktop.check`: reads the checkbox and activates it only when it is
+    /// not as wanted, so a second run never flips it back. Works wherever
+    /// desktop.getValue reads a checkbox and desktop.click toggles it.
+    async fn check(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
+        let target = target(&input.params, Allow::Plain)?;
+        let want = input.params.get("checked").and_then(Value::as_bool) != Some(false);
+        // A three-state box may need two presses.
+        for _ in 0..3 {
+            let now = self
+                .until_found(
+                    Op::GetValue {
+                        target: target.clone(),
+                    },
+                    input,
+                    deadline,
+                )
+                .await?;
+            match now {
+                Value::Bool(checked) if checked == want => return Ok(Value::Null),
+                Value::Bool(_) => {
+                    self.until_found(
+                        Op::Click {
+                            target: target.clone(),
+                        },
+                        input,
+                        deadline,
+                    )
+                    .await?;
+                }
+                _ => {
+                    return Err(StepError::permanent(
+                        "NOT_A_CHECKBOX",
+                        "the target is not a checkbox (its value is text)",
+                    )
+                    .with_details(json!({ "hint": "Point target.element at the checkbox itself (role checkbox). For a radio button or a tab, use desktop.click." })));
+                }
+            }
+        }
+        Err(StepError::new(
+            "CHECK_FAILED",
+            format!(
+                "the checkbox did not become {}",
+                if want { "checked" } else { "unchecked" }
+            ),
+        ))
+    }
+
     async fn is_visible(&self, input: &ActionInput) -> Result<Value, StepError> {
         let target = target(&input.params, Allow::Visual)?;
         let looking = match target.is_visual() {
@@ -919,10 +1021,11 @@ fn target_schema(allow: Allow) -> Value {
             "type": "object",
             "description": "トップレベルのウィンドウ。inspect_ui（引数なし）の一覧から title / process を写す",
             "properties": {
-                "title": { "type": "string", "minLength": 1, "description": "タイトル（既定は部分一致・大文字小文字無視）" },
+                "title": { "type": "string", "minLength": 1, "description": "タイトル（照合のしかたは match。既定は部分一致・大文字小文字無視）" },
+                "match": { "enum": ["contains", "exact", "prefix", "suffix", "pattern"], "description": "title の照合のしかた：contains（含む・既定）、exact（完全一致）、prefix（で始まる）、suffix（で終わる）、pattern（正規表現。日付やファイル名が変わる窓に）。exact 以外は大文字小文字を区別しない" },
                 "process": { "type": "string", "minLength": 1, "description": "実行ファイル名（例 billing.exe）" },
                 "className": { "type": "string", "minLength": 1 },
-                "exact": { "type": "boolean", "description": "title を完全一致にする" },
+                "exact": { "type": "boolean", "description": "title を完全一致にする（match: \"exact\" の古い書き方）" },
                 "nth": { "type": "integer", "minimum": 0, "description": "複数一致したときの 0 始まりの番号" }
             },
             "additionalProperties": false,
@@ -1216,6 +1319,47 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             has_output: false,
             examples: vec![
                 json!({ "type": CLOSE_WINDOW, "params": { "target": { "window": { "process": "notepad.exe" } } } }),
+            ],
+            secret_params: &[],
+            input: false,
+        },
+        Def {
+            step_type: SET_WINDOW,
+            kind: Kind::SetWindow,
+            label: "ウィンドウ状態",
+            description: "Changes how the window `target.window` is shown: `state` \"maximized\", \"minimized\" or \"normal\"; `x` / `y` / `width` / `height` (screen pixels; what is left out stays) move and size it (a maximized window is restored first); `front: true` brings it to the front. Output: { state, x, y, width, height } afterwards. Use it before steps whose places depend on the window's size (desktop.mouseClick with point, images), so every run starts from the same layout.",
+            params: json!({
+                "target": target,
+                "state": { "enum": ["maximized", "minimized", "normal"], "description": "最大化・最小化・元のサイズ" },
+                "front": { "type": "boolean", "description": "前面に出す" },
+                "x": { "type": "integer", "description": "左端の位置（画面の左からのピクセル）" },
+                "y": { "type": "integer", "description": "上端の位置（画面の上からのピクセル）" },
+                "width": { "type": "integer", "minimum": 1, "description": "幅（ピクセル）" },
+                "height": { "type": "integer", "minimum": 1, "description": "高さ（ピクセル）" }
+            }),
+            required: &["target"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": SET_WINDOW, "name": "請求システムを最大化", "params": { "target": { "window": { "process": "billing.exe" } }, "state": "maximized" } }),
+                json!({ "type": SET_WINDOW, "name": "決まった位置と大きさにする", "params": { "target": { "window": { "title": "販売管理" } }, "x": 0, "y": 0, "width": 1280, "height": 800, "front": true } }),
+            ],
+            secret_params: &[],
+            input: true,
+        },
+        Def {
+            step_type: CHECK,
+            kind: Kind::Check,
+            label: "チェック状態",
+            description: "Sets the checkbox `target` to checked (`checked: true`, the default) or unchecked (`checked: false`), without the mouse. Does nothing when it already is, so running the flow twice never flips it back (desktop.click would). Fails with NOT_A_CHECKBOX when the target has no checked state.",
+            params: json!({
+                "target": target,
+                "checked": { "type": "boolean", "description": "チェックを付ける（外すときは false、既定は付ける）" }
+            }),
+            required: &["target"],
+            has_output: false,
+            examples: vec![
+                json!({ "type": CHECK, "name": "メール送信をオン", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "role": "checkbox", "name": "メール送信" } } } }),
+                json!({ "type": CHECK, "name": "印刷をオフ", "params": { "target": { "window": { "process": "billing.exe" }, "element": { "id": "chkPrint" } }, "checked": false } }),
             ],
             secret_params: &[],
             input: false,

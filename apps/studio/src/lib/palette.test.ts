@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { insertPlace } from "../store";
 import { setLocale, t } from "./i18n";
 import { en } from "./locales/en";
-import { frequent, groupOf, groups, normalize, paletteItems, search, stepSummary } from "./palette";
+import { SUBGROUPS, bySection, frequent, frequentBySection, groupOf, groups, nextAfter, normalize, paletteItems, search, stepSummary } from "./palette";
+import { toKana } from "./romaji";
 
 const def = (type: string, category: string, label: string, description = ""): StepTypeDef =>
   ({ type, category, label, description, params: {}, blocks: [] }) as unknown as StepTypeDef;
@@ -20,6 +21,13 @@ const DEFS: StepTypeDef[] = [
   def("mail.list", "office", "メール検索"),
   def("flow.delay", "flow", "待機（時間指定）"),
   def("acme.stamp", "acme", "はんこを押す", "Stamps a document. Then more."),
+  def("browser.attach", "browser", "既存ブラウザへの接続"),
+  def("log.message", "log", "ログ出力"),
+  def("dialog.input", "system", "入力ダイアログ"),
+  def("process.run", "system", "プログラム実行"),
+  def("browser.fill", "browser", "文字入力"),
+  def("control.group", "control", "グループ"),
+  def("control.forEach", "control", "繰り返し（リスト）"),
 ];
 
 describe("node palette", () => {
@@ -98,6 +106,56 @@ describe("node palette", () => {
       expect(help.summary).not.toBe("");
     }
     setLocale("ja", false);
+  });
+});
+
+describe("node palette, finding by what a node is for", () => {
+  it("lists a group's nodes in the order people use them, under headings", () => {
+    const browser = paletteItems(DEFS).filter((i) => i.group === "browser");
+    expect(browser.map((i) => i.key)).toEqual(["browser.open", "browser.attach", "browser.click", "browser.fill"]);
+    expect(browser.map((i) => i.sub)).toEqual(["open", "open", "operate", "operate"]);
+  });
+
+  it("does not find a katakana word inside another one", () => {
+    const items = paletteItems(DEFS);
+    // ログ is not in ダイアログ nor プログラム; ループ is not in グループ.
+    expect(search(items, "ログ").map((i) => i.key)[0]).toBe("log.message");
+    expect(search(items, "ログ").map((i) => i.key)).not.toEqual(expect.arrayContaining(["dialog.input"]));
+    expect(search(items, "ログ").map((i) => i.key)).not.toContain("process.run");
+    expect(search(items, "ループ").map((i) => i.key)).not.toContain("control.group");
+    expect(search(items, "ループ").map((i) => i.key)).toContain("control.forEach");
+  });
+
+  it("finds nodes by romaji and by their English names", () => {
+    expect(toKana("kurikaesi")).toBe("くりかえし");
+    expect(toKana("kurikaeshi")).toBe("くりかえし");
+    expect(toKana("kitte")).toBe("きって");
+    expect(toKana("excel")).toBeNull();
+    const items = paletteItems(DEFS);
+    expect(search(items, "kurikaesi").map((i) => i.key)).toContain("control.forEach");
+    expect(search(items, "loop").map((i) => i.key)).toContain("control.forEach");
+  });
+
+  it("keeps operations and flow control apart", () => {
+    const items = paletteItems(DEFS);
+    const view = frequentBySection(items, []);
+    expect(view.map(([s]) => s)).toEqual(["apps", "flow"]);
+    expect(view[0]![1].every((i) => !i.key.startsWith("control.") && i.group !== "log")).toBe(true);
+    expect(view[1]![1].map((i) => i.key)).toContain("control.if");
+    // Search results too, the section of the best match first.
+    expect(bySection(search(items, "ログ")).map(([s]) => s)[0]).toBe("flow");
+  });
+
+  it("gives every built-in node a place in its group", () => {
+    const placed = new Set(Object.values(SUBGROUPS).flatMap((subs) => subs.flatMap(([, types]) => types)));
+    const missing = Object.keys(t.stepHelp).filter((type) => type !== "control.case" && !placed.has(type));
+    expect(missing).toEqual([]);
+  });
+
+  it("offers what usually follows a node", () => {
+    const items = paletteItems(DEFS);
+    expect(nextAfter(items, "excel.readRows").map((i) => i.key)[0]).toBe("control.forEach");
+    expect(nextAfter(items, "unknown.type")).toEqual([]);
   });
 });
 

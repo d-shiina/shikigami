@@ -355,18 +355,20 @@ function Shell() {
       <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
         {showSidebar && (
           <div className="relative flex">
-            <Sidebar width={sizes.sidebar} onCollapse={() => setSidebar("closed")} />
+            <Sidebar width={sizes.sidebar} onToggle={() => setSidebar("closed")} />
             {grip("sidebar")}
           </div>
         )}
+        {/* Folded, the sidebar keeps its icons; its button unfolds it, or lays it over the chart without room. */}
+        {!showSidebar && <Sidebar width={sizes.sidebar} onToggle={toggleSidebar} mini />}
         {!showSidebar && peek && (
           <Peek onClose={() => setPeek(false)}>
-            <Sidebar width={sizes.sidebar} onCollapse={() => setPeek(false)} />
+            <Sidebar width={sizes.sidebar} onToggle={() => setPeek(false)} />
           </Peek>
         )}
         {/* The work floats on the window's ground, framed and rounded, as in Linear. */}
         <div className="mt-1.5 mr-1.5 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
-          <TitleBar view={view} onView={setView} onShowSidebar={showSidebar ? undefined : toggleSidebar} />
+          <TitleBar view={view} onView={setView} />
           <HumanBanner />
           <Banner />
           <div className="flex min-h-0 flex-1">
@@ -568,6 +570,19 @@ export function App() {
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (store.getState().flow) store.getState().setPaletteOpen(!store.getState().paletteOpen);
+        return;
+      }
+      // Nodes: copy, cut, paste and duplicate. Text selected on the page keeps
+      // the window's own copy.
+      const letter = e.key.toLowerCase();
+      if (mod && !e.shiftKey && !e.altKey && ["c", "x", "v", "d"].includes(letter) && store.getState().flow && !store.getState().reviewing) {
+        if ((letter === "c" || letter === "x") && (window.getSelection()?.toString() ?? "") !== "") return;
+        e.preventDefault();
+        const s = store.getState();
+        if (letter === "c") void s.copySelected();
+        else if (letter === "x") void s.copySelected(true);
+        else if (letter === "v") void s.paste();
+        else void s.duplicateSelected();
         return;
       }
       if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {

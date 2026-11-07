@@ -20,7 +20,7 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { Plus } from "lucide-react";
+import { Plus, StickyNote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
@@ -57,7 +57,9 @@ import {
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence, typeTitle } from "../lib/sentence";
 import { AppTag } from "./AppTag";
-import { callKey, diveChain, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
+import { HoverPreview } from "./HoverPreview";
+import { previewSource } from "../lib/preview";
+import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { ChangeView, changeText } from "./ValueView";
@@ -87,7 +89,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; primary: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -457,8 +459,9 @@ function ValueText({ value, refs, color, run, stepId }: { value: string; refs: s
   );
 }
 
-function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, string | undefined>; run: RunValues; stepId: string }) {
+function NodeRow({ row, vars, run, stepId, sheet }: { row: Row; vars: Map<string, string | undefined>; run: RunValues; stepId: string; sheet?: string }) {
   const focused = useFocus();
+  const parts = useStudio((s) => s.flow?.parts);
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "var(--cat-other)";
   if (row.kind === "more") {
     return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[11px] text-slate-400">{t.flow.moreRows(row.count)}</div>;
@@ -494,13 +497,37 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
           {t.flow.unsetValue}
         </span>
       ) : row.file ? (
-        <FileValue file={row.file} />
+        <FileValue file={row.file} sheet={sheet} />
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-ink" title={row.value}>
+        <ParamValue row={row} parts={parts}>
           <ValueText value={row.value} refs={row.refs} color={typeColor} run={run} stepId={stepId} />
-        </span>
+        </ParamValue>
       )}
     </div>
+  );
+}
+
+/**
+ * A setting's value on the node. Resting the pointer on it shows what it
+ * names (a picture by its path, the picture of a part) or the whole text
+ * when it is cut short; otherwise the tooltip has the text.
+ */
+function ParamValue({ row, parts, children }: { row: Extract<Row, { kind: "param" }>; parts: Flow["parts"]; children: React.ReactNode }) {
+  const className = "flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-ink";
+  // A node pointing at a named part shows the part's picture.
+  const raw = row.raw && typeof row.raw === "object" && typeof (row.raw as { part?: unknown }).part === "string" ? (parts?.[(row.raw as { part: string }).part]?.target ?? row.raw) : row.raw;
+  const source = previewSource(raw) ?? (row.full ? { kind: "text" as const, text: row.full } : null);
+  if (!source) {
+    return (
+      <span className={className} title={row.value}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <HoverPreview source={source} className={className}>
+      {children}
+    </HoverPreview>
   );
 }
 
@@ -516,16 +543,18 @@ const ROLE_VAR: Record<string, string> = {
  * colour, marked when Excel has it open (a write would fail), and opened in
  * its sheet or app on double-click.
  */
-function FileValue({ file }: { file: NonNullable<Extract<Row, { kind: "param" }>["file"]> }) {
+function FileValue({ file, sheet }: { file: NonNullable<Extract<Row, { kind: "param" }>["file"]>; sheet?: string }) {
   const color = ROLE_VAR[file.role] ?? "var(--color-slate-400)";
   const entry = useProjectMaybe((s) => s.files?.files.find((f) => f.path.toLowerCase() === file.path.toLowerCase()) ?? null, null);
   const known = useProjectMaybe((s) => s.files !== null, false);
   const openFile = useProjectMaybe((s) => s.openFile, null);
   const missing = known && !entry && file.role !== "output" && file.role !== "work" && !file.path.includes("{{");
+  const source = previewSource(file.path, { sheet });
   return (
-    <span
+    <HoverPreview
+      source={source}
       className="flex h-[20px] min-w-0 flex-1 items-center gap-1.5 leading-[20px] text-ink"
-      title={entry?.inUse ? `${file.path} · ${t.project.inUse}` : file.path}
+      title={source ? (entry?.inUse ? t.project.inUse : undefined) : entry?.inUse ? `${file.path} · ${t.project.inUse}` : file.path}
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (entry && openFile) void openFile(file.path);
@@ -534,7 +563,7 @@ function FileValue({ file }: { file: NonNullable<Extract<Row, { kind: "param" }>
       <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: color }} />
       <span className={`min-w-0 flex-1 truncate text-[12px] ${missing ? "text-shu-500 line-through decoration-1" : ""}`}>{file.path}</span>
       {entry?.inUse && <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-shu-500" />}
-    </span>
+    </HoverPreview>
   );
 }
 
@@ -652,13 +681,13 @@ function StepNode({ data }: StepNodeProps) {
               : "border-slate-200 hover:border-slate-300"
       } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
     >
-      {(latest || (data.selected && !data.readOnly)) && (
+      {(latest || (data.primary && !data.readOnly)) && (
         // Beside the step's head: the flow line runs through the top and bottom
         // centres, and variable chips sit beside the rows below the head.
         <NodeToolbar isVisible position={Position.Right} align="start" offset={8}>
           <div className="flex items-center gap-1.5">
             {latest && <ReviewToolbar entry={latest} />}
-            {data.selected && !data.readOnly && <StepTools step={data.step} />}
+            {data.primary && !data.readOnly && <StepTools step={data.step} />}
           </div>
         </NodeToolbar>
       )}
@@ -697,13 +726,18 @@ function StepNode({ data }: StepNodeProps) {
         ) : (
           <AppTag def={data.def} title={title} />
         )}
+        {data.step.description && (
+          <StickyNote size={13} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-label={t.memo}>
+            <title>{`${t.memo}${t.colon}${data.step.description}`}</title>
+          </StickyNote>
+        )}
         <NodeStatus data={data} />
       </div>
       {data.call && <CallBar call={data.call} />}
       {rows.length > 0 && (
         <div style={{ paddingBottom: NODE_PAD_B }} className="border-t border-slate-100 pt-0.5">
           {rows.map((row, i) => (
-            <NodeRow key={i} row={row} vars={data.vars} run={data.run} stepId={data.step.id ?? ""} />
+            <NodeRow key={i} row={row} vars={data.vars} run={data.run} stepId={data.step.id ?? ""} sheet={typeof data.step.params?.sheet === "string" ? data.step.params.sheet : undefined} />
           ))}
         </div>
       )}
@@ -769,6 +803,8 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
   return (
     <div
       style={{ width: NODE_W, height: SLOT_H }}
+      // The empty flow's block: Ctrl+K opens the palette under it, not over it.
+      data-add-first={data.parentId === null || undefined}
       title={data.addCase ? t.flow.addCase : t.addStep}
       className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed text-[13px] ${
         data.selected
@@ -978,6 +1014,9 @@ export function FlowCanvas() {
   const flow = inside ? chain.at(-1)!.flow : root;
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
+  const range = useStudio((s) => s.range);
+  const selectTo = useStudio((s) => s.selectTo);
+  const picked = useMemo(() => new Set(selectedIds({ selection, range })), [selection, range]);
   const validation = useStudio((s) => s.validation);
   // The open flow's last run, until it is edited or run again.
   const run = useStudio(trailOf);
@@ -1137,7 +1176,9 @@ export function FlowCanvas() {
           issueCount: issueCounts.get(id) ?? 0,
           unsetCount: inside ? 0 : unsetParams(n.data.step, n.data.def).length,
           todos: todos.get(id) ?? NO_TODOS,
-          selected: !inside && selection?.kind === "step" && selection.stepId === id,
+          selected: !inside && picked.has(id),
+          // The toolbar beside a node acts on the selected one only.
+          primary: !inside && selection?.kind === "step" && selection.stepId === id,
           byAi: !inside && !reviewing && reviews.has(id),
           reviews: inside || reviewing ? [] : (reviews.get(id) ?? []),
           diff: !inside && reviewing ? diffs.get(id) : undefined,
@@ -1256,8 +1297,12 @@ export function FlowCanvas() {
       onNodeClick={(event, node) => {
         if (inside || node.type === "frame") return;
         const data = node.data as StepNodeData | SlotNodeData;
-        if (data.kind === "step") select({ kind: "step", stepId: data.step.id ?? node.id });
-        else {
+        if (data.kind === "step") {
+          const id = data.step.id ?? node.id;
+          // Shift+click picks the nodes from the selected one to this one, to copy or remove them together.
+          if (event.shiftKey) selectTo(id);
+          else select({ kind: "step", stepId: id });
+        } else {
           // An empty block is there to be filled: clicking it opens the palette for it.
           select({ kind: "slot", parentId: data.parentId, block: data.block });
           // Beside a switch's cases it adds the next case.

@@ -23,6 +23,7 @@ use tokio::sync::oneshot;
 use windows::Win32::Foundation::{
     CloseHandle, E_ACCESSDENIED, HANDLE, HWND, LPARAM, POINT, RECT, WPARAM,
 };
+use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
 use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
@@ -44,19 +45,23 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    BM_CLICK, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId,
-    IsIconic, PostMessageW, SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_RESTORE, SendMessageTimeoutW,
-    SetCursorPos, SetForegroundWindow, ShowWindow, WM_CLOSE, WM_IME_CONTROL,
+    BM_CLICK, GA_ROOT, GetAncestor, GetCursorPos, GetForegroundWindow, GetSystemMetrics,
+    GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, IsZoomed,
+    PostMessageW, SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE,
+    SWP_NOACTIVATE, SWP_NOZORDER, SendMessageTimeoutW, SetCursorPos, SetForegroundWindow,
+    SetWindowPos, ShowWindow, WM_CLOSE, WM_IME_CONTROL, WindowFromPoint,
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
 use crate::backend::{
-    Backend, Capture, Direction, MouseButton, OcrEngine, OcrOptions, Op, ScrollUnit, Text,
+    Backend, Bounds, Capture, Direction, MouseButton, OcrEngine, OcrOptions, Op, ScrollUnit, Text,
+    WindowState,
 };
 use crate::bitmap::{Bitmap, Rect};
 use crate::bridge::AppBridge;
 use crate::capture;
 use crate::engine::Engine;
+use crate::hover::{self, Hover};
 use crate::jab::JavaWindow;
 use crate::keys;
 use crate::keys::{Chord, Key};
@@ -354,6 +359,12 @@ impl Uia {
             Op::Type { target, text } => self.type_text(&target, &text),
             Op::Press { target, chord } => self.press(&target, &chord),
             Op::CloseWindow { target } => self.close_window(&target),
+            Op::SetWindow {
+                target,
+                state,
+                front,
+                bounds,
+            } => self.set_window(&target, state, front, bounds),
             Op::Scroll {
                 target,
                 direction,
@@ -442,6 +453,7 @@ impl Uia {
             | Op::Type { target, .. }
             | Op::Press { target, .. }
             | Op::CloseWindow { target }
+            | Op::SetWindow { target, .. }
             | Op::Scroll { target, .. }
             | Op::Wheel { target, .. }
             | Op::Hover { target }
@@ -784,6 +796,9 @@ impl Uia {
         // SAFETY: plain Win32 call.
         let own = unsafe { GetCurrentProcessId() };
         let mut shown: Option<(i32, i32, i32, i32)> = None;
+        // The window frame on screen: its handle, place and title.
+        let mut shown_window: Option<TopWindow> = None;
+        let mut hover = Hover::new();
         let clicked = loop {
             match overlay.take_input() {
                 Some(Input::Clicked(pt)) => break pt,
@@ -794,12 +809,18 @@ impl Uia {
                 return Ok(json!({ "cancelled": true, "timedOut": true }));
             }
             let mut pt = POINT::default();
-            // SAFETY: UIA / Win32 calls on the UIA thread.
-            let under = unsafe {
-                GetCursorPos(&mut pt)
-                    .ok()
-                    .and_then(|()| self.automation.ElementFromPoint(pt).ok())
-            };
+            // SAFETY: plain Win32 call.
+            let moved = unsafe { GetCursorPos(&mut pt) }.is_ok();
+            let started = Instant::now();
+            // Ask the app under the mouse only when it moved (or now and
+            // then while it rests), never faster than the app answers.
+            if !moved || !hover.due((pt.x, pt.y), started) {
+                std::thread::sleep(hover::TICK);
+                continue;
+            }
+            // SAFETY: UIA call on the UIA thread.
+            let under = unsafe { self.automation.ElementFromPoint(pt).ok() };
+            hover.looked((pt.x, pt.y), started, started.elapsed());
             if let Some(el) = under {
                 // SAFETY: reading the element's current properties.
                 let (pid, rect) = unsafe {
@@ -809,15 +830,25 @@ impl Uia {
                     )
                 };
                 if let Some(rect) = rect.filter(|_| pid != own) {
-                    let key = (rect.left, rect.top, rect.right, rect.bottom);
-                    if shown != Some(key) {
+                    // The window the node will act on: framed too, and
+                    // named on the banner, so it is clear which one it is.
+                    let window = top_window_at(pt).filter(|w| w.pid != own);
+                    let window_changed = window.as_ref().map(TopWindow::key)
+                        != shown_window.as_ref().map(TopWindow::key);
+                    if window_changed {
+                        overlay.window(window.as_ref().map(|w| w.rect));
+                        shown_window = window;
+                    }
+                    let key = rect_key(rect);
+                    if shown != Some(key) || window_changed {
                         shown = Some(key);
                         overlay.frame(Some(rect));
-                        overlay.detail(self.describe_live(&el));
+                        let title = shown_window.as_ref().map_or("", |w| w.title.as_str());
+                        overlay.detail(hover::banner_line(title, &self.describe_live(&el)));
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(40));
+            std::thread::sleep(hover::TICK);
         };
         // The frame must not be under the click when it is looked up.
         drop(overlay);
@@ -1491,6 +1522,92 @@ impl Uia {
             }
         }
         Ok(Value::Null)
+    }
+
+    fn set_window(
+        &self,
+        target: &Target,
+        state: Option<WindowState>,
+        front: bool,
+        bounds: Bounds,
+    ) -> Result<Value, StepError> {
+        let (_, window, _) = self.find_window(&target.window)?;
+        let h = hwnd(window.handle);
+        if h.0.is_null() {
+            return Err(StepError::permanent(
+                "NOT_SUPPORTED",
+                "this window cannot be moved or sized",
+            ));
+        }
+        // SAFETY: Win32 calls on the UIA thread, on a window handle UIA gave.
+        unsafe {
+            match state {
+                Some(WindowState::Maximized) => {
+                    let _ = ShowWindow(h, SW_MAXIMIZE);
+                }
+                Some(WindowState::Minimized) => {
+                    let _ = ShowWindow(h, SW_MINIMIZE);
+                }
+                Some(WindowState::Normal) => {
+                    let _ = ShowWindow(h, SW_RESTORE);
+                }
+                None => {}
+            }
+            if !bounds.is_empty() {
+                // A maximized or minimized window keeps its size: restore it first.
+                if IsZoomed(h).as_bool() || IsIconic(h).as_bool() {
+                    let _ = ShowWindow(h, SW_RESTORE);
+                }
+                let mut r = RECT::default();
+                GetWindowRect(h, &raw mut r).or_fail()?;
+                SetWindowPos(
+                    h,
+                    None,
+                    bounds.x.unwrap_or(r.left),
+                    bounds.y.unwrap_or(r.top),
+                    bounds.width.unwrap_or(r.right - r.left).max(1),
+                    bounds.height.unwrap_or(r.bottom - r.top).max(1),
+                    SWP_NOZORDER | SWP_NOACTIVATE,
+                )
+                .or_fail()?;
+            }
+            if front {
+                if IsIconic(h).as_bool() {
+                    let _ = ShowWindow(h, SW_RESTORE);
+                }
+                if GetForegroundWindow() != h {
+                    // Windows lets the process that sent the last input
+                    // choose the foreground window.
+                    let _ = send(&[mouse(MOUSEEVENTF_MOVE)]);
+                    let _ = SetForegroundWindow(h);
+                }
+                if foreground_pid() != window.pid {
+                    return Err(StepError::new(
+                        "FOREGROUND_DENIED",
+                        "Windows did not let Shikigami bring the window to the front",
+                    )
+                    .with_details(json!({
+                        "hint": "Keep the screen unlocked and do not use the PC while desktop steps run."
+                    })));
+                }
+            }
+            let mut r = RECT::default();
+            GetWindowRect(h, &raw mut r).or_fail()?;
+            let now = if IsIconic(h).as_bool() {
+                WindowState::Minimized
+            } else if IsZoomed(h).as_bool() {
+                WindowState::Maximized
+            } else {
+                WindowState::Normal
+            };
+            Ok(json!({
+                "state": now.name(),
+                "x": r.left,
+                "y": r.top,
+                "width": r.right - r.left,
+                "height": r.bottom - r.top,
+            }))
+        }
     }
 
     // -- scrolling and menus --------------------------------------------------------
@@ -2276,6 +2393,7 @@ fn op_target(op: &Op) -> Option<&Target> {
         | Op::Type { target, .. }
         | Op::Press { target, .. }
         | Op::CloseWindow { target }
+        | Op::SetWindow { target, .. }
         | Op::Scroll { target, .. }
         | Op::Wheel { target, .. }
         | Op::Hover { target }
@@ -2527,6 +2645,63 @@ fn replay_key(vk: u16, extended: bool, held: keys::Held) {
     tap(&mut inputs, key);
     inputs.extend(missing.iter().rev().map(|k| key_event(*k, true)));
     let _ = send(&inputs);
+}
+
+fn rect_key(rect: RECT) -> (i32, i32, i32, i32) {
+    (rect.left, rect.top, rect.right, rect.bottom)
+}
+
+/// The top-level window at `pt` on screen, as the picker frames it.
+struct TopWindow {
+    hwnd: HWND,
+    pid: u32,
+    /// What is seen of it (without the invisible resize borders).
+    rect: RECT,
+    title: String,
+}
+
+impl TopWindow {
+    /// Which window, and where: a change means the frame moves.
+    fn key(&self) -> (isize, (i32, i32, i32, i32)) {
+        (self.hwnd.0 as isize, rect_key(self.rect))
+    }
+}
+
+/// The top-level window at `pt`. Only Win32 calls that do not wait for the
+/// app (no WM_GETTEXT), so a hung app cannot stall the picker. The picker's
+/// own frames and banner let the mouse through, so they are never found.
+fn top_window_at(pt: POINT) -> Option<TopWindow> {
+    // SAFETY: plain Win32 calls with local buffers.
+    unsafe {
+        let at = WindowFromPoint(pt);
+        if at.is_invalid() {
+            return None;
+        }
+        let top = GetAncestor(at, GA_ROOT);
+        let top = if top.is_invalid() { at } else { top };
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(top, Some(&mut pid));
+        let mut rect = RECT::default();
+        let seen = DwmGetWindowAttribute(
+            top,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&raw mut rect).cast(),
+            std::mem::size_of::<RECT>() as u32,
+        );
+        if seen.is_err() || rect.right <= rect.left {
+            GetWindowRect(top, &mut rect).ok()?;
+        }
+        let mut buf = [0u16; 256];
+        let n = InternalGetWindowText(top, &mut buf);
+        let title =
+            String::from_utf16_lossy(&buf[..usize::try_from(n).unwrap_or(0).min(buf.len())]);
+        Some(TopWindow {
+            hwnd: top,
+            pid,
+            rect,
+            title,
+        })
+    }
 }
 
 fn hwnd(handle: isize) -> HWND {

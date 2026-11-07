@@ -8,6 +8,8 @@ Crate `shikigami-system`. Built-in nodes for things outside app windows. Value p
 |---|---|---|---|
 | `http.request` | Calls a web API | `{ status, headers, body }` | dangerous |
 | `process.run` | Runs a command-line program and waits for it | `{ exitCode, stdout, stderr }` | dangerous |
+| `process.list` | Lists running programs (only `name`'s when given) | `[{ pid, name }]` | safe |
+| `process.kill` | Ends every process of `name` with its children | `{ killed }` | dangerous |
 | `clipboard.get` / `clipboard.set` | Reads / sets the clipboard text (Windows) | text | safe / interactive |
 | `dialog.message` | Shows a message and returns the button pressed (Windows) | `ok` `cancel` `yes` `no` | interactive |
 | `dialog.input` | Asks for one line of text (Windows; empty on cancel) | text | interactive |
@@ -30,6 +32,13 @@ Crate `shikigami-system`. Built-in nodes for things outside app windows. Value p
 - No console window is shown. Past the node's `timeoutMs` the program is ended.
 - When the node ends (finished, stopped or timed out), child processes the program started are ended too (a job object on Windows). Leftovers of an earlier attempt never keep running during a retry.
 - To leave an app with a window open, use `desktop.launch` (apps opened with `cmd /c start …` are closed when the node ends).
+
+## `process.list` / `process.kill`
+
+- `name` may be `EXCEL` or `EXCEL.EXE` (case and `.exe` do not matter).
+- To restart an application that hangs, `process.kill` then `desktop.launch`. Unsaved work is lost. A program that is not running gives `{ killed: 0 }`, not an error.
+- Whether a program runs: `length(list) > 0` on the output of `process.list`.
+- Programs of another user or an administrator cannot be ended (`PROCESS_KILL_FAILED`). With `apps` in `policy.json`, only the programs listed there can be ended.
 
 ## Clipboard and dialogs
 

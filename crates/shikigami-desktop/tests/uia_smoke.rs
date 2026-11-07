@@ -122,6 +122,37 @@ async fn notepad_round_trip() {
             < 100.0
     );
 
+    // The window itself: placed and sized, then maximized.
+    s.steps = vec![
+        step(
+            types::SET_WINDOW,
+            json!({ "target": { "window": window }, "state": "normal", "x": 40, "y": 30, "width": 640, "height": 480, "front": true }),
+            Some("text"),
+        ),
+        step(
+            types::SET_WINDOW,
+            json!({ "target": { "window": window }, "state": "maximized" }),
+            Some("scrolled"),
+        ),
+        step(
+            types::SET_WINDOW,
+            json!({ "target": { "window": window }, "state": "normal" }),
+            None,
+        ),
+    ];
+    let report = runtime
+        .start(s.clone(), RunOptions::default())
+        .unwrap()
+        .wait()
+        .await
+        .unwrap();
+    eprintln!("window: {:?} {:?}", report.outputs, report.error);
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["text"]["state"], json!("normal"));
+    assert_eq!(report.outputs["text"]["width"], json!(640));
+    assert_eq!(report.outputs["text"]["x"], json!(40));
+    assert_eq!(report.outputs["scrolled"]["state"], json!("maximized"));
+
     // The menu bar: Help > About Notepad opens a dialog (a modal one: the
     // step must not wait for it to close).
     let about = json!({ "window": { "process": "notepad.exe", "title": "About" } });

@@ -7,6 +7,8 @@
 
 use std::sync::Arc;
 
+pub mod preview;
+
 use shikigami_plugins::PluginProblem;
 use shikigami_runtime::{Adapter, Runtime};
 

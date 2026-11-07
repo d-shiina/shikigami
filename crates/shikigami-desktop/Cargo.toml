@@ -17,6 +17,7 @@ tokio-util.workspace = true
 tracing.workspace = true
 png = "0.18.1"
 base64.workspace = true
+regex.workspace = true
 ort = { version = "2.0.0-rc.15", default-features = false, features = ["load-dynamic", "std"] }
 
 [target.'cfg(windows)'.dependencies]
@@ -29,6 +30,7 @@ windows = { version = "0.62.2", features = [
     "Storage",
     "Storage_Streams",
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Storage_Xps",

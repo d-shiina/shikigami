@@ -48,6 +48,8 @@ Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GU
 | `desktop.waitFor` | `target`, `state`（visible / hidden / enabled） | – | 使わない |
 | `desktop.isVisible` | `target`, `waitMs` | true / false | 使わない |
 | `desktop.closeWindow` | `target` | – | 使わない |
+| `desktop.setWindow` | `target`（ウィンドウ）, `state`（`maximized` / `minimized` / `normal`）, `front`（前面に出す）, `x` `y` `width` `height`（画面の左上からのピクセル。書いたものだけ変える） | `{ state, x, y, width, height }` | 使わない |
+| `desktop.check` | `target`（チェックボックス）, `checked`（既定 true） | – | 使わない |
 | `desktop.mouseClick` | `target`, `button`, `double` | – | **使う** |
 | `desktop.type` | `target`, `text`（文字またはシークレット） | – | **使う** |
 | `desktop.press` | `target`, `key`（`Enter` `Control+S` `Alt+F4` など。ブラウザと同じ書き方） | – | **使う** |

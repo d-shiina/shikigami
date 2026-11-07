@@ -47,7 +47,7 @@ fn examples_validate_and_every_step_locks_its_workbook() {
     let runtime = runtime();
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 15);
+    assert_eq!(defs.len(), 22);
     for def in &defs {
         assert!(def.step_type.starts_with("excel."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
@@ -359,4 +359,98 @@ async fn excel_only_steps_say_they_need_windows() {
         report.error.as_ref().map(|e| e.code.as_str()),
         Some("PLATFORM_UNSUPPORTED")
     );
+}
+
+#[tokio::test]
+async fn rows_and_sheets_are_inserted_deleted_renamed_and_copied() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = workbook(&dir, "月報.xlsx");
+    let report = run(vec![
+        step(types::WRITE_RANGE, json!({ "path": path, "sheet": "ひな形", "cell": "A1", "values": [["品目", "金額"], ["a", 1], ["b", 2], ["c", 3]] })),
+        step(types::WRITE_CELL, json!({ "path": path, "sheet": "ひな形", "cell": "B6", "value": { "formula": "SUM(B2:B4)" } })),
+        step(types::ADD_SHEET, json!({ "path": path, "sheet": "集計" })),
+        step(types::WRITE_CELL, json!({ "path": path, "sheet": "集計", "cell": "A1", "value": { "formula": "ひな形!B6*2" } })),
+        // b goes, an empty row comes in under the header.
+        step(types::DELETE_ROWS, json!({ "path": path, "sheet": "ひな形", "row": 3 })),
+        step(types::INSERT_ROWS, json!({ "path": path, "sheet": "ひな形", "row": 2, "count": "{{ 1 + 1 }}" })),
+        step(types::COPY_SHEET, json!({ "path": path, "sheet": "ひな形", "name": "4月" })),
+        step(types::RENAME_SHEET, json!({ "path": path, "sheet": "ひな形", "name": "元 データ" })),
+        // Re-running a rename that is done changes nothing.
+        step(types::RENAME_SHEET, json!({ "path": path, "sheet": "ひな形", "name": "元 データ" })),
+        step(types::CLEAR_RANGE, json!({ "path": path, "sheet": "4月", "range": "A4:B5" })),
+        step(types::DELETE_SHEET, json!({ "path": path, "sheet": "ない" })),
+        saving(step(types::LIST_SHEETS, json!({ "path": path })), "rows"),
+        saving(step(types::READ_RANGE, json!({ "path": path, "sheet": "4月", "range": "A1:B7" })), "out"),
+    ])
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["rows"], json!(["元 データ", "4月", "集計"]));
+    assert_eq!(
+        report.outputs["out"],
+        json!([
+            ["品目", "金額"],
+            [null, null],
+            [null, null],
+            [null, null],
+            [null, null],
+            [null, null],
+            [null, null]
+        ])
+    );
+    let book = book::open(&path).unwrap();
+    let source = book.sheet_by_name("元 データ").unwrap();
+    assert_eq!(source.cell("A4").unwrap().value(), "a");
+    assert_eq!(source.cell("A5").unwrap().value(), "c");
+    // The total moved with its rows, and the other sheet follows the rename.
+    assert_eq!(source.cell("B7").unwrap().formula(), "SUM(B4:B5)");
+    let total = book
+        .sheet_by_name("集計")
+        .unwrap()
+        .cell("A1")
+        .unwrap()
+        .formula()
+        .to_owned();
+    assert_eq!(total, "'元 データ'!B7*2");
+    // Cells outside the cleared range stay.
+    assert!(
+        book.sheet_by_name("4月")
+            .unwrap()
+            .cell("B7")
+            .unwrap()
+            .is_formula()
+    );
+
+    let used = error_of(vec![step(
+        types::DELETE_SHEET,
+        json!({ "path": path, "sheet": "元 データ" }),
+    )])
+    .await;
+    assert_eq!(used.code, "SHEET_REFERENCED");
+    assert_eq!(used.details.as_ref().unwrap()["usedBy"], json!(["集計!A1"]));
+    let taken = error_of(vec![step(
+        types::COPY_SHEET,
+        json!({ "path": path, "sheet": "4月", "name": "集計" }),
+    )])
+    .await;
+    assert_eq!(taken.code, "SHEET_EXISTS");
+    let report = run(vec![
+        step(
+            types::DELETE_SHEET,
+            json!({ "path": path, "sheet": "集計" }),
+        ),
+        step(
+            types::DELETE_SHEET,
+            json!({ "path": path, "sheet": "元 データ" }),
+        ),
+        saving(step(types::LIST_SHEETS, json!({ "path": path })), "rows"),
+    ])
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["rows"], json!(["4月"]));
+    let last = error_of(vec![step(
+        types::DELETE_SHEET,
+        json!({ "path": path, "sheet": "4月" }),
+    )])
+    .await;
+    assert_eq!(last.code, "LAST_SHEET");
 }

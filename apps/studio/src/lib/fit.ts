@@ -1,13 +1,15 @@
 // Which panels fit beside the chart. The chart is what you work on, so it
 // keeps at least CHART_MIN and the panels around it give way, outermost
-// first: the sidebar hides (its button in the title bar lays it over the
-// chart for a moment), the review inbox folds to its strip, the AI pane
+// first: the sidebar folds to its icon strip (whose button lays the whole
+// sidebar over the chart for a moment), the review inbox folds to its strip, the AI pane
 // narrows, and last the AI pane takes the inspector's place on the right
 // (closing it brings the inspector back). The window's own minimum (960px)
 // always fits. The person can drag each panel's edge; fit then works with
 // those widths, and a drag never takes the chart below CHART_MIN.
 
 export const SIDEBAR = 208;
+/** The sidebar folded: its icons only, as Linear and VS Code keep them. */
+export const SIDEBAR_MINI = 44;
 export const INBOX = 248;
 export const INBOX_FOLDED = 44;
 export const RIGHT = 340;
@@ -49,7 +51,7 @@ export function readSizes(raw: string | null): Sizes {
 }
 
 export type Fit = {
-  /** The sidebar may be shown (it can still be hidden by hand). */
+  /** The sidebar may be shown in full (it can still be folded by hand); else its icon strip. */
   sidebar: boolean;
   /** The review inbox is open rather than a strip. */
   inbox: boolean;
@@ -68,7 +70,7 @@ type Shown = {
   right: boolean;
   /** The place has a list of its own between the sidebar and the chart (review). */
   inbox: boolean;
-  /** The person hid the sidebar; it then takes no room. */
+  /** The person folded the sidebar; it then takes only its icon strip. */
   sidebar: boolean;
 };
 
@@ -77,7 +79,7 @@ export function fit(width: number, shown: Shown, sizes: Sizes = DEFAULT_SIZES): 
   const f: Fit = { sidebar: true, inbox: true, right: shown.right, agent: shown.agent ? sizes.agent : 0, chart: 0 };
   const chart = () =>
     width -
-    (f.sidebar && shown.sidebar ? sizes.sidebar : 0) -
+    (f.sidebar && shown.sidebar ? sizes.sidebar : SIDEBAR_MINI) -
     (shown.inbox ? (f.inbox ? sizes.inbox : INBOX_FOLDED) : 0) -
     (f.right ? sizes.right : 0) -
     f.agent;

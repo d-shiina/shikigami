@@ -500,7 +500,7 @@ export function PointTools({
     setBusy(true);
     setNote(null);
     try {
-      const result = await api.pointAt(adapter, { action: "pick", message: t.picker.banner, ...extra }, session);
+      const result = await api.pointAt(adapter, { action: "pick", message: browser ? t.picker.banner : t.picker.bannerDesktop, ...extra }, session);
       if (result.cancelled || result.status === "cancelled") {
         setNote({ text: t.picker.cancelled });
       } else if (result.how === "point" && !canPoint) {
@@ -615,9 +615,19 @@ export function ObjectFields({
         }
         let editor: React.ReactNode;
         if (sub.enum) {
+          // A window's 照合方法 also stands for the older `exact: true`: show it
+          // as 完全一致, and let a choice replace it.
+          const legacyExact = key === "match" && v === undefined && current.exact === true;
+          const choose = (choice: string) => {
+            if (key !== "match" || current.exact === undefined) return set(key, choice || null);
+            const { exact: _old, ...rest } = current;
+            const next = choice ? { ...rest, match: choice } : (({ match: _m, ...r }) => r)(rest);
+            onChange(Object.keys(next).length === 0 ? null : next);
+          };
           editor = (
-            <select className={inputClass} value={String(v ?? "")} onChange={(e) => set(key, e.target.value || null)}>
-              <option value="">{t.props.unset}</option>
+            <select className={inputClass} value={legacyExact ? "exact" : String(v ?? "")} onChange={(e) => choose(e.target.value)}>
+              {/* A choice whose default has a name (照合方法: 含む) says so when unset. */}
+              <option value="">{t.paramNames.choices[key]?.[""] ?? t.props.unset}</option>
               {sub.enum.map((option) => (
                 <option key={String(option)} value={String(option)}>
                   {key === "role" ? roleLabel(String(option)) : choiceLabel(key, option)}
