@@ -785,3 +785,100 @@ describe("studio store", () => {
     });
   });
 });
+
+describe("copying nodes", () => {
+  const steps = [
+    { id: "s1", type: "log.message", params: { message: "1" } },
+    { id: "s2", type: "log.message", params: { message: "2" } },
+    { id: "s3", type: "log.message", params: { message: "3" } },
+  ];
+
+  function withClipboard() {
+    let text = "";
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { clipboard: { writeText: vi.fn(async (v: string) => void (text = v)), readText: vi.fn(async () => text) } },
+    });
+    return { get: () => text, set: (v: string) => void (text = v) };
+  }
+
+  it("copies a Shift+click range and pastes it after the selection under new IDs", async () => {
+    const clip = withClipboard();
+    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(2, steps)));
+    const store = createStudioStore(fakeApi({ edit, getFlow: vi.fn(async () => flow(1, steps)) }));
+    await store.getState().open("scn_a");
+    store.getState().select({ kind: "step", stepId: "s2" });
+    store.getState().selectTo("s1");
+    await store.getState().copySelected();
+    expect(JSON.parse(clip.get()).steps.map((s: { id: string }) => s.id)).toEqual(["s1", "s2"]);
+
+    store.getState().select({ kind: "step", stepId: "s3" });
+    await store.getState().paste();
+    const ops = edit.mock.calls[0]![2] as Extract<EditOp, { op: "addStep" }>[];
+    expect(ops.map((o) => o.position)).toEqual([
+      { parentId: null, block: null, index: 3 },
+      { parentId: null, block: null, index: 4 },
+    ]);
+    expect(ops.map((o) => o.step.params)).toEqual([{ message: "1" }, { message: "2" }]);
+    expect(ops.every((o) => o.step.id?.startsWith("stp_"))).toBe(true);
+    expect(store.getState().range?.ids).toEqual(ops.map((o) => o.step.id));
+  });
+
+  it("removes every picked node at once, as one change", async () => {
+    withClipboard();
+    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(2, [steps[0]!])));
+    const store = createStudioStore(fakeApi({ edit, getFlow: vi.fn(async () => flow(1, steps)) }));
+    await store.getState().open("scn_a");
+    store.getState().select({ kind: "step", stepId: "s2" });
+    store.getState().selectTo("s3");
+    await store.getState().copySelected(true);
+    expect(edit).toHaveBeenCalledOnce();
+    expect(edit.mock.calls[0]![2]).toEqual([
+      { op: "removeStep", stepId: "s2" },
+      { op: "removeStep", stepId: "s3" },
+    ]);
+    expect(store.getState().selection).toBeNull();
+  });
+
+  it("says so when the clipboard holds no nodes", async () => {
+    const clip = withClipboard();
+    clip.set("ただの文字");
+    const edit = vi.fn();
+    const store = createStudioStore(fakeApi({ edit, getFlow: vi.fn(async () => flow(1, steps)) }));
+    await store.getState().open("scn_a");
+    await store.getState().paste();
+    expect(edit).not.toHaveBeenCalled();
+    expect(store.getState().notice).toBe(t.nothingToPaste);
+  });
+
+  it("duplicates right after the node", async () => {
+    withClipboard();
+    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(2, steps)));
+    const store = createStudioStore(fakeApi({ edit, getFlow: vi.fn(async () => flow(1, steps)) }));
+    await store.getState().open("scn_a");
+    store.getState().select({ kind: "step", stepId: "s1" });
+    await store.getState().duplicateSelected();
+    const op = edit.mock.calls[0]![2][0] as Extract<EditOp, { op: "addStep" }>;
+    expect(op.position).toEqual({ parentId: null, block: null, index: 1 });
+    expect(op.step.params).toEqual({ message: "1" });
+    expect(op.step.id).not.toBe("s1");
+  });
+
+  it("puts the picked nodes inside a new loop where they were, as one change", async () => {
+    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(2, steps)));
+    const store = createStudioStore(fakeApi({ edit, getFlow: vi.fn(async () => flow(1, steps)) }));
+    await store.getState().open("scn_a");
+    store.getState().select({ kind: "step", stepId: "s2" });
+    store.getState().selectTo("s3");
+    await store.getState().wrapSelected("control.repeat");
+    expect(edit).toHaveBeenCalledOnce();
+    const [add, ...moves] = edit.mock.calls[0]![2];
+    const wrapper = (add as Extract<EditOp, { op: "addStep" }>).step;
+    expect(add).toMatchObject({ op: "addStep", step: { type: "control.repeat" }, position: { parentId: null, block: null, index: 1 } });
+    expect(moves).toEqual([
+      { op: "moveStep", stepId: "s2", position: { parentId: wrapper.id, block: "body", index: 0 } },
+      { op: "moveStep", stepId: "s3", position: { parentId: wrapper.id, block: "body", index: 1 } },
+    ]);
+    expect(store.getState().selection).toEqual({ kind: "step", stepId: wrapper.id });
+  });
+});

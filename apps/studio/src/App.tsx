@@ -578,6 +578,19 @@ export function App() {
         if (store.getState().flow) store.getState().setPaletteOpen(!store.getState().paletteOpen);
         return;
       }
+      // Nodes: copy, cut, paste and duplicate. Text selected on the page keeps
+      // the window's own copy.
+      const letter = e.key.toLowerCase();
+      if (mod && !e.shiftKey && !e.altKey && ["c", "x", "v", "d"].includes(letter) && store.getState().flow && !store.getState().reviewing) {
+        if ((letter === "c" || letter === "x") && (window.getSelection()?.toString() ?? "") !== "") return;
+        e.preventDefault();
+        const s = store.getState();
+        if (letter === "c") void s.copySelected();
+        else if (letter === "x") void s.copySelected(true);
+        else if (letter === "v") void s.paste();
+        else void s.duplicateSelected();
+        return;
+      }
       if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
         void store.getState().undo();

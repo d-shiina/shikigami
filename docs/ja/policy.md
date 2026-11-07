@@ -66,7 +66,7 @@
 | 項目 | 既定 | 意味 |
 |---|---|---|
 | `sites` | 空（どこでも） | `browser.open`・`oauth.signIn`（`authorizeUrl` と `tokenUrl`）・`http.request`（と、`targets` で宣言したプラグインのステップ）が開いてよいサイト。オリジン（`https://example.com`、ポート付きも可）か、サブドメインすべての `https://*.example.com`。http と https は別。`about:blank` はいつでも可、`file:` などは不可 |
-| `apps` | 空（どれでも） | `desktop.launch`・`process.run` が起動してよいプログラム。フォルダ付きならそのパスだけ、ファイル名だけならどのフォルダでも。大文字小文字・`/` と `\`・`.exe` の有無は区別しない |
+| `apps` | 空（どれでも） | `desktop.launch`・`process.run` が起動してよい、`process.kill` が終了させてよいプログラム。フォルダ付きならそのパスだけ、ファイル名だけならどのフォルダでも。大文字小文字・`/` と `\`・`.exe` の有無は区別しない |
 | `ai.runFlow` | safe/interactive は allow、dangerous は ask | AI の `run_flow`。実行しうるステップ（呼び出し先を含む）のいちばん高い危険度で決まる |
 | `ai.testStep` | 同上 | AI の `test_step`。ブロックの中のステップと、`flow.call` の呼び出し先を含めたいちばん高い危険度 |
 | `ai.deleteFlow` | ask | AI の `delete_flow` |
@@ -74,6 +74,7 @@
 | `flows.<id>.unattended` | true | false なら `shikigami run` で動かさない。これを呼ぶフローも動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
 | `records.keepDays` | なし（残す） | 各 PC が、この日数より古い実行記録（`runs/<run-id>/`）と MCP の呼び出し（`audit/mcp.jsonl`）を消す（[audit.md](audit.md)）。実行が終わったときに適用し、実行中のものは消さない |
 | `records.keepRuns` | なし（残す） | 各 PC が残す実行記録の数（新しいものから） |
+| `records.failureScreenshots` | `true` | フロー全体の実行がブラウザ・デスクトップのノードで失敗したとき、そのページ・ウィンドウの画面をフローのフォルダーの実行ログの隣に保存する（`logs/<時刻>_failed.png`、ログと一緒に消える）。エラーの `details.screenshot` にその場所が入る。画面に個人情報が出るなどで残したくないときは `false` |
 | `remote.enabled` | false | 管理サーバーからジョブを受けるか（[remote.md](remote.md)）。PC の登録（`shikigami agent enroll`）も要る |
 | `remote.manager` | なし | 管理サーバーの URL。`https://`（`http://` は `localhost` だけ） |
 | `remote.flows` | 空（なし） | 管理サーバーが始めてよいフローの ID。`"*"` ですべて。`flows.<id>.unattended: false` のものはここで許しても動かない |

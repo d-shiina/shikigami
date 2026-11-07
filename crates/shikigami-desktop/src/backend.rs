@@ -47,6 +47,53 @@ impl Direction {
     }
 }
 
+/// How a window is shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowState {
+    Maximized,
+    Minimized,
+    Normal,
+}
+
+impl WindowState {
+    pub fn parse(name: &str) -> Result<Self, StepError> {
+        Ok(match name {
+            "maximized" => Self::Maximized,
+            "minimized" => Self::Minimized,
+            "normal" => Self::Normal,
+            other => {
+                return Err(StepError::invalid_params(format!(
+                    "unknown window state '{other}' (use maximized, minimized or normal)"
+                )));
+            }
+        })
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Maximized => "maximized",
+            Self::Minimized => "minimized",
+            Self::Normal => "normal",
+        }
+    }
+}
+
+/// Where a window goes and how big it is, in screen pixels; what is left
+/// out stays as it is.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Bounds {
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+}
+
+impl Bounds {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// How far one scroll goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScrollUnit {
@@ -119,6 +166,14 @@ pub enum Op {
     },
     CloseWindow {
         target: Target,
+    },
+    /// Maximizes, minimizes or restores `target.window`, moves or sizes it,
+    /// and/or brings it to the front. Output: `{ state, x, y, width, height }`.
+    SetWindow {
+        target: Target,
+        state: Option<WindowState>,
+        front: bool,
+        bounds: Bounds,
     },
     /// Scrolls without the mouse. `None` brings the target element into
     /// view; otherwise its scrollable area (or the nearest one around it)

@@ -16,6 +16,8 @@ import { variableUsage, type VariableUsage } from "../lib/variableUsage";
 import { findStep } from "../store";
 import type { View } from "./Toolbar";
 import { VarIcon } from "./VarIcon";
+import { HoverPreview } from "./HoverPreview";
+import { previewSource } from "../lib/preview";
 
 function initialText(u: VariableUsage): string {
   const value = u.def?.default;
@@ -125,9 +127,14 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                       </td>
                       <td className="max-w-[240px] px-3 py-2">
                         {initial ? (
-                          <span className="block truncate font-mono text-[12px] text-ink" title={initial}>
+                          <HoverPreview
+                            value={u.def?.secret ? undefined : u.def?.default}
+                            longText
+                            className="block truncate font-mono text-[12px] text-ink"
+                            title={previewSource(u.def?.default, { longText: true }) ? undefined : initial}
+                          >
                             {initial}
-                          </span>
+                          </HoverPreview>
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
@@ -141,9 +148,14 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                       {changes && (
                         <td className="max-w-[200px] px-3 py-2">
                           {last ? (
-                            <span className="block truncate rounded-md bg-brand-50 px-1.5 font-mono text-[12px] text-brand-700" title={valueText(last)}>
+                            <HoverPreview
+                              value={last.secret || last.truncated ? undefined : last.value}
+                              longText
+                              className="block truncate rounded-md bg-brand-50 px-1.5 font-mono text-[12px] text-brand-700"
+                              title={!last.secret && !last.truncated && previewSource(last.value, { longText: true }) ? undefined : valueText(last)}
+                            >
                               {valueText(last)}
-                            </span>
+                            </HoverPreview>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}

@@ -457,6 +457,7 @@ mod prune_tests {
         let by_days = RecordsPolicy {
             keep_days: Some(30),
             keep_runs: None,
+            failure_screenshots: None,
         };
         assert_eq!(prune(tmp.path(), &by_days, &[]), 1);
         let left = list_runs(tmp.path()).unwrap();
@@ -466,6 +467,7 @@ mod prune_tests {
         let by_count = RecordsPolicy {
             keep_days: None,
             keep_runs: Some(2),
+            failure_screenshots: None,
         };
         assert_eq!(prune(tmp.path(), &by_count, std::slice::from_ref(&a)), 0);
         assert_eq!(prune(tmp.path(), &by_count, &[]), 1);

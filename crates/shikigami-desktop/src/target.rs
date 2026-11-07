@@ -100,6 +100,10 @@ pub const DEFAULT_IMAGE_THRESHOLD: f32 = 0.9;
 pub struct WindowQuery {
     #[serde(default)]
     pub title: Option<String>,
+    /// How `title` is compared (default: contains). `exact: true` is the
+    /// older way to write `"exact"`.
+    #[serde(default, rename = "match")]
+    pub title_match: Option<TitleMatch>,
     /// Executable name, e.g. `billing.exe` (`.exe` optional).
     #[serde(default)]
     pub process: Option<String>,
@@ -109,6 +113,75 @@ pub struct WindowQuery {
     pub exact: bool,
     #[serde(default)]
     pub nth: Option<usize>,
+}
+
+/// How a window's title is compared with `title`. All but `exact` ignore
+/// upper and lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TitleMatch {
+    /// The title contains it (the default).
+    Contains,
+    /// The title is exactly it.
+    Exact,
+    /// The title starts with it.
+    Prefix,
+    /// The title ends with it.
+    Suffix,
+    /// The title matches it as a regular expression (anywhere in the title;
+    /// anchor with `^` and `$`).
+    Pattern,
+}
+
+/// The longest pattern accepted (a title is one line).
+const MAX_PATTERN: usize = 500;
+
+/// The regular expression of a `pattern` title, or why it is not one.
+fn title_pattern(pattern: &str) -> Result<regex::Regex, String> {
+    if pattern.len() > MAX_PATTERN {
+        return Err(format!(
+            "the pattern is longer than {MAX_PATTERN} characters"
+        ));
+    }
+    regex::RegexBuilder::new(pattern)
+        .case_insensitive(true)
+        .size_limit(1 << 20)
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// Whether `actual` (a window title) is what `wanted` asks for.
+pub fn title_matches(actual: &str, wanted: &str, how: TitleMatch) -> bool {
+    let lower = || (actual.to_lowercase(), wanted.to_lowercase());
+    match how {
+        TitleMatch::Exact => actual == wanted,
+        TitleMatch::Contains => {
+            let (a, w) = lower();
+            a.contains(&w)
+        }
+        TitleMatch::Prefix => {
+            let (a, w) = lower();
+            a.starts_with(&w)
+        }
+        TitleMatch::Suffix => {
+            let (a, w) = lower();
+            a.ends_with(&w)
+        }
+        TitleMatch::Pattern => title_pattern(wanted).is_ok_and(|re| re.is_match(actual)),
+    }
+}
+
+/// What the picker puts in `title` for a window: the title without the
+/// marks some apps add for unsaved changes (`*無題 - メモ帳`, `● file.txt`),
+/// which come and go while the window stays the same.
+pub fn stable_title(title: &str) -> String {
+    let trimmed = title.trim();
+    let without = trimmed
+        .strip_prefix('*')
+        .or_else(|| trimmed.strip_prefix('●'))
+        .or_else(|| trimmed.strip_prefix('•'))
+        .unwrap_or(trimmed);
+    without.trim().to_owned()
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
@@ -222,6 +295,17 @@ impl Target {
                 "target.window needs title or process",
             )
             .with_details(json!({ "hint": "Call inspect_ui without arguments to list the open windows, then copy title and process from there." })));
+        }
+        if let (Some(title), TitleMatch::Pattern) = (&w.title, w.how())
+            && let Err(e) = title_pattern(title)
+        {
+            return Err(StepError::invalid_params(format!(
+                "target.window.title is not a valid pattern: {e}"
+            ))
+            .with_details(json!({ "hint": "With match \"pattern\", title is a regular expression (e.g. ^請求書_\\d+\\.xlsx - Excel$). Use match \"contains\" for plain text." })));
+        }
+        if w.title_match.is_some() && w.title.is_none() {
+            return Err(StepError::invalid_params("target.window.match needs title"));
         }
         if let Some(element) = &self.element {
             if element.id.is_none()
@@ -337,10 +421,20 @@ pub fn process_key(name: &str) -> String {
 }
 
 impl WindowQuery {
+    /// How `title` is compared: `match`, else `exact`, else contains.
+    pub fn how(&self) -> TitleMatch {
+        self.title_match.unwrap_or(if self.exact {
+            TitleMatch::Exact
+        } else {
+            TitleMatch::Contains
+        })
+    }
+
     pub fn matches(&self, w: &WindowInfo) -> bool {
+        let how = self.how();
         self.title
             .as_deref()
-            .is_none_or(|t| text_matches(&w.title, t, self.exact))
+            .is_none_or(|t| title_matches(&w.title, t, how))
             && self
                 .process
                 .as_deref()
@@ -541,11 +635,22 @@ pub fn picked_target(
             .filter(|&i| q.matches(&windows[i]))
             .collect::<Vec<_>>()
     };
-    if same_app(&window_query).len() > 1 && !w.title.trim().is_empty() {
-        window_query.title = Some(w.title.clone());
-        window_query.exact = true;
-        window_json["title"] = json!(w.title);
-        window_json["exact"] = json!(true);
+    // The title only when the app has several windows open. Contains (the
+    // default) the title without unsaved marks, so the target still finds
+    // the window when the app adds or drops them; exact only when that
+    // would also find another of its windows.
+    let title = stable_title(&w.title);
+    if same_app(&window_query).len() > 1 && !title.is_empty() {
+        window_query.title = Some(title.clone());
+        window_json["title"] = json!(title);
+        if same_app(&window_query).len() > 1 && !w.title.trim().is_empty() {
+            window_query.title = Some(w.title.clone());
+            window_query.title_match = Some(TitleMatch::Exact);
+            window_json["title"] = json!(w.title);
+            window_json["match"] = json!("exact");
+        } else {
+            window_json["match"] = json!("contains");
+        }
     }
     let hits = same_app(&window_query);
     if hits.len() > 1

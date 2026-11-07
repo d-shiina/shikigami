@@ -5,8 +5,10 @@
 import type { FlowSummary, StepTypeDef } from "@shikigami/schema";
 import { stepLabel, t } from "./i18n";
 import { KEYWORD } from "./keywords";
+import { en } from "./locales/en";
 import { presets } from "./presets";
 import { extensionGroup, extensionOf, extensionSummary, extensionTag, groupExtension } from "./extensions";
+import { toKana } from "./romaji";
 
 /** One line of the palette: a node type, or a ready-made "変数への代入" (preset). */
 export type PaletteItem = {
@@ -20,9 +22,16 @@ export type PaletteItem = {
   type: string;
   params?: Record<string, unknown>;
   name?: string;
+  /** The sub-heading it is listed under inside its group (see SUBGROUPS), if any. */
+  sub?: string;
+  /** Its place in its group: the order people reach for nodes, used to break ties. */
+  order: number;
   /** Normalised text, by how much a match in it counts. */
-  find: { label: string; strong: string; weak: string };
+  find: { label: Text; strong: Text; weak: Text };
 };
+
+/** Normalised text, and which of its characters were katakana before (see `has`). */
+type Text = { text: string; kata: string };
 
 /**
  * The groups, in the order the palette lists them, under three headings:
@@ -45,12 +54,112 @@ const COMMON = [
   "excel.readRows",
   "excel.writeCell",
   "file.readCsv",
+  "dialog.message",
   "control.if",
   "control.forEach",
+  "control.repeat",
+  "control.try",
   "variable.set",
-  "dialog.message",
+  "flow.delay",
   "log.message",
 ];
+
+/**
+ * The order inside a group, by what the node is for: open, operate, read,
+ * wait… People look for "the browser node that reads" more than for a name,
+ * and alphabetical order put rarely used nodes (既存ブラウザへの接続) first.
+ * Nodes not listed here (new ones, plugins) follow, in registry order.
+ */
+export const SUBGROUPS: Record<string, [string, string[]][]> = {
+  browser: [
+    ["open", ["browser.open", "browser.attach", "browser.navigate", "browser.switchTab", "browser.closeTab", "browser.close"]],
+    ["operate", ["browser.click", "browser.fill", "browser.select", "browser.check", "browser.press", "browser.hover", "browser.scroll", "browser.upload", "browser.download"]],
+    ["read", ["browser.getText", "browser.getTable", "browser.getAttribute", "browser.isVisible", "browser.screenshot"]],
+    ["wait", ["browser.waitFor", "browser.waitForHuman"]],
+  ],
+  excel: [
+    ["read", ["excel.readRows", "excel.readCell", "excel.readRange", "excel.listSheets"]],
+    ["write", ["excel.writeCell", "excel.writeRange", "excel.appendRows", "excel.insertRows", "excel.deleteRows", "excel.clearRange"]],
+    ["sheet", ["excel.addSheet", "excel.renameSheet", "excel.copySheet", "excel.deleteSheet"]],
+    ["arrange", ["excel.sort", "excel.filter", "excel.format", "excel.pivot", "excel.recalculate"]],
+    ["output", ["excel.saveAs", "excel.exportPdf", "excel.runMacro"]],
+  ],
+  word: [["", ["word.fillTemplate", "word.readText"]]],
+  outlook: [["", ["mail.list", "mail.saveAttachments", "mail.createDraft", "mail.send"]]],
+  file: [
+    ["read", ["file.readCsv", "file.readText", "pdf.readText", "config.read"]],
+    ["write", ["file.writeCsv", "file.writeText"]],
+    ["manage", ["file.list", "file.exists", "file.copy", "file.move", "file.delete", "file.createFolder"]],
+    ["zipPdf", ["file.zip", "file.unzip", "pdf.merge", "pdf.split", "pdf.extractPages"]],
+  ],
+  windows: [
+    ["open", ["desktop.launch", "sap.runTransaction", "desktop.setWindow", "desktop.closeWindow"]],
+    [
+      "operate",
+      ["desktop.click", "desktop.setValue", "desktop.select", "desktop.check", "desktop.selectMenu", "desktop.type", "desktop.press", "desktop.mouseClick", "desktop.hover", "desktop.drag", "desktop.scroll", "desktop.mouseScroll"],
+    ],
+    ["read", ["desktop.getValue", "desktop.getTable", "desktop.readText", "desktop.isVisible", "desktop.screenshot"]],
+    ["wait", ["desktop.waitFor"]],
+  ],
+  network: [["", ["http.request", "oauth.signIn"]]],
+  database: [["", ["db.query", "db.execute"]]],
+  system: [
+    ["dialog", ["dialog.message", "dialog.input", "dialog.selectFile"]],
+    ["system", ["clipboard.get", "clipboard.set", "process.run", "process.list", "process.kill"]],
+  ],
+  control: [
+    ["branch", ["control.if", "control.switch", "control.parallel"]],
+    ["loop", ["control.forEach", "control.repeat", "control.while", "control.break", "control.continue"]],
+    ["error", ["control.try", "control.group", "control.fail"]],
+    ["call", ["flow.call"]],
+  ],
+  variable: [["", ["variable.set"]]],
+  flow: [["", ["flow.delay", "wait.until"]]],
+  log: [["", ["log.message"]]],
+};
+
+const PLACE = new Map<string, { sub: string; order: number }>();
+for (const subs of Object.values(SUBGROUPS)) {
+  let order = 0;
+  for (const [sub, types] of subs) for (const type of types) PLACE.set(type, { sub, order: order++ });
+}
+
+/**
+ * What usually comes next after a node (or inside a block, "type:block"):
+ * offered first when adding right after it, the way an Excel read is
+ * followed by a loop over its rows.
+ */
+const NEXT: Record<string, string[]> = {
+  "browser.open": ["browser.fill", "browser.click", "browser.getText"],
+  "browser.attach": ["browser.click", "browser.fill", "browser.getText"],
+  "browser.fill": ["browser.fill", "browser.click", "browser.press"],
+  "browser.click": ["browser.waitFor", "browser.getText", "browser.fill"],
+  "browser.getTable": ["control.forEach", "excel.writeRange", "file.writeCsv"],
+  "browser.download": ["file.move", "excel.readRows", "file.readCsv"],
+  "excel.readRows": ["control.forEach", "excel.writeCell"],
+  "excel.readRange": ["control.forEach", "excel.writeRange"],
+  "file.readCsv": ["control.forEach", "excel.writeRange"],
+  "file.list": ["control.forEach", "file.move"],
+  "mail.list": ["control.forEach", "mail.saveAttachments"],
+  "db.query": ["control.forEach", "excel.writeRange", "file.writeCsv"],
+  "desktop.launch": ["desktop.waitFor", "desktop.setValue", "desktop.click"],
+  "desktop.setValue": ["desktop.setValue", "desktop.click", "desktop.press"],
+  "desktop.click": ["desktop.waitFor", "desktop.getValue", "desktop.setValue"],
+  "word.fillTemplate": ["mail.createDraft", "file.copy"],
+  "dialog.input": ["control.if", "variable.set"],
+  "dialog.selectFile": ["excel.readRows", "file.readCsv"],
+  "control.forEach:body": ["browser.fill", "excel.writeCell", "control.if"],
+  "control.repeat:body": ["browser.click", "control.if", "control.break"],
+  "control.while:body": ["browser.click", "control.if", "control.break"],
+  "control.try:catch": ["log.message", "dialog.message", "mail.send"],
+};
+
+/** Up to 3 nodes that usually follow `key` (a step type, or "type:block" for an empty block). */
+export function nextAfter(items: readonly PaletteItem[], key: string | undefined): PaletteItem[] {
+  if (!key) return [];
+  const byKey = new Map(items.map((i) => [i.key, i]));
+  return (NEXT[key] ?? []).flatMap((k) => byKey.get(k) ?? []).slice(0, 3);
+}
 
 /** Node types that only exist inside another one. */
 const UNLISTED = new Set(["control.case"]);
@@ -78,6 +187,12 @@ export function normalize(text: string): string {
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+}
+
+/** `normalize`, remembering which characters were katakana ("K") before. */
+export function normalizeMarked(text: string): Text {
+  const nfkc = text.normalize("NFKC").toLowerCase();
+  return { text: normalize(nfkc), kata: nfkc.replace(/[ァ-ヶー]/g, "K").replace(/[^K]/g, ".") };
 }
 
 /**
@@ -116,10 +231,13 @@ export function stepSummary(type: string, description?: string | null): string {
   return t.stepHelp[type]?.summary ?? (extensionSummary(type) || firstSentence(description ?? ""));
 }
 
-function stepItem(def: StepTypeDef): PaletteItem {
+function stepItem(def: StepTypeDef, at: number): PaletteItem {
   const group = groupOf(def);
   const label = stepLabel(def.type, def.label);
   const help = t.stepHelp[def.type];
+  // The English name and words find a node in Japanese too (click, open, read…), and the other way round.
+  const english = `${en.stepTypes[def.type] ?? ""} ${en.stepHelp[def.type]?.words ?? ""}`;
+  const place = PLACE.get(def.type);
   return {
     key: def.type,
     group,
@@ -127,29 +245,33 @@ function stepItem(def: StepTypeDef): PaletteItem {
     keyword: KEYWORD[def.type],
     summary: stepSummary(def.type, def.description),
     type: def.type,
+    sub: place?.sub || undefined,
+    order: place?.order ?? 1000 + at,
     find: {
-      label: normalize(label),
-      strong: normalize(
-        `${def.label} ${def.type} ${KEYWORD[def.type] ?? ""} ${help?.words ?? ""} ${groupLabel(group)} ${readings(`${def.label} ${help?.words ?? ""}`)}`,
+      label: normalizeMarked(label),
+      strong: normalizeMarked(
+        `${def.label} ${def.type} ${KEYWORD[def.type] ?? ""} ${help?.words ?? ""} ${english} ${groupLabel(group)} ${readings(`${def.label} ${help?.words ?? ""}`)}`,
       ),
-      weak: normalize(`${help?.summary ?? ""} ${extensionSummary(def.type) ?? ""} ${def.description ?? ""}`),
+      weak: normalizeMarked(`${help?.summary ?? ""} ${extensionSummary(def.type) ?? ""} ${def.description ?? ""}`),
     },
   };
 }
 
 function presetItems(): PaletteItem[] {
-  return presets().map((preset) => ({
+  return presets().map((preset, at) => ({
     key: preset.key,
     group: preset.category,
     label: preset.label,
     keyword: preset.keyword,
-    summary: `${preset.description}　${preset.name} ← ${preset.expression}`,
+    // What it does in words: the expression it writes is for the form to show, not the list.
+    summary: preset.description,
     type: "variable.set",
     params: { name: preset.name, expression: preset.expression },
+    order: at,
     find: {
-      label: normalize(preset.label),
-      strong: normalize(`${preset.keyword} ${groupLabel(preset.category)} ${readings(`${preset.label} ${preset.description}`)}`),
-      weak: normalize(`${preset.description} ${preset.expression}`),
+      label: normalizeMarked(preset.label),
+      strong: normalizeMarked(`${preset.keyword} ${groupLabel(preset.category)} ${readings(`${preset.label} ${preset.description}`)}`),
+      weak: normalizeMarked(`${preset.description} ${preset.expression}`),
     },
   }));
 }
@@ -163,7 +285,7 @@ function presetItems(): PaletteItem[] {
 function flowItems(flows: readonly FlowSummary[], openId: string | undefined): PaletteItem[] {
   return flows
     .filter((f) => f.id !== openId && ((f.inputs?.length ?? 0) > 0 || (f.outputs?.length ?? 0) > 0))
-    .map((f) => {
+    .map((f, at) => {
       const shape = t.palette.flowShape(f.inputs ?? [], f.outputs ?? []);
       return {
         key: `flow:${f.id}`,
@@ -172,11 +294,12 @@ function flowItems(flows: readonly FlowSummary[], openId: string | undefined): P
         summary: f.description.trim() ? firstSentence(f.description.trim()) : shape,
         type: "flow.call",
         params: { flow: f.id },
+        order: at,
         find: {
           // The name is all a flow has to go by, so its kana reading counts as the name.
-          label: normalize(`${f.name} ${readings(f.name)}`),
-          strong: normalize(`${groupLabel("subflow")} ${(f.tags ?? []).join(" ")}`),
-          weak: normalize(`${f.description} ${shape}`),
+          label: normalizeMarked(`${f.name} ${readings(f.name)}`),
+          strong: normalizeMarked(`${groupLabel("subflow")} ${(f.tags ?? []).join(" ")}`),
+          weak: normalizeMarked(`${f.description} ${shape}`),
         },
       };
     });
@@ -186,7 +309,9 @@ function flowItems(flows: readonly FlowSummary[], openId: string | undefined): P
 export function paletteItems(defs: readonly StepTypeDef[], flows: readonly FlowSummary[] = [], openId?: string): PaletteItem[] {
   // A case is added from its switch ("ケースを追加"), never on its own.
   const listed = defs.filter((d) => !UNLISTED.has(d.type));
-  return [...listed.map(stepItem), ...flowItems(flows, openId), ...presetItems()];
+  // Each group in the order people reach for its nodes (SUBGROUPS), not registry order.
+  const steps = listed.map(stepItem).sort((a, b) => rank(a.group) - rank(b.group) || a.order - b.order);
+  return [...steps, ...flowItems(flows, openId), ...presetItems()];
 }
 
 const rank = (group: string) => {
@@ -207,26 +332,47 @@ export function sectionOf(group: string): string {
 }
 
 /**
- * Whether `text` contains `word`. Latin words must start a word ("read" is
- * not in "already"); Japanese has no spaces, so it matches anywhere.
+ * How `text` contains `word`: 2 as a whole word or the start of a Japanese
+ * compound, 1 as only the start of a longer katakana word ("ログ" in
+ * "ログイン"), 0 not at all. Latin words must start a word ("read" is not in
+ * "already"). Japanese has no spaces, so it matches anywhere except the
+ * middle of a katakana word: "ログ" is not in "ダイアログ", nor "ループ" in
+ * "グループ".
  */
-function has(text: string, word: string): boolean {
-  if (!/^[a-z0-9]/.test(word)) return text.includes(word);
+function has({ text, kata }: Text, word: string): 0 | 1 | 2 {
+  const latin = /^[a-z0-9]/.test(word);
+  let best: 0 | 1 | 2 = 0;
   for (let at = text.indexOf(word); at >= 0; at = text.indexOf(word, at + 1)) {
-    if (at === 0 || !/[a-z0-9]/.test(text[at - 1]!)) return true;
+    if (latin) {
+      if (at === 0 || !/[a-z0-9]/.test(text[at - 1]!)) return 2;
+      continue;
+    }
+    if (at > 0 && kata[at - 1] === "K" && kata[at] === "K") continue;
+    const end = at + word.length;
+    if (kata[end - 1] === "K" && kata[end] === "K") best = 1;
+    else return 2;
   }
-  return false;
+  return best;
 }
 
 /** How well `item` matches one query word; 0 when it does not. */
 function wordScore(item: PaletteItem, word: string): number {
   const { label, strong, weak } = item.find;
-  if (label === word) return 120;
-  if (label.startsWith(word)) return 100;
-  if (has(label, word)) return 70;
-  if (has(strong, word)) return 40;
-  if (has(weak, word)) return 10;
-  return 0;
+  if (label.text === word) return 120;
+  const inLabel = has(label, word);
+  if (inLabel && label.text.startsWith(word)) return inLabel === 2 ? 100 : 60;
+  if (inLabel === 2) return 70;
+  const inStrong = has(strong, word);
+  if (inStrong === 2) return 40;
+  if (inLabel === 1) return 30;
+  if (inStrong === 1) return 15;
+  return has(weak, word) === 2 ? 10 : 0;
+}
+
+/** The better of `word` as typed and read as romaji (kurikaesi → くりかえし). */
+function bestScore(item: PaletteItem, word: string, kana: string | null): number {
+  const typed = wordScore(item, word);
+  return kana ? Math.max(typed, wordScore(item, kana)) : typed;
 }
 
 /**
@@ -237,21 +383,61 @@ function wordScore(item: PaletteItem, word: string): number {
 export function search(items: readonly PaletteItem[], query: string, recent: readonly string[] = []): PaletteItem[] {
   const words = normalize(query).split(/\s+/).filter(Boolean);
   if (words.length === 0) return [...items];
+  const kana = words.map(toKana);
   const scored: { item: PaletteItem; score: number; at: number }[] = [];
   items.forEach((item, at) => {
     let score = 0;
-    for (const word of words) {
-      const s = wordScore(item, word);
+    for (const [i, word] of words.entries()) {
+      const s = bestScore(item, word, kana[i]!);
       if (s === 0) return;
       score += s;
     }
+    // Among equal matches, the nodes people use most come first (行の読み取り before シート追加).
+    if (COMMON.includes(item.key)) score += 4;
     const used = recent.indexOf(item.key);
     if (used >= 0) score += 8 - Math.min(used, 7);
     scored.push({ item, score, at });
   });
+  // A word only in the long descriptions is noise once some node has it in its name or other names
+  // ("click" is in the description of half the browser nodes).
+  const best = Math.max(0, ...scored.map((s) => s.score / words.length));
   return scored
-    .sort((a, b) => b.score - a.score || rank(a.item.group) - rank(b.item.group) || a.at - b.at)
+    .filter((s) => best < 30 || s.score / words.length >= 15)
+    .sort((a, b) => b.score - a.score || rank(a.item.group) - rank(b.item.group) || a.item.order - b.item.order || a.at - b.at)
     .map((s) => s.item);
+}
+
+/**
+ * The opening view, split by kind so working on an app and steering the
+ * flow are not one mixed list: per section ("apps", "flow", "data"), the
+ * recently added nodes first, then the common ones (4 operations, 6 of the others). Sections
+ * in palette order; empty ones left out.
+ */
+export function frequentBySection(items: readonly PaletteItem[], recent: readonly string[], skip: ReadonlySet<string> = new Set()): [string, PaletteItem[]][] {
+  const byKey = new Map(items.map((i) => [i.key, i]));
+  const keys = [...new Set([...recent, ...COMMON])];
+  const out = new Map<string, PaletteItem[]>();
+  for (const k of keys) {
+    const item = byKey.get(k);
+    if (!item || skip.has(k)) continue;
+    const section = sectionOf(item.group);
+    const list = out.get(section) ?? [];
+    // Data handling only shows what was used: its common forms are a click away on the left.
+    // Four operations leave room for the flow-control tiles below them without scrolling.
+    if (list.length < (section === "apps" ? 4 : 6) && (section !== "data" || recent.includes(k))) out.set(section, [...list, item]);
+  }
+  return [...SECTIONS.map((s) => s.id), "other"].flatMap((id) => (out.get(id)?.length ? [[id, out.get(id)!] as [string, PaletteItem[]]] : []));
+}
+
+/** Search results under the same section headings, best match first within each. */
+export function bySection(found: readonly PaletteItem[]): [string, PaletteItem[]][] {
+  const out = new Map<string, PaletteItem[]>();
+  for (const item of found) {
+    const section = sectionOf(item.group);
+    out.set(section, [...(out.get(section) ?? []), item]);
+  }
+  // The section of the best match first ("ログ" finds ログ出力 before 文字入力's "ログイン").
+  return [...out];
 }
 
 /** The frequent view: up to 6 recently added, then the common nodes not among them. */

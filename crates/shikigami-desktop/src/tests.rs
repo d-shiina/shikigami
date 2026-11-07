@@ -93,7 +93,7 @@ fn examples_validate_and_targets_are_checked() {
     let runtime = runtime(Scripted::new(vec![]));
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 20);
+    assert_eq!(defs.len(), 22);
     for def in &defs {
         assert!(def.step_type.starts_with("desktop.") || def.step_type.starts_with("sap."));
         assert!(!def.examples.is_empty(), "{}", def.step_type);
@@ -391,6 +391,72 @@ fn window(title: &str, process: &str) -> WindowInfo {
 
 fn query(value: Value) -> target::WindowQuery {
     serde_json::from_value(value).unwrap()
+}
+
+#[test]
+fn window_titles_match_the_way_asked() {
+    let windows = [
+        window("請求書_2026-11.xlsx - Excel", "EXCEL.EXE"),
+        window("見積書_2026-10.xlsx - Excel", "EXCEL.EXE"),
+        window("請求システム", "billing.exe"),
+    ];
+    let pick = |q: Value| pick_window(&query(q), &windows);
+    assert_eq!(
+        pick(json!({ "title": "請求書", "match": "contains" })).unwrap(),
+        0
+    );
+    assert_eq!(
+        pick(json!({ "title": "見積", "match": "prefix" })).unwrap(),
+        1
+    );
+    assert_eq!(
+        pick(json!({ "title": "システム", "match": "suffix" })).unwrap(),
+        2
+    );
+    assert_eq!(
+        pick(json!({ "title": "^請求書_\\d{4}-\\d{2}\\.xlsx - excel$", "match": "pattern" }))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        pick(json!({ "title": "請求システム", "match": "exact" })).unwrap(),
+        2
+    );
+    // exact is exact: a part of the title is not enough.
+    assert_eq!(
+        pick(json!({ "title": "請求", "match": "exact" }))
+            .unwrap_err()
+            .code,
+        "WINDOW_NOT_FOUND"
+    );
+    // prefix is not contains.
+    assert_eq!(
+        pick(json!({ "title": "2026", "match": "prefix" }))
+            .unwrap_err()
+            .code,
+        "WINDOW_NOT_FOUND"
+    );
+    // The older `exact: true` still means exact; `match` wins over it.
+    assert_eq!(
+        pick(json!({ "title": "請求システム", "exact": true })).unwrap(),
+        2
+    );
+    assert_eq!(
+        pick(json!({ "title": "請求シ", "exact": true, "match": "prefix" })).unwrap(),
+        2
+    );
+}
+
+#[test]
+fn a_bad_title_pattern_is_caught_before_the_run() {
+    let bad = json!({ "target": { "window": { "title": "請求(", "match": "pattern" } } });
+    let e = Target::from_params(&bad, "target", Allow::Any).unwrap_err();
+    assert_eq!(e.code, "INVALID_PARAMS");
+    assert!(e.message.contains("pattern"), "{}", e.message);
+    let alone = json!({ "target": { "window": { "process": "a.exe", "match": "prefix" } } });
+    assert!(Target::from_params(&alone, "target", Allow::Any).is_err());
+    let unknown = json!({ "target": { "window": { "title": "a", "match": "like" } } });
+    assert!(Target::from_params(&unknown, "target", Allow::Any).is_err());
 }
 
 #[test]
@@ -769,8 +835,29 @@ fn a_picked_element_gets_the_sturdiest_target() {
     let picked = picked_target(&two, 1, &nodes, Some(1), at);
     assert_eq!(
         picked.target["window"],
-        json!({ "process": "billing.exe", "title": "請求 - B社", "exact": true })
+        json!({ "process": "billing.exe", "title": "請求 - B社", "match": "contains" })
     );
+    // Unsaved marks come and go: the title is taken without them.
+    let marked = vec![
+        window("*メモ - メモ帳", "notepad.exe"),
+        window("無題 - メモ帳", "notepad.exe"),
+    ];
+    assert_eq!(
+        picked_target(&marked, 0, &nodes, None, at).target["window"],
+        json!({ "process": "notepad.exe", "title": "メモ - メモ帳", "match": "contains" })
+    );
+    // When contains would also find the other window, exact.
+    let nested = vec![
+        window("請求", "billing.exe"),
+        window("請求 - 編集", "billing.exe"),
+    ];
+    let picked = picked_target(&nested, 0, &nodes, None, at);
+    assert_eq!(
+        picked.target["window"],
+        json!({ "process": "billing.exe", "title": "請求", "match": "exact" })
+    );
+    let target: crate::target::Target = serde_json::from_value(picked.target).unwrap();
+    assert_eq!(pick_window(&target.window, &nested).unwrap(), 0);
     // Every picked target finds the element it was built from.
     for i in 1..nodes.len() - 1 {
         let target: crate::target::Target = serde_json::from_value(pick(Some(i)).target).unwrap();

@@ -1,271 +1,196 @@
-# WinActor・UiPath・Power Automate Desktop と比べて足りないもの（2026-11-06）
+# WinActor・UiPath・Power Automate Desktop などと比べて劣る点（2026-11-07 再点検）
 
-目的：既存の RPA 製品と並べたときに Shikigami が劣る点・欠けている機能を、リポジトリの実装と docs を根拠に洗い出し、影響の大きさで並べる。**実装はしない**（ここは一覧と優先度だけ。着手は項目ごとに決める）。
+目的：既存の RPA 製品と並べたときに Shikigami が**まだ劣っている点だけ**を、ノード・操作の単位まで掘って並べる。各項目に、相手の製品での名前・Shikigami での対応案・優先度を書く。上から順に PR で潰していき、済んだものは「済んだもの」に移す。
+
+比べた相手：WinActor・UiPath（Studio / Robot / Orchestrator）・Power Automate Desktop（以下 PAD）・Automation Anywhere（以下 AA）・BizRobo!。相手の機能名は各社の公開資料で一般に知られている範囲で書いた（細かい版・価格は確かめていない）。Shikigami 側は `schemas/contract/step-types.json`（組込ノード 105 種）と docs・Studio のコードを根拠にした。
 
 前提にする方針（変えない）：
 
-- 差別化の軸は「AI が作り、AI なしで動く」。AI がフローを組み、実行は決まった JSON を Runtime が動かす
-- Windows 特化（mac / Linux はやらない）、OSS（Apache-2.0）で当面無償
-- 組込以外のノードはプラグイン（別プロセス・JSON-RPC、[plugins.md](plugins.md)）
-- 値の加工は式の関数、外に触れる操作だけノード（[uipath-coverage.md](uipath-coverage.md)）
+- 差別化の軸は「AI が作り、AI なしで動く」。同時に「人がゼロから手で組む」流れも一級に扱う（手で組むときに困る点は AI で作るときと同じ重さで数える）
+- Windows 特化、OSS（Apache-2.0）で当面無償
+- 値の加工は式の関数、外に触れる操作だけノード（[uipath-coverage.md](uipath-coverage.md)）。組込以外はプラグイン（[plugins.md](plugins.md)）
+- 1 つのことは 1 通りに書ける（[ai-authoring.md](ai-authoring.md)）。足すときは既存のノードの設定で済むならそちらを選ぶ
 
-比較相手の機能は、各社の公開情報から一般に知られている範囲で書いた（細かい版・価格は確かめていない）。Shikigami 側は本文中のファイルを根拠にした。
-
-## 優先度の決め方
+## 優先度
 
 | 優先度 | 意味 |
 |---|---|
-| **P0** | 導入の前提を欠く。ないと企業の PC で入らない・無人で動かない・日本の業務システムに届かない |
-| **P1** | 多くの業務で困る。比較表で必ず「×」が付き、乗り換えを止める |
-| **P2** | 特定の業種・規模・使い方で効く。プラグインや後回しでもよい |
+| **P0** | 導入の前提を欠く。ないと企業の PC に入らない・評価の土俵に乗らない |
+| **P1** | 多くの業務で困る。乗り換えの比較表で「×」が付く、または手で組む人がすぐ手を止める |
+| **P2** | 特定の業務・使い方で効く。後回しやプラグインでもよい |
 
-「重なり」欄：進行中の別の取り組みと重なる項目。
+「状態」欄：**着手順** は下の「進める順」の番号。**別** は別の取り組みで進めている。**待ち** は Daiki の PC・費用など外の条件待ち。
 
-- **#77**：離れた所からの実行指示と管理ツール（`shikigami agent`、設計メモ PR #77、draft）
-- **部品選択**：画面から部品を選ぶ機能（別スレッドで進行中）
+## 一覧
 
-## 一覧（要約）
+| # | 優先度 | 分野 | 劣っている点 | 相手での名前 | 状態 |
+|---|---|---|---|---|---|
+| G1 | P0 | 実機 | 実際の業務アプリ・SAP GUI・Citrix・Edge の IE モード・`browser.attach` が実機で未確認 | （実績・事例の比較） | 待ち |
+| G2 | P0 | 配布 | インストーラーが未署名、MSI・サイレントインストール・社内配布先の指定がない | 署名済みインストーラー・MSI・Intune 配布 | 待ち（後回し） |
+| G3 | P1 | Studio | ノードのコピー・貼り付け・複製ができない。複数のノードをまとめて選べない | UiPath・PAD・WinActor：Ctrl+C / Ctrl+V・複数選択 | 済み（#151） |
+| G4 | P1 | 例外処理 | 複数のノードをまとめて再試行できない（`control.group` の `retry` は黙って無視される） | UiPath：Retry Scope／PAD：「エラー発生時」のブロックの再試行 | 済み（#153） |
+| G5 | P1 | ログ | 無人実行で失敗したときの画面が残らない（Studio の一時停止のときだけ撮る） | UiPath：REFramework の Take Screenshot・Orchestrator のログ／AA：エラー時のスクリーンショット | 済み |
+| G6 | P1 | ブラウザ | クリックの種類（右クリック・ダブルクリック・Ctrl / Shift を押しながら）がない | UiPath：Click の ClickType・MouseButton・KeyModifiers／PAD：「Web ページのリンクまたはボタンをクリック」のクリックの種類 | 済み |
+| G7 | P1 | ブラウザ・デスクトップ | チェックボックスを「オンにする／オフにする」ができない（クリックで切り替えるだけなので、2 回流すと逆になる） | UiPath：Check / Uncheck／PAD：「Web ページのチェック ボックスの状態を設定します」「ウィンドウのチェック ボックスの状態を設定」／WinActor：チェックボックス操作 | 済み |
+| G8 | P1 | デスクトップ | ウィンドウの最大化・最小化・元に戻す・前面に出す・移動・サイズ変更がない | WinActor：ウィンドウ状態変更・ウィンドウ位置変更／UiPath：Maximize / Minimize / Restore / Move Window / Activate／PAD：「ウィンドウの状態の設定」「ウィンドウの移動」「ウィンドウのサイズ変更」「ウィンドウにフォーカスする」 | 済み |
+| G9 | P1 | システム | 動いているプロセスの終了・有無の確認がない（固まった業務アプリを落として立ち上げ直せない） | UiPath：Kill Process・Get Processes／PAD：「プロセスを終了する」「プロセスを待機する」／WinActor：プロセス終了 | 済み |
+| G10 | P1 | Excel | 行・列の挿入と削除、範囲のクリア、シートの削除・名前変更・コピーがない | WinActor：Excel 操作（行削除・シート名変更・シートコピー…）／UiPath：Insert/Delete Rows・Delete Range・Rename Sheet・Copy Sheet／PAD：「Excel ワークシートから行を削除」など | 済み |
+| G11 | P1 | Excel | `.xls`・パスワード付きのブックが開けない、CSV や `.xlsx` への変換（名前を付けて保存）がない | UiPath：Save Workbook As・Password／PAD：「Excel の起動」のパスワード・「Excel を閉じる」の名前を付けて保存 | 済み |
+| G12 | P1 | 人とのやりとり | フローの途中で複数の項目（選択肢・日付・チェック）を一度に入れてもらう画面がない（`dialog.input` は 1 行だけ） | UiPath：Create Form／PAD：「カスタム フォームを表示」／WinActor：ユーザー入力（複数項目） | 着手順 7 |
+| G13 | P1 | Studio・デバッグ | 選んだノードから実行する（前のノードを飛ばす）ことができない | UiPath：Run from this Activity／PAD：「ここから実行」 | 着手順 8 |
+| G14 | P1 | メール | メールの移動・既読にする・返信・転送・削除がない。Outlook（クラシック）なしで受信できない（Microsoft 365・IMAP） | UiPath：Move / Mark as Read / Reply To / Delete Outlook Mail Message・Get IMAP Mail／PAD：「メール メッセージの処理」・Exchange / Outlook / IMAP | 着手順 9 |
+| G15 | P1 | スケジュール | 祝日・会社の休日を飛ばす・「第 3 営業日」の指定がない。メールが届いたら起動もない | UiPath：Orchestrator の Non-Working Days・キュートリガー／PAD：クラウドフローのメールトリガー | 着手順 10 |
+| G16 | P1 | 記録 | ブラウザの操作は記録できない（デスクトップだけ） | WinActor：Web レコーディング／UiPath：Web Recorder／PAD：Web レコーダー | 着手順 11 |
+| G17 | P1 | Word | PDF で保存・文字の置換・表の読み取りがない（`word.fillTemplate` / `word.readText` だけ） | UiPath：Save Document As PDF・Replace Text／PAD：「Word 文書を保存」の PDF・「Word 文書内の語句の検索と置換」 | 着手順 12 |
+| G18 | P1 | 無人実行 | 画面がロックされた・サインアウトした PC ではデスクトップのノードが止まる（`DESKTOP_UNAVAILABLE`） | UiPath：無人ロボットがセッションを作る／PAD：ロックされた PC での無人実行 | 設計が要る |
+| G19 | P1 | 画像 | 画像認識で「画面から切り取る」・一致率・探す範囲がない | UiPath：Click Image・Find Image の Indicate on screen／PAD：画像をキャプチャ | 別（画像部品のスレッド） |
+| G20 | P2 | ブラウザ | 戻る・進む・再読み込みがない（同じタブでの移動は `browser.open` で済む） | UiPath：Go Back / Go Forward / Refresh／PAD：「Web ページに移動します」の戻る・進む・再読み込み | 済み |
+| G21 | P2 | ブラウザ | 1 文字ずつ打つ入力がない（キーの動きを見ているサイトで `browser.fill` が効かない） | UiPath：Type Into の入力方式／PAD：「Web ページ内のテキスト フィールドに入力する」の入力をエミュレート | 済み |
+| G22 | P2 | Studio | ノードのメモ（注釈）を Studio で書けない（フローの `description` はあるが画面に出ない） | UiPath：Annotation／PAD：コメント／WinActor：コメント | 済み（#151） |
+| G23 | P2 | Studio | フローの中の検索（ノード名・設定値・変数名で探す）がない | UiPath：Find / Find References／PAD：アクションの検索 | 着手順 13 |
+| G24 | P2 | デバッグ | 一時停止中に変数の値を書き換えられない | UiPath：Locals パネルの値の変更・Immediate | 着手順 13 |
+| G25 | P2 | デスクトップ | 部品の指定は「ウィンドウ＋部品」の 2 段だけ。親の部品をたどる指定がなく、同じ名前の部品は `nth` 頼み | UiPath：Selector の階層・Anchor／PAD：UI 要素のセレクター | 後で |
+| G26 | P2 | 資格情報 | Windows の資格情報マネージャーにある資格情報を使えない | UiPath：Get Secure Credential | 後で |
+| G27 | P2 | 帳票 | 帳票の項目を読む AI-OCR がない | UiPath：Document Understanding／WinActor：AI-OCR 連携 | プラグイン候補 |
+| G28 | P2 | テスト | 入力と期待する出力を保存して繰り返し流すテストがない | UiPath：Test Suite | 後で |
+| G29 | P2 | 連携 | kintone・Box・Slack などの個別ノード、端末エミュレーター、FTP / SFTP がない | UiPath：Integration Service・Terminal・FTP／PAD：コネクター・FTP | プラグイン候補 |
+| G30 | P2 | 支援 | 有償サポート・販売パートナー・研修と認定がない | WinActor・UiPath | 広がってから |
 
-| # | 優先度 | 項目 | 主に強い相手 | 重なり |
-|---|---|---|---|---|
-| 1 | P0 | スケジュール実行・トリガーがない | WinActor・PAD・UiPath | #77 |
-| 2 | P0 | 無人実行の土台（画面ロック・PC 間の入力排他・キャンセル時の後始末・再開） | UiPath・PAD | #77 |
-| 3 | P0 | 人が画面を指して部品を選ぶ・光らせて確かめる手段がない | 3 製品すべて | 部品選択 |
-| 4 | P0 | Edge の IE モード・既に開いているブラウザを操作できない | WinActor・UiPath・PAD | – |
-| 5 | P0 | 実際の業務アプリ・SAP・Java・Citrix で未検証、SAP / Java の経路が未実装 | UiPath・WinActor | – |
-| 6 | P0 | インストーラーが未署名、企業での配布・更新の統制がない | 3 製品すべて | – |
-| 7 | P1 | 実行時のエラーメッセージが英語のまま Studio に出る | WinActor | – |
-| 8 | P1 | 管理サーバー（PC 一覧・ジョブ・キュー・集中ログ・共有の設定値）がない | UiPath・WinActor・PAD | #77 |
-| 9 | P1 | 失敗の通知（メール・Teams）がない | UiPath・PAD | #77 |
-| 10 | P1 | 操作の記録（レコーダー）がない。AI を使えない職場で作りにくい | WinActor・PAD・UiPath | 部品選択（一部） |
-| 11 | P1 | ブラウザ操作の欠け（タブ・ポップアップ・iframe・ダウンロード・アップロード・JS ダイアログ・ホバー・スクロール） | 3 製品すべて | – |
-| 12 | P1 | デスクトップ操作の欠け（スクロール・ドラッグ・ホバー・表の一括読み・メニュー辿り） | 3 製品すべて | – |
-| 13 | P1 | 画面の部品を名前を付けて共有する場所（UiPath のオブジェクトリポジトリ、PAD の UI 要素）がない | UiPath・PAD | 部品選択 |
-| 14 | P1 | Excel：開いているブックの操作・書式・フィルター・並べ替え・ピボット・再計算・PDF 保存がない | 3 製品すべて | – |
-| 15 | P1 | メール：Outlook（クラシック）だけ・送信なし・SMTP / IMAP / Microsoft 365（Graph）なし | 3 製品すべて | – |
-| 16 | P1 | データベース（SQL Server・Oracle・Access・ODBC）のノードがない | 3 製品すべて | – |
-| 17 | P1 | 人が起動するための軽い実行画面と、複数項目の入力フォームがない | UiPath・PAD・WinActor | #77（一部） |
-| 18 | P1 | 業務の人向けの学習資料（操作マニュアル・チュートリアル・業務別サンプル）がない | 3 製品すべて | – |
-| 19 | P2 | 帳票の項目を読む OCR（AI-OCR・請求書など）、PDF の結合・分割・表の読み取り | UiPath・WinActor（連携製品） | – |
-| 20 | P2 | フローのテスト（テストケース・モック・自動回帰） | UiPath | – |
-| 21 | P2 | 複数人での開発（同じフローの同時編集・マージ・編集中の印） | UiPath | – |
-| 22 | P2 | プラグインの配布（インストール・カタログ・署名）と部品の数 | UiPath・WinActor | – |
-| 23 | P2 | SaaS へのつなぎ（kintone・Salesforce・Box・Slack など）が `http.request` 頼み | UiPath・PAD | – |
-| 24 | P2 | 汎用機の端末エミュレーター、FTP / SFTP、XML | UiPath・PAD | – |
-| 25 | P2 | 実行記録の保管期間・監査の一元化 | UiPath | #77 |
-| 26 | P2 | 有償サポート・販売パートナー・研修と認定 | WinActor・UiPath | – |
+## 項目ごとの対応案
 
-## P0：導入の前提
+### G3・G22 ノードのコピー・貼り付け・複製、ノードのメモ（Studio）
 
-### 1. スケジュール実行・トリガーがない（重なり：#77）
+- **今**：Studio の選択は 1 つ（`Selection` は 1 ノード）。キーは元に戻す・やり直す・削除・上下移動だけで、Ctrl+C / Ctrl+V / Ctrl+D がない。右クリックのメニューにも複製がない。同じ形の手順を 2 回作るとき、手で組む人は一から設定し直すことになる
+- **対応案**：
+  - ノードの右クリックと Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+D。ブロックごとコピーし、貼り付けると ID は付け直す（Core の `addSteps` で）。別のフロー・別の Studio の窓にも貼れるよう、クリップボードにはフローの JSON の形で置く（AI のチャットに貼ってもそのまま読める）
+  - Shift+クリックで同じブロックの中の連続したノードを選び、まとめてコピー・削除・移動
+  - 設定画面に「メモ」の欄（`Step.description`）。チャートではノードの下に 1 行で出す
 
-- **今**：無人実行は Windows のタスクスケジューラーから `shikigami run` を呼ぶ前提（[policy.md](../policy.md) §1、[compatibility.md](../compatibility.md) §1）。Studio には置き場所だけ決めてある（[ui-principles.md](ui-principles.md)「スケジュール実行・トリガー」）。実行記録の `trigger` に `schedule` の値は予約済み（[architecture.md](../architecture.md) §8）
-- **相手**：WinActor は製品の中でスケジュールを組める。PAD はクラウドフローから日時・メール・ファイルなどのトリガーで起動できる。UiPath は Orchestrator のトリガー（時刻・キュー・イベント）
-- **影響**：タスクスケジューラーの設定は業務の人には難しく、「毎朝 8 時」すら Studio で完結しない。ファイルが置かれたら・メールが来たら、の起動もない
-- **方向**：#77 の `shikigami agent` に実行を集め、日時・ファイル・メールのトリガーをそこに置く案と合わせて決める
+### G4 範囲の再試行
 
-### 2. 無人実行の土台（重なり：#77）
+- **今**：`retry` はアクションのノードだけで効く。`control.group` に `retry` を書いても検証は通り、実行では無視される（AI にも人にも気付けない）
+- **対応案**：`control.group` の `retry` で、ブロックの中が失敗したら頭からやり直す（`retryable` でないエラーも含めて、`maxAttempts` 回まで、`backoffMs` を空けて）。ブラウザを開く→ログイン→画面を開く、をまとめてやり直すときの書き方を docs に。ほかの制御ノード（`control.if` など）の `retry` は検証で止める（`CONTROL_RETRY`）
 
-- **今**（[desktop.md](../desktop.md)「How it works」「Verified and limits」、[architecture.md](../architecture.md) §13 Known limits）
-  - 画面がロックされていると前面に出せず `FOREGROUND_DENIED` / `INPUT_BLOCKED` で止まる。ロック中・ログオフ中に Windows のセッションを用意する仕組みはない
-  - マウス・キーボードの排他は 1 プロセスの中だけ。Studio・CLI・MCP サーバーが同時に動くと取り合う
-  - `control.try` の `finally` はキャンセル時に走らない。プロセスが落ちたあと途中から再開できない
-- **相手**：UiPath の無人ロボットは Windows にサインインしてセッションを作ってから動く。PAD の無人実行も同様（ロックされた PC で動く）
-- **影響**：夜間・休日の無人運用が実質できない。「AI なしで動く」を一番売りたい場面で弱い
-- **方向**：#77 のメモにある「排他・画面ロック検知・キャンセル時 finally」と同じ。ロック中の自動サインインは資格情報の扱いを含めて別に設計が要る
+### G5 失敗したときの画面を残す
 
-### 3. 人が画面を指して部品を選ぶ手段がない（重なり：部品選択）
+- **今**：Studio の一時停止のときだけ、アダプターの `inspect` で画面を撮って観察として残す。`shikigami run`・自動実行・管理サーバーからの実行では、どんな画面で止まったか後から分からない
+- **対応案**：実行が失敗で終わるとき、失敗したノードがブラウザ・デスクトップのノードなら、その画面のスクリーンショットを実行記録のフォルダーに保存し、実行記録と通知・`get_run_logs` から辿れるようにする。秘密の値は画面に出ていることがあるので、`policy.json` で切れるようにする（既定は撮る）
 
-- **今**：部品の特定は AI が `inspect_ui` / `inspect_page` の木から写す前提（[desktop.md](../desktop.md)、[browser.md](../browser.md)）。Studio では項目ごとの入力欄で `id` / `role` / `name` を打つ（PR #72）。「UI element inspector」は未実装（[architecture.md](../architecture.md) §13）。指定した部品を画面上で光らせて確かめる機能もない
-- **相手**：3 製品とも「画面上の部品をクリックして選ぶ」「選んだ部品を光らせる」が基本の操作
-- **影響**：AI を通さずに直すとき（AI が使えない日、AI に頼むほどでもない小さな直し）に止まる。「AI が作り」の後の保守を人がやれない
-- **方向**：進行中のスレッドで扱う。そこで光らせる（ハイライト）・今の画面で見つかるか試す、まで含めるとよい
+### G6・G7・G20・G21 ブラウザ・デスクトップの細かい操作
 
-### 4. Edge の IE モード・既に開いているブラウザを操作できない
+**対応**：済み（#158、デスクトップのチェックボックス `desktop.check` は G8・G9 と一緒に）。
 
-- **今**：ブラウザは Playwright が Edge / Chrome を自分で起動して操作する（[browser.md](../browser.md)「How it works」）。ログイン状態は `session` で保存して使い回せるが、人が開いているブラウザに後から入ることはできない。IE モードのタブは Playwright（CDP）から操作できない
-- **相手**：WinActor・UiPath・PAD はブラウザ拡張や IE 用の仕組みで、人が開いたブラウザ・IE モードのページも操作できる
-- **影響**：日本の社内システムには IE モードでしか動かないものがまだ多い。拡張機能や証明書・SSO で「人のブラウザでしか入れない」社内サイトもある。対象に届かなければ他の強みは効かない
-- **方向**：IE モードはデスクトップ側（UI Automation）で扱えるかをまず確かめる（IE モードのタブは UIA で部品が見えることが多い）。人のブラウザへの接続は `--remote-debugging-port` で起動したブラウザに CDP でつなぐ案と、拡張機能を作る案を比べる
-- **対応**：人が開いたブラウザは `browser.attach`（`--remote-debugging-port` と専用の `--user-data-dir` で起動した Edge / Chrome に 127.0.0.1 でつなぐ、終わっても閉じない、PR #88）。拡張機能の案はとらない。IE モードは `desktop.*` で扱う。Windows CI の実験（`crates/shikigami-desktop/tests/ie_mode.rs`、PR #98）で、IE11 のエンジンで出したページの部品が UI Automation に `id` 付きで出て、入力とクリックも効くことを確かめた（[browser.md](../browser.md)「Edge IE mode」）。残り：どちらも実機の Edge での確認
 
-### 5. 実際の業務アプリで未検証、SAP / Java の経路が未実装
+- `browser.click` に `button`（`left` / `right`）・`double`・`modifiers`（`["Control"]` など）。`desktop.mouseClick` の書き方にそろえる
+- チェックボックスは「チェック状態」のノード（`browser.check` / `desktop.check`、`checked`: true / false）。今の状態と同じなら何もしない。`fill` に true / false を混ぜるより、図とパレットで探しやすいので別のノードにした
+- `browser.open` は同じタブで開き直せるので、戻る・進む・再読み込みは `browser.press` ではなく `browser.navigate`（`action`: `back` / `forward` / `reload`）を 1 つ足す
+- 1 文字ずつ打つのは `browser.fill` に `typing: true`（キーの間隔は固定）
 
-- **今**：「Not yet verified: real business apps, SAP GUI, Java apps and Citrix; mouse and keyboard actions; high DPI and multiple monitors」（[desktop.md](../desktop.md)）。SAP GUI Scripting と Java Access Bridge は「Planned」。版は 0.1.0
-- **相手**：UiPath は SAP・Java・Citrix（Remote Runtime）それぞれに専用の経路がある。WinActor は国内の業務アプリでの実績が長い
-- **影響**：安定性はカタログでは比べられず、実績と事例で比べられる。未検証のままでは評価の土俵に乗らない
-- **方向**：代表的な業務アプリ（会計・販売管理・SAP GUI・Java 製の社内システム・Citrix）での検証の一覧を作り、結果を docs に「動作確認済み」として残す。SAP / Java の経路は [desktop.md](../desktop.md) の計画どおり
-- **対応（2026-11-06）**：SAP GUI Scripting と Java Access Bridge の経路を実装し、同じ `desktop.*` のノードがそれを通して動くようにした。`sap.runTransaction` を追加。Java は CI の Swing の画面で確認。実機での確認手順は [real-app-checks.md](real-app-checks.md)（SAP・業務アプリ・Citrix は未確認のまま）
+### G8・G9 ウィンドウとプロセス
 
-### 6. インストーラーが未署名、企業での配布・更新の統制がない
+**対応**：済み。`desktop.setWindow`（ウィンドウ状態）・`process.list`（プロセス一覧）・`process.kill`（プロセス終了、policy の `apps` で絞れる）。
 
-- **今**：Authenticode の署名なし、初回に SmartScreen の警告（[release.md](../release.md)「Notes」）。更新は Studio が GitHub Releases の最新を見て入れる。社内で版を固定する・社内のサーバーから配る・まとめて入れる（サイレントインストール）手順は書いていない
-- **相手**：3 製品とも署名済みで、企業向けの配布（MSI・Intune・社内配布）と版の管理がある
-- **影響**：情報システム部門が未署名の exe を通すことはまずない。管理者権限なしで入る NSIS は、逆に「勝手に入る」と嫌われることもある
-- **方向**：コード署名証明書の取得（費用が要る。OSS 向けの無償署名サービスも候補）、MSI のサイレントインストールと更新を止める設定・社内配布先を指定する設定の手順
+- `desktop.setWindow`（`target` の窓、`state`: `maximized` / `minimized` / `normal`、`front: true`、`x` / `y` / `width` / `height`）。画面の大きさで部品の位置が変わるアプリを、毎回同じ大きさにしてから操作できる
+- `process.kill`（`name` または `pid`、危険度 Dangerous、`policy.json` の許可した program と同じ確認）と、`process.list`（`name` で絞って `{ pid, name, startedAt }` の一覧）。固まった業務アプリを落として `desktop.launch` で立ち上げ直す書き方を docs に
 
-## P1：多くの業務で困る
+### G10・G11 Excel の行・シート・形式
 
-### 7. 実行時のエラーメッセージが英語のまま出る
+**対応**：済み。行・シートの操作はファイルを直接変え（数式の参照も付いていく）、`excel.saveAs` は Excel で。`.xls` とパスワード付きは `excel.saveAs` で `.xlsx` にしてから使う形にした。
 
-- **今**：Runtime・アダプターのエラーは英語（例：`crates/shikigami-desktop/src/target.rs:367` の `no open window matches target.window`）。Studio は `error.message` をそのまま出す（`apps/studio/src/components/RunPausePanel.tsx:249`）。UI の文言は日英あるが、エラーは訳されない
-- **相手**：WinActor は日本語が母語。UiPath・PAD も日本語のメッセージを出す
-- **影響**：止まったときに一番読む文が英語。日本語で売るときに真っ先に気になる
-- **方向**：`code` は契約で固定（[compatibility.md](../compatibility.md) §6）なので、Studio 側で `code` と `details` から日本語の説明を組む（`message` は AI 向けの英語のまま残す）
-- **対応**：Studio の `apps/studio/src/lib/errorText.ts` と `locales/errors.{ja,en}.ts` で、約 150 の `code` を「何が起きたか・どうすればよいか」に言い換える。一時停止パネルと実行ログで使い、英語の原文は折りたたみで残す。残り：検証結果（問題の一覧）の `message` / `hint` はまだ英語
+- `excel.insertRows` / `excel.deleteRows`（`sheet`・`row`・`count`。readRows の `_row` をそのまま使える）、`excel.clearRange`、`excel.deleteSheet` / `excel.renameSheet` / `excel.copySheet`
+- `.xls`・パスワード付きのブックは COM（この PC の Excel）で開く。`excel.saveAs`（`to` の拡張子で `.xlsx` / `.xls` / `.csv` / `.pdf` を決める。`excel.exportPdf` はそのまま残す）
+- ファイルを直接読み書きする経路（umya-spreadsheet）でできるものは Excel なしでも動かす
 
-### 8. 管理サーバーがない（重なり：#77）
+### G12 フローの途中の入力フォーム
 
-- **今**：PC ごとのワークスペースだけ。共有は共有フォルダーかバンドル（[sharing-versioning.md](sharing-versioning.md)）
-- **相手**：UiPath Orchestrator（ロボット・ジョブ・キュー・アセット・ログ）、WinActor の管理製品（WinDirector など）、PAD の Power Automate ポータル
-- **影響**：10 台を超えると、どの PC で何がいつ失敗したかを追えない。キュー（1 件ずつ処理を配る）もない
-- **方向**：#77 のとおり。キューは「預けは期限付き・空いた PC が取りに行く」案の延長で扱える
+- `dialog.form`：`fields`（`name`・`label`・`type`: `text` / `number` / `date` / `choice` / `check` / `file`・`choices`・`default`・`required`）を 1 つの画面で入れてもらい、`{ 名前: 値 }` を返す。見た目と作りは `dialog.*` と同じ WPF（Studio の見た目）。実行画面の入力フォームと同じ部品の種類にそろえる
 
-### 9. 失敗の通知がない（重なり：#77）
+### G13 選んだノードから実行
 
-- **今**：通知の置き場所は Studio の中だけ（[ui-principles.md](ui-principles.md)「通知」）。無人実行が失敗しても誰にも届かない
-- **相手**：UiPath（Orchestrator のアラート・メール）、PAD（クラウドフローで Teams・メール）
-- **方向**：フローに書かせる（`mail.*` や `http.request` を `catch` で呼ぶ）のではなく、実行の受け持ち（#77 の agent）の設定にする。AI が毎回書くものを増やさない
+- ノードの右クリックに「ここから実行」。前のノードは実行せず、変数は既定値（または直前の実行の、そのノードの手前の値を使うかを選ぶ）。ブロックの中のノードなら、外側の繰り返しの 1 回目として入る。Runtime の `debug` の「ノードへ飛ぶ」と同じ仕組みで始める
 
-### 10. 操作の記録（レコーダー）がない
+### G14 メール
 
-- **今**：記録機能はない（`grep` で該当なし。`RunRecorder` は実行記録で別物）。作るのは AI か、Studio のパレットから 1 つずつ（PR #70）
-- **相手**：WinActor は「記録」で操作をそのままフローにするのが入口。PAD・UiPath にもレコーダーがある
-- **影響**：方針上 AI が代わりをするが、**生成 AI の利用を禁じている職場**では入口がない。WinActor から来る人は「まず記録」を期待する
-- **方向**：記録した操作を AI がまとめ直す「記録 → AI が整える」にすれば方針と両立する。最低限は部品選択（#3）とパレットで手で組めること。どこまでやるかは決めが要る
+- `mail.move`（`id`・`folder`）、`mail.markRead`（`id`・`read`）、`mail.reply` / `mail.forward`（下書きか送信か、送信は Dangerous）、`mail.delete`（ごみ箱へ）
+- `mail.list` / `mail.saveAttachments` に `via`（`outlook` / `microsoft365` / `imap`）。`mail.send` と同じ書き方
 
-### 11. ブラウザ操作の欠け
+### G15 祝日・営業日・メールのトリガー
 
-- **今**（[browser.md](../browser.md)「Nodes」、[architecture.md](../architecture.md) §13）：ダウンロード・アップロードは未実装と明記。`context` ごとに 1 ページで、新しいタブ・ポップアップへの切替のノードはない。`target` に iframe の指定はない。`alert` / `confirm` の扱い、ホバー、スクロール、属性（`href` など）の取得、ページ送りしながらの表の取得もない
-- **相手**：3 製品とも標準
-- **影響**：業務サイトの多くで「CSV をダウンロードする」「ファイルを添付する」「別ウィンドウで開く」が出てくる。ここで止まる
-- **方向**：組込ノードとして足す（外に触れる操作なので方針どおりノード）。ダウンロードは `file.*` と同じくプロジェクトフォルダー基準の保存先にする
-- **対応**：`browser.switchTab` / `browser.closeTab`、出す操作のノードの `dialog`（alert / confirm / prompt）、`target.frame`（iframe）、`browser.hover` / `browser.scroll` / `browser.getAttribute`（PR #83）、`browser.download` / `browser.upload`（保存先・添付するファイルはプロジェクトフォルダー基準、PR #88）。ページ送りしながらの表は既存のノードのくり返しで読む書き方を [browser.md](../browser.md)「Tables across pages」に追加（PR #98）。残り：実機の Edge での確認
+- スケジュールに `skipHolidays`（日本の祝日を内蔵。会社の休日は `holidays.json` に日付を足す）と、`monthly` の `businessDay`（第 n 営業日、-1 で最終営業日）
+- `when.kind: "mailReceived"`（`folder`・`subjectContains`・`fromContains`、届いたメールの `id` を入力変数へ）
 
-### 12. デスクトップ操作の欠け
+### G16 ブラウザの操作の記録
 
-- **今**（[desktop.md](../desktop.md)）：スクロール・ドラッグ・ホバー・マウス移動のノードはない。「Reading a whole grid at once and walking through menus are not implemented」。デスクトップの表を一度に読めない
-- **相手**：3 製品とも標準（UiPath・PAD は表のデータ抽出、WinActor はリスト・表の取得）
-- **影響**：販売管理・会計ソフトの一覧画面から表を読む、は RPA の典型。1 セルずつ読むのは遅く、AI が組んでも長いフローになる
-- **方向**：`desktop.getTable`（`browser.getTable` と同じ形の配列で返す）、`desktop.scroll`、`desktop.drag` を組込で
-- **対応（2026-11-06）**：`desktop.scroll`・`desktop.mouseScroll`・`desktop.drag`・`desktop.hover`・`desktop.selectMenu`・`desktop.getTable` を追加（PR #82 ほか）。メニュー・スクロール・表は CI の WinForms の画面で確認。マウスを使う操作の実機確認は [real-app-checks.md](real-app-checks.md)
+- デスクトップの記録と同じ入口・同じ「記録した操作」の一覧。ブラウザは Playwright の中でクリック・入力・選択・ページの移動を拾い、`target` は「画面から選ぶ」と同じ作り方で作る。記録のあと「AI に整えてもらう」も同じ
 
-### 13. 画面の部品を名前を付けて共有する場所がない（重なり：部品選択）
+### G17 Word
 
-- **今**：`target` はノードごとにその場で書く。同じ「保存ボタン」を 10 ノードが使えば 10 か所に書く
-- **相手**：UiPath のオブジェクトリポジトリ、PAD の UI 要素の一覧。画面が変わったら 1 か所直せば済む
-- **影響**：画面の改修のたびに直す箇所が多く、AI が直してもレビュー（確認待ち）が膨らむ
-- **方向**：AI が組みやすい仕様（1 つのことは 1 通り、[ai-authoring.md](ai-authoring.md)）と衝突しうるので慎重に。プロジェクトフォルダーに名前付きの対象を置き、ノードはその名前を参照する形なら、AI は名前だけ書けばよくなる。部品選択の結果をどこに保存するかと同時に決める
+- `word.exportPdf`（COM、Excel のマクロと同じ経路）、`word.replaceText`（`.docx` を直接、書式を残す）、`word.readTables`（表を行の一覧で）
 
-### 14. Excel の欠け
+### G18 ロック中の無人実行
 
-- **今**（[office.md](../ja/office.md)）：済み。この PC の Excel で開いているブックには `excel.*` が自動で COM を使い（読み書きとも）、`excel.recalculate` / `excel.sort` / `excel.exportPdf`、書式 `excel.format`・フィルター `excel.filter`・ピボット `excel.pivot` を追加した。残り：実機の Excel での確認
-- **相手**：3 製品とも、開いている Excel を COM で操作できる（PAD の Excel アクションは COM が基本）
-- **影響**：「人が開いて見ているブックに追記する」「数式を再計算した結果を読む」「PDF にして送る」は日本の事務で頻出
-- **方向**：ファイル直接を既定のまま、COM の「開いているブック」を別の入口として足す（デスクトップと同じく backend を自動で選ぶ形が AI に優しい）
+- 方式を比べて決める：（a）実行の間だけ RDP のループバックでセッションを作る、（b）自動サインインの仕組みを使う、（c）デスクトップのノードがある実行はロックを解いて終わったらロックし直す。どれも資格情報の扱いが要るので、設計メモを先に書く
 
-### 15. メールの欠け
+### G25・G26 は需要を見て。G27・G29 はプラグインの見本として作る候補。
 
-- **今**（[office.md](../office.md)）：下書き・一覧・添付の保存は Outlook（クラシック）の COM のみ。送信は `mail.send` で Outlook・Microsoft 365（Graph）・SMTP から済み。残りは Outlook なしで読む（Graph・IMAP）と Gmail
-- **相手**：3 製品とも送信と複数の方式がある
-- **影響**：送信できないので通知・報告の自動化が完結しない。新しい Outlook への移行が進むとクラシックの COM が使えない PC が増える
-- **方向**：`mail.send`（危険度 Dangerous、承認の対象）と Graph の backend を先に。SMTP は社内メールサーバー向け
+## 進める順
 
-### 16. データベースのノードがない
+手で組む人がすぐ手を止める点と、無人実行で困る点を先に、小さく出せる順に並べた。1 つずつ PR にして、CI が通ったらマージする。
 
-- **今**：`db.query` / `db.execute`（ODBC、[database.md](../ja/database.md)）で済み。組込にした（ODBC はどの DB にも同じ書き方で、Windows に標準で入っているため）
-- **相手**：3 製品とも SQL の実行がある
-- **影響**：基幹システムの DB から抜いて Excel にする、は定番。`process.run` で `sqlcmd` を呼ぶのは AI にも人にも筋が悪い
-- **方向**：`db.query` / `db.execute`（ODBC と SQL Server を先に。接続文字列はシークレット）。プラグインでなく組込にするかはここで決める
+1. G3・G22 ノードのコピー・貼り付け・複製・複数選択・メモ
+2. G4 範囲の再試行
+3. G5 失敗したときの画面
+4. G6・G7・G20・G21 クリックの種類・チェックボックス・戻る／進む／再読み込み・1 文字ずつの入力
+5. G8・G9 ウィンドウとプロセス
+6. G10・G11 Excel の行・シート・形式
+7. G12 入力フォーム
+8. G13 ここから実行
+9. G14 メール
+10. G15 祝日・営業日・メールのトリガー
+11. G16 ブラウザの記録
+12. G17 Word
+13. G23・G24 フローの中の検索・一時停止中の変数の書き換え
 
-### 17. 人が起動する軽い実行画面・入力フォームがない（重なり：#77 一部）
+## 済んだもの（2026-11-06 版の 26 項目から）
 
-- **今**：起動は Studio か CLI。人への入力は `dialog.input`（1 行）、`dialog.message`、`dialog.selectFile` だけ（[system.md](../system.md)）
-- **相手**：UiPath Assistant、PAD のコンソール、WinActor の簡易実行の画面。複数項目のフォーム（UiPath のフォーム、PAD のカスタムフォーム）
-- **影響**：現場の人に「公開版を押して動かすだけ」の画面を渡せない。Studio は作る人の道具で、使う人には重い
-- **方向**：公開版だけが並ぶ小さな実行画面（タスクトレイ）。入力はフローの入力変数から自動でフォームを作れば、AI は何も書かなくてよい
-- **対応**：別ウィンドウ「Shikigami 実行」（[docs/ja/runner.md](../ja/runner.md)）：公開版の一覧、入力変数から作るフォーム、実行中の進み、出力とできたファイル、日本語のエラー。Studio のサイドバー・タスクトレイ・`--runner` で開く。変数の `format`（ファイル・フォルダー・日付・月）と `choices` で参照ボタン・カレンダー・選択肢の入力欄
+前の版で挙げた点のうち、次は対応済み（詳しくは各 docs）。
 
-### 18. 業務の人向けの学習資料がない
-
-- **今**：docs は設計と仕様（英語が主、日本語は `docs/ja/`）。開発者・AI 向けで、操作マニュアル・チュートリアル・業務別のサンプル集はない。サンプルは `examples/` の数本
-- **相手**：UiPath Academy、Microsoft Learn（PAD）、WinActor のマニュアル・研修・利用者コミュニティ
-- **影響**：OSS で販売網がない分、資料が営業の代わり。ないと試されない
-- **方向**：「AI に頼んで請求書の集計を作る」のような業務別の通し例を数本、画面付きで。Studio の中から開ける形が望ましい
-- **対応**：[docs/ja/tutorials/](../ja/tutorials/README.md) に 3 本（売上 CSV の集約、請求書の作成、Web の受注システム）。見本は `examples/tutorials/`、完成形はバンドルで「ファイルから読み込む」で開け、CI で毎回実行する。Studio のフローの画面の下に「見本」：手順のページを開く・完成形をそのまま開く
-
-## P2：特定の場面で効く
-
-### 19. 帳票 OCR・PDF の操作
-
-- **今**：`pdf.readText`（テキスト層のみ）、`desktop.readText`（画像の OCR、位置つき）。請求書などの項目を取り出す仕組み、表の読み取りはない。PDF の結合・分割は `pdf.merge` / `pdf.extractPages` / `pdf.split` で済み（[uipath-coverage.md](uipath-coverage.md)「PDF」）
-- **相手**：UiPath Document Understanding。WinActor は AI-OCR 製品との連携が定番
-- **方向**：項目の取り出しは「AI なしで動く」と相性が悪い（毎回 AI に読ませると AI ありになる）。位置で読む定型帳票なら OCR＋式で書ける。非定型はプラグイン（外部の AI-OCR）にする
-
-### 20. フローのテスト
-
-- **今**：試しの実行と確認待ちの「試しの結果」はある（[review-evidence.md](review-evidence.md)）。入力と期待する出力を保存して繰り返し流すテストケース・外部をモックにする仕組みはない
-- **相手**：UiPath Test Suite
-- **方向**：AI が直したときの回帰確認に効く。確認待ちの「試しの結果」を保存してテストケースにする、が最小
-
-### 21. 複数人での開発
-
-- **今**：同時編集はリビジョン競合で止めて読み直し。3-way マージはしない（[sharing-versioning.md](sharing-versioning.md)「やらないこと」）。Undo はフローに 1 本で人ごとではない（[architecture.md](../architecture.md) §13）
-- **相手**：UiPath（Git 連携・Studio のチーム機能）
-- **方向**：Git に頼らない方針は維持。「誰が編集中か」の印と、版どうしの差分（確認待ちの比較を版に使う）から
-
-### 22. プラグインの配布と部品の数
-
-- **今**：`shikigami plugin list` / `check` のみ。インストール・カタログ・署名・SDK は未着手（[plugins.md](plugins.md) §8）
-- **相手**：UiPath Marketplace、WinActor の豊富なライブラリ
-- **方向**：§8 の順で。部品の数の勝負は式の関数（[uipath-coverage.md](uipath-coverage.md)）で半分は埋まっているので、外部連携のプラグインを数本作って見本にする
-
-### 23. SaaS へのつなぎ
-
-- **今**：`http.request` と `oauth.signIn`（[oauth.md](../oauth.md)）。個別の SaaS 用ノードはない
-- **相手**：UiPath Integration Service、PAD（Power Automate のコネクター）
-- **方向**：方針どおりプラグイン。国内でよく使う kintone・Box・Slack・Teams から
-
-### 24. 汎用機の端末・FTP / SFTP・XML
-
-- **今**：なし（XML は「需要を見て」、[uipath-coverage.md](uipath-coverage.md)）
-- **相手**：UiPath・PAD に端末エミュレーターと FTP の操作がある
-- **方向**：金融・製造の一部で必須。プラグイン候補
-
-### 25. 実行記録の保管と監査の一元化（重なり：#77）
-
-- **今**：人が読む実行ログは新しい 100 件（CHANGELOG 0.1.0）。MCP の操作は `audit/mcp.jsonl`。Studio・CLI・MCP をまたいだ監査の一本化と、保管期間の設定はない
-- **相手**：UiPath（Orchestrator の監査ログ・保持期間）
-- **方向**：#77 の管理ツールに集める前提で、PC 側の保管期間の設定を先に
-- **対応（2026-11-06）**：`shikigami audit` で、変更の記録・公開の記録・MCP の呼び出し・実行記録を 1 つの一覧（時刻順、`--since` / `--until` / `--flow` / `--json`）で読む（[docs/ja/audit.md](../ja/audit.md)）。新しく二重に書く記録は作らない。`policy.json` の `records.keepDays` で実行記録と MCP の呼び出しを期限で削除。管理サーバーはジョブ・イベント・レポートを全 PC 分保存（[docs/ja/remote.md](../ja/remote.md)）
-
-### 26. 有償サポート・販売パートナー・研修と認定
-
-- **今**：OSS で当面無償。サポート窓口・SLA はない
-- **相手**：WinActor は国内の販売パートナー網と研修。UiPath は認定制度とパートナー
-- **影響**：大企業の購買は「問い合わせ先があるか」で決まることがある。OSS の構造上の弱み
-- **方向**：収益化と同じく「広がってから」。それまでは資料（#18）と公開の Issue 対応で補う
+| 前の # | 項目 | 対応 |
+|---|---|---|
+| 1 | スケジュール・トリガー | `shikigami agent` と Studio の「自動実行」、日時・毎月・間隔・ファイル到着（[schedules.md](../schedules.md)） |
+| 2 | 無人実行の土台 | PC をまたいだ入力の排他、キャンセル時の `finally`、ロックの検知（ロック中に動かすのは G18） |
+| 3・13 | 画面から選ぶ・光らせる・名前付きの部品 | 「画面から選ぶ」「光らせる」、`parts`（[desktop.md](../desktop.md)） |
+| 4 | IE モード・人が開いたブラウザ | `desktop.*` で IE モード、`browser.attach`（実機確認は G1） |
+| 5 | SAP / Java の経路 | SAP GUI Scripting・Java Access Bridge、`sap.runTransaction`（実機確認は G1） |
+| 7 | エラーが英語 | `errorText.ts`・検証の問題の日本語化 |
+| 8・25 | 管理サーバー・監査 | 管理サーバー、`shikigami audit`、`records.keepDays` |
+| 9 | 失敗の通知 | `policy.json` の `notify`（Teams・メール） |
+| 10 | 操作の記録 | デスクトップの記録 → AI が整える（ブラウザは G16） |
+| 11 | ブラウザ操作の欠け | タブ・iframe・JS ダイアログ・ホバー・スクロール・属性・ダウンロード・アップロード |
+| 12 | デスクトップ操作の欠け | スクロール・ドラッグ・ホバー・メニュー・表の一括読み |
+| 14 | Excel | 開いているブック・再計算・並べ替え・書式・フィルター・ピボット・PDF（行・シートの操作は G10・G11） |
+| 15 | メールの送信 | `mail.send`（Outlook・Microsoft 365・SMTP。受信側は G14） |
+| 16 | データベース | `db.query` / `db.execute`（ODBC） |
+| 17 | 軽い実行画面 | 「Shikigami 実行」（入力変数から作るフォーム。途中のフォームは G12） |
+| 18 | 学習資料 | `docs/ja/tutorials/`、Studio の「見本」 |
+| 19 | PDF の結合・分割 | `pdf.merge` / `pdf.extractPages` / `pdf.split`（帳票 OCR は G27） |
 
 ## 方針としてやらないこと（比較で × が付いても追わない）
 
 | 相手にあるもの | やらない理由 |
 |---|---|
-| 任意のコードの実行（Invoke Code・VBA の直書き・PowerShell の直書き） | 任意コードを実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro`（[uipath-coverage.md](uipath-coverage.md)） |
-| 乱数・Switch | 結果が変わる／書き方が 2 通りになる（同上） |
-| mac / Linux 対応 | Windows 特化（[architecture.md](../architecture.md) 判断 9） |
+| 任意のコードの実行（Invoke Code・VBA の直書き・PowerShell の直書き・ブラウザでの JavaScript 実行） | 任意のコードを実行しない方針。外部プログラムは `process.run`、マクロは `excel.runMacro` |
+| 乱数 | 結果が毎回変わる |
+| mac / Linux 対応 | Windows 特化 |
 | Git 連携 | 自前の版管理（[sharing-versioning.md](sharing-versioning.md)） |
-| 1 操作 1 アクティビティの細かいノード | 式の関数で 1 通りに書く（[uipath-coverage.md](uipath-coverage.md)） |
+| 1 操作 1 アクティビティの細かいノード（文字の結合・トリムなど） | 式の関数で 1 通りに書く |
 
 ## 逆に勝っている点（比較表で並べるときのために）
 
 - AI がフローを組む入口が MCP（他社の MCP は既存のロボットを呼ぶ側が中心）
-- 無人実行は人が承認して公開した版だけ、AI の操作は `policy.json` で絞る（[policy.md](../policy.md)）
-- フローは JSON で人も AI も同じものを見る。差分を確認して公開（[review-evidence.md](review-evidence.md)）
-- 同時に動かす数に料金がない、ブラウザは `context` ごとに並列（[architecture.md](../architecture.md) §10.5）
-- 和暦・全角半角・Shift_JIS が式と `file.*` にある（[uipath-coverage.md](uipath-coverage.md)）
+- 無人実行は人が確認して公開した版だけ、AI の操作は `policy.json` で絞る
+- フローは JSON で人も AI も同じものを見る。差分を確認して公開
+- 同時に動かす数に料金がない、ブラウザは `context` ごとに並列
+- 和暦・全角半角・Shift_JIS が式と `file.*` にある
 - エラーで止まったところから直して続けられる（[debug-runs.md](debug-runs.md)）
-- オフラインで動く日本語 OCR を同梱（[desktop.md](../desktop.md)）
-
-## 次に決めること
-
-P0 のうち別の取り組みと重ならない #4（IE モード・既存ブラウザ）・#5（実機検証）・#6（署名と配布）は、担当を決めて着手するかどうかを先に決める。#1・#2 は #77、#3 は部品選択のスレッドで進める。
+- オフラインで動く日本語 OCR を同梱

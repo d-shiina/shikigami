@@ -27,6 +27,7 @@ pub mod oauth;
 /// call web APIs with a secret (`mail.send` through Microsoft 365).
 pub use http::{check_site, client as http_client};
 mod process;
+mod procs;
 
 #[cfg(test)]
 mod tests;
@@ -34,6 +35,8 @@ mod tests;
 pub mod types {
     pub const HTTP_REQUEST: &str = "http.request";
     pub const PROCESS_RUN: &str = "process.run";
+    pub const PROCESS_LIST: &str = "process.list";
+    pub const PROCESS_KILL: &str = "process.kill";
     pub const CLIPBOARD_GET: &str = "clipboard.get";
     pub const CLIPBOARD_SET: &str = "clipboard.set";
     pub const DIALOG_MESSAGE: &str = "dialog.message";
@@ -79,6 +82,8 @@ impl Adapter for SystemAdapter {
 enum Kind {
     HttpRequest,
     ProcessRun,
+    ProcessList,
+    ProcessKill,
     ClipboardGet,
     ClipboardSet,
     DialogMessage,
@@ -106,6 +111,8 @@ impl ActionHandler for SystemStep {
             match kind {
                 Kind::HttpRequest => http::request(&input).await,
                 Kind::ProcessRun => process::run(&input).await,
+                Kind::ProcessList => blocking(move || procs::list(&params)).await,
+                Kind::ProcessKill => blocking(move || procs::kill(&params)).await,
                 Kind::ClipboardGet => blocking(desktop::clipboard_get).await,
                 Kind::ClipboardSet => blocking(move || desktop::clipboard_set(&params)).await,
                 Kind::DialogMessage | Kind::DialogInput | Kind::DialogSelectFile => {
@@ -150,6 +157,7 @@ impl From<Def> for StepTypeDef {
         let targets = match d.step_type {
             types::HTTP_REQUEST => vec![TargetDef::site("url")],
             types::PROCESS_RUN => vec![TargetDef::app("program")],
+            types::PROCESS_KILL => vec![TargetDef::app("name")],
             _ => Vec::new(),
         };
         StepTypeDef {
@@ -264,6 +272,39 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 })],
             },
             Kind::ProcessRun,
+        ),
+        (
+            Def {
+                step_type: types::PROCESS_LIST,
+                category: StepCategory::System,
+                label: "プロセス一覧",
+                description: "Outputs the programs running on this PC as [{ pid, name }]. With `name` (e.g. \"EXCEL\" or \"EXCEL.EXE\"; case and .exe do not matter) only that program's processes, so `length(list) > 0` tells whether it is running.",
+                params_schema: object_schema(json!({ "name": text }), &[]),
+                risk: RiskLevel::Safe,
+                resources: vec![],
+                secret_params: vec![],
+                default_timeout_ms: None,
+                examples: vec![json!({ "type": types::PROCESS_LIST, "params": { "name": "EXCEL" }, "saveAs": "excels" })],
+            },
+            Kind::ProcessList,
+        ),
+        (
+            Def {
+                step_type: types::PROCESS_KILL,
+                category: StepCategory::System,
+                label: "プロセス終了",
+                description: "Ends every running process of the program `name` (e.g. \"sales.exe\"; case and .exe do not matter) with its child processes, without asking it to save. Use it to restart an application that hangs (then desktop.launch it again). Outputs { killed } (0 when it was not running, which is not an error). Unsaved work in that program is lost. A process of another user or of an administrator fails with PROCESS_KILL_FAILED.",
+                params_schema: object_schema(
+                    json!({ "name": { "type": "string", "minLength": 1 } }),
+                    &["name"],
+                ),
+                risk: RiskLevel::Dangerous,
+                resources: vec![],
+                secret_params: vec![],
+                default_timeout_ms: None,
+                examples: vec![json!({ "type": types::PROCESS_KILL, "params": { "name": "sales.exe" } })],
+            },
+            Kind::ProcessKill,
         ),
         (
             Def {

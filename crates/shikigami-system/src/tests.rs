@@ -41,7 +41,7 @@ fn examples_validate() {
     let runtime = runtime();
     let validator = Validator::new(runtime.registry().clone());
     let defs = definitions();
-    assert_eq!(defs.len(), 7);
+    assert_eq!(defs.len(), 9);
     for def in &defs {
         assert!(runtime.registry().get(&def.step_type).is_some());
         assert!(!def.examples.is_empty(), "{}", def.step_type);
