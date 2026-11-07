@@ -4,6 +4,7 @@ import { typeTitle } from "../lib/sentence";
 import { findStep } from "../store";
 import { PartInspector } from "./inspector/PartInspector";
 import { StepInspector } from "./inspector/StepInspector";
+import { Position } from "./StatusBar";
 import { FlowInspector } from "./inspector/FlowInspector";
 
 /**
@@ -46,6 +47,10 @@ export function Inspector() {
         ) : (
           <span className="font-semibold">{t.shell.flow}</span>
         )}
+        {/* Where the selection is in the flow: "ノード 3 / 12". */}
+        <span className="ml-auto flex h-full shrink-0 items-center text-[11px] text-slate-500">
+          <Position />
+        </span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {partName ? <PartInspector name={partName} /> : step ? <StepInspector /> : <FlowInspector />}
