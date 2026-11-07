@@ -25,7 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
     return (
       <div className="canvas-bg flex h-full items-center justify-center p-8">
-        <div className="w-[480px] space-y-3 rounded-[4px] border border-shu-100 bg-sheet p-6 shadow-dialog">
+        <div className="w-[480px] space-y-3 rounded-lg border border-shu-100 bg-sheet p-6 shadow-dialog">
           <div className="flex items-center gap-2">
             <img src="/mark.png" alt="" className="h-6 w-6" />
             <h1 className="text-lg font-semibold">{t.crash.title}</h1>
@@ -40,14 +40,14 @@ export class ErrorBoundary extends Component<Props, State> {
             <button
               type="button"
               onClick={() => this.setState({ error: null })}
-              className="rounded-[4px] bg-ink px-3 py-1 text-sm text-paper hover:bg-slate-700"
+              className="rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover"
             >
               {t.crash.retry}
             </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="rounded-[4px] border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100"
+              className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100"
             >
               {t.crash.reload}
             </button>

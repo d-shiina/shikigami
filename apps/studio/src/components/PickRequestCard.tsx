@@ -17,7 +17,7 @@ export function PickRequestCard() {
     <div
       role="status"
       aria-label={t.pickAsked}
-      className="fixed top-12 left-1/2 z-40 w-[440px] max-w-[calc(100vw-32px)] -translate-x-1/2 space-y-2 rounded-[4px] border border-brand-500/60 bg-sheet p-4 shadow-dialog"
+      className="fixed top-12 left-1/2 z-40 w-[440px] max-w-[calc(100vw-32px)] -translate-x-1/2 space-y-2 rounded-lg border border-brand-500/60 bg-sheet p-4 shadow-dialog"
     >
       <div className="flex items-center gap-2">
         <MousePointerClick aria-hidden className="h-4 w-4 text-brand-600" />

@@ -9,7 +9,7 @@ import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleV
 import { t } from "../lib/i18n";
 import { blankWhen, DAYS, describeWhen, KINDS, normalizeDays, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
 
-const inputClass = "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm focus:border-ink focus:outline-none";
+const inputClass = "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm focus:border-primary focus:outline-none";
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -40,7 +40,7 @@ function DayPicker({ days: given, onChange }: { days: string[]; onChange: (days:
             type="button"
             aria-pressed={on}
             onClick={() => onChange(on ? days.filter((x) => x !== d) : [...days, d])}
-            className={`h-7 min-w-8 rounded-[4px] border px-1.5 text-xs ${on ? "border-ink bg-ink text-paper" : "border-slate-300 text-slate-600 hover:bg-slate-100"}`}
+            className={`h-7 min-w-8 rounded-lg border px-1.5 text-xs ${on ? "border-slate-400 bg-slate-100 font-medium text-ink" : "border-slate-300 text-slate-600 hover:bg-slate-100"}`}
           >
             {names[d]}
           </button>
@@ -213,7 +213,7 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
   const setKind = (kind: WhenKind) => setDraft((d) => ({ ...d, when: d.when.kind === kind ? d.when : blankWhen(kind) }));
   return (
     <form
-      className="space-y-3 rounded-[4px] border border-slate-200 bg-sheet p-4 shadow-sheet"
+      className="space-y-3 rounded-lg border border-slate-200 bg-sheet p-4 shadow-sheet"
       onSubmit={async (e) => {
         e.preventDefault();
         const problem = whenProblem(draft.when);
@@ -250,7 +250,7 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
               role="radio"
               aria-checked={draft.when.kind === k}
               onClick={() => setKind(k)}
-              className={`rounded-[4px] border px-2 py-1 text-xs ${draft.when.kind === k ? "border-ink bg-ink text-paper" : "border-slate-300 text-slate-600 hover:bg-slate-100"}`}
+              className={`rounded-lg border px-2 py-1 text-xs ${draft.when.kind === k ? "border-slate-400 bg-slate-100 font-medium text-ink" : "border-slate-300 text-slate-600 hover:bg-slate-100"}`}
             >
               {r.kinds[k]}
             </button>
@@ -266,10 +266,10 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
       <p className="text-xs text-slate-600">{describeWhen(draft.when)}</p>
       {error && <p className="rounded border border-shu-600/40 bg-shu-600/5 px-2 py-1.5 text-xs text-shu-600">{error}</p>}
       <div className="flex justify-end gap-2">
-        <button type="button" className="rounded-[4px] px-3 py-1 text-sm text-slate-600 hover:bg-slate-100" onClick={onCancel}>
+        <button type="button" className="rounded-lg px-3 py-1 text-sm text-slate-600 hover:bg-slate-100" onClick={onCancel}>
           {r.cancel}
         </button>
-        <button type="submit" className="rounded-[4px] bg-ink px-3 py-1 text-sm text-paper hover:bg-slate-700">
+        <button type="submit" className="rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover">
           {r.save}
         </button>
       </div>
@@ -294,7 +294,7 @@ function AgentCard({ status, onChange }: { status: AgentStatus | null | undefine
   };
   if (status === undefined) return null;
   return (
-    <div className={`mb-4 rounded-[4px] border p-3 ${status ? "border-slate-200 bg-sheet" : "border-shu-600/40 bg-shu-600/5"}`}>
+    <div className={`mb-4 rounded-lg border p-3 ${status ? "border-slate-200 bg-sheet" : "border-shu-600/40 bg-shu-600/5"}`}>
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 shrink-0 rounded-full ${status ? "bg-moegi-500" : "bg-shu-500"}`} aria-hidden="true" />
         <div className="min-w-0 flex-1">
@@ -307,7 +307,7 @@ function AgentCard({ status, onChange }: { status: AgentStatus | null | undefine
             disabled={busy}
             title={r.agentStopHint}
             onClick={() => act(async () => (await api.stopAgent(), null))}
-            className="flex items-center gap-1 rounded-[4px] border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+            className="flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
           >
             <Square size={12} aria-hidden="true" />
             {r.agentStop}
@@ -318,7 +318,7 @@ function AgentCard({ status, onChange }: { status: AgentStatus | null | undefine
             disabled={busy}
             title={r.agentStartHint}
             onClick={() => act(api.startAgent)}
-            className="flex items-center gap-1 rounded-[4px] bg-ink px-3 py-1 text-sm text-paper hover:bg-slate-700 disabled:opacity-60"
+            className="flex items-center gap-1 rounded-lg border border-slate-300 bg-sheet px-3 py-1 text-sm font-medium text-ink hover:bg-slate-100 disabled:opacity-60"
           >
             <Play size={13} aria-hidden="true" />
             {r.agentStart}
@@ -362,7 +362,7 @@ function ScheduleRow({
   const { flowName, published, ...schedule } = item;
   const warn = !flowName ? r.flowMissing : !published ? r.notPublished : null;
   return (
-    <li className={`rounded-[4px] border border-slate-200 bg-sheet p-3 shadow-sheet ${item.enabled ? "" : "opacity-70"}`}>
+    <li className={`rounded-lg border border-slate-200 bg-sheet p-3 shadow-sheet ${item.enabled ? "" : "opacity-70"}`}>
       <div className="flex items-center gap-2">
         <CalendarClock size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
         <span className="min-w-0 truncate font-medium">{item.name}</span>
@@ -480,7 +480,7 @@ export function RunsPage() {
           {!editing && (
             <button
               type="button"
-              className="mb-2 ml-auto rounded-[4px] bg-ink px-3 py-1 text-sm text-paper hover:bg-slate-700"
+              className="mb-2 ml-auto rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover"
               onClick={() => setEditing(blank)}
             >
               {r.add}

@@ -24,7 +24,7 @@ export function SettingsGroup({
           {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
         </div>
       )}
-      <div className="divide-y divide-slate-200 rounded-[4px] border border-slate-200 bg-sheet shadow-sheet">
+      <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-sheet shadow-sheet">
         {children}
         {footer && <div className="flex items-center justify-end gap-3 bg-slate-50 px-4 py-2">{footer}</div>}
       </div>
@@ -69,8 +69,8 @@ export function SettingsRow({
 }
 
 export const settingsInput =
-  "w-full rounded-[3px] border border-slate-300 bg-sheet px-2 py-1 text-[13px] text-ink focus:border-ink focus:outline-none";
+  "w-full rounded-md border border-slate-300 bg-sheet px-2 py-1 text-[13px] text-ink focus:border-primary focus:outline-none";
 export const settingsSelect =
-  "rounded-[3px] border border-slate-300 bg-sheet px-1.5 py-1 text-[13px] text-ink focus:border-ink focus:outline-none";
+  "rounded-md border border-slate-300 bg-sheet px-1.5 py-1 text-[13px] text-ink focus:border-primary focus:outline-none";
 export const settingsPrimary =
-  "rounded-[4px] bg-ink px-3 py-1 text-[13px] font-medium text-paper hover:bg-slate-700 disabled:bg-slate-300";
+  "rounded-lg bg-primary px-3 py-1 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-300";

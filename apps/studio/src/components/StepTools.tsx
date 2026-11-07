@@ -6,7 +6,7 @@ import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { ExtractForm } from "./inspector/StepInspector";
 
-const STEP_TOOL = "grid h-6 w-6 place-items-center rounded-[3px] text-[13px] text-slate-600 hover:bg-slate-100 hover:text-ink";
+const STEP_TOOL = "grid h-6 w-6 place-items-center rounded-md text-[13px] text-slate-600 hover:bg-slate-100 hover:text-ink";
 
 /** Move, delete and extract, on the selected step itself: the pointer is already there. */
 export function StepTools({ step }: { step: Step }) {
@@ -15,7 +15,7 @@ export function StepTools({ step }: { step: Step }) {
   const [extracting, setExtracting] = useState(false);
   return (
     <div className="relative">
-      <div role="toolbar" aria-label={t.toolbar.stepTools} className="flex items-center gap-0.5 rounded-[3px] border border-slate-200 bg-sheet p-0.5 shadow-raised">
+      <div role="toolbar" aria-label={t.toolbar.stepTools} className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-sheet p-0.5 shadow-raised">
         <button type="button" title={`${t.moveUp} (Alt+↑)`} onClick={() => moveSelected(-1)} className={STEP_TOOL}>
           ↑
         </button>
@@ -28,7 +28,7 @@ export function StepTools({ step }: { step: Step }) {
           title={t.shell.extractTitle}
           onClick={() => setExtracting(!extracting)}
           aria-expanded={extracting}
-          className={`h-6 rounded-[3px] px-1.5 text-[11px] ${extracting ? "bg-slate-200 text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
+          className={`h-6 rounded-md px-1.5 text-[11px] ${extracting ? "bg-slate-200 text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
         >
           {t.shell.extract}
         </button>
@@ -38,7 +38,7 @@ export function StepTools({ step }: { step: Step }) {
         </button>
       </div>
       {extracting && (
-        <div className="nodrag nopan absolute top-full left-0 z-20 mt-1 rounded-[4px] border border-slate-200 bg-sheet shadow-lifted">
+        <div className="nodrag nopan absolute top-full left-0 z-20 mt-1 rounded-lg border border-slate-200 bg-sheet shadow-lifted">
           <ExtractForm step={step} />
         </div>
       )}

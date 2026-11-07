@@ -563,6 +563,9 @@ export const ja = {
     fixNow: (agent: string) => `${agent} に今すぐ修正を依頼`,
   },
   flow: {
+    ranOk: "完了",
+    ranFailed: "エラー",
+    issues: (n: number) => `検証で見つかった問題 ${n} 件`,
     addAtBlockEnd: (block: string) => `「${block}」の最後にノードを追加`,
     aiAdded: "AIが追加",
     aiChanged: "AIが変更",
@@ -1185,6 +1188,7 @@ export const ja = {
     direction: { input: "受け取る", output: "返す", inOut: "受け取って返す", local: "使う" },
   },
   shell: {
+    aiChat: "AI チャット",
     places: "場所",
     settings: "設定",
     flow: "フロー",

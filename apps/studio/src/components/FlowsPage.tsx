@@ -36,8 +36,8 @@ function save(key: string, value: unknown) {
 export function Monogram({ name, active }: { name: string; active: boolean }) {
   return (
     <span
-      className={`grid h-5 w-5 shrink-0 place-items-center rounded-[4px] text-[11px] font-bold ${
-        active ? "bg-ink text-paper" : "bg-brand-50 text-brand-700"
+      className={`grid h-5 w-5 shrink-0 place-items-center rounded-lg text-[11px] font-bold ${
+        active ? "bg-slate-200 text-ink" : "bg-brand-50 text-brand-700"
       }`}
     >
       {[...name.trim()][0] ?? "?"}
@@ -52,7 +52,7 @@ function Marked({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, at)}
-      <mark className="rounded-[2px] bg-accent-100 text-ink">{text.slice(at, at + query.length)}</mark>
+      <mark className="rounded-sm bg-accent-100 text-ink">{text.slice(at, at + query.length)}</mark>
       {text.slice(at + query.length)}
     </>
   );
@@ -79,7 +79,7 @@ function ImportConflict() {
     if (await importFile(pending.contents, mode)) setPlace("flows");
   };
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[4px] border border-accent-100 bg-accent-50 px-3 py-2 text-[13px]">
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-accent-100 bg-accent-50 px-3 py-2 text-[13px]">
       <span className="min-w-0 flex-1">
         {t.importConflict}
         {pending.name && <span className="font-semibold">{t.quote(pending.name)}</span>}
@@ -87,10 +87,10 @@ function ImportConflict() {
       <button type="button" onClick={cancelImport} className="h-7 px-2 text-slate-500 hover:text-ink">
         {t.cancel}
       </button>
-      <button type="button" onClick={() => resolve("copy")} className="h-7 rounded-[4px] border border-slate-300 bg-sheet px-2.5 hover:bg-slate-50">
+      <button type="button" onClick={() => resolve("copy")} className="h-7 rounded-lg border border-slate-300 bg-sheet px-2.5 hover:bg-slate-50">
         {t.importCopy}
       </button>
-      <button type="button" onClick={() => resolve("update")} className="h-7 rounded-[4px] bg-ink px-2.5 text-paper hover:bg-brand-700">
+      <button type="button" onClick={() => resolve("update")} className="h-7 rounded-lg bg-primary px-2.5 text-on-primary hover:bg-primary-hover">
         {t.importUpdate}
       </button>
     </div>
@@ -132,7 +132,7 @@ function Samples() {
           <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
-      <ul className="overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-sheet">
+      <ul className="overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
         {SAMPLES.map((sample) => {
           const item = t.samples.items[sample.id] ?? { name: sample.id, uses: "" };
           return (
@@ -154,7 +154,7 @@ function Samples() {
                   type="button"
                   disabled={busy !== null}
                   onClick={() => void open(sample)}
-                  className="h-7 shrink-0 rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  className="h-7 shrink-0 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                 >
                   {t.samples.open}
                 </button>
@@ -206,7 +206,7 @@ function Row({ summary, query }: { summary: FlowSummary; query: string }) {
       <td className="px-3 py-2.5">
         <div className="flex flex-wrap gap-1">
           {(summary.tags ?? []).map((tag) => (
-            <span key={tag} className="rounded-[2px] bg-slate-100 px-1.5 text-[11px] leading-5 text-slate-600">
+            <span key={tag} className="rounded-sm bg-slate-100 px-1.5 text-[11px] leading-5 text-slate-600">
               {tag}
             </span>
           ))}
@@ -219,7 +219,7 @@ function Row({ summary, query }: { summary: FlowSummary; query: string }) {
           <button
             type="button"
             title={t.duplicate}
-            className="grid h-7 w-7 place-items-center rounded-[3px] text-slate-500 hover:bg-slate-200 hover:text-ink"
+            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-ink"
             onClick={(e) => {
               e.stopPropagation();
               setPlace("flows");
@@ -231,7 +231,7 @@ function Row({ summary, query }: { summary: FlowSummary; query: string }) {
           <button
             type="button"
             title={confirming ? t.list.confirmDelete : t.delete}
-            className={`flex h-7 items-center gap-1 rounded-[3px] px-1.5 text-[12px] ${confirming ? "bg-shu-600 text-white" : "text-slate-500 hover:bg-shu-50 hover:text-shu-600"}`}
+            className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] ${confirming ? "bg-shu-600 text-white" : "text-slate-500 hover:bg-shu-50 hover:text-shu-600"}`}
             onClick={(e) => {
               e.stopPropagation();
               if (confirming) void remove(summary.id);
@@ -300,7 +300,7 @@ export function FlowsPage() {
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {/* The page's name is in the title bar; here only how many there are. */}
           <span className="text-[12px] text-slate-500">{t.list.count(summaries.length)}</span>
-          <div className="ml-2 flex h-8 w-64 items-center gap-1.5 rounded-[4px] border border-slate-200 bg-sheet px-2 focus-within:border-brand-500">
+          <div className="ml-2 flex h-8 w-64 items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
             <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
             <input
               value={query}
@@ -315,7 +315,7 @@ export function FlowsPage() {
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
             title={t.list.sort}
-            className="h-8 rounded-[4px] border border-slate-200 bg-sheet px-1.5 text-[12px] text-slate-600 focus:outline-none"
+            className="h-8 rounded-lg border border-slate-200 bg-sheet px-1.5 text-[12px] text-slate-600 focus:outline-none"
           >
             <option value="updated">{t.list.byUpdated}</option>
             <option value="name">{t.list.byName}</option>
@@ -325,7 +325,7 @@ export function FlowsPage() {
           <button
             type="button"
             onClick={() => picker.current?.click()}
-            className="flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
           >
             <Upload size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.importFlow}
@@ -334,12 +334,12 @@ export function FlowsPage() {
             type="button"
             onClick={() => setPasteOpen("new")}
             title={t.paste.lead}
-            className="flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
           >
             <ClipboardPaste size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.paste.title}
           </button>
-          <button type="button" onClick={() => setCreating(true)} className="flex h-8 items-center gap-1 rounded-[4px] bg-ink px-3 text-[13px] font-semibold text-paper hover:bg-brand-700">
+          <button type="button" onClick={() => setCreating(true)} className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
             ＋ {t.newFlow}
           </button>
         </div>
@@ -352,7 +352,7 @@ export function FlowsPage() {
                 role="radio"
                 aria-checked={tag === value}
                 onClick={() => setTag(value)}
-                className={`h-7 rounded-[4px] px-2.5 text-[12px] ${tag === value ? "bg-ink text-paper" : "bg-sheet text-slate-600 ring-1 ring-slate-200 hover:text-ink"}`}
+                className={`h-7 rounded-lg px-2.5 text-[12px] ${tag === value ? "bg-slate-100 font-medium text-ink ring-1 ring-slate-400" : "bg-sheet text-slate-600 ring-1 ring-slate-200 hover:text-ink"}`}
               >
                 {value ?? t.list.all}
               </button>
@@ -369,21 +369,21 @@ export function FlowsPage() {
               onKeyDown={(e) => e.key === "Escape" && setCreating(false)}
               onBlur={() => !name && setCreating(false)}
               placeholder={t.newFlowPrompt}
-              className="h-8 w-80 rounded-[4px] border border-brand-500 bg-sheet px-2 text-[13px] focus:outline-none"
+              className="h-8 w-80 rounded-lg border border-brand-500 bg-sheet px-2 text-[13px] focus:outline-none"
             />
-            <button type="submit" className="h-8 rounded-[4px] bg-ink px-3 text-[13px] text-paper">
+            <button type="submit" className="h-8 rounded-lg bg-primary px-3 text-[13px] text-on-primary">
               {t.list.create}
             </button>
           </form>
         )}
         {summaries.length === 0 ? (
-          <p className="rounded-[4px] border border-dashed border-slate-300 px-4 py-10 text-center text-[13px] text-slate-400">
+          <p className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-[13px] text-slate-400">
             {t.noFlows}
             <br />
             {t.list.askAiHint}
           </p>
         ) : (
-          <div className="overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-sheet">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <table className="w-full table-fixed border-collapse text-left">
               <colgroup>
                 <col />

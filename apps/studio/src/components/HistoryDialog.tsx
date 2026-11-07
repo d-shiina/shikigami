@@ -35,7 +35,7 @@ export function HistoryDialog() {
       <div
         role="dialog"
         aria-label={t.shell.history}
-        className="flex h-[80vh] w-[560px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-dialog"
+        className="flex h-[80vh] w-[560px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-dialog"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 px-3">
@@ -53,7 +53,7 @@ export function HistoryDialog() {
           ))}
           <button
             type="button"
-            className="ml-auto grid h-7 w-7 place-items-center rounded-[3px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+            className="ml-auto grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"
             onClick={() => setOpen(false)}
             aria-label={t.close}
             title={`${t.close} (Esc)`}

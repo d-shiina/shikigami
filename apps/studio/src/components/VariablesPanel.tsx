@@ -11,7 +11,7 @@ import { VarIcon } from "./VarIcon";
 
 const TYPES = Object.keys(t.varType) as VarType[];
 const DIRECTIONS = Object.keys(t.direction) as VarDirection[];
-const cell = "w-full rounded-[4px] border border-slate-200 bg-sheet px-1.5 py-0.5 text-xs focus:border-brand-500 focus:outline-none";
+const cell = "w-full rounded-lg border border-slate-200 bg-sheet px-1.5 py-0.5 text-xs focus:border-primary focus:outline-none";
 const row = "grid grid-cols-[64px_1fr] items-center gap-2";
 const rowLabel = "text-right text-[11px] text-slate-500";
 
@@ -90,7 +90,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
   return (
     // One box per variable: what it is on top, its starting value below, both always in view.
     <li
-      className={`rounded-[4px] border bg-sheet shadow-sheet ${open ? "border-slate-300" : "border-slate-200"}`}
+      className={`rounded-lg border bg-sheet shadow-sheet ${open ? "border-slate-300" : "border-slate-200"}`}
       // Lights up where the flow chart reads and writes this variable.
       onMouseEnter={() => focus.set(varFocus(variable.name))}
       onMouseLeave={() => focus.set(null)}
@@ -101,9 +101,9 @@ function VariableRow({ variable }: { variable: VariableDef }) {
         <span className="min-w-0 truncate font-mono text-[13px] font-semibold" title={variable.name}>
           {variable.name}
         </span>
-        {variable.secret && <span className="shrink-0 rounded-[2px] bg-slate-200 px-1 text-[9px] text-slate-600">{t.secret}</span>}
+        {variable.secret && <span className="shrink-0 rounded-sm bg-slate-200 px-1 text-[9px] text-slate-600">{t.secret}</span>}
         <span
-          className="ml-auto shrink-0 rounded-[2px] px-1.5 text-[10px] leading-4 font-semibold"
+          className="ml-auto shrink-0 rounded-sm px-1.5 text-[10px] leading-4 font-semibold"
           style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}
         >
           {t.varType[type]}
@@ -113,7 +113,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
           onClick={() => setOpen(!open)}
           aria-expanded={open}
           title={t.vars.details}
-          className="-mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-[3px] text-slate-400 hover:bg-slate-100 hover:text-ink"
+          className="-mr-1 grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-ink"
         >
           <ChevronDown size={14} strokeWidth={1.75} className={open ? "rotate-180" : ""} aria-hidden="true" />
         </button>
@@ -148,7 +148,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
         {last && (
           <>
             <span className="text-[11px] text-brand-600">{t.vars.after}</span>
-            <span className="truncate rounded-[3px] bg-brand-50 px-1.5 py-0.5 font-mono text-xs text-brand-700" title={t.vars.afterRun(traced.length)}>
+            <span className="truncate rounded-md bg-brand-50 px-1.5 py-0.5 font-mono text-xs text-brand-700" title={t.vars.afterRun(traced.length)}>
               {valueText(last)}
             </span>
           </>
@@ -224,7 +224,7 @@ export function VariablesPanel() {
               <span className="ml-auto text-[10px] text-slate-400">{members.length}</span>
             </div>
             {members.length === 0 ? (
-              <p className="rounded-[4px] border border-dashed border-slate-200 px-2 py-1.5 text-[11px] text-slate-400">{t.vars.nothing}</p>
+              <p className="rounded-lg border border-dashed border-slate-200 px-2 py-1.5 text-[11px] text-slate-400">{t.vars.nothing}</p>
             ) : (
               <ul className="space-y-2">
                 {members.map((v) => (
@@ -245,12 +245,12 @@ export function VariablesPanel() {
         }}
       >
         <input
-          className="min-w-0 flex-1 rounded-[4px] border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none"
+          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-xs focus:border-primary focus:bg-sheet focus:outline-none"
           placeholder={t.name}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <button type="submit" className="rounded-[3px] bg-ink px-3 py-1 text-xs text-paper hover:bg-slate-700">
+        <button type="submit" className="rounded-md bg-primary px-3 py-1 text-xs text-on-primary hover:bg-primary-hover">
           {t.addVariable}
         </button>
       </form>

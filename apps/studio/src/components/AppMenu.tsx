@@ -151,13 +151,13 @@ export function AboutSection() {
       {info.cliPath && (
         <SettingsRow label={t.mcpSetup} hint={t.mcpSetupHint(agentName)} align="start">
           <div className="flex items-start gap-2">
-            <code className="block min-w-0 flex-1 rounded-[3px] bg-slate-100 px-2 py-1.5 font-mono text-[11px] break-all">
+            <code className="block min-w-0 flex-1 rounded-md bg-slate-100 px-2 py-1.5 font-mono text-[11px] break-all">
               {mcpCommand(agentKind, info.cliPath)}
             </code>
             <button
               type="button"
               onClick={() => void copy(mcpCommand(agentKind, info.cliPath ?? ""))}
-              className="shrink-0 rounded-[3px] border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+              className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
             >
               {copied ? t.copied : t.copy}
             </button>

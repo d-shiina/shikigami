@@ -62,7 +62,7 @@ function TextOrSecretField({
             key={m}
             type="button"
             onClick={() => setMode(m)}
-            className={`rounded-[3px] px-2 py-0.5 ${mode === m ? "bg-ink text-paper" : "text-slate-500 hover:bg-slate-100"}`}
+            className={`rounded-md px-2 py-0.5 ${mode === m ? "bg-slate-100 font-medium text-ink ring-1 ring-slate-300" : "text-slate-500 hover:bg-slate-100"}`}
           >
             {m === "text" ? t.secretText : `🔑 ${t.secretUse}`}
           </button>
@@ -345,7 +345,7 @@ function TargetField({
       )}
       {ref ? (
         part ? (
-          <div className={`rounded-[4px] border px-2.5 py-2 text-[12px] ${part.target ? "border-slate-200 bg-paper" : "border-amber-300 bg-amber-50"}`}>
+          <div className={`rounded-lg border px-2.5 py-2 text-[12px] ${part.target ? "border-slate-200 bg-paper" : "border-amber-300 bg-amber-50"}`}>
             <div className="flex items-center gap-2">
               <span className={`min-w-0 flex-1 truncate ${part.target ? "" : "text-amber-700"}`}>
                 {part.target ? targetText(part.target) : t.todos.notPickedNode(part.label || ref)}
@@ -376,7 +376,7 @@ function TargetField({
                     if (e.key === "Escape") setMaking(false);
                   }}
                 />
-                <button type="button" className="shrink-0 rounded-[3px] bg-ink px-2.5 py-1 text-[11px] text-paper" onClick={() => void make()}>
+                <button type="button" className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-[11px] text-on-primary" onClick={() => void make()}>
                   {t.parts.create}
                 </button>
               </div>
@@ -384,7 +384,7 @@ function TargetField({
               <button
                 type="button"
                 title={t.parts.makeHint}
-                className="mt-1 inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] text-brand-700 hover:bg-brand-50"
+                className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-brand-700 hover:bg-brand-50"
                 onClick={() => setMaking(true)}
               >
                 <Boxes size={13} strokeWidth={1.75} />
@@ -481,7 +481,7 @@ export function PointTools({
       setNote({ text: t.picker.failed(e instanceof Error ? e.message : String(e)), warn: true });
     }
   };
-  const button = "inline-flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] text-brand-700 hover:bg-brand-50 disabled:opacity-50";
+  const button = "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-brand-700 hover:bg-brand-50 disabled:opacity-50";
   return (
     <>
       <span className="ml-auto flex items-center gap-0.5">
@@ -549,7 +549,7 @@ export function ObjectFields({
   };
   const shown = keys.filter((k) => more || !RARE.has(k));
   return (
-    <div className="space-y-1 rounded-[4px] border border-slate-200 bg-paper px-2 py-1.5">
+    <div className="space-y-1 rounded-lg border border-slate-200 bg-paper px-2 py-1.5">
       {shown.map((key) => {
         const sub = props[key]!;
         const v = current[key];
@@ -716,7 +716,7 @@ export function ParamsEditor({
           {error && <div className="text-xs text-shu-600">{error}</div>}
           <button
             type="button"
-            className="rounded-[3px] bg-ink px-2.5 py-0.5 text-xs text-paper"
+            className="rounded-md bg-primary px-2.5 py-0.5 text-xs text-on-primary hover:bg-primary-hover"
             onClick={() => {
               try {
                 const parsed = JSON.parse(text) as Record<string, unknown>;

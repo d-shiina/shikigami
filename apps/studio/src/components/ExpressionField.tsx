@@ -15,7 +15,7 @@ import { columnsOf, type RunScope, sampleOf, shortValue } from "../lib/runScope"
 import { useFieldRegistration } from "./InsertVariable";
 
 /** Fonts and spacing shared by the field and the coloured copy under it, so the letters line up. */
-const BOX = "block w-full rounded-[4px] border px-2 py-1 font-mono text-xs leading-5 whitespace-pre-wrap break-all";
+const BOX = "block w-full rounded-lg border px-2 py-1 font-mono text-xs leading-5 whitespace-pre-wrap break-all";
 
 type Suggestion = {
   key: string;
@@ -144,7 +144,7 @@ export function ExpressionField({
           {help.label}：{help.summary}
         </div>
       )}
-      <div className={`relative rounded-[4px] ${focused ? "bg-sheet" : "bg-slate-50"}`}>
+      <div className={`relative rounded-lg ${focused ? "bg-sheet" : "bg-slate-50"}`}>
         <div aria-hidden="true" className={`${BOX} pointer-events-none absolute inset-0 border-transparent text-ink`}>
           {pieces.map((p, i) => (
             <span key={i} style={pieceStyle(p, types)}>
@@ -163,7 +163,7 @@ export function ExpressionField({
           placeholder={placeholder}
           value={draft}
           title={t.exprField.hint}
-          className={`${BOX} relative resize-none overflow-hidden border-slate-200 bg-transparent text-transparent caret-ink placeholder:text-slate-400 focus:border-brand-500 focus:outline-none`}
+          className={`${BOX} relative resize-none overflow-hidden border-slate-200 bg-transparent text-transparent caret-ink placeholder:text-slate-400 focus:border-primary focus:outline-none`}
           onChange={(e) => {
             setDraft(e.target.value.replace(/\r?\n/g, " "));
             setCursor(e.target.selectionStart);
@@ -221,7 +221,7 @@ export function ExpressionField({
       {focused && open && suggestions.length > 0 && (
         <ul
           role="listbox"
-          className="absolute right-0 left-0 z-30 mt-0.5 max-h-64 overflow-auto rounded-[3px] border border-slate-200 bg-sheet py-1 text-[12px] shadow-lifted"
+          className="absolute right-0 left-0 z-30 mt-0.5 max-h-64 overflow-auto rounded-md border border-slate-200 bg-sheet py-1 text-[12px] shadow-lifted"
         >
           {suggestions.map((s, i) => {
             const heading = i === 0 || suggestions[i - 1]!.kind !== s.kind;
@@ -374,13 +374,13 @@ export function ResultLine({ result }: { result: Result }) {
   if (result.kind === "needsRun") return <p className="mt-1 text-[10.5px] leading-snug text-slate-500">{t.exprField.needsRun}</p>;
   if (result.kind === "error")
     return (
-      <div className="mt-1 rounded-[2px] border-l-2 border-shu-500 bg-shu-50 px-2 py-1 text-[11px] leading-snug text-ink">
+      <div className="mt-1 rounded-sm border-l-2 border-shu-500 bg-shu-50 px-2 py-1 text-[11px] leading-snug text-ink">
         {result.what}
         {result.todo && <span className="block text-[10.5px] text-slate-500">{result.todo}</span>}
       </div>
     );
   return (
-    <div className="mt-1 rounded-[2px] border-l-2 border-moegi-500 bg-moegi-100/50 px-2 py-1 text-[11px] leading-snug">
+    <div className="mt-1 rounded-sm border-l-2 border-moegi-500 bg-moegi-100/50 px-2 py-1 text-[11px] leading-snug">
       <span className="text-slate-500">{t.exprField.result}</span>{" "}
       <span className="font-mono text-[12px] font-bold break-all text-ink">{resultText(result.value)}</span>
       <span className="block text-[10px] text-slate-500">{result.partial ? t.exprField.fromPartialRun : t.exprField.fromRun}</span>

@@ -86,7 +86,7 @@ export function ContextMenu() {
       onMouseDown={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
       style={at ?? { left: menu.x, top: menu.y, visibility: "hidden" }}
-      className="fixed z-[100] min-w-[208px] max-w-[320px] rounded-[4px] border border-slate-200 bg-sheet py-1 text-[12.5px] shadow-lifted select-none"
+      className="fixed z-[100] min-w-[208px] max-w-[320px] rounded-lg border border-slate-200 bg-sheet py-1 text-[12.5px] shadow-lifted select-none"
     >
       {items.map((item, i) =>
         item === "-" ? (

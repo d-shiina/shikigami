@@ -66,6 +66,6 @@ describe("English sentences", () => {
   it("spell block conditions in English", () => {
     setLocale("en", false);
     const loop: Step = { type: "control.forEach", params: { items: "invoices", itemVar: "invoice" } };
-    expect(blockLabel(loop, "body", "要素ごとの処理")).toBe("forEach: each of invoices → invoice");
+    expect(blockLabel(loop, "body", "要素ごとの処理")).toBe("each of invoices → invoice");
   });
 });

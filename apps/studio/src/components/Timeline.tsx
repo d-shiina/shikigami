@@ -104,7 +104,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
   const lines = describe(entry, flow, defs);
   const blocker = revertBlocker(entry, history);
   return (
-    <li className="rounded-[4px] border border-shu-100 bg-sheet p-3 shadow-sheet">
+    <li className="rounded-lg border border-shu-100 bg-sheet p-3 shadow-sheet">
       <div className="mb-2 flex items-center gap-2">
         <ActorMark entry={entry} size={20} />
         <span className="text-xs font-semibold">{actorLabel(entry)}</span>
@@ -117,7 +117,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
         <button
           type="button"
           onClick={() => approve(entry.revision)}
-          className="flex-1 rounded-[4px] bg-ink px-2 py-1 text-xs font-medium text-paper hover:bg-slate-700"
+          className="flex-1 rounded-lg bg-primary px-2 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
         >
           ✓ {t.approve}
         </button>
@@ -126,7 +126,7 @@ function ReviewCard({ entry }: { entry: HistoryEntry }) {
           onClick={() => revert(entry)}
           disabled={blocker !== null}
           title={blocker ?? undefined}
-          className="flex-1 rounded-[4px] border border-shu-500 px-2 py-1 text-xs font-medium text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
+          className="flex-1 rounded-lg border border-shu-500 px-2 py-1 text-xs font-medium text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
         >
           ↶ {t.revert}
         </button>

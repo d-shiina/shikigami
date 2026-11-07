@@ -38,7 +38,7 @@ export function PartInspector({ name }: { name: string }) {
   return (
     <div className="pb-6">
       <div className="px-4 pt-4 pb-3">
-        <div className="overflow-hidden rounded-[4px] border border-slate-200">
+        <div className="overflow-hidden rounded-lg border border-slate-200">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <Boxes size={14} strokeWidth={1.75} style={{ color }} aria-hidden="true" />
             <span className="text-sm font-bold" style={{ color }}>
@@ -70,7 +70,7 @@ export function PartInspector({ name }: { name: string }) {
       </Section>
       <Section title={t.parts.target}>
         {!part.target && (
-          <p role="status" className="mb-1.5 rounded-[4px] border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">
+          <p role="status" className="mb-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">
             {t.todos.notPicked}
           </p>
         )}
@@ -96,7 +96,7 @@ export function PartInspector({ name }: { name: string }) {
           <ul className="space-y-0.5">
             {uses.map((s) => (
               <li key={s.id}>
-                <button type="button" className="flex w-full items-center gap-2 rounded-[3px] px-1.5 py-1 text-left text-[12px] hover:bg-slate-100" onClick={() => s.id && goTo(s.id)}>
+                <button type="button" className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[12px] hover:bg-slate-100" onClick={() => s.id && goTo(s.id)}>
                   <span className="w-7 shrink-0 text-right font-mono text-[11px] text-slate-400">{order.indexOf(s.id ?? "") + 1}</span>
                   <span className="truncate">{s.name || stepLabel(s.type, stepTypes.find((d) => d.type === s.type)?.label)}</span>
                 </button>
@@ -108,7 +108,7 @@ export function PartInspector({ name }: { name: string }) {
           type="button"
           disabled={uses.length > 0}
           title={uses.length > 0 ? t.parts.removeBlocked(uses.length) : undefined}
-          className="mt-2 rounded-[3px] px-1.5 py-0.5 text-[11px] text-shu-600 hover:bg-shu-50 disabled:text-slate-400 disabled:hover:bg-transparent"
+          className="mt-2 rounded-md px-1.5 py-0.5 text-[11px] text-shu-600 hover:bg-shu-50 disabled:text-slate-400 disabled:hover:bg-transparent"
           onClick={() => {
             void applyOps([{ op: "removePart", name }]).then((ok) => ok && select(null));
           }}

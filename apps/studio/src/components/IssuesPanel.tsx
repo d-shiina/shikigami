@@ -57,7 +57,7 @@ export function TodoList({ todos, onAct }: { todos: Todo[]; onAct?: () => void }
     <section aria-labelledby="todos-title" className="bg-amber-50/60">
       <div className="px-4 pt-2.5 pb-1">
         <h3 id="todos-title" className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
-          <span className="rounded-[3px] bg-amber-500 px-1.5 text-[10px] leading-4 text-white">{todos.length}</span>
+          <span className="rounded-md bg-amber-500 px-1.5 text-[10px] leading-4 text-white">{todos.length}</span>
           {t.todos.title}
         </h3>
         <p className="mt-0.5 text-[12px] text-slate-600">{t.todos.lead}</p>
@@ -80,7 +80,7 @@ export function TodoList({ todos, onAct }: { todos: Todo[]; onAct?: () => void }
               <button
                 type="button"
                 onClick={() => act(todo)}
-                className="h-7 shrink-0 rounded-[4px] border border-amber-300 bg-sheet px-2.5 text-[12px] text-amber-700 hover:bg-amber-50"
+                className="h-7 shrink-0 rounded-lg border border-amber-300 bg-sheet px-2.5 text-[12px] text-amber-700 hover:bg-amber-50"
               >
                 {action}
               </button>
@@ -109,8 +109,8 @@ export function CopyForAi({ text, label = t.todos.copyReturn, primary = false }:
       <button
         type="button"
         onClick={() => void copy()}
-        className={`flex h-7 shrink-0 items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] ${
-          primary ? "bg-ink text-paper hover:bg-ink/90" : "border border-slate-300 bg-sheet text-slate-700 hover:bg-slate-50"
+        className={`flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] ${
+          primary ? "bg-primary text-on-primary hover:bg-primary-hover" : "border border-slate-300 bg-sheet text-slate-700 hover:bg-slate-50"
         }`}
       >
         {copied ? <Check size={14} strokeWidth={1.75} aria-hidden="true" /> : <ClipboardCopy size={14} strokeWidth={1.75} aria-hidden="true" />}

@@ -60,7 +60,7 @@ function Editor({ step }: { step: Step }) {
   return (
     <div className="absolute inset-0 z-30 grid grid-rows-[48px_minmax(0,1fr)] bg-paper" role="dialog" aria-label={typeTitle(step, def)}>
       <header className="flex items-center gap-3 border-b border-slate-200 px-4">
-        <button type="button" onClick={close} className="flex items-center gap-0.5 rounded-[4px] px-1.5 py-1 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink">
+        <button type="button" onClick={close} className="flex items-center gap-0.5 rounded-lg px-1.5 py-1 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink">
           <ChevronLeft size={14} aria-hidden="true" />
           {t.editor.back}
         </button>
@@ -70,7 +70,7 @@ function Editor({ step }: { step: Step }) {
         </span>
         <span className="ml-auto flex items-center gap-2">
           <RunButtons step={step} def={def} />
-          <button type="button" onClick={close} className="rounded-[4px] bg-ink px-3 py-1.5 text-[12.5px] font-semibold text-paper hover:bg-ink/90">
+          <button type="button" onClick={close} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-on-primary hover:bg-ink/90">
             {t.close}
           </button>
         </span>
@@ -116,7 +116,7 @@ function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undefined })
     [flow, step, def, stepTypes, scope],
   );
   const active = run !== null && isActive(run);
-  const button = "flex items-center gap-1.5 rounded-[4px] border border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-700 enabled:hover:border-brand-500 enabled:hover:text-brand-600 disabled:opacity-50";
+  const button = "flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-700 enabled:hover:border-brand-500 enabled:hover:text-brand-600 disabled:opacity-50";
   if (active)
     return (
       <button type="button" onClick={() => void stopRun()} className={button}>
@@ -314,10 +314,10 @@ function RunResult({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }
       <div className={`font-semibold ${tone}`}>{headline}</div>
       {active && run.pause && !trying && (
         <div className="flex gap-2">
-          <button type="button" onClick={() => void debug({ action: "continue" })} className="rounded-[4px] border border-slate-300 px-2.5 py-1 text-[12px] hover:bg-slate-50">
+          <button type="button" onClick={() => void debug({ action: "continue" })} className="rounded-lg border border-slate-300 px-2.5 py-1 text-[12px] hover:bg-slate-50">
             {t.editor.continueRun}
           </button>
-          <button type="button" onClick={() => void stopRun()} className="rounded-[4px] border border-slate-300 px-2.5 py-1 text-[12px] hover:bg-slate-50">
+          <button type="button" onClick={() => void stopRun()} className="rounded-lg border border-slate-300 px-2.5 py-1 text-[12px] hover:bg-slate-50">
             {t.editor.stopRun}
           </button>
         </div>

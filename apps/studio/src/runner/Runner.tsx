@@ -48,7 +48,7 @@ function List({ items, selected, onSelect, locked }: { items: RunnerItem[]; sele
   const rows = items.filter((i) => !q || `${i.flow.name} ${i.flow.description ?? ""}`.toLowerCase().includes(q));
   return (
     <nav aria-label={t.flows} className="flex w-[240px] shrink-0 flex-col border-r border-slate-200 bg-sheet">
-      <div className="m-2.5 flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-200 px-2 focus-within:border-brand-500">
+      <div className="m-2.5 flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2 focus-within:border-primary">
         <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
         <input
           value={query}
@@ -84,7 +84,7 @@ function List({ items, selected, onSelect, locked }: { items: RunnerItem[]; sele
   );
 }
 
-const INPUT = "w-full rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[13px] focus:border-brand-500 focus:outline-none";
+const INPUT = "w-full rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] focus:border-primary focus:outline-none";
 
 function FieldRow({
   field,
@@ -143,7 +143,7 @@ function FieldRow({
               () => {},
             )
           }
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-3 text-[12.5px] font-semibold hover:bg-slate-50"
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3 text-[12.5px] font-semibold hover:bg-slate-50"
         >
           {kind === "file" ? <FileText size={14} aria-hidden="true" /> : <FolderOpen size={14} aria-hidden="true" />}
           {t.runner.browse}
@@ -414,12 +414,12 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                 </div>
               )}
 
-              {problem && <div className="mx-5 mb-2 rounded-[4px] border border-shu-100 bg-shu-50 px-3 py-2 text-[12.5px] text-shu-600">{problem}</div>}
+              {problem && <div className="mx-5 mb-2 rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[12.5px] text-shu-600">{problem}</div>}
 
               <footer className="flex shrink-0 items-center gap-2.5 border-t border-slate-200 bg-sheet px-5 py-2.5">
                 <span className="flex-1 text-[12px] text-slate-500">{!run ? t.runner.runNote(item.version) : running ? t.runner.stopNote : ""}</span>
                 {!run && (
-                  <button type="submit" form="runner-form" className="flex h-8 items-center gap-1.5 rounded-[4px] bg-ink px-4 text-[13px] font-semibold text-paper hover:bg-brand-700">
+                  <button type="submit" form="runner-form" className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
                     <Play size={14} strokeWidth={2} aria-hidden="true" />
                     {t.runner.run}
                   </button>
@@ -430,7 +430,7 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                     onClick={stop}
                     title={run?.stopping ? t.stopAgainTitle : undefined}
                     disabled={!run?.runId}
-                    className="flex h-8 items-center gap-1.5 rounded-[4px] border border-shu-500 bg-sheet px-4 text-[13px] font-semibold text-shu-600 hover:bg-shu-50 disabled:opacity-60"
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-shu-500 bg-sheet px-4 text-[13px] font-semibold text-shu-600 hover:bg-shu-50 disabled:opacity-60"
                   >
                     <Square size={12} strokeWidth={2.5} aria-hidden="true" className={run?.stopping ? "animate-pulse" : undefined} />
                     {run?.stopping ? t.stopping : t.runner.stop}
@@ -438,10 +438,10 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                 )}
                 {finished && (
                   <>
-                    <button type="button" onClick={reset} className="h-8 rounded-[4px] border border-slate-300 bg-sheet px-4 text-[13px] hover:bg-slate-50">
+                    <button type="button" onClick={reset} className="h-8 rounded-lg border border-slate-300 bg-sheet px-4 text-[13px] hover:bg-slate-50">
                       {t.runner.back}
                     </button>
-                    <button type="button" onClick={() => void start()} className="flex h-8 items-center gap-1.5 rounded-[4px] bg-ink px-4 text-[13px] font-semibold text-paper hover:bg-brand-700">
+                    <button type="button" onClick={() => void start()} className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
                       <Play size={14} strokeWidth={2} aria-hidden="true" />
                       {t.runner.again}
                     </button>
@@ -477,7 +477,7 @@ function Result({
   const outputs = (item.flow.variables ?? []).filter(isOutput);
   const explained = error ? explainError(error, failedStep) : null;
   return (
-    <div className={`rounded-[4px] border-l-4 bg-sheet px-4 py-3 shadow-sheet ${good ? "border-moegi-500" : status === "failed" ? "border-shu-500" : "border-slate-400"}`}>
+    <div className={`rounded-lg border-l-4 bg-sheet px-4 py-3 shadow-sheet ${good ? "border-moegi-500" : status === "failed" ? "border-shu-500" : "border-slate-400"}`}>
       <div className="flex items-center gap-2 text-[14px] font-bold">
         <span className={`inline-block h-2 w-2 rounded-full ${DOT[status] ?? "bg-slate-400"}`} aria-hidden="true" />
         {good ? t.runner.succeeded : status === "failed" ? t.runner.failed : t.runner.cancelled}
@@ -485,7 +485,7 @@ function Result({
       {explained && error && (
         <div className="mt-2 space-y-1 text-[13px]">
           <div className="flex items-start gap-2">
-            <span className="shrink-0 rounded-[3px] bg-shu-50 px-1.5 text-[11.5px] font-bold text-shu-600">{error.code}</span>
+            <span className="shrink-0 rounded-md bg-shu-50 px-1.5 text-[11.5px] font-bold text-shu-600">{error.code}</span>
             <span className="font-semibold">{explained.what}</span>
           </div>
           {explained.todo && <div className="text-slate-600">{explained.todo}</div>}

@@ -76,7 +76,7 @@ export function BottomPanel() {
             className={`relative flex h-full items-center gap-1 px-2 text-xs font-medium ${tab === key ? "text-ink" : "text-slate-500 hover:text-ink"}`}
           >
             {label}
-            {count > 0 && <span className="rounded-[3px] bg-slate-200 px-1.5 text-[10px] text-slate-600">{count}</span>}
+            {count > 0 && <span className="rounded-md bg-slate-200 px-1.5 text-[10px] text-slate-600">{count}</span>}
             {tab === key && <span className="absolute inset-x-2 bottom-[-1px] h-[2px] bg-ink" />}
           </button>
         ))}
@@ -87,21 +87,21 @@ export function BottomPanel() {
         )}
         <span className="flex-1" />
         {tab === "log" && trail && (
-          <button type="button" className="rounded-[3px] px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={hideTrail}>
+          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={hideTrail}>
             {t.clearTrail}
           </button>
         )}
         {tab === "log" && breakpointCount > 0 && (
-          <button type="button" className="rounded-[3px] px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clearBreakpoints}>
+          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clearBreakpoints}>
             {t.clearBreakpoints(breakpointCount)}
           </button>
         )}
         {tab === "log" && run && (
-          <button type="button" className="rounded-[3px] px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clear}>
+          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clear}>
             {t.clearLog}
           </button>
         )}
-        <button type="button" className="grid h-6 w-6 place-items-center rounded-[3px] text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={() => setTab(null)} title={t.shell.closePanel} aria-label={t.shell.closePanel}>
+        <button type="button" className="grid h-6 w-6 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={() => setTab(null)} title={t.shell.closePanel} aria-label={t.shell.closePanel}>
           ✕
         </button>
       </div>

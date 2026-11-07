@@ -197,7 +197,7 @@ export function FileDragLayer() {
   const hint = kind === "canvas" ? t.fileDrop.makeNode : kind ? t.fileDrop.putHere : t.fileDrop.where;
   return (
     <div
-      className="pointer-events-none fixed z-[100] flex max-w-[280px] items-center gap-2 rounded-[4px] border border-brand-500 bg-sheet px-2.5 py-1.5 text-[12px] shadow-lifted"
+      className="pointer-events-none fixed z-[100] flex max-w-[280px] items-center gap-2 rounded-lg border border-brand-500 bg-sheet px-2.5 py-1.5 text-[12px] shadow-lifted"
       style={{ left: drag.x + 14, top: drag.y + 10 }}
     >
       <FileText size={14} strokeWidth={1.75} className="shrink-0 text-brand-500" aria-hidden="true" />

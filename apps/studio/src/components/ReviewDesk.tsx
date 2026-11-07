@@ -57,7 +57,7 @@ export function ReviewRail({ onExpand }: { onExpand: () => void }) {
         type="button"
         onClick={onExpand}
         title={t.desk.expand}
-        className="grid h-7 w-7 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-200 hover:text-ink"
+        className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 hover:bg-slate-200 hover:text-ink"
       >
         »
       </button>
@@ -84,7 +84,7 @@ export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
               type="button"
               onClick={onCollapse}
               title={t.close}
-              className="ml-auto grid h-6 w-6 place-items-center rounded-[4px] font-normal text-slate-500 hover:bg-slate-200 hover:text-ink"
+              className="ml-auto grid h-6 w-6 place-items-center rounded-lg font-normal text-slate-500 hover:bg-slate-200 hover:text-ink"
             >
               «
             </button>
@@ -94,7 +94,7 @@ export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
       </div>
       <ul className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
         {inbox.filter((i) => !i.waiting).length === 0 && (
-          <li className="mx-1 rounded-[4px] border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
+          <li className="mx-1 rounded-lg border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
             {t.desk.empty}
           </li>
         )}
@@ -108,9 +108,9 @@ export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
               <button
                 type="button"
                 onClick={() => void open(item.flowId)}
-                className={`relative w-full rounded-[4px] px-2.5 py-2 text-left ${active ? "bg-sheet shadow-sheet ring-1 ring-brand-100" : "hover:bg-sheet/70"}`}
+                className={`relative w-full rounded-lg px-2.5 py-2 text-left ${active ? "bg-sheet shadow-sheet ring-1 ring-brand-100" : "hover:bg-sheet/70"}`}
               >
-                {active && <span className="absolute top-2 bottom-2 left-0 w-[3px] rounded-[1px] bg-brand-500" />}
+                {active && <span className="absolute top-2 bottom-2 left-0 w-[3px] rounded-xs bg-brand-500" />}
                 <div className="flex items-center gap-1.5">
                   {newest && <ActorMark entry={newest} size={18} />}
                   <span className="truncate text-[13px] font-bold">{item.name}</span>
@@ -223,7 +223,7 @@ export function ReviewPanel() {
           <button
             type="button"
             onClick={() => void open(next.flowId)}
-            className="mt-4 flex w-full items-center gap-2 rounded-[4px] border border-slate-200 px-3 py-2 text-left hover:border-brand-500"
+            className="mt-4 flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left hover:border-brand-500"
           >
             <span className="text-[11px] text-slate-400">{t.desk.next}</span>
             <span className="flex-1 truncate font-semibold">{next.name}</span>
@@ -322,7 +322,7 @@ function Numbered({ n, title, aside, children }: { n: number; title: string; asi
   return (
     <section>
       <div className="mb-2 flex items-center gap-1.5 text-[12px] font-bold">
-        <span className="grid h-[18px] w-[18px] place-items-center rounded-[3px] bg-ink text-[11px] text-paper">{n}</span>
+        <span className="grid h-[18px] w-[18px] place-items-center rounded-md bg-ink text-[11px] text-paper">{n}</span>
         {title}
         {aside && <span className="ml-auto text-[11px] font-normal text-slate-500">{aside}</span>}
       </div>
@@ -377,12 +377,12 @@ function ChangeCardView({
   };
   return (
     <div
-      className={`rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-2 ${current ? "border-l-[3px] border-l-brand-500 shadow-sheet" : seen ? "border-l-[3px] border-l-moegi-500" : ""}`}
+      className={`rounded-lg border border-slate-200 bg-sheet px-2.5 py-2 ${current ? "border-l-[3px] border-l-brand-500 shadow-sheet" : seen ? "border-l-[3px] border-l-moegi-500" : ""}`}
     >
       <div className="flex items-center gap-1.5">
-        <span className={`shrink-0 rounded-[3px] px-1.5 text-[10px] leading-4 font-bold ${tag.style}`}>{tag.label()}</span>
+        <span className={`shrink-0 rounded-md px-1.5 text-[10px] leading-4 font-bold ${tag.style}`}>{tag.label()}</span>
         <span className="min-w-0 flex-1 truncate text-[13px] font-bold">{name ?? stepLabel(step.type, defs.get(step.type)?.label)}</span>
-        {card.afterFeedback && <span className="shrink-0 rounded-[3px] bg-shu-50 px-1.5 text-[10px] leading-4 font-bold text-shu-600">{t.desk.afterFeedback}</span>}
+        {card.afterFeedback && <span className="shrink-0 rounded-md bg-shu-50 px-1.5 text-[10px] leading-4 font-bold text-shu-600">{t.desk.afterFeedback}</span>}
         {card.after && (
           <button type="button" onClick={show} className="shrink-0 text-[11px] text-brand-600 hover:underline">
             {t.desk.showInFlow} ›
@@ -436,7 +436,7 @@ function ChangeCardView({
 
 /** A sentence with the parts that differ from the other side marked. */
 function Marked({ parts, marks, other, tone }: { parts: Part[]; marks?: boolean[]; other: Part[] | null; tone: "add" | "drop" }) {
-  const hit = tone === "add" ? "rounded-[2px] bg-moegi-100 font-semibold text-moegi-500" : "rounded-[2px] bg-shu-50 text-shu-600 line-through";
+  const hit = tone === "add" ? "rounded-sm bg-moegi-100 font-semibold text-moegi-500" : "rounded-sm bg-shu-50 text-shu-600 line-through";
   // A changed expression is one chip on both sides: mark the words inside it instead of the whole chip.
   const counterpart = (i: number) => {
     const o = other?.[i];
@@ -507,12 +507,12 @@ function EffectRow({ effect }: { effect: Effect }) {
     <button
       type="button"
       onClick={() => effect.status !== "removed" && effect.stepId && goTo(effect.stepId)}
-      className="flex w-full items-start gap-1.5 rounded-[3px] px-1 py-0.5 text-left text-[12.5px] leading-relaxed hover:bg-slate-100"
+      className="flex w-full items-start gap-1.5 rounded-md px-1 py-0.5 text-left text-[12.5px] leading-relaxed hover:bg-slate-100"
     >
       {effect.status === "same" ? (
         <span className="w-[3.2em] shrink-0 text-center text-slate-400">・</span>
       ) : (
-        <span className={`mt-0.5 w-[3.2em] shrink-0 rounded-[3px] text-center text-[10px] leading-4 font-bold ${EFFECT_TAG[effect.status]}`}>
+        <span className={`mt-0.5 w-[3.2em] shrink-0 rounded-md text-center text-[10px] leading-4 font-bold ${EFFECT_TAG[effect.status]}`}>
           {t.desk.effect[effect.status]}
         </span>
       )}
@@ -560,7 +560,7 @@ function TestResult({ runs, revision, changedIds }: { runs: TestRun[]; revision:
   return (
     <div className="space-y-1.5">
       <TestRuns runs={[latest]} revision={revision} />
-      {!current && <p className="rounded-[4px] bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">{t.desk.staleTest}</p>}
+      {!current && <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">{t.desk.staleTest}</p>}
       {result && (
         <div className="grid grid-cols-[6.5em_1fr] gap-x-2 gap-y-0.5 px-1 text-[12px]">
           {result.total > 0 && !result.partial && (
@@ -595,7 +595,7 @@ function TestResult({ runs, revision, changedIds }: { runs: TestRun[]; revision:
           )}
         </div>
       )}
-      {result && result.missed.length > 0 && <p className="rounded-[4px] bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">{t.desk.notCovered(result.missed.length)}</p>}
+      {result && result.missed.length > 0 && <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">{t.desk.notCovered(result.missed.length)}</p>}
       {runs.length > 1 && (
         <div>
           <button type="button" onClick={() => setOlder(!older)} className="text-[11px] text-slate-500 hover:text-ink">
@@ -619,11 +619,11 @@ function Checks({ checks, markKey, onNo }: { checks: string[]; markKey: string; 
         const value = answers[key];
         const pick = (v: "ok" | "no") => answer(key, value === v ? null : v);
         const chip = (on: boolean, tone: string) =>
-          `rounded-[3px] border px-2 text-[11px] leading-5 ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
+          `rounded-md border px-2 text-[11px] leading-5 ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
         return (
-          <li key={q} className="flex items-start gap-2 rounded-[4px] border border-slate-200 px-2.5 py-2">
+          <li key={q} className="flex items-start gap-2 rounded-lg border border-slate-200 px-2.5 py-2">
             <span
-              className={`mt-[3px] grid h-3.5 w-3.5 shrink-0 place-items-center rounded-[2px] border text-[9px] text-white ${
+              className={`mt-[3px] grid h-3.5 w-3.5 shrink-0 place-items-center rounded-sm border text-[9px] text-white ${
                 value === "ok" ? "border-moegi-500 bg-moegi-500" : value === "no" ? "border-shu-500 bg-shu-500" : "border-slate-400"
               }`}
             >
@@ -657,7 +657,7 @@ function Checks({ checks, markKey, onNo }: { checks: string[]; markKey: string; 
 /** Walk the chart from one changed step to the next (N / Shift+N). */
 function ChangeStepper() {
   const changeBy = useStudio((s) => s.changeBy);
-  const button = "grid h-6 w-6 place-items-center rounded-[4px] border border-slate-200 text-slate-600 hover:border-brand-500 hover:text-brand-700";
+  const button = "grid h-6 w-6 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:border-brand-500 hover:text-brand-700";
   return (
     <div className="mt-2 flex items-center justify-end gap-1 text-[11px] text-slate-500">
       <button type="button" className={button} onClick={() => changeBy(-1)} title={t.desk.prevChangeTitle} aria-label={t.desk.prevChange}>
@@ -725,7 +725,7 @@ export function ReviewActions({
           onClick={() => setSending(true)}
           title={t.desk.sendBackTitle}
           {...hover("sendBack")}
-          className="h-9 shrink-0 rounded-[4px] border border-shu-500/60 px-3 text-[13px] font-semibold whitespace-nowrap text-shu-600 hover:bg-shu-50"
+          className="h-9 shrink-0 rounded-lg border border-shu-500/60 px-3 text-[13px] font-semibold whitespace-nowrap text-shu-600 hover:bg-shu-50"
         >
           {t.desk.sendBack}
         </button>
@@ -734,7 +734,7 @@ export function ReviewActions({
           onClick={() => void approveAndPublish()}
           title={t.desk.keepTitle}
           {...hover("keep")}
-          className="h-9 min-w-0 flex-1 truncate rounded-[4px] bg-ink px-3 text-[13px] font-semibold whitespace-nowrap text-paper hover:bg-brand-700"
+          className="h-9 min-w-0 flex-1 truncate rounded-lg bg-primary px-3 text-[13px] font-semibold whitespace-nowrap text-on-primary hover:bg-primary-hover"
         >
           ✓ {t.desk.keep}
           {unanswered > 0 && <span className="font-normal opacity-75">{t.desk.unanswered(unanswered)}</span>}

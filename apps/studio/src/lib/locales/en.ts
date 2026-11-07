@@ -564,6 +564,9 @@ export const en: Dict = {
     fixNow: (agent: string) => `Ask ${agent} to fix it now`,
   },
   flow: {
+    ranOk: "Done",
+    ranFailed: "Error",
+    issues: (n: number) => `${n} validation ${n === 1 ? "issue" : "issues"}`,
     addAtBlockEnd: (block: string) => `Add a node at the end of "${block}"`,
     aiAdded: "Added by AI",
     aiChanged: "Changed by AI",
@@ -1186,6 +1189,7 @@ export const en: Dict = {
     direction: { input: "Takes", output: "Returns", inOut: "Takes and returns", local: "Uses" },
   },
   shell: {
+    aiChat: "AI chat",
     places: "Places",
     settings: "Settings",
     flow: "Flow",

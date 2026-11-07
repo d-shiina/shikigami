@@ -24,7 +24,7 @@ function Button({
   ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "primary" | "danger" | "plain" | "ai"; keys?: string }) {
   const tones = {
-    primary: "bg-ink text-paper hover:bg-brand-700 disabled:bg-slate-300",
+    primary: "bg-primary text-on-primary hover:bg-primary-hover disabled:bg-slate-300",
     ai: "bg-brand-500 text-paper hover:bg-brand-600 disabled:opacity-50",
     danger: "text-shu-600 hover:bg-shu-50 disabled:text-slate-300",
     plain: "border border-slate-300 bg-sheet text-ink hover:bg-slate-50 disabled:text-slate-300",
@@ -32,11 +32,11 @@ function Button({
   return (
     <button
       type="button"
-      className={`flex h-8 shrink-0 items-center gap-1.5 rounded-[4px] px-2.5 text-[13px] font-semibold disabled:cursor-not-allowed ${tones[tone]}`}
+      className={`flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold disabled:cursor-not-allowed ${tones[tone]}`}
       {...rest}
     >
       {children}
-      {keys && <kbd className="rounded-[3px] bg-current/10 px-1 font-sans text-[10px] font-normal opacity-70">{keys}</kbd>}
+      {keys && <kbd className="rounded-md bg-current/10 px-1 font-sans text-[10px] font-normal opacity-70">{keys}</kbd>}
     </button>
   );
 }
@@ -50,7 +50,7 @@ function Variables({ values }: { values: Record<string, unknown> }) {
         <span
           key={name}
           title={`${name} = ${JSON.stringify(value, null, 2)}`}
-          className="flex max-w-[220px] items-center gap-1 rounded-[4px] bg-slate-100 px-1.5 text-[12px] leading-[20px]"
+          className="flex max-w-[220px] items-center gap-1 rounded-lg bg-slate-100 px-1.5 text-[12px] leading-[20px]"
         >
           <span className="shrink-0 font-semibold text-slate-600">{name}</span>
           <span className="text-slate-400">=</span>
@@ -70,14 +70,14 @@ function Screenshot({ src, title }: { src: string; title: string }) {
         type="button"
         onClick={() => setOpen(true)}
         title={t.pause.screenshotTitle}
-        className="shrink-0 overflow-hidden rounded-[4px] border border-slate-300 hover:border-brand-500"
+        className="shrink-0 overflow-hidden rounded-lg border border-slate-300 hover:border-brand-500"
       >
         <img src={src} alt={title} className="h-[92px] w-auto max-w-[180px] object-cover object-top" />
       </button>
       {open &&
         createPortal(
           <div className="fixed inset-0 z-50 grid place-items-center bg-ink/50 p-6" onClick={() => setOpen(false)}>
-            <figure lang="ja" className="max-h-full overflow-auto rounded-[4px] bg-sheet p-2 shadow-dialog">
+            <figure lang="ja" className="max-h-full overflow-auto rounded-lg bg-sheet p-2 shadow-dialog">
               <figcaption className="px-1 pb-2 text-[13px] font-bold">{title}</figcaption>
               <img src={src} alt={title} className="max-w-[min(1200px,90vw)]" />
             </figure>
@@ -247,7 +247,7 @@ export function RunPausePanel() {
 
       {error && explained && (
         <div className="mt-1.5 flex items-baseline gap-2 text-[13px]">
-          <code className="shrink-0 rounded-[3px] bg-shu-50 px-1.5 text-[12px] font-semibold text-shu-600">{error.code}</code>
+          <code className="shrink-0 rounded-md bg-shu-50 px-1.5 text-[12px] font-semibold text-shu-600">{error.code}</code>
           <div className="min-w-0 flex-1">
             <div className="break-words font-semibold text-ink">{explained.what}</div>
             {explained.todo && <div className="break-words text-slate-600">{explained.todo}</div>}
@@ -262,7 +262,7 @@ export function RunPausePanel() {
       )}
 
       {unreviewed > 0 && (
-        <div className="mt-2 flex items-center gap-2 rounded-[4px] bg-brand-50 px-3 py-1.5 text-[13px] text-brand-700">
+        <div className="mt-2 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[13px] text-brand-700">
           <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
           {t.pause.fixArrived(unreviewed)}
           {!reviewing && (

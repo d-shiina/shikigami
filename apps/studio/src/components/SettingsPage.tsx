@@ -57,7 +57,7 @@ function AgentSection() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="mt-1.5 flex h-7 items-center rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
+            className="mt-1.5 flex h-7 items-center rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
           >
             {t.agent.setup.title}
           </button>
@@ -134,7 +134,7 @@ export function SettingsPage() {
                 type="button"
                 onClick={() => go(id)}
                 aria-current={current === id ? "true" : undefined}
-                className={`flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left text-[13px] ${
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] ${
                   current === id ? "bg-slate-100 font-semibold text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"
                 }`}
               >

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 
-const primary = "rounded bg-ink px-3 py-1 text-sm text-paper hover:bg-brand-700";
+const primary = "rounded bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover";
 const danger = "rounded border border-shu-500/60 px-3 py-1 text-sm text-shu-600 hover:bg-shu-50";
 const quiet = "rounded px-3 py-1 text-sm text-slate-500 hover:bg-slate-100";
 
@@ -33,7 +33,7 @@ export function ApprovalDialog() {
       <div
         role="dialog"
         aria-label={t.approvalAsked}
-        className="max-h-[85vh] w-[480px] space-y-3 overflow-y-auto rounded-[4px] border border-slate-200 bg-sheet p-5 shadow-dialog"
+        className="max-h-[85vh] w-[480px] space-y-3 overflow-y-auto rounded-lg border border-slate-200 bg-sheet p-5 shadow-dialog"
       >
         <div className="flex items-center gap-2">
           <span aria-hidden>✋</span>

@@ -10,7 +10,7 @@ function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { lab
     <button
       type="button"
       title={label}
-      className={`grid h-8 min-w-8 place-items-center rounded-[3px] px-2 text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent ${className ?? ""}`}
+      className={`grid h-8 min-w-8 place-items-center rounded-md px-2 text-sm text-slate-700 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent ${className ?? ""}`}
       {...rest}
     >
       {children}
@@ -40,7 +40,7 @@ function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => 
     ["variables", t.vars.table.view],
   ];
   return (
-    <div className="flex h-7 items-center rounded-[4px] bg-slate-100 p-0.5 text-[12px]" role="radiogroup">
+    <div className="flex h-7 items-center rounded-lg bg-slate-100 p-0.5 text-[12px]" role="radiogroup">
       {options.map(([key, label]) => (
         <button
           key={key}
@@ -48,7 +48,7 @@ function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => 
           role="radio"
           aria-checked={view === key}
           onClick={() => onChange(key)}
-          className={`h-6 rounded-[3px] px-2.5 ${view === key ? "bg-sheet font-semibold text-ink shadow-sheet" : "text-slate-500 hover:text-ink"}`}
+          className={`h-6 rounded-md px-2.5 ${view === key ? "bg-sheet font-semibold text-ink shadow-sheet" : "text-slate-500 hover:text-ink"}`}
         >
           {label}
         </button>
@@ -65,7 +65,7 @@ export function OutlineButton() {
       type="button"
       onClick={() => setOpen(true)}
       title={t.outline.title}
-      className="flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-200 bg-sheet/95 px-2.5 text-[12px] text-slate-600 shadow-raised backdrop-blur hover:text-ink"
+      className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet/95 px-2.5 text-[12px] text-slate-600 shadow-raised backdrop-blur hover:text-ink"
     >
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
         <path d="M1 2.5h10M3 6h8M3 9.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -100,7 +100,7 @@ export function FlowTitle() {
         type="button"
         onClick={() => setHistoryOpen(true)}
         title={`${t.shell.historyTitle}（${t.revisionCount(flow.revision ?? 0)}）`}
-        className="flex h-6 shrink-0 items-center gap-1 rounded-[3px] bg-slate-100 px-1.5 text-[11px] text-slate-500 hover:bg-slate-200 hover:text-ink"
+        className="flex h-6 shrink-0 items-center gap-1 rounded-md bg-slate-100 px-1.5 text-[11px] text-slate-500 hover:bg-slate-200 hover:text-ink"
       >
         {t.revision}
         <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
@@ -112,7 +112,7 @@ export function FlowTitle() {
         type="button"
         onClick={() => setHistoryOpen(true, "versions")}
         title={published ? t.publishedLabel(published.version, published.name) : t.publishedHint}
-        className={`flex h-6 shrink-0 items-center gap-1 rounded-[3px] px-1.5 text-[11px] ${
+        className={`flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] ${
           published && !published.matchesCurrent
             ? "bg-shu-50 text-shu-600 hover:bg-shu-100"
             : published
@@ -125,7 +125,7 @@ export function FlowTitle() {
       <button
         type="button"
         onClick={() => setBottom("issues")}
-        className={`flex h-6 shrink-0 items-center gap-1 rounded-[3px] px-1.5 text-[12px] font-medium ${
+        className={`flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[12px] font-medium ${
           errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : todos ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "text-moegi-500 hover:bg-slate-100"
         }`}
         title={t.toolbar.issuesTitle}
@@ -170,7 +170,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
       <ViewSwitch view={view} onChange={onView} />
       <span className="mx-1 h-5 w-px bg-slate-200" />
       {running ? (
-        <div className="flex h-8 items-center overflow-hidden rounded-[4px] border border-slate-300 bg-sheet text-[13px]">
+        <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-300 bg-sheet text-[13px]">
           <span className="flex items-center gap-2 px-3 font-medium text-ink">
             <span className={`h-2 w-2 rounded-full ${paused ? (run?.pause?.reason === "error" ? "bg-shu-500" : "bg-mizu-500") : "bg-accent-500 animate-pulse"}`} />
             {paused ? t.status.paused : t.status.running}
@@ -199,7 +199,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
             title={run?.stopping ? t.stopAgainTitle : `${t.stop} (Shift+F5)`}
             className="flex h-full items-center gap-1.5 border-l border-slate-300 px-3 font-semibold text-shu-600 hover:bg-shu-50"
           >
-            <span className={`h-2.5 w-2.5 rounded-[2px] bg-shu-500 ${run?.stopping ? "animate-pulse" : ""}`} />
+            <span className={`h-2.5 w-2.5 rounded-sm bg-shu-500 ${run?.stopping ? "animate-pulse" : ""}`} />
             {run?.stopping ? t.stopping : t.stop}
           </button>
         </div>
@@ -210,7 +210,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
             onClick={() => startRun({ step: true })}
             disabled={errors > 0}
             title={t.toolbar.stepRunTitle}
-            className="flex h-8 items-center gap-1 rounded-[4px] border border-slate-300 px-2.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
+            className="flex h-8 items-center gap-1 rounded-lg border border-slate-300 px-2.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
           >
             <span className="@max-[920px]/title:hidden">{t.toolbar.stepRun}</span>
             <span className="hidden @max-[920px]/title:inline" aria-hidden="true">
@@ -222,13 +222,11 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
             onClick={() => startRun()}
             disabled={errors > 0}
             title={errors > 0 ? (authorIssues(validation).length === 0 ? t.todos.runBlocked : t.toolbar.fixErrors) : `${t.run} (F5)`}
-            className="group flex h-8 items-center gap-2 rounded-[4px] bg-ink pr-1.5 pl-3 text-[13px] font-semibold text-paper shadow-[0_1px_2px_rgba(15,27,42,.3)] hover:bg-brand-700 disabled:bg-slate-300 disabled:shadow-none"
+            className="group flex h-8 items-center gap-2 rounded-lg bg-primary pr-1.5 pl-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
           >
-            <span className="text-[#5fd08a] group-disabled:text-paper dark:text-moegi-100">
-              <PlayIcon />
-            </span>
+            <PlayIcon />
             {t.run}
-            <kbd className="rounded-[3px] bg-paper/15 px-1 font-sans text-[10px] font-normal text-paper/80">F5</kbd>
+            <kbd className="rounded-sm bg-on-primary/15 px-1 font-sans text-[10px] font-normal opacity-80">F5</kbd>
           </button>
         </>
       )}
@@ -254,14 +252,14 @@ export function CanvasDock() {
   if (!flow || inside) return null;
 
   return (
-    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-[4px] whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-raised backdrop-blur">
+    <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-lg whitespace-nowrap border border-slate-200 bg-sheet/95 p-1 shadow-raised backdrop-blur">
       <button
         type="button"
         onClick={(e) => setPaletteOpen(true, null, e.currentTarget.getBoundingClientRect())}
-        className="flex items-center gap-2 rounded-[3px] bg-ink py-1.5 pr-2 pl-3 text-sm font-medium text-paper hover:bg-slate-700"
+        className="flex items-center gap-2 rounded-md py-1.5 pr-2 pl-2.5 text-sm font-medium text-ink hover:bg-slate-100"
       >
         ＋ <span className="@max-[560px]:hidden">{t.addStep}</span>
-        <kbd className="rounded-[3px] bg-paper/15 px-1 font-sans text-[10px] @max-[560px]:hidden">{t.shortcut}</kbd>
+        <kbd className="rounded-sm border border-slate-200 px-1 font-sans text-[10px] text-slate-500 @max-[560px]:hidden">{t.shortcut}</kbd>
       </button>
       <RecordButton />
       <span className="mx-1 h-5 w-px bg-slate-200" />

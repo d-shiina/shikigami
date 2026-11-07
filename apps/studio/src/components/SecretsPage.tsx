@@ -5,7 +5,7 @@ import { locale, t } from "../lib/i18n";
 import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
 
 const inputClass =
-  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-ink dark:bg-paper focus:outline-none";
+  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-primary dark:bg-paper focus:outline-none";
 
 type Draft = {
   name: string;
@@ -85,7 +85,7 @@ function SecretForm({
 
   return (
     <form
-      className="space-y-3 rounded-[4px] border border-slate-200 bg-sheet p-4 shadow-sheet"
+      className="space-y-3 rounded-lg border border-slate-200 bg-sheet p-4 shadow-sheet"
       autoComplete="off"
       onSubmit={async (e) => {
         e.preventDefault();
@@ -126,9 +126,9 @@ function SecretForm({
               type="button"
               role="radio"
               aria-checked={draft.kind === kind}
-              className={`rounded-[4px] border px-2.5 py-1 text-sm ${
+              className={`rounded-lg border px-2.5 py-1 text-sm ${
                 draft.kind === kind
-                  ? "border-ink bg-ink text-paper"
+                  ? "border-slate-400 bg-slate-100 font-medium text-ink"
                   : "border-slate-300 text-slate-700 hover:bg-slate-100"
               }`}
               onClick={() => edit({ kind })}
@@ -182,7 +182,7 @@ function SecretForm({
         <input className={inputClass} value={draft.description} onChange={(e) => edit({ description: e.target.value })} />
       </Labeled>
       <div className="flex gap-2">
-        <button type="submit" className="rounded bg-ink px-3 py-1 text-sm text-paper">
+        <button type="submit" className="rounded bg-primary px-3 py-1 text-sm text-on-primary">
           {t.secretSave}
         </button>
         <button type="button" className="rounded px-3 py-1 text-sm text-slate-500 hover:bg-slate-100" onClick={onDone}>
@@ -240,7 +240,7 @@ export function SecretsPage() {
         <div className="mb-2 flex items-center">
           <h2 className="text-lg font-bold">{t.secrets}</h2>
           {!keyMissing && !editing && (
-            <button type="button" className="ml-auto rounded-[4px] bg-ink px-3 py-1 text-sm text-paper hover:bg-slate-700" onClick={() => setEditing({ draft: empty, isNew: true })}>
+            <button type="button" className="ml-auto rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover" onClick={() => setEditing({ draft: empty, isNew: true })}>
               {t.secretNew}
             </button>
           )}
@@ -258,7 +258,7 @@ export function SecretsPage() {
             </ul>
             <button
               type="button"
-              className="rounded bg-ink px-3 py-1 text-sm text-paper"
+              className="rounded bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover"
               onClick={() => window.confirm(t.secretConfirmReset) && void resetSecrets()}
             >
               {t.secretReset}
@@ -278,10 +278,10 @@ export function SecretsPage() {
             <ul className="mb-3 space-y-2">
               {secrets.length === 0 && <li className="text-sm text-slate-400">{t.secretNone}</li>}
               {secrets.map((s) => (
-                <li key={s.name} className="rounded-[4px] border border-slate-200 bg-sheet p-3 shadow-sheet">
+                <li key={s.name} className="rounded-lg border border-slate-200 bg-sheet p-3 shadow-sheet">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{s.name}</span>
-                    <span className="rounded-[4px] border border-slate-300 px-1 text-[11px] text-slate-600">
+                    <span className="rounded-lg border border-slate-300 px-1 text-[11px] text-slate-600">
                       {t.secretKinds[s.kind ?? "login"]}
                     </span>
                     <span className="text-xs text-slate-500">{s.username}</span>

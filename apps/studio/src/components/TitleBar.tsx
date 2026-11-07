@@ -33,7 +33,7 @@ export function TitleBar({ view, onView, onShowSidebar }: { view: View; onView: 
           type="button"
           onClick={onShowSidebar}
           title={`${t.list.expand} (Ctrl+B)`}
-          className="-ml-1 grid h-7 w-7 shrink-0 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+          className="-ml-1 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
         >
           <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>

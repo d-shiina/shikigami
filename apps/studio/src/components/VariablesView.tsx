@@ -37,7 +37,7 @@ function StepChips({ ids, steps, defs, onOpen }: { ids: string[]; steps: Step[];
             type="button"
             onClick={() => onOpen(id)}
             title={t.vars.table.openStep}
-            className="max-w-[180px] truncate rounded-[3px] border border-slate-200 bg-sheet px-1.5 text-[11px] leading-5 text-slate-700 hover:border-brand-500 hover:text-brand-700"
+            className="max-w-[180px] truncate rounded-md border border-slate-200 bg-sheet px-1.5 text-[11px] leading-5 text-slate-700 hover:border-brand-500 hover:text-brand-700"
           >
             {label}
           </button>
@@ -78,9 +78,9 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
           <span className="ml-auto text-[11px] text-slate-400">{t.vars.table.hint}</span>
         </div>
         {rows.length === 0 ? (
-          <p className="rounded-[4px] border border-dashed border-slate-300 px-4 py-8 text-center text-[13px] text-slate-400">{t.vars.table.empty}</p>
+          <p className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-[13px] text-slate-400">{t.vars.table.empty}</p>
         ) : (
-          <div className="overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-sheet">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <table className="w-full border-collapse text-left text-[12px]">
               <thead className="bg-slate-50 text-[11px] text-slate-500">
                 <tr>
@@ -107,7 +107,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                       onContextMenu={menuFor(() => variableMenu(u.name, { writer: u.writers[0], onOpenWriter: open }))}
                     >
                       <td className="px-3 py-2">
-                        <span className={`rounded-[2px] px-1.5 text-[10px] leading-4 font-semibold whitespace-nowrap ${DIRECTION_TONE[u.direction]}`}>
+                        <span className={`rounded-sm px-1.5 text-[10px] leading-4 font-semibold whitespace-nowrap ${DIRECTION_TONE[u.direction]}`}>
                           {u.direction === "made" ? t.vars.table.made : t.direction[u.direction]}
                         </span>
                       </td>
@@ -141,7 +141,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                       {changes && (
                         <td className="max-w-[200px] px-3 py-2">
                           {last ? (
-                            <span className="block truncate rounded-[3px] bg-brand-50 px-1.5 font-mono text-[12px] text-brand-700" title={valueText(last)}>
+                            <span className="block truncate rounded-md bg-brand-50 px-1.5 font-mono text-[12px] text-brand-700" title={valueText(last)}>
                               {valueText(last)}
                             </span>
                           ) : (

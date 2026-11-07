@@ -45,7 +45,7 @@ export function OutlinePanel({ left = 12 }: { left?: number }) {
   if (!open || !flow) return null;
 
   return (
-    <nav style={{ left }} className="absolute top-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
+    <nav style={{ left }} className="absolute top-3 z-10 flex max-h-[calc(100%-6rem)] w-[264px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet/95 shadow-raised backdrop-blur">
       <div className="flex items-center gap-2 border-b border-slate-100 py-1 pr-1 pl-3 text-[11px] text-slate-500">
         <span className="font-bold text-ink">{t.outline.steps}</span>
         <span>{items.length}</span>
@@ -63,7 +63,7 @@ export function OutlinePanel({ left = 12 }: { left?: number }) {
           onClick={() => setOpen(false)}
           aria-label={t.close}
           title={`${t.close} (O)`}
-          className="grid h-6 w-6 place-items-center rounded-[3px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+          className="grid h-6 w-6 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"
         >
           ✕
         </button>
@@ -96,7 +96,7 @@ export function OutlinePanel({ left = 12 }: { left?: number }) {
                   {item.step.name || plain(sentence(item.step, def))}
                 </span>
                 {diff && (
-                  <span className={`shrink-0 rounded-[3px] px-1.5 text-[9px] leading-4 font-bold text-white ${diff === "added" ? "bg-moegi-500" : "bg-accent-500"}`}>
+                  <span className={`shrink-0 rounded-md px-1.5 text-[9px] leading-4 font-bold text-white ${diff === "added" ? "bg-moegi-500" : "bg-accent-500"}`}>
                     {diff === "added" ? t.diffKind.added : t.diffKind.changed}
                   </span>
                 )}
