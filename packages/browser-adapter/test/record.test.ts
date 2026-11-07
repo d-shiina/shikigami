@@ -22,7 +22,8 @@ const PAGES: Record<string, string> = {
     <button onclick="this.textContent = '検索しました'">検索</button>
     <iframe name="side" src="/side"></iframe>
     <a href="/next">次のページ</a>`,
-  "/side": `<button onclick="this.textContent = '押しました'">枠のボタン</button>`,
+  "/side": `<button onclick="this.textContent = '押しました'">枠のボタン</button><a href="/side2">枠の次</a>`,
+  "/side2": `<button>枠の次のボタン</button>`,
   "/next": `<title>次</title><div style="height:80px"></div><button>戻る</button>`,
 };
 
@@ -86,7 +87,8 @@ describe("recording", () => {
       { kind: "open", url: `${base}/` },
       { kind: "fill", target: { role: "textbox", name: "氏名", exact: true }, value: "山田太郎" },
       { kind: "click", target: { role: "button", name: "検索", exact: true } },
-      { kind: "fill", target: { role: "textbox", name: "パスワード", exact: true }, value: "", password: true },
+      // A password field has no role: its label names it.
+      { kind: "fill", target: { label: "パスワード", exact: true }, value: "", password: true },
       { kind: "select", target: { role: "combobox", name: "都道府県", exact: true }, value: "東京" },
       { kind: "check", target: { role: "checkbox", name: "同意する", exact: true }, checked: true },
       { kind: "fill", target: { role: "textbox", name: "検索語", exact: true }, value: "請求書" },
@@ -98,6 +100,28 @@ describe("recording", () => {
     // The password never left the page, and nothing is left behind.
     expect(JSON.stringify(actions)).not.toContain("secret-123");
     expect(await page.evaluate(() => Boolean(document.getElementById("__shikigami_record")))).toBe(false);
+  });
+
+  it("keeps recording in a frame that went to another page", async () => {
+    await page.goto(`${base}/`);
+    await page.frameLocator("iframe").getByRole("button").waitFor();
+    const recording = record(page, { timeoutMs: 20_000 });
+    await bannerUp(page, /記録中/);
+    const side = page.frameLocator("iframe");
+    await side.getByRole("link", { name: "枠の次" }).click();
+    await side.getByRole("button", { name: "枠の次のボタン" }).waitFor();
+    await bannerUp(page, /（1 件）/);
+    // The frame's new page is armed once it is ready.
+    await page.waitForTimeout(300);
+    await side.getByRole("button", { name: "枠の次のボタン" }).click();
+    await bannerUp(page, /（2 件）/);
+    await stopRecording(page);
+    const { actions } = await recording;
+    expect(actions.map((a) => [a.kind, a.target])).toEqual([
+      ["open", undefined],
+      ["click", { role: "link", name: "枠の次", exact: true, frame: { name: "side" } }],
+      ["click", { role: "button", name: "枠の次のボタン", exact: true, frame: { name: "side" } }],
+    ]);
   });
 
   it("records an address typed by hand as opening it", async () => {

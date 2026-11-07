@@ -168,8 +168,11 @@ export async function record(page: Page, options: RecordOptions): Promise<Record
       }
     }
     const facts = report.facts;
-    const target = facts ? targetFromFacts(facts) : undefined;
-    if (!target) return { failed: { message: "the element was gone before it could be named" } };
+    const found = facts ? targetFromFacts(facts) : undefined;
+    if (!found) return { failed: { message: "the element was gone before it could be named" } };
+    // Still in the frame it was used in.
+    const where = await framePath(frame).catch(() => undefined);
+    const target: Target = where ? { ...found, frame: where } : found;
     return { target, label: facts?.text || facts?.name || undefined };
   };
 
@@ -215,6 +218,8 @@ export async function record(page: Page, options: RecordOptions): Promise<Record
   // tab going somewhere nobody clicked toward is an address typed by hand.
   const onNavigated = (frame: PageFrame) => {
     if (finished) return;
+    // A frame's new page (the tab's own gets it on domcontentloaded).
+    if (frame !== main) void frame.waitForLoadState("domcontentloaded").then(() => arm(frame)).catch(() => {});
     if (frame === main && Date.now() - lastAction > 3000 && frame.url() !== actions.at(-1)?.url) {
       queue = queue.then(() => {
         actions.push({ app: "browser", kind: "open", url: frame.url() });
@@ -327,6 +332,8 @@ function install({ hostId, binding, mark, banner, title, hint, count }: InstallA
       if (type === "radio") return "radio";
       if (type === "search") return "searchbox";
       if (type === "number") return "spinbutton";
+      // A password field has no role: its label names it.
+      if (type === "password") return "";
       return "textbox";
     }
     if (/^h[1-6]$/.test(tag)) return "heading";
