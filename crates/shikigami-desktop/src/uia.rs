@@ -23,6 +23,7 @@ use tokio::sync::oneshot;
 use windows::Win32::Foundation::{
     CloseHandle, E_ACCESSDENIED, HANDLE, HWND, LPARAM, POINT, RECT, WPARAM,
 };
+use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
 use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
@@ -44,9 +45,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    BM_CLICK, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowThreadProcessId,
-    IsIconic, PostMessageW, SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_RESTORE, SendMessageTimeoutW,
-    SetCursorPos, SetForegroundWindow, ShowWindow, WM_CLOSE, WM_IME_CONTROL,
+    BM_CLICK, GA_ROOT, GetAncestor, GetCursorPos, GetForegroundWindow, GetSystemMetrics,
+    GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, PostMessageW,
+    SM_CXDOUBLECLK, SMTO_ABORTIFHUNG, SW_RESTORE, SendMessageTimeoutW, SetCursorPos,
+    SetForegroundWindow, ShowWindow, WM_CLOSE, WM_IME_CONTROL, WindowFromPoint,
 };
 use windows::core::{BSTR, Interface, PWSTR};
 
@@ -776,6 +778,8 @@ impl Uia {
         // SAFETY: plain Win32 call.
         let own = unsafe { GetCurrentProcessId() };
         let mut shown: Option<(i32, i32, i32, i32)> = None;
+        // The window frame on screen: its handle, place and title.
+        let mut shown_window: Option<TopWindow> = None;
         let mut hover = Hover::new();
         let clicked = loop {
             match overlay.take_input() {
@@ -808,11 +812,21 @@ impl Uia {
                     )
                 };
                 if let Some(rect) = rect.filter(|_| pid != own) {
-                    let key = (rect.left, rect.top, rect.right, rect.bottom);
-                    if shown != Some(key) {
+                    // The window the node will act on: framed too, and
+                    // named on the banner, so it is clear which one it is.
+                    let window = top_window_at(pt).filter(|w| w.pid != own);
+                    let window_changed = window.as_ref().map(TopWindow::key)
+                        != shown_window.as_ref().map(TopWindow::key);
+                    if window_changed {
+                        overlay.window(window.as_ref().map(|w| w.rect));
+                        shown_window = window;
+                    }
+                    let key = rect_key(rect);
+                    if shown != Some(key) || window_changed {
                         shown = Some(key);
                         overlay.frame(Some(rect));
-                        overlay.detail(self.describe_live(&el));
+                        let title = shown_window.as_ref().map_or("", |w| w.title.as_str());
+                        overlay.detail(hover::banner_line(title, &self.describe_live(&el)));
                     }
                 }
             }
@@ -2467,6 +2481,63 @@ fn replay_key(vk: u16, extended: bool, held: keys::Held) {
     tap(&mut inputs, key);
     inputs.extend(missing.iter().rev().map(|k| key_event(*k, true)));
     let _ = send(&inputs);
+}
+
+fn rect_key(rect: RECT) -> (i32, i32, i32, i32) {
+    (rect.left, rect.top, rect.right, rect.bottom)
+}
+
+/// The top-level window at `pt` on screen, as the picker frames it.
+struct TopWindow {
+    hwnd: HWND,
+    pid: u32,
+    /// What is seen of it (without the invisible resize borders).
+    rect: RECT,
+    title: String,
+}
+
+impl TopWindow {
+    /// Which window, and where: a change means the frame moves.
+    fn key(&self) -> (isize, (i32, i32, i32, i32)) {
+        (self.hwnd.0 as isize, rect_key(self.rect))
+    }
+}
+
+/// The top-level window at `pt`. Only Win32 calls that do not wait for the
+/// app (no WM_GETTEXT), so a hung app cannot stall the picker. The picker's
+/// own frames and banner let the mouse through, so they are never found.
+fn top_window_at(pt: POINT) -> Option<TopWindow> {
+    // SAFETY: plain Win32 calls with local buffers.
+    unsafe {
+        let at = WindowFromPoint(pt);
+        if at.is_invalid() {
+            return None;
+        }
+        let top = GetAncestor(at, GA_ROOT);
+        let top = if top.is_invalid() { at } else { top };
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(top, Some(&mut pid));
+        let mut rect = RECT::default();
+        let seen = DwmGetWindowAttribute(
+            top,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&raw mut rect).cast(),
+            std::mem::size_of::<RECT>() as u32,
+        );
+        if seen.is_err() || rect.right <= rect.left {
+            GetWindowRect(top, &mut rect).ok()?;
+        }
+        let mut buf = [0u16; 256];
+        let n = InternalGetWindowText(top, &mut buf);
+        let title =
+            String::from_utf16_lossy(&buf[..usize::try_from(n).unwrap_or(0).min(buf.len())]);
+        Some(TopWindow {
+            hwnd: top,
+            pid,
+            rect,
+            title,
+        })
+    }
 }
 
 fn hwnd(handle: isize) -> HWND {
