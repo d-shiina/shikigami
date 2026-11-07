@@ -5,7 +5,7 @@ import { t } from "../lib/i18n";
 import { ValueView } from "./ValueView";
 
 type Line = { text: string; confidence?: number; unsure?: number[] };
-type Read = { text?: string; lines: Line[]; engine?: string; warning?: string };
+type Read = { text?: string; lines: Line[]; engine?: string; warning?: string; cells?: string[][]; rows?: unknown[] };
 
 const isRead = (v: unknown): v is Read =>
   typeof v === "object" && v !== null && Array.isArray((v as Read).lines) && (v as Read).lines.every((l) => typeof l?.text === "string");
@@ -41,9 +41,35 @@ function LineText({ line }: { line: Line }) {
   );
 }
 
+/** `table: true`'s cells, the header row first. */
+function CellTable({ cells }: { cells: string[][] }) {
+  if (cells.length === 0) return <p className="text-slate-500">{t.ocr.noTable}</p>;
+  const cols = Math.max(...cells.map((r) => r.length));
+  return (
+    <div>
+      <div className="pb-1 text-[11px] font-semibold text-slate-600">{t.ocr.table(cells.length, cols)}</div>
+      <div className="overflow-x-auto">
+        <table data-ocr-table className="border-collapse text-[11px]">
+          <tbody>
+            {cells.map((row, i) => (
+              <tr key={i} className={i === 0 ? "bg-slate-50 font-semibold" : ""}>
+                {row.map((c, j) => (
+                  <td key={j} className="whitespace-nowrap border border-slate-200 px-1.5 py-0.5">
+                    {c}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function OcrResult({ value }: { value: unknown }) {
   if (!isRead(value)) return <ValueView value={value} />;
-  const { lines, engine, warning } = value;
+  const { lines, engine, warning, cells } = value;
   const unsure = lines.reduce((n, l) => n + (l.unsure?.length ?? 0), 0);
   const rated = lines.some((l) => typeof l.confidence === "number");
   return (
@@ -58,6 +84,7 @@ export function OcrResult({ value }: { value: unknown }) {
         {unsure > 0 && <span className="font-semibold text-accent-600">{t.ocr.unsure(unsure)}</span>}
       </div>
       {warning && <p className="text-[11.5px] leading-relaxed text-accent-600">{warning}</p>}
+      {cells && <CellTable cells={cells} />}
       {lines.length === 0 ? (
         <p className="text-slate-500">{t.ocr.noText}</p>
       ) : (

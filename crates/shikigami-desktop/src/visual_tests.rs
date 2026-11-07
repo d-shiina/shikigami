@@ -664,6 +664,54 @@ async fn added_ocr_engines_read_and_say_how_sure_they_are() {
     assert!(line.get("confidence").is_none() && line.get("unsure").is_none());
 }
 
+/// `table: true` splits a ruled table into rows named by its header.
+#[tokio::test]
+async fn read_text_reads_a_table_by_its_ruled_lines() {
+    let (w, h) = (300u32, 100u32);
+    let mut rgba = vec![255u8; (w * h * 4) as usize];
+    let mut dark = |x: u32, y: u32| {
+        let i = ((y * w + x) * 4) as usize;
+        rgba[i..i + 3].copy_from_slice(&[60, 60, 60]);
+    };
+    for y in [10, 40, 70] {
+        for x in 10..=290 {
+            dark(x, y);
+        }
+    }
+    for x in [10, 150, 290] {
+        for y in 10..=70 {
+            dark(x, y);
+        }
+    }
+    let mut screen = Screen::new(Bitmap::new(w, h, rgba));
+    screen.lines = vec![
+        OcrLine {
+            words: vec![word("品名", 20, 16, 40)],
+        },
+        OcrLine {
+            words: vec![word("金額", 160, 16, 40)],
+        },
+        OcrLine {
+            words: vec![word("用紙", 20, 46, 40)],
+        },
+        OcrLine {
+            words: vec![word("1,200", 160, 46, 50)],
+        },
+    ];
+    let report = run_on(
+        Arc::new(screen),
+        vec![saving(step(
+            types::READ_TEXT,
+            json!({ "target": { "window": { "title": "Citrix" } }, "table": true }),
+        ))],
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    let out = &report.outputs["out"];
+    assert_eq!(out["cells"], json!([["品名", "金額"], ["用紙", "1,200"]]));
+    assert_eq!(out["rows"], json!([{ "品名": "用紙", "金額": "1,200" }]));
+}
+
 #[tokio::test]
 async fn screenshots_save_the_window_element_or_region() {
     let dir = tempfile::tempdir().unwrap();
