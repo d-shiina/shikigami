@@ -58,6 +58,12 @@ export function newImagePart(parts: Iterable<string>, files: ProjectFiles | null
   }
 }
 
+/** Whether `path` is inside the flow's folder (relative, not climbing out), so Studio can read and write it. */
+export function inProject(path: string): boolean {
+  const norm = normPath(path);
+  return norm !== "" && !/^[A-Za-z]:|^\/|:\/\//.test(norm) && !norm.split("/").includes("..");
+}
+
 /** The file for the picture of the part `name`: templates/<name>.png, or numbered when that is taken. */
 export function imagePathFor(name: string, files: ProjectFiles | null | undefined): string {
   const have = new Set((files?.files ?? []).map((f) => normPath(f.path).toLowerCase()));
@@ -95,7 +101,7 @@ export function reshot(part: Part, window: unknown): Part {
 }
 
 /** The part with its picture's settings changed (`undefined` drops one: the default applies). */
-export function withImage(part: Part, patch: Partial<Omit<ImageQuery, "path">>, offset?: Offset | null): Part {
+export function withImage(part: Part, patch: Partial<ImageQuery>, offset?: Offset | null): Part {
   const target = { ...(isRecord(part.target) ? part.target : {}) } as Record<string, unknown>;
   const image = { ...(isRecord(target.image) ? target.image : {}) } as Record<string, unknown>;
   for (const [k, v] of Object.entries(patch)) {
@@ -163,10 +169,9 @@ export function missingImages(flow: Flow, files: ProjectFiles | null | undefined
     .filter(([, p]) => {
       const path = imageOf(p)?.path;
       if (!path) return false;
-      const norm = normPath(path);
       // A full path is outside the folder: not ours to check.
-      if (/^[A-Za-z]:|^\//.test(norm)) return false;
-      return !have.has(norm.toLowerCase());
+      if (!inProject(path)) return false;
+      return !have.has(normPath(path).toLowerCase());
     })
     .map(([name]) => name);
 }

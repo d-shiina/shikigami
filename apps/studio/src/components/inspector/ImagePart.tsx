@@ -11,6 +11,8 @@ import {
   DEFAULT_THRESHOLD,
   imageOf,
   imagePartOps,
+  imagePathFor,
+  inProject,
   newImageLabel,
   newImagePart,
   normPath,
@@ -162,9 +164,10 @@ export function Picture({
           alt={alt}
           draggable={false}
           onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-          className={`block max-w-full object-contain [image-rendering:pixelated] ${onPoint ? "cursor-crosshair" : ""}`}
-          // Small pictures (a button) shown twice their size, pixel for pixel.
-          style={{ maxHeight, height: size ? Math.min(maxHeight, size.h * 2) : undefined }}
+          className={`block h-auto max-w-full [image-rendering:pixelated] ${onPoint ? "cursor-crosshair" : ""}`}
+          // Small pictures (a button) shown up to twice their size, pixel for pixel. Only the
+          // width is set, so a narrow pane shrinks both sides alike and a click maps onto the picture.
+          style={{ maxHeight, width: size ? size.w * Math.min(2, maxHeight / Math.max(1, size.h)) : undefined }}
           onClick={(e) => {
             if (!onPoint || !w || !h) return;
             const r = e.currentTarget.getBoundingClientRect();
@@ -276,14 +279,18 @@ export function ImagePartEditor({ name, part, set, scopeFields }: { name: string
   const flow = useStudio((s) => s.flow);
   const image = imageOf(part);
   const src = useProjectImage(image?.path);
+  const files = useProjectMaybe((s) => s.files, null);
   const [note, setNote] = useState<string | null>(null);
   if (!image) return null;
   const target = (part.target ?? {}) as Record<string, unknown>;
   const offset = (target.offset as Offset | undefined) ?? { x: 0, y: 0 };
   const retake = async (cut: Cut) => {
     if (!flow) return;
-    await savePicture(flow.id, image.path, cut);
-    set(reshot(part, cut.window));
+    // A picture kept outside the flow's folder (a full path) moves into templates/.
+    const path = inProject(image.path) ? image.path : imagePathFor(name, files);
+    await savePicture(flow.id, path, cut);
+    const next = reshot(part, cut.window);
+    set(path === image.path ? next : withImage(next, { path }));
     setNote(t.parts.reshot);
   };
   return (
