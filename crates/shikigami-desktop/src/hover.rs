@@ -24,6 +24,7 @@ pub const TICK: Duration = Duration::from_millis(15);
 #[derive(Debug, Default)]
 pub struct Hover {
     /// Where and when the last look-up started, and how long it took.
+    /// Intervals count from when it ended (start + took).
     last: Option<((i32, i32), Instant, Duration)>,
 }
 
@@ -37,9 +38,11 @@ impl Hover {
         let Some((seen, when, took)) = self.last else {
             return true;
         };
-        let since = now.saturating_duration_since(when);
-        // A slow app sets the pace: never ask before the last answer's time
-        // has passed again.
+        // Counted from when the answer came, not when the question went:
+        // the picker asks again only after the look-up returned, so from
+        // the start a slow look-up would already be "old enough".
+        let since = now.saturating_duration_since(when + took);
+        // A slow app sets the pace: after its answer, wait as long again.
         if since < took {
             return false;
         }
@@ -80,7 +83,7 @@ mod tests {
                 "asked again at tick {tick}"
             );
         }
-        assert!(hover.due((10, 10), t0 + RESTING));
+        assert!(hover.due((10, 10), t0 + ms(2) + RESTING));
     }
 
     #[test]
@@ -90,18 +93,21 @@ mod tests {
         hover.looked((10, 10), t0, ms(2));
         assert!(!hover.due((11, 10), t0 + ms(15)));
         assert!(!hover.due((30, 10), t0 + ms(59)));
-        assert!(hover.due((30, 10), t0 + MOVING));
+        assert!(hover.due((30, 10), t0 + ms(2) + MOVING));
     }
 
     #[test]
     fn a_slow_app_is_not_asked_faster_than_it_answers() {
         let t0 = Instant::now();
         let mut hover = Hover::new();
-        // The app took 400 ms to answer.
+        // The app took 400 ms to answer: the picker learns it at t0 + 400.
         hover.looked((10, 10), t0, ms(400));
-        assert!(!hover.due((50, 50), t0 + ms(100)));
-        assert!(!hover.due((50, 50), t0 + ms(399)));
-        assert!(hover.due((50, 50), t0 + ms(400)));
+        assert!(!hover.due((50, 50), t0 + ms(415)));
+        assert!(!hover.due((50, 50), t0 + ms(799)));
+        assert!(hover.due((50, 50), t0 + ms(800)));
+        // A still mouse waits the resting time after the answer, too.
+        assert!(!hover.due((10, 10), t0 + ms(800)));
+        assert!(hover.due((10, 10), t0 + ms(900)));
     }
 
     #[test]
