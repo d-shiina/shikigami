@@ -1388,6 +1388,8 @@ export const ja = {
     noConfidence: "このエンジンは信頼度を返しません",
     noText: "文字は見つかりませんでした",
     raw: "そのままの値",
+    table: (rows: number, cols: number) => `表（${rows} 行 × ${cols} 列）`,
+    noTable: "表は見つかりませんでした",
   },
   values: {
     none: "（なし）",

@@ -58,6 +58,7 @@ export const paramsJa = {
     language: "言語",
     engine: "OCR エンジン",
     accurate: "高精度（手書き向け・遅い）",
+    table: "表の読み取り",
     maxRows: "最大の行数",
     // Files
     path: "ファイル",

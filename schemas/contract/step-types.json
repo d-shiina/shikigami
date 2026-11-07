@@ -7988,6 +7988,13 @@
           },
           "accurate": {
             "type": "boolean"
+          },
+          "table": {
+            "type": "boolean"
+          },
+          "headerRow": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [],

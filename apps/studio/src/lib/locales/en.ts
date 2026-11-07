@@ -1389,6 +1389,8 @@ export const en: Dict = {
     noConfidence: "This engine does not report confidence",
     noText: "No text was found",
     raw: "Raw value",
+    table: (rows: number, cols: number) => `Table (${rows} × ${cols})`,
+    noTable: "No table was found",
   },
   values: {
     none: "(none)",
