@@ -105,7 +105,7 @@ async fn swing_through_the_access_bridge() {
     let adapter = DesktopAdapter::new();
     let runtime = Runtime::builder().adapter(&adapter).build();
     let mut s = Flow::new("java");
-    for name in ["pid", "after", "mail", "rows", "cleared"] {
+    for name in ["pid", "after", "mail", "mailOff", "rows", "cleared"] {
         s.variables.push(VariableDef {
             direction: VarDirection::Output,
             ..VariableDef::new(name, VarType::Any)
@@ -144,6 +144,27 @@ async fn swing_through_the_access_bridge() {
             json!({ "target": el("checkbox", "メール送信") }),
             Some("mail"),
         ),
+        // Already checked: nothing happens. Then off, and off again.
+        step(
+            types::CHECK,
+            json!({ "target": el("checkbox", "メール送信") }),
+            None,
+        ),
+        step(
+            types::CHECK,
+            json!({ "target": el("checkbox", "メール送信"), "checked": false }),
+            None,
+        ),
+        step(
+            types::CHECK,
+            json!({ "target": el("checkbox", "メール送信"), "checked": false }),
+            None,
+        ),
+        step(
+            types::GET_VALUE,
+            json!({ "target": el("checkbox", "メール送信") }),
+            Some("mailOff"),
+        ),
         step(
             types::GET_TABLE,
             json!({ "target": { "window": window } }),
@@ -180,6 +201,7 @@ async fn swing_through_the_access_bridge() {
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
     assert_eq!(report.outputs["after"], json!("結果:登録:山田"));
     assert_eq!(report.outputs["mail"], json!(true));
+    assert_eq!(report.outputs["mailOff"], json!(false));
     assert_eq!(
         report.outputs["rows"],
         json!([{ "番号": "A-1", "金額": "1,200" }, { "番号": "A-2", "金額": "300" }])

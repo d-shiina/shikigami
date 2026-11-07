@@ -151,6 +151,9 @@ export const paramsEn = {
     params: "Values for the SQL",
   } as Record<string, string>,
   for: {
+    "desktop.setWindow": { state: "Window state", front: "Bring to front", x: "Left edge", y: "Top edge", width: "Width", height: "Height" },
+    "process.list": { name: "Program name" },
+    "process.kill": { name: "Program name" },
     "browser.navigate": { action: "Where to" },
     "variable.set": { name: "Variable" },
     "control.switch": { value: "Value to compare" },
@@ -200,7 +203,7 @@ export const paramsEn = {
   choices: {
     action: { back: "Back", forward: "Forward", reload: "Reload" },
     level: { debug: "Detail", info: "Info", warn: "Warning", warning: "Warning", error: "Error" },
-    state: { visible: "Shown", hidden: "Not shown", attached: "On the page", detached: "Gone from the page", enabled: "Can be used" },
+    state: { visible: "Shown", hidden: "Not shown", attached: "On the page", detached: "Gone from the page", enabled: "Can be used", maximized: "Maximized", minimized: "Minimized", normal: "Normal size" },
     dialog: { accept: "OK", dismiss: "Cancel" },
     to: { top: "Top", bottom: "Bottom" },
     direction: { up: "Up", down: "Down", left: "Left", right: "Right", top: "To the top", bottom: "To the bottom" },
