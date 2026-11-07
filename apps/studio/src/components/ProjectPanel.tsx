@@ -31,7 +31,7 @@ import { useStudio } from "../context";
 import { copyText, menuFor, type MenuSpec } from "../lib/contextMenu";
 import { locale, stepLabel, t } from "../lib/i18n";
 import { partUses } from "../lib/parts";
-import { latestLog, logStatus, ProjectContext, type Role, ROLES, roleOf, useProject, usersOf } from "../project";
+import { latestLog, logStatus, ProjectContext, type Role, ROLES, roleOf, useProject, usersOf, walkSteps } from "../project";
 
 const ROLE_COLOR: Record<Role, string> = {
   input: "var(--color-role-input)",
@@ -99,6 +99,14 @@ function FileRow({ file, role }: { file: ProjectFile; role: Role }) {
 
 function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: boolean }) {
   const newSettings = useProject((s) => s.newSettings);
+  const applyOps = useStudio((s) => s.applyOps);
+  const hasReader = useStudio((s) => [...walkSteps(s.flow?.steps ?? [])].some((step) => step.type === "config.read"));
+  // A settings file is only useful once a node reads it: the first one gets
+  // its 「設定ファイルを読む」 at the start of the flow, saved as `settings`.
+  const createSettings = async () => {
+    const path = await newSettings();
+    if (path && !hasReader) await applyOps([{ op: "addStep", step: { type: "config.read", params: { path }, saveAs: "settings" }, position: { index: 0 } }]);
+  };
   const color = ROLE_COLOR[role];
   return (
     <section
@@ -118,7 +126,7 @@ function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: 
         (role === "config" ? (
           <button
             type="button"
-            onClick={() => void newSettings()}
+            onClick={() => void createSettings()}
             className="mx-2 flex w-[calc(100%-1rem)] items-center gap-2 rounded-[4px] border border-dashed border-slate-300 px-2 py-1.5 text-[11.5px] text-slate-500 hover:border-brand-500 hover:text-brand-500"
           >
             <FilePlus2 size={14} strokeWidth={1.75} aria-hidden="true" />
