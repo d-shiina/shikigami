@@ -957,6 +957,7 @@ export function FlowCanvas() {
   const called = useStudio((s) => s.called);
   const dive = useStudio((s) => s.dive);
   const enterCall = useStudio((s) => s.enterCall);
+  const openEditor = useStudio((s) => s.openEditor);
   const projectW = useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
   // Entered calls show their flow here, read-only; edits stay with the open one.
   const chain = useMemo(() => diveChain(root, called, dive), [root, called, dive]);
@@ -1260,7 +1261,9 @@ export function FlowCanvas() {
       }
       onNodeDoubleClick={(_, node) => {
         const data = node.data as StepNodeData | SlotNodeData;
-        if (data.kind === "step" && data.step.id && calls.get(data.step.id)?.callee) enterCall(data.step.id);
+        if (data.kind !== "step" || !data.step.id) return;
+        if (calls.get(data.step.id)?.callee) enterCall(data.step.id);
+        else openEditor(data.step.id);
       }}
       // Double-clicking a call enters it; zooming there would only get in the way.
       zoomOnDoubleClick={false}

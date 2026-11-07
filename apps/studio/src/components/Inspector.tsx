@@ -1,7 +1,7 @@
 import type { Part, Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
-import { Boxes, Crosshair, FolderOpen, ScanSearch } from "lucide-react";
+import { Boxes, Crosshair, FolderOpen, Maximize2, ScanSearch } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectMaybe } from "../project";
 import { api, type SecretField } from "../lib/api";
@@ -137,7 +137,7 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <label className={`grid ${onRemove ? "grid-cols-[84px_1fr_auto]" : "grid-cols-[84px_1fr]"} items-start gap-x-2 py-1`}>
+    <label className={`grid ${onRemove ? "grid-cols-[84px_1fr_auto] [[data-wide]_&]:grid-cols-[132px_1fr_auto]" : "grid-cols-[84px_1fr] [[data-wide]_&]:grid-cols-[132px_1fr]"} items-start gap-x-2 py-1`}>
       <span className="relative flex min-h-[26px] items-center justify-end text-right text-[11px] leading-tight text-slate-500" title={title}>
         {socket && <span className="mr-1.5 h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
         {label}
@@ -172,7 +172,7 @@ function Row({
 function AddRow({ choices, onAdd }: { choices: { key: string; label: string }[]; onAdd: (key: string) => void }) {
   if (choices.length === 0) return null;
   return (
-    <div className="grid grid-cols-[84px_1fr] gap-x-2 py-1">
+    <div className="grid grid-cols-[84px_1fr] gap-x-2 py-1 [[data-wide]_&]:grid-cols-[132px_1fr]">
       <span />
       <select
         className="w-full cursor-pointer rounded-[4px] border border-dashed border-slate-300 bg-transparent px-2 py-1 text-[11px] text-slate-500 hover:border-brand-500 hover:text-brand-600 focus:outline-none"
@@ -255,7 +255,7 @@ function TextOrSecretField({
         ))}
       </div>
       {mode === "text" ? (
-        <TemplateInput value={typeof value === "string" ? value : ""} onCommit={(text) => onChange(text === "" ? null : text)} />
+        <TemplateInput value={typeof value === "string" ? value : ""} label={label} onCommit={(text) => onChange(text === "" ? null : text)} />
       ) : (
         <div className="flex items-center gap-1">
           <select
@@ -390,7 +390,7 @@ function ParamField({
   } else if (schema.type === "string" && binds) {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "string") {
-    editor = <TemplateInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
+    editor = <TemplateInput value={String(value ?? "")} label={paramLabel(name, stepType)} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "array" && isScalarList(schema, value)) {
     // A few plain values (a case's values): one line, comma-separated.
     hint = t.props.listHint;
@@ -1315,7 +1315,7 @@ export function ExtractForm({ step }: { step: Step }) {
   );
 }
 
-function StepInspector() {
+export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
   const flow = useStudio((s) => s.flow);
   const selection = useStudio((s) => s.selection);
   const stepTypes = useStudio((s) => s.stepTypes);
@@ -1325,6 +1325,7 @@ function StepInspector() {
   const revert = useStudio((s) => s.revert);
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
+  const openEditor = useStudio((s) => s.openEditor);
   const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
   const links = useMemo(() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
@@ -1345,13 +1346,26 @@ function StepInspector() {
 
   return (
     <div className="pb-6">
-      <div className="px-4 pt-4 pb-3">
+      <div className={inEditor ? "px-4 pt-1 pb-2" : "px-4 pt-4 pb-3"}>
+        {/* The editor's header already says what the node is. */}
+        {!inEditor && (
         <div className="overflow-hidden rounded-[4px] border border-slate-200">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
             <span className="text-sm font-bold" style={{ color }} title={`${step.type} · ID: ${id}`}>
               {typeTitle(step, def)}
             </span>
+            {!inEditor && (
+              <button
+                type="button"
+                title={t.editor.openTitle}
+                onClick={() => openEditor(id)}
+                className="ml-auto flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-white/60 hover:text-ink"
+              >
+                <Maximize2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                {t.editor.open}
+              </button>
+            )}
           </div>
           <div className="space-y-1 px-3 py-2">
             <div className="text-[13px] leading-snug">
@@ -1360,6 +1374,7 @@ function StepInspector() {
             {def && <p className="text-[11px] text-slate-500">{stepSummary(def.type, def.description)}</p>}
           </div>
         </div>
+        )}
         {pending
           .filter((e) => touchedSteps(e).includes(id))
           .map((e) => (

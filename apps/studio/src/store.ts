@@ -235,6 +235,10 @@ export type StudioState = {
   reviewing: boolean;
   /** A step the canvas should bring into view; `seq` changes on every request. */
   reveal: { stepId: string; seq: number } | null;
+  /** The node open in the full-size editor (double-click on the chart). */
+  editing: string | null;
+  /** 「このノードだけ試す」: the run pauses before this node, runs it, and pauses again after. */
+  trying: string | null;
   /** While running, keep the running step in view. */
   followRun: boolean;
   /** Steps to pause before, per flow (this PC only). */
@@ -332,7 +336,11 @@ export type StudioState = {
   extract(stepIds: string[], name: string): Promise<boolean>;
   onExternalChange(flowId: string): Promise<void>;
   /** `step`: pause before the first step. */
-  startRun(options?: { step?: boolean }): Promise<void>;
+  startRun(options?: { step?: boolean; stopAt?: string }): Promise<void>;
+  openEditor(stepId: string): void;
+  closeEditor(): void;
+  /** Runs the flow up to and through `stepId`, then pauses, so its result can be looked at. */
+  tryStep(stepId: string): Promise<void>;
   stopRun(): Promise<void>;
   /** Step command for the paused (or running) run; false when it was refused. */
   debug(command: DebugCommand): Promise<boolean>;
@@ -775,6 +783,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       timelines: {},
       reviewing: false,
       reveal: null,
+      editing: null,
+      trying: null,
       followRun: true,
       breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
@@ -941,6 +951,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             canUndo: undo.canUndo,
             canRedo: undo.canRedo,
             selection: null,
+            editing: null,
             error: null,
             history: [],
             versions: [],
@@ -1192,11 +1203,26 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
+      openEditor(stepId) {
+        set({ editing: stepId, selection: { kind: "step", stepId } });
+      },
+
+      closeEditor() {
+        set({ editing: null });
+      },
+
+      async tryStep(stepId) {
+        if (get().run && isActive(get().run)) return;
+        set({ trying: stepId });
+        await get().startRun({ stopAt: stepId });
+        if (!get().run) set({ trying: null });
+      },
+
       async startRun(options) {
         const flow = get().flow;
         if (!flow) return;
         try {
-          const breakpoints = runBreakpoints(get());
+          const breakpoints = [...new Set([...runBreakpoints(get()), ...(options?.stopAt ? [options.stopAt] : [])])];
           const runId = await api.run(flow.id, undefined, { breakpoints, step: options?.step ?? false });
           set((s) => ({
             // Events may have arrived before the command returned.
@@ -1421,6 +1447,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           }
           return { run, human, secretFix, reveal, ...moved };
         });
+        // 「このノードだけ試す」: the pause before the node is only a way to get there; run it and pause after.
+        const trying = get().trying;
+        if (trying && env.type === "paused" && env.stepId === trying && env.reason === "breakpoint") {
+          set({ trying: null });
+          void get().debug({ action: "stepOver" });
+        } else if (trying && env.type === "runFinished") set({ trying: null });
       },
 
       hideTrail() {
