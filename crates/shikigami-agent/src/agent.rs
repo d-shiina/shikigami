@@ -16,6 +16,7 @@ use shikigami_secrets::KeyStore;
 use tokio_util::sync::CancellationToken;
 
 use crate::schedule::{Schedule, ScheduleState, Schedules, When, name_matches};
+use shikigami_core::calendar::Calendar;
 
 /// A run the agent is asked for. Agent runs are unattended: they execute
 /// the published version, as `shikigami run <id>` does.
@@ -100,6 +101,9 @@ struct Active {
 struct Loop {
     schedules: Vec<Schedule>,
     modified: Option<std::time::SystemTime>,
+    /// The company's days off (`holidays.json`) and when it was read.
+    calendar: Calendar,
+    calendar_modified: Option<std::time::SystemTime>,
     next: HashMap<String, Zoned>,
     /// File triggers: files seen per schedule, and new files with the size
     /// they had at the last look (started once the size stops changing).
@@ -388,7 +392,7 @@ impl Agent {
                 .cloned()
                 .collect();
             for s in &due {
-                match s.when.next_after(now) {
+                match s.when.next_after(now, &state.calendar) {
                     Some(t) => state.next.insert(s.id.clone(), t),
                     None => state.next.remove(&s.id),
                 };
@@ -406,11 +410,29 @@ impl Agent {
     fn reload(&self, now: &Zoned) {
         let path = Schedules::path(self.local_root());
         let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        let holidays = Calendar::path(self.svc.store().root());
+        let holidays_modified = std::fs::metadata(&holidays).and_then(|m| m.modified()).ok();
         let mut state = lock(&self.state);
-        if state.modified == modified && (modified.is_some() || state.schedules.is_empty()) {
+        if state.modified == modified
+            && state.calendar_modified == holidays_modified
+            && (modified.is_some() || state.schedules.is_empty())
+        {
             return;
         }
         state.modified = modified;
+        state.calendar_modified = holidays_modified;
+        match Calendar::load(&holidays) {
+            Ok(calendar) => state.calendar = calendar,
+            Err(e) => {
+                // Like a broken schedules.json: nothing fires on a guess
+                // about which days are off.
+                tracing::warn!(error = %e, "holidays not read");
+                state.problem = Some(e.to_string());
+                state.schedules.clear();
+                state.next.clear();
+                return;
+            }
+        }
         let schedules = match Schedules::load(&path) {
             Ok(s) => {
                 state.problem = None;
@@ -437,7 +459,7 @@ impl Agent {
                 Some(last) if last > *now => last,
                 _ => now.clone(),
             };
-            if let Some(t) = s.when.next_after(&from) {
+            if let Some(t) = s.when.next_after(&from, &state.calendar) {
                 next.insert(s.id.clone(), t);
             }
         }

@@ -12,6 +12,15 @@ describe("schedule", () => {
     expect(describeWhen({ kind: "fileAdded", folder: "input", pattern: "*.xlsx" })).toBe("input に *.xlsx が届いたら");
   });
 
+  it("says how holidays are treated", () => {
+    expect(describeWhen({ kind: "daily", at: "08:00", days: ["mon", "fri"], skipHolidays: true })).toBe(
+      "毎週 月・金 の 08:00（祝日・会社の休日を除く）",
+    );
+    expect(describeWhen({ kind: "monthly", day: 3, at: "09:00", businessDay: true })).toBe("毎月 第 3 営業日 の 09:00");
+    expect(describeWhen({ kind: "monthly", day: -1, at: "18:00", businessDay: true })).toBe("毎月 最終営業日 の 18:00");
+    expect(describeWhen({ kind: "monthly", day: 25, at: "09:00", onHoliday: "before" })).toBe("毎月 25 日 の 09:00（休日なら前の営業日）");
+  });
+
   it("checks what the agent would refuse", () => {
     expect(isTime("8:00")).toBe(true);
     expect(isTime("24:00")).toBe(false);

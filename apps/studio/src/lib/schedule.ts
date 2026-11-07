@@ -76,12 +76,20 @@ export function describeWhen(when: ScheduleWhen): string {
   const w = t.runs.describe;
   switch (when.kind) {
     case "daily":
-      return w.daily(when.at, dayList(when.days));
-    case "monthly":
-      return w.monthly(when.day === -1 ? t.runs.lastDay : w.day(when.day), when.at);
+      return w.daily(when.at, dayList(when.days)) + (when.skipHolidays ? w.skipHolidays : "");
+    case "monthly": {
+      const day = when.businessDay
+        ? when.day === -1
+          ? t.runs.lastBusinessDay
+          : w.businessDay(when.day)
+        : when.day === -1
+          ? t.runs.lastDay
+          : w.day(when.day);
+      return w.monthly(day, when.at) + (when.onHoliday && !when.businessDay ? w.onHoliday[when.onHoliday] : "");
+    }
     case "every": {
       const between = when.from || when.to ? w.between(when.from ?? "", when.to ?? "") : "";
-      return w.every(when.minutes, between, dayList(when.days));
+      return w.every(when.minutes, between, dayList(when.days)) + (when.skipHolidays ? w.skipHolidays : "");
     }
     case "once":
       return w.once(when.at.replace("T", " "));

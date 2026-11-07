@@ -1061,6 +1061,38 @@
               "long": "monthly"
             },
             {
+              "id": "skip_holidays",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "skip-holidays",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "business_day",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "business-day",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "on_holiday",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "on-holiday"
+            },
+            {
               "id": "every",
               "required": false,
               "takesValue": true,

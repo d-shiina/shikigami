@@ -114,6 +114,7 @@ async fn a_schedule_runs_the_published_version_when_due() {
             when: When::Daily {
                 at: at.strftime("%H:%M").to_string(),
                 days: vec![],
+                skip_holidays: false,
             },
             inputs: Map::new(),
         }],
@@ -174,6 +175,7 @@ async fn an_unpublished_flow_is_reported_as_failed() {
                 from: None,
                 to: None,
                 days: vec![],
+                skip_holidays: false,
             },
             inputs: Map::new(),
         }],
@@ -248,6 +250,7 @@ async fn a_broken_schedules_file_stops_every_schedule() {
                 from: None,
                 to: None,
                 days: vec![],
+                skip_holidays: false,
             },
             inputs: Map::new(),
         }],

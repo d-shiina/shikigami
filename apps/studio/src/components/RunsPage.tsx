@@ -50,6 +50,19 @@ function DayPicker({ days: given, onChange }: { days: string[]; onChange: (days:
   );
 }
 
+/** Whether a daily or every-few-minutes schedule rests on holidays. */
+function SkipHolidays({ checked, onChange }: { checked: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label className="flex items-start gap-2 text-sm">
+      <input type="checkbox" className="mt-0.5" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        <span className="text-ink">{t.runs.skipHolidays}</span>
+        <span className="block text-[11px] text-slate-500">{t.runs.holidaysHint}</span>
+      </span>
+    </label>
+  );
+}
+
 /** The fields of one kind of `when`. */
 function WhenFields({ when, onChange, inputs }: { when: ScheduleWhen; onChange: (w: ScheduleWhen) => void; inputs: string[] }) {
   const r = t.runs;
@@ -63,26 +76,63 @@ function WhenFields({ when, onChange, inputs }: { when: ScheduleWhen; onChange: 
           <Labeled label={r.days} hint={r.everyDay}>
             <DayPicker days={when.days ?? []} onChange={(days) => onChange({ ...when, days })} />
           </Labeled>
+          <SkipHolidays checked={when.skipHolidays ?? false} onChange={(skipHolidays) => onChange({ ...when, skipHolidays: skipHolidays || undefined })} />
         </>
       );
-    case "monthly":
+    case "monthly": {
+      const business = when.businessDay ?? false;
       return (
-        <div className="grid grid-cols-2 gap-3">
-          <Labeled label={r.dayOfMonth}>
-            <select className={inputClass} value={when.day} onChange={(e) => onChange({ ...when, day: Number(e.target.value) })}>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                <option key={d} value={d}>
-                  {r.describe.day(d)}
-                </option>
-              ))}
-              <option value={-1}>{r.lastDay}</option>
-            </select>
-          </Labeled>
-          <Labeled label={r.at}>
-            <input type="time" className={inputClass} value={when.at} onChange={(e) => onChange({ ...when, at: e.target.value })} required />
-          </Labeled>
-        </div>
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            <Labeled label={r.counting}>
+              <select
+                className={inputClass}
+                value={business ? "business" : "calendar"}
+                onChange={(e) => {
+                  const toBusiness = e.target.value === "business";
+                  onChange({
+                    ...when,
+                    businessDay: toBusiness || undefined,
+                    onHoliday: undefined,
+                    day: toBusiness && when.day > 23 ? -1 : when.day,
+                  });
+                }}
+              >
+                <option value="calendar">{r.calendarDays}</option>
+                <option value="business">{r.businessDays}</option>
+              </select>
+            </Labeled>
+            <Labeled label={r.dayOfMonth}>
+              <select className={inputClass} value={when.day} onChange={(e) => onChange({ ...when, day: Number(e.target.value) })}>
+                {Array.from({ length: business ? 23 : 31 }, (_, i) => i + 1).map((d) => (
+                  <option key={d} value={d}>
+                    {business ? r.describe.businessDay(d) : r.describe.day(d)}
+                  </option>
+                ))}
+                <option value={-1}>{business ? r.lastBusinessDay : r.lastDay}</option>
+              </select>
+            </Labeled>
+            <Labeled label={r.at}>
+              <input type="time" className={inputClass} value={when.at} onChange={(e) => onChange({ ...when, at: e.target.value })} required />
+            </Labeled>
+          </div>
+          {!business && (
+            <Labeled label={r.onHoliday} hint={r.holidaysHint}>
+              <select
+                className={inputClass}
+                value={when.onHoliday ?? ""}
+                onChange={(e) => onChange({ ...when, onHoliday: (e.target.value || undefined) as typeof when.onHoliday })}
+              >
+                <option value="">{r.onHolidayChoices.run}</option>
+                <option value="before">{r.onHolidayChoices.before}</option>
+                <option value="after">{r.onHolidayChoices.after}</option>
+                <option value="skip">{r.onHolidayChoices.skip}</option>
+              </select>
+            </Labeled>
+          )}
+        </>
       );
+    }
     case "every":
       return (
         <>
@@ -107,6 +157,7 @@ function WhenFields({ when, onChange, inputs }: { when: ScheduleWhen; onChange: 
           <Labeled label={r.days} hint={r.everyDay}>
             <DayPicker days={when.days ?? []} onChange={(days) => onChange({ ...when, days })} />
           </Labeled>
+          <SkipHolidays checked={when.skipHolidays ?? false} onChange={(skipHolidays) => onChange({ ...when, skipHolidays: skipHolidays || undefined })} />
         </>
       );
     case "once":
