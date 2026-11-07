@@ -48,6 +48,9 @@ export const paramsJa = {
     waitMs: "待ち時間（ミリ秒）",
     button: "ボタン",
     double: "ダブルクリック",
+    modifiers: "押しながらのキー",
+    typing: "1 文字ずつ入力",
+    checked: "チェック",
     amount: "量",
     direction: "方向",
     unit: "単位",
@@ -153,6 +156,7 @@ export const paramsJa = {
   } as Record<string, string>,
   /** Names that differ by node: what `path` or `to` is depends on what the node does with it. */
   for: {
+    "browser.navigate": { action: "移動先" },
     "variable.set": { name: "変数" },
     "control.switch": { value: "比べる値" },
     "control.fail": { message: "エラーの内容" },
@@ -200,6 +204,7 @@ export const paramsJa = {
   } as Record<string, Record<string, string>>,
   /** A choice's words, by the setting it belongs to. */
   choices: {
+    action: { back: "戻る", forward: "進む", reload: "再読み込み" },
     level: { debug: "詳細", info: "情報", warn: "警告", warning: "警告", error: "エラー" },
     state: { visible: "表示されている", hidden: "表示されていない", attached: "ページにある", detached: "ページから消えた", enabled: "操作できる" },
     dialog: { accept: "OK", dismiss: "キャンセル" },

@@ -82,6 +82,8 @@ interface SecretInfo {
 
 const MASK = "***";
 const PASSWORD_FIELDS = 'input[type="password"]';
+/** Pause between keys for `typing: true` (fast enough, slow enough for key handlers). */
+const TYPING_DELAY_MS = 30;
 
 /** `https://example.com:443/login` → `https://example.com` (as the Runtime normalizes sites). */
 export function originOf(url: string): string {
@@ -175,6 +177,10 @@ export class Adapter {
           return await this.closeTab(params);
         case "fill":
           return await this.fill(params);
+        case "check":
+          return await this.check(params);
+        case "navigate":
+          return await this.navigate(params);
         case "select":
           return await this.select(params);
         case "press":
@@ -469,8 +475,13 @@ export class Adapter {
   private async click(params: Params): Promise<string | null> {
     const session = this.session(params);
     const { page, locator } = this.target(params);
+    const button = params.button === "right" ? "right" : "left";
+    const modifiers = (Array.isArray(params.modifiers) ? params.modifiers : []).filter(
+      (m): m is "Control" | "Shift" | "Alt" => m === "Control" || m === "Shift" || m === "Alt",
+    );
+    const options = { timeout: this.limit(params), button, modifiers } as const;
     return await this.withDialog(session, params, () =>
-      locator.click({ timeout: this.limit(params) }).catch((error: unknown) => {
+      (params.double === true ? locator.dblclick(options) : locator.click(options)).catch((error: unknown) => {
         // A "閉じる" button of a popup closes its own tab while the click is
         // still being confirmed: the click did its work.
         if (page.isClosed()) return;
@@ -720,8 +731,9 @@ export class Adapter {
     const { locator } = this.target(params);
     const value = String(params.value ?? "");
     const secret = params.secret as SecretInfo | undefined;
+    const typing = params.typing === true;
     if (!secret) {
-      await locator.fill(value, { timeout: this.limit(params) });
+      await this.type(locator, value, typing, this.limit(params));
       return null;
     }
     // Never type a secret into a page it was not registered for (a
@@ -748,11 +760,50 @@ export class Adapter {
         session.secrets.add(value);
         session.secretFields.push(locator);
       }
-      await handle.fill(value, { timeout });
+      if (typing) {
+        await handle.fill("", { timeout });
+        await handle.type(value, { delay: TYPING_DELAY_MS, timeout });
+      } else {
+        await handle.fill(value, { timeout });
+      }
     } finally {
       await handle.dispose().catch(() => {});
     }
     return null;
+  }
+
+  /** Replaces the field's text: at once, or one key at a time with `typing`. */
+  private async type(locator: Locator, value: string, typing: boolean, timeout: number): Promise<void> {
+    if (!typing) return void (await locator.fill(value, { timeout }));
+    await locator.fill("", { timeout });
+    await locator.pressSequentially(value, { delay: TYPING_DELAY_MS, timeout });
+  }
+
+  /** Sets a checkbox, radio button or switch; nothing happens when it already is. */
+  private async check(params: Params): Promise<null> {
+    const { locator } = this.target(params);
+    await locator.setChecked(params.checked !== false, { timeout: this.limit(params) });
+    return null;
+  }
+
+  /** Back, forward or reload in the current tab. */
+  private async navigate(params: Params): Promise<{ url: string; title: string }> {
+    const session = this.session(params);
+    const page = session.page;
+    const timeout = this.limit(params);
+    const action = params.action;
+    let response: unknown;
+    if (action === "back") response = await page.goBack({ waitUntil: "load", timeout });
+    else if (action === "forward") response = await page.goForward({ waitUntil: "load", timeout });
+    else if (action === "reload") response = await page.reload({ waitUntil: "load", timeout });
+    else throw new AdapterError("INVALID_PARAMS", "action must be back, forward or reload");
+    // goBack / goForward give null when there is no page to go to.
+    if (response === null && action !== "reload") {
+      throw new AdapterError("NAVIGATION_FAILED", `there is no page to go ${action} to`, {
+        details: { action, url: page.url(), hint: "The tab has no page in that direction. Open the page with browser.open instead." },
+      });
+    }
+    return { url: page.url(), title: await page.title() };
   }
 
   private async select(params: Params): Promise<unknown> {

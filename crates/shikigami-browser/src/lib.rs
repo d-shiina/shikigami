@@ -52,6 +52,8 @@ pub mod types {
     pub const DOWNLOAD: &str = "browser.download";
     pub const UPLOAD: &str = "browser.upload";
     pub const FILL: &str = "browser.fill";
+    pub const CHECK: &str = "browser.check";
+    pub const NAVIGATE: &str = "browser.navigate";
     pub const SELECT: &str = "browser.select";
     pub const PRESS: &str = "browser.press";
     pub const GET_TEXT: &str = "browser.getText";
@@ -507,14 +509,21 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             step_type: CLICK,
             method: "click",
             label: "クリック",
-            description: "Clicks the element `target` (waits until it is visible and enabled). When the click shows a JS dialog (alert / confirm / prompt), set `dialog`: \"accept\" (OK) or \"dismiss\" (Cancel), or { \"action\": \"accept\", \"promptText\": \"…\" } for a prompt; the step then waits for the dialog, answers it and outputs its message (saveAs to read e.g. a receipt number). Without `dialog`, dialogs are dismissed (a confirm is cancelled). A dialog drawn by the page itself is not a JS dialog: click its button. A link or button that opens a new tab or window: follow with browser.switchTab. An element inside an iframe: add `frame` to the target.",
-            params: json!({ "target": target, "dialog": dialog_schema() }),
+            description: "Clicks the element `target` (waits until it is visible and enabled). `button: \"right\"` right-clicks (to open the page's own menu), `double: true` double-clicks, `modifiers` holds keys down during the click (e.g. [\"Control\"] to open a link in a new tab, [\"Shift\"] to extend a selection). To set a checkbox, use browser.check, not a click. When the click shows a JS dialog (alert / confirm / prompt), set `dialog`: \"accept\" (OK) or \"dismiss\" (Cancel), or { \"action\": \"accept\", \"promptText\": \"…\" } for a prompt; the step then waits for the dialog, answers it and outputs its message (saveAs to read e.g. a receipt number). Without `dialog`, dialogs are dismissed (a confirm is cancelled). A dialog drawn by the page itself is not a JS dialog: click its button. A link or button that opens a new tab or window: follow with browser.switchTab. An element inside an iframe: add `frame` to the target.",
+            params: json!({
+                "target": target,
+                "button": { "enum": ["left", "right"], "description": "押すボタン（既定は左）" },
+                "double": { "type": "boolean", "description": "ダブルクリックする" },
+                "modifiers": { "type": "array", "items": { "enum": ["Control", "Shift", "Alt"] }, "uniqueItems": true, "description": "押しながらクリックするキー" },
+                "dialog": dialog_schema()
+            }),
             required: &["target"],
             has_output: true,
             examples: vec![
                 json!({ "type": CLICK, "name": "ログインする", "params": { "target": { "role": "button", "name": "ログイン" } } }),
                 json!({ "type": CLICK, "name": "削除して確認に OK", "params": { "target": { "role": "button", "name": "削除" }, "dialog": "accept" } }),
                 json!({ "type": CLICK, "name": "フレームの中の検索", "params": { "target": { "role": "button", "name": "検索", "frame": { "name": "main" } } } }),
+                json!({ "type": CLICK, "name": "明細の行を開く", "params": { "target": { "role": "row", "name": "{{ order.id }}" }, "double": true } }),
             ],
             ..Def::default()
         },
@@ -628,8 +637,12 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
             step_type: FILL,
             method: "fill",
             label: "文字入力",
-            description: "Replaces the text of the input `target` with `value`: a template, or a registered secret { \"secret\": \"<name>\", \"field\": \"username\" | \"password\" | \"totp\" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text.",
-            params: json!({ "target": target, "value": text_or_secret_schema("入力する文字。パスワードは登録済みシークレット { \"secret\": \"名前\", \"field\": \"password\" }") }),
+            description: "Replaces the text of the input `target` with `value`: a template, or a registered secret { \"secret\": \"<name>\", \"field\": \"username\" | \"password\" | \"totp\" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text. `typing: true` clears the field and types the text one key at a time, for pages that react to each key (suggestions, inputs that format as you type) and ignore a pasted value; leave it out otherwise (it is slower).",
+            params: json!({
+                "target": target,
+                "value": text_or_secret_schema("入力する文字。パスワードは登録済みシークレット { \"secret\": \"名前\", \"field\": \"password\" }"),
+                "typing": { "type": "boolean", "description": "1 文字ずつキーを打って入力する（キー入力を見ているページ向け）" }
+            }),
             required: &["target", "value"],
             has_output: false,
             examples: vec![
@@ -638,6 +651,39 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
                 json!({ "type": FILL, "name": "検索語を入力", "params": { "target": { "label": "検索" }, "value": "{{ keyword }}" } }),
             ],
             secret_params: &["value"],
+            ..Def::default()
+        },
+        Def {
+            step_type: CHECK,
+            method: "check",
+            label: "チェック状態",
+            description: "Sets the checkbox (or radio button / switch) `target` to checked (`checked: true`, the default) or unchecked (`checked: false`). Does nothing when it already is, so running the flow twice never flips it back (a browser.click would). For a radio button only `checked: true` makes sense: check the other option to move away.",
+            params: json!({
+                "target": target,
+                "checked": { "type": "boolean", "description": "チェックを付ける（外すときは false、既定は付ける）" }
+            }),
+            required: &["target"],
+            has_output: false,
+            examples: vec![
+                json!({ "type": CHECK, "name": "利用規約に同意", "params": { "target": { "role": "checkbox", "name": "利用規約に同意する" } } }),
+                json!({ "type": CHECK, "name": "メール配信を外す", "params": { "target": { "label": "お知らせメールを受け取る" }, "checked": false } }),
+            ],
+            ..Def::default()
+        },
+        Def {
+            step_type: NAVIGATE,
+            method: "navigate",
+            label: "ページ移動",
+            description: "Goes `action`: \"back\" (the browser's Back), \"forward\" or \"reload\" in the current tab, and waits for the page to load. Output: { url, title }. To go to an address, use browser.open on the same context (it opens in the current tab). Fails with NAVIGATION_FAILED when there is no page to go back or forward to.",
+            params: json!({
+                "action": { "enum": ["back", "forward", "reload"], "description": "戻る・進む・再読み込み" }
+            }),
+            required: &["action"],
+            has_output: true,
+            examples: vec![
+                json!({ "type": NAVIGATE, "name": "一覧に戻る", "params": { "action": "back" } }),
+                json!({ "type": NAVIGATE, "name": "最新の状態を読み込む", "params": { "action": "reload" } }),
+            ],
             ..Def::default()
         },
         Def {

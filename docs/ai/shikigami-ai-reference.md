@@ -155,18 +155,33 @@ Params:
 Output: yes (saveAs)
 Example: `{"type":"browser.attach","name":"開いている Edge の勤怠システムを使う","params":{"title":"勤怠"}}`
 
-#### browser.click (クリック)
+#### browser.check (チェック状態)
 
-Clicks the element `target` (waits until it is visible and enabled). When the click shows a JS dialog (alert / confirm / prompt), set `dialog`: "accept" (OK) or "dismiss" (Cancel), or { "action": "accept", "promptText": "…" } for a prompt; the step then waits for the dialog, answers it and outputs its message (saveAs to read e.g. a receipt number). Without `dialog`, dialogs are dismissed (a confirm is cancelled). A dialog drawn by the page itself is not a JS dialog: click its button. A link or button that opens a new tab or window: follow with browser.switchTab. An element inside an iframe: add `frame` to the target.
+Sets the checkbox (or radio button / switch) `target` to checked (`checked: true`, the default) or unchecked (`checked: false`). Does nothing when it already is, so running the flow twice never flips it back (a browser.click would). For a radio button only `checked: true` makes sense: check the other option to move away.
 
 Params:
 - `target`*: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
+- `checked`: true | false — チェックを付ける（外すときは false、既定は付ける）
+- `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
+Example: `{"type":"browser.check","name":"利用規約に同意","params":{"target":{"role":"checkbox","name":"利用規約に同意する"}}}`
+Example: `{"type":"browser.check","name":"メール配信を外す","params":{"target":{"label":"お知らせメールを受け取る"},"checked":false}}`
+
+#### browser.click (クリック)
+
+Clicks the element `target` (waits until it is visible and enabled). `button: "right"` right-clicks (to open the page's own menu), `double: true` double-clicks, `modifiers` holds keys down during the click (e.g. ["Control"] to open a link in a new tab, ["Shift"] to extend a selection). To set a checkbox, use browser.check, not a click. When the click shows a JS dialog (alert / confirm / prompt), set `dialog`: "accept" (OK) or "dismiss" (Cancel), or { "action": "accept", "promptText": "…" } for a prompt; the step then waits for the dialog, answers it and outputs its message (saveAs to read e.g. a receipt number). Without `dialog`, dialogs are dismissed (a confirm is cancelled). A dialog drawn by the page itself is not a JS dialog: click its button. A link or button that opens a new tab or window: follow with browser.switchTab. An element inside an iframe: add `frame` to the target.
+
+Params:
+- `target`*: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
+- `button`: "left" | "right" — 押すボタン（既定は左）
+- `double`: true | false — ダブルクリックする
+- `modifiers`: list of "Control" | "Shift" | "Alt" — 押しながらクリックするキー
 - `dialog`: "accept" | "dismiss" or { action*: "accept" | "dismiss", promptText: text } — この操作で出る JS のダイアログ（alert・confirm・prompt）への答え。accept = OK、dismiss = キャンセル。prompt に入れる文字は { "action": "accept", "promptText": "…" }
 - `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
 Output: yes (saveAs)
 Example: `{"type":"browser.click","name":"ログインする","params":{"target":{"role":"button","name":"ログイン"}}}`
 Example: `{"type":"browser.click","name":"削除して確認に OK","params":{"target":{"role":"button","name":"削除"},"dialog":"accept"}}`
 Example: `{"type":"browser.click","name":"フレームの中の検索","params":{"target":{"role":"button","name":"検索","frame":{"name":"main"}}}}`
+Example: `{"type":"browser.click","name":"明細の行を開く","params":{"target":{"role":"row","name":"{{ order.id }}"},"double":true}}`
 
 #### browser.close (ブラウザ終了)
 
@@ -200,11 +215,12 @@ Example: `{"type":"browser.download","name":"請求書を落とす（サイト�
 
 #### browser.fill (文字入力)
 
-Replaces the text of the input `target` with `value`: a template, or a registered secret { "secret": "<name>", "field": "username" | "password" | "totp" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text.
+Replaces the text of the input `target` with `value`: a template, or a registered secret { "secret": "<name>", "field": "username" | "password" | "totp" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text. `typing: true` clears the field and types the text one key at a time, for pages that react to each key (suggestions, inputs that format as you type) and ignore a pasted value; leave it out otherwise (it is slower).
 
 Params:
 - `target`*: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
 - `value`*: text or { secret*: text, field*: "username" | "password" | "totp" } [may be a secret] — 入力する文字。パスワードは登録済みシークレット { "secret": "名前", "field": "password" }
+- `typing`: true | false — 1 文字ずつキーを打って入力する（キー入力を見ているページ向け）
 - `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
 Example: `{"type":"browser.fill","name":"ユーザー名を入力","params":{"target":{"label":"ユーザー名"},"value":{"secret":"受注システム","field":"username"}}}`
 Example: `{"type":"browser.fill","name":"パスワードを入力","params":{"target":{"label":"パスワード"},"value":{"secret":"受注システム","field":"password"}}}`
@@ -262,6 +278,17 @@ Params:
 - `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
 Output: yes (saveAs)
 Example: `{"type":"browser.isVisible","name":"ログイン画面か確かめる","params":{"target":{"label":"パスワード"}},"saveAs":"needsLogin"}`
+
+#### browser.navigate (ページ移動)
+
+Goes `action`: "back" (the browser's Back), "forward" or "reload" in the current tab, and waits for the page to load. Output: { url, title }. To go to an address, use browser.open on the same context (it opens in the current tab). Fails with NAVIGATION_FAILED when there is no page to go back or forward to.
+
+Params:
+- `action`*: "back" | "forward" | "reload" — 戻る・進む・再読み込み
+- `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
+Output: yes (saveAs)
+Example: `{"type":"browser.navigate","name":"一覧に戻る","params":{"action":"back"}}`
+Example: `{"type":"browser.navigate","name":"最新の状態を読み込む","params":{"action":"reload"}}`
 
 #### browser.open (ページ表示)
 

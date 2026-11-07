@@ -1467,6 +1467,8 @@ export const en: Dict = {
     "browser.getTable": "Read table",
     "browser.getText": "Read text",
     "browser.hover": "Hover",
+    "browser.check": "Checkbox state",
+    "browser.navigate": "Page navigation",
     "browser.isVisible": "Is visible",
     "browser.open": "Open in browser",
     "browser.press": "Press key",

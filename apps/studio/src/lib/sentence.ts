@@ -300,7 +300,12 @@ const BUILDERS: Record<string, Builder> = {
     return name ? [w(`サブフロー「${name}」を呼ぶ`)] : [w("サブフローを呼ぶ（呼ぶフローが未設定）")];
   },
   "browser.open": (p) => [...template(p.url), w(" をブラウザで開く")],
-  "browser.click": (p, s) => [w(`${targetText(p.target)}を押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`), ...saveAs(s)],
+  "browser.click": (p, s) =>
+    p.button === "right" || p.double === true
+      ? [w(`${targetText(p.target)}を${p.button === "right" ? "右クリック" : "ダブルクリック"}${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "する"}`), ...saveAs(s)]
+      : [w(`${targetText(p.target)}を押${dialogText(p.dialog) ? `し${dialogText(p.dialog)}` : "す"}`), ...saveAs(s)],
+  "browser.check": (p) => [w(`${targetText(p.target)}のチェックを${p.checked === false ? "外す" : "付ける"}`)],
+  "browser.navigate": (p) => [w(p.action === "back" ? "前のページに戻る" : p.action === "forward" ? "次のページに進む" : "ページを読み込み直す")],
   "browser.hover": (p) => [w(`${targetText(p.target)}にマウスを乗せる`)],
   "browser.attach": (p) => [w(p.title || p.url ? `開いているブラウザの「${String(p.title ?? p.url)}」のタブを使う` : "開いているブラウザを使う")],
   "browser.download": (p, s) => [w(`${targetText(p.target)}を押してダウンロードし、`), code(p.path ?? p.folder), w(p.path ? " に保存する" : " に保存する（名前はサイトのまま）"), ...saveAs(s)],
@@ -367,7 +372,12 @@ const BUILDERS_EN: Record<string, Builder> = {
     return name ? [w(`Call the subflow "${name}"`)] : [w("Call a subflow (none chosen)")];
   },
   "browser.open": (p) => [w("Open "), ...template(p.url), w(" in the browser")],
-  "browser.click": (p, s) => [w(`Click ${targetText(p.target)}${dialogText(p.dialog)}`), ...saveAs(s)],
+  "browser.click": (p, s) => [
+    w(`${p.button === "right" ? "Right-click" : p.double === true ? "Double-click" : "Click"} ${targetText(p.target)}${dialogText(p.dialog)}`),
+    ...saveAs(s),
+  ],
+  "browser.check": (p) => [w(`${p.checked === false ? "Uncheck" : "Check"} ${targetText(p.target)}`)],
+  "browser.navigate": (p) => [w(p.action === "back" ? "Go back a page" : p.action === "forward" ? "Go forward a page" : "Reload the page")],
   "browser.hover": (p) => [w(`Hover over ${targetText(p.target)}`)],
   "browser.attach": (p) => [w(p.title || p.url ? `Use the "${String(p.title ?? p.url)}" tab of the open browser` : "Use the open browser")],
   "browser.download": (p, s) => [w(`Click ${targetText(p.target)} and save the download to `), code(p.path ?? p.folder), w(p.path ? "" : " (keeping the site's name)"), ...saveAs(s)],
