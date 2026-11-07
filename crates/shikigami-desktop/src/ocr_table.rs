@@ -106,17 +106,27 @@ fn rules(gray: &Gray, horizontal: bool) -> Vec<Rule> {
             None => groups.push((o, o, from, to)),
         }
     }
+    let contrast = |o: usize, i: usize| {
+        let (x, y) = if horizontal { (i, o) } else { (o, i) };
+        (gray.values[y * w + x] - bg).abs()
+    };
     // A line has background beside it; a row through the middle of a line
-    // of text (strokes close together) has more text beside it.
-    let clear = |o: Option<usize>, from: usize, to: usize| {
-        o.filter(|&o| o < outer)
-            .is_none_or(|o| (from..to).filter(|&i| at(o, i)).count() * 2 < to - from)
+    // of text (strokes close together) has more text beside it. Beside
+    // counts what is at least half as dark as the line itself, so a light
+    // shaded header under its border is still background.
+    let clear = |o: Option<usize>, from: usize, to: usize, strength: f32| {
+        let enough = (strength / 2.0).max(LINE_CONTRAST);
+        o.filter(|&o| o < outer).is_none_or(|o| {
+            (from..to).filter(|&i| contrast(o, i) >= enough).count() * 2 < to - from
+        })
     };
     let mut out: Vec<Rule> = groups
         .into_iter()
         .filter(|g| g.1 - g.0 < MAX_THICKNESS)
         .filter(|&(first, last, from, to)| {
-            clear(first.checked_sub(2), from, to) && clear(Some(last + 2), from, to)
+            let strength = (from..to).map(|i| contrast(first, i)).sum::<f32>() / (to - from) as f32;
+            clear(first.checked_sub(2), from, to, strength)
+                && clear(Some(last + 2), from, to, strength)
         })
         .map(|(first, last, from, to)| Rule {
             at: ((first + last) / 2) as i32,
