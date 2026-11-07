@@ -105,8 +105,10 @@ fn list_published(svc: &FlowService) -> CmdResult<Vec<RunnerItem>> {
 
 /// Runs the published version of `id` with `inputs`. Events arrive as
 /// `runner-event`; an unhandled error ends the run (nobody here debugs it).
+/// Async like `run_flow`: a sync command runs on the main thread, outside
+/// the Tokio runtime the run is spawned on, and Studio would abort.
 #[tauri::command]
-pub fn runner_run(
+pub async fn runner_run(
     app: AppHandle,
     state: State<'_, AppState>,
     id: FlowId,
