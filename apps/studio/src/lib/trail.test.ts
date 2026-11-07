@@ -29,17 +29,11 @@ describe("trailLines", () => {
     expect(out.has("check->read")).toBe(false);
   });
 
-  it("takes the way back up a loop once its body has run", () => {
-    expect(trailLines([line("body", "loop")], { loop: "running", body: "succeeded" }).get("body->loop")).toBe("now");
-    expect(trailLines([line("body", "loop")], { loop: "succeeded", body: "succeeded" }).get("body->loop")).toBe("done");
-  });
-
-  it("does not take the way back up from a step that failed at the end of a loop's body", () => {
+  it("ends the way into a loop's body red where it stopped", () => {
     const states: Record<string, StepRunState> = { before: "succeeded", loop: "failed", body: "failed" };
-    const out = trailLines([line("before", "loop"), line("loop", "body"), { ...line("body", "loop"), loop: true }], states);
+    const out = trailLines([line("before", "loop"), line("loop", "body")], states);
     expect(out.get("before->loop")).toBe("done");
     expect(out.get("loop->body")).toBe("failed");
-    expect(out.has("body->loop")).toBe(false);
   });
 
   it("passes through the \"+\" at the end of a block", () => {
