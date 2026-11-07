@@ -403,6 +403,7 @@ export const en: Dict = {
       install: (name: string) => `Install ${name}`,
       retry: "Try again",
       installing: "Installing… (1–2 minutes)",
+      stopping: "Stopping…",
       whatHappens: "It goes into your user folder (no administrator rights). The sign-in screen follows when it is done.",
     },
   },

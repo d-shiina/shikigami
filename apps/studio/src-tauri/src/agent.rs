@@ -69,7 +69,7 @@ struct AgentConfig {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum AgentKind {
+pub enum AgentKind {
     #[default]
     ClaudeCode,
     Command,
@@ -253,7 +253,11 @@ pub fn agent_info() -> AgentInfo {
     };
     AgentInfo {
         available: problem.is_none(),
-        installable: command.is_none() && config.kind == AgentKind::ClaudeCode,
+        // Only the default lookup: an explicit `agent.command` that is missing
+        // is the person's path to fix, and the installer would not put it there.
+        installable: command.is_none()
+            && config.kind == AgentKind::ClaudeCode
+            && config.command.is_none(),
         name: config.name(),
         command: command.map(|p| p.display().to_string()),
         problem,
@@ -272,15 +276,15 @@ pub(crate) const INSTALL_EVENT: &str = "agent-install";
 )]
 pub enum InstallEvent {
     /// A line the installer printed (downloading, done…).
-    Progress {
-        line: String,
-    },
+    Progress { line: String },
     Done {
         ok: bool,
         message: Option<String>,
         /// Installed but not signed in yet: `agent_login` is the next step.
         needs_login: bool,
     },
+    /// Stopped on request, and the installer is gone: another can start.
+    Cancelled,
 }
 
 /// The installer in flight, so the pane can stop it.
@@ -292,18 +296,26 @@ pub(crate) struct AgentInstall {
 /// Installs Claude Code from the pane with its own installer (the one its
 /// documentation gives: a PowerShell script on Windows, a shell script
 /// elsewhere), for the person's own account, without a terminal. Progress
-/// arrives as `agent-install`. Other kinds of agent are installed by hand.
+/// arrives as `agent-install`. `kind` picks the installer; today only
+/// `claudeCode` has one, and each other kind gets its own here when it is added.
 #[tauri::command]
-pub async fn agent_install(app: AppHandle, install: State<'_, AgentInstall>) -> CmdResult<()> {
+pub async fn agent_install(
+    app: AppHandle,
+    install: State<'_, AgentInstall>,
+    kind: AgentKind,
+) -> CmdResult<()> {
     let config = AgentConfig::load();
-    if config.kind != AgentKind::ClaudeCode {
+    if kind != AgentKind::ClaudeCode || config.command.is_some() {
         return Err(err(
             "AGENT_INSTALL_UNSUPPORTED",
-            format!("{} は、その AI の手順でインストールしてください", config.name()),
+            "この AI は、その AI の手順でインストールしてください",
         ));
     }
-    if let Some(previous) = lock(&install.cancel).take() {
-        previous.cancel();
+    if lock(&install.cancel).is_some() {
+        return Err(err(
+            "AGENT_INSTALL_RUNNING",
+            "インストールが進んでいます。終わるまでお待ちください",
+        ));
     }
     let mut command = if cfg!(windows) {
         let mut c = Command::new("powershell");
@@ -328,6 +340,9 @@ pub async fn agent_install(app: AppHandle, install: State<'_, AgentInstall>) -> 
         .kill_on_drop(true);
     #[cfg(windows)]
     command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    // Its own process group, so stopping it stops the pipeline (curl | bash), not only the shell.
+    #[cfg(unix)]
+    command.process_group(0);
     let mut child = command
         .spawn()
         .map_err(|e| err("AGENT_FAILED", format!("インストールを始められません: {e}")))?;
@@ -352,7 +367,7 @@ pub async fn agent_install(app: AppHandle, install: State<'_, AgentInstall>) -> 
             loop {
                 tokio::select! {
                     () = cancel.cancelled() => {
-                        let _ = child.start_kill();
+                        kill_tree(&mut child);
                         stopped = true;
                         break;
                     }
@@ -370,11 +385,15 @@ pub async fn agent_install(app: AppHandle, install: State<'_, AgentInstall>) -> 
         }
         let status = child.wait().await;
         let stderr = stderr_task.await.unwrap_or_default();
+        // The next installer may start once this one is gone.
+        *lock(&app.state::<AgentInstall>().cancel) = None;
         if stopped {
+            emit(InstallEvent::Cancelled);
             return;
         }
         let installed = find_claude();
-        let ok = status.as_ref().is_ok_and(std::process::ExitStatus::success) && installed.is_some();
+        let ok =
+            status.as_ref().is_ok_and(std::process::ExitStatus::success) && installed.is_some();
         let needs_login = match &installed {
             Some(program) if ok => !logged_in(program).await,
             _ => false,
@@ -396,11 +415,24 @@ pub async fn agent_install(app: AppHandle, install: State<'_, AgentInstall>) -> 
     Ok(())
 }
 
+/// Asks the installer to stop; `agent-install` says `cancelled` once it is gone.
 #[tauri::command]
 pub fn agent_install_cancel(install: State<'_, AgentInstall>) {
-    if let Some(cancel) = lock(&install.cancel).take() {
+    if let Some(cancel) = lock(&install.cancel).as_ref() {
         cancel.cancel();
     }
+}
+
+/// Stops the child and, on Unix, everything it started (its process group).
+fn kill_tree(child: &mut tokio::process::Child) {
+    #[cfg(unix)]
+    if let Some(pid) = child.id() {
+        // `kill(1)` with a negative id signals the whole process group; this crate forbids `unsafe`.
+        let _ = std::process::Command::new("kill")
+            .args(["-KILL", &format!("-{pid}")])
+            .status();
+    }
+    let _ = child.start_kill();
 }
 
 /// Installers colour their output; the pane shows plain lines.

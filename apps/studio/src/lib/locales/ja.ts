@@ -402,6 +402,7 @@ export const ja = {
       install: (name: string) => `${name} を導入する`,
       retry: "もう一度",
       installing: "インストールしています…（1〜2 分）",
+      stopping: "止めています…",
       whatHappens: "あなたのユーザーフォルダーに入ります（管理者権限は不要）。終わるとサインインの画面が出ます。",
     },
   },

@@ -9,7 +9,7 @@
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { AgentApi, AgentEvent, AgentInfo, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
+import type { AgentApi, AgentEvent, AgentInfo, AgentKind, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
 import { t } from "./lib/i18n";
 
 export type AgentPart =
@@ -76,6 +76,8 @@ export type LoginState =
 export type InstallState =
   | { phase: "idle" }
   | { phase: "running"; lines: string[] }
+  /** Asked to stop; the button is back once the installer is gone. */
+  | { phase: "stopping" }
   | { phase: "failed"; message: string };
 
 export type FlowLabel = { id: string; name: string };
@@ -114,7 +116,7 @@ export type AgentState = {
   cancelLogin(): Promise<void>;
   onLoginEvent(event: LoginEvent): void;
   /** Installs the agent with its own installer, then signs in when needed. */
-  startInstall(): Promise<void>;
+  startInstall(kind: AgentKind): Promise<void>;
   cancelInstall(): Promise<void>;
   onInstallEvent(event: InstallEvent): void;
   onEvent(event: AgentEvent): void;
@@ -413,22 +415,27 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         await api.cancelLogin().catch(() => undefined);
       },
 
-      async startInstall() {
+      async startInstall(kind) {
         set({ install: { phase: "running", lines: [] } });
         try {
-          await api.install();
+          await api.install(kind);
         } catch (e) {
           set({ install: { phase: "failed", message: errorText(e) } });
         }
       },
 
       async cancelInstall() {
-        set({ install: { phase: "idle" } });
-        await api.cancelInstall().catch(() => undefined);
+        if (get().install.phase !== "running") return;
+        set({ install: { phase: "stopping" } });
+        await api.cancelInstall().catch(() => set({ install: { phase: "idle" } }));
       },
 
       onInstallEvent(event) {
         const install = get().install;
+        if (event.kind === "cancelled") {
+          if (install.phase === "stopping") set({ install: { phase: "idle" } });
+          return;
+        }
         if (install.phase !== "running") return;
         if (event.kind === "progress") {
           set({ install: { phase: "running", lines: [...install.lines.slice(-19), event.line] } });

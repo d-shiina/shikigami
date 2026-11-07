@@ -323,7 +323,7 @@ export const agent = {
   loginCode: (code: string) => call<void>("agent_login_code", { code }),
   cancelLogin: () => call<void>("agent_login_cancel"),
   /** Runs the agent's own installer in the background; progress arrives through `onInstall`. */
-  install: () => call<void>("agent_install"),
+  install: (kind: AgentKind) => call<void>("agent_install", { kind }),
   cancelInstall: () => call<void>("agent_install_cancel"),
   openUrl: (url: string) => call<void>("agent_open_url", { url }),
   onEvent: (handler: (e: AgentEvent) => void): Promise<UnlistenFn> =>
@@ -335,7 +335,9 @@ export const agent = {
 };
 
 export type LoginEvent = { kind: "url"; url: string } | { kind: "done"; ok: boolean; message: string | null };
-export type InstallEvent = { kind: "progress"; line: string } | { kind: "done"; ok: boolean; message: string | null; needsLogin: boolean };
+/** Which AI to set up; the installer is chosen by this. */
+export type AgentKind = "claudeCode" | "command";
+export type InstallEvent = { kind: "progress"; line: string } | { kind: "done"; ok: boolean; message: string | null; needsLogin: boolean } | { kind: "cancelled" };
 
 export type AgentApi = Omit<typeof agent, "onEvent" | "onLogin" | "onInstall">;
 

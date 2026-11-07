@@ -413,23 +413,23 @@ function SetupCard() {
         </select>
       </label>
       <div className="leading-relaxed text-slate-600">{choice.note()}</div>
-      {install.phase === "running" ? (
+      {install.phase === "running" || install.phase === "stopping" ? (
         <>
           <div className="flex items-center gap-1.5 text-slate-700">
             <Loader2 size={13} className="animate-spin" aria-hidden="true" />
-            {t.agent.setup.installing}
+            {install.phase === "stopping" ? t.agent.setup.stopping : t.agent.setup.installing}
           </div>
-          {install.lines.length > 0 && (
+          {install.phase === "running" && install.lines.length > 0 && (
             <pre className="max-h-24 overflow-y-auto rounded-[3px] bg-sheet px-2 py-1 font-mono text-[10.5px] leading-snug whitespace-pre-wrap text-slate-600">{install.lines.slice(-6).join("\n")}</pre>
           )}
-          <button type="button" onClick={() => void cancel()} className="text-slate-500 hover:text-ink">
+          <button type="button" disabled={install.phase === "stopping"} onClick={() => void cancel()} className="text-slate-500 enabled:hover:text-ink disabled:opacity-50">
             {t.cancel}
           </button>
         </>
       ) : (
         <>
           {install.phase === "failed" && <div className="whitespace-pre-wrap text-shu-600">{install.message}</div>}
-          <button type="button" onClick={() => void start()} className={primary}>
+          <button type="button" onClick={() => void start(choice.kind)} className={primary}>
             <Download size={13} strokeWidth={2} aria-hidden="true" />
             {install.phase === "failed" ? t.agent.setup.retry : t.agent.setup.install(choice.name)}
           </button>
