@@ -32,9 +32,13 @@ shikigami agent uninstall
 ```powershell
 shikigami schedule add scn_01a1… --name "毎朝の受注取り込み" --daily 08:00 --days mon,tue,wed,thu,fri
 shikigami schedule add scn_01a1… --monthly 25@09:00          # -1@18:00 で月末
+shikigami schedule add scn_01a1… --monthly 25@09:00 --on-holiday before   # 休日なら前の営業日
+shikigami schedule add scn_01a1… --monthly 3@09:00 --business-day        # 第 3 営業日（-1 で最終営業日）
+shikigami schedule add scn_01a1… --daily 08:00 --days mon,tue,wed,thu,fri --skip-holidays
 shikigami schedule add scn_01a1… --every 30 --from 09:00 --to 18:00
 shikigami schedule add scn_01a1… --once 2026-11-07T08:00
 shikigami schedule add scn_01a1… --file-added input --pattern "*.xlsx" --file-input file
+shikigami schedule add scn_01a1… --mail-received 受信トレイ --subject-contains 請求書 --mail-input mail
 shikigami schedule list
 shikigami schedule disable sch_…   # enable / remove
 ```
@@ -43,11 +47,42 @@ shikigami schedule disable sch_…   # enable / remove
 
 | `when.kind` | 項目 | 動くとき |
 |---|---|---|
-| `daily` | `at`（"08:00"）、`days`（任意："mon" … "sun" か 月 … 日） | 毎日（またはその曜日）のその時刻 |
-| `monthly` | `day`（1〜31、-1 は月末）、`at` | 毎月。その月にない日（6 月の 31 日）は月末 |
-| `every` | `minutes`、`from` / `to`（任意）、`days`（任意） | `from`、`from` + `minutes`、… `to` まで（なければ一日中） |
+| `daily` | `at`（"08:00"）、`days`（任意："mon" … "sun" か 月 … 日）、`skipHolidays`（任意） | 毎日（またはその曜日）のその時刻 |
+| `monthly` | `day`（1〜31、-1 は月末）、`at`、`businessDay`（任意）、`onHoliday`（任意） | 毎月。その月にない日（6 月の 31 日）は月末 |
+| `every` | `minutes`、`from` / `to`（任意）、`days`（任意）、`skipHolidays`（任意） | `from`、`from` + `minutes`、… `to` まで（なければ一日中） |
 | `once` | `at`（"2026-11-07T08:00"） | 1 回だけ |
 | `fileAdded` | `folder`（フローのフォルダーからの相対パスか絶対パス）、`pattern`（"*.xlsx"）、`input`（任意） | 名前が合う新しいファイル 1 つにつき 1 回。大きさが変わらなくなってから始め、そのフルパスを入力変数 `input` に入れる。エージェントの起動時からあるファイル、Office のロックファイル（`~$…`）、ダウンロード途中のファイルは数えない |
+| `mailReceived` | `folder`（任意、既定は受信トレイ）、`subjectContains`・`fromContains`（任意）、`minutes`（確認の間隔、既定 5）、`via`・`account`（任意、`mail.list` と同じ）、`input`（任意） | 条件に合う新しいメール 1 通につき 1 回。そのメール（`{ id, subject, from, fromAddress, receivedAt, attachments }`）を入力変数 `input` に入れる。エージェントの起動時からあるメールは数えない |
+
+### メールが届いたら
+
+`mailReceived` は `minutes` 分ごとに `mail.list` でフォルダーを見て、前に見たときになかったメールでフローを始めます。この PC の Outlook（クラシック版）を使うので、Outlook を起動してサインインしておきます。Outlook のない PC や業務用のメールボックスは `via: "microsoft365"` と `account`（[office.md](office.md) の「Outlook なしで Microsoft 365 のメールボックスを扱う」）で見ます。
+
+- 入力変数に入ったメールの `id` で、フローの中で添付の保存（`mail.saveAttachments`）・移動（`mail.move`）・返信（`mail.reply`）ができます。処理したメールは移動するか既読にしておくと、受信トレイで見分けやすくなります
+- 見られなかったとき（Outlook が起動していない、サインインが切れた）は `agent status` のそのスケジュールに理由を出し、次の確認でまた見ます
+- エージェントが止まっている間に届いたメールは、次に起動したときの「起動時からあるメール」になり、数えません
+
+```json
+{ "kind": "mailReceived", "folder": "受信トレイ", "subjectContains": "請求書", "minutes": 5, "input": "mail" }
+```
+
+### 祝日と営業日
+
+- `skipHolidays: true`（`daily`・`every`）：日本の祝日（振替休日・国民の休日を含む）と会社の休日には動きません。会社の出勤日は、`days` にない曜日（土曜など）でも動きます
+- `businessDay: true`（`monthly`）：`day` を営業日で数えます。`3` は第 3 営業日、`-1` は最終営業日（`-2` はその前）。営業日は、土日・祝日・会社の休日でない日と、会社の出勤日です
+- `onHoliday`（`monthly`、暦日のとき）：その日が営業日でなければ、`before` は前の営業日、`after` は次の営業日、`skip` はその月は動きません。25 日の支払いを休日なら前の営業日に、といった使い方です
+
+会社の休日と出勤日は、ワークスペースの `holidays.json` に書きます（共有フォルダーのワークスペースなら全部の PC で同じになります）。
+
+```json
+{
+  "formatVersion": 1,
+  "holidays": ["2026-12-29", "2026-12-30", "2026-12-31", "2027-01-02", "2027-01-03"],
+  "workdays": ["2026-11-28"]
+}
+```
+
+日本の祝日は Shikigami に入っています（2020 年以降の法律の決まり。春分・秋分の日は計算で出します）。読めない `holidays.json` は推測で読まず、直るまでどのスケジュールも動きません（`HOLIDAYS_INVALID`）。
 
 時刻は PC の時刻です。ファイルが変わるとエージェントが読み直します。壊れたファイルは推測で読まず、`agent status` に問題を出し、直るまでどのスケジュールも動きません（`SCHEDULE_INVALID`）。
 

@@ -146,7 +146,7 @@ Crate `crates/shikigami-mail`. One `mail.*` set regardless of app. Reading, sort
 | type | Main params | Output |
 |---|---|---|
 | `mail.createDraft` | `to` / `cc` / `bcc` (lists of addresses), `subject`, `body`, `html`, `attachments` (list of full paths) | `{ id }` |
-| `mail.list` | `folder` (e.g. `Inbox/Invoices`; default the Inbox), `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit` (default 50), `includeBody` | A list of mails, newest first: `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
+| `mail.list` | `folder` (e.g. `Inbox/Invoices`; default the Inbox), `unreadOnly`, `since`, `before`, `subjectContains`, `fromContains`, `limit` (default 50), `includeBody` | A list of mails, newest first: `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
 | `mail.saveAttachments` | `id` (an id from `mail.list`), `folder` (where to save), `nameContains` | A list of the full paths saved |
 | `mail.move` | `id`, `folder` (where to move it, e.g. `Inbox/Done`) | `{ id }` (the message's new id) |
 | `mail.markRead` | `id`, `read` (default `true`; `false` marks it unread) | `null` |
@@ -189,7 +189,7 @@ Every step but `mail.send` (which has its own `via`) takes `via: "microsoft365"`
 
 - Ids from one mailbox do not work in the other: use the `id` from a `mail.list` with the same `via` and `account` (`MESSAGE_NOT_FOUND`)
 - Folders are paths of their display names as in Outlook (`受信トレイ/請求書`); the first part may also be one of Graph's names (`inbox`, `drafts`, `sentitems`, `deleteditems`, `archive`, `junkemail`)
-- `receivedAt` and `since` are in this PC's time, as with Outlook
+- `receivedAt`, `since` and `before` are in this PC's time, as with Outlook
 - Attachments added to a reply or forward: up to 3 MB each
 - Errors: `OAUTH_SIGN_IN_REQUIRED`, `MAIL_PERMISSION_DENIED` (no Mail.ReadWrite), `MESSAGE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `MAIL_REQUEST_FAILED`
 

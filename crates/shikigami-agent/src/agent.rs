@@ -5,17 +5,27 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use jiff::ToSpan;
 use jiff::Zoned;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use shikigami_core::{ErrorPayload, FlowId, FlowService, Policy, RunId};
+use shikigami_core::{
+    ErrorPayload, Flow, FlowId, FlowService, Policy, RunId, Step, VarDirection, VarType,
+    VariableDef,
+};
 use shikigami_runtime::record::RunRecorder;
 use shikigami_runtime::{RunOptions, RunOrigin, RunReport, RunTrigger, Runtime};
 use shikigami_secrets::KeyStore;
 use tokio_util::sync::CancellationToken;
 
-use crate::schedule::{Schedule, ScheduleState, Schedules, When, name_matches};
+use crate::schedule::{MAIL_MINUTES, Schedule, ScheduleState, Schedules, When, name_matches};
+
+/// Mails one `mail.list` of a mail trigger reads (the most it gives).
+const MAIL_PAGE: usize = 500;
+/// Pages one look reads at most.
+const MAIL_PAGES: usize = 20;
+use shikigami_core::calendar::Calendar;
 
 /// A run the agent is asked for. Agent runs are unattended: they execute
 /// the published version, as `shikigami run <id>` does.
@@ -55,6 +65,9 @@ pub struct ScheduleStatus {
     pub next: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last: Option<String>,
+    /// Why a mail trigger could not look for mail the last time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
 }
 
 /// What `shikigami agent status` shows.
@@ -100,11 +113,21 @@ struct Active {
 struct Loop {
     schedules: Vec<Schedule>,
     modified: Option<std::time::SystemTime>,
+    /// The company's days off (`holidays.json`) and when it was read.
+    calendar: Calendar,
+    calendar_modified: Option<std::time::SystemTime>,
     next: HashMap<String, Zoned>,
     /// File triggers: files seen per schedule, and new files with the size
     /// they had at the last look (started once the size stops changing).
     seen: HashMap<String, HashSet<PathBuf>>,
     growing: HashMap<String, HashMap<PathBuf, u64>>,
+    /// Mail triggers: when each looks next, the mails it has seen, since
+    /// when it looks, which are looking now, and why the last look failed.
+    mail_next: HashMap<String, Zoned>,
+    mail_seen: HashMap<String, HashSet<String>>,
+    mail_since: HashMap<String, Zoned>,
+    mail_checking: HashSet<String>,
+    mail_problem: HashMap<String, String>,
     problem: Option<String>,
 }
 
@@ -309,6 +332,7 @@ impl Agent {
                         .then(|| state.next.get(&s.id).map(local_text))
                         .flatten(),
                     last: saved.last(&s.id).map(|t| local_text(&t)),
+                    problem: state.mail_problem.get(&s.id).cloned(),
                 })
                 .collect(),
             problem: state.problem.clone(),
@@ -388,7 +412,7 @@ impl Agent {
                 .cloned()
                 .collect();
             for s in &due {
-                match s.when.next_after(now) {
+                match s.when.next_after(now, &state.calendar) {
                     Some(t) => state.next.insert(s.id.clone(), t),
                     None => state.next.remove(&s.id),
                 };
@@ -401,16 +425,35 @@ impl Agent {
         if files {
             self.look_for_files(now);
         }
+        self.look_for_mail(now);
     }
 
     fn reload(&self, now: &Zoned) {
         let path = Schedules::path(self.local_root());
         let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        let holidays = Calendar::path(self.svc.store().root());
+        let holidays_modified = std::fs::metadata(&holidays).and_then(|m| m.modified()).ok();
         let mut state = lock(&self.state);
-        if state.modified == modified && (modified.is_some() || state.schedules.is_empty()) {
+        if state.modified == modified
+            && state.calendar_modified == holidays_modified
+            && (modified.is_some() || state.schedules.is_empty())
+        {
             return;
         }
         state.modified = modified;
+        state.calendar_modified = holidays_modified;
+        match Calendar::load(&holidays) {
+            Ok(calendar) => state.calendar = calendar,
+            Err(e) => {
+                // Like a broken schedules.json: nothing fires on a guess
+                // about which days are off.
+                tracing::warn!(error = %e, "holidays not read");
+                state.problem = Some(e.to_string());
+                state.schedules.clear();
+                state.next.clear();
+                return;
+            }
+        }
         let schedules = match Schedules::load(&path) {
             Ok(s) => {
                 state.problem = None;
@@ -437,7 +480,7 @@ impl Agent {
                 Some(last) if last > *now => last,
                 _ => now.clone(),
             };
-            if let Some(t) = s.when.next_after(&from) {
+            if let Some(t) = s.when.next_after(&from, &state.calendar) {
                 next.insert(s.id.clone(), t);
             }
         }
@@ -446,6 +489,11 @@ impl Agent {
         let ids: HashSet<String> = schedules.iter().map(|s| s.id.clone()).collect();
         state.seen.retain(|id, _| ids.contains(id));
         state.growing.retain(|id, _| ids.contains(id));
+        state.mail_seen.retain(|id, _| ids.contains(id));
+        state.mail_since.retain(|id, _| ids.contains(id));
+        state.mail_problem.retain(|id, _| ids.contains(id));
+        // An edited mail trigger looks again at once.
+        state.mail_next.clear();
         state.schedules = schedules;
         state.next = next;
         let file_schedules: Vec<Schedule> = state
@@ -555,6 +603,225 @@ impl Agent {
         }
     }
 
+    /// Starts a look for each mail trigger that is due (one at a time each).
+    fn look_for_mail(self: &Arc<Self>, now: &Zoned) {
+        let due: Vec<Schedule> = {
+            let mut state = lock(&self.state);
+            let due: Vec<Schedule> = state
+                .schedules
+                .iter()
+                .filter(|s| s.enabled && matches!(s.when, When::MailReceived { .. }))
+                .filter(|s| !state.mail_checking.contains(&s.id))
+                .filter(|s| state.mail_next.get(&s.id).is_none_or(|t| t <= now))
+                .cloned()
+                .collect();
+            for s in &due {
+                let When::MailReceived { minutes, .. } = &s.when else {
+                    continue;
+                };
+                let every = i64::from(minutes.unwrap_or(MAIL_MINUTES));
+                if let Ok(next) = now.checked_add(every.minutes()) {
+                    state.mail_next.insert(s.id.clone(), next);
+                }
+                state.mail_checking.insert(s.id.clone());
+            }
+            due
+        };
+        for s in due {
+            let agent = Arc::clone(self);
+            let now = now.clone();
+            tokio::spawn(async move {
+                let result = agent.list_mail(&s, &now).await;
+                agent.mail_listed(&s, &now, result);
+            });
+        }
+    }
+
+    /// The mails `mail.list` finds for a mail trigger, newest first. More
+    /// than one look's worth are read page by page, each before the oldest
+    /// of the last, so none drop out of the window unseen.
+    async fn list_mail(&self, s: &Schedule, now: &Zoned) -> Result<Vec<Value>, String> {
+        let mut all = Vec::new();
+        let mut ids = HashSet::new();
+        let mut before: Option<String> = None;
+        for _ in 0..MAIL_PAGES {
+            let page = self.list_mail_page(s, now, before.as_deref()).await?;
+            let full = page.len() >= MAIL_PAGE;
+            let oldest = page
+                .last()
+                .and_then(|m| m["receivedAt"].as_str())
+                .map(str::to_owned);
+            let mut added = false;
+            for mail in page {
+                if let Some(id) = mail["id"].as_str()
+                    && ids.insert(id.to_owned())
+                {
+                    all.push(mail);
+                    added = true;
+                }
+            }
+            if !full || !added {
+                return Ok(all);
+            }
+            // The next page ends one second after the oldest mail, so mails
+            // of that same second come again (and are known by their id).
+            before = oldest.and_then(|at| {
+                let at: jiff::civil::DateTime = at.get(..19)?.parse().ok()?;
+                let next = at.checked_add(1.second()).ok()?;
+                Some(next.strftime("%Y-%m-%dT%H:%M:%S").to_string())
+            });
+            if before.is_none() {
+                break;
+            }
+        }
+        tracing::warn!(schedule = %s.name, mails = all.len(), "too many new mails to read in one look");
+        Ok(all)
+    }
+
+    /// One page of [`Self::list_mail`]: mails received before `before`.
+    async fn list_mail_page(
+        &self,
+        s: &Schedule,
+        now: &Zoned,
+        before: Option<&str>,
+    ) -> Result<Vec<Value>, String> {
+        let When::MailReceived {
+            folder,
+            subject_contains,
+            from_contains,
+            via,
+            account,
+            ..
+        } = &s.when
+        else {
+            return Ok(Vec::new());
+        };
+        // From a little before the last look (mail can be filed late);
+        // the first look only learns what is there.
+        let since = lock(&self.state)
+            .mail_since
+            .get(&s.id)
+            .cloned()
+            .unwrap_or_else(|| now.clone());
+        let since = since.checked_sub(30.minutes()).unwrap_or(since);
+        let mut params = Map::new();
+        let mut put = |k: &str, v: Option<Value>| {
+            if let Some(v) = v {
+                params.insert(k.into(), v);
+            }
+        };
+        put("folder", folder.clone().map(Value::from));
+        put("subjectContains", subject_contains.clone().map(Value::from));
+        put("fromContains", from_contains.clone().map(Value::from));
+        put("via", via.clone().map(Value::from));
+        put("account", account.clone());
+        put(
+            "since",
+            Some(
+                since
+                    .datetime()
+                    .strftime("%Y-%m-%dT%H:%M:%S")
+                    .to_string()
+                    .into(),
+            ),
+        );
+        put("before", before.map(Value::from));
+        put("limit", Some(MAIL_PAGE.into()));
+        put("includeBody", Some(false.into()));
+        let mut step = Step::new("mail.list").with_id("look");
+        step.params = params;
+        step.save_as = Some("mails".into());
+        let mut flow = Flow::new(format!("{} (mail check)", s.name));
+        let mut mails = VariableDef::new("mails", VarType::Any);
+        mails.direction = VarDirection::Output;
+        flow.variables = vec![mails];
+        flow.steps = vec![step];
+        let handle = self
+            .runtime
+            .start(flow, RunOptions::default())
+            .map_err(|e| e.message.clone())?;
+        let report = handle.wait().await.map_err(|e| e.message.clone())?;
+        if let Some(error) = report.error {
+            return Err(format!("{}: {}", error.code, error.message));
+        }
+        Ok(report
+            .outputs
+            .get("mails")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    /// Starts a run for each mail the trigger has not seen.
+    fn mail_listed(
+        self: &Arc<Self>,
+        s: &Schedule,
+        now: &Zoned,
+        result: Result<Vec<Value>, String>,
+    ) {
+        let fresh: Vec<Value> = {
+            let mut state = lock(&self.state);
+            state.mail_checking.remove(&s.id);
+            // Turned off, changed or removed while looking (or the file
+            // broke): what was found is not this trigger's to start. A
+            // changed folder or filter learns what is there again at its
+            // next look.
+            let current = state.schedules.iter().find(|c| c.id == s.id);
+            if current != Some(s) {
+                if current.is_some_and(|c| c.when != s.when) {
+                    state.mail_seen.remove(&s.id);
+                    state.mail_since.remove(&s.id);
+                }
+                return;
+            }
+            let mails = match result {
+                Ok(mails) => mails,
+                Err(problem) => {
+                    // Outlook not started, the sign-in expired…: told in
+                    // `agent status`, and tried again at the next look.
+                    tracing::warn!(schedule = %s.name, error = %problem, "could not look for mail");
+                    state.mail_problem.insert(s.id.clone(), problem);
+                    return;
+                }
+            };
+            state.mail_problem.remove(&s.id);
+            state.mail_since.insert(s.id.clone(), now.clone());
+            let ids: HashSet<String> = mails
+                .iter()
+                .filter_map(|m| m["id"].as_str().map(str::to_owned))
+                .collect();
+            let first = !state.mail_seen.contains_key(&s.id);
+            let seen = state.mail_seen.entry(s.id.clone()).or_default();
+            let fresh: Vec<Value> = if first {
+                Vec::new()
+            } else {
+                // Oldest first, as they came.
+                mails
+                    .into_iter()
+                    .rev()
+                    .filter(|m| m["id"].as_str().is_some_and(|id| !seen.contains(id)))
+                    .collect()
+            };
+            // Mails older than the next look's window drop out by themselves.
+            *seen = ids;
+            fresh
+        };
+        let When::MailReceived { input, .. } = &s.when else {
+            return;
+        };
+        for mail in fresh {
+            let mut inputs = Map::new();
+            if let Some(name) = input {
+                let mut mail = mail;
+                if let Some(m) = mail.as_object_mut() {
+                    m.remove("body");
+                }
+                inputs.insert(name.clone(), mail);
+            }
+            self.fire(s, inputs, now);
+        }
+    }
+
     fn fire(self: &Arc<Self>, s: &Schedule, extra: Map<String, Value>, now: &Zoned) {
         let state_path = ScheduleState::path(self.local_root());
         let mut saved = ScheduleState::load(&state_path);
@@ -564,7 +831,7 @@ impl Agent {
         saved.save(&state_path);
         // A file trigger may start several runs; a timed schedule waits for
         // its last run to end.
-        let timed = !matches!(s.when, When::FileAdded { .. });
+        let timed = !matches!(s.when, When::FileAdded { .. } | When::MailReceived { .. });
         if timed
             && self
                 .running()

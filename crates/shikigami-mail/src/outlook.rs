@@ -198,11 +198,17 @@ fn list(mapi: &Object, query: &ListQuery) -> Result<Value, StepError> {
                 // Sorted newest first: everything after is older.
                 break;
             }
+            // Newer than the window: the older ones follow.
+            let too_new = matches!((&query.before, received.as_str()),
+                (Some(before), Some(at)) if at >= before.as_str());
             let unread = item.get("UnRead")?.to_bool();
             let subject = item.get("Subject")?.to_text();
             let from = item.get("SenderName")?.to_text();
             let from_address = item.get("SenderEmailAddress")?.to_text();
-            if (!query.unread_only || unread) && matches(query, &subject, &from, &from_address) {
+            if !too_new
+                && (!query.unread_only || unread)
+                && matches(query, &subject, &from, &from_address)
+            {
                 let attachments = item.get("Attachments")?.object("Attachments")?;
                 let count = attachments.get("Count")?.to_i64().unwrap_or(0);
                 let names: Vec<String> = (1..=count)

@@ -58,11 +58,21 @@ export type PasteOutcome = { outcome?: EditOutcome; problems: AnswerProblem[] };
 
 /** When a schedule fires (docs/schedules.md). Times are local, "08:00". */
 export type ScheduleWhen =
-  | { kind: "daily"; at: string; days?: string[] }
-  | { kind: "monthly"; day: number; at: string }
-  | { kind: "every"; minutes: number; from?: string; to?: string; days?: string[] }
+  | { kind: "daily"; at: string; days?: string[]; skipHolidays?: boolean }
+  | { kind: "monthly"; day: number; at: string; businessDay?: boolean; onHoliday?: "before" | "after" | "skip" }
+  | { kind: "every"; minutes: number; from?: string; to?: string; days?: string[]; skipHolidays?: boolean }
   | { kind: "once"; at: string }
-  | { kind: "fileAdded"; folder: string; pattern: string; input?: string };
+  | { kind: "fileAdded"; folder: string; pattern: string; input?: string }
+  | {
+      kind: "mailReceived";
+      folder?: string;
+      subjectContains?: string;
+      fromContains?: string;
+      via?: "outlook" | "microsoft365";
+      account?: { secret: string; field: "accessToken" };
+      minutes?: number;
+      input?: string;
+    };
 
 /** One schedule of this PC (`schedules.json`). `id` is empty for a new one. */
 export type Schedule = {

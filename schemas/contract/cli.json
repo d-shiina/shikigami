@@ -1061,6 +1061,38 @@
               "long": "monthly"
             },
             {
+              "id": "skip_holidays",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "skip-holidays",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "business_day",
+              "required": false,
+              "takesValue": false,
+              "repeatable": false,
+              "global": false,
+              "long": "business-day",
+              "values": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "id": "on_holiday",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "on-holiday"
+            },
+            {
               "id": "every",
               "required": false,
               "takesValue": true,
@@ -1099,6 +1131,38 @@
               "repeatable": false,
               "global": false,
               "long": "file-added"
+            },
+            {
+              "id": "mail_received",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "mail-received"
+            },
+            {
+              "id": "subject_contains",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "subject-contains"
+            },
+            {
+              "id": "from_contains",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "from-contains"
+            },
+            {
+              "id": "mail_input",
+              "required": false,
+              "takesValue": true,
+              "repeatable": false,
+              "global": false,
+              "long": "mail-input"
             },
             {
               "id": "pattern",

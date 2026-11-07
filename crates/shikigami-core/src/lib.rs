@@ -5,6 +5,7 @@
 //! depend on this crate and never re-implement its logic.
 
 pub mod approval;
+pub mod calendar;
 pub mod call;
 pub mod chat;
 pub mod error;
