@@ -172,7 +172,7 @@ describe("layoutFlow", () => {
     expect(tail.position.y + 24).toBeLessThan(frame.y + frame.height - FOOT_H);
     // Out of the frame's bottom; a hidden line from the head carries a run's trail there.
     expect(layout.edges.find((e) => e.source === "loop" && e.target === "join:loop")?.hidden).toBe(true);
-    expect(layout.edges.some((e) => e.source === "join:loop" && e.target === "after")).toBe(true);
+    expect(layout.edges.find((e) => e.source === "join:loop" && e.target === "after")?.label).toBe("回数を終えたら");
     expect(layout.nodes.find((n) => n.id === "join:loop")?.data).toMatchObject({ shown: false });
   });
 
@@ -213,6 +213,9 @@ describe("layoutFlow", () => {
     const layout = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }], defs);
     expect(layout.edges.filter((e) => !e.hidden).map((e) => `${e.source}->${e.target}`)).toEqual(["loop->slot:loop:body"]);
     expect(layout.frames[0]!.foot).toBe("次の 1 件へ");
+    // Into the "+" at the flow's end there is no line, so nothing says when it leaves.
+    const after = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }, log("x")], defs);
+    expect(after.edges.find((e) => e.source === "join:loop")?.label).toBe("すべて終わったら");
   });
 
   it("frames a loop with everything inside it, apart from what comes after", () => {

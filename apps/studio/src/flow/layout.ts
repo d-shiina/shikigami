@@ -7,7 +7,7 @@
 // in a foot that says it goes round again (no line back up).
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { CASE, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
-import { laneLabel, loopBackLabel } from "../lib/keywords";
+import { laneLabel, loopBackLabel, loopExitLabel } from "../lib/keywords";
 import { nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
@@ -262,6 +262,8 @@ class Builder {
   edges: LayoutEdge[] = [];
   frames: LayoutFrame[] = [];
   private depth = 0;
+  /** What the line out of a loop says ("すべて終わったら"), by its join. */
+  private exitLabels = new Map<string, string>();
 
   constructor(
     private defs: Defs,
@@ -270,6 +272,8 @@ class Builder {
   ) {}
 
   edge(source: string, target: string, label?: string, hidden?: boolean, split?: boolean) {
+    // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
+    if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
     this.edges.push({
       id: `${source}->${target}${label ? `:${label}` : ""}`,
       source,
@@ -404,7 +408,10 @@ class Builder {
     });
     this.depth -= 1;
     // A loop leaves from the bottom of its frame once it is done: no line through its body.
-    if (isLoop) this.edge(id, join, undefined, true);
+    if (isLoop) {
+      this.edge(id, join, undefined, true);
+      this.exitLabels.set(join, loopExitLabel(step));
+    }
     return { entry: id, exits: [join] };
   }
 }
