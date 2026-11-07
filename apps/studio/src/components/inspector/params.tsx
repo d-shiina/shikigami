@@ -376,7 +376,7 @@ function TargetField({
                     if (e.key === "Escape") setMaking(false);
                   }}
                 />
-                <button type="button" className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-[11px] text-on-primary" onClick={() => void make()}>
+                <button type="button" className="shrink-0 rounded-md border border-slate-300 bg-paper text-ink hover:bg-slate-100 px-2.5 py-1 text-[11px]" onClick={() => void make()}>
                   {t.parts.create}
                 </button>
               </div>
@@ -426,10 +426,13 @@ export function PointTools({
   context,
   stepId,
   onChange,
+  large = false,
 }: {
   adapter: string;
   schema: JsonSchema;
   value: unknown;
+  /** As the main action of the place (a part's screen), not a small link by a field. */
+  large?: boolean;
   /** The browser context the node uses (`context` param). */
   context?: string;
   /** The node, to find the 「ページを開く」 above it. */
@@ -481,10 +484,12 @@ export function PointTools({
       setNote({ text: t.picker.failed(e instanceof Error ? e.message : String(e)), warn: true });
     }
   };
-  const button = "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-brand-700 hover:bg-brand-50 disabled:opacity-50";
+  const button = large
+    ? "inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-paper px-3 text-[13px] text-ink hover:bg-slate-100 disabled:opacity-50"
+    : "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-brand-700 hover:bg-brand-50 disabled:opacity-50";
   return (
     <>
-      <span className="ml-auto flex items-center gap-0.5">
+      <span className={large ? "flex items-center gap-2" : "ml-auto flex items-center gap-0.5"}>
         <button
           type="button"
           className={button}
@@ -716,7 +721,7 @@ export function ParamsEditor({
           {error && <div className="text-xs text-shu-600">{error}</div>}
           <button
             type="button"
-            className="rounded-md bg-primary px-2.5 py-0.5 text-xs text-on-primary hover:bg-primary-hover"
+            className="rounded-md border border-slate-300 bg-paper text-ink hover:bg-slate-100 px-2.5 py-0.5 text-xs"
             onClick={() => {
               try {
                 const parsed = JSON.parse(text) as Record<string, unknown>;

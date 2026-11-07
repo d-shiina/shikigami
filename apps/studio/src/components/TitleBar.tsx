@@ -15,6 +15,7 @@ const PAGE_TITLE: Partial<Record<Place, () => string>> = {
   library: () => t.flows,
   flows: () => t.flows,
   review: () => t.awaitingReview,
+  runs: () => t.runs.place,
   secrets: () => t.secrets,
   settings: () => t.shell.settings,
 };

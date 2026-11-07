@@ -117,12 +117,12 @@ Kinds: **Broken** (does not work, or a path dead-ends) / **Missing** / **Noise**
 | U1 | Run in the run window crashes Studio | 1 line | Broken (**fixed in this PR**) |
 | U2 | Put new AI-made flows in review (count a create as an all-new change, so its checks can be answered) | Medium | Broken |
 | U3 | "Open part" from review, the settings table of contents, the "press 導入する below" text | Small | Broken |
-| U4 | The first ten minutes by hand: a first-run empty state (build with AI / build it myself / open a sample), open the node screen (or its required fields) right after adding, show a fresh node as "not set up" rather than an error, let a single run feed the next node | Medium | Missing, Unclear |
-| U5 | Remove program names from the screen: setting keys in sentences, the `forEach` tag and line label, node types under variable links, automatic result names (no `forEach` variable), IDs and rev in the run log, the status bar, the version row, permission help, schedule inputs | Medium | Wording |
-| U6 | Align terms: one name for to-dos / validation / errors, 停止 → 中止, 繰り返し vs ループ, インストール, one name for the AI, banned words in the palette, the error code and English original in the pause panel | Small–medium | Wording |
-| U7 | Warn before publishing with to-dos or a failed run, split publishing from named versions, clear the publish banner, show only published runs in the run window | Medium | Missing, Unclear |
-| U8 | Back to the layout rules: one filled button per surface, one exit from the node screen, move part editing out of the inspector, one form layout and button order, the library header with the AI pane open | Medium | Noise, Twice |
-| U9 | Chart placement: centred at first, no jump after a run, node tools never cut off, the palette inside the window, no attribution | Small–medium | Unclear |
-| U10 | Schedules: no warning without schedules, a page title, no unpublished flows, a plainer word for "agent" | Small | Unclear, Wording |
+| U4 | The first ten minutes by hand: a first-run empty state (build with AI / build it myself / open a sample), open the node screen (or its required fields) right after adding, show a fresh node as "not set up" rather than an error, let a single run feed the next node | Medium | Missing, Unclear (fixed in #142) |
+| U5 | Remove program names from the screen: setting keys in sentences, the `forEach` tag and line label, node types under variable links, automatic result names (no `forEach` variable), IDs and rev in the run log, the status bar, the version row, permission help, schedule inputs | Medium | Wording (fixed in #142) |
+| U6 | Align terms: one name for to-dos / validation / errors, 停止 → 中止, 繰り返し vs ループ, インストール, one name for the AI, banned words in the palette, the error code and English original in the pause panel | Small–medium | Wording (fixed in #142) |
+| U7 | Warn before publishing with to-dos or a failed run, split publishing from named versions, clear the publish banner, show only published runs in the run window | Medium | Missing, Unclear (fixed in #142) |
+| U8 | Back to the layout rules: one filled button per surface, one exit from the node screen, move part editing out of the inspector, one form layout and button order, the library header with the AI pane open | Medium | Noise, Twice (fixed in #142) |
+| U9 | Chart placement: centred at first, no jump after a run, node tools never cut off, the palette inside the window, no attribution | Small–medium | Unclear (fixed in #142) |
+| U10 | Schedules: no warning without schedules, a page title, no unpublished flows, a plainer word for "agent" | Small | Unclear, Wording (fixed in #142) |
 
 U1–U3 are bugs and can be fixed without asking. U4 matters most for selling "build it from scratch by hand". U5 and U6 are mechanical but wide; ship them with a test that no program name reaches on-screen text (like `paramNames.test.ts`).

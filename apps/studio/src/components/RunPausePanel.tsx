@@ -25,7 +25,7 @@ function Button({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "primary" | "danger" | "plain" | "ai"; keys?: string }) {
   const tones = {
     primary: "bg-primary text-on-primary hover:bg-primary-hover disabled:bg-slate-300",
-    ai: "bg-brand-500 text-paper hover:bg-brand-600 disabled:opacity-50",
+    ai: "border border-brand-300 bg-sheet text-brand-700 hover:bg-brand-50 disabled:opacity-50",
     danger: "text-shu-600 hover:bg-shu-50 disabled:text-slate-300",
     plain: "border border-slate-300 bg-sheet text-ink hover:bg-slate-50 disabled:text-slate-300",
   } as const;
@@ -247,14 +247,16 @@ export function RunPausePanel() {
 
       {error && explained && (
         <div className="mt-1.5 flex items-baseline gap-2 text-[13px]">
-          <code className="shrink-0 rounded-md bg-shu-50 px-1.5 text-[12px] font-semibold text-shu-600">{error.code}</code>
+          <span className="mt-[5px] h-2 w-2 shrink-0 rounded-full bg-shu-500" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <div className="break-words font-semibold text-ink">{explained.what}</div>
             {explained.todo && <div className="break-words text-slate-600">{explained.todo}</div>}
             {explained.known && (
               <details className="text-[12px] text-slate-600">
                 <summary className="w-fit cursor-pointer select-none hover:text-ink">{t.pause.original}</summary>
-                <div lang="en" className="break-words font-mono">{error.message}</div>
+                <div lang="en" className="break-words font-mono">
+                  {error.code}: {error.message}
+                </div>
               </details>
             )}
           </div>

@@ -51,8 +51,16 @@ export function freeName(base: string, variables: VariableDef[] | undefined, ste
   for (let n = 2; ; n++) if (!used.has(`${base}${n}`)) return `${base}${n}`;
 }
 
-/** Where a new node of `def` keeps its result, or undefined for a node that returns nothing. */
+/**
+ * Nodes that do something (click, type, open, repeat…) also return a value,
+ * but nobody reads it: they get no variable, so the chart shows no stray
+ * `click` or `forEach`. Only nodes that read or ask for something do.
+ */
+const READS = /^(get|read|list|find|is|exists|query|request|input|select|search|count|download|run)/i;
+
+/** Where a new node of `def` keeps its result, or undefined for a node that returns nothing worth keeping. */
 export function resultName(def: StepTypeDef | undefined, variables: VariableDef[] | undefined, steps: Step[]): string | undefined {
   if (!def?.hasOutput) return undefined;
+  if (!NAMES[def.type] && !READS.test(def.type.split(".").pop() ?? "")) return undefined;
   return freeName(baseName(def.type), variables, steps);
 }

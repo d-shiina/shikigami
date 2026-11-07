@@ -184,6 +184,17 @@ function InputFields({ vars, values, onChange }: { vars: InputVar[]; values: Rec
 
 function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSaved: (list: ScheduleList) => void; onCancel: () => void }) {
   const summaries = useStudio((s) => s.summaries);
+  // Only a published version runs unattended: the others are listed, but cannot be chosen.
+  const [published, setPublished] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    let live = true;
+    void Promise.all(summaries.map((s) => api.publishedState(s.id).then((p) => (p ? s.id : null), () => null))).then(
+      (ids) => live && setPublished(new Set(ids.filter((id): id is string => id !== null))),
+    );
+    return () => {
+      live = false;
+    };
+  }, [summaries]);
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [vars, setVars] = useState<InputVar[]>([]);
@@ -230,11 +241,14 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
           <option value="" disabled>
             {r.chooseFlow}
           </option>
-          {summaries.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
+          {summaries.map((s) => {
+            const off = published !== null && !published.has(s.id) && s.id !== initial.flowId;
+            return (
+              <option key={s.id} value={s.id} disabled={off}>
+                {off ? `${s.name}（${t.notPublishedBadge}）` : s.name}
+              </option>
+            );
+          })}
         </select>
       </Labeled>
       <Labeled label={r.name}>
@@ -277,7 +291,7 @@ function ScheduleForm({ initial, onSaved, onCancel }: { initial: Schedule; onSav
   );
 }
 
-function AgentCard({ status, onChange }: { status: AgentStatus | null | undefined; onChange: (s: AgentStatus | null) => void }) {
+function AgentCard({ status, onChange, idle }: { status: AgentStatus | null | undefined; onChange: (s: AgentStatus | null) => void; idle: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const r = t.runs;
@@ -294,11 +308,12 @@ function AgentCard({ status, onChange }: { status: AgentStatus | null | undefine
   };
   if (status === undefined) return null;
   return (
-    <div className={`mb-4 rounded-lg border p-3 ${status ? "border-slate-200 bg-sheet" : "border-shu-600/40 bg-shu-600/5"}`}>
+    // Stopped is only a problem when there is something to run.
+    <div className={`mb-4 rounded-lg border p-3 ${status || idle ? "border-slate-200 bg-sheet" : "border-shu-600/40 bg-shu-600/5"}`}>
       <div className="flex items-center gap-2">
-        <span className={`h-2 w-2 shrink-0 rounded-full ${status ? "bg-moegi-500" : "bg-shu-500"}`} aria-hidden="true" />
+        <span className={`h-2 w-2 shrink-0 rounded-full ${status ? "bg-moegi-500" : idle ? "bg-slate-400" : "bg-shu-500"}`} aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{status ? r.agentOn : r.agentOff}</p>
+          <p className="text-sm font-medium">{status ? r.agentOn : idle ? r.agentIdle : r.agentOff}</p>
           {status && <p className="text-[11px] text-slate-500">{r.agentOnDetail(shortTime(status.startedAt))}</p>}
         </div>
         {status ? (
@@ -488,7 +503,7 @@ export function RunsPage() {
           )}
         </div>
         <p className="mb-4 text-xs text-slate-600">{r.intro}</p>
-        <AgentCard status={status} onChange={setStatus} />
+        <AgentCard status={status} onChange={setStatus} idle={(list?.schedules.length ?? 0) === 0} />
         {error && <p className="mb-3 text-xs text-shu-600">{error}</p>}
         {editing && (
           <div className="mb-4">
@@ -515,7 +530,6 @@ export function RunsPage() {
                 );
               })}
             </ul>
-            <p className="mt-4 text-[11px] text-slate-500 select-all">{r.stored(list.path)}</p>
           </>
         )}
       </div>

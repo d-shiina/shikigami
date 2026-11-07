@@ -1,6 +1,6 @@
 import type { Step } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { CALL_BAR_H, knownVariables, NODE_HEAD_H, NODE_PAD_B, nodeHeight, nodeRows, ROW_H, splitRefs } from "./nodeRows";
+import { CALL_BAR_H, knownVariables, NODE_HEAD_H, NODE_PAD_B, nodeHeight, nodeRows, ROW_H, splitRefs, unsetParams } from "./nodeRows";
 
 const set: Step = { id: "s1", type: "variable.set", params: { name: "total", expression: "total + invoice.amount" } };
 const loop: Step = { id: "s2", type: "control.forEach", params: { items: "invoices", itemVar: "invoice" }, blocks: { body: [set] } };
@@ -58,5 +58,14 @@ describe("nodeRows", () => {
     ]);
     expect(splitRefs("subtotal + items[0].金額", ["total", "items"])).toEqual(["subtotal + ", "items[0].金額", ""]);
     expect(splitRefs("x.total", ["total"])).toEqual(["x.total"]);
+  });
+
+  it("finds the required settings still empty, and gives them a row", () => {
+    const def = { type: "browser.fill", category: "browser", label: "", description: "", risk: "safe", paramsSchema: { required: ["target", "value"], properties: { target: {}, value: {} } } } as never;
+    const fresh = { id: "s", type: "browser.fill", params: { target: { label: "" } } };
+    expect(unsetParams(fresh, def)).toEqual(["target", "value"]);
+    expect(nodeRows(fresh, def).filter((r) => r.kind === "param" && r.unset).map((r) => (r.kind === "param" ? r.key : ""))).toEqual(["target", "value"]);
+    expect(unsetParams({ ...fresh, params: { target: { role: "textbox", name: "注文番号" }, value: "{{ no }}" } }, def)).toEqual([]);
+    expect(unsetParams({ id: "o", type: "browser.open", params: { url: "https://" } }, { ...(def as object), paramsSchema: { required: ["url"] } } as never)).toEqual(["url"]);
   });
 });

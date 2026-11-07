@@ -250,7 +250,7 @@ export function VariablesPanel() {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <button type="submit" className="rounded-md bg-primary px-3 py-1 text-xs text-on-primary hover:bg-primary-hover">
+        <button type="submit" className="rounded-md border border-slate-300 bg-paper text-ink hover:bg-slate-100 px-3 py-1 text-xs">
           {t.addVariable}
         </button>
       </form>
