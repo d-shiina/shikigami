@@ -37,6 +37,15 @@ export function NodeEditor() {
   useEffect(() => {
     if (editing && !step) close();
   }, [editing, step, close]);
+  // The settings pane shows the selected node: a link to another node in it
+  // (「変数のつながり」) moves the whole editor there, never only the middle.
+  const selection = useStudio((s) => s.selection);
+  const openEditor = useStudio((s) => s.openEditor);
+  useEffect(() => {
+    if (!editing) return;
+    if (selection?.kind === "step" && selection.stepId !== editing) openEditor(selection.stepId);
+    else if (selection?.kind !== "step") close();
+  }, [editing, selection, openEditor, close]);
   if (!step?.id) return null;
   return <Editor key={step.id} step={step} />;
 }

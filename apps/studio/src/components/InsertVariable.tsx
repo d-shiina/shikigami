@@ -36,6 +36,25 @@ export function setActiveField(field: ActiveField | null) {
   activeField = field;
   for (const w of fieldWatchers) w();
 }
+/** Forgets `field` when it is the one registered: its input is gone (the row removed, the editor closed). */
+export function dropActiveField(field: ActiveField) {
+  if (activeField === field) setActiveField(null);
+}
+/** A field that registers on focus and forgets itself when it unmounts. */
+export function useFieldRegistration(label: string | undefined, insert: (expression: string) => void): () => void {
+  const self = useRef<ActiveField | null>(null);
+  const latest = useRef(insert);
+  latest.current = insert;
+  useEffect(() => () => {
+    if (self.current) dropActiveField(self.current);
+  }, []);
+  return () => {
+    if (!label) return;
+    self.current ??= { label, insert: (expression) => latest.current(expression) };
+    self.current.label = label;
+    setActiveField(self.current);
+  };
+}
 export function useActiveField(): ActiveField | null {
   return useSyncExternalStore(
     (w) => {
@@ -134,8 +153,7 @@ export function TemplateInput({
     if (live !== null) requestAnimationFrame(() => input.current?.setSelectionRange(caret.current, caret.current));
   };
   // The draft the registered insert sees is the latest one.
-  const latest = useRef({ draft, insert });
-  latest.current = { draft, insert };
+  const register = useFieldRegistration(label, insert);
   const field = (
     <input
       ref={input}
@@ -143,7 +161,7 @@ export function TemplateInput({
       value={draft}
       placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
-      onFocus={() => label && setActiveField({ label, insert: (expression) => latest.current.insert(expression) })}
+      onFocus={register}
       onBlur={(e) => {
         caret.current = e.target.selectionStart;
         commit();
