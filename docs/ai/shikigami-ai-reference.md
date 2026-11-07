@@ -572,6 +572,16 @@ Example: `{"type":"db.query","params":{"connection":"DSN=基幹システム;Trus
 
 ### desktop.*
 
+#### desktop.check (チェック状態)
+
+Sets the checkbox `target` to checked (`checked: true`, the default) or unchecked (`checked: false`), without the mouse. Does nothing when it already is, so running the flow twice never flips it back (desktop.click would). Fails with NOT_A_CHECKBOX when the target has no checked state.
+
+Params:
+- `target`*: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
+- `checked`: true | false — チェックを付ける（外すときは false、既定は付ける）
+Example: `{"type":"desktop.check","name":"メール送信をオン","params":{"target":{"window":{"process":"billing.exe"},"element":{"role":"checkbox","name":"メール送信"}}}}`
+Example: `{"type":"desktop.check","name":"印刷をオフ","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"chkPrint"}},"checked":false}}`
+
 #### desktop.click (クリック)
 
 Activates `target` without the mouse: presses a button or menu item, toggles a checkbox, selects a list item or tab, expands a tree item. Works even when the window is behind others. Waits until the element exists and is enabled. For elements that only react to a real mouse click, use desktop.mouseClick.
@@ -746,6 +756,22 @@ Params:
 - `value`*: text or { secret*: text, field*: "username" | "password" | "totp" } [may be a secret] — 入力する文字。パスワードは登録済みシークレット { "secret": "名前", "field": "password" }
 Example: `{"type":"desktop.setValue","name":"顧客コードを入力","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"txtCustomer"}},"value":"{{ customerCode }}"}}`
 Example: `{"type":"desktop.setValue","name":"パスワードを入力","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"txtPassword"}},"value":{"secret":"請求システム","field":"password"}}}`
+
+#### desktop.setWindow (ウィンドウ状態)
+
+Changes how the window `target.window` is shown: `state` "maximized", "minimized" or "normal"; `x` / `y` / `width` / `height` (screen pixels; what is left out stays) move and size it (a maximized window is restored first); `front: true` brings it to the front. Output: { state, x, y, width, height } afterwards. Use it before steps whose places depend on the window's size (desktop.mouseClick with point, images), so every run starts from the same layout.
+
+Params:
+- `target`*: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
+- `state`: "maximized" | "minimized" | "normal" — 最大化・最小化・元のサイズ
+- `front`: true | false — 前面に出す
+- `x`: whole number — 左端の位置（画面の左からのピクセル）
+- `y`: whole number — 上端の位置（画面の上からのピクセル）
+- `width`: whole number — 幅（ピクセル）
+- `height`: whole number — 高さ（ピクセル）
+Output: yes (saveAs)
+Example: `{"type":"desktop.setWindow","name":"請求システムを最大化","params":{"target":{"window":{"process":"billing.exe"}},"state":"maximized"}}`
+Example: `{"type":"desktop.setWindow","name":"決まった位置と大きさにする","params":{"target":{"window":{"title":"販売管理"}},"x":0,"y":0,"width":1280,"height":800,"front":true}}`
 
 #### desktop.type (キーボード入力)
 
@@ -1329,6 +1355,24 @@ Example: `{"type":"pdf.split","params":{"path":"input/まとめて読み取り.p
 
 
 ### process.*
+
+#### process.kill (プロセス終了)
+
+Ends every running process of the program `name` (e.g. "sales.exe"; case and .exe do not matter) with its child processes, without asking it to save. Use it to restart an application that hangs (then desktop.launch it again). Outputs { killed } (0 when it was not running, which is not an error). Unsaved work in that program is lost. A process of another user or of an administrator fails with PROCESS_KILL_FAILED.
+
+Params:
+- `name`*: text
+Output: yes (saveAs)
+Example: `{"type":"process.kill","params":{"name":"sales.exe"}}`
+
+#### process.list (プロセス一覧)
+
+Outputs the programs running on this PC as [{ pid, name }]. With `name` (e.g. "EXCEL" or "EXCEL.EXE"; case and .exe do not matter) only that program's processes, so `length(list) > 0` tells whether it is running.
+
+Params:
+- `name`: text
+Output: yes (saveAs)
+Example: `{"type":"process.list","params":{"name":"EXCEL"},"saveAs":"excels"}`
 
 #### process.run (プログラム実行)
 

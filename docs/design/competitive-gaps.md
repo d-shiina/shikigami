@@ -31,9 +31,9 @@
 | G4 | P1 | 例外処理 | 複数のノードをまとめて再試行できない（`control.group` の `retry` は黙って無視される） | UiPath：Retry Scope／PAD：「エラー発生時」のブロックの再試行 | 済み（#153） |
 | G5 | P1 | ログ | 無人実行で失敗したときの画面が残らない（Studio の一時停止のときだけ撮る） | UiPath：REFramework の Take Screenshot・Orchestrator のログ／AA：エラー時のスクリーンショット | 済み |
 | G6 | P1 | ブラウザ | クリックの種類（右クリック・ダブルクリック・Ctrl / Shift を押しながら）がない | UiPath：Click の ClickType・MouseButton・KeyModifiers／PAD：「Web ページのリンクまたはボタンをクリック」のクリックの種類 | 済み |
-| G7 | P1 | ブラウザ・デスクトップ | チェックボックスを「オンにする／オフにする」ができない（クリックで切り替えるだけなので、2 回流すと逆になる） | UiPath：Check / Uncheck／PAD：「Web ページのチェック ボックスの状態を設定します」「ウィンドウのチェック ボックスの状態を設定」／WinActor：チェックボックス操作 | ブラウザは済み・デスクトップは着手順 5 |
-| G8 | P1 | デスクトップ | ウィンドウの最大化・最小化・元に戻す・前面に出す・移動・サイズ変更がない | WinActor：ウィンドウ状態変更・ウィンドウ位置変更／UiPath：Maximize / Minimize / Restore / Move Window / Activate／PAD：「ウィンドウの状態の設定」「ウィンドウの移動」「ウィンドウのサイズ変更」「ウィンドウにフォーカスする」 | 着手順 5 |
-| G9 | P1 | システム | 動いているプロセスの終了・有無の確認がない（固まった業務アプリを落として立ち上げ直せない） | UiPath：Kill Process・Get Processes／PAD：「プロセスを終了する」「プロセスを待機する」／WinActor：プロセス終了 | 着手順 5 |
+| G7 | P1 | ブラウザ・デスクトップ | チェックボックスを「オンにする／オフにする」ができない（クリックで切り替えるだけなので、2 回流すと逆になる） | UiPath：Check / Uncheck／PAD：「Web ページのチェック ボックスの状態を設定します」「ウィンドウのチェック ボックスの状態を設定」／WinActor：チェックボックス操作 | 済み |
+| G8 | P1 | デスクトップ | ウィンドウの最大化・最小化・元に戻す・前面に出す・移動・サイズ変更がない | WinActor：ウィンドウ状態変更・ウィンドウ位置変更／UiPath：Maximize / Minimize / Restore / Move Window / Activate／PAD：「ウィンドウの状態の設定」「ウィンドウの移動」「ウィンドウのサイズ変更」「ウィンドウにフォーカスする」 | 済み |
+| G9 | P1 | システム | 動いているプロセスの終了・有無の確認がない（固まった業務アプリを落として立ち上げ直せない） | UiPath：Kill Process・Get Processes／PAD：「プロセスを終了する」「プロセスを待機する」／WinActor：プロセス終了 | 済み |
 | G10 | P1 | Excel | 行・列の挿入と削除、範囲のクリア、シートの削除・名前変更・コピーがない | WinActor：Excel 操作（行削除・シート名変更・シートコピー…）／UiPath：Insert/Delete Rows・Delete Range・Rename Sheet・Copy Sheet／PAD：「Excel ワークシートから行を削除」など | 着手順 6 |
 | G11 | P1 | Excel | `.xls`・パスワード付きのブックが開けない、CSV や `.xlsx` への変換（名前を付けて保存）がない | UiPath：Save Workbook As・Password／PAD：「Excel の起動」のパスワード・「Excel を閉じる」の名前を付けて保存 | 着手順 6 |
 | G12 | P1 | 人とのやりとり | フローの途中で複数の項目（選択肢・日付・チェック）を一度に入れてもらう画面がない（`dialog.input` は 1 行だけ） | UiPath：Create Form／PAD：「カスタム フォームを表示」／WinActor：ユーザー入力（複数項目） | 着手順 7 |
@@ -78,7 +78,7 @@
 
 ### G6・G7・G20・G21 ブラウザ・デスクトップの細かい操作
 
-**対応**：ブラウザの分は済み。デスクトップのチェックボックスは G8・G9 と一緒に。
+**対応**：済み（#158、デスクトップのチェックボックス `desktop.check` は G8・G9 と一緒に）。
 
 
 - `browser.click` に `button`（`left` / `right`）・`double`・`modifiers`（`["Control"]` など）。`desktop.mouseClick` の書き方にそろえる
@@ -87,6 +87,8 @@
 - 1 文字ずつ打つのは `browser.fill` に `typing: true`（キーの間隔は固定）
 
 ### G8・G9 ウィンドウとプロセス
+
+**対応**：済み。`desktop.setWindow`（ウィンドウ状態）・`process.list`（プロセス一覧）・`process.kill`（プロセス終了、policy の `apps` で絞れる）。
 
 - `desktop.setWindow`（`target` の窓、`state`: `maximized` / `minimized` / `normal`、`front: true`、`x` / `y` / `width` / `height`）。画面の大きさで部品の位置が変わるアプリを、毎回同じ大きさにしてから操作できる
 - `process.kill`（`name` または `pid`、危険度 Dangerous、`policy.json` の許可した program と同じ確認）と、`process.list`（`name` で絞って `{ pid, name, startedAt }` の一覧）。固まった業務アプリを落として `desktop.launch` で立ち上げ直す書き方を docs に

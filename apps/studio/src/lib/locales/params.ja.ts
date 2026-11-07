@@ -156,6 +156,9 @@ export const paramsJa = {
   } as Record<string, string>,
   /** Names that differ by node: what `path` or `to` is depends on what the node does with it. */
   for: {
+    "desktop.setWindow": { state: "ウィンドウの状態", front: "前面に表示", x: "左端の位置", y: "上端の位置", width: "幅", height: "高さ" },
+    "process.list": { name: "プログラム名" },
+    "process.kill": { name: "プログラム名" },
     "browser.navigate": { action: "移動先" },
     "variable.set": { name: "変数" },
     "control.switch": { value: "比べる値" },
@@ -206,7 +209,7 @@ export const paramsJa = {
   choices: {
     action: { back: "戻る", forward: "進む", reload: "再読み込み" },
     level: { debug: "詳細", info: "情報", warn: "警告", warning: "警告", error: "エラー" },
-    state: { visible: "表示されている", hidden: "表示されていない", attached: "ページにある", detached: "ページから消えた", enabled: "操作できる" },
+    state: { visible: "表示されている", hidden: "表示されていない", attached: "ページにある", detached: "ページから消えた", enabled: "操作できる", maximized: "最大化", minimized: "最小化", normal: "元のサイズ" },
     dialog: { accept: "OK", dismiss: "キャンセル" },
     match: { "": "含む（既定）", contains: "含む", exact: "完全一致", prefix: "で始まる", suffix: "で終わる", pattern: "パターン（正規表現）" },
     to: { top: "一番上", bottom: "一番下" },
