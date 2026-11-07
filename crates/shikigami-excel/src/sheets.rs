@@ -128,7 +128,8 @@ fn sheet_refs(formula: &str, name: &str) -> Vec<std::ops::Range<usize>> {
         }
         let starts_word = i == 0 || {
             let before = formula[..i].chars().next_back().unwrap_or(' ');
-            !(before.is_alphanumeric() || matches!(before, '_' | '.' | '\'' | '!' | '['))
+            // `]` ends a workbook name: `[Other.xlsx]Data!A1` is not ours.
+            !(before.is_alphanumeric() || matches!(before, '_' | '.' | '\'' | '!' | '[' | ']'))
         };
         if starts_word {
             for candidate in [quoted_name.as_str(), name] {
@@ -186,7 +187,91 @@ pub fn rename_refs(formula: &str, old: &str, new: &str) -> Option<String> {
 }
 
 fn refers_to(formula: &str, name: &str) -> bool {
-    !sheet_refs(formula, name).is_empty()
+    !sheet_refs(formula, name).is_empty() || in_3d_ref(formula, name)
+}
+
+/// Whether `formula` has a reference across sheets (`Jan:Mar!A1`,
+/// `'4月:6月'!A1`) with `name` at one end, outside string literals. Those
+/// are not rewritten, so renaming or deleting such a sheet is refused.
+fn in_3d_ref(formula: &str, name: &str) -> bool {
+    let chars: Vec<char> = formula.chars().collect();
+    let ends = |span: &str| {
+        span.contains(':')
+            && span
+                .split(':')
+                .any(|part| part.trim().eq_ignore_ascii_case(name))
+    };
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '"' => {
+                i += 1;
+                while i < chars.len() {
+                    if chars[i] == '"' {
+                        if chars.get(i + 1) == Some(&'"') {
+                            i += 2;
+                            continue;
+                        }
+                        break;
+                    }
+                    i += 1;
+                }
+                i += 1;
+            }
+            '\'' => {
+                let mut text = String::new();
+                i += 1;
+                while i < chars.len() {
+                    if chars[i] == '\'' {
+                        if chars.get(i + 1) == Some(&'\'') {
+                            text.push('\'');
+                            i += 2;
+                            continue;
+                        }
+                        break;
+                    }
+                    text.push(chars[i]);
+                    i += 1;
+                }
+                i += 1;
+                // A sheet name cannot hold `:`, so a quoted one that does is a span.
+                if chars.get(i) == Some(&'!') && !text.starts_with('[') && ends(&text) {
+                    return true;
+                }
+            }
+            c if c.is_alphanumeric() || c == '_' => {
+                let start = i;
+                while i < chars.len()
+                    && (chars[i].is_alphanumeric() || matches!(chars[i], '_' | '.' | ':'))
+                {
+                    i += 1;
+                }
+                let after_sheet = start > 0 && matches!(chars[start - 1], '!' | ']' | '.');
+                let word: String = chars[start..i].iter().collect();
+                if chars.get(i) == Some(&'!') && !after_sheet && ends(&word) {
+                    return true;
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    false
+}
+
+fn in_3d_anywhere(workbook: &Workbook, name: &str) -> bool {
+    workbook.sheet_collection().iter().any(|sheet| {
+        sheet
+            .cells()
+            .iter()
+            .any(|c| c.is_formula() && in_3d_ref(c.formula(), name))
+            || sheet
+                .defined_names()
+                .iter()
+                .any(|d| in_3d_ref(&d.address(), name))
+    }) || workbook
+        .defined_names()
+        .iter()
+        .any(|d| in_3d_ref(&d.address(), name))
 }
 
 /// Points every formula and named range of the workbook that references
@@ -316,6 +401,13 @@ pub fn rename_sheet(workbook: &mut Workbook, old: &str, new: &str) -> Result<boo
     {
         return Err(sheet_exists(new));
     }
+    if in_3d_anywhere(workbook, old) {
+        return Err(StepError::permanent(
+            "SHEET_IN_3D_REFERENCE",
+            format!("formulas use the sheet '{old}' at the end of a reference across sheets (like {old}:…!A1)"),
+        )
+        .with_details(json!({ "hint": "Those references are not rewritten here. Open the workbook in Excel and run the step again: Excel then renames the sheet itself." })));
+    }
     workbook
         .sheet_mut(index)
         .map_err(|e| StepError::permanent("INTERNAL", e.to_string()))?
@@ -357,6 +449,14 @@ pub fn copy_sheet(workbook: &mut Workbook, from: &str, to: &str) -> Result<(), S
     for view in copy.sheet_views_mut().sheet_view_list_mut() {
         view.set_tab_selected(false);
     }
+    // References of the copy to its own sheet point at the copy.
+    for cell in copy.cells_mut() {
+        if cell.is_formula()
+            && let Some(formula) = rename_refs(cell.formula(), from, to)
+        {
+            cell.set_formula(formula);
+        }
+    }
     for defined in copy.defined_names_mut() {
         if let Some(address) = rename_refs(&defined.address(), from, to) {
             defined.set_address(address);
@@ -371,6 +471,30 @@ pub fn copy_sheet(workbook: &mut Workbook, from: &str, to: &str) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leaves_other_workbooks_and_spots_references_across_sheets() {
+        assert_eq!(
+            rename_refs("[Other.xlsx]Data!A1+Data!B1", "Data", "D"),
+            Some("[Other.xlsx]Data!A1+'D'!B1".into())
+        );
+        assert!(!refers_to("[Other.xlsx]Data!A1", "Data"));
+        for formula in [
+            "SUM(Jan:Mar!A1)",
+            "SUM('Jan:Mar'!A1)",
+            "SUM(jan:Mar!A1)",
+            "SUM(Feb:Mar!A1, Jan:Jan!B2)",
+        ] {
+            assert!(
+                in_3d_ref(formula, "Jan") || formula.contains("Feb"),
+                "{formula}"
+            );
+        }
+        assert!(in_3d_ref("SUM(Jan:Mar!A1)", "Mar"));
+        assert!(!in_3d_ref("SUM(Jan!A1:Jan!B2)", "Jan"));
+        assert!(!in_3d_ref("\"Jan:Mar!A1\"&Jan!A1", "Jan"));
+        assert!(!in_3d_ref("SUM(A1:B2)", "A1"));
+    }
 
     #[test]
     fn finds_sheet_references_outside_strings() {

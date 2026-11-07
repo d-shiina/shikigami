@@ -10,15 +10,15 @@ use shikigami_com::{GaveUp, Object, Session, Var, run_on_sta};
 use shikigami_runtime::StepError;
 use tokio_util::sync::CancellationToken;
 
-use crate::{Draft, ListQuery, MAX_BODY_CHARS, Request, SaveQuery, free_name, matches};
+use crate::{
+    Answer, Draft, ListQuery, MAX_BODY_CHARS, MAX_SCANNED, Request, SaveQuery, free_name, matches,
+};
 
 const OL_FOLDER_INBOX: i32 = 6;
+const OL_FOLDER_DELETED_ITEMS: i32 = 3;
 const OL_MAIL_ITEM: i32 = 0;
 /// `Class` of a mail message (other items: meeting requests, reports, ...).
 const OL_MAIL: i64 = 43;
-/// Most items looked at by one mail.list, whatever the filters.
-const MAX_SCANNED: usize = 5_000;
-
 pub fn run(
     request: Request,
     timeout: Duration,
@@ -26,7 +26,7 @@ pub fn run(
 ) -> Result<Value, StepError> {
     // A send that runs out of time may still go out when Outlook gets to
     // it, so it is never retried (it could be sent twice).
-    let sending = matches!(request, Request::Send(_));
+    let sending = matches!(request, Request::Send(_) | Request::SendDraft { .. });
     run_on_sta(
         "shikigami-outlook-com",
         timeout,
@@ -45,6 +45,45 @@ pub fn run(
                 Request::Send(draft) => send(&app, &draft, session),
                 Request::List(query) => list(&mapi, &query),
                 Request::Save(query) => save_attachments(&mapi, &query, session),
+                Request::Move { id, folder: to } => {
+                    let target = folder(&mapi, Some(&to))?;
+                    let moved =
+                        message(&mapi, &id)?.object("Move", vec![Var::from_object(&target)])?;
+                    Ok(json!({ "id": moved.get("EntryID")?.to_text() }))
+                }
+                Request::MarkRead { id, read } => {
+                    let item = message(&mapi, &id)?;
+                    item.put("UnRead", Var::bool(!read))?;
+                    item.call("Save", vec![])?;
+                    Ok(Value::Null)
+                }
+                Request::Delete { id } => {
+                    // Outlook moves it to Deleted Items, but deletes one
+                    // already there for good: leave that one as it is.
+                    let item = message(&mapi, &id)?;
+                    let deleted = mapi
+                        .object("GetDefaultFolder", vec![Var::i32(OL_FOLDER_DELETED_ITEMS)])?
+                        .get("EntryID")?
+                        .to_text();
+                    let parent = item
+                        .get("Parent")?
+                        .object("Parent")?
+                        .get("EntryID")?
+                        .to_text();
+                    if parent != deleted {
+                        item.call("Delete", vec![])?;
+                    }
+                    Ok(Value::Null)
+                }
+                Request::Reply(answer) => respond(&mapi, &answer, false, session),
+                Request::Forward(answer) => respond(&mapi, &answer, true, session),
+                Request::SendDraft { id } => {
+                    message(&mapi, &id)?.call("Send", vec![]).map_err(|e| {
+                        StepError::permanent("MAIL_SEND_FAILED", format!("Outlook did not send the message: {}", e.message))
+                            .with_details(json!({ "hint": "Outlook may have asked whether a program may send mail; ask the user to allow it, or check the addresses." }))
+                    })?;
+                    Ok(Value::Null)
+                }
             }
         },
         |gave_up| {
@@ -159,11 +198,17 @@ fn list(mapi: &Object, query: &ListQuery) -> Result<Value, StepError> {
                 // Sorted newest first: everything after is older.
                 break;
             }
+            // Newer than the window: the older ones follow.
+            let too_new = matches!((&query.before, received.as_str()),
+                (Some(before), Some(at)) if at >= before.as_str());
             let unread = item.get("UnRead")?.to_bool();
             let subject = item.get("Subject")?.to_text();
             let from = item.get("SenderName")?.to_text();
             let from_address = item.get("SenderEmailAddress")?.to_text();
-            if (!query.unread_only || unread) && matches(query, &subject, &from, &from_address) {
+            if !too_new
+                && (!query.unread_only || unread)
+                && matches(query, &subject, &from, &from_address)
+            {
                 let attachments = item.get("Attachments")?.object("Attachments")?;
                 let count = attachments.get("Count")?.to_i64().unwrap_or(0);
                 let names: Vec<String> = (1..=count)
@@ -197,15 +242,79 @@ fn list(mapi: &Object, query: &ListQuery) -> Result<Value, StepError> {
     Ok(Value::Array(out))
 }
 
+/// The message (or draft) with this EntryID.
+fn message(mapi: &Object, id: &str) -> Result<Object, StepError> {
+    mapi.object("GetItemFromID", vec![Var::str(id)]).map_err(|_| {
+        StepError::permanent("MESSAGE_NOT_FOUND", "there is no message with that id")
+            .with_details(json!({ "hint": "Use an `id` from mail.list (or the draft step) in this run; it changes when the message is moved." }))
+    })
+}
+
+/// `BodyFormat` of an HTML message.
+const OL_FORMAT_HTML: i64 = 2;
+
+/// A reply or forward saved in Drafts, the body above the quoted message.
+fn respond(
+    mapi: &Object,
+    answer: &Answer,
+    forward: bool,
+    session: &Session,
+) -> Result<Value, StepError> {
+    session.check()?;
+    let original = message(mapi, &answer.id)?;
+    let action = match (forward, answer.all) {
+        (true, _) => "Forward",
+        (false, true) => "ReplyAll",
+        (false, false) => "Reply",
+    };
+    let item = original.object(action, vec![])?;
+    if forward {
+        let recipients = item.get("Recipients")?.object("Recipients")?;
+        for address in &answer.to {
+            recipients.call("Add", vec![Var::str(address)])?;
+        }
+    }
+    if !answer.cc.is_empty() {
+        let cc = item.get("CC")?.to_text();
+        let mut all: Vec<&str> = cc
+            .split(';')
+            .map(str::trim)
+            .filter(|a| !a.is_empty())
+            .collect();
+        all.extend(answer.cc.iter().map(String::as_str));
+        item.put("CC", Var::str(&all.join("; ")))?;
+    }
+    if !answer.body.is_empty() {
+        if item.get("BodyFormat")?.to_i64().ok() == Some(OL_FORMAT_HTML) {
+            let html = item.get("HTMLBody")?.to_text();
+            let text = if answer.html {
+                answer.body.clone()
+            } else {
+                crate::html_text(&answer.body)
+            };
+            item.put("HTMLBody", Var::str(&crate::prepend_html(&html, &text)))?;
+        } else {
+            let body = item.get("Body")?.to_text();
+            item.put("Body", Var::str(&format!("{}\r\n\r\n{body}", answer.body)))?;
+        }
+    }
+    if !answer.attachments.is_empty() {
+        let attachments = item.get("Attachments")?.object("Attachments")?;
+        for path in &answer.attachments {
+            attachments.call("Add", vec![Var::str(path)])?;
+        }
+    }
+    session.check()?;
+    item.call("Save", vec![])?;
+    Ok(json!({ "id": item.get("EntryID")?.to_text() }))
+}
+
 fn save_attachments(
     mapi: &Object,
     query: &SaveQuery,
     session: &Session,
 ) -> Result<Value, StepError> {
-    let item = mapi.object("GetItemFromID", vec![Var::str(&query.id)]).map_err(|_| {
-        StepError::permanent("MESSAGE_NOT_FOUND", "there is no message with that id")
-            .with_details(json!({ "hint": "Use an `id` from mail.list in this run; it changes when the message is moved to another store." }))
-    })?;
+    let item = message(mapi, &query.id)?;
     let dir = std::path::Path::new(&query.folder);
     std::fs::create_dir_all(dir).map_err(|e| {
         StepError::permanent(

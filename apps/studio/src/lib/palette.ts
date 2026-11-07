@@ -85,7 +85,7 @@ export const SUBGROUPS: Record<string, [string, string[]][]> = {
     ["output", ["excel.saveAs", "excel.exportPdf", "excel.runMacro"]],
   ],
   word: [["", ["word.fillTemplate", "word.readText"]]],
-  outlook: [["", ["mail.list", "mail.saveAttachments", "mail.createDraft", "mail.send"]]],
+  outlook: [["", ["mail.list", "mail.saveAttachments", "mail.move", "mail.markRead", "mail.delete", "mail.createDraft", "mail.reply", "mail.forward", "mail.sendDraft", "mail.send"]]],
   file: [
     ["read", ["file.readCsv", "file.readText", "pdf.readText", "config.read"]],
     ["write", ["file.writeCsv", "file.writeText"]],

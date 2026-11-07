@@ -141,16 +141,23 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 
 ## メール（`mail.*`、実装済み）
 
-クレート `crates/shikigami-mail`。アプリで分けず `mail.*` の 1 セットにしています。読む・下書きはこの PC の Outlook（クラシック版）を COM で使います（Windows だけ。新しい Outlook アプリと Web 版は対象外）。Outlook にサインインしているアカウントをそのまま使うので、パスワードやサーバー設定は要りません。`mail.send` は Microsoft 365 や SMTP サーバーからも送れます。
+クレート `crates/shikigami-mail`。アプリで分けず `mail.*` の 1 セットにしています。読む・仕分け・下書きはこの PC の Outlook（クラシック版）を COM で使います（Windows だけ。新しい Outlook アプリと Web 版は対象外）。Outlook にサインインしているアカウントをそのまま使うので、パスワードやサーバー設定は要りません。Outlook なしで Microsoft 365 のメールボックスを直接扱うこともできます（`via: "microsoft365"`、下記）。`mail.send` は Microsoft 365 や SMTP サーバーからも送れます。
 
 | type | 主な params | 出力 |
 |---|---|---|
 | `mail.createDraft` | `to` / `cc` / `bcc`（アドレスの配列）, `subject`, `body`, `html`, `attachments`（フルパスの配列） | `{ id }` |
-| `mail.list` | `folder`（例 `受信トレイ/請求書`、省略で受信トレイ）, `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit`（既定 50）, `includeBody` | 新しい順のメールの配列 `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
+| `mail.list` | `folder`（例 `受信トレイ/請求書`、省略で受信トレイ）, `unreadOnly`, `since`, `before`（この日時より前）, `subjectContains`, `fromContains`, `limit`（既定 50）, `includeBody` | 新しい順のメールの配列 `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
 | `mail.saveAttachments` | `id`（`mail.list` の id）, `folder`（保存先）, `nameContains` | 保存したファイルのフルパスの配列 |
+| `mail.move` | `id`, `folder`（移動先。例 `受信トレイ/処理済み`） | `{ id }`（移動後の新しい id） |
+| `mail.markRead` | `id`, `read`（既定 `true`。`false` で未読に戻す） | `null` |
+| `mail.delete` | `id` | `null`（削除済みアイテムに移る） |
+| `mail.reply` | `id`, `body`（元のメールの上に入る）, `html`, `all`（全員に返信）, `cc`, `attachments` | 下書きの `{ id }` |
+| `mail.forward` | `id`, `to`, `cc`, `body`, `html`, `attachments`（元のメールの添付も付いていく） | 下書きの `{ id }` |
+| `mail.sendDraft` | `id`（`mail.createDraft` / `mail.reply` / `mail.forward` の下書き） | `null` |
 | `mail.send` | `mail.createDraft` の params に、`via` とその送り方に要るもの（下記） | `{ via }` |
 
-- `mail.createDraft` は下書きフォルダーに置くだけで、人が確かめて送ります。外に出る前に人が見るべきときはこちら
+- `mail.createDraft`・`mail.reply`・`mail.forward` は下書きフォルダーに置くだけです。人が確かめて送るか、フローが `mail.sendDraft`（`mail.send` と同じく `dangerous`）で送ります。外に出る前に人が見るべきときは下書きのまま止めます
+- メールは移動すると `id` が変わります。それ以降は `mail.move` が返した id を使います
 - 宛先は 1 件ずつ配列で書きます（`["{{ customer.email }}"]`）。アドレスの形でないものは `INVALID_ADDRESS`、無い添付ファイルは `FILE_NOT_FOUND` で、下書きを作る前に止めます
 - 添付の保存は同じ名前のファイルを上書きせず、`請求書 (2).pdf` のように番号を付けます。添付の名前に含まれるフォルダー指定は無視します
 - Outlook への操作は 1 つずつ動きます（資源 `app:outlook`）。ユーザーの Outlook は閉じません。セキュリティの確認ダイアログなどで止まったときは `OUTLOOK_TIMEOUT`
@@ -176,7 +183,24 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 } }
 ```
 
+### Outlook なしで Microsoft 365 のメールボックスを扱う（`via: "microsoft365"`）
+
+`mail.send` 以外（送信には別の `via` があります）のノードに `via: "microsoft365"` と `account: { "secret": "名前", "field": "accessToken" }` を書くと、この PC の Outlook ではなく Microsoft Graph でその Microsoft 365 のメールボックスを扱います。Outlook（クラシック版）のない PC や、誰も Outlook で開いていない業務用のメールボックス向けです。シークレットは送信と同じ手順で、スコープを `Mail.ReadWrite offline_access`（下書きを送るなら `Mail.Send` も）にします。
+
+- 片方のメールボックスの id はもう片方では使えません。同じ `via`・`account` の `mail.list` の `id` を使います（`MESSAGE_NOT_FOUND`）
+- フォルダーは Outlook と同じく表示名のパス（`受信トレイ/請求書`）。先頭は Graph の名前（`inbox`・`drafts`・`sentitems`・`deleteditems`・`archive`・`junkemail`）でも書けます
+- `receivedAt`・`since`・`before` は Outlook と同じくこの PC の時刻です
+- 返信・転送に足す添付は 1 つ 3 MB まで
+- エラー：`OAUTH_SIGN_IN_REQUIRED`、`MAIL_PERMISSION_DENIED`（Mail.ReadWrite がない）、`MESSAGE_NOT_FOUND`、`FOLDER_NOT_FOUND`、`MAIL_REQUEST_FAILED`
+
+```json
+{ "type": "mail.list", "params": {
+  "via": "microsoft365", "account": { "secret": "Microsoft365", "field": "accessToken" },
+  "folder": "受信トレイ", "unreadOnly": true, "subjectContains": "請求書"
+}, "saveAs": "mails" }
+```
+
 ## 次の段階（予定）
 
 1. **Word の PDF 出力**：COM（Excel のマクロと同じ仕組み）
-2. **Outlook なしで読む**：`mail.list` / `mail.saveAttachments` を Microsoft 365・IMAP でも
+2. **IMAP で読む**：Outlook・Microsoft 365 以外のメールボックス向け

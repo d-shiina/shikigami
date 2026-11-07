@@ -4659,6 +4659,7 @@ name = "shikigami-mail"
 version = "0.1.10"
 dependencies = [
  "base64 0.22.1",
+ "jiff",
  "lettre",
  "reqwest",
  "rustls",

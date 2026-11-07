@@ -11606,6 +11606,42 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "required": [
@@ -11619,7 +11655,159 @@
       "risk": "interactive",
       "expressionParams": [],
       "bindsVariables": [],
-      "secretParams": [],
+      "secretParams": [
+        "account"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "mail.delete",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "account"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "mail.forward",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "body": {
+            "type": "string"
+          },
+          "html": {
+            "type": "boolean"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "account"
+      ],
       "deprecated": null
     },
     {
@@ -11638,6 +11826,10 @@
             "type": "string",
             "minLength": 4
           },
+          "before": {
+            "type": "string",
+            "minLength": 4
+          },
           "subjectContains": {
             "type": "string",
             "minLength": 1
@@ -11653,6 +11845,42 @@
           },
           "includeBody": {
             "type": "boolean"
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "required": [],
@@ -11663,7 +11891,223 @@
       "risk": "safe",
       "expressionParams": [],
       "bindsVariables": [],
-      "secretParams": [],
+      "secretParams": [
+        "account"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "mail.markRead",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "account"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "mail.move",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "folder": {
+            "type": "string",
+            "minLength": 1
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "folder"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "account"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "mail.reply",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string"
+          },
+          "html": {
+            "type": "boolean"
+          },
+          "all": {
+            "type": "boolean"
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "interactive",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "account"
+      ],
       "deprecated": null
     },
     {
@@ -11682,6 +12126,42 @@
           "nameContains": {
             "type": "string",
             "minLength": 1
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "required": [
@@ -11695,7 +12175,9 @@
       "risk": "interactive",
       "expressionParams": [],
       "bindsVariables": [],
-      "secretParams": [],
+      "secretParams": [
+        "account"
+      ],
       "deprecated": null
     },
     {
@@ -11867,6 +12349,67 @@
         "account",
         "user",
         "password"
+      ],
+      "deprecated": null
+    },
+    {
+      "type": "mail.sendDraft",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "via": {
+            "enum": [
+              "outlook",
+              "microsoft365"
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "field": {
+                    "enum": [
+                      "password",
+                      "accessToken",
+                      "username",
+                      "totp"
+                    ]
+                  }
+                },
+                "required": [
+                  "secret",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "blocks": [],
+      "hasOutput": true,
+      "risk": "dangerous",
+      "expressionParams": [],
+      "bindsVariables": [],
+      "secretParams": [
+        "account"
       ],
       "deprecated": null
     },

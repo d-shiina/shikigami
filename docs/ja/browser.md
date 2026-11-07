@@ -45,7 +45,7 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 | `browser.upload` | `target`（ファイルの入力欄、またはファイル選択を開くボタン）, `path`（ファイル 1 つか配列） | – |
 | `browser.hover` | `target` | – |
 | `browser.scroll` | `target`（見えるところまで）と `to`（`top` / `bottom`）のどちらか、または両方 | – |
-| `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`）, `typing`（1 文字ずつキーを打つ。キー入力を見ているページ向け） | – |
+| `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`）, `typing`（1 文字ずつキーを打つ。キー入力を見ているページ向け。シークレットはいつも一度に入れる） | – |
 | `browser.check` | `target`, `checked`（既定 `true`、`false` で外す） | –（すでにその状態なら何もしない） |
 | `browser.navigate` | `action`（`back` 戻る / `forward` 進む / `reload` 再読み込み） | `{ url, title }` |
 | `browser.select` | `target`, `value`（表示名、または配列） | – |

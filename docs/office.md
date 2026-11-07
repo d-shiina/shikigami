@@ -141,16 +141,23 @@ Crate `crates/shikigami-word`. Reads and writes `.docx` (also `.docm` / `.dotx`)
 
 ## Mail (`mail.*`, implemented)
 
-Crate `crates/shikigami-mail`. One `mail.*` set regardless of app. Reading and drafts use this PC's Outlook (classic) through COM (Windows only; the new Outlook app and the web version are not supported), with the account signed in to Outlook, so no passwords or server settings are needed. `mail.send` can also send through Microsoft 365 or an SMTP server.
+Crate `crates/shikigami-mail`. One `mail.*` set regardless of app. Reading, sorting and drafts use this PC's Outlook (classic) through COM (Windows only; the new Outlook app and the web version are not supported), with the account signed in to Outlook, so no passwords or server settings are needed. They can also work on a Microsoft 365 mailbox without Outlook (`via: "microsoft365"`, below). `mail.send` can also send through Microsoft 365 or an SMTP server.
 
 | type | Main params | Output |
 |---|---|---|
 | `mail.createDraft` | `to` / `cc` / `bcc` (lists of addresses), `subject`, `body`, `html`, `attachments` (list of full paths) | `{ id }` |
-| `mail.list` | `folder` (e.g. `Inbox/Invoices`; default the Inbox), `unreadOnly`, `since`, `subjectContains`, `fromContains`, `limit` (default 50), `includeBody` | A list of mails, newest first: `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
+| `mail.list` | `folder` (e.g. `Inbox/Invoices`; default the Inbox), `unreadOnly`, `since`, `before`, `subjectContains`, `fromContains`, `limit` (default 50), `includeBody` | A list of mails, newest first: `{ id, subject, from, fromAddress, to, receivedAt, unread, attachments, body }` |
 | `mail.saveAttachments` | `id` (an id from `mail.list`), `folder` (where to save), `nameContains` | A list of the full paths saved |
+| `mail.move` | `id`, `folder` (where to move it, e.g. `Inbox/Done`) | `{ id }` (the message's new id) |
+| `mail.markRead` | `id`, `read` (default `true`; `false` marks it unread) | `null` |
+| `mail.delete` | `id` | `null` (moved to Deleted Items) |
+| `mail.reply` | `id`, `body` (goes above the quoted message), `html`, `all` (reply all), `cc`, `attachments` | `{ id }` of the draft |
+| `mail.forward` | `id`, `to`, `cc`, `body`, `html`, `attachments` (the original's attachments go along) | `{ id }` of the draft |
+| `mail.sendDraft` | `id` (a draft from `mail.createDraft` / `mail.reply` / `mail.forward`) | `null` |
 | `mail.send` | The params of `mail.createDraft`, plus `via` and what that way needs (below) | `{ via }` |
 
-- `mail.createDraft` only puts a draft in the Drafts folder; a person checks and sends it. Use it when a person should look before anything leaves
+- `mail.createDraft`, `mail.reply` and `mail.forward` only put a draft in the Drafts folder; a person checks and sends it, or the flow sends it with `mail.sendDraft` (`dangerous`, like `mail.send`). Use the draft alone when a person should look before anything leaves
+- A message gets a new `id` when it is moved: use the one `mail.move` returns from then on
 - Write recipients one per list item (`["{{ customer.email }}"]`). Anything that is not an address gives `INVALID_ADDRESS` and a missing attachment `FILE_NOT_FOUND`, before the draft is created
 - Saving attachments never overwrites a file of the same name; it numbers them like `invoice (2).pdf`. Folder parts in attachment names are ignored
 - Outlook operations run one at a time (resource `app:outlook`). The person's Outlook is never closed. `OUTLOOK_TIMEOUT` when it gets stuck on a security prompt or similar
@@ -176,7 +183,24 @@ A message that has gone cannot be taken back, so `mail.send` is `dangerous`: it 
 } }
 ```
 
+### A Microsoft 365 mailbox without Outlook (`via: "microsoft365"`)
+
+Every step but `mail.send` (which has its own `via`) takes `via: "microsoft365"` with `account: { "secret": "<name>", "field": "accessToken" }`, and then works on that Microsoft 365 mailbox through Microsoft Graph instead of this PC's Outlook: for PCs without Outlook (classic), and for shared work mailboxes no one opens in Outlook. Set up the secret as for sending, with the scope `Mail.ReadWrite offline_access` (and `Mail.Send` to send drafts).
+
+- Ids from one mailbox do not work in the other: use the `id` from a `mail.list` with the same `via` and `account` (`MESSAGE_NOT_FOUND`)
+- Folders are paths of their display names as in Outlook (`受信トレイ/請求書`); the first part may also be one of Graph's names (`inbox`, `drafts`, `sentitems`, `deleteditems`, `archive`, `junkemail`)
+- `receivedAt`, `since` and `before` are in this PC's time, as with Outlook
+- Attachments added to a reply or forward: up to 3 MB each
+- Errors: `OAUTH_SIGN_IN_REQUIRED`, `MAIL_PERMISSION_DENIED` (no Mail.ReadWrite), `MESSAGE_NOT_FOUND`, `FOLDER_NOT_FOUND`, `MAIL_REQUEST_FAILED`
+
+```json
+{ "type": "mail.list", "params": {
+  "via": "microsoft365", "account": { "secret": "Microsoft365", "field": "accessToken" },
+  "folder": "受信トレイ", "unreadOnly": true, "subjectContains": "請求書"
+}, "saveAs": "mails" }
+```
+
 ## Next (planned)
 
 1. **Word PDF export**: through COM (the same way as Excel macros)
-2. **Reading mail without Outlook**: `mail.list` / `mail.saveAttachments` through Microsoft 365 and IMAP
+2. **Reading mail over IMAP**: for mailboxes other than Outlook and Microsoft 365

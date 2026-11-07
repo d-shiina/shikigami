@@ -32,9 +32,13 @@ Schedules belong to the PC that runs them (`schedules.json` in the per-PC area o
 ```powershell
 shikigami schedule add scn_01a1… --name "毎朝の受注取り込み" --daily 08:00 --days mon,tue,wed,thu,fri
 shikigami schedule add scn_01a1… --monthly 25@09:00          # -1@18:00 is the last day of the month
+shikigami schedule add scn_01a1… --monthly 25@09:00 --on-holiday before   # the business day before on holidays
+shikigami schedule add scn_01a1… --monthly 3@09:00 --business-day        # the third business day (-1: the last)
+shikigami schedule add scn_01a1… --daily 08:00 --days mon,tue,wed,thu,fri --skip-holidays
 shikigami schedule add scn_01a1… --every 30 --from 09:00 --to 18:00
 shikigami schedule add scn_01a1… --once 2026-11-07T08:00
 shikigami schedule add scn_01a1… --file-added input --pattern "*.xlsx" --file-input file
+shikigami schedule add scn_01a1… --mail-received Inbox --subject-contains Invoice --mail-input mail
 shikigami schedule list
 shikigami schedule disable sch_…   # enable / remove
 ```
@@ -43,11 +47,12 @@ shikigami schedule disable sch_…   # enable / remove
 
 | `when.kind` | Fields | Fires |
 |---|---|---|
-| `daily` | `at` ("08:00"), `days` (optional: "mon" … "sun", or 月 … 日) | Every day (or on those days) at that time |
-| `monthly` | `day` (1–31, -1 = last day), `at` | Every month. A day the month lacks (31 in June) is its last day |
-| `every` | `minutes`, `from` / `to` (optional), `days` (optional) | `from`, `from` + `minutes`, … up to `to` (the whole day without them) |
+| `daily` | `at` ("08:00"), `days` (optional: "mon" … "sun", or 月 … 日), `skipHolidays` (optional) | Every day (or on those days) at that time |
+| `monthly` | `day` (1–31, -1 = last day), `at`, `businessDay` (optional), `onHoliday` (optional) | Every month. A day the month lacks (31 in June) is its last day |
+| `every` | `minutes`, `from` / `to` (optional), `days` (optional), `skipHolidays` (optional) | `from`, `from` + `minutes`, … up to `to` (the whole day without them) |
 | `once` | `at` ("2026-11-07T08:00") | Once |
 | `fileAdded` | `folder` (relative to the flow's folder, or a full path), `pattern` ("*.xlsx"), `input` (optional) | Once per new file whose name matches, after its size stops changing. Its full path goes into the input variable `input`. Files already there when the agent starts, Office lock files (`~$…`) and partial downloads do not count |
+| `mailReceived` | `folder` (optional, default the Inbox), `subjectContains` / `fromContains` (optional), `minutes` (how often to look, default 5), `via` / `account` (optional, as for `mail.list`), `input` (optional) | Once per new mail that matches. The mail (`{ id, subject, from, fromAddress, receivedAt, attachments }`) goes into the input variable `input`. Mails already there when the agent starts do not count |
 
 ```json
 {
@@ -64,6 +69,36 @@ shikigami schedule disable sch_…   # enable / remove
   ]
 }
 ```
+
+### When a mail arrives
+
+`mailReceived` looks at the folder with `mail.list` every `minutes` minutes and starts the flow for each mail that was not there at the last look. It uses this PC's Outlook (classic), so keep Outlook started and signed in. PCs without Outlook and shared work mailboxes are looked at with `via: "microsoft365"` and `account` ([office.md](office.md), "A Microsoft 365 mailbox without Outlook").
+
+- With the mail's `id` from the input variable, the flow can save its attachments (`mail.saveAttachments`), move it (`mail.move`) or reply (`mail.reply`). Moving handled mail or marking it read keeps the inbox easy to read
+- When it cannot look (Outlook not started, the sign-in expired), `agent status` shows why on that schedule, and it looks again next time
+- Mail that arrives while the agent is off is there when it starts, and does not count
+
+```json
+{ "kind": "mailReceived", "folder": "Inbox", "subjectContains": "Invoice", "minutes": 5, "input": "mail" }
+```
+
+### Holidays and business days
+
+- `skipHolidays: true` (`daily`, `every`): not on Japan's national holidays (with substitute holidays and days between two) or the company's days off. The company's working days run even on days not in `days` (a Saturday)
+- `businessDay: true` (`monthly`): `day` counts business days. `3` is the third business day, `-1` the last (`-2` the one before). Business days are the days that are not weekends, holidays or company days off, and the company's working days
+- `onHoliday` (`monthly`, calendar days): when the day is not a business day, `before` runs on the business day before, `after` on the one after, `skip` not that month. For example, payments on the 25th, or the business day before
+
+The company's days off and working days go in the workspace's `holidays.json` (the same on every PC that shares the workspace folder).
+
+```json
+{
+  "formatVersion": 1,
+  "holidays": ["2026-12-29", "2026-12-30", "2026-12-31", "2027-01-02", "2027-01-03"],
+  "workdays": ["2026-11-28"]
+}
+```
+
+Japan's national holidays are built in (the law since 2020; the equinoxes are calculated). A `holidays.json` that cannot be read is not guessed at: no schedule fires until it is fixed (`HOLIDAYS_INVALID`).
 
 Times are the PC's local time. The agent reads the file again when it changes. A broken file is not guessed at: `agent status` shows the problem and no schedule fires until it is fixed (`SCHEDULE_INVALID`).
 

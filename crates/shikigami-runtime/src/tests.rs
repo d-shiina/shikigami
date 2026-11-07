@@ -2280,9 +2280,15 @@ async fn a_failed_browser_step_leaves_a_picture_of_the_page_beside_the_log() {
         .register(fake_def("browser.click"), Screen(shots.clone()))
         .register(fake_def("browser.screenshot"), Screen(shots.clone()))
         .build();
-    let s = flow(vec![
-        Step::new("browser.click").with_param("context", "受注"),
+    let mut s = flow(vec![
+        Step::new("browser.click").with_param("context", "{{ ctx }}"),
     ]);
+    s.variables.push(var(
+        "ctx",
+        VarType::String,
+        VarDirection::Local,
+        Some(json!("受注")),
+    ));
     let options = || RunOptions {
         project_dir: Some(dir.path().to_path_buf()),
         full_run: true,
@@ -2306,9 +2312,40 @@ async fn a_failed_browser_step_leaves_a_picture_of_the_page_beside_the_log() {
     assert_eq!(log.with_extension("png").display().to_string(), shot);
 
     // A run without a log (a single step an AI tries) takes no picture.
-    let (report, _) = run_project(&runtime, s, RunOptions::default()).await;
+    let (report, _) = run_project(&runtime, s.clone(), RunOptions::default()).await;
     assert!(report.error.unwrap().details.is_none());
     assert_eq!(shots.lock().unwrap().len(), 1);
+
+    // A step that fails inside a called flow leaves one too, of the context
+    // it rendered with the called flow's variables.
+    let mut sub = flow(vec![
+        Step::new("browser.click").with_param("context", "{{ ctx }}"),
+    ]);
+    sub.id = "scn_sub".into();
+    sub.variables.push(var(
+        "ctx",
+        VarType::String,
+        VarDirection::Local,
+        Some(json!("共通")),
+    ));
+    let mut caller = flow(vec![Step::new("flow.call").with_param("flow", "scn_sub")]);
+    caller.variables = s.variables.clone();
+    let (report, _) = run_project(
+        &runtime,
+        caller,
+        RunOptions {
+            subflows: vec![Subflow {
+                flow: sub,
+                version: None,
+                project_dir: None,
+            }],
+            ..options()
+        },
+    )
+    .await;
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(report.error.unwrap().details.unwrap()["screenshot"].is_string());
+    assert_eq!(shots.lock().unwrap()[1]["context"], json!("共通"));
 }
 
 #[tokio::test]
@@ -2366,4 +2403,72 @@ async fn a_run_can_start_at_a_chosen_step() {
         .err()
         .expect("refused");
     assert_eq!(error.code, "START_INSIDE_BLOCK");
+}
+
+#[tokio::test]
+async fn a_start_restores_inputs_and_values_steps_saved() {
+    let mut s = flow(vec![set("z", "1"), set("w", "z + 1")]);
+    s.variables
+        .push(var("who", VarType::String, VarDirection::Input, None));
+    s.variables.push(var(
+        "w",
+        VarType::Number,
+        VarDirection::Output,
+        Some(json!(0)),
+    ));
+    let start = s.steps[1].id.clone();
+    let report = Runtime::new()
+        .start(
+            s,
+            RunOptions {
+                start_at: Some(start),
+                // `who` is required and `z` is not declared (set by a step).
+                start_values: json!({ "who": "佐藤", "z": 4 })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+                ..RunOptions::default()
+            },
+        )
+        .expect("start")
+        .wait()
+        .await
+        .expect("wait");
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(report.outputs["w"], json!(5));
+}
+
+#[tokio::test]
+async fn a_flow_swapped_in_while_paused_still_starts_at_the_chosen_step() {
+    let s = flow(vec![log("a"), log("b")]);
+    let start = s.steps[1].id.clone();
+    let mut edited = s.clone();
+    edited.revision += 1;
+    edited.steps.push(log("c").with_id("c"));
+    let mut options = debug_options(&[]);
+    if let Some(debug) = options.debug.as_mut() {
+        debug.pause_at_start = true;
+    }
+    options.start_at = Some(start);
+    let mut handle = Runtime::new().start(s, options).expect("start");
+    let control = handle.debug_control().expect("control");
+    let mut events = Vec::new();
+    let mut swapped = false;
+    while let Some(event) = handle.next_event().await {
+        if matches!(event.event, RunEvent::Paused { .. }) {
+            if !swapped {
+                // Studio sends the whole stored flow, with the step before.
+                assert!(control.update_flow(edited.clone()).expect("taken"));
+                swapped = true;
+            }
+            control.send(DebugCommand::Continue).expect("continue");
+        }
+        events.push(event);
+    }
+    assert_eq!(
+        handle.wait().await.expect("wait").status,
+        RunStatus::Succeeded
+    );
+    let logs = logs(&events);
+    assert_eq!(&logs[1..], ["b", "c"], "{logs:?}");
 }

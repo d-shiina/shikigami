@@ -38,8 +38,8 @@
 | G11 | P1 | Excel | `.xls`・パスワード付きのブックが開けない、CSV や `.xlsx` への変換（名前を付けて保存）がない | UiPath：Save Workbook As・Password／PAD：「Excel の起動」のパスワード・「Excel を閉じる」の名前を付けて保存 | 済み |
 | G12 | P1 | 人とのやりとり | フローの途中で複数の項目（選択肢・日付・チェック）を一度に入れてもらう画面がない（`dialog.input` は 1 行だけ） | UiPath：Create Form／PAD：「カスタム フォームを表示」／WinActor：ユーザー入力（複数項目） | 済み |
 | G13 | P1 | Studio・デバッグ | 選んだノードから実行する（前のノードを飛ばす）ことができない | UiPath：Run from this Activity／PAD：「ここから実行」 | 済み |
-| G14 | P1 | メール | メールの移動・既読にする・返信・転送・削除がない。Outlook（クラシック）なしで受信できない（Microsoft 365・IMAP） | UiPath：Move / Mark as Read / Reply To / Delete Outlook Mail Message・Get IMAP Mail／PAD：「メール メッセージの処理」・Exchange / Outlook / IMAP | 着手順 9 |
-| G15 | P1 | スケジュール | 祝日・会社の休日を飛ばす・「第 3 営業日」の指定がない。メールが届いたら起動もない | UiPath：Orchestrator の Non-Working Days・キュートリガー／PAD：クラウドフローのメールトリガー | 着手順 10 |
+| G14 | P1 | メール | メールの移動・既読にする・返信・転送・削除がない。Outlook（クラシック）なしで受信できない（Microsoft 365・IMAP） | UiPath：Move / Mark as Read / Reply To / Delete Outlook Mail Message・Get IMAP Mail／PAD：「メール メッセージの処理」・Exchange / Outlook / IMAP | 済み（IMAP は残り） |
+| G15 | P1 | スケジュール | 祝日・会社の休日を飛ばす・「第 3 営業日」の指定がない。メールが届いたら起動もない | UiPath：Orchestrator の Non-Working Days・キュートリガー／PAD：クラウドフローのメールトリガー | 済み |
 | G16 | P1 | 記録 | ブラウザの操作は記録できない（デスクトップだけ） | WinActor：Web レコーディング／UiPath：Web Recorder／PAD：Web レコーダー | 着手順 11 |
 | G17 | P1 | Word | PDF で保存・文字の置換・表の読み取りがない（`word.fillTemplate` / `word.readText` だけ） | UiPath：Save Document As PDF・Replace Text／PAD：「Word 文書を保存」の PDF・「Word 文書内の語句の検索と置換」 | 着手順 12 |
 | G18 | P1 | 無人実行 | 画面がロックされた・サインアウトした PC ではデスクトップのノードが止まる（`DESKTOP_UNAVAILABLE`） | UiPath：無人ロボットがセッションを作る／PAD：ロックされた PC での無人実行 | 設計が要る |
@@ -113,13 +113,14 @@
 
 ### G14 メール
 
-- `mail.move`（`id`・`folder`）、`mail.markRead`（`id`・`read`）、`mail.reply` / `mail.forward`（下書きか送信か、送信は Dangerous）、`mail.delete`（ごみ箱へ）
-- `mail.list` / `mail.saveAttachments` に `via`（`outlook` / `microsoft365` / `imap`）。`mail.send` と同じ書き方
+- 済み：`mail.move`（`id`・`folder`）、`mail.markRead`（`id`・`read`）、`mail.reply` / `mail.forward`（下書きに置く。送るのは Dangerous の `mail.sendDraft` だけ）、`mail.delete`（削除済みアイテムへ）
+- 済み：`mail.send` 以外のメールのノードに `via`（`outlook` / `microsoft365`）。`mail.send` と同じ書き方で、Microsoft 365 は Graph
+- 残り：`via: "imap"`（Outlook・Microsoft 365 以外のメールボックス）
 
 ### G15 祝日・営業日・メールのトリガー
 
-- スケジュールに `skipHolidays`（日本の祝日を内蔵。会社の休日は `holidays.json` に日付を足す）と、`monthly` の `businessDay`（第 n 営業日、-1 で最終営業日）
-- `when.kind: "mailReceived"`（`folder`・`subjectContains`・`fromContains`、届いたメールの `id` を入力変数へ）
+- 済み：スケジュールに `skipHolidays`（日本の祝日を内蔵。会社の休日・出勤日はワークスペースの `holidays.json`）、`monthly` の `businessDay`（第 n 営業日、-1 で最終営業日）と `onHoliday`（休日なら前・次の営業日、その月は飛ばす）
+- 済み：`when.kind: "mailReceived"`（`folder`・`subjectContains`・`fromContains`・`minutes`・`via`、届いたメールを入力変数へ）
 
 ### G16 ブラウザの操作の記録
 

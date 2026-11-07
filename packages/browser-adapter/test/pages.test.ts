@@ -286,4 +286,11 @@ describe("clicks, checkboxes, typing and moving between pages", () => {
     expect((await failure(adapter.call("navigate", { ...tab, action: "forward" }))).code).toBe("NAVIGATION_FAILED");
     expect((await failure(adapter.call("navigate", { ...tab, action: "up" }))).code).toBe("INVALID_PARAMS");
   });
+
+  it("goes back over an in-page move", async () => {
+    await adapter.call("open", { ...tab, url: `${base}/clicks` });
+    await adapter.call("open", { ...tab, url: `${base}/clicks#more` });
+    const result = (await adapter.call("navigate", { ...tab, action: "back" })) as { url: string };
+    expect(result.url).toBe(`${base}/clicks`);
+  });
 });

@@ -23,7 +23,7 @@ pub mod single;
 pub mod start;
 mod used_secrets;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -202,6 +202,23 @@ impl Runtime {
         // Nodes that name a part run with its target.
         let mut flow = flow;
         flow.inline_parts();
+        // Variables an earlier run can hand to 「ここから実行」: every name
+        // the whole flow can bind (inputs, saveAs, call outputs…), not secrets.
+        let restorable: BTreeSet<String> = match &options.start_at {
+            Some(_) => {
+                let secret: BTreeSet<&str> = flow
+                    .variables
+                    .iter()
+                    .filter(|v| v.secret)
+                    .map(|v| v.name.as_str())
+                    .collect();
+                shikigami_core::validate::known_variables(&flow, &self.registry)
+                    .into_iter()
+                    .filter(|n| !secret.contains(n.as_str()))
+                    .collect()
+            }
+            None => BTreeSet::new(),
+        };
         let start_step = match &options.start_at {
             Some(id) => {
                 flow.steps = start::steps_from(&flow.steps, id)?;
@@ -259,6 +276,7 @@ impl Runtime {
                 debug,
                 flow.clone(),
                 self.validator.clone(),
+                start_step.clone(),
             ))
         });
 
@@ -304,7 +322,18 @@ impl Runtime {
                 policy: Arc::new(policy),
             },
         );
-        let inputs = options.inputs;
+        let mut inputs = options.inputs;
+        if start_step.is_some() {
+            // Inputs the earlier run had count as given (and are checked).
+            for var in flow.variables.iter().filter(|v| v.direction.is_input()) {
+                if restorable.contains(&var.name)
+                    && !inputs.contains_key(&var.name)
+                    && let Some(value) = start_values.get(&var.name)
+                {
+                    inputs.insert(var.name.clone(), value.clone());
+                }
+            }
+        }
         let subflows: Vec<SubflowRef> = options
             .subflows
             .iter()
@@ -367,9 +396,9 @@ impl Runtime {
             if init.is_ok()
                 && let Some(start) = &start_step
             {
-                for var in flow.variables.iter().filter(|v| !v.secret) {
-                    if let Some(value) = start_values.get(&var.name) {
-                        executor.set_var(&var.name, value.clone(), None);
+                for (name, value) in &start_values {
+                    if restorable.contains(name) && !inputs.contains_key(name) {
+                        executor.set_var(name, value.clone(), None);
                     }
                 }
                 let name = flow
