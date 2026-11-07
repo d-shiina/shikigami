@@ -185,7 +185,7 @@ The canonical format is JSON (`schemas/flow.schema.json`). Example: [examples/in
 - **Nodes are always referenced by stable ID.** Positions (indexes) are never used as references, so adding, removing or moving nodes does not break other references. IDs are `stp_` + UUIDv7.
 - **`params` are validated with a JSON Schema per type** (held by `StepRegistry`). New node types can be added without changing the flow schema itself.
 - **Expression language** (§11 decision 5): conditions are expressions (`count > 3 && status == 'OK'`), string params are `{{ expression }}` templates. No arbitrary code can run.
-- **Common node options**: `disabled`, `timeoutMs`, `retry`, `onError` (`fail`/`continue`), `saveAs` (output into a variable), `meta` (for Studio display and the AI's evidence; the Runtime ignores it).
+- **Common node options**: `disabled`, `timeoutMs`, `retry`, `onError` (`fail`/`continue`), `saveAs` (output into a variable), `meta` (for Studio display and the AI's evidence; the Runtime ignores it). `retry` on `control.group` runs the whole body again from its first step when any step in it fails (every failure counts, as UiPath's Retry Scope); on other control steps it is not used (`CONTROL_RETRY` warning).
 - **Backward compatibility**: on load, `schemaVersion` drives step-by-step migration (`migrate.rs`). Future versions are rejected with `UNSUPPORTED_SCHEMA_VERSION` rather than silently truncated. Unknown keys in `metadata` are kept. When the version goes up, plugin `requires`, deprecation, and MCP / CLI compatibility: [compatibility.md](compatibility.md).
 - **YAML** is a possible future import/export format, not the canonical one.
 

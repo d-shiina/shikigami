@@ -27,6 +27,7 @@ export const issuesJa: Record<string, IssueText> = {
   DEPRECATED_STEP_TYPE: "このノードは古い種類です。新しいノードに置き換えてください",
   PLUGIN_NOT_INSTALLED: "このノードに必要なプラグインがインストールされていません",
   INVALID_RETRY: "リトライ回数は 1 以上にしてください",
+  CONTROL_RETRY: "この種類のノードでは再試行の回数は使われません。まとめてやり直すときは「グループ」で囲み、グループに再試行の回数を設定してください",
   NOT_A_CASE: "値で分岐の中には「ケース」だけを置けます",
   CASE_OUTSIDE_SWITCH: "「ケース」は値で分岐の中に置いてください",
 };

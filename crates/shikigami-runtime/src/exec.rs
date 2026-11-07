@@ -1093,7 +1093,8 @@ impl Executor {
                 }
             }
             control::SWITCH => self.switch(step).await,
-            control::GROUP | control::CASE => self.sub_block(step, "body").await,
+            control::GROUP => self.group(step).await,
+            control::CASE => self.sub_block(step, "body").await,
             control::PARALLEL => self.parallel(step).await,
             control::WAIT_UNTIL => self.wait_until(step).await,
             flow::CALL => self.call(step).await,
@@ -1738,6 +1739,46 @@ impl Executor {
                     delay_ms *= retry.map_or(1.0, |r| r.backoff_multiplier.max(1.0));
                     attempt += 1;
                 }
+            }
+        }
+    }
+
+    /// `control.group`: its `body`, and with `retry` the whole body again from
+    /// its first step when anything in it fails (UiPath's Retry Scope). Every
+    /// failure counts, not only retryable ones: the body as a whole is what
+    /// is tried again (open, sign in, go to the page…).
+    async fn group(&mut self, step: &Step) -> StepResult {
+        let Some(retry) = step.retry else {
+            return self.sub_block(step, "body").await;
+        };
+        let max_attempts = retry.max_attempts.max(1);
+        let mut delay_ms = retry.backoff_ms as f64;
+        let mut attempt = 1;
+        loop {
+            // A failure that will be retried is handled: it does not pause the run.
+            let result = self
+                .handled_block(attempt < max_attempts, step, "body")
+                .await;
+            match result {
+                Err(Interrupt::Failed(error)) if attempt < max_attempts => {
+                    self.emitter.log(
+                        LogLevel::Warn,
+                        format!(
+                            "グループの {attempt} 回目が失敗したので、最初からやり直します（{attempt}/{max_attempts}）: {}",
+                            error.message
+                        ),
+                        Some(step.id.clone()),
+                    );
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    let wait = Duration::from_millis(delay_ms as u64);
+                    tokio::select! {
+                        () = self.cancel.cancelled() => return Err(Interrupt::Cancelled),
+                        () = tokio::time::sleep(wait) => {}
+                    }
+                    delay_ms *= retry.backoff_multiplier.max(1.0);
+                    attempt += 1;
+                }
+                other => return other,
             }
         }
     }
