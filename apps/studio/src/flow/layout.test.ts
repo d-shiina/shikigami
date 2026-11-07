@@ -343,7 +343,12 @@ describe("layoutFlow", () => {
     );
     expect(layout.edges.some((e) => e.source === "brk")).toBe(false);
     expect(layout.nodes.some((n) => n.id === "end:if:then")).toBe(false);
-    expect(layout.nodes.some((n) => n.id === "end:if:else")).toBe(true);
+    expect(layout.nodes.some((n) => n.id === "end:if:else")).toBe(true);    // A disabled one is skipped when it runs: the flow goes on past it.
+    const off = layoutFlow(
+      [{ id: "loop", type: "control.repeat", blocks: { body: [{ id: "brk", type: "control.break", disabled: true }] } }],
+      defs,
+    );
+    expect(off.edges.some((e) => e.source === "brk" && e.target === "end:loop:body")).toBe(true);
   });
 
   it("draws a wait's check going round like a loop", () => {

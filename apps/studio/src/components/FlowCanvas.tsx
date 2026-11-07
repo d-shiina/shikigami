@@ -729,7 +729,7 @@ function StepNode({ data }: StepNodeProps) {
       )}
       <FlowHandles x={head?.lineX} />
       {/* A break, continue or fail: no line goes on from it, so say where the flow goes instead. */}
-      {!head && TERMINAL_NOTE[data.step.type] && !data.runState && (
+      {!head && TERMINAL_NOTE[data.step.type] && !data.step.disabled && !data.runState && (
         <span className="pointer-events-none absolute top-full left-1/2 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-500">
           {TERMINAL_NOTE[data.step.type]!()}
         </span>

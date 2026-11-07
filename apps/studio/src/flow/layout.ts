@@ -67,6 +67,8 @@ const WAIT_UNTIL = "wait.until";
 const CIRCLING: ReadonlySet<string> = new Set([...LOOP_TYPES, WAIT_UNTIL]);
 /** Steps the flow does not go on from: out of a loop, round to its next pass, or stopped with an error. */
 const TERMINAL: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
+/** A break, continue or fail that runs: a disabled one is skipped, and the flow goes on past it. */
+const ends = (step: Step | undefined): boolean => !!step && TERMINAL.has(step.type) && !step.disabled;
 const BLOCK_FRAME = { left: READ_ROOM + 12, right: WRITE_ROOM + 12 };
 /** Beside the blocks of a step: room for its frame to sit inside the frame of a step around it. */
 const BLOCK_ROOM = 16;
@@ -218,7 +220,7 @@ function lanes(step: Step, defs: Defs, collapsed: Collapsed = NONE): Lane[] {
   const fanOut = FAN_OUT_BLOCKS[step.type];
   const optional = OPTIONAL_BLOCKS[step.type];
   // Nothing runs after a break, continue or fail: no "+" to add at the end of its block.
-  for (const lane of result) if (TERMINAL.has(lane.steps.at(-1)?.type ?? "")) lane.tail = false;
+  for (const lane of result) if (ends(lane.steps.at(-1))) lane.tail = false;
   return result.flatMap((lane) =>
     lane.name === optional && lane.steps.length === 0
       ? []
@@ -407,7 +409,7 @@ class Builder {
     if (!head) {
       this.nodes.push({ id, type: "step", position: { x: cx - own.w / 2, y }, data: base });
       // A break, continue or fail: the flow does not go on to the node under it.
-      return { entry: id, exits: TERMINAL.has(step.type) ? [] : [id] };
+      return { entry: id, exits: ends(step) ? [] : [id] };
     }
     const optional = OPTIONAL_BLOCKS[step.type];
     const extras = {
