@@ -51,8 +51,16 @@ describe("parseMarkdown", () => {
       { kind: "paragraph", children: [{ kind: "text", text: "説明" }] },
       { kind: "code", lang: "ts", text: "const a = 1;\n\nconst b", open: true },
     ]);
+    for (const end of ["https://", "http://", "https://.", "[a](https://"]) expect(() => parseMarkdown(`See ${end}`)).not.toThrow();
+    expect(parseInline("See https://")).toEqual([{ kind: "text", text: "See https://" }]);
     // An unclosed `**` is shown as written.
     expect(parseInline("これは **重要")).toEqual([{ kind: "text", text: "これは **重要" }]);
+  });
+
+  it("keeps tabs inside code as written", () => {
+    expect(parseMarkdown("```make\nall:\n\techo ok\n```")).toEqual([{ kind: "code", lang: "make", text: "all:\n\techo ok", open: false }]);
+    const [list] = parseMarkdown("- a\n\t- b") as [Extract<Block, { kind: "list" }>];
+    expect(list.items[0]!.children.map((b) => b.kind)).toEqual(["paragraph", "list"]);
   });
 
   it("keeps a raw HTML tag as text", () => {

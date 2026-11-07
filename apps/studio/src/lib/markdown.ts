@@ -40,7 +40,24 @@ const TABLE_RULE = /^ *\|? *:?-+:? *(\| *:?-+:? *)*\|? *$/;
 
 /** Reads a whole reply (or the part of it that has arrived) into blocks. */
 export function parseMarkdown(source: string): Block[] {
-  return blocks(source.replace(/\r\n?/g, "\n").replace(/\t/g, "    ").split("\n"));
+  return blocks(expandIndent(source.replace(/\r\n?/g, "\n").split("\n")));
+}
+
+/**
+ * Tabs that indent lists and quotes count as four spaces. Inside a code
+ * fence nothing changes: a Makefile or TSV must copy out exactly as written.
+ */
+function expandIndent(lines: string[]): string[] {
+  let fence: string | null = null;
+  return lines.map((line) => {
+    const mark = /^[ \t]*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      if (mark && mark[0] === fence[0] && mark.length >= fence.length && !line.trim().slice(mark.length).trim()) fence = null;
+      return line;
+    }
+    if (mark) fence = mark;
+    return line.replace(/^[ \t]+/, (indent) => indent.replace(/\t/g, "    "));
+  });
 }
 
 function blocks(lines: string[]): Block[] {
@@ -281,12 +298,12 @@ export function parseInline(source: string): Inline[] {
       }
     }
     if ((c === "h" || c === "H") && /^https?:\/\//i.test(source.slice(i, i + 8)) && !WORD.test(source[i - 1] ?? "")) {
-      const match = /^https?:\/\/[!#-;=?-~]+/i.exec(source.slice(i))!;
-      let url = match[0];
+      // A reply still arriving can end at "https://": that stays text.
+      let url = /^https?:\/\/[!#-;=?-~]+/i.exec(source.slice(i))?.[0] ?? "";
       // Sentence punctuation after an address is not part of it.
       while (/[.,;:!?'*_~]$/.test(url) || (url.endsWith(")") && count(url, "(") < count(url, ")"))) url = url.slice(0, -1);
       const href = safeHref(url);
-      if (href && url.length > "https://".length) {
+      if (href && url) {
         push({ kind: "link", href, children: [{ kind: "text", text: url }] });
         i += url.length;
         continue;
