@@ -141,8 +141,10 @@ export function authorIssues(validation: ValidationReport | null | undefined): V
  * A required setting left empty: what every node is right after it is added.
  * Shown as "未設定" (not set up yet), not as an error; a run still waits for it.
  */
-export function isUnset(issue: Pick<ValidationIssue, "code" | "message">): boolean {
-  return issue.code === "INVALID_PARAMS" && /is a required property/.test(issue.message);
+export function isUnset(issue: Pick<ValidationIssue, "code" | "message" | "path">): boolean {
+  // Only a node's own settings (`…/params`): a required item inside a list or
+  // record is not what the unset count sees, and stays an error.
+  return issue.code === "INVALID_PARAMS" && /is a required property/.test(issue.message) && issue.path.endsWith("/params");
 }
 
 /** The required settings still empty, one per field. */

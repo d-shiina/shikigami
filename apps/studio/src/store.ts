@@ -1283,6 +1283,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             run: s.run?.runId === runId ? s.run : newRun(runId, flow.id),
             // A new run's result replaces what a node run alone gave.
             stepTest: null,
+            // Values tested alone before this run are older than what it reads.
+            tested: { ...s.tested, [flow.id]: {} },
             error: null,
             followRun: true,
             // A run's log opens under the chart.
