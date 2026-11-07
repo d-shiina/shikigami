@@ -42,7 +42,7 @@
 | G15 | P1 | スケジュール | 祝日・会社の休日を飛ばす・「第 3 営業日」の指定がない。メールが届いたら起動もない | UiPath：Orchestrator の Non-Working Days・キュートリガー／PAD：クラウドフローのメールトリガー | 済み |
 | G16 | P1 | 記録 | ブラウザの操作は記録できない（デスクトップだけ） | WinActor：Web レコーディング／UiPath：Web Recorder／PAD：Web レコーダー | 済み |
 | G17 | P1 | Word | PDF で保存・文字の置換・表の読み取りがない（`word.fillTemplate` / `word.readText` だけ） | UiPath：Save Document As PDF・Replace Text／PAD：「Word 文書を保存」の PDF・「Word 文書内の語句の検索と置換」 | 済み |
-| G18 | P1 | 無人実行 | 画面がロックされた・サインアウトした PC ではデスクトップのノードが止まる（`DESKTOP_UNAVAILABLE`） | UiPath：無人ロボットがセッションを作る／PAD：ロックされた PC での無人実行 | 設計済み（[locked-runs.md](locked-runs.md)、段階 1 から） |
+| G18 | P1 | 無人実行 | 画面がロックされた・サインアウトした PC ではデスクトップのノードが止まる（`DESKTOP_UNAVAILABLE`） | UiPath：無人ロボットがセッションを作る／PAD：ロックされた PC での無人実行 | 段階 1 済み（#187・#188・#192）、段階 2 は署名のあと（[locked-runs.md](locked-runs.md)） |
 | G19 | P1 | 画像 | 画像認識で「画面から切り取る」・一致率・探す範囲がない | UiPath：Click Image・Find Image の Indicate on screen／PAD：画像をキャプチャ | 別（画像部品のスレッド） |
 | G20 | P2 | ブラウザ | 戻る・進む・再読み込みがない（同じタブでの移動は `browser.open` で済む） | UiPath：Go Back / Go Forward / Refresh／PAD：「Web ページに移動します」の戻る・進む・再読み込み | 済み |
 | G21 | P2 | ブラウザ | 1 文字ずつ打つ入力がない（キーの動きを見ているサイトで `browser.fill` が効かない） | UiPath：Type Into の入力方式／PAD：「Web ページ内のテキスト フィールドに入力する」の入力をエミュレート | 済み |
@@ -139,6 +139,8 @@
 - 方式を比べて決める：（a）実行の間だけ RDP のループバックでセッションを作る、（b）自動サインインの仕組みを使う、（c）デスクトップのノードがある実行はロックを解いて終わったらロックし直す。どれも資格情報の扱いが要るので、設計メモを先に書く
 
 **方針**：[locked-runs.md](locked-runs.md)。段階 1（資格情報を持たない手当て：実行中はロックさせない、リモートデスクトップをロックしないで切断、ロック解除を待つ、前もって知らせる）を先に作り、段階 2（Windows サービスがロボット用アカウントでサインインする、UiPath・PAD と同じ形）はコード署名のあとに決める。
+
+**対応**：段階 1 は済み。実行中は画面オフ・スリープさせない（#187）、予定に何分でロックされるかを出す（#188）、リモートデスクトップをロックしないで切断する「画面を残して切断」・`shikigami session`、`policy.json` の `desktop.waitUnlockedMinutes`（#192）。実機の Windows ではまだ試していない。
 
 ### G26 Windows の資格情報マネージャー
 
