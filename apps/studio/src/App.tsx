@@ -8,6 +8,7 @@ import { ApprovalDialog } from "./components/ApprovalDialog";
 import { PickRequestCard } from "./components/PickRequestCard";
 import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
+import { FlowSearch } from "./components/FlowSearch";
 import { ContextMenu } from "./components/ContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FlowCanvas } from "./components/FlowCanvas";
@@ -33,7 +34,7 @@ import { StatusBar } from "./components/StatusBar";
 import { StoryView } from "./components/StoryView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
-import { CanvasDock, OutlineButton, type View } from "./components/Toolbar";
+import { CanvasDock, OutlineButton, SearchButton, type View } from "./components/Toolbar";
 import { StudioContext, useStudio, useStudioApi } from "./context";
 import { agent, api, events } from "./lib/api";
 import { installContextMenu } from "./lib/contextMenu";
@@ -199,10 +200,12 @@ function Editor({
                 <div className="absolute top-3 z-10 flex gap-2" style={{ left: outlineLeft }}>
                   {!projectOpen && <ProjectButton />}
                   <OutlineButton />
+                  <SearchButton />
                 </div>
               )}
             </ReactFlowProvider>
           )}
+          {view !== "variables" && hasFlow && <FlowSearch />}
           <FileSheet />
           {/* Clear of the zoom controls in the bottom-left corner. */}
           {view !== "variables" && (
@@ -563,8 +566,14 @@ export function App() {
     });
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       const mod = e.ctrlKey || e.metaKey;
+      // Searching the flow, also from a setting being typed in.
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f" && store.getState().flow && !target?.closest("[data-own-find]")) {
+        e.preventDefault();
+        store.getState().setSearchOpen(true);
+        return;
+      }
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       if (e.key === "F5" || e.key === "F9" || e.key === "F10" || e.key === "F11") {
         // Run and step like a debugger, instead of reloading the window.
         e.preventDefault();
