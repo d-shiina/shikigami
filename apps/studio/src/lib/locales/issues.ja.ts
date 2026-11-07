@@ -16,7 +16,7 @@ export const issuesJa: Record<string, IssueText> = {
   EXPR_UNDEFINED_VARIABLE: (c) => (c.name ? `変数「${c.name}」がありません` : "存在しない変数を使っています"),
   EXPR_TYPE: (c) => (c.field ? `「${c.label(c.field)}」の式で、値の種類が合っていません` : "式で値の種類が合っていません"),
   VARIABLE_TYPE_MISMATCH: (c) => (c.name ? `変数「${c.name}」の初期値が種類と一致しません` : "変数の初期値が種類と一致しません"),
-  INVALID_VARIABLE_NAME: (c) => `変数名${c.name ? `「${c.name}」` : ""}には、半角の英字・数字・_ だけを使えます（先頭は英字）`,
+  INVALID_VARIABLE_NAME: (c) => `変数名${c.name ? `「${c.name}」` : ""}には、文字（日本語も可）・数字・_ を使えます。空白や記号は使えず、先頭に数字は置けません`,
   DUPLICATE_VARIABLE: (c) => `変数${c.name ? `「${c.name}」` : ""}が 2 回追加されています`,
   NO_OUTPUT: "このノードは結果を返さないため、「結果を保存する変数」は使えません",
   EMPTY_NAME: "フローの名前を入力してください",

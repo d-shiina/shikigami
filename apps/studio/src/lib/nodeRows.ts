@@ -63,7 +63,7 @@ export type Row =
 export function referencedVariables(value: unknown, known: ReadonlySet<string>): string[] {
   const found = new Set<string>();
   const scan = (text: string) => {
-    for (const word of text.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []) if (known.has(word)) found.add(word);
+    for (const word of text.match(/[\p{Alphabetic}_][\p{Alphabetic}\p{N}_]*/gu) ?? []) if (known.has(word)) found.add(word);
   };
   const holes = (text: string) => {
     for (const [, expr] of text.matchAll(/\{\{(.*?)\}\}/g)) scan(expr ?? "");

@@ -396,7 +396,8 @@ export interface Flow {
  */
 export interface VariableDef {
   /**
-   * Identifier used in expressions: `[A-Za-z_][A-Za-z0-9_]*`.
+   * Identifier used in expressions: letters of any script (orderNo, 受注番号),
+   * digits and `_`, not starting with a digit.
    */
   name: string;
   type?: "string" | "number" | "boolean" | "object" | "array" | "any";

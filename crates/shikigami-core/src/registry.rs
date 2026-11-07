@@ -324,7 +324,9 @@ fn object_schema(properties: Value, required: &[&str]) -> Value {
     })
 }
 
-const IDENT_PATTERN: &str = "^[A-Za-z_][A-Za-z0-9_]*$";
+/// Letters of any script (orderNo, 受注番号), digits and `_`, not starting
+/// with a digit: the same rule as names in expressions (`is_identifier`).
+const IDENT_PATTERN: &str = r"^[\p{Alphabetic}_][\p{Alphabetic}\p{N}_]*$";
 
 /// Pattern of a string that is exactly one `{{ … }}` template.
 pub const SINGLE_TEMPLATE_PATTERN: &str = r"^\s*\{\{.*\}\}\s*$";
@@ -776,11 +778,14 @@ fn builtin_defs() -> Vec<StepTypeDef> {
     ]
 }
 
-/// Whether a string is a valid variable identifier.
+/// Whether a string is a valid variable identifier: letters of any script
+/// (`orderNo`, `受注番号`), digits and `_`, not starting with a digit. The
+/// expression reader (`expr.rs`) reads names by the same rule, so every name
+/// that passes here can be written as-is in `{{ }}` and expressions.
 pub fn is_identifier(name: &str) -> bool {
     let mut chars = name.chars();
-    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    matches!(chars.next(), Some(c) if c.is_alphabetic() || c == '_')
+        && chars.all(|c| c.is_alphanumeric() || c == '_')
 }
 
 /// Copyable examples for the built-in step types.
@@ -941,5 +946,13 @@ mod tests {
         assert!(!is_identifier("1x"));
         assert!(!is_identifier("a-b"));
         assert!(!is_identifier(""));
+        assert!(is_identifier("受注番号"));
+        assert!(is_identifier("請求書_2"));
+        assert!(is_identifier("ヘッダー"));
+        assert!(is_identifier("_金額"));
+        assert!(!is_identifier("1件目"));
+        assert!(!is_identifier("税込 金額"));
+        assert!(!is_identifier("請求書・番号"));
+        assert!(!is_identifier("金額（税込）"));
     }
 }

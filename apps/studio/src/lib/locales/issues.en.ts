@@ -11,7 +11,7 @@ export const issuesEn: Record<string, IssueText> = {
   EXPR_UNDEFINED_VARIABLE: (c) => (c.name ? `There is no variable "${c.name}"` : "Uses a variable that does not exist"),
   EXPR_TYPE: (c) => (c.field ? `The expression in "${c.label(c.field)}" mixes kinds of values` : "An expression mixes kinds of values"),
   VARIABLE_TYPE_MISMATCH: (c) => (c.name ? `The initial value of "${c.name}" does not match its type` : "A variable's initial value does not match its type"),
-  INVALID_VARIABLE_NAME: (c) => `Variable names${c.name ? ` ("${c.name}")` : ""} use only letters, digits and _, starting with a letter`,
+  INVALID_VARIABLE_NAME: (c) => `Variable names${c.name ? ` ("${c.name}")` : ""} use letters (any language), digits and _, with no spaces or symbols, and do not start with a digit`,
   DUPLICATE_VARIABLE: (c) => `The variable${c.name ? ` "${c.name}"` : ""} is added twice`,
   NO_OUTPUT: "This node returns nothing, so it cannot save a result",
   EMPTY_NAME: "Enter a name for the flow",
