@@ -1,6 +1,6 @@
 [package]
 name = "shikigami-mail"
-description = "Mail steps for Shikigami (mail.*): drafts, sending, reading the inbox and saving attachments, through Outlook, Microsoft 365 or SMTP"
+description = "Mail steps for Shikigami (mail.*): reading, sorting, replying, drafts and sending, through Outlook, Microsoft 365 or SMTP"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,6 +14,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 shikigami-system.workspace = true
 base64.workspace = true
+jiff.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "builder", "hostname", "tokio1-rustls", "ring", "rustls-platform-verifier"] }
