@@ -4,6 +4,7 @@
 // its label. Word order differs between the languages, so each has its own
 // builders rather than dictionary entries.
 import type { Step, StepTypeDef } from "@shikigami/schema";
+import { extensionParamTitle } from "./extensions";
 import { locale, stepLabel, t } from "./i18n";
 import { choiceLabel, columnOf, type Match, recognize, slotsOf, splitParts, textOf, valueKind, wordsOf } from "./transforms";
 
@@ -49,7 +50,15 @@ export function readable(expr: string): string {
 
 function code(value: unknown): Part {
   if (value === undefined || value === null || value === "") return { text: locale === "ja" ? "（未設定）" : "(not set)" };
+  if (secretName(value)) return { code: `🔑 ${secretName(value)}` };
   return { code: typeof value === "string" ? readable(value) : JSON.stringify(value) };
+}
+
+/** The name of a registered secret a value refers to (`{ "secret": "受注システム", "field": … }`). */
+export function secretName(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const name = (value as { secret?: unknown }).secret;
+  return typeof name === "string" && name ? name : null;
 }
 
 /** The values a case compares to, as literals: 「A」「B」 / "A", "B". */
@@ -458,7 +467,7 @@ export function sentence(step: Step, def: StepTypeDef | undefined): Part[] {
   const parts: Part[] = [w(stepLabel(step.type, def?.label))];
   for (const [key, value] of Object.entries(step.params ?? {}).slice(0, 3)) {
     // A target reads as words ("billing.exe の [btnSave]"), never as JSON.
-    parts.push(...(key === "target" ? [w(` ${targetText(value)}`)] : [w(` ${t.paramNames.for[step.type]?.[key] ?? t.paramNames.labels[key] ?? key}：`), code(value)]));
+    parts.push(...(key === "target" ? [w(` ${targetText(value)}`)] : [w(` ${t.paramNames.for[step.type]?.[key] ?? extensionParamTitle(step.type, key) ?? t.paramNames.labels[key] ?? key}：`), code(value)]));
   }
   return [...parts, ...saveAs(step)];
 }

@@ -17,6 +17,11 @@ tokio-util.workspace = true
 tracing.workspace = true
 dirs.workspace = true
 semver.workspace = true
+uuid.workspace = true
+time.workspace = true
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+zip = { version = "9.1.3", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile.workspace = true

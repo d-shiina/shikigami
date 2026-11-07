@@ -418,3 +418,77 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     .expect("the run ends");
     assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
 }
+
+#[test]
+fn the_ocr_example_declares_its_tag_secret_kind_and_what_it_sends() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/azure-ocr");
+    let plugin = Plugin::load(&dir, &[]).unwrap();
+    let def = &plugin.step_defs()[0];
+    assert_eq!(def.step_type, "azureocr.readDocument");
+    assert_eq!(def.path_params, ["path"]);
+    assert_eq!(def.secret_params, ["key"]);
+    let info = def.plugin.as_ref().unwrap();
+    assert_eq!(
+        (info.tag.as_str(), info.icon.as_str()),
+        ("AI-OCR", "scan-text")
+    );
+    assert_eq!(info.label, "Azure AI-OCR");
+    assert_eq!(
+        info.credentials[0].kind,
+        shikigami_core::secret::SecretKind::ApiKey
+    );
+    assert_eq!(info.credentials[0].params, ["key"]);
+    let external = info.external.as_ref().unwrap();
+    assert_eq!(external.service, "Azure AI Document Intelligence");
+    assert_eq!(external.param.as_deref(), Some("endpoint"));
+    // What Studio and AI clients get.
+    let json = serde_json::to_value(def).unwrap();
+    assert_eq!(json["plugin"]["credentials"][0]["kind"], "apiKey");
+    assert_eq!(
+        json["plugin"]["external"]["data"],
+        "読み取るファイル（画像・PDF）"
+    );
+}
+
+#[test]
+fn studio_fields_are_checked() {
+    let has = |manifest: Value, text: &str| {
+        let problems = problems(manifest);
+        assert!(
+            problems.iter().any(|p| p.contains(text)),
+            "{text}: {problems:?}"
+        );
+    };
+    let mut m = manifest("t", json!([echo_step(json!({}))]));
+    m["icon"] = json!("Scan Text");
+    has(m, "not an icon name");
+    let mut m = manifest("t", json!([echo_step(json!({}))]));
+    m["homepage"] = json!("http://example.com");
+    has(m, "not an https URL");
+    let mut m = manifest("t", json!([echo_step(json!({}))]));
+    m["credentials"] = json!([{ "kind": "password", "label": "x", "params": ["value"] }]);
+    has(m.clone(), "not a secret kind");
+    has(m, "not in any step's secretParams");
+    has(
+        manifest(
+            "t",
+            json!([echo_step(
+                json!({ "external": { "service": "X", "data": "y", "param": "url" } })
+            )]),
+        ),
+        "'url' is not a param",
+    );
+    has(
+        manifest(
+            "t",
+            json!([echo_step(
+                json!({ "external": { "service": "", "data": "" } })
+            )]),
+        ),
+        "service or data is empty",
+    );
+    has(
+        manifest("t", json!([echo_step(json!({ "pathParams": ["file"] }))])),
+        "'file' is not a param",
+    );
+}

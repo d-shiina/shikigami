@@ -543,7 +543,7 @@ impl Cx<'_> {
             );
             self.error("PLUGIN_NOT_INSTALLED", message, format!("{path}/type"), id);
             self.hint(format!(
-                "Install the '{namespace}' plugin ({range}) into %LOCALAPPDATA%\\Shikigami\\plugins\\{namespace}\\ and restart; `shikigami plugin list` shows what is installed. The step is kept as it is until then."
+                "Ask the user to install (or turn on) the '{namespace}' extension ({range}) in Studio (拡張機能), or run `shikigami plugin install <zip | URL | GitHub repository>`, then restart; `shikigami plugin list` shows what is installed and turned off. The step is kept as it is until then."
             ));
             for (name, children) in &step.blocks {
                 self.steps(children, &format!("{path}/blocks/{name}"), loop_depth);
@@ -2007,6 +2007,7 @@ mod tests {
         def.plugin = Some(crate::registry::PluginInfo {
             name: "hello".into(),
             version: version.into(),
+            ..Default::default()
         });
         registry.register(def);
         registry
@@ -2028,7 +2029,7 @@ mod tests {
         let report = validator().validate(&greet_flow("^0.3.1"));
         assert_eq!(codes(&report), ["PLUGIN_NOT_INSTALLED"]);
         assert!(report.issues[0].message.contains("'hello' (^0.3.1)"));
-        assert!(hint_of(&report, "PLUGIN_NOT_INSTALLED").contains("plugins\\hello"));
+        assert!(hint_of(&report, "PLUGIN_NOT_INSTALLED").contains("the 'hello' extension"));
     }
 
     #[test]

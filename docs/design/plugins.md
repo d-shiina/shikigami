@@ -152,6 +152,8 @@ hello/
 
 ## 8. まだやらないこと（順に検討）
 
+2 の導入と一覧、4 の Studio の画面は [extensions.md](../ja/extensions.md) で対応済み。
+
 1. 足りないプラグインを Studio の画面で案内する（記録と検証のヒントは `requires` で対応済み）
 2. `shikigami plugin install <zip / Git URL>` と一覧（カタログ）
 3. 署名・発行元の確認、`dangerous` なプラグインを初回に人が許可する仕組み

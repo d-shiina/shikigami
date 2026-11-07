@@ -7,7 +7,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use shikigami_core::policy::TargetDef;
 use shikigami_core::registry::{
-    Deprecation, PluginInfo, RiskLevel, StepCategory, StepRegistry, StepTypeDef,
+    Deprecation, ExternalUse, PluginCredential, PluginInfo, RiskLevel, StepCategory, StepRegistry,
+    StepTypeDef,
 };
 use shikigami_core::resource::{DESKTOP_INPUT, ResourceDef};
 use shikigami_core::secret::text_or_secret_schema;
@@ -66,7 +67,52 @@ pub struct Manifest {
     /// Whether the plugin answers `inspect` (what the application shows now).
     #[serde(default)]
     pub inspect: bool,
+    /// Who makes it, shown in Studio's extension list.
+    #[serde(default)]
+    pub publisher: String,
+    /// Where to read about it (https).
+    #[serde(default)]
+    pub homepage: String,
+    /// The tag before its nodes' names, where they work ("AI-OCR").
+    /// Empty: `label`.
+    #[serde(default)]
+    pub tag: String,
+    /// A Lucide icon name for its nodes, e.g. `scan-text`
+    /// (https://lucide.dev/icons). Unknown names show a puzzle piece.
+    #[serde(default)]
+    pub icon: String,
+    /// The registered secrets its steps take, by kind.
+    #[serde(default)]
+    pub credentials: Vec<CredentialManifest>,
     pub steps: Vec<StepManifest>,
+}
+
+/// A registered secret the plugin's steps take.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CredentialManifest {
+    /// `login`, `apiKey` or `oauth`.
+    pub kind: String,
+    /// What to register, for people ("Azure のキー").
+    pub label: String,
+    #[serde(default)]
+    pub description: String,
+    /// The `secretParams` that take it.
+    pub params: Vec<String>,
+}
+
+/// What a step sends outside the PC.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExternalManifest {
+    /// The service it goes to ("Azure AI Document Intelligence").
+    pub service: String,
+    /// What is sent ("読み取る画像・PDF").
+    pub data: String,
+    /// The param holding the address, when there is one. Declare it in
+    /// `targets` too so `policy.json` `sites` can allow or refuse it.
+    #[serde(default)]
+    pub param: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,6 +132,10 @@ pub struct StepManifest {
     pub action: String,
     pub label: String,
     pub description: String,
+    /// One sentence for people, shown in Studio under the node's name
+    /// (`description` is for AI clients and may be English).
+    #[serde(default)]
+    pub summary: String,
     pub params: Value,
     #[serde(default)]
     pub has_output: bool,
@@ -105,6 +155,15 @@ pub struct StepManifest {
     /// Marks the step as one to stop using (it keeps working).
     #[serde(default)]
     pub deprecated: Option<Deprecation>,
+    /// Data this step sends to a service outside the PC (shown on the
+    /// review panel before publishing).
+    #[serde(default)]
+    pub external: Option<ExternalManifest>,
+    /// Params naming a file or folder: a relative path there is resolved
+    /// from the flow's folder (`input/invoice.pdf`) before the plugin gets
+    /// it, so the plugin always sees an absolute path.
+    #[serde(default)]
+    pub path_params: Vec<String>,
 }
 
 fn interactive() -> RiskLevel {
@@ -124,11 +183,23 @@ pub enum ResourceManifest {
     Plugin,
 }
 
+/// Whether `s` can be a plugin's name (`kintone`).
+pub fn is_plugin_name(s: &str) -> bool {
+    is_name(s)
+}
+
 fn is_name(s: &str) -> bool {
     let mut chars = s.chars();
     chars.next().is_some_and(|c| c.is_ascii_lowercase())
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
         && s.len() <= MAX_NAME_LEN
+}
+
+fn is_icon(s: &str) -> bool {
+    s.len() <= 64
+        && s.starts_with(|c: char| c.is_ascii_lowercase())
+        && s.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 fn is_action(s: &str) -> bool {
@@ -200,6 +271,58 @@ impl Manifest {
         }
         if self.steps.is_empty() {
             p.add("steps", "no steps", "declare at least one step");
+        }
+        if !self.homepage.is_empty() && !self.homepage.starts_with("https://") {
+            p.add(
+                "homepage",
+                format!("'{}' is not an https URL", self.homepage),
+                "write https://… or leave it out",
+            );
+        }
+        if !self.icon.is_empty() && !is_icon(&self.icon) {
+            p.add(
+                "icon",
+                format!("'{}' is not an icon name", self.icon),
+                "write a Lucide icon name in kebab-case, e.g. scan-text",
+            );
+        }
+        let secret_params: BTreeSet<&str> = self
+            .steps
+            .iter()
+            .flat_map(|s| s.secret_params.iter().map(String::as_str))
+            .collect();
+        for (i, credential) in self.credentials.iter().enumerate() {
+            let at = format!("credentials/{i}");
+            if shikigami_core::secret::SecretKind::parse(&credential.kind).is_none() {
+                p.add(
+                    &format!("{at}/kind"),
+                    format!("'{}' is not a secret kind", credential.kind),
+                    "write login, apiKey or oauth",
+                );
+            }
+            if credential.label.trim().is_empty() {
+                p.add(
+                    &format!("{at}/label"),
+                    "is empty",
+                    "say what to register, e.g. Azure のキー",
+                );
+            }
+            if credential.params.is_empty() {
+                p.add(
+                    &format!("{at}/params"),
+                    "is empty",
+                    "list the secretParams that take it",
+                );
+            }
+            for param in &credential.params {
+                if !secret_params.contains(param.as_str()) {
+                    p.add(
+                        &format!("{at}/params"),
+                        format!("'{param}' is not in any step's secretParams"),
+                        "list params that steps declare in secretParams",
+                    );
+                }
+            }
         }
 
         let mut seen = BTreeSet::new();
@@ -323,7 +446,14 @@ impl Manifest {
                         .get("description")
                         .and_then(Value::as_str)
                         .unwrap_or("text, or a registered secret { \"secret\": \"<name>\", \"field\": \"password\" }");
-                    secret_properties.insert(key.clone(), text_or_secret_schema(description));
+                    let mut schema = text_or_secret_schema(description);
+                    // Studio names the field by its title, as for other params.
+                    if let (Some(title), Some(map)) =
+                        (property.get("title"), schema.as_object_mut())
+                    {
+                        map.insert("title".into(), title.clone());
+                    }
+                    secret_properties.insert(key.clone(), schema);
                 }
                 None => p.add(
                     &format!("{at}/secretParams"),
@@ -376,6 +506,33 @@ impl Manifest {
                 );
             }
         }
+        for (i, param) in step.path_params.iter().enumerate() {
+            if !properties.contains_key(param) {
+                p.add(
+                    &format!("{at}/pathParams/{i}"),
+                    format!("'{param}' is not a param"),
+                    "name a param declared in params.properties",
+                );
+            }
+        }
+        if let Some(external) = &step.external {
+            if external.service.trim().is_empty() || external.data.trim().is_empty() {
+                p.add(
+                    &format!("{at}/external"),
+                    "service or data is empty",
+                    "name the service and what is sent to it, e.g. \"読み取る画像・PDF\"",
+                );
+            }
+            if let Some(param) = &external.param
+                && !properties.contains_key(param)
+            {
+                p.add(
+                    &format!("{at}/external/param"),
+                    format!("'{param}' is not a param"),
+                    "name a param declared in params.properties",
+                );
+            }
+        }
         if step.label.trim().is_empty() || step.description.trim().is_empty() {
             p.add(
                 at,
@@ -404,8 +561,30 @@ impl Manifest {
             plugin: Some(PluginInfo {
                 name: self.name.clone(),
                 version: self.version.clone(),
+                label: self.label.clone(),
+                tag: self.tag.clone(),
+                icon: self.icon.clone(),
+                publisher: self.publisher.clone(),
+                credentials: self
+                    .credentials
+                    .iter()
+                    .filter_map(|c| {
+                        Some(PluginCredential {
+                            kind: shikigami_core::secret::SecretKind::parse(&c.kind)?,
+                            label: c.label.clone(),
+                            description: c.description.clone(),
+                            params: c.params.clone(),
+                        })
+                    })
+                    .collect(),
+                summary: step.summary.clone(),
+                external: step.external.as_ref().map(|e| ExternalUse {
+                    service: e.service.clone(),
+                    data: e.data.clone(),
+                    param: e.param.clone(),
+                }),
             }),
-            path_params: Vec::new(),
+            path_params: step.path_params.clone(),
         })
     }
 }
