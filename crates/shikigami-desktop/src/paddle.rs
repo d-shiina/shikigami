@@ -666,6 +666,10 @@ pub fn ctc_decode(scores: &[f32], steps: usize, classes: usize, vocab: &Vocab) -
     decoded
 }
 
+fn is_numeral(c: char) -> bool {
+    c.is_ascii_digit() || ('０'..='９').contains(&c) || "一二三四五六七八九十百千何数".contains(c)
+}
+
 fn is_katakana(c: char) -> bool {
     matches!(c as u32, 0x30A1..=0x30FA | 0x30FC)
 }
@@ -713,7 +717,11 @@ impl Decoded {
                 .iter()
                 .flatten()
                 .any(|&n| is_kanji(n) || (is_hiragana(n) && !is_hiragana(other)));
-            let wanted = if c == other {
+            // After a number カ is the counter: "3カ月", "2カ所", "十カ国".
+            let counter = other == '力' && before.is_some_and(is_numeral);
+            let wanted = if counter {
+                Some(kana)
+            } else if c == other {
                 // After katakana the katakana half, except "一" starting a
                 // word of its own.
                 let starts_word = c == '一' && after.is_some_and(|n| AFTER_ICHI.contains(n));

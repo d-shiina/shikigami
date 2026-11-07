@@ -924,6 +924,32 @@ fn ctc_never_reads_lookalike_letters() {
     assert!((alone.score - 0.98).abs() < 1e-6, "{}", alone.score);
 }
 
+/// Look-alike kana and kanji follow their neighbours, but a counter after
+/// a number stays katakana ("3カ月" is not "3力月").
+#[test]
+fn kana_and_kanji_follow_their_neighbours() {
+    let fix = |text: &str| {
+        let mut decoded = crate::paddle::Decoded {
+            chars: text.chars().map(|c| (c.to_string(), 0.9)).collect(),
+            confidences: vec![0.9; text.chars().count()],
+            score: 0.9,
+        };
+        decoded.fix_kana();
+        decoded
+            .chars
+            .iter()
+            .map(|(c, _)| c.as_str())
+            .collect::<String>()
+    };
+    assert_eq!(fix("入カ"), "入力");
+    assert_eq!(fix("力ード"), "カード");
+    assert_eq!(fix("エラ-番号"), "エラー番号");
+    for kept in ["3カ月", "2カ所", "１２カ月", "十カ国", "何カ所"] {
+        assert_eq!(fix(kept), kept);
+    }
+    assert_eq!(fix("3力月"), "3カ月");
+}
+
 /// Light text on a dark background, in a font whose capital I is a bare
 /// stroke: the model's first guess for "AI" is "Aı".
 #[test]
