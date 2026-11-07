@@ -368,6 +368,19 @@ fn header_row(params: &Value) -> Result<u32, StepError> {
     }
 }
 
+/// The column names `excel.readRows` would give with these params (path
+/// already resolved), for offering them while the flow is being built.
+pub fn read_rows_columns(params: &Value) -> Result<Vec<String>, StepError> {
+    let workbook = book::open(&string(params, "path")?)?;
+    let sheet = book::sheet(&workbook, optional_string(params, "sheet")?.as_deref())?;
+    Ok(
+        book::headers(sheet, header_row(params)?, workbook.date1904())
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect(),
+    )
+}
+
 // -- step type definitions ----------------------------------------------------
 
 fn schema(properties: Value, required: &[&str]) -> Value {

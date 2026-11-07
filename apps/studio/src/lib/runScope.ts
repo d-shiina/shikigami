@@ -10,6 +10,8 @@ export type RunScope = {
   values: Record<string, unknown>;
   /** Variables whose value is only part of what the run had. */
   partial: Set<string>;
+  /** Columns known before a run (read from the file a repeat's table comes from), by variable. */
+  columns?: Record<string, string[]>;
 };
 
 export const EMPTY_SCOPE: RunScope = { values: {}, partial: new Set() };

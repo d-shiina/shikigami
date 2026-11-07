@@ -71,3 +71,25 @@ pub fn runtime(adapters: &[Arc<dyn Adapter>]) -> Runtime {
         .build()
         .with_pc_locks(shikigami_runtime::default_pc_lock_dir())
 }
+
+/// The columns a table-reading node (`excel.readRows`, `file.readCsv`) will
+/// give, read from its file now, so the columns can be offered before the
+/// flow has run. A relative path is read from `folder` (the flow's folder).
+/// None when the node reads no table or the file cannot be read yet.
+pub fn table_columns(
+    step_type: &str,
+    params: &serde_json::Value,
+    folder: &std::path::Path,
+) -> Option<Vec<String>> {
+    let path = params.get("path")?.as_str()?;
+    if path.contains("{{") {
+        return None;
+    }
+    let mut params = params.clone();
+    params["path"] = folder.join(path).to_string_lossy().into_owned().into();
+    match step_type {
+        shikigami_excel::types::READ_ROWS => shikigami_excel::read_rows_columns(&params).ok(),
+        shikigami_files::types::READ_CSV => shikigami_files::read_csv_columns(&params).ok(),
+        _ => None,
+    }
+}

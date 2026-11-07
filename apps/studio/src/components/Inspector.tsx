@@ -24,6 +24,7 @@ import { ExpressionField } from "./ExpressionField";
 import { VariableSetForm } from "./TransformForm";
 import { VarIcon } from "./VarIcon";
 import { VariablesPanel } from "./VariablesPanel";
+import { columnsByVariable, InsertProvider, ListSourceField, TemplateInput, useInsertChoices } from "./InsertVariable";
 import { listToText, textToList } from "../lib/listText";
 
 type JsonSchema = {
@@ -124,16 +125,19 @@ function Row({
   hint,
   title,
   socket,
+  onRemove,
   children,
 }: {
   label: string;
   hint?: string;
   title?: string;
   socket?: string;
+  /** An optional setting: × clears it and takes the row away. */
+  onRemove?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <label className="grid grid-cols-[84px_1fr] items-start gap-x-2 py-1">
+    <label className={`grid ${onRemove ? "grid-cols-[84px_1fr_auto]" : "grid-cols-[84px_1fr]"} items-start gap-x-2 py-1`}>
       <span className="relative flex min-h-[26px] items-center justify-end text-right text-[11px] leading-tight text-slate-500" title={title}>
         {socket && <span className="mr-1.5 h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
         {label}
@@ -142,7 +146,48 @@ function Row({
         {children}
         {hint && <span className="mt-0.5 block text-[10px] leading-snug text-slate-400">{hint}</span>}
       </span>
+      {onRemove && (
+        <button
+          type="button"
+          title={t.props.removeSetting}
+          aria-label={t.props.removeSetting}
+          className="mt-1 rounded-[3px] px-1 text-[12px] leading-none text-slate-400 hover:bg-slate-100 hover:text-ink"
+          onClick={(e) => {
+            e.preventDefault();
+            onRemove();
+          }}
+        >
+          ×
+        </button>
+      )}
     </label>
+  );
+}
+
+/**
+ * 「＋ 設定を追加」: the settings not on screen, by name. Only the required
+ * ones and those with a value are shown, so a node starts with one or two
+ * rows instead of every setting it could take.
+ */
+function AddRow({ choices, onAdd }: { choices: { key: string; label: string }[]; onAdd: (key: string) => void }) {
+  if (choices.length === 0) return null;
+  return (
+    <div className="grid grid-cols-[84px_1fr] gap-x-2 py-1">
+      <span />
+      <select
+        className="w-full cursor-pointer rounded-[4px] border border-dashed border-slate-300 bg-transparent px-2 py-1 text-[11px] text-slate-500 hover:border-brand-500 hover:text-brand-600 focus:outline-none"
+        value=""
+        aria-label={t.props.addSetting}
+        onChange={(e) => e.target.value && onAdd(e.target.value)}
+      >
+        <option value="">{t.props.addSetting}</option>
+        {choices.map((c) => (
+          <option key={c.key} value={c.key}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -210,7 +255,7 @@ function TextOrSecretField({
         ))}
       </div>
       {mode === "text" ? (
-        <CommitInput value={typeof value === "string" ? value : ""} onCommit={(text) => onChange(text === "" ? null : text)} />
+        <TemplateInput value={typeof value === "string" ? value : ""} onCommit={(text) => onChange(text === "" ? null : text)} />
       ) : (
         <div className="flex items-center gap-1">
           <select
@@ -273,11 +318,14 @@ function ParamField({
   secretCapable,
   pointer,
   isPath,
+  binds,
+  onRemove,
   onChange,
 }: {
   name: string;
   stepType: string;
   schema: JsonSchema;
+  onRemove?: () => void;
   value: unknown;
   required: boolean;
   socket?: string;
@@ -286,6 +334,8 @@ function ParamField({
   pointer?: string;
   /** A file or folder of the flow's folder (`input/orders.xlsx`). */
   isPath?: boolean;
+  /** A variable name the node defines (a repeat's 要素): plain text, nothing to insert. */
+  binds?: boolean;
   onChange: (value: unknown) => void;
 }) {
   const label = `${paramLabel(name, stepType)}${required ? " *" : ""}`;
@@ -337,8 +387,10 @@ function ParamField({
     );
   } else if (schema.type === "string" && isPath) {
     editor = <PathField value={String(value ?? "")} folder={name === "folder"} onChange={onChange} />;
-  } else if (schema.type === "string") {
+  } else if (schema.type === "string" && binds) {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
+  } else if (schema.type === "string") {
+    editor = <TemplateInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "array" && isScalarList(schema, value)) {
     // A few plain values (a case's values): one line, comma-separated.
     hint = t.props.listHint;
@@ -381,7 +433,7 @@ function ParamField({
     );
   }
   return (
-    <Row label={label} title={schema.description ? `${schema.description}（${name}）` : name} socket={socket} hint={hint}>
+    <Row label={label} title={schema.description ? `${schema.description}（${name}）` : name} socket={socket} hint={hint} onRemove={onRemove}>
       {editor}
     </Row>
   );
@@ -890,15 +942,38 @@ function ParamsEditor({
   const known = new Set(vars.keys());
   const run = useStudio((s) => s.run);
   const flowId = useStudio((s) => s.flow?.id);
-  const scope = useMemo(() => runScope(run, flowId), [run, flowId]);
+  const baseScope = useMemo(() => runScope(run, flowId), [run, flowId]);
+  const choices = useInsertChoices(step, baseScope);
+  const scope = useMemo(() => ({ ...baseScope, columns: columnsByVariable(choices) }), [baseScope, choices]);
+  const stepTypes = useStudio((s) => s.stepTypes);
   const expressionParams = new Set(def?.expressionParams ?? []);
   const [raw, setRaw] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Optional settings opened with 「＋ 設定を追加」 but still empty.
+  const [added, setAdded] = useState<Set<string>>(new Set());
   useEffect(() => {
     setText(JSON.stringify(params, null, 2));
     setError(null);
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setAdded(new Set()), [step.id]);
+  const isRequired = (key: string) => schema.required?.includes(key) ?? false;
+  const shown = (key: string) => isRequired(key) || params[key] !== undefined || added.has(key);
+  const hidden = Object.keys(props)
+    .filter((key) => !shown(key))
+    .map((key) => ({ key, label: paramLabel(key, step.type) }));
+  const remove = (key: string) => {
+    setAdded((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    if (params[key] !== undefined) {
+      const next = { ...params };
+      delete next[key];
+      update({ replaceParams: next });
+    }
+  };
 
   const toggle = (
     <button
@@ -914,7 +989,8 @@ function ParamsEditor({
   );
 
   return (
-    <Section title={t.params} aside={toggle}>
+    <InsertProvider value={choices}>
+      <Section title={t.params} aside={toggle}>
       {raw || Object.keys(props).length === 0 ? (
         <div className="space-y-1">
           <textarea className={`${inputClass} font-mono`} rows={8} value={text} onChange={(e) => setText(e.target.value)} />
@@ -938,8 +1014,10 @@ function ParamsEditor({
       ) : step.type === "variable.set" && params.value === undefined ? (
         <VariableSetForm step={step} types={vars} scope={scope} update={update} />
       ) : (
-        Object.entries(props).map(([key, propSchema]) => {
+        <>
+        {Object.entries(props).filter(([key]) => shown(key)).map(([key, propSchema]) => {
           const ref = referencedVariables(params[key], known)[0];
+          const onRemove = isRequired(key) ? undefined : () => remove(key);
           const setParam = (value: unknown) => {
             const next = { ...params };
             if (value === null || value === undefined) delete next[key];
@@ -948,15 +1026,22 @@ function ParamsEditor({
           };
           if (expressionParams.has(key) && (params[key] === undefined || typeof params[key] === "string")) {
             const required = schema.required?.includes(key) ?? false;
+            const field = (
+              <ExpressionField
+                value={typeof params[key] === "string" ? params[key] : ""}
+                onCommit={(text) => setParam(text.trim() === "" ? null : text)}
+                types={vars}
+                scope={scope}
+                label={paramLabel(key, step.type)}
+              />
+            );
             return (
-              <Row key={key} label={`${paramLabel(key, step.type)}${required ? " *" : ""}`} title={key} socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}>
-                <ExpressionField
-                  value={typeof params[key] === "string" ? params[key] : ""}
-                  onCommit={(text) => setParam(text.trim() === "" ? null : text)}
-                  types={vars}
-                  scope={scope}
-                  label={paramLabel(key, step.type)}
-                />
+              <Row key={key} label={`${paramLabel(key, step.type)}${required ? " *" : ""}`} title={key} socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined} onRemove={onRemove}>
+                {step.type === "control.forEach" && key === "items" ? (
+                  <ListSourceField step={step} defs={stepTypes} value={typeof params[key] === "string" ? params[key] : ""} onChange={setParam} expression={field} />
+                ) : (
+                  field
+                )}
               </Row>
             );
           }
@@ -974,6 +1059,7 @@ function ParamsEditor({
           }
           return (
             <ParamField
+              onRemove={onRemove}
               key={key}
               name={key}
               stepType={step.type}
@@ -984,14 +1070,18 @@ function ParamsEditor({
               secretCapable={def?.secretParams?.includes(key) ?? false}
               pointer={key === "target" ? pointerOf(step.type) : undefined}
               isPath={def?.pathParams?.includes(key) ?? false}
+              binds={def?.bindsVariables?.includes(key) ?? false}
               // The whole params, not a merge patch: a merge would keep the
               // fields an object (a target) no longer has. null removes the key.
               onChange={setParam}
             />
           );
-        })
+        })}
+        <AddRow choices={hidden} onAdd={(key) => setAdded((prev) => new Set(prev).add(key))} />
+        </>
       )}
-    </Section>
+      </Section>
+    </InsertProvider>
   );
 }
 
@@ -1334,46 +1424,77 @@ function StepInspector() {
         </Section>
       )}
       <Connections stepId={id} links={links} vars={vars} />
-      <Section title={t.props.execution}>
-        <Row label={t.disabled}>
+      <ExecutionSection step={step} isCall={isCall} update={update} />
+    </div>
+  );
+}
+
+/**
+ * 無効化・タイムアウト・再試行・エラー時: a row only once it is set, so a
+ * node's pane is not four rows of things nobody changes.
+ */
+function ExecutionSection({ step, isCall, update }: { step: Step; isCall: boolean; update: (p: StepPatch) => void }) {
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  useEffect(() => setAdded(new Set()), [step.id]);
+  const control = step.type.startsWith("control.");
+  const all: { key: string; label: string; set: boolean; hide?: boolean }[] = [
+    { key: "disabled", label: t.disabled, set: step.disabled === true },
+    { key: "timeoutMs", label: t.timeoutMs, set: step.timeoutMs != null, hide: control },
+    { key: "retry", label: t.retry, set: step.retry != null, hide: control || isCall },
+    { key: "onError", label: t.onError, set: step.onError != null, hide: control },
+  ].filter((r) => !r.hide);
+  const shown = (key: string) => (all.find((r) => r.key === key)?.set ?? false) || added.has(key);
+  const drop = (key: string, patch: StepPatch) => {
+    setAdded((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    update(patch);
+  };
+  return (
+    <Section title={t.props.execution}>
+      {shown("disabled") && (
+        <Row label={t.disabled} onRemove={() => drop("disabled", { disabled: false })}>
           <input type="checkbox" className="mt-1.5" checked={step.disabled ?? false} onChange={(e) => update({ disabled: e.target.checked })} />
         </Row>
-        {!step.type.startsWith("control.") && (
-          <>
-          <Row label={t.timeoutMs}>
-            <CommitInput
-              value={step.timeoutMs?.toString() ?? ""}
-              placeholder={isCall ? t.props.callTimeout : "30000"}
-              onCommit={(v) => update({ timeoutMs: v.trim() === "" ? null : Number(v) })}
-            />
-          </Row>
-          {!isCall && (
-            <Row label={t.retry}>
-              <CommitInput
-                value={step.retry?.maxAttempts?.toString() ?? ""}
-                placeholder="1"
-                onCommit={(v) => {
-                  const n = Number(v);
-                  update({ retry: v.trim() === "" || n <= 1 ? null : { maxAttempts: n, backoffMs: 1000, backoffMultiplier: 2 } });
-                }}
-              />
-            </Row>
-          )}
-          <Row label={t.onError}>
-            <select
-              className={inputClass}
-              value={step.onError ?? ""}
-              onChange={(e) => update({ onError: (e.target.value || null) as StepPatch["onError"] })}
-            >
-              <option value="">{t.props.followFlow}</option>
-              <option value="fail">{t.onErrorFail}</option>
-              <option value="continue">{t.onErrorContinue}</option>
-            </select>
-          </Row>
-          </>
-        )}
-      </Section>
-    </div>
+      )}
+      {shown("timeoutMs") && (
+        <Row label={t.timeoutMs} onRemove={() => drop("timeoutMs", { timeoutMs: null })}>
+          <CommitInput
+            value={step.timeoutMs?.toString() ?? ""}
+            placeholder={isCall ? t.props.callTimeout : "30000"}
+            onCommit={(v) => update({ timeoutMs: v.trim() === "" ? null : Number(v) })}
+          />
+        </Row>
+      )}
+      {shown("retry") && (
+        <Row label={t.retry} onRemove={() => drop("retry", { retry: null })}>
+          <CommitInput
+            value={step.retry?.maxAttempts?.toString() ?? ""}
+            placeholder="1"
+            onCommit={(v) => {
+              const n = Number(v);
+              update({ retry: v.trim() === "" || n <= 1 ? null : { maxAttempts: n, backoffMs: 1000, backoffMultiplier: 2 } });
+            }}
+          />
+        </Row>
+      )}
+      {shown("onError") && (
+        <Row label={t.onError} onRemove={() => drop("onError", { onError: null })}>
+          <select
+            className={inputClass}
+            value={step.onError ?? ""}
+            onChange={(e) => update({ onError: (e.target.value || null) as StepPatch["onError"] })}
+          >
+            <option value="">{t.props.followFlow}</option>
+            <option value="fail">{t.onErrorFail}</option>
+            <option value="continue">{t.onErrorContinue}</option>
+          </select>
+        </Row>
+      )}
+      <AddRow choices={all.filter((r) => !shown(r.key))} onAdd={(key) => setAdded((prev) => new Set(prev).add(key))} />
+    </Section>
   );
 }
 

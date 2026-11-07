@@ -679,7 +679,7 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "control.case": { values: [""] },
   "control.while": { condition: "false" },
   "control.repeat": { count: 1 },
-  "control.forEach": { items: "[]", itemVar: "item" },
+  "control.forEach": { itemVar: "item" },
   get "control.fail"() {
     return { message: t.severity.error };
   },

@@ -590,6 +590,22 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
 }
 
 /// Definitions of every `file.*` step.
+/// The column names `file.readCsv` would give with these params (path
+/// already resolved); none when the file has no header row.
+pub fn read_csv_columns(params: &Value) -> Result<Vec<String>, StepError> {
+    if !flag(params, "header", true) {
+        return Ok(Vec::new());
+    }
+    let path = path(params, "path")?;
+    let encoding = optional_string(params, "encoding").unwrap_or_else(|| "auto".into());
+    let text = encoding::decode(
+        &ops::read_bytes(&path)?,
+        &encoding,
+        &path.display().to_string(),
+    )?;
+    ops::csv_header(&text, optional_string(params, "delimiter").as_deref())
+}
+
 pub fn definitions() -> Vec<StepTypeDef> {
     step_defs().into_iter().map(|(def, _)| def).collect()
 }

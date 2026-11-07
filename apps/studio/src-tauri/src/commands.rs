@@ -330,6 +330,24 @@ pub fn read_project_text(
         .unwrap_or(text))
 }
 
+/// The columns of the table a node reads (an Excel sheet, a CSV file), read
+/// from its file now, so a repeat over its rows can offer them before any
+/// run. Empty when the node reads no table or the file is not there yet.
+#[tauri::command]
+pub async fn table_columns(
+    state: State<'_, AppState>,
+    id: FlowId,
+    step_type: String,
+    params: Value,
+) -> CmdResult<Vec<String>> {
+    let folder = state.service.project_dir(&id)?;
+    Ok(tokio::task::spawn_blocking(move || {
+        shikigami_adapters::table_columns(&step_type, &params, &folder).unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default())
+}
+
 #[tauri::command]
 pub fn write_project_text(
     state: State<'_, AppState>,

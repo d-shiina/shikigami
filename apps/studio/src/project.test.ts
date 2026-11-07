@@ -1,6 +1,6 @@
-import type { Flow } from "@shikigami/schema";
+import type { ConfigItem, Flow } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { formatConfig, itemUsers, latestLog, logStatus, parseConfig, roleOf, shelfFor, usersOf } from "./project";
+import { CONFIG_FORMAT, formatConfig, itemUsers, latestLog, logStatus, parseConfig, roleOf, shelfFor, usersOf } from "./project";
 
 const flow = {
   id: "s",
@@ -76,5 +76,31 @@ describe("the open sheet", () => {
     globalThis.confirm = () => true;
     await store.getState().openFile("input/b.csv");
     expect(store.getState().sheet?.text).toBe("text of input/b.csv");
+  });
+});
+
+describe("settings autosave", () => {
+  it("writes a setting typed just before another flow is opened", async () => {
+    const { createProjectStore } = await import("./project");
+    const writes: [string, string, string][] = [];
+    const api = {
+      list: async (id: string) => ({ flowId: id, dir: "", folders: [], files: [] }),
+      readText: async () => JSON.stringify({ items: [{ name: "締め日", type: "text", value: "25" }] }),
+      writeText: async (id: string, path: string, text: string) => {
+        writes.push([id, path, text]);
+        return { path, size: text.length };
+      },
+    } as unknown as Parameters<typeof createProjectStore>[0];
+    const store = createProjectStore(api, { added: () => "", discard: () => "discard?" });
+    await store.getState().load("s");
+    await store.getState().openFile("config/settings.json");
+    store.getState().editConfig({ format: CONFIG_FORMAT, items: [{ name: "締め日", type: "text", value: "20" as unknown as ConfigItem["value"] }] });
+    // Within the autosave pause, the person opens another flow.
+    await store.getState().load("t");
+    expect(writes).toHaveLength(1);
+    expect(writes[0]![0]).toBe("s");
+    expect(writes[0]![2]).toContain('"20"');
+    expect(store.getState().flowId).toBe("t");
+    expect(store.getState().sheet).toBeNull();
   });
 });

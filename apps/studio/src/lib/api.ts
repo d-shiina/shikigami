@@ -217,6 +217,8 @@ export const api = {
   validate: (id: string) => call<ValidationReport>("validate_flow", { id }),
   listStepTypes: () => call<StepTypeDef[]>("list_step_types"),
   /** Evaluates an expression with the given variable values (no side effects). */
+  /** The columns of the table a node reads (Excel sheet, CSV), read from its file now; [] when unknown. */
+  tableColumns: (id: string, stepType: string, params: Record<string, unknown>) => call<string[]>("table_columns", { id, stepType, params }),
   evalExpression: (expression: string, values: Record<string, unknown>) => call<unknown>("eval_expression", { expression, values }),
   history: (id: string, limit = 100) => call<HistoryEntry[]>("flow_history", { id, limit }),
   reviewTimeline: (id: string, since?: number) => call<ReviewTimeline>("review_timeline", { id, since }),

@@ -92,10 +92,10 @@ export function isText(path: string): boolean {
   return /\.(json|txt|csv|tsv|log|md|ya?ml|toml|ini|xml|html?|js|ps1|bat|cmd|sql)$/i.test(path);
 }
 
-function* walk(steps: Step[] | undefined): Generator<Step> {
+export function* walkSteps(steps: Step[] | undefined): Generator<Step> {
   for (const step of steps ?? []) {
     yield step;
-    for (const children of Object.values(step.blocks ?? {})) yield* walk(children);
+    for (const children of Object.values(step.blocks ?? {})) yield* walkSteps(children);
   }
 }
 
@@ -105,7 +105,7 @@ const norm = (path: string) => path.replace(/\\/g, "/").replace(/^\.\//, "").toL
 export function usersOf(flow: Flow | null, path: string): Step[] {
   if (!flow) return [];
   const needle = norm(path);
-  return [...walk(flow.steps)].filter((step) => norm(JSON.stringify(step.params ?? {})).includes(needle));
+  return [...walkSteps(flow.steps)].filter((step) => norm(JSON.stringify(step.params ?? {})).includes(needle));
 }
 
 /**
@@ -116,7 +116,7 @@ export function usersOf(flow: Flow | null, path: string): Step[] {
 export function itemUsers(flow: Flow | null, path: string, items: ConfigItem[]): Map<string, Step[]> {
   const result = new Map<string, Step[]>(items.map((i) => [i.name, []]));
   if (!flow) return result;
-  const steps = [...walk(flow.steps)];
+  const steps = [...walkSteps(flow.steps)];
   const vars = steps
     .filter((s) => s.type === "config.read" && typeof s.params?.path === "string" && norm(s.params.path) === norm(path) && s.saveAs)
     .map((s) => s.saveAs as string);
@@ -158,12 +158,14 @@ export type ProjectState = {
   onChanged(id: string): Promise<void>;
   openFile(path: string): Promise<void>;
   closeSheet(): void;
-  /** Edits the sheet's text (or form); saved with `saveSheet`. */
+  /** Edits the sheet's text; saved with `saveSheet`. */
   editSheet(text: string): void;
+  /** Edits the settings form; saved on its own a moment later. */
   editConfig(config: ConfigFile): void;
   setRaw(raw: boolean): void;
   saveSheet(): Promise<boolean>;
-  newSettings(): Promise<void>;
+  /** Makes config/settings.json (or the next free name) and opens it; its path. */
+  newSettings(): Promise<string | null>;
   /** Files from Explorer; `folder` null sorts each onto its shelf. */
   /** Copies files into the flow's folder; the files now there (none that failed or already existed). */
   copyIn(paths: string[], folder: Role | null): Promise<ProjectFile[]>;
@@ -175,6 +177,7 @@ export type ProjectState = {
 };
 
 const PANEL_KEY = "shikigami.studio.project";
+const AUTOSAVE_MS = 400;
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -190,6 +193,7 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
     // Only a remembered preference.
   }
   return createStore<ProjectState>()((set, get) => {
+    let autosave: ReturnType<typeof setTimeout> | undefined;
     const refresh = async () => {
       const id = get().flowId;
       if (!id) return;
@@ -218,6 +222,8 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
       },
       async load(id) {
         if (id === get().flowId) return;
+        // A setting typed just before the switch is still waiting for its autosave.
+        if (get().sheet?.config && !get().sheet?.raw) await get().saveSheet();
         set({ flowId: id, files: null, sheet: null, error: null, notice: null });
         await refresh();
       },
@@ -246,7 +252,10 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         // Unsaved edits are not dropped by opening a file over them.
         const sheet = get().sheet;
         if (sheet && sheet.text !== sheet.saved) {
-          if (sheet.path === path || !(globalThis.confirm?.(labels.discard()) ?? true)) return;
+          if (sheet.path === path) return;
+          // The settings form saves as it is typed; only hand-edited text can be lost.
+          if (sheet.config && !sheet.raw) await get().saveSheet();
+          else if (!(globalThis.confirm?.(labels.discard()) ?? true)) return;
         }
         try {
           const text = await api.readText(id, path);
@@ -266,7 +275,11 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
       },
       editConfig(config) {
         const sheet = get().sheet;
-        if (sheet) set({ sheet: { ...sheet, config, text: formatConfig(config) } });
+        if (!sheet) return;
+        set({ sheet: { ...sheet, config, text: formatConfig(config) } });
+        // Typing is saving, as everywhere else in Studio: a short pause, then the file.
+        clearTimeout(autosave);
+        autosave = setTimeout(() => void get().saveSheet(), AUTOSAVE_MS);
       },
       setRaw(raw) {
         const sheet = get().sheet;
@@ -275,9 +288,10 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
         set({ sheet: { ...sheet, raw, config: raw ? sheet.config : parseConfig(sheet.text) } });
       },
       async saveSheet() {
+        clearTimeout(autosave);
         const id = get().flowId;
         const sheet = get().sheet;
-        if (!id || !sheet) return false;
+        if (!id || !sheet || sheet.text === sheet.saved) return false;
         try {
           await api.writeText(id, sheet.path, sheet.text, true);
           if (get().sheet?.path === sheet.path) set({ sheet: { ...get().sheet!, saved: sheet.text } });
@@ -290,17 +304,20 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
       },
       async newSettings() {
         const id = get().flowId;
-        if (!id) return;
+        if (!id) return null;
         const taken = new Set(get().files?.files.map((f) => f.path) ?? []);
         let path = "config/settings.json";
         for (let n = 2; taken.has(path); n++) path = `config/settings-${n}.json`;
-        const text = formatConfig({ format: CONFIG_FORMAT, items: [] });
+        // One blank row to type into, so the sheet opens ready (Core skips unnamed settings).
+        const text = formatConfig({ format: CONFIG_FORMAT, items: [{ name: "", type: "text", value: "" as unknown as ConfigItem["value"] }] });
         try {
           await api.writeText(id, path, text, false);
           await refresh();
           set({ sheet: { path, text, saved: text, config: parseConfig(text), raw: false } });
+          return path;
         } catch (e) {
           set({ error: message(e) });
+          return null;
         }
       },
       async copyIn(paths, folder) {
