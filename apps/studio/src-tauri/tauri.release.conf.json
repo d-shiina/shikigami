@@ -9,6 +9,11 @@
       "bundled/node": "node",
       "bundled/browser-adapter": "browser-adapter",
       "bundled/ocr": "ocr"
+    },
+    "windows": {
+      "nsis": {
+        "compression": "zlib"
+      }
     }
   }
 }

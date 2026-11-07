@@ -81,4 +81,6 @@ expect_used = "warn"
 panic = "warn"
 
 [profile.release]
-lto = "thin"
+# No cross-crate LTO: it made each release binary link for minutes (the
+# release build twice: CLI and Studio), for no speed a user would notice.
+lto = false

@@ -17,6 +17,7 @@ on:
     paths:
       - .github/workflows/release.yml
       - apps/studio/scripts/**
+      - apps/studio/src-tauri/Cargo.toml
       - apps/studio/src-tauri/tauri.conf.json
       - apps/studio/src-tauri/tauri.release.conf.json
       - scripts/release-notes.mjs
