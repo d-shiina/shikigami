@@ -13,6 +13,7 @@
 // move the allocation.
 #![allow(clippy::result_large_err)]
 
+pub mod install;
 pub mod manifest;
 
 use std::path::{Path, PathBuf};
@@ -154,19 +155,18 @@ pub fn default_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = std::env::var_os("SHIKIGAMI_PLUGINS")
         .map(|value| std::env::split_paths(&value).collect())
         .unwrap_or_default();
-    if let Some(local) = dirs::data_local_dir() {
-        dirs.push(local.join("Shikigami").join("plugins"));
-    }
+    dirs.extend(install::install_root());
     dirs
 }
 
 /// Loads every plugin in `roots`. A root is a plugin folder itself or a
-/// folder of plugin folders; missing roots are skipped. Plugins whose name
-/// is in `taken` or was loaded before are reported, not loaded.
+/// folder of plugin folders; missing roots are skipped, and so are plugins
+/// turned off ([`install::DISABLED_FILE`]). Plugins whose name is in
+/// `taken` or was loaded before are reported, not loaded.
 pub fn discover(roots: &[PathBuf], taken: &[&str]) -> Discovery {
     let mut found = Discovery::default();
     let mut names: Vec<String> = taken.iter().map(|s| (*s).to_owned()).collect();
-    for dir in roots.iter().flat_map(|root| plugin_dirs(root)) {
+    for dir in roots.iter().flat_map(|root| plugin_dirs(root, false)) {
         let taken: Vec<&str> = names.iter().map(String::as_str).collect();
         match Plugin::load(&dir, &taken) {
             Ok(plugin) => {
@@ -182,9 +182,17 @@ pub fn discover(roots: &[PathBuf], taken: &[&str]) -> Discovery {
     found
 }
 
-fn plugin_dirs(root: &Path) -> Vec<PathBuf> {
+/// The plugin folders in `root` (itself, or the folders in it), without
+/// Shikigami's own (`.staging`, `.trash`) and, unless `with_disabled`,
+/// without those turned off.
+pub(crate) fn plugin_dirs(root: &Path, with_disabled: bool) -> Vec<PathBuf> {
+    let on = |p: &Path| with_disabled || !p.join(install::DISABLED_FILE).exists();
     if root.join(MANIFEST_FILE).is_file() {
-        return vec![root.to_path_buf()];
+        return if on(root) {
+            vec![root.to_path_buf()]
+        } else {
+            vec![]
+        };
     }
     let Ok(entries) = std::fs::read_dir(root) else {
         return vec![];
@@ -192,7 +200,12 @@ fn plugin_dirs(root: &Path) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = entries
         .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|p| p.join(MANIFEST_FILE).is_file())
+        .filter(|p| {
+            !p.file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with('.'))
+                && p.join(MANIFEST_FILE).is_file()
+                && on(p)
+        })
         .collect();
     dirs.sort();
     dirs

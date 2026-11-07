@@ -44,6 +44,7 @@ import {
   type StepTestResult,
 } from "./lib/api";
 import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
+import { registerExtensions } from "./lib/extensions";
 import { copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
@@ -70,7 +71,7 @@ export type PaletteAnchor = { left: number; top: number; right: number; bottom: 
  * The places in the sidebar; each fills the window right of it. "library" is
  * the page of all flows, "flows" the editor of the open one.
  */
-export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "settings";
+export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "extensions" | "settings";
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues";
@@ -912,6 +913,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const [stepTypes, summaries] = await Promise.all([api.listStepTypes(), api.listFlows()]);
           setFlowNames(new Map(summaries.map((s) => [s.id, s.name] as const)));
+          registerExtensions(stepTypes);
           set({ stepTypes, summaries });
           void get().loadInbox();
           set({ workspace: await api.workspaceInfo() });

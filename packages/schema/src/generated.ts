@@ -113,6 +113,16 @@ export type RiskLevel = "safe" | "interactive" | "dangerous";
  */
 export type TargetKind = "site" | "app";
 /**
+ * What a secret holds, so Studio can name its fields and the AI can tell
+ * a login from an API key. Every kind is stored, referenced (`{ "secret",
+ * "field" }`), site-checked and masked the same way: the kind only changes
+ * how the fields are called and which ones a person fills in.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "SecretKind".
+ */
+export type SecretKind = "login" | "apiKey" | "oauth";
+/**
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "ChangeKind".
  */
@@ -835,7 +845,8 @@ export interface Deprecation {
   replacement?: string | null;
 }
 /**
- * A plugin that provides step types, as installed on this PC.
+ * A plugin (an extension, in Studio) that provides step types, as
+ * installed on this PC, with what Studio shows about it.
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "PluginInfo".
@@ -849,6 +860,76 @@ export interface PluginInfo {
    * Installed version (semver).
    */
   version: string;
+  /**
+   * The plugin's display name (its palette group).
+   */
+  label?: string;
+  /**
+   * Where its nodes work, shown as the tag before a node's name
+   * ("AI-OCR"). Empty: the label.
+   */
+  tag?: string;
+  /**
+   * A Lucide icon name for its nodes (`scan-text`).
+   */
+  icon?: string;
+  /**
+   * Who makes it.
+   */
+  publisher?: string;
+  /**
+   * The registered secrets it takes, by kind, so Studio offers the
+   * right ones (and a form of that kind) for its secret params.
+   */
+  credentials?: PluginCredential[];
+  /**
+   * What this step does, in one sentence for people (Studio shows it
+   * under the node's name; `description` is written for AI clients).
+   */
+  summary?: string;
+  /**
+   * What this step sends outside the PC, when it does: shown on the
+   * review panel before publishing.
+   */
+  external?: ExternalUse | null;
+}
+/**
+ * A secret a plugin's steps take: of which kind, and in which params.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "PluginCredential".
+ */
+export interface PluginCredential {
+  kind: SecretKind;
+  /**
+   * What to register, for people ("Azure のキー").
+   */
+  label: string;
+  description?: string;
+  /**
+   * The step params (in `secretParams`) that take it.
+   */
+  params: string[];
+}
+/**
+ * Data a step sends to a service outside the PC.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "ExternalUse".
+ */
+export interface ExternalUse {
+  /**
+   * The service it is sent to ("Azure AI Document Intelligence").
+   */
+  service: string;
+  /**
+   * What is sent ("読み取る画像・PDF").
+   */
+  data: string;
+  /**
+   * The param holding the address it is sent to, when it has one.
+   */
+  param?: string | null;
 }
 /**
  * One committed change.

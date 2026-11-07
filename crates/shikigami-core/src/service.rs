@@ -2183,6 +2183,7 @@ mod tests {
         def.plugin = Some(crate::registry::PluginInfo {
             name: "hello".into(),
             version: "0.3.1".into(),
+            ..Default::default()
         });
         registry.register(def);
         let svc = FlowService::new(FileStore::open(dir.path()).expect("store"), registry);

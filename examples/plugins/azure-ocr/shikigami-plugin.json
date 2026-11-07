@@ -1,0 +1,93 @@
+{
+  "manifestVersion": 1,
+  "name": "azureocr",
+  "version": "0.1.0",
+  "label": "Azure AI-OCR",
+  "description": "Azure AI Document Intelligence（クラウド型 AI-OCR）で、画像や PDF の文字・表・請求書や領収書の項目を読み取ります。",
+  "publisher": "Shikigami 見本",
+  "homepage": "https://github.com/d-shiina/shikigami/tree/main/examples/plugins/azure-ocr",
+  "tag": "AI-OCR",
+  "icon": "scan-text",
+  "command": { "program": "node", "args": ["main.mjs"] },
+  "credentials": [
+    {
+      "kind": "apiKey",
+      "label": "Azure AI Document Intelligence のキー",
+      "description": "Azure ポータルのリソースの「キーとエンドポイント」にあるキー 1 またはキー 2。使ってよい先に plugin:azureocr を登録します。",
+      "params": ["key"]
+    }
+  ],
+  "steps": [
+    {
+      "action": "readDocument",
+      "label": "AI-OCR の読み取り",
+      "summary": "画像や PDF を Azure の AI-OCR で読み取り、文字・表・帳票の項目を返します",
+      "description": "Sends the image or PDF at `path` to Azure AI Document Intelligence (`endpoint`, key from a registered apiKey secret) and returns what it read: { text, pages: [{ page, lines: [text] }], tables: [{ rows: [[cell]] }], fields: { name: value }, model }. `model` prebuilt-read (text, default), prebuilt-layout (text and tables), prebuilt-invoice / prebuilt-receipt (also fields such as InvoiceTotal, VendorName). `locale` is a hint like ja-JP. A relative `path` is read from the flow's folder.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "エンドポイント",
+            "description": "Azure のリソースのエンドポイント（例：https://<リソース名>.cognitiveservices.azure.com）"
+          },
+          "key": {
+            "type": "string",
+            "title": "API キー",
+            "description": "登録済みのシークレット（種類：API キー）を選びます"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "ファイル",
+            "description": "読み取る画像（PNG・JPEG・TIFF・BMP）または PDF"
+          },
+          "model": {
+            "type": "string",
+            "enum": ["prebuilt-read", "prebuilt-layout", "prebuilt-invoice", "prebuilt-receipt"],
+            "default": "prebuilt-read",
+            "title": "読み取りの種類",
+            "x-enumLabels": {
+              "prebuilt-read": "文字",
+              "prebuilt-layout": "文字と表",
+              "prebuilt-invoice": "請求書の項目",
+              "prebuilt-receipt": "領収書の項目"
+            }
+          },
+          "locale": {
+            "type": "string",
+            "title": "言語",
+            "description": "文書の言語の手がかり（例：ja-JP）。空欄の場合は自動で判定します"
+          }
+        },
+        "required": ["endpoint", "key", "path"],
+        "additionalProperties": false
+      },
+      "secretParams": ["key"],
+      "pathParams": ["path"],
+      "targets": [{ "kind": "site", "param": "endpoint" }],
+      "external": {
+        "service": "Azure AI Document Intelligence",
+        "data": "読み取るファイル（画像・PDF）",
+        "param": "endpoint"
+      },
+      "hasOutput": true,
+      "risk": "interactive",
+      "defaultTimeoutMs": 120000,
+      "examples": [
+        {
+          "type": "azureocr.readDocument",
+          "name": "請求書の読み取り",
+          "params": {
+            "endpoint": "https://example.cognitiveservices.azure.com",
+            "key": { "secret": "Azure AI-OCR", "field": "password" },
+            "path": "input/invoice.pdf",
+            "model": "prebuilt-invoice"
+          },
+          "saveAs": "invoice"
+        }
+      ]
+    }
+  ]
+}
