@@ -254,7 +254,8 @@ function suggest(source: string, ctx: ReturnType<typeof cursorContext>, types: M
     // A column: of the table a `r =>` walks over, or of a record variable.
     const table = paramSource(source, ctx.owner) ?? ctx.owner;
     const value = scope.values[table];
-    for (const col of columnsOf(value)) {
+    const known = columnsOf(value);
+    for (const col of known.length > 0 ? known : (scope.columns?.[table] ?? [])) {
       if (!matches(col)) continue;
       const plain = isPlainName(col);
       // `['税込 金額']` replaces the `.` too.

@@ -151,6 +151,20 @@ fn header_names(raw: &csv::StringRecord) -> Vec<String> {
     names
 }
 
+/// The header names of a CSV file, as `read_csv` names its columns.
+pub fn csv_header(text: &str, delim: Option<&str>) -> Result<Vec<String>, StepError> {
+    let mut reader = csv::ReaderBuilder::new()
+        .delimiter(delimiter(delim)?)
+        .has_headers(false)
+        .flexible(true)
+        .from_reader(text.as_bytes());
+    match reader.records().next() {
+        Some(Ok(first)) => Ok(header_names(&first)),
+        Some(Err(e)) => Err(StepError::permanent("CSV_INVALID", e.to_string())),
+        None => Ok(Vec::new()),
+    }
+}
+
 pub fn read_csv(
     text: &str,
     delim: Option<&str>,

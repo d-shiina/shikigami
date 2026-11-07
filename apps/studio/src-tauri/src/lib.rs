@@ -152,6 +152,7 @@ pub fn run() {
             commands::list_flows,
             commands::project_files,
             commands::read_project_text,
+            commands::table_columns,
             commands::write_project_text,
             commands::upload_project_file,
             commands::copy_into_project,
