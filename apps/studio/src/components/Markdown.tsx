@@ -7,9 +7,9 @@ import { agent } from "../lib/api";
 import { t } from "../lib/i18n";
 import { type Block, type Inline, parseMarkdown } from "../lib/markdown";
 
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, className = "text-[13px] text-ink" }: { text: string; className?: string }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
-  return <div className="md min-w-0 space-y-2 text-[13px] leading-relaxed text-ink">{blocks.map(block)}</div>;
+  return <div className={`md min-w-0 space-y-2 leading-relaxed ${className}`}>{blocks.map(block)}</div>;
 }
 
 function block(b: Block, key: number): ReactNode {

@@ -8,6 +8,8 @@ import { create } from "zustand";
 import { useAgent } from "../agent";
 import { type AgentKind, type AppInfo, type UpdateInfo, updates } from "../lib/api";
 import { t } from "../lib/i18n";
+import { releaseNotes } from "../lib/releaseNotes";
+import { Markdown } from "./Markdown";
 import { SettingsGroup, SettingsRow, settingsPrimary } from "./settingsLayout";
 
 type UpdateState =
@@ -141,7 +143,9 @@ export function AboutSection() {
       {state.kind === "ready" && (
         <SettingsRow label={`v${state.info.version} ${t.updateReady}`} hint={t.updateOnClose} align="start">
           {state.info.notes && (
-            <p className="mb-2 max-h-32 overflow-y-auto text-xs whitespace-pre-wrap text-slate-600">{state.info.notes}</p>
+            <div className="mb-2 max-h-48 overflow-y-auto pr-1">
+              <Markdown text={releaseNotes(state.info.notes)} className="text-xs text-slate-700" />
+            </div>
           )}
           <button type="button" onClick={() => void install(state.info)} className={settingsPrimary}>
             {t.updateInstall}
