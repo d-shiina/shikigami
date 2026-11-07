@@ -217,3 +217,19 @@ export const TYPE_COLOR: Record<string, string> = {
   object: "var(--cat-windows)",
   any: "var(--cat-other)",
 };
+
+/** The variable of `refs` an expression like "row.金額" or "items[0]" starts with. */
+export function rootOf(expr: string, refs: readonly string[]): string | undefined {
+  return refs.find((r) => expr === r || expr.startsWith(`${r}.`) || expr.startsWith(`${r}[`));
+}
+
+/**
+ * An expression cut around the variables of `refs` it uses, each with its
+ * fields: odd pieces are the uses ("response.rows"), even ones the text between.
+ */
+export function splitRefs(expr: string, refs: readonly string[]): string[] {
+  if (refs.length === 0) return [expr];
+  const names = [...refs].sort((a, b) => b.length - a.length).map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const id = "\\p{L}\\p{N}_$";
+  return expr.split(new RegExp(`(?<![${id}.])((?:${names.join("|")})(?:\\.[${id}]+|\\[[^\\]]*\\])*)(?![${id}])`, "u"));
+}

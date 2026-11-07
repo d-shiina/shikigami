@@ -1,6 +1,6 @@
 import type { Step } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { CALL_BAR_H, knownVariables, NODE_HEAD_H, NODE_PAD_B, nodeHeight, nodeRows, ROW_H } from "./nodeRows";
+import { CALL_BAR_H, knownVariables, NODE_HEAD_H, NODE_PAD_B, nodeHeight, nodeRows, ROW_H, splitRefs } from "./nodeRows";
 
 const set: Step = { id: "s1", type: "variable.set", params: { name: "total", expression: "total + invoice.amount" } };
 const loop: Step = { id: "s2", type: "control.forEach", params: { items: "invoices", itemVar: "invoice" }, blocks: { body: [set] } };
@@ -44,5 +44,19 @@ describe("nodeRows", () => {
       ["invoice", "any"],
       ["total", "any"],
     ]);
+  });
+
+  it("cuts an expression around the variables it uses, with their fields", () => {
+    expect(splitRefs("total > limit && response.rows.length > 0", ["total", "limit", "response"])).toEqual([
+      "",
+      "total",
+      " > ",
+      "limit",
+      " && ",
+      "response.rows.length",
+      " > 0",
+    ]);
+    expect(splitRefs("subtotal + items[0].金額", ["total", "items"])).toEqual(["subtotal + ", "items[0].金額", ""]);
+    expect(splitRefs("x.total", ["total"])).toEqual(["x.total"]);
   });
 });

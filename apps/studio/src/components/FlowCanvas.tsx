@@ -46,6 +46,8 @@ import {
   NODE_HEAD_H,
   NODE_PAD_B,
   nodeRows,
+  rootOf,
+  splitRefs,
   knownVariables,
   ROW_H,
   type Row,
@@ -424,10 +426,19 @@ function VarChip({ name, label, color, values, side, owner }: { name: string; la
 function ValueText({ value, refs, color, run, stepId }: { value: string; refs: string[]; color: (name: string) => string; run: RunValues; stepId: string }) {
   const parts = value.split(/\{\{\s*(.*?)\s*\}\}/g);
   const holes = parts.filter((_, i) => i % 2 === 1).length;
-  // An expression param (a condition, a list) names its variables without holes.
-  if (holes === 0 && refs.length > 0 && refs.includes(value.trim())) {
-    const r = value.trim();
-    return <VarChip side="in" owner={stepId} name={r} color={color(r)} values={valuesSeenBy(run.changes, run.starts, r, stepId)} />;
+  // An expression param (a condition, a list) names its variables without
+  // holes: each variable in it, with its fields ("response.rows"), is a token.
+  if (holes === 0 && refs.length > 0) {
+    const pieces = splitRefs(value, refs);
+    return (
+      <>
+        {pieces.map((piece, i) => {
+          if (i % 2 === 0) return piece ? <span key={i} className="truncate">{piece}</span> : null;
+          const root = rootOf(piece, refs) ?? piece;
+          return <VarChip key={i} side="in" owner={stepId} name={root} label={piece} color={color(root)} values={valuesSeenBy(run.changes, run.starts, root, stepId)} />;
+        })}
+      </>
+    );
   }
   return (
     <>
