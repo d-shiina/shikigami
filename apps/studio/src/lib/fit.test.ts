@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AGENT, AGENT_NARROW, CHART_MIN, DEFAULT_SIZES, fit, INBOX_FOLDED, readSizes, RIGHT, SIDEBAR } from "./fit";
+import { AGENT, AGENT_NARROW, CHART_MIN, DEFAULT_SIZES, fit, INBOX_FOLDED, readSizes, RIGHT, SIDEBAR, SIDEBAR_MINI } from "./fit";
 
 const editing = { agent: true, right: true, inbox: false, sidebar: true };
 
@@ -8,20 +8,22 @@ describe("fit", () => {
     expect(fit(1920, editing)).toMatchObject({ sidebar: true, inbox: true, right: true, agent: AGENT });
   });
 
-  it("hides the sidebar first, keeping the inspector beside the AI pane on a 1280px window", () => {
-    expect(fit(1280, editing)).toMatchObject({ sidebar: false, inbox: true, right: true, agent: AGENT });
+  it("folds the sidebar to its icons first, keeping the inspector beside the AI pane on a 1280px window", () => {
+    const f = fit(1280, editing);
+    expect(f).toMatchObject({ sidebar: false, inbox: true, right: true, agent: AGENT });
+    expect(f.chart).toBe(1280 - SIDEBAR_MINI - RIGHT - AGENT);
   });
 
   it("folds the review inbox next", () => {
-    expect(fit(1280, { ...editing, inbox: true })).toMatchObject({ sidebar: false, inbox: false, right: true, agent: AGENT });
+    expect(fit(1280, { ...editing, inbox: true })).toMatchObject({ sidebar: false, inbox: false, right: true, agent: AGENT_NARROW });
   });
 
   it("narrows the AI pane, then lets it take the inspector's place, and the chart still fits at 960px", () => {
     const f = fit(960, editing);
     expect(f).toMatchObject({ sidebar: false, inbox: true, right: false, agent: AGENT_NARROW });
-    expect(960 - f.agent).toBeGreaterThanOrEqual(CHART_MIN);
-    expect(fit(RIGHT + AGENT_NARROW + CHART_MIN, editing).right).toBe(true);
-    expect(fit(INBOX_FOLDED + RIGHT + AGENT_NARROW + CHART_MIN, { ...editing, inbox: true }).right).toBe(true);
+    expect(960 - SIDEBAR_MINI - f.agent).toBeGreaterThanOrEqual(CHART_MIN);
+    expect(fit(SIDEBAR_MINI + RIGHT + AGENT_NARROW + CHART_MIN, editing).right).toBe(true);
+    expect(fit(SIDEBAR_MINI + INBOX_FOLDED + RIGHT + AGENT_NARROW + CHART_MIN, { ...editing, inbox: true }).right).toBe(true);
   });
 
   it("keeps the sidebar while nothing is open to inspect", () => {
@@ -32,8 +34,10 @@ describe("fit", () => {
     expect(fit(960, { ...editing, agent: false }).right).toBe(true);
   });
 
-  it("gives the room of a sidebar hidden by hand to the others", () => {
-    expect(fit(1280 - 1, { ...editing, sidebar: false }).sidebar).toBe(true);
+  it("gives the room of a sidebar folded by hand to the others, keeping its icons", () => {
+    const f = fit(1280 - 1, { ...editing, sidebar: false });
+    expect(f.sidebar).toBe(true);
+    expect(f.chart).toBe(1280 - 1 - SIDEBAR_MINI - RIGHT - AGENT);
   });
 
   it("works with the widths the person dragged to", () => {

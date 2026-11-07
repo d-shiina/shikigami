@@ -5,9 +5,14 @@
 // (schedules now, run history next) are one row here. Above the places,
 // the AI: its chat opens right beside this column, as Notion AI and Linear's
 // agent do, since it works on whatever place is open.
-import { AppWindow, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, Settings2, Workflow } from "lucide-react";
+//
+// Folded (Ctrl+B, or a window too narrow for it), the column keeps its icons
+// as a strip, as Linear and VS Code do: the places stay one click away and
+// their counts stay in sight. Hovering an icon names it.
+import { AppWindow, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
 import { anyBusy, useAgent } from "../agent";
 import { useStudio, useStudioApi } from "../context";
+import { SIDEBAR_MINI } from "../lib/fit";
 import { t } from "../lib/i18n";
 import { runnerApi } from "../runner/api";
 import type { Place } from "../store";
@@ -26,9 +31,12 @@ type ItemProps = {
   busy?: boolean;
   title?: string;
   indent?: boolean;
+  /** The folded sidebar: the icon alone, named on hover. */
+  mini?: boolean;
 };
 
-function Item({ icon: Icon, label, on, onClick, count, tone, dot, busy, title, indent }: ItemProps) {
+function Item({ icon: Icon, label, on, onClick, count, tone, dot, busy, title, indent, mini }: ItemProps) {
+  if (mini) return <MiniItem icon={Icon} label={label} on={on} onClick={onClick} count={count} tone={tone} dot={dot} busy={busy} title={title} />;
   return (
     <button
       type="button"
@@ -50,8 +58,45 @@ function Item({ icon: Icon, label, on, onClick, count, tone, dot, busy, title, i
   );
 }
 
+/** The name shown beside an icon of the folded sidebar while it is hovered or focused. */
+function Tip({ label, note }: { label: string; note?: string }) {
+  return (
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute top-1/2 left-full z-50 ml-2 hidden w-max max-w-64 -translate-y-1/2 rounded-md border border-slate-200 bg-sheet px-2 py-1 text-left text-[12px] leading-snug font-medium text-ink shadow-lifted group-hover:block group-focus-visible:block"
+    >
+      {label}
+      {note && <span className="mt-0.5 block font-normal text-slate-600">{note}</span>}
+    </span>
+  );
+}
+
+function MiniItem({ icon: Icon, label, on, onClick, count, tone, dot, busy, title }: Omit<ItemProps, "indent" | "mini">) {
+  const badge = count !== undefined && count > 0;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={on ? "page" : undefined}
+      aria-label={badge ? `${label} (${count})` : label}
+      className={`group relative mx-auto grid h-8 w-8 place-items-center rounded-lg ${on ? "bg-slate-200/70 text-ink" : "text-slate-500 hover:bg-slate-100 hover:text-ink"}`}
+    >
+      <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
+      {badge && (
+        <span
+          className={`absolute -top-0.5 -right-0.5 min-w-4 rounded-md px-0.5 text-center text-[10px] leading-4 font-semibold text-white ring-2 ring-frame ${tone === "accent" ? "bg-accent-500" : "bg-shu-500"}`}
+        >
+          {count}
+        </span>
+      )}
+      {!badge && (dot || busy) && <span className={`absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-500 ring-2 ring-frame ${busy ? "animate-pulse" : ""}`} />}
+      <Tip label={label} note={title && title !== label ? title : undefined} />
+    </button>
+  );
+}
+
 /** Opens and closes the AI's chat, which sits right of the sidebar. */
-function AgentItem() {
+function AgentItem({ mini }: { mini?: boolean }) {
   const open = useAgent((s) => s.open);
   const setOpen = useAgent((s) => s.setOpen);
   const busy = useAgent(anyBusy);
@@ -60,7 +105,7 @@ function AgentItem() {
   // Named by what it is, not by the AI in use (Claude Code, Codex, …): which
   // one is set in Settings and shown in the pane's head.
   const name = useAgent((s) => s.info?.name ?? "AI");
-  return <Item icon={MessageSquareText} label={t.shell.aiChat} on={open} onClick={() => setOpen(!open)} busy={busy} dot={news} title={`${t.shell.aiChat}：${name}（Ctrl+J）`} />;
+  return <Item icon={MessageSquareText} label={t.shell.aiChat} on={open} onClick={() => setOpen(!open)} busy={busy} dot={news} title={`${t.shell.aiChat}：${name}（Ctrl+J）`} mini={mini} />;
 }
 
 /** The folder the flows live in; the full path and the change are in Settings. */
@@ -82,7 +127,11 @@ function Workspace() {
   );
 }
 
-export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () => void }) {
+/**
+ * `mini`: folded to its icons; `onToggle` then unfolds it (or lays it over
+ * the chart when the window has no room for it).
+ */
+export function Sidebar({ width, onToggle, mini = false }: { width: number; onToggle: () => void; mini?: boolean }) {
   const place = useStudio((s) => s.place);
   const setPlace = useStudio((s) => s.setPlace);
   const flow = useStudio((s) => s.flow);
@@ -100,28 +149,29 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
   const go = (p: Place) => () => setPlace(p);
   const store = useStudioApi();
   return (
-    <aside aria-label={t.shell.places} style={{ width }} className="flex h-full shrink-0 flex-col bg-frame">
+    <aside aria-label={t.shell.places} style={{ width: mini ? SIDEBAR_MINI : width }} className="relative z-20 flex h-full shrink-0 flex-col bg-frame">
       {/* The top of the window: room to drag it by, level with the title bar. */}
-      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pr-1.5 pl-2 select-none">
-        <Workspace />
+      <div data-tauri-drag-region className={`flex h-10 shrink-0 items-center gap-1 select-none ${mini ? "justify-center" : "pr-1.5 pl-2"}`}>
+        {!mini && <Workspace />}
         <button
           type="button"
-          onClick={onCollapse}
-          title={`${t.list.collapse} (Ctrl+B)`}
+          onClick={onToggle}
+          aria-label={mini ? t.list.expand : t.list.collapse}
+          title={`${mini ? t.list.expand : t.list.collapse} (Ctrl+B)`}
           className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
         >
-          <PanelLeftClose size={16} strokeWidth={1.75} aria-hidden="true" />
+          {mini ? <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden="true" /> : <PanelLeftClose size={16} strokeWidth={1.75} aria-hidden="true" />}
         </button>
       </div>
-      <div className="px-2 pt-1 pb-2">
-        <AgentItem />
+      <div className={mini ? "px-1.5 pt-1 pb-2" : "px-2 pt-1 pb-2"}>
+        <AgentItem mini={mini} />
       </div>
-      <nav className="flex-1 space-y-px border-t border-slate-200 px-2 pt-2">
-        <Item icon={LayoutList} label={t.flows} on={place === "library"} onClick={go("library")} />
+      <nav className={`flex-1 border-t border-slate-200 pt-2 ${mini ? "space-y-1 px-1.5" : "space-y-px px-2"}`}>
+        <Item icon={LayoutList} label={t.flows} on={place === "library"} onClick={go("library")} mini={mini} />
         {/* The open flow, under the library it came from: the way back to the editor. */}
-        {flow && <Item icon={Workflow} label={flow.name} on={place === "flows"} onClick={go("flows")} indent />}
-        <Item icon={Inbox} label={t.awaitingReview} on={place === "review"} onClick={enterReview} count={inbox.length} title={t.bar.reviewTitle} />
-        <Item icon={CalendarClock} label={t.runs.place} on={place === "runs"} onClick={go("runs")} title={t.runs.placeTitle} />
+        {flow && <Item icon={Workflow} label={flow.name} on={place === "flows"} onClick={go("flows")} indent mini={mini} />}
+        <Item icon={Inbox} label={t.awaitingReview} on={place === "review"} onClick={enterReview} count={inbox.length} title={t.bar.reviewTitle} mini={mini} />
+        <Item icon={CalendarClock} label={t.runs.place} on={place === "runs"} onClick={go("runs")} title={t.runs.placeTitle} mini={mini} />
         <Item
           icon={KeyRound}
           label={t.secrets}
@@ -130,11 +180,12 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
           count={asks}
           tone="accent"
           title={asks > 0 ? t.bar.secretAskTitle : t.secretsIntro}
+          mini={mini}
         />
       </nav>
-      <div className="space-y-px px-2 py-1.5">
+      <div className={mini ? "space-y-1 px-1.5 py-1.5" : "space-y-px px-2 py-1.5"}>
         {/* Another window, not a place: the published scenarios for the people who only run them. */}
-        <Item icon={AppWindow} label={t.runner.open} on={false} onClick={() => void runnerApi.openWindow().catch((e: unknown) => store.setState({ error: e instanceof Error ? e.message : String(e) }))} title={t.runner.openTitle} />
+        <Item icon={AppWindow} label={t.runner.open} on={false} onClick={() => void runnerApi.openWindow().catch((e: unknown) => store.setState({ error: e instanceof Error ? e.message : String(e) }))} title={t.runner.openTitle} mini={mini} />
         <Item
           icon={Settings2}
           label={t.shell.settings}
@@ -142,6 +193,7 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
           onClick={go("settings")}
           dot={update !== null}
           title={update ? `${t.updateAvailable} v${update}` : t.shell.settings}
+          mini={mini}
         />
       </div>
     </aside>
