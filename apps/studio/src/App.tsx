@@ -351,7 +351,7 @@ function Shell() {
     return () => window.removeEventListener("keydown", onKey);
   });
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-frame">
       <div ref={measure} className="relative flex min-h-0 flex-1 overflow-hidden">
         {showSidebar && (
           <div className="relative flex">
@@ -364,7 +364,8 @@ function Shell() {
             <Sidebar width={sizes.sidebar} onCollapse={() => setPeek(false)} />
           </Peek>
         )}
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* The work floats on the window's ground, framed and rounded, as in Linear. */}
+        <div className="mt-1.5 mr-1.5 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
           <TitleBar view={view} onView={setView} onShowSidebar={showSidebar ? undefined : toggleSidebar} />
           <HumanBanner />
           <Banner />
