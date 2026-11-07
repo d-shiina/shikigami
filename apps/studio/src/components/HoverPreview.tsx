@@ -3,7 +3,7 @@
 // CSV, the start of a text file, or a long text whole. Wraps the value as it
 // is drawn; nothing changes for values with nothing more to show.
 import { FileText, ImageIcon, Sheet, TriangleAlert } from "lucide-react";
-import { type HTMLAttributes, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { type HTMLAttributes, type ReactNode, type RefObject, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -95,7 +95,8 @@ function TableView({ preview }: { preview: Extract<FilePreview, { kind: "table" 
 }
 
 const TextBlock = ({ text, more }: { text: string; more?: boolean }) => (
-  <div className="mt-1.5 max-h-[240px] max-w-[420px] overflow-hidden rounded-md border border-slate-100 bg-paper px-2 py-1 font-mono text-[11px] leading-[1.55] break-all whitespace-pre-wrap text-ink">
+  // Scrolls: the popover stays open while the pointer is on it, so a long text can be read to the end.
+  <div className="mt-1.5 max-h-[min(60vh,420px)] max-w-[420px] overflow-y-auto overscroll-contain rounded-md border border-slate-100 bg-paper px-2 py-1 font-mono text-[11px] leading-[1.55] break-all whitespace-pre-wrap text-ink">
     {text}
     {more && <div className="mt-0.5 font-sans text-[10px] text-slate-400">{t.preview.moreText}</div>}
   </div>
@@ -180,20 +181,31 @@ export function PreviewBody({ source, head = true, flowId: given }: { source: Pr
 /** Half the popover's widest, to keep it on screen. */
 const HALF = 230;
 
-function Popover({ anchor, children }: { anchor: DOMRect; children: ReactNode }) {
+function Popover({ anchor, children, box, onEnter, onLeave }: { anchor: DOMRect; children: ReactNode; box: RefObject<HTMLDivElement | null>; onEnter: () => void; onLeave: () => void }) {
   const below = anchor.top < window.innerHeight / 2;
   const left = Math.min(Math.max(anchor.left + anchor.width / 2, HALF + 8), Math.max(HALF + 8, window.innerWidth - HALF - 8));
   return createPortal(
     <div
+      ref={box}
       role="tooltip"
-      style={{ left, top: below ? anchor.bottom + 6 : anchor.top - 6 }}
-      className={`pointer-events-none fixed z-50 max-w-[460px] min-w-[120px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-2 shadow-lifted`}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      // The popover sits in the value's React tree: a press in it is not a press on the value (opening, selecting a node).
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.stopPropagation()}
+      style={{ left, top: below ? anchor.bottom + 4 : anchor.top - 4 }}
+      className={`fixed z-50 max-w-[460px] min-w-[120px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-2 shadow-lifted`}
     >
       {children}
     </div>,
     document.body,
   );
 }
+
+/** How long the popover waits for the pointer to come onto it before closing. */
+const LEAVE_DELAY = 150;
 
 /**
  * Shows what `value` holds after the pointer rests on `children` for
@@ -218,11 +230,16 @@ export function HoverPreview({
   const source = given !== undefined ? given : previewSource(value, { longText });
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const box = useRef<HTMLDivElement | null>(null);
   useEffect(() => () => clearTimeout(timer.current), []);
   useEffect(() => {
     if (!anchor) return;
-    // Zooming, scrolling or pressing moves what it points at: it closes.
-    const close = () => setAnchor(null);
+    // Zooming, scrolling or pressing elsewhere moves what it points at: it
+    // closes. Scrolling or selecting inside the popover (a long text) does not.
+    const close = (e: Event) => {
+      if (e.target instanceof Node && box.current?.contains(e.target)) return;
+      setAnchor(null);
+    };
     window.addEventListener("wheel", close, { passive: true });
     window.addEventListener("pointerdown", close);
     window.addEventListener("keydown", close);
@@ -233,6 +250,10 @@ export function HoverPreview({
     };
   }, [anchor]);
   if (!source) return <span {...rest}>{children}</span>;
+  const leave = () => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setAnchor(null), LEAVE_DELAY);
+  };
   return (
     <span
       {...rest}
@@ -242,14 +263,11 @@ export function HoverPreview({
         clearTimeout(timer.current);
         timer.current = setTimeout(() => setAnchor(target.getBoundingClientRect()), HOVER_DELAY);
       }}
-      onMouseLeave={() => {
-        clearTimeout(timer.current);
-        setAnchor(null);
-      }}
+      onMouseLeave={leave}
     >
       {children}
       {anchor && (
-        <Popover anchor={anchor}>
+        <Popover anchor={anchor} box={box} onEnter={() => clearTimeout(timer.current)} onLeave={leave}>
           <PreviewBody source={source} flowId={flowId} />
         </Popover>
       )}
