@@ -940,7 +940,7 @@ impl Cx<'_> {
                     id,
                 );
                 self.hint(format!(
-                    "A person picks it in Studio (select the part '{name}' and press 画面から選ぶ). Leave the node as it is."
+                    "A person picks it in Studio (select the part '{name}' and press 画面から選ぶ, or 画面から切り取る for a picture). Leave the node as it is."
                 ));
                 continue;
             }

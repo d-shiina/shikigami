@@ -273,8 +273,9 @@ export const api = {
   /** 「ノードの単体実行」: only the node runs, reading `values`; not recorded as a run. */
   testStep: (id: string, stepId: string, values: Record<string, unknown>) => call<StepTestResult>("test_step", { id, stepId, values }),
   /** The picker (`action: "pick"`) and highlight (`action: "highlight"`) of an adapter. */
-  pointAt: (adapter: string, params: Record<string, unknown>, session?: string) =>
-    call<Record<string, unknown>>("point_at", { adapter, session, params }),
+  /** `flowId`: relative picture paths (templates/…) are found in that flow's folder. */
+  pointAt: (adapter: string, params: Record<string, unknown>, session?: string, flowId?: string) =>
+    call<Record<string, unknown>>("point_at", { adapter, session, flowId, params }),
   runStatus: (runId: string) => call<RunSnapshot | null>("run_status", { runId }),
   listSecrets: () => call<{ secrets: SecretInfo[]; keyLocation: string; keyMissing: boolean }>("list_secrets"),
   setSecret: (input: SecretInput) => call<SecretInfo>("set_secret", { input }),

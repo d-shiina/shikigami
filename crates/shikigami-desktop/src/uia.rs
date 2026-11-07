@@ -70,6 +70,7 @@ use crate::overlay::{Input, Overlay, Raw, held_now};
 use crate::roles;
 use crate::sap::SapWindow;
 use crate::sapgui;
+use crate::snip;
 use crate::table::{self, GRID_ROLES, Grid};
 use crate::target::{
     ElementQuery, NodeInfo, Point, Target, WindowInfo, WindowQuery, app_allowed, describe,
@@ -382,6 +383,10 @@ impl Uia {
                 message,
                 timeout_ms,
             } => self.pick(message, timeout_ms),
+            Op::Snip {
+                message,
+                timeout_ms,
+            } => self.snip(message, timeout_ms),
             Op::Highlight { target, ms } => self.highlight(&target, ms),
             Op::Record {
                 title,
@@ -430,7 +435,11 @@ impl Uia {
     /// element turned into its place on the screen) back to UI Automation.
     fn via_app(&self, op: Op) -> Result<Routed, StepError> {
         let window = match &op {
-            Op::ListWindows | Op::Pick { .. } | Op::Highlight { .. } | Op::Record { .. } => {
+            Op::ListWindows
+            | Op::Pick { .. }
+            | Op::Snip { .. }
+            | Op::Highlight { .. }
+            | Op::Record { .. } => {
                 return Ok(Routed::Uia(Box::new(op)));
             }
             Op::Inspect { window, .. } => window,
@@ -844,6 +853,61 @@ impl Uia {
         // The frame must not be under the click when it is looked up.
         drop(overlay);
         self.picked_at(clicked)
+    }
+
+    /// Lets the user cut a picture out of the screen (see `Op::Snip`).
+    fn snip(&self, message: Option<String>, timeout_ms: u64) -> Result<Value, StepError> {
+        use base64::Engine as _;
+        let message = message.unwrap_or_else(|| {
+            "Drag over the part of the screen to cut out (Esc to cancel)".into()
+        });
+        let screen = snip::virtual_screen();
+        let shot = capture::copy_screen(screen)?;
+        let Some(cut) = snip::snip(
+            shot.clone(),
+            screen,
+            message,
+            Duration::from_millis(timeout_ms),
+        )?
+        else {
+            return Ok(json!({ "cancelled": true }));
+        };
+        let Some(image) = shot.crop(cut) else {
+            return Ok(json!({ "cancelled": true }));
+        };
+        // The window the picture belongs to: the one under its middle, now
+        // that the cutter is gone.
+        std::thread::sleep(Duration::from_millis(60));
+        let (cx, cy) = cut.center();
+        let middle = POINT {
+            x: screen.left + cx,
+            y: screen.top + cy,
+        };
+        let picked = self.picked_at(middle)?;
+        let window = picked
+            .get("target")
+            .and_then(|t| t.get("window"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        if window.is_null() {
+            return Err(StepError::new(
+                "WINDOW_NOT_FOUND",
+                "the place cut out is not in an app window",
+            ));
+        }
+        Ok(json!({
+            "target": { "window": window },
+            "window": picked.get("window").cloned().unwrap_or(Value::Null),
+            "png": base64::engine::general_purpose::STANDARD.encode(image.to_png()),
+            "width": image.width,
+            "height": image.height,
+            "rect": {
+                "x": screen.left + cut.x,
+                "y": screen.top + cut.y,
+                "width": cut.width,
+                "height": cut.height,
+            },
+        }))
     }
 
     /// `button "保存"` for the banner, without building a cache.
@@ -2313,7 +2377,11 @@ enum Routed {
 /// The target an op acts on (the start of a drag).
 fn op_target(op: &Op) -> Option<&Target> {
     match op {
-        Op::ListWindows | Op::Inspect { .. } | Op::Pick { .. } | Op::Record { .. } => None,
+        Op::ListWindows
+        | Op::Inspect { .. }
+        | Op::Pick { .. }
+        | Op::Snip { .. }
+        | Op::Record { .. } => None,
         Op::Drag { from, .. } => Some(from),
         Op::Highlight { target, .. } => Some(target),
         Op::Probe { target }

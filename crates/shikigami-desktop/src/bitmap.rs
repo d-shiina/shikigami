@@ -28,6 +28,18 @@ pub struct Rect {
 }
 
 impl Rect {
+    /// The rectangle a drag from `a` to `b` spans (either way round), both
+    /// corners inside.
+    pub fn spanning(a: (i32, i32), b: (i32, i32)) -> Rect {
+        let (x, y) = (a.0.min(b.0), a.1.min(b.1));
+        Rect {
+            x,
+            y,
+            width: a.0.abs_diff(b.0) + 1,
+            height: a.1.abs_diff(b.1) + 1,
+        }
+    }
+
     pub fn right(&self) -> i32 {
         self.x + self.width as i32
     }
@@ -183,6 +195,18 @@ impl Bitmap {
         Some(Bitmap::new(r.width, r.height, rgba))
     }
 
+    /// Darker, keeping `keep` / 255 of each colour (the screen behind the
+    /// cutter of 「画面から切り取る」).
+    pub fn dimmed(&self, keep: u8) -> Bitmap {
+        let mut rgba = self.rgba.clone();
+        for px in rgba.as_chunks_mut::<4>().0.iter_mut() {
+            for c in &mut px[..3] {
+                *c = (u16::from(*c) * u16::from(keep) / 255) as u8;
+            }
+        }
+        Bitmap::new(self.width, self.height, rgba)
+    }
+
     /// Every pixel the same colour (a window that could not be captured
     /// comes back black).
     pub fn is_blank(&self) -> bool {
@@ -274,4 +298,32 @@ pub struct Gray {
     pub width: u32,
     pub height: u32,
     pub values: Vec<f32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_drag_spans_its_corners_either_way_round() {
+        let r = Rect::spanning((10, 20), (3, 25));
+        assert_eq!(
+            r,
+            Rect {
+                x: 3,
+                y: 20,
+                width: 8,
+                height: 6
+            }
+        );
+        assert_eq!(Rect::spanning((3, 25), (10, 20)), r);
+        assert_eq!(Rect::spanning((-5, -5), (-5, -5)).width, 1);
+    }
+
+    #[test]
+    fn dimming_keeps_alpha_and_darkens_colour() {
+        let image = Bitmap::new(1, 1, vec![255, 100, 0, 255]);
+        assert_eq!(image.dimmed(110).rgba, vec![110, 43, 0, 255]);
+        assert_eq!(image.dimmed(255), image);
+    }
 }

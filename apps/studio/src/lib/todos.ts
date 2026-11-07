@@ -6,12 +6,13 @@
 import type { Flow, ProjectFiles, Step, StepTypeDef, ValidationIssue, ValidationReport } from "@shikigami/schema";
 import type { AnswerProblem, SecretField } from "./api";
 import { t } from "./i18n";
+import { missingImages } from "./imageParts";
 import { partRef } from "./parts";
 import { writtenAt } from "./problemText";
 
 export type Todo =
-  /** A screen part without a target: pick it on the screen. */
-  | { kind: "pick"; part: string; label: string; app: string; steps: string[] }
+  /** A screen part without a target: pick it on the screen (`image`: cut its picture out of the screen). */
+  | { kind: "pick"; part: string; label: string; app: string; steps: string[]; image?: boolean }
   /** A login the flow types by name that is not registered on this PC. */
   | { kind: "secret"; name: string; fields: SecretField[]; steps: string[] }
   /** A file the flow reads from its folder that is not there. */
@@ -71,6 +72,12 @@ export function personTodos(
     const uses = steps.filter((s) => partRef(s.params?.target) === name).map((s) => s.id ?? "");
     todos.push({ kind: "pick", part: name, label: part.label || name, app: part.app, steps: uses });
   }
+  for (const name of missingImages(flow, files)) {
+    const part = flow.parts?.[name];
+    if (!part) continue;
+    const uses = steps.filter((s) => partRef(s.params?.target) === name).map((s) => s.id ?? "");
+    todos.push({ kind: "pick", part: name, label: part.label || name, app: part.app, steps: uses, image: true });
+  }
   if (secrets) {
     const missing = new Map<string, { fields: Set<SecretField>; steps: string[] }>();
     for (const step of steps) {
@@ -125,7 +132,7 @@ export function todosByStep(todos: readonly Todo[]): Map<string, string[]> {
 export function todoTitle(todo: Todo): string {
   switch (todo.kind) {
     case "pick":
-      return t.todos.pick(todo.label);
+      return todo.image ? t.todos.snip(todo.label) : t.todos.pick(todo.label);
     case "secret":
       return t.todos.secret(todo.name);
     case "file":

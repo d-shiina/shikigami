@@ -201,6 +201,7 @@ You cannot see the screen, so never write a CSS selector, an element id or coord
 - The label says what it is and where, so the person can find it: Studio asks them to pick each part on the screen.
 - Use one part for the same thing in several steps. Write { "part": "<name>" } and nothing else beside it.
 - A desktop part covers the window too: do not write "window" in those steps.
+- Some screens show no buttons or fields to pick (Citrix, remote desktops, drawn screens). There, use desktop.mouseClick, desktop.waitFor or desktop.isVisible with a part whose label starts with "画像：" and says what the picture shows (画像：保存ボタンのアイコン). The person cuts its picture out of the screen in Studio (画面から切り取る); Studio keeps it in templates/ and fills the target in.
 
 ## Logins, files and settings
 
@@ -287,7 +288,7 @@ Everything an AI needs to write a Shikigami flow without tools. Read shikigami-a
 
 ## The screen
 
-A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Studio and Studio fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }.
+A step that works on the screen has a `target`. You write { "part": "<name>" } and declare the part in "parts" without a target; the person picks the element in Studio and Studio fills the target in. A picked browser target looks like { "role": "button", "name": "保存" } or { "label": "ユーザー名" }; a desktop target like { "window": { "process": "notepad.exe" }, "element": { "id": "15" } }. A picture cut out of the screen (an image part) is a desktop target too: { "window": { "process": "wfica32.exe" }, "image": { "path": "templates/image1.png", "threshold": 0.9 }, "offset": { "x": 0, "y": 0 } }; only desktop steps whose target lists `image` can use it. Keep image parts as they are.
 "#;
 
 fn step_section(out: &mut String, def: &StepTypeDef) {

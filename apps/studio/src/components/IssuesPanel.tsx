@@ -67,7 +67,7 @@ export function TodoList({ todos, onAct }: { todos: Todo[]; onAct?: () => void }
         {todos.map((todo) => {
           const Icon = todo.kind === "pick" ? MousePointerClick : todo.kind === "secret" ? KeyRound : FolderOpen;
           const action = todo.kind === "pick" ? t.todos.pickAction : todo.kind === "secret" ? t.todos.secretAction : t.todos.fileAction;
-          const help = todo.kind === "pick" ? t.todos.pickHelp : todo.kind === "secret" ? t.todos.secretHelp : t.todos.fileHelp;
+          const help = todo.kind === "pick" ? (todo.image ? t.todos.snipHelp : t.todos.pickHelp) : todo.kind === "secret" ? t.todos.secretHelp : t.todos.fileHelp;
           return (
             <li key={`${todo.kind}:${todo.kind === "pick" ? todo.part : todo.kind === "secret" ? todo.name : todo.path}`} className="flex items-center gap-2.5 px-4 py-1.5">
               <Icon size={15} strokeWidth={1.75} className="shrink-0 text-amber-700" aria-hidden="true" />

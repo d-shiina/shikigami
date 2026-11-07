@@ -103,7 +103,7 @@ export const SUBGROUPS: Record<string, [string, string[]][]> = {
   network: [["", ["http.request", "oauth.signIn"]]],
   database: [["", ["db.query", "db.execute"]]],
   system: [
-    ["dialog", ["dialog.message", "dialog.input", "dialog.selectFile"]],
+    ["dialog", ["dialog.message", "dialog.input", "dialog.form", "dialog.selectFile"]],
     ["system", ["clipboard.get", "clipboard.set", "process.run", "process.list", "process.kill"]],
   ],
   control: [

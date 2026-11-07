@@ -97,6 +97,7 @@ export const stepHelpJa: Record<string, { summary: string; words: string }> = {
   "http.request": { summary: "Web API を呼ぶ（GET・POST など）", words: "api http rest json 通信 送信 Web API を呼ぶ" },
   "oauth.signIn": { summary: "Web API に OAuth でサインインする", words: "ログイン 認証 トークン box OAuth でサインイン" },
   "dialog.message": { summary: "メッセージを出して、PC の前の人に見てもらう", words: "表示 通知 お知らせ メッセージボックス 確認 メッセージを表示 ポップアップ アラート" },
+  "dialog.form": { summary: "PC の前の人に、いくつかの項目（文字・数値・日付・選択肢・チェック）を 1 つの画面で入れてもらう", words: "フォーム 入力 複数 項目 日付 選択 チェック ユーザー入力 カスタムフォーム 入力画面" },
   "dialog.input": { summary: "PC の前の人に文字を入力してもらう", words: "入力 質問 聞く 入力してもらう" },
   "dialog.selectFile": { summary: "PC の前の人にファイルやフォルダーを選んでもらう", words: "ファイル 選択 フォルダー 選ぶ ファイルを選んでもらう" },
   "clipboard.get": { summary: "クリップボードの文字を読む", words: "コピー 貼り付け 読む クリップボードを読む" },
