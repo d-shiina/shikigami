@@ -4842,6 +4842,7 @@ name = "shikigami-word"
 version = "0.1.10"
 dependencies = [
  "serde_json",
+ "shikigami-com",
  "shikigami-core",
  "shikigami-runtime",
  "tempfile",

@@ -124,12 +124,15 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 
 ## Word（`word.*`、実装済み）
 
-クレート `crates/shikigami-word`。`.docx`（`.docm` / `.dotx` も可）を直接読み書きし、Word は不要です（`.doc` は `UNSUPPORTED_FORMAT`）。
+クレート `crates/shikigami-word`。`.docx`（`.docm` / `.dotx` も可）を直接読み書きし、Word は不要です（`.doc` は `UNSUPPORTED_FORMAT`）。`word.exportPdf` だけ Word を使います。
 
 | type | 主な params | 出力 |
 |---|---|---|
 | `word.fillTemplate` | `template`（テンプレート）, `path`（作る文書）, `values` | `{ path, replaced }` |
 | `word.readText` | `path` | 本文の文字（段落ごとに改行） |
+| `word.replaceText` | `path`, `find`（探す文字）, `replace`（置き換える文字）, `matchCase`（既定 true） | `{ path, replaced }` |
+| `word.readTables` | `path`, `table`（1 から。省略するとすべての表）, `header`（既定 true） | 1 行目を見出しにしたレコードの一覧（`header: false` ならセルの文字の行） |
+| `word.exportPdf` | `path`（.docx・.doc・.rtf）, `to`（.pdf）, `overwrite` | `{ path }`（Windows と Word が必要） |
 
 - テンプレートの本文・ヘッダー・フッターに `{{ 名前 }}` を書いておくと、`values` の値で置き換えます。書式（太字・フォントなど）はテンプレートのまま。値の `\n` は改行になります。`{{ 顧客.氏名 }}` はレコードの項目
 - **表の行の繰り返し**：表の行に `{{ 明細.品名 }}` `{{ 明細.数量 }}` と書き、`values` に `"明細": [ { "品名": …, "数量": … }, … ]` を渡すと、その行がレコードの数だけ並びます（空の配列なら行ごと消える）
@@ -138,6 +141,9 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 - テンプレートは変更しません。`path` は同じフォルダーに一時ファイルを書いてから置き換え。Word で開いている文書への書き込みは `FILE_IN_USE`
 - `template` と `path` の両方を資源にするので、同じファイルへのノードは自動で順番待ち
 - MCP の `test_step` で `word.readText` をテンプレートに実行すると、`state` にプレースホルダーの一覧が付きます
+- `word.replaceText` は文書をそのまま書き換えます（元を残すなら先に `file.copy`）。置き換えた文字は、見つかった文字の先頭の書式になります。Word が内部で分割した文字も、本文・表・ヘッダー・フッターで見つけます。見つからなければファイルは変えません（`replaced: 0`）
+- `word.readTables` は本文の表を順に読みます。セルの中の段落は改行でつなぎ、セルの中の表はそのセルの文字になります。空や重複の見出しは `列1`・`名前_2` …（最後の表より大きい番号は `TABLE_NOT_FOUND`）
+- `word.exportPdf` はファイルを読み取り専用で、専用の見えない Word で開き（マクロは動かない）、Word で印刷したとおりに保存します。人が開いている Word は閉じません
 
 ## メール（`mail.*`、実装済み）
 
@@ -202,5 +208,4 @@ Excel 本体（COM）が要る操作です。Windows と デスクトップ版 E
 
 ## 次の段階（予定）
 
-1. **Word の PDF 出力**：COM（Excel のマクロと同じ仕組み）
-2. **IMAP で読む**：Outlook・Microsoft 365 以外のメールボックス向け
+1. **IMAP で読む**：Outlook・Microsoft 365 以外のメールボックス向け

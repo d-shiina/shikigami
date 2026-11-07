@@ -41,6 +41,13 @@ fn segments(xml: &str) -> Vec<Segment> {
             i = at + 6;
             continue;
         }
+        // A tab or a line break inside a paragraph is not text a search can
+        // run across: the text on each side is matched on its own.
+        if is_tag(xml, at, "<w:tab") || is_tag(xml, at, "<w:br") || is_tag(xml, at, "<w:cr") {
+            paragraph += 1;
+            i = at + 1;
+            continue;
+        }
         if is_tag(xml, at, "<w:t") {
             let Some(close) = xml[at..].find('>').map(|c| at + c) else {
                 break;
@@ -115,49 +122,41 @@ fn for_each_paragraph(segments: &[Segment], mut f: impl FnMut(&[char], &[usize])
     }
 }
 
-/// Replaces every placeholder `lookup` knows. Returns the new XML, how many
-/// were replaced and the names it did not know.
-pub fn fill(xml: &str, lookup: &dyn Fn(&str) -> Lookup) -> (String, usize, BTreeSet<String>) {
+/// Rewrites each paragraph's text: `edits` gets the paragraph's characters
+/// and gives back non-overlapping, ordered (start, end, new text) ranges.
+/// Each new text goes into the run where its range starts (keeping that
+/// run's formatting). Returns the new XML and how many ranges were replaced.
+fn rewrite(
+    xml: &str,
+    mut edits: impl FnMut(&[char]) -> Vec<(usize, usize, String)>,
+) -> (String, usize) {
     let segments = segments(xml);
     let mut texts: Vec<Option<String>> = vec![None; segments.len()];
     let mut replaced = 0;
-    let mut missing = BTreeSet::new();
     for_each_paragraph(&segments, |chars, owner| {
-        let found = placeholders(chars);
+        let found = edits(chars);
         if found.is_empty() {
             return;
         }
-        let mut new: Vec<String> = Vec::new();
         let first = owner[0];
         let last = owner[owner.len() - 1];
-        new.resize(last - first + 1, String::new());
+        let mut new: Vec<String> = vec![String::new(); last - first + 1];
         let mut k = 0;
-        let mut any = false;
         let mut c = 0;
         while c < chars.len() {
             if k < found.len() && found[k].0 == c {
-                let (start, end, name) = &found[k];
+                let (start, end, value) = &found[k];
                 k += 1;
-                match lookup(name) {
-                    Lookup::Text(value) => {
-                        new[owner[*start] - first].push_str(&value);
-                        replaced += 1;
-                        any = true;
-                        c = *end;
-                        continue;
-                    }
-                    Lookup::Missing => {
-                        missing.insert(name.clone());
-                    }
-                }
+                new[owner[*start] - first].push_str(value);
+                replaced += 1;
+                c = *end;
+                continue;
             }
             new[owner[c] - first].push(chars[c]);
             c += 1;
         }
-        if any {
-            for (n, text) in new.into_iter().enumerate() {
-                texts[first + n] = Some(text);
-            }
+        for (n, text) in new.into_iter().enumerate() {
+            texts[first + n] = Some(text);
         }
     });
 
@@ -172,7 +171,123 @@ pub fn fill(xml: &str, lookup: &dyn Fn(&str) -> Lookup) -> (String, usize, BTree
         at = segment.end;
     }
     out.push_str(&xml[at..]);
+    (out, replaced)
+}
+
+/// Replaces every placeholder `lookup` knows. Returns the new XML, how many
+/// were replaced and the names it did not know.
+pub fn fill(xml: &str, lookup: &dyn Fn(&str) -> Lookup) -> (String, usize, BTreeSet<String>) {
+    let mut missing = BTreeSet::new();
+    let (out, replaced) = rewrite(xml, |chars| {
+        placeholders(chars)
+            .into_iter()
+            .filter_map(|(start, end, name)| match lookup(&name) {
+                Lookup::Text(value) => Some((start, end, value)),
+                Lookup::Missing => {
+                    missing.insert(name);
+                    None
+                }
+            })
+            .collect()
+    });
     (out, replaced, missing)
+}
+
+/// Replaces each `find` in the paragraphs' text (also when Word split it
+/// over runs) with `with`. Returns the new XML and how many were replaced.
+pub fn replace_text(xml: &str, find: &str, with: &str, match_case: bool) -> (String, usize) {
+    let fold = |c: char| -> char {
+        if match_case {
+            c
+        } else {
+            c.to_lowercase().next().unwrap_or(c)
+        }
+    };
+    let needle: Vec<char> = find.chars().map(fold).collect();
+    if needle.is_empty() {
+        return (xml.to_owned(), 0);
+    }
+    rewrite(xml, |chars| {
+        let hay: Vec<char> = chars.iter().copied().map(fold).collect();
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i + needle.len() <= hay.len() {
+            if hay[i..i + needle.len()] == needle[..] {
+                out.push((i, i + needle.len(), with.to_owned()));
+                i += needle.len();
+            } else {
+                i += 1;
+            }
+        }
+        out
+    })
+}
+
+/// Byte ranges of the outermost `<tag>…</tag>` elements in `xml`
+/// (`w:tbl`, `w:tr`, `w:tc`).
+fn elements(xml: &str, tag: &str) -> Vec<(usize, usize)> {
+    let open = format!("<{tag}");
+    let close = format!("</{tag}>");
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0;
+    let mut i = 0;
+    while let Some(off) = xml[i..]
+        .find(&open)
+        .into_iter()
+        .chain(xml[i..].find(&close))
+        .min()
+    {
+        let at = i + off;
+        if xml[at..].starts_with(&close) {
+            if depth > 0 {
+                depth -= 1;
+                if depth == 0 {
+                    out.push((start, at + close.len()));
+                }
+            }
+            i = at + close.len();
+        } else {
+            if is_tag(xml, at, &open) {
+                let self_closing = xml[at..]
+                    .find('>')
+                    .is_some_and(|c| xml.as_bytes()[at + c - 1] == b'/');
+                if !self_closing {
+                    if depth == 0 {
+                        start = at;
+                    }
+                    depth += 1;
+                }
+            }
+            i = at + open.len();
+        }
+    }
+    out
+}
+
+/// The tables of the body: each a list of rows, each a list of cell texts
+/// (paragraphs of a cell joined with line breaks). A table inside a cell is
+/// part of that cell's text.
+pub fn tables(xml: &str) -> Vec<Vec<Vec<String>>> {
+    elements(xml, "w:tbl")
+        .into_iter()
+        .map(|(s, e)| {
+            let table = &xml[s..e];
+            // The table's own rows: those not inside a nested table.
+            let inner = &table[table.find('>').map_or(0, |c| c + 1)..];
+            elements(inner, "w:tr")
+                .into_iter()
+                .map(|(rs, re)| {
+                    let row = &inner[rs..re];
+                    let body = &row[row.find('>').map_or(0, |c| c + 1)..];
+                    elements(body, "w:tc")
+                        .into_iter()
+                        .map(|(cs, ce)| plain_text(&body[cs..ce]))
+                        .collect()
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// Byte ranges of the table rows (`<w:tr>`) in a part, outermost only.

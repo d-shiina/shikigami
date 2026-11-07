@@ -41,7 +41,7 @@
 | G14 | P1 | メール | メールの移動・既読にする・返信・転送・削除がない。Outlook（クラシック）なしで受信できない（Microsoft 365・IMAP） | UiPath：Move / Mark as Read / Reply To / Delete Outlook Mail Message・Get IMAP Mail／PAD：「メール メッセージの処理」・Exchange / Outlook / IMAP | 済み（IMAP は残り） |
 | G15 | P1 | スケジュール | 祝日・会社の休日を飛ばす・「第 3 営業日」の指定がない。メールが届いたら起動もない | UiPath：Orchestrator の Non-Working Days・キュートリガー／PAD：クラウドフローのメールトリガー | 済み |
 | G16 | P1 | 記録 | ブラウザの操作は記録できない（デスクトップだけ） | WinActor：Web レコーディング／UiPath：Web Recorder／PAD：Web レコーダー | 済み |
-| G17 | P1 | Word | PDF で保存・文字の置換・表の読み取りがない（`word.fillTemplate` / `word.readText` だけ） | UiPath：Save Document As PDF・Replace Text／PAD：「Word 文書を保存」の PDF・「Word 文書内の語句の検索と置換」 | 着手順 12 |
+| G17 | P1 | Word | PDF で保存・文字の置換・表の読み取りがない（`word.fillTemplate` / `word.readText` だけ） | UiPath：Save Document As PDF・Replace Text／PAD：「Word 文書を保存」の PDF・「Word 文書内の語句の検索と置換」 | 済み |
 | G18 | P1 | 無人実行 | 画面がロックされた・サインアウトした PC ではデスクトップのノードが止まる（`DESKTOP_UNAVAILABLE`） | UiPath：無人ロボットがセッションを作る／PAD：ロックされた PC での無人実行 | 設計が要る |
 | G19 | P1 | 画像 | 画像認識で「画面から切り取る」・一致率・探す範囲がない | UiPath：Click Image・Find Image の Indicate on screen／PAD：画像をキャプチャ | 別（画像部品のスレッド） |
 | G20 | P2 | ブラウザ | 戻る・進む・再読み込みがない（同じタブでの移動は `browser.open` で済む） | UiPath：Go Back / Go Forward / Refresh／PAD：「Web ページに移動します」の戻る・進む・再読み込み | 済み |
@@ -131,6 +131,8 @@
 ### G17 Word
 
 - `word.exportPdf`（COM、Excel のマクロと同じ経路）、`word.replaceText`（`.docx` を直接、書式を残す）、`word.readTables`（表を行の一覧で）
+
+**対応**：済み。`word.replaceText`・`word.readTables` は Word なしで、`word.exportPdf` は専用の見えない Word で。
 
 ### G18 ロック中の無人実行
 

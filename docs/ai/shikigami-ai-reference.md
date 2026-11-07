@@ -1607,6 +1607,17 @@ Example: `{"type":"wait.until","name":"転記が終わるまで待つ","params":
 
 ### word.*
 
+#### word.exportPdf (Word PDF 出力)
+
+Saves the Word document `path` (.docx, .doc, .rtf) as the PDF `to`, laid out as Word prints it. Opens the file read-only in a hidden Word (changes not yet saved in an open Word are not in the PDF; macros do not run). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Needs Windows with desktop Word (WORD_NOT_INSTALLED). Output: { path }.
+
+Params:
+- `path`*: text [path] — 元の文書（.docx・.doc・.rtf、フルパス）
+- `to`*: text [path] — 保存する PDF（フルパス、.pdf）
+- `overwrite`: true | false — 同じ名前のファイルがあれば上書きする（既定 false）
+Output: yes (saveAs)
+Example: `{"type":"word.exportPdf","name":"請求書を PDF にする","params":{"path":"output/請求書.docx","to":"output/請求書.pdf","overwrite":true}}`
+
 #### word.fillTemplate (Word 差し込み)
 
 Makes the document `path` from the .docx template `template` (the template is not changed): every {{ 名前 }} in the text, headers and footers is replaced by `values`[名前] (text, number, true/false, null for empty; \n starts a new line), keeping the formatting of the template. {{ 顧客.氏名 }} reads a field of a record. A table row containing {{ 明細.品名 }} is repeated once per record of the list `values`.明細 (an empty list removes the row). Fails with TEMPLATE_VALUE_MISSING (listing the names) when a placeholder has no value. Output: { path, replaced }.
@@ -1618,6 +1629,17 @@ Params:
 Output: yes (saveAs)
 Example: `{"type":"word.fillTemplate","name":"請求書を作る","params":{"template":"templates/請求書.docx","path":"output/請求書_{{ order.受注番号 }}.docx","values":{"宛名":"{{ order.顧客名 }}","金額":"{{ order.金額 }}","明細":"{{ order.明細 }}"}}}`
 
+#### word.readTables (Word 表の読み取り)
+
+Reads the tables in the body of the .docx `path`. With `header` (the default) each table is a list of records keyed by its first row (an empty or repeated heading becomes 列1, 名前_2 …); with header: false a list of rows of cell texts. Without `table` the output is a list of all tables in order; with `table` (1 = the first) only that table's rows (TABLE_NOT_FOUND when there is none). A cell's paragraphs are joined with line breaks; a table inside a cell is part of that cell's text.
+
+Params:
+- `path`*: text [path] — 読む .docx（フルパス）
+- `table`: whole number — 読む表の番号（1 から。省略するとすべての表）
+- `header`: true | false — 1 行目を見出しにする（既定 true）
+Output: yes (saveAs)
+Example: `{"type":"word.readTables","name":"見積書の明細を読む","params":{"path":"input/見積書.docx","table":1},"saveAs":"items"}`
+
 #### word.readText (Word 読み取り)
 
 Output: the body text of the .docx `path`, one paragraph per line (table cells are paragraphs too; tabs and line breaks kept). Headers and footers are not included.
@@ -1626,4 +1648,16 @@ Params:
 - `path`*: text [path] — 読む .docx（フルパス）
 Output: yes (saveAs)
 Example: `{"type":"word.readText","params":{"path":"input/契約書.docx"},"saveAs":"contractText"}`
+
+#### word.replaceText (Word 文字の置換)
+
+Replaces every `find` in the text, tables, headers and footers of the .docx `path` with `replace` (a template; empty removes it) and saves the document in place, keeping the formatting (the replacement takes the formatting where the found text starts). Matches text Word split over runs too; upper / lower case must match unless `matchCase` is false. Does not change the file when nothing is found. To keep the original, copy it first (file.copy) or use word.fillTemplate. Output: { path, replaced } (how many were replaced).
+
+Params:
+- `path`*: text [path] — 変える .docx（フルパス）。上書き保存する
+- `find`*: text — 探す文字
+- `replace`*: text — 置き換える文字（空なら消す）
+- `matchCase`: true | false — 大文字と小文字を区別する（既定 true）
+Output: yes (saveAs)
+Example: `{"type":"word.replaceText","name":"年度を書き換える","params":{"path":"output/契約書.docx","find":"令和7年度","replace":"令和8年度"}}`
 
