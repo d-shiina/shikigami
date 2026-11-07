@@ -2,7 +2,8 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@shikigami/schema";
-import { BookOpen, ClipboardPaste, Copy, ExternalLink, FolderOpen, Search, Trash2, Upload, Workflow } from "lucide-react";
+import { BookOpen, ClipboardPaste, Copy, ExternalLink, FolderOpen, MessageSquareText, MousePointerClick, Search, Trash2, Upload, Workflow } from "lucide-react";
+import { useAgentApi } from "../agent";
 import { useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { relativeTime } from "../lib/changes";
@@ -102,6 +103,46 @@ function useReadTutorial() {
   const store = useStudioApi();
   return (id?: Sample["id"]) =>
     void agent.openUrl(tutorialUrl(id)).catch((e: unknown) => store.setState({ error: e instanceof Error ? e.message : String(e) }));
+}
+
+/**
+ * The first screen of an empty workspace: three equal ways in, so building
+ * by hand is as plain a start as asking the AI.
+ */
+function FirstSteps({ onCreate }: { onCreate: () => void }) {
+  const agentStore = useAgentApi();
+  const askAi = () => {
+    const a = agentStore.getState();
+    a.newChat(null);
+    a.setOpen(true);
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-agent-input]")?.focus());
+  };
+  const showSamples = () => document.getElementById("samples-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const ways = [
+    { icon: MousePointerClick, title: t.firstSteps.byHand, body: t.firstSteps.byHandBody, run: onCreate },
+    { icon: MessageSquareText, title: t.firstSteps.withAi, body: t.firstSteps.withAiBody, run: askAi },
+    { icon: BookOpen, title: t.firstSteps.sample, body: t.firstSteps.sampleBody, run: showSamples },
+  ];
+  return (
+    <section aria-label={t.firstSteps.title} className="rounded-lg border border-slate-200 bg-sheet p-5">
+      <h2 className="text-[15px] font-semibold text-ink">{t.firstSteps.title}</h2>
+      <p className="mt-1 text-[13px] text-slate-500">{t.firstSteps.lead}</p>
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        {ways.map(({ icon: Icon, title, body, run }) => (
+          <button
+            key={title}
+            type="button"
+            onClick={run}
+            className="flex flex-col items-start gap-1.5 rounded-lg border border-slate-200 p-4 text-left hover:border-slate-300 hover:bg-slate-50"
+          >
+            <Icon size={18} strokeWidth={1.75} className="text-slate-500" aria-hidden="true" />
+            <span className="text-[13px] font-semibold text-ink">{title}</span>
+            <span className="text-[12px] leading-relaxed text-slate-500">{body}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 /** The tutorials, under the list: read the steps, or open the finished flow with its files. */
@@ -339,7 +380,8 @@ export function FlowsPage() {
             <ClipboardPaste size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.paste.title}
           </button>
-          <button type="button" onClick={() => setCreating(true)} className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
+          {/* While naming a new flow, its form's "作成" is the one filled button. */}
+          <button type="button" onClick={() => setCreating(true)} hidden={creating} className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
             ＋ {t.newFlow}
           </button>
         </div>
@@ -377,11 +419,7 @@ export function FlowsPage() {
           </form>
         )}
         {summaries.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-[13px] text-slate-400">
-            {t.noFlows}
-            <br />
-            {t.list.askAiHint}
-          </p>
+          <FirstSteps onCreate={() => setCreating(true)} />
         ) : (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-sheet">
             <table className="w-full table-fixed border-collapse text-left">

@@ -1,6 +1,9 @@
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { authorIssues } from "../lib/todos";
+import type { Step } from "@shikigami/schema";
+import { useMemo } from "react";
+import { authorIssues, unsetIssues } from "../lib/todos";
+import { unsetParams } from "../lib/nodeRows";
 import { useTodos } from "../lib/useTodos";
 import { RecordButton } from "./RecordButton";
 
@@ -87,6 +90,21 @@ export function FlowTitle() {
   const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
   const published = useStudio((s) => s.published);
   const todos = useTodos().length;
+  const flowSteps = useStudio((s) => s.flow?.steps);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  // Required settings still empty, over the whole flow (blocks too).
+  const unset = useMemo(() => {
+    const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
+    let n = 0;
+    const walk = (steps: Step[]) => {
+      for (const step of steps) {
+        n += unsetParams(step, defs.get(step.type)).length;
+        for (const block of Object.values(step.blocks ?? {})) walk(block);
+      }
+    };
+    walk(flowSteps ?? []);
+    return n;
+  }, [flowSteps, stepTypes]);
   if (!flow) return null;
   // A part to pick is counted as a to-do, not as an error.
   const errors = authorIssues(validation).length;
@@ -126,20 +144,19 @@ export function FlowTitle() {
         type="button"
         onClick={() => setBottom("issues")}
         className={`flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[12px] font-medium ${
-          errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : todos ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "text-moegi-500 hover:bg-slate-100"
+          errors ? "bg-shu-50 text-shu-600 hover:bg-shu-100" : todos || unset ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "text-moegi-500 hover:bg-slate-100"
         }`}
         title={t.toolbar.issuesTitle}
       >
         {errors ? (
           <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span>
-        ) : todos ? (
-          <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-amber-500 text-[9px] font-bold text-white">{todos}</span>
+        ) : todos || unset ? (
+          <span className="h-3 w-3 rounded-full border-[1.5px] border-dashed border-amber-600" />
         ) : (
           <CheckIcon />
         )}
         <span className="@max-[920px]/title:hidden">
-          {errors ? t.toolbar.errors(errors) : todos ? t.todos.chip(todos) : t.toolbar.valid}
-          {errors > 0 && todos > 0 && <span className="text-amber-700"> · {t.todos.chip(todos)}</span>}
+          {[errors ? t.toolbar.errors(errors) : "", unset ? t.toolbar.unset(unset) : "", todos ? t.todos.chip(todos) : ""].filter(Boolean).join(" · ") || t.toolbar.valid}
         </span>
       </button>
     </div>
@@ -221,7 +238,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
             type="button"
             onClick={() => startRun()}
             disabled={errors > 0}
-            title={errors > 0 ? (authorIssues(validation).length === 0 ? t.todos.runBlocked : t.toolbar.fixErrors) : `${t.run} (F5)`}
+            title={errors > 0 ? (authorIssues(validation).length > 0 ? t.toolbar.fixErrors : unsetIssues(validation).length > 0 ? t.toolbar.fillUnset : t.todos.runBlocked) : `${t.run} (F5)`}
             className="group flex h-8 items-center gap-2 rounded-lg bg-primary pr-1.5 pl-3 text-[13px] font-semibold text-on-primary hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400"
           >
             <PlayIcon />

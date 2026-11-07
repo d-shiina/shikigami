@@ -1,5 +1,6 @@
 // Studio state. All mutations go through the backend API as EditOps; the
 // store only mirrors what Core returns (flow, validation, undo state).
+import { unsetParams } from "./lib/nodeRows";
 import type {
   ApprovalRequest,
   DebugCommand,
@@ -257,6 +258,8 @@ export type StudioState = {
   trying: string | null;
   /** The last 「ノードの単体実行」 (only that node ran), until another node is run alone. */
   stepTest: StepTest | null;
+  /** Results of nodes run alone, by flow and variable: the next node run alone reads them. */
+  tested: Record<string, Record<string, unknown>>;
   /** While running, keep the running step in view. */
   followRun: boolean;
   /** Steps to pause before, per flow (this PC only). */
@@ -805,6 +808,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       editing: null,
       trying: null,
       stepTest: null,
+      tested: {},
       followRun: true,
       breakpoints: loadBreakpoints(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
@@ -1101,7 +1105,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const parent = position.parentId ? findStep(flow.steps ?? [], position.parentId) : null;
         if (parent?.type === SWITCH && position.block === "cases" && type !== CASE) step = newCase([step]);
         const ok = await get().applyOps([{ op: "addStep", step, position }]);
-        if (ok && step.id) set({ selection: { kind: "step", stepId: step.id } });
+        if (!ok || !step.id) return;
+        set({ selection: { kind: "step", stepId: step.id } });
+        // A node with settings it cannot run without opens at once, so they
+        // are filled in now instead of turning up later as a problem.
+        if (unsetParams(step, get().stepTypes.find((d) => d.type === type)).length > 0) get().openEditor(step.id);
       },
 
       async moveSelected(delta) {
@@ -1238,6 +1246,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         try {
           const result = await api.testStep(flow.id, stepId, values);
           set({ stepTest: { flowId: flow.id, stepId, running: false, result, error: null } });
+          // Kept under the node's result name, so the node after it can be run alone next.
+          const saveAs = findStep(flow.steps ?? [], stepId)?.saveAs;
+          if (saveAs && result.status === "succeeded" && result.output !== undefined) {
+            set((s) => ({ tested: { ...s.tested, [flow.id]: { ...(s.tested[flow.id] ?? {}), [saveAs]: result.output } } }));
+          }
         } catch (e) {
           set({ stepTest: { flowId: flow.id, stepId, running: false, result: null, error: message(e) } });
         }

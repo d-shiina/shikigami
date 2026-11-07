@@ -69,10 +69,8 @@ function Editor({ step }: { step: Step }) {
           <Sentence parts={sentence(step, def)} />
         </span>
         <span className="ml-auto flex items-center gap-2">
+          {/* One way out: "フロー図に戻る" on the left (or Esc). */}
           <RunButtons step={step} def={def} />
-          <button type="button" onClick={close} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-on-primary hover:bg-ink/90">
-            {t.close}
-          </button>
         </span>
       </header>
       <div className="grid min-h-0 grid-cols-[300px_minmax(0,1fr)_380px]">
@@ -108,7 +106,14 @@ function RunButtons({ step, def }: { step: Step; def: StepTypeDef | undefined })
   const runTo = useStudio((s) => s.runTo);
   const testStep = useStudio((s) => s.testStep);
   const stopRun = useStudio((s) => s.stopRun);
-  const scope = useMemo(() => runScope(run, flow?.id), [run, flow?.id]);
+  const tested = useStudio((s) => (flow ? s.tested[flow.id] : undefined));
+  // The last run's values, and over them what nodes run alone since gave.
+  const scope = useMemo(() => {
+    const last = runScope(run, flow?.id);
+    if (!tested) return last;
+    const partial = new Set([...(last.partial ?? [])].filter((name) => !(name in tested)));
+    return { ...last, values: { ...last.values, ...tested }, partial };
+  }, [run, flow?.id, tested]);
   const stepTypes = useStudio((s) => s.stepTypes);
   const stopStepTest = useStudio((s) => s.stopStepTest);
   const inputs = useMemo(

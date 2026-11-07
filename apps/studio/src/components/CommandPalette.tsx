@@ -1,4 +1,5 @@
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquareText, Search } from "lucide-react";
+import { useAgentApi } from "../agent";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { blockName, stepLabel, t } from "../lib/i18n";
@@ -54,7 +55,7 @@ const MARGIN = 12;
 const MIN_HEIGHT = 300;
 
 /** A line of the list: a node, a group to open, or a heading. */
-type Row = { item: PaletteItem; tagged: boolean } | { group: string; count: number } | { heading: string };
+type Row = { item: PaletteItem; tagged: boolean } | { group: string; count: number } | { ask: string } | { heading: string };
 type Choice = Exclude<Row, { heading: string }>;
 
 /**
@@ -106,6 +107,7 @@ export function CommandPalette() {
   const anchor = useStudio((s) => s.paletteAnchor);
   const addStep = useStudio((s) => s.addStep);
   const summaries = useStudio((s) => s.summaries);
+  const agent = useAgentApi();
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<string | null>(null);
   const [recent, setRecent] = useState(loadRecent);
@@ -117,7 +119,8 @@ export function CommandPalette() {
   const items = useMemo(() => paletteItems(stepTypes, summaries, flow?.id), [stepTypes, summaries, flow?.id]);
   const all = useMemo(() => groups(items), [items]);
   const rows: Row[] = useMemo(() => {
-    if (query.trim()) return search(items, query, recent).map((item) => ({ item, tagged: true }));
+    // What no node does by name, the AI can be asked to build: the last choice, always there.
+    if (query.trim()) return [...search(items, query, recent).map((item) => ({ item, tagged: true })), { ask: query.trim() }];
     if (group) return items.filter((i) => i.group === group).map((item) => ({ item, tagged: false }));
     const view = frequent(items, recent);
     const top = [...view.recent, ...view.common].slice(0, 6);
@@ -159,6 +162,15 @@ export function CommandPalette() {
 
   const choose = (choice: Choice | undefined) => {
     if (!choice) return;
+    if ("ask" in choice) {
+      // Handed to the AI chat as a draft, with the selected node as context: the person sends it.
+      const a = agent.getState();
+      a.setOpen(true);
+      a.setDraft(a.current, choice.ask);
+      setOpen(false);
+      requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-agent-input]")?.focus());
+      return;
+    }
     if ("group" in choice) {
       setGroup(choice.group);
       input.current?.focus();
@@ -247,7 +259,7 @@ export function CommandPalette() {
           />
         </div>
         <ul ref={list} className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5" aria-label={t.addStep}>
-          {choices.length === 0 && <li className="px-3 py-4 text-sm text-slate-500">{t.palette.empty(query)}</li>}
+          {choices.length === 1 && "ask" in choices[0]! && <li className="px-3 pt-4 pb-2 text-sm text-slate-500">{t.palette.empty(query)}</li>}
           {rows.map((row) => {
             if ("heading" in row) {
               return (
@@ -264,6 +276,21 @@ export function CommandPalette() {
               onMouseMove: () => i !== active && setActive(i),
               onClick: () => choose(row),
             };
+            if ("ask" in row) {
+              return (
+                <li key="ask" className="mt-1 border-t border-slate-100 pt-1">
+                  <button {...common} className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left ${on ? "bg-slate-100" : ""}`}>
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500">
+                      <MessageSquareText size={16} strokeWidth={1.75} aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] leading-5 font-semibold text-ink">{t.palette.askAi(row.ask)}</span>
+                      <span className="block truncate text-xs leading-[18px] text-slate-500">{t.palette.askAiHint}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            }
             if ("group" in row) {
               return (
                 <li key={`g:${row.group}`}>

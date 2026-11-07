@@ -134,7 +134,20 @@ export function todoTitle(todo: Todo): string {
 
 /** The errors the flow's author has to fix (not the ones a person does). */
 export function authorIssues(validation: ValidationReport | null | undefined): ValidationIssue[] {
-  return (validation?.issues ?? []).filter((i) => i.severity === "error" && !PERSON_CODES.has(i.code));
+  return (validation?.issues ?? []).filter((i) => i.severity === "error" && !PERSON_CODES.has(i.code) && !isUnset(i));
+}
+
+/**
+ * A required setting left empty: what every node is right after it is added.
+ * Shown as "未設定" (not set up yet), not as an error; a run still waits for it.
+ */
+export function isUnset(issue: Pick<ValidationIssue, "code" | "message">): boolean {
+  return issue.code === "INVALID_PARAMS" && /is a required property/.test(issue.message);
+}
+
+/** The required settings still empty, one per field. */
+export function unsetIssues(validation: ValidationReport | null | undefined): ValidationIssue[] {
+  return (validation?.issues ?? []).filter((i) => i.severity === "error" && isUnset(i));
 }
 
 /** The flow as the AI writes it: the answer object, keeping step IDs and picked targets. */
