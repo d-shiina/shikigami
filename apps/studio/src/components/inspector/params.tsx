@@ -220,6 +220,21 @@ function ParamField({
         }}
       />
     );
+  } else if (isRecordList(schema, value)) {
+    // A list of small records (a form's fields, sort keys): one box each.
+    return (
+      <div className="py-1">
+        <div className="mb-1 pl-1 text-[11px] text-slate-500" title={schema.description ?? name}>
+          {label}
+        </div>
+        <RecordList
+          schema={recordItems(schema)!}
+          value={(value as Record<string, unknown>[] | undefined | null) ?? []}
+          labels={t.paramNames.items[`${stepType}.${name}`]}
+          onChange={(list) => onChange(list.length === 0 ? null : list)}
+        />
+      </div>
+    );
   } else if (isForm(schema, value)) {
     // A target and other small records: one field per item, never JSON by hand.
     return (
@@ -520,11 +535,60 @@ export function PointTools({
   );
 }
 
+/** An array of records with known items, held as such. */
+function recordItems(schema: JsonSchema): JsonSchema | undefined {
+  const items = schema.items as JsonSchema | undefined;
+  return items && items.type === "object" && Object.keys(items.properties ?? {}).length > 0 ? items : undefined;
+}
+
+function isRecordList(schema: JsonSchema, value: unknown): boolean {
+  return (
+    schema.type === "array" &&
+    !!recordItems(schema) &&
+    (value === undefined || value === null || (Array.isArray(value) && value.every(isRecord)))
+  );
+}
+
+/** Each record as its fields in a box, with a way to take it out and one to add another. */
+function RecordList({
+  schema,
+  value,
+  labels,
+  onChange,
+}: {
+  schema: JsonSchema;
+  value: Record<string, unknown>[];
+  labels?: Record<string, string>;
+  onChange: (value: Record<string, unknown>[]) => void;
+}) {
+  const set = (index: number, next: unknown) =>
+    onChange(next === null ? value.filter((_, i) => i !== index) : value.map((item, i) => (i === index ? (next as Record<string, unknown>) : item)));
+  return (
+    <div className="space-y-1.5">
+      {value.map((item, index) => (
+        <div key={index} className="relative">
+          <ObjectFields schema={schema} value={item} labels={labels} onChange={(next) => set(index, next)} />
+          <button
+            type="button"
+            className="absolute right-1 top-1 rounded px-1 text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            title={t.props.removeItem}
+            onClick={() => set(index, null)}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <button type="button" className="pl-1 text-[11px] text-brand-600 hover:underline" onClick={() => onChange([...value, {}])}>
+        ＋{t.props.addItem}
+      </button>
+    </div>
+  );
+}
+
 function isForm(schema: JsonSchema, value: unknown): boolean {
   return schema.type === "object" && Object.keys(schema.properties ?? {}).length > 0 && (value === undefined || value === null || isRecord(value));
 }
 
-const fieldLabel = (key: string) => t.targetFields[key] ?? key;
 const roleLabel = (role: string) => (!t.roles[role] ? role : locale === "ja" ? `${t.roles[role]}（${role}）` : `${t.roles[role]} (${role})`);
 
 /**
@@ -536,11 +600,15 @@ export function ObjectFields({
   schema,
   value,
   onChange,
+  labels,
 }: {
   schema: JsonSchema;
   value: Record<string, unknown> | undefined;
   onChange: (value: unknown) => void;
+  /** Names of the items, when they are not a target's. */
+  labels?: Record<string, string>;
 }) {
+  const fieldLabel = (key: string) => labels?.[key] ?? t.targetFields[key] ?? key;
   const props = schema.properties ?? {};
   const current = value ?? {};
   const keys = Object.keys(props);
@@ -599,6 +667,16 @@ export function ObjectFields({
               onCommit={(text) => {
                 const n = Number(text.trim());
                 set(key, text.trim() === "" || !Number.isFinite(n) ? null : n);
+              }}
+            />
+          );
+        } else if (sub.type === "array" && isScalarList(sub, v)) {
+          editor = (
+            <CommitInput
+              value={listToText(v)}
+              onCommit={(text) => {
+                const list = textToList(text);
+                set(key, list.length === 0 ? null : list);
               }}
             />
           );

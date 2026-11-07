@@ -1012,6 +1012,8 @@ export const ja = {
     browse: "参照…",
     browseTitle: "ファイルを選択します。フローのフォルダーの外にあるファイルは、フォルダーにコピーして使います",
     jsonHint: "JSON（文字列は {{ 式 }} テンプレートも可）",
+    addItem: "項目を追加",
+    removeItem: "この項目を外す",
     listHint: "カンマ区切り（例: A, B, 10）。数字を文字として扱う場合は \"10\" のように囲みます",
     form: "フォーム",
     flowInput: "フロー入力",

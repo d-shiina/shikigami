@@ -23,6 +23,7 @@ const NAMES: Record<string, string> = {
   "desktop.readText": "text",
   "desktop.isVisible": "visible",
   "dialog.input": "answer",
+  "dialog.form": "form",
   "dialog.message": "answer",
   "dialog.selectFile": "selected",
   "http.request": "response",
