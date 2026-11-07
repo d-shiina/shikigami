@@ -23,6 +23,14 @@ sha1 = "0.10.6"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3.6.3", features = ["windows-native"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 
-[lints]
-workspace = true
+# The workspace forbids unsafe code; reading Windows Credential Manager
+# needs it, so it is allowed only inside the `wincred` module.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"

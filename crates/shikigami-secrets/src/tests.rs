@@ -580,3 +580,132 @@ fn api_key_requests_ask_for_the_key_only() {
     assert_eq!(more.kind, Some(SecretKind::ApiKey));
     assert_eq!(more.fields, [SecretField::Password]);
 }
+
+fn linked_vault(dir: &Path) -> (Vault, std::sync::Arc<MemoryWindowsCredentials>) {
+    let windows = std::sync::Arc::new(MemoryWindowsCredentials::default());
+    let v = vault(dir).with_windows_credentials(Box::new(windows.clone()));
+    (v, windows)
+}
+
+fn linked(name: &str, target: &str) -> SecretInput {
+    SecretInput {
+        name: name.into(),
+        sites: Some(vec!["https://example.com".into()]),
+        windows_credential: Some(target.into()),
+        ..SecretInput::default()
+    }
+}
+
+#[test]
+fn a_secret_linked_to_windows_reads_the_current_password_each_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let (v, windows) = linked_vault(dir.path());
+    windows.put("会社/受注", "yamada", "spring-2026");
+    let info = v.set(linked("受注", "会社/受注")).unwrap();
+    assert_eq!(info.username, "yamada");
+    assert_eq!(info.fields, [SecretField::Username, SecretField::Password]);
+    assert_eq!(info.windows_credential.as_deref(), Some("会社/受注"));
+    let raw = std::fs::read_to_string(dir.path().join("secrets/vault.json")).unwrap();
+    assert!(raw.contains("会社/受注"));
+    assert!(!raw.contains("spring-2026"));
+
+    let password = |v: &Vault| {
+        v.resolve(&reference("受注", SecretField::Password))
+            .unwrap()
+            .value
+    };
+    assert_eq!(password(&v), "spring-2026");
+    // Changed in Credential Manager: the next use types the new one.
+    windows.put("会社/受注", "yamada", "summer-2026");
+    assert_eq!(password(&v), "summer-2026");
+    assert_eq!(v.mask("pw=summer-2026"), "pw=***");
+    assert_eq!(
+        v.summaries().unwrap()[0].windows_credential.as_deref(),
+        Some("会社/受注")
+    );
+}
+
+#[test]
+fn a_windows_credential_that_is_not_there_says_how_to_add_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (v, windows) = linked_vault(dir.path());
+    let e = v.set(linked("受注", "会社/受注")).unwrap_err();
+    assert_eq!(e.code, "WINDOWS_CREDENTIAL_NOT_FOUND");
+    assert!(v.list().unwrap().is_empty());
+
+    windows.put("会社/受注", "yamada", "pw");
+    v.set(linked("受注", "会社/受注")).unwrap();
+    *windows.logins_for_test() = Default::default();
+    let e = v
+        .resolve(&reference("受注", SecretField::Password))
+        .unwrap_err();
+    assert_eq!(e.code, "WINDOWS_CREDENTIAL_NOT_FOUND");
+    assert!(e.hint.unwrap_or_default().contains("資格情報マネージャー"));
+    // Still listed, so the person can fix it.
+    assert_eq!(v.list().unwrap()[0].username, "");
+}
+
+#[test]
+fn unlinking_goes_back_to_values_kept_in_the_vault() {
+    let dir = tempfile::tempdir().unwrap();
+    let (v, windows) = linked_vault(dir.path());
+    v.set(input("受注")).unwrap();
+    windows.put("会社/受注", "yamada", "from-windows");
+    v.set(linked("受注", "会社/受注")).unwrap();
+    assert_eq!(
+        v.resolve(&reference("受注", SecretField::Password))
+            .unwrap()
+            .value,
+        "from-windows"
+    );
+    // The vault's own values were dropped when it was linked.
+    let info = v
+        .set(SecretInput {
+            name: "受注".into(),
+            windows_credential: Some(String::new()),
+            ..SecretInput::default()
+        })
+        .unwrap();
+    assert_eq!(info.windows_credential, None);
+    assert!(info.fields.is_empty());
+    v.set(SecretInput {
+        password: Some("typed".into()),
+        ..input("受注")
+    })
+    .unwrap();
+    assert_eq!(
+        v.resolve(&reference("受注", SecretField::Password))
+            .unwrap()
+            .value,
+        "typed"
+    );
+}
+
+#[test]
+fn windows_passwords_are_read_as_utf16_or_utf8() {
+    let utf16 = |t: &str| {
+        t.encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<u8>>()
+    };
+    assert_eq!(
+        wincred::blob_text(&utf16("hunter2")).as_deref(),
+        Some("hunter2")
+    );
+    assert_eq!(
+        wincred::blob_text(&utf16("パス12")).as_deref(),
+        Some("パス12")
+    );
+    // Their UTF-16 bytes are also valid UTF-8 ("B0D0F0"): still UTF-16.
+    let both = |t: &str| wincred::blob_text(&utf16(t));
+    assert_eq!(both("あいう").as_deref(), Some("あいう"));
+    assert_eq!(both("你好").as_deref(), Some("你好"));
+    assert_eq!(both("pw\0").as_deref(), Some("pw"));
+    // Not UTF-16 (odd length): UTF-8.
+    assert_eq!(wincred::blob_text(b"abc").as_deref(), Some("abc"));
+    assert_eq!(
+        wincred::blob_text("パス1".as_bytes()).as_deref(),
+        Some("パス1")
+    );
+    assert_eq!(wincred::blob_text(b"").as_deref(), Some(""));
+}

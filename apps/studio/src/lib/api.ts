@@ -127,8 +127,13 @@ export type SecretInfo = {
   /** oauth.signIn saved tokens for it. */
   signedIn?: boolean;
   oauth?: OAuthStatus;
+  /** The user name and password are read from this generic credential of Windows Credential Manager. */
+  windowsCredential?: string;
   updatedAt: string;
 };
+
+/** A generic credential of Windows Credential Manager (never its password). */
+export type WindowsCredentialInfo = { target: string; username?: string };
 
 /** Registers or updates a secret; fields left out keep their stored value. */
 export type SecretInput = {
@@ -140,6 +145,8 @@ export type SecretInput = {
   totp?: string;
   sites?: string[];
   description?: string;
+  /** Read the user name and password from this Windows credential; "" keeps them in Shikigami again. */
+  windowsCredential?: string;
 };
 
 /** A login an AI asked the user for (request_secret): names and sites only. */
@@ -352,6 +359,7 @@ export const api = {
   listSecrets: () => call<{ secrets: SecretInfo[]; keyLocation: string; keyMissing: boolean }>("list_secrets"),
   setSecret: (input: SecretInput) => call<SecretInfo>("set_secret", { input }),
   removeSecret: (name: string) => call<void>("remove_secret", { name }),
+  listWindowsCredentials: () => call<WindowsCredentialInfo[]>("list_windows_credentials"),
   resetSecrets: () => call<number>("reset_secrets"),
   forgetLogin: (session: string) => call<boolean>("forget_login", { session }),
   listSecretRequests: () => call<SecretRequest[]>("list_secret_requests"),

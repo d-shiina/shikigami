@@ -15,6 +15,17 @@ export const ja = {
   secretUsername: "ユーザー名",
   secretPassword: "パスワード",
   secretPasswordKeep: "変更しないときは空のまま",
+  secretStore: "値の保存先",
+  secretStores: { vault: "Shikigami", windows: "Windows の資格情報マネージャー" },
+  secretStoreHints: {
+    vault: "暗号化してこのワークスペースに保存します",
+    windows: "使うたびに資格情報マネージャーの「汎用資格情報」から読みます。そちらでパスワードを変えると、次の実行から新しいものを使います",
+  },
+  secretWindowsTarget: "資格情報のアドレス",
+  secretWindowsUser: (user: string) => `ユーザー名：${user}`,
+  secretWindowsNone:
+    "汎用資格情報がまだありません。コントロール パネルの「資格情報マネージャー」→「Windows 資格情報」→「汎用資格情報の追加」で追加してから選んでください",
+  secretWindowsBadge: "資格情報マネージャー",
   secretTotp: "MFA の設定キー（任意）",
   secretTotpHint: "認証アプリ用の QR コードの横に出るキー、または otpauth:// の文字列。ワンタイムコードを自動で入力します",
   secretSites: "入力してよいサイト・アプリ（1 行に 1 つ）",

@@ -21,6 +21,7 @@
 | ユーザー名 / パスワード | ログインに使う値。編集時、パスワード欄を空のままにすると前の値を残す |
 | 入力してよいサイト・アプリ | 1 行に 1 つ。`https://example.com/login` と書いても `https://example.com`（オリジン）として扱う。デスクトップアプリは `app:billing.exe`（実行ファイル名、[desktop.md](desktop.md)） |
 | MFA の設定キー | 任意。認証アプリ用 QR コードの横に出るキー（base32）か `otpauth://` の文字列。ワンタイムコードを自動入力する |
+| 値の保存先 | **Shikigami**（暗号化してワークスペースに保存、既定）か **Windows の資格情報マネージャー**（下記） |
 
 種類が違っても金庫は 1 つで、フローでの書き方も同じです（下記）。保存・サイトの照合・伏せ字の扱いは種類で変わりません。別々に管理すると、見る場所も参照の書き方も 2 通りになり、AI も迷うためです。
 
@@ -34,12 +35,27 @@
 
 OAuth アプリは一覧に、アクセストークンの有効期限・最後に取得した日時・自動で更新されるか（リフレッシュトークンがあるか）、再度サインインが必要かを表示します。
 
+### Windows の資格情報マネージャーの資格情報を使う
+
+会社の決まりでパスワードを資格情報マネージャーに置いている、ほかのツールと同じパスワードを使い回したい、パスワードの変更をそちらだけで済ませたい、というときは、値の保存先を「Windows の資格情報マネージャー」にして、「資格情報のアドレス」に資格情報マネージャーの **汎用資格情報** のアドレスを選びます（一覧から選ぶか、そのまま入力）。
+
+- ユーザー名とパスワードは、フローが使うたびに資格情報マネージャーから読みます。シークレットの金庫には値を持ちません。資格情報マネージャーでパスワードを変えると、次の実行から新しいパスワードを入力します。
+- 名前・入力してよいサイト・MFA の設定キーはこれまでどおり Shikigami 側に登録します。サイトの照合・伏せ字の扱いも同じです。
+- 読めるのは「Windows 資格情報」の **汎用資格情報** だけです。「Windows 資格情報」（ドメインの資格情報）や「Web 資格情報」のパスワードは、Windows がほかのプログラムに渡さないため使えません。
+- パスワードは、資格情報マネージャーの画面・`cmdkey`・PowerShell が書く UTF-16 として読みます（UTF-8 で書くほかのツールの資格情報は、正しく読めないことがあります）。
+- 資格情報はその Windows ユーザーのものです。無人実行では、実行する Windows ユーザーの資格情報マネージャーに同じアドレスで登録しておきます。
+- 保存先を「Shikigami」に戻すと、ユーザー名とパスワードは空になるので入力し直します。
+
+汎用資格情報は、コントロール パネルの「資格情報マネージャー」→「Windows 資格情報」→「汎用資格情報の追加」か、`cmdkey /generic:会社/受注 /user:tanaka /pass` で追加できます。
+
 ### CLI
 
 ```powershell
 shikigami secret set 受注システム --username tanaka --site https://orders.example.com   # パスワードは伏せ字で聞かれる
 shikigami secret set 受注システム --totp JBSWY3DPEHPK3PXP                                 # 変えたい項目だけ
 shikigami secret set 受注API --kind api-key --site https://api.example.com               # キーは伏せ字で聞かれる
+shikigami secret set 受注システム --windows-credential 会社/受注 --site https://orders.example.com   # 資格情報マネージャーから読む
+shikigami secret windows-credentials       # 選べる汎用資格情報（アドレスとユーザー名）
 shikigami secret list
 shikigami secret remove 受注システム
 shikigami secret logout 受注システム        # 保存したログイン状態（下記）だけ消す
@@ -131,6 +147,8 @@ Studio で実行したフローが `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `
 | `SECRET_SITE_NOT_SET` | 入力してよいサイトが未登録。サイトを追加する |
 | `SECRET_SITE_MISMATCH` | いまのページが登録サイトではない。URL を確認し、正しければサイトを追加する |
 | `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | デスクトップアプリ（`app:xxx.exe`）が未登録、または別のアプリに入力しようとした |
+| `WINDOWS_CREDENTIAL_NOT_FOUND` | 資格情報マネージャーに、そのアドレスの汎用資格情報がない。資格情報マネージャーで追加するか、シークレットのアドレスを直す |
+| `WINDOWS_CREDENTIAL_UNREADABLE` | 汎用資格情報のパスワードが文字として読めない |
 | `SECRET_KEY_MISSING` | この PC / Windows ユーザーに鍵がない。Studio か `shikigami secret reset --yes` でリセットして登録し直す |
 | `SECRETS_UNAVAILABLE` | シークレットのない Runtime で実行した（Studio・CLI・MCP から実行する） |
 | `HUMAN_REQUIRED` / `HUMAN_TIMEOUT` | 人の操作が必要だが画面がない／時間内に終わらなかった |

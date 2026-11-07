@@ -205,6 +205,7 @@ pub fn run() {
             commands::list_secrets,
             commands::set_secret,
             commands::remove_secret,
+            commands::list_windows_credentials,
             commands::reset_secrets,
             commands::forget_login,
             commands::list_secret_requests,

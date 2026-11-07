@@ -21,6 +21,7 @@ How IDs and passwords for business sites and apps, and keys for web APIs, are ha
 | Username / Password | The login values. When editing, an empty password keeps the previous one |
 | Sites and apps allowed | One per line. `https://example.com/login` is treated as `https://example.com` (the origin). Desktop apps as `app:billing.exe` (the executable name; [desktop.md](desktop.md)) |
 | MFA setup key | Optional. The key next to the authenticator QR code (base32) or an `otpauth://` string. One-time codes are filled in automatically |
+| Where the values are kept | **Shikigami** (encrypted in the workspace, the default) or **Windows Credential Manager** (below) |
 
 All kinds are one vault and one way to write them in flows (below): the kind changes no storage, site check or masking. Kept apart they would need a second place to look and a second way to reference, for the AI too.
 
@@ -34,12 +35,27 @@ Changing the kind of a saved secret removes the fields the new kind does not use
 
 For an OAuth app the list shows when the access token expires, when it was last obtained, and whether it renews itself (a refresh token is kept) or needs signing in again.
 
+### Using a credential of Windows Credential Manager
+
+When company rules keep passwords in Credential Manager, another tool uses the same password, or a password should be changed in one place only, set "Where the values are kept" to Windows Credential Manager and pick the address of a **generic credential** there (from the list, or typed).
+
+- The user name and password are read from Credential Manager each time a flow uses them; the vault keeps no values for that secret. A password changed in Credential Manager is typed from the next run.
+- The name, allowed sites and MFA setup key are still registered in Shikigami, and site checks and masking work the same.
+- Only **generic credentials** can be read: Windows does not hand domain ("Windows") credentials or web credentials to other programs.
+- Passwords are read as UTF-16, as Credential Manager, `cmdkey` and PowerShell write them (credentials another tool wrote as UTF-8 may not read correctly).
+- Credentials belong to the Windows user. For unattended runs, add the same address to the Credential Manager of the user the runs run as.
+- Switching back to Shikigami empties the user name and password: type them again.
+
+Add a generic credential in Control Panel → Credential Manager → Windows Credentials → Add a generic credential, or with `cmdkey /generic:company/orders /user:tanaka /pass`.
+
 ### CLI
 
 ```powershell
 shikigami secret set "Order system" --username tanaka --site https://orders.example.com   # asks for the password without echo
 shikigami secret set "Order system" --totp JBSWY3DPEHPK3PXP                                 # only the fields to change
 shikigami secret set "Orders API" --kind api-key --site https://api.example.com          # asks for the key without echo
+shikigami secret set "Order system" --windows-credential company/orders --site https://orders.example.com   # read from Credential Manager
+shikigami secret windows-credentials       # generic credentials to pick from (addresses and user names)
 shikigami secret list
 shikigami secret remove "Order system"
 shikigami secret logout "Order system"     # removes only the saved sign-in state (below)
@@ -131,6 +147,8 @@ When a flow run in Studio stops on `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `
 | `SECRET_SITE_NOT_SET` | No allowed sites. Add the site |
 | `SECRET_SITE_MISMATCH` | The current page is not a registered site. Check the URL and add the site if it is right |
 | `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | The desktop app (`app:xxx.exe`) is not registered, or the input went to another app |
+| `WINDOWS_CREDENTIAL_NOT_FOUND` | Credential Manager has no generic credential with that address. Add it there, or fix the secret's address |
+| `WINDOWS_CREDENTIAL_UNREADABLE` | The password of the generic credential is not text |
 | `SECRET_KEY_MISSING` | No key for this PC / Windows user. Reset in Studio or with `shikigami secret reset --yes` and register again |
 | `SECRETS_UNAVAILABLE` | Run on a Runtime without secrets (run from Studio, the CLI or MCP) |
 | `HUMAN_REQUIRED` / `HUMAN_TIMEOUT` | A person is needed but there is no window / they did not finish in time |
