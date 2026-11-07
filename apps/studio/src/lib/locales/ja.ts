@@ -563,6 +563,9 @@ export const ja = {
     fixNow: (agent: string) => `${agent} に今すぐ修正を依頼`,
   },
   flow: {
+    ranOk: "完了",
+    ranFailed: "エラー",
+    issues: (n: number) => `検証で見つかった問題 ${n} 件`,
     addAtBlockEnd: (block: string) => `「${block}」の最後にノードを追加`,
     aiAdded: "AIが追加",
     aiChanged: "AIが変更",

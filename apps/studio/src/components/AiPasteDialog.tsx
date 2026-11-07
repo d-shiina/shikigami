@@ -79,7 +79,7 @@ export function AiPasteDialog() {
       <div
         role="dialog"
         aria-label={t.paste.title}
-        className="flex max-h-[86vh] w-[640px] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-dialog"
+        className="flex max-h-[86vh] w-[640px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-dialog"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-4">
@@ -90,7 +90,7 @@ export function AiPasteDialog() {
           </button>
           <button
             type="button"
-            className="ml-auto grid h-7 w-7 place-items-center rounded-[3px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+            className="ml-auto grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"
             onClick={close}
             aria-label={t.close}
             title={`${t.close} (Esc)`}
@@ -111,7 +111,7 @@ export function AiPasteDialog() {
                   <button
                     type="button"
                     onClick={() => void saveGuide()}
-                    className="flex h-7 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
+                    className="flex h-7 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
                   >
                     <FileDown size={14} strokeWidth={1.75} aria-hidden="true" />
                     {t.paste.saveGuide}
@@ -136,7 +136,7 @@ export function AiPasteDialog() {
                   }}
                   placeholder={t.paste.placeholder}
                   spellCheck={false}
-                  className="mt-1.5 h-48 w-full resize-y rounded-[4px] border border-slate-300 bg-paper px-2.5 py-2 font-mono text-[12px] leading-relaxed focus:border-brand-500 focus:outline-none"
+                  className="mt-1.5 h-48 w-full resize-y rounded-lg border border-slate-300 bg-paper px-2.5 py-2 font-mono text-[12px] leading-relaxed focus:border-brand-500 focus:outline-none"
                 />
                 {flow ? (
                   <div className="mt-1.5 space-y-1" role="radiogroup" aria-label={t.paste.where}>
@@ -157,7 +157,7 @@ export function AiPasteDialog() {
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 px-4 py-2.5">
           {result?.kind === "done" ? (
-            <button type="button" onClick={openFlow} className="h-8 rounded-[4px] bg-ink px-3.5 text-[13px] font-semibold text-paper hover:bg-brand-700">
+            <button type="button" onClick={openFlow} className="h-8 rounded-lg bg-primary px-3.5 text-[13px] font-semibold text-on-primary hover:bg-primary-hover">
               {t.paste.open}
             </button>
           ) : (
@@ -169,7 +169,7 @@ export function AiPasteDialog() {
                 type="button"
                 disabled={!text.trim() || busy}
                 onClick={() => void submit()}
-                className="h-8 rounded-[4px] bg-ink px-3.5 text-[13px] font-semibold text-paper hover:bg-brand-700 disabled:bg-slate-300"
+                className="h-8 rounded-lg bg-primary px-3.5 text-[13px] font-semibold text-on-primary hover:bg-primary-hover disabled:bg-slate-300"
               >
                 {t.paste.submit}
               </button>
@@ -183,7 +183,7 @@ export function AiPasteDialog() {
 
 function Problems({ problems }: { problems: AnswerProblem[] }) {
   return (
-    <section role="alert" className="rounded-[4px] border border-shu-200 bg-shu-50/60 px-3 py-2.5">
+    <section role="alert" className="rounded-lg border border-shu-200 bg-shu-50/60 px-3 py-2.5">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="text-[13px] font-semibold text-shu-600">{t.paste.problemsTitle}</h3>
@@ -251,7 +251,7 @@ function Done({ outcome, fresh, onAct }: { outcome: EditOutcome; fresh: boolean;
         forAi.length === 0 && <p className="px-4 text-[13px] text-moegi-600">✓ {t.paste.noTodos}</p>
       )}
       {forAi.length > 0 && (
-        <section className="mx-4 rounded-[4px] border border-shu-200 bg-shu-50/60 px-3 py-2.5">
+        <section className="mx-4 rounded-lg border border-shu-200 bg-shu-50/60 px-3 py-2.5">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <h3 className="text-[13px] font-semibold text-shu-600">{t.todos.aiTitle}</h3>

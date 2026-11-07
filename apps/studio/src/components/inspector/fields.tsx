@@ -41,7 +41,7 @@ export type JsonSchema = {
 };
 
 export const inputClass =
-  "w-full rounded-[4px] border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none";
+  "w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none";
 
 /** Text field that commits on blur / Enter, so each edit is one undoable change. */
 export function CommitInput(props: {
@@ -105,7 +105,7 @@ export function PathField({ value, folder, onChange }: { value: string; folder: 
     <div
       {...drop.attrs}
       title={drop.armed ? undefined : t.fileDrop.fieldHint}
-      className={`flex gap-1 rounded-[4px] ${drop.over ? "bg-brand-50 outline-2 outline-brand-500" : drop.armed ? "outline-1 outline-dashed outline-brand-500/60" : ""}`}
+      className={`flex gap-1 rounded-lg ${drop.over ? "bg-brand-50 outline-2 outline-brand-500" : drop.armed ? "outline-1 outline-dashed outline-brand-500/60" : ""}`}
     >
       <CommitInput value={value} list={listId} placeholder={drop.over ? t.fileDrop.putHere : t.props.pathPlaceholder} onCommit={(text) => onChange(text === "" ? null : text)} />
       <datalist id={listId}>
@@ -119,7 +119,7 @@ export function PathField({ value, folder, onChange }: { value: string; folder: 
         type="button"
         title={t.props.browseTitle}
         onClick={() => void browse()}
-        className="flex shrink-0 items-center gap-1 rounded-[3px] border border-slate-300 bg-sheet px-2 text-[11px] text-slate-700 hover:bg-slate-50"
+        className="flex shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-sheet px-2 text-[11px] text-slate-700 hover:bg-slate-50"
       >
         <FolderOpen size={13} strokeWidth={1.75} aria-hidden="true" />
         {t.props.browse}
@@ -160,7 +160,7 @@ export function Row({
           type="button"
           title={t.props.removeSetting}
           aria-label={t.props.removeSetting}
-          className="mt-1 rounded-[3px] px-1 text-[12px] leading-none text-slate-400 hover:bg-slate-100 hover:text-ink"
+          className="mt-1 rounded-md px-1 text-[12px] leading-none text-slate-400 hover:bg-slate-100 hover:text-ink"
           onClick={(e) => {
             e.preventDefault();
             onRemove();
@@ -184,7 +184,7 @@ export function AddRow({ choices, onAdd }: { choices: { key: string; label: stri
     <div className="grid grid-cols-[84px_1fr] gap-x-2 py-1 [[data-wide]_&]:grid-cols-[132px_1fr]">
       <span />
       <select
-        className="w-full cursor-pointer rounded-[4px] border border-dashed border-slate-300 bg-transparent px-2 py-1 text-[11px] text-slate-500 hover:border-brand-500 hover:text-brand-600 focus:outline-none"
+        className="w-full cursor-pointer rounded-lg border border-dashed border-slate-300 bg-transparent px-2 py-1 text-[11px] text-slate-500 hover:border-brand-500 hover:text-brand-600 focus:outline-none"
         value=""
         aria-label={t.props.addSetting}
         onChange={(e) => e.target.value && onAdd(e.target.value)}

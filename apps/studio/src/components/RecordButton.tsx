@@ -60,7 +60,7 @@ export function RecordButton() {
         title={note ?? t.recording.recordTitle}
         onClick={() => void record()}
         disabled={busy}
-        className={`flex h-8 items-center gap-1.5 rounded-[3px] px-2 text-sm hover:bg-slate-100 disabled:opacity-60 ${note ? "text-shu-600" : "text-slate-700"}`}
+        className={`flex h-8 items-center gap-1.5 rounded-md px-2 text-sm hover:bg-slate-100 disabled:opacity-60 ${note ? "text-shu-600" : "text-slate-700"}`}
       >
         <Circle size={11} strokeWidth={0} fill="currentColor" className="text-shu-500" aria-hidden="true" />
         <span className="@max-[560px]:hidden">{busy ? t.recording.busy : t.recording.record}</span>
@@ -127,7 +127,7 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
 
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-ink/30">
-      <div role="dialog" aria-label={t.recording.title} className="flex max-h-[85vh] w-[520px] flex-col rounded-[4px] border border-slate-200 bg-sheet shadow-dialog">
+      <div role="dialog" aria-label={t.recording.title} className="flex max-h-[85vh] w-[520px] flex-col rounded-lg border border-slate-200 bg-sheet shadow-dialog">
         <div className="flex items-baseline gap-2 border-b border-slate-200 px-5 pt-4 pb-3">
           <h2 className="text-lg font-bold">{t.recording.title}</h2>
           <span className="text-[12px] text-slate-600">{t.recording.count(recording.actions.length)}</span>
@@ -183,7 +183,7 @@ function RecordingDialog({ recording, path, onClose }: { recording: Recording; p
             <button
               type="button"
               disabled={working || steps.length === 0}
-              className="rounded bg-ink px-3 py-1 text-sm font-semibold text-paper hover:bg-brand-700 disabled:bg-slate-300"
+              className="rounded bg-primary px-3 py-1 text-sm font-semibold text-on-primary hover:bg-primary-hover disabled:bg-slate-300"
               onClick={() => void asNodes()}
             >
               {t.recording.asNodes}

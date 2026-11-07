@@ -37,7 +37,7 @@ function StepLink({ id }: { id: string }) {
     <button
       type="button"
       onClick={() => goTo(id)}
-      className="max-w-full truncate rounded-[4px] bg-slate-100 px-1.5 text-left text-[11px] text-slate-600 hover:bg-brand-50 hover:text-brand-700"
+      className="max-w-full truncate rounded-lg bg-slate-100 px-1.5 text-left text-[11px] text-slate-600 hover:bg-brand-50 hover:text-brand-700"
       title={t.evidence.showInFlow}
     >
       {label(id)}
@@ -57,13 +57,13 @@ export function Section({ title, tone = "text-slate-500", children }: { title: s
 /** The last time someone sent this flow back, and whether the AI has acted on it since. */
 export function FeedbackBox({ feedback, fixedAfter }: { feedback: Review; fixedAfter: boolean }) {
   return (
-    <div className="rounded-[4px] border border-shu-100 bg-shu-50/60 px-3 py-2">
+    <div className="rounded-lg border border-shu-100 bg-shu-50/60 px-3 py-2">
       <div className="flex items-center gap-2 text-[11px]">
         <span className="font-bold text-shu-600">{t.evidence.lastSendBack}</span>
         <span className="text-slate-400">
           {t.evidence.revision(feedback.revision)} ・ {relativeTime(feedback.at)}
         </span>
-        <span className={`ml-auto rounded-[3px] px-1.5 font-semibold ${fixedAfter ? "bg-moegi-100 text-moegi-500" : "bg-slate-200 text-slate-600"}`}>
+        <span className={`ml-auto rounded-md px-1.5 font-semibold ${fixedAfter ? "bg-moegi-100 text-moegi-500" : "bg-slate-200 text-slate-600"}`}>
           {fixedAfter ? t.evidence.fixedAfter : t.evidence.waitingFix}
         </span>
       </div>
@@ -91,7 +91,7 @@ export function Explanations({ entries }: { entries: HistoryEntry[] }) {
   return (
     <ul className="space-y-1.5">
       {said.map((e) => (
-        <li key={e.revision} className="rounded-[4px] border-l-[3px] border-brand-300 bg-brand-50/50 px-2.5 py-1.5">
+        <li key={e.revision} className="rounded-lg border-l-[3px] border-brand-300 bg-brand-50/50 px-2.5 py-1.5">
           <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap text-ink">{e.summary}</p>
           {(e.stepIds ?? []).length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
@@ -116,7 +116,7 @@ const RUN_STATUS: Record<string, { mark: string; label: () => string; style: str
 export function TestRuns({ runs, revision }: { runs: TestRun[]; revision: number }) {
   if (runs.length === 0) {
     return (
-      <p className="rounded-[4px] bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">
+      <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] text-amber-700">
         {t.evidence.notTested}
       </p>
     );
@@ -127,9 +127,9 @@ export function TestRuns({ runs, revision }: { runs: TestRun[]; revision: number
         const status = RUN_STATUS[run.status] ?? { mark: "・", label: () => run.status, style: "bg-slate-100 text-slate-600" };
         const current = run.revision === revision;
         return (
-          <li key={run.runId} className={`rounded-[4px] border px-2.5 py-1.5 ${i === 0 ? "border-slate-200 bg-sheet" : "border-transparent"}`}>
+          <li key={run.runId} className={`rounded-lg border px-2.5 py-1.5 ${i === 0 ? "border-slate-200 bg-sheet" : "border-transparent"}`}>
             <div className="flex items-center gap-2 text-[12px]">
-              <span className={`rounded-[3px] px-1.5 text-[11px] font-bold ${status.style}`}>
+              <span className={`rounded-md px-1.5 text-[11px] font-bold ${status.style}`}>
                 {status.mark} {status.label()}
               </span>
               <span className={current ? "text-slate-600" : "text-amber-700"}>
@@ -190,7 +190,7 @@ export function Observations({ items }: { items: Observed[] }) {
             <button
               type="button"
               onClick={() => setOpenId(o.observationId)}
-              className="w-full overflow-hidden rounded-[4px] border border-slate-200 bg-sheet text-left hover:border-brand-500"
+              className="w-full overflow-hidden rounded-lg border border-slate-200 bg-sheet text-left hover:border-brand-500"
             >
               <Thumb item={o} />
               <div className="px-2 py-1">
@@ -230,7 +230,7 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-6" onClick={onClose}>
       <div
         lang="ja"
-        className="flex max-h-full w-[min(1100px,100%)] flex-col overflow-hidden rounded-[4px] bg-sheet shadow-dialog"
+        className="flex max-h-full w-[min(1100px,100%)] flex-col overflow-hidden rounded-lg bg-sheet shadow-dialog"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5">
@@ -241,17 +241,17 @@ function ObservationViewer({ item, onClose }: { item: Observed; onClose: () => v
               {relativeTime(item.at)}
             </div>
           </div>
-          <div className="flex rounded-[4px] bg-slate-100 p-0.5 text-[12px]">
+          <div className="flex rounded-lg bg-slate-100 p-0.5 text-[12px]">
             {item.hasScreenshot && (
-              <button type="button" onClick={() => setTab("shot")} className={`rounded-[4px] px-2.5 py-1 ${tab === "shot" ? "bg-sheet font-semibold shadow-sheet" : "text-slate-500"}`}>
+              <button type="button" onClick={() => setTab("shot")} className={`rounded-lg px-2.5 py-1 ${tab === "shot" ? "bg-sheet font-semibold shadow-sheet" : "text-slate-500"}`}>
                 {t.evidence.screen}
               </button>
             )}
-            <button type="button" onClick={() => setTab("tree")} className={`rounded-[4px] px-2.5 py-1 ${tab === "tree" ? "bg-sheet font-semibold shadow-sheet" : "text-slate-500"}`}>
+            <button type="button" onClick={() => setTab("tree")} className={`rounded-lg px-2.5 py-1 ${tab === "tree" ? "bg-sheet font-semibold shadow-sheet" : "text-slate-500"}`}>
               {t.evidence.tree}
             </button>
           </div>
-          <button type="button" onClick={onClose} className="grid h-7 w-7 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100" aria-label={t.close}>
+          <button type="button" onClick={onClose} className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label={t.close}>
             ✕
           </button>
         </div>
@@ -324,10 +324,10 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
         onChange={(e) => setReason(e.target.value)}
         rows={3}
         placeholder={t.evidence.reasonPlaceholder}
-        className="w-full resize-y rounded-[4px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500"
+        className="w-full resize-y rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500"
       />
       {notes.map((n, i) => (
-        <div key={n.stepId} className="rounded-[4px] border border-slate-200 bg-paper p-1.5">
+        <div key={n.stepId} className="rounded-lg border border-slate-200 bg-paper p-1.5">
           <div className="flex items-center gap-1">
             <StepLink id={n.stepId} />
             <button
@@ -345,7 +345,7 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
             onChange={(e) => setNotes(notes.map((m, j) => (j === i ? { ...m, note: e.target.value } : m)))}
             rows={2}
             placeholder={t.evidence.notePlaceholder}
-            className="mt-1 w-full resize-y rounded-[4px] border border-slate-200 px-2 py-1 text-[12.5px] outline-none focus:border-brand-500"
+            className="mt-1 w-full resize-y rounded-lg border border-slate-200 px-2 py-1 text-[12.5px] outline-none focus:border-brand-500"
           />
         </div>
       ))}
@@ -353,7 +353,7 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
         type="button"
         disabled={!canNote}
         onClick={() => selected && setNotes([...notes, { stepId: selected, note: "" }])}
-        className="w-full truncate rounded-[4px] border border-dashed border-slate-300 px-2 py-1 text-left text-[12px] text-slate-600 enabled:hover:border-brand-500 enabled:hover:text-brand-700 disabled:text-slate-400"
+        className="w-full truncate rounded-lg border border-dashed border-slate-300 px-2 py-1 text-left text-[12px] text-slate-600 enabled:hover:border-brand-500 enabled:hover:text-brand-700 disabled:text-slate-400"
       >
         ＋ {hint}
       </button>
@@ -364,14 +364,14 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
         </label>
       )}
       <div className="flex gap-2 pt-1">
-        <button type="button" onClick={onCancel} className="h-9 rounded-[4px] px-3 text-[13px] text-slate-500 hover:bg-slate-100">
+        <button type="button" onClick={onCancel} className="h-9 rounded-lg px-3 text-[13px] text-slate-500 hover:bg-slate-100">
           {t.cancel}
         </button>
         <button
           type="button"
           disabled={!ready || busy}
           onClick={() => void submit()}
-          className="h-9 flex-1 rounded-[4px] bg-shu-500 px-3 text-[13px] font-semibold text-white enabled:hover:bg-shu-600 disabled:bg-slate-200 disabled:text-slate-400"
+          className="h-9 flex-1 rounded-lg bg-shu-500 px-3 text-[13px] font-semibold text-white enabled:hover:bg-shu-600 disabled:bg-slate-200 disabled:text-slate-400"
         >
           {t.evidence.sendBack}
         </button>

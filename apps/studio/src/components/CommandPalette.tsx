@@ -39,7 +39,7 @@ function Tile({ icon: Icon, group, size }: { icon: React.ComponentType<{ size?: 
   const c = color(group);
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-[4px]"
+      className="flex shrink-0 items-center justify-center rounded-lg"
       style={{ width: size, height: size, color: c, background: `color-mix(in srgb, ${c} 14%, transparent)` }}
     >
       <Icon size={Math.round(size * 0.55)} strokeWidth={1.9} aria-hidden={true} />
@@ -197,7 +197,7 @@ export function CommandPalette() {
         role="dialog"
         aria-label={t.addStep}
         style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: WIDTH, maxHeight: pos.height }}
-        className="absolute flex flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-lifted"
+        className="absolute flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-lifted"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-slate-200 px-3.5">
@@ -206,7 +206,7 @@ export function CommandPalette() {
               type="button"
               onClick={back}
               title={t.palette.back}
-              className="-ml-1 flex shrink-0 items-center gap-0.5 rounded-[3px] py-0.5 pr-1.5 pl-0.5 text-[13px] font-medium text-ink hover:bg-slate-100"
+              className="-ml-1 flex shrink-0 items-center gap-0.5 rounded-md py-0.5 pr-1.5 pl-0.5 text-[13px] font-medium text-ink hover:bg-slate-100"
             >
               <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
               {groupLabel(group)}
@@ -267,7 +267,7 @@ export function CommandPalette() {
             if ("group" in row) {
               return (
                 <li key={`g:${row.group}`}>
-                  <button {...common} className={`flex w-full items-center gap-2.5 rounded-[4px] px-2 py-1.5 text-left text-[13px] ${on ? "bg-slate-100" : ""}`}>
+                  <button {...common} className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] ${on ? "bg-slate-100" : ""}`}>
                     <Tile icon={groupIcon(row.group)} group={row.group} size={24} />
                     <span className="flex-1 truncate font-medium text-ink">{groupLabel(row.group)}</span>
                     <span className="text-[11px] text-slate-500 tabular-nums">{row.count}</span>
@@ -279,12 +279,11 @@ export function CommandPalette() {
             const item = row.item;
             return (
               <li key={item.key}>
-                <button {...common} className={`flex w-full items-center gap-3 rounded-[4px] px-2 py-2 text-left ${on ? "bg-slate-100" : ""}`}>
+                <button {...common} className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left ${on ? "bg-slate-100" : ""}`}>
                   <Tile icon={nodeIcon(item.type, item.group)} group={item.group} size={32} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 text-[13px] leading-5 font-semibold text-ink">
                       <span className="truncate">{item.label}</span>
-                      {item.keyword && <span className="rounded-[2px] bg-slate-100 px-1 font-mono text-[10px] leading-4 font-normal text-slate-600">{item.keyword}</span>}
                     </span>
                     <span className="block truncate text-xs leading-[18px] text-slate-500">{item.summary}</span>
                   </span>
@@ -300,7 +299,7 @@ export function CommandPalette() {
             <span className="ml-1.5 font-medium text-ink">{where}</span>
           </span>
           <span className="ml-auto shrink-0 text-slate-500">
-            <kbd className="rounded-[2px] bg-slate-100 px-1">Enter</kbd> {t.palette.add}
+            <kbd className="rounded-sm bg-slate-100 px-1">Enter</kbd> {t.palette.add}
           </span>
         </div>
       </div>

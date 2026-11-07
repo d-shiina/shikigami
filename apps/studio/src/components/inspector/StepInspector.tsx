@@ -112,7 +112,7 @@ export function ExtractForm({ step }: { step: Step }) {
         <button
           type="button"
           disabled={busy || name.trim() === ""}
-          className="rounded-[3px] bg-ink px-2.5 py-0.5 text-xs text-paper disabled:opacity-40"
+          className="rounded-md bg-primary px-2.5 py-0.5 text-xs text-on-primary hover:bg-primary-hover disabled:opacity-40"
           onClick={async (e) => {
             e.preventDefault();
             setBusy(true);
@@ -166,10 +166,10 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
       <div className={inEditor ? "px-4 pt-1 pb-2" : "px-4 pt-4 pb-3"}>
         {/* The editor's header already says what the node is. */}
         {!inEditor && (
-        <div className="overflow-hidden rounded-[4px] border border-slate-200">
+        <div className="overflow-hidden rounded-lg border border-slate-200">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-            <AppTag def={def} title={typeTitle(step, def)} color={color} />
+            <AppTag def={def} title={typeTitle(step, def)} />
             <span className="text-sm font-bold" style={{ color }} title={`${step.type} · ID: ${id}`}>
               {typeTitle(step, def)}
             </span>
@@ -185,7 +185,7 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
         {pending
           .filter((e) => touchedSteps(e).includes(id))
           .map((e) => (
-            <div key={e.revision} className="mt-2 flex items-center gap-2 rounded-[4px] border border-shu-100 bg-shu-50 px-2 py-1.5 text-xs">
+            <div key={e.revision} className="mt-2 flex items-center gap-2 rounded-lg border border-shu-100 bg-shu-50 px-2 py-1.5 text-xs">
               <ActorMark entry={e} size={18} />
               <span className="flex-1">
                 {t.props.changedBy(t.actor[e.actor.kind], e.revision)}
@@ -205,7 +205,7 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
             </div>
           ))}
         {issues.length > 0 && (
-          <ul className="mt-2 space-y-1 rounded-[4px] border border-shu-100 bg-shu-50 p-2 text-xs text-shu-600">
+          <ul className="mt-2 space-y-1 rounded-lg border border-shu-100 bg-shu-50 p-2 text-xs text-shu-600">
             {issues.map((i) => (
               <li key={`${i.code}${i.path}${i.message}`}>
                 {i.severity === "warning" ? "⚠" : "✕"} {issueText(i, flow)}
@@ -292,7 +292,7 @@ function StepSummary({ step, def, vars, isCall }: { step: Step; def: StepTypeDef
           type="button"
           title={t.props.editSettingsTitle}
           onClick={() => step.id && openEditor(step.id)}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-[4px] border border-slate-300 py-1.5 text-[12px] font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600"
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 py-1.5 text-[12px] font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600"
         >
           <Maximize2 size={12} strokeWidth={1.75} aria-hidden="true" />
           {t.props.editSettings}

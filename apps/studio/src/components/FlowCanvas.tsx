@@ -24,8 +24,6 @@ import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
-import { KEYWORD } from "../lib/keywords";
-import { VarIcon } from "./VarIcon";
 import { type FrameKind, layoutFlow, NODE_W, READ_ROOM, type SlotNodeData, SLOT_H, type StepNodeData, TAIL_SIZE, WRITE_ROOM } from "../flow/layout";
 import { nodeIcon } from "../lib/nodeIcons";
 import { PERSON_CODES, todosByStep } from "../lib/todos";
@@ -59,7 +57,6 @@ import { AppTag } from "./AppTag";
 import { callKey, diveChain, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { CATEGORY_COLOR } from "./CommandPalette";
-import { Sentence } from "./StoryView";
 import { ChangeView, changeText } from "./ValueView";
 import { StepTools } from "./StepTools";
 import { menuFor } from "../lib/contextMenu";
@@ -107,11 +104,11 @@ const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: () => s
 /** Which way the chart runs, for rows deciding whether to show chips. */
 
 const RUN_STYLE: Record<StepRunState, string> = {
-  running: "ring-2 ring-accent-500 animate-pulse",
-  succeeded: "ring-2 ring-moegi-500/60",
-  failed: "ring-[3px] ring-shu-500 shadow-[0_0_0_9px_color-mix(in_srgb,var(--color-shu-500)_18%,transparent)]",
+  running: "!border-accent-500 shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent-500)_16%,transparent)]",
+  succeeded: "",
+  failed: "!border-shu-500 shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-shu-500)_16%,transparent)]",
   skipped: "opacity-60",
-  paused: "ring-[3px] ring-mizu-500 shadow-[0_0_0_9px_color-mix(in_srgb,var(--color-mizu-500)_18%,transparent)]",
+  paused: "!border-mizu-500 shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-mizu-500)_18%,transparent)]",
 };
 
 /** Click target left of a step's header: a red dot when the run pauses before it. */
@@ -143,10 +140,10 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   const blocker = revertBlocker(entry, history);
   const scope = entryScope(describe(entry, flow, defs));
   return (
-    <div title={scope.title} className="flex items-center gap-1.5 rounded-[3px] border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-raised">
+    <div title={scope.title} className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-sheet py-1 pr-1 pl-1.5 text-[11px] shadow-raised">
       <ActorMark entry={entry} size={18} />
       <span className="text-slate-600">{t.flow.changeBy(actorLabel(entry))}</span>
-      <button type="button" onClick={() => approve(entry.revision)} className="rounded-[3px] bg-ink px-2 py-0.5 text-paper hover:bg-slate-700">
+      <button type="button" onClick={() => approve(entry.revision)} className="rounded-md bg-primary px-2 py-0.5 text-on-primary hover:bg-primary-hover">
         {t.approve}
         {scope.suffix}
       </button>
@@ -155,7 +152,7 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
         onClick={() => revert(entry)}
         disabled={blocker !== null}
         title={blocker ?? scope.title}
-        className="rounded-[3px] border border-shu-500 px-2 py-0.5 text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
+        className="rounded-md border border-shu-500 px-2 py-0.5 text-shu-600 enabled:hover:bg-shu-50 disabled:border-slate-300 disabled:text-slate-400"
       >
         {t.revert}
         {scope.suffix}
@@ -164,8 +161,11 @@ function ReviewToolbar({ entry }: { entry: HistoryEntry }) {
   );
 }
 
-/** A variable socket on the node's edge, coloured by the variable's type. Links attach here. */
-function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; color: string; title: string }) {
+/**
+ * A variable socket on the node's edge: a small hollow ring, filled with the
+ * variable's type colour while its value is in focus. Links attach here.
+ */
+function Socket({ side, id, color, title, lit }: { side: "in" | "out"; id: string; color: string; title: string; lit: boolean }) {
   return (
     <Handle
       id={id}
@@ -173,7 +173,12 @@ function Socket({ side, id, color, title }: { side: "in" | "out"; id: string; co
       position={side === "in" ? Position.Left : Position.Right}
       title={title}
       isConnectable={false}
-      style={{ background: color, width: 11, height: 11, border: "2px solid white", boxShadow: "0 0 0 1px rgba(15,27,42,.25)" }}
+      style={{
+        width: 9,
+        height: 9,
+        background: lit ? color : "var(--color-sheet)",
+        border: `1.5px solid ${lit ? color : "var(--color-slate-300)"}`,
+      }}
     />
   );
 }
@@ -206,11 +211,11 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
   const lit = focused !== null && (focused === data.from || focused === data.to || focused === varFocus(data.variable));
   if (!lit) return null;
   const [path] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
-  return <BaseEdge id={id} path={path} style={{ stroke: data.color, strokeWidth: 2.5 }} />;
+  return <BaseEdge id={id} path={path} style={{ stroke: data.color, strokeWidth: 1.5 }} />;
 }
 
 /**
- * A step-to-step edge. Its block label ("forEach：…", "catch：…") sits just
+ * A step-to-step edge. Its block label ("受注一覧 の 1 件ずつ", "失敗したら") sits just
  * above the step it leads to, not halfway, where sibling edges share a line.
  */
 type BlockEdgeData = {
@@ -242,7 +247,7 @@ function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: Bl
         setPaletteOpen(true, at, e.currentTarget.getBoundingClientRect());
       }}
       style={inline ? undefined : { transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
-      className={`nodrag nopan pointer-events-auto flex h-[18px] w-[18px] items-center justify-center rounded-[3px] border border-slate-300 bg-sheet text-slate-600 shadow-raised hover:border-ink hover:bg-ink hover:text-white ${
+      className={`nodrag nopan pointer-events-auto flex h-[18px] w-[18px] items-center justify-center rounded-md border border-slate-300 bg-sheet text-slate-600 shadow-raised hover:border-primary hover:bg-primary hover:text-on-primary ${
         inline ? "ml-1 shrink-0" : "absolute"
       } ${data.hovered ? "opacity-100" : "pointer-events-none opacity-0"}`}
     >
@@ -306,7 +311,7 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
             className="pointer-events-none absolute flex items-center"
           >
             {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
-            <span className="max-w-[300px] truncate rounded-[3px] bg-paper px-1.5 text-[11px] leading-4 text-slate-600">{label}</span>
+            <span className="max-w-[300px] truncate rounded-md border border-slate-200 bg-sheet px-1.5 text-[11px] leading-4 text-slate-600">{label}</span>
             <InsertButton edgeId={id} data={edge} inline />
           </div>
         ) : (
@@ -333,9 +338,6 @@ const TRAIL_MARKER: Record<"light" | "dark", Record<LineTrail, string>> = {
 
 type RunValues = { changes: VariableChange[]; starts: StepStart[] };
 const NO_RUN: RunValues = { changes: [], starts: [] };
-/** Chips shown per input before the rest fold into "+n". */
-const MAX_CHIPS = 2;
-
 /** The values a chip's popover lists: the last few, newest last. */
 const MAX_RUNS = 5;
 
@@ -350,7 +352,7 @@ function ValuePopover({ name, color, values, side, anchor }: { name: string; col
     <div
       // Above the chip, or below it when there is no room up top.
       style={{ left: anchor.left + anchor.width / 2, top: below ? anchor.bottom + 6 : anchor.top - 6 }}
-      className={`pointer-events-none fixed z-50 max-w-[480px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-[4px] border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lifted`}
+      className={`pointer-events-none fixed z-50 max-w-[480px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lifted`}
     >
       <div className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
@@ -367,7 +369,7 @@ function ValuePopover({ name, color, values, side, anchor }: { name: string; col
           {values.slice(0, MAX_RUNS).map((w, i) => (
             <li key={`${w.seq}-${i}`} className="flex items-start gap-2">
               {many && <span className="w-9 shrink-0 pt-1 text-[10px] text-slate-400">{t.flow.nth(i + 1)}</span>}
-              <div className="min-w-0 flex-1 rounded-[3px] border border-slate-100 bg-paper px-2 py-1">
+              <div className="min-w-0 flex-1 rounded-md border border-slate-100 bg-paper px-2 py-1">
                 <ChangeView change={w} />
               </div>
             </li>
@@ -381,11 +383,12 @@ function ValuePopover({ name, color, values, side, anchor }: { name: string; col
 }
 
 /**
- * A variable chip, like a Get / Set node in Unity's Visual Scripting: it sits
- * right beside the socket it feeds, so no line ever crosses the chart.
- * Hovering one lights every chip and row of the same variable.
+ * A variable as a small token inside a value ("今の行.金額"), the way Linear
+ * shows a mention: a dot in the variable's type colour and its name. Hovering
+ * lights every token of the same variable, draws where its value comes from,
+ * and lists the values it had in the last run.
  */
-function VarChip({ name, color, values, side, owner }: { name: string; color: string; values: VariableChange[]; side: "in" | "out"; owner: string }) {
+function VarChip({ name, label, color, values, side, owner }: { name: string; label?: string; color: string; values: VariableChange[]; side: "in" | "out"; owner: string }) {
   const focused = useFocus() === varFocus(name);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const variableMenu = useVariableMenu();
@@ -396,10 +399,10 @@ function VarChip({ name, color, values, side, owner }: { name: string; color: st
         setAnchor(null);
         return variableMenu(name);
       })}
-      className={`nodrag flex h-[20px] max-w-[80px] shrink-0 items-center gap-1 rounded-[3px] border bg-sheet px-1.5 font-mono text-[11px] leading-none shadow-sheet ${
-        focused ? "ring-2 ring-offset-1" : ""
+      className={`nodrag inline-flex h-[20px] max-w-[150px] shrink-0 items-center gap-1.5 rounded-md border bg-sheet px-1.5 text-[11.5px] leading-none text-ink ${
+        focused ? "" : "border-slate-200"
       }`}
-      style={{ borderColor: color, color, ["--tw-ring-color" as string]: color }}
+      style={focused ? { borderColor: color, background: `color-mix(in srgb, ${color} 10%, var(--color-sheet))` } : undefined}
       onMouseEnter={(e) => {
         focus.set(varFocus(name));
         setAnchor(e.currentTarget.getBoundingClientRect());
@@ -410,29 +413,31 @@ function VarChip({ name, color, values, side, owner }: { name: string; color: st
         setAnchor(null);
       }}
     >
-      {side === "out" && last ? (
-        <span className="truncate text-ink">{changeText(last)}</span>
-      ) : (
-        <>
-          <VarIcon size={10} />
-          <span className="truncate font-semibold">{name}</span>
-        </>
-      )}
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
+      <span className="truncate">{side === "out" && last ? changeText(last) : (label ?? name)}</span>
       {anchor && <ValuePopover name={name} color={color} values={values} side={side} anchor={anchor} />}
     </span>
   );
 }
 
-/** The chips beside a row and the short stub joining them to its socket. */
-function Chips({ side, color, children }: { side: "in" | "out"; color: string; children: React.ReactNode }) {
+/** A value's text with each `{{ variable… }}` hole as a token. */
+function ValueText({ value, refs, color, run, stepId }: { value: string; refs: string[]; color: (name: string) => string; run: RunValues; stepId: string }) {
+  const parts = value.split(/\{\{\s*(.*?)\s*\}\}/g);
+  const holes = parts.filter((_, i) => i % 2 === 1).length;
+  // An expression param (a condition, a list) names its variables without holes.
+  if (holes === 0 && refs.length > 0 && refs.includes(value.trim())) {
+    const r = value.trim();
+    return <VarChip side="in" owner={stepId} name={r} color={color(r)} values={valuesSeenBy(run.changes, run.starts, r, stepId)} />;
+  }
   return (
-    <div
-      style={side === "in" ? { right: "calc(100% + 6px)" } : { left: "calc(100% + 6px)" }}
-      className={`absolute top-1/2 flex -translate-y-1/2 items-center ${side === "in" ? "flex-row-reverse" : ""}`}
-    >
-      <span className="h-[2px] w-[10px] shrink-0" style={{ background: color }} />
-      <span className={`flex items-center gap-[3px] ${side === "in" ? "flex-row-reverse" : ""}`}>{children}</span>
-    </div>
+    <>
+      {parts.map((part, i) => {
+        if (i % 2 === 0) return part ? <span key={i} className="truncate">{part}</span> : null;
+        const root = refs.find((r) => part === r || part.startsWith(`${r}.`) || part.startsWith(`${r}[`));
+        if (!root) return <span key={i} className="truncate">{`{{ ${part} }}`}</span>;
+        return <VarChip key={i} side="in" owner={stepId} name={root} label={part} color={color(root)} values={valuesSeenBy(run.changes, run.starts, root, stepId)} />;
+      })}
+    </>
   );
 }
 
@@ -440,56 +445,38 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
   const focused = useFocus();
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "var(--cat-other)";
   if (row.kind === "more") {
-    return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[10px] text-slate-400">{t.flow.moreRows(row.count)}</div>;
+    return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[11px] text-slate-400">{t.flow.moreRows(row.count)}</div>;
   }
   if (row.kind === "output") {
     const color = typeColor(row.variable);
     const lit = focused === varFocus(row.variable);
     return (
-      <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${color} 12%, transparent)` : undefined }} className="relative flex items-center justify-end gap-2 px-3 text-[12px]">
+      <div style={{ height: ROW_H }} className="relative flex items-center justify-end gap-2 px-3 text-[12px]">
         <span className="text-slate-500">{row.label}</span>
-        <span className="flex min-w-0 items-center gap-1 font-mono font-semibold" style={{ color }}>
-          <VarIcon size={11} />
-          <span className="truncate">{row.variable}</span>
-        </span>
-        <Socket side="out" id={outHandle(row.variable)} color={color} title={t.flow.writes(row.variable)} />
-        <Chips side="out" color={color}>
-          <VarChip
-            side="out"
-            owner={stepId}
-            name={row.variable}
-            color={color}
-            values={run.changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
-          />
-        </Chips>
+        <VarChip
+          side="out"
+          owner={stepId}
+          name={row.variable}
+          color={color}
+          values={run.changes.filter((c) => c.variable === row.variable && c.stepId === stepId)}
+        />
+        <Socket side="out" id={outHandle(row.variable)} color={color} title={t.flow.writes(row.variable)} lit={lit} />
       </div>
     );
   }
   const first = typeColor(row.refs[0] ?? "");
   const lit = row.refs.some((r) => focused === varFocus(r));
   return (
-    <div style={{ height: ROW_H, background: lit ? `color-mix(in srgb, ${first} 12%, transparent)` : undefined }} className="relative flex items-center gap-2 px-3 text-[12px]">
-      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={t.flow.reads(row.refs.join(", "))} />}
-      {row.refs.length > 0 && (
-        <Chips side="in" color={first}>
-          {row.refs.slice(0, MAX_CHIPS).map((r) => (
-            <VarChip key={r} side="in" owner={stepId} name={r} color={typeColor(r)} values={valuesSeenBy(run.changes, run.starts, r, stepId)} />
-          ))}
-          {row.refs.length > MAX_CHIPS && (
-            <span className="text-[10px] text-slate-400" title={row.refs.slice(MAX_CHIPS).join(", ")}>
-              +{row.refs.length - MAX_CHIPS}
-            </span>
-          )}
-        </Chips>
-      )}
-      <span className="w-16 shrink-0 truncate text-slate-500" title={row.key}>
+    <div style={{ height: ROW_H }} className="relative flex items-center gap-2 px-3 text-[12.5px]">
+      {row.refs.length > 0 && <Socket side="in" id={inHandle(row.key)} color={first} title={t.flow.reads(row.refs.join(", "))} lit={lit} />}
+      <span className="w-[72px] shrink-0 truncate text-[12px] text-slate-500" title={row.key}>
         {row.label}
       </span>
       {row.file ? (
         <FileValue file={row.file} />
       ) : (
-        <span className="h-[20px] min-w-0 flex-1 truncate rounded bg-slate-100 px-1.5 leading-[20px] text-ink" title={row.value}>
-          {row.value}
+        <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-ink" title={row.value}>
+          <ValueText value={row.value} refs={row.refs} color={typeColor} run={run} stepId={stepId} />
         </span>
       )}
     </div>
@@ -516,15 +503,15 @@ function FileValue({ file }: { file: NonNullable<Extract<Row, { kind: "param" }>
   const missing = known && !entry && file.role !== "output" && file.role !== "work" && !file.path.includes("{{");
   return (
     <span
-      className="flex h-[20px] min-w-0 flex-1 items-center gap-1 rounded px-1.5 leading-[20px] text-ink"
-      style={{ background: `color-mix(in srgb, ${color} 12%, transparent)`, boxShadow: `inset 2px 0 0 ${color}` }}
+      className="flex h-[20px] min-w-0 flex-1 items-center gap-1.5 leading-[20px] text-ink"
       title={entry?.inUse ? `${file.path} · ${t.project.inUse}` : file.path}
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (entry && openFile) void openFile(file.path);
       }}
     >
-      <span className={`min-w-0 flex-1 truncate font-mono text-[11.5px] ${missing ? "text-shu-500 line-through decoration-1" : ""}`}>{file.path}</span>
+      <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: color }} />
+      <span className={`min-w-0 flex-1 truncate text-[12px] ${missing ? "text-shu-500 line-through decoration-1" : ""}`}>{file.path}</span>
       {entry?.inUse && <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-shu-500" />}
     </span>
   );
@@ -547,12 +534,12 @@ function CallBar({ call }: { call: CallView }) {
   const open = useStudio((s) => s.open);
   const missing = call.target !== "" && !call.callee;
   const count = call.callee ? outline(call.callee.steps ?? [], new Map()).length : 0;
-  const button = "nodrag nopan rounded-[3px] px-1.5 leading-[18px] text-[11px] font-medium";
+  const button = "nodrag nopan rounded-md px-1.5 leading-[18px] text-[11px] font-medium";
   return (
     <div
       style={{ height: CALL_BAR_H }}
       title={call.callee ? t.callEnterHint : undefined}
-      className="flex items-center gap-1.5 border-t border-slate-100 px-3 text-[11px]"
+      className="flex items-center gap-1.5 border-t border-slate-100 px-3 text-[11.5px]"
     >
       {call.target === "" ? (
         <span className="text-slate-400">{t.flow.chooseCallee}</span>
@@ -577,7 +564,7 @@ function CallBar({ call }: { call: CallView }) {
           </button>
           <button
             type="button"
-            className={`${button} bg-ink text-paper hover:bg-slate-700`}
+            className={`${button} border border-slate-300 text-slate-600 hover:bg-slate-100`}
             title={t.flow.openCallee(call.callee.name)}
             onClick={(e) => {
               e.stopPropagation();
@@ -598,7 +585,7 @@ function InnerSteps({ call, defs }: { call: CallView; defs: Map<string, StepType
   return (
     <div
       style={{ height: innerHeight(lines), paddingTop: INNER_PAD, paddingBottom: INNER_PAD }}
-      className="rounded-b-[3px] border-t border-slate-200 bg-paper px-2"
+      className="rounded-b-lg border-t border-slate-100 bg-slate-50 px-2"
     >
       {call.lines.map((item) => {
         const def = defs.get(item.step.type);
@@ -608,11 +595,6 @@ function InnerSteps({ call, defs }: { call: CallView; defs: Map<string, StepType
         return (
           <div key={item.id} style={{ height: INNER_LINE_H, paddingLeft: item.depth * 12 }} className="flex items-center gap-1.5 text-[12px]" title={text}>
             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
-            {KEYWORD[item.step.type] && (
-              <span className="shrink-0 font-mono text-[10px] font-bold" style={{ color }}>
-                {KEYWORD[item.step.type]}
-              </span>
-            )}
             <span className={`truncate ${item.step.disabled ? "text-slate-400 line-through" : "text-slate-700"}`}>{text}</span>
             {state && <span className={`ml-auto shrink-0 text-[11px] ${INNER_MARK[state].className}`}>{INNER_MARK[state].text}</span>}
           </div>
@@ -629,26 +611,25 @@ function InnerSteps({ call, defs }: { call: CallView; defs: Map<string, StepType
 
 function StepNode({ data }: StepNodeProps) {
   const category = data.def?.category ?? data.step.type.split(".")[0] ?? "other";
-  const color = CATEGORY_COLOR[category] ?? CATEGORY_COLOR.other;
   const latest = data.reviews.at(-1);
   const known = useMemo(() => new Set(data.vars.keys()), [data.vars]);
   const rows = nodeRows(data.step, data.def, known);
-  const parts = sentence(data.step, data.def);
+  const title = typeTitle(data.step, data.def);
+  const Icon = nodeIcon(data.step.type, category);
   return (
     <div
       style={{ width: NODE_W }}
-      // The selected step is lifted off the stack: two sheet edges and a deeper shadow.
-      className={`group relative rounded-[4px] border bg-sheet transition-shadow ${data.selected ? "shadow-lifted" : "shadow-node hover:shadow-raised"} ${
+      // Linear's cards: one hairline border and the faintest shadow. Colour only
+      // says something: the selection (primary), an AI change (blue), a run state.
+      className={`group relative rounded-lg border bg-sheet shadow-node transition-[border-color,box-shadow] ${
         data.diff
-          ? `border-2 ${DIFF_STYLE[data.diff].border}`
-          : data.byAi
-            ? "ai-border"
-            : data.selected
+          ? DIFF_STYLE[data.diff].border
+          : data.selected
+            ? "border-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_16%,transparent)]"
+            : data.byAi
               ? "border-brand-500"
-              : "border-slate-300"
-      } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${
-        data.runState ? RUN_STYLE[data.runState] : ""
-      }`}
+              : "border-slate-200 hover:border-slate-300"
+      } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
     >
       {(latest || (data.selected && !data.readOnly)) && (
         // Beside the step's head: the flow line runs through the top and bottom
@@ -665,7 +646,7 @@ function StepNode({ data }: StepNodeProps) {
       <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} owner={data.owner} />
       {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
         <span
-          className={`absolute top-full left-1 z-10 mt-1.5 rounded-[4px] px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
+          className={`absolute top-full left-1 z-10 mt-1.5 rounded-lg px-2 text-[11px] leading-[20px] font-bold text-white shadow ${
             data.runState === "failed" ? "bg-shu-500" : "bg-mizu-500"
           }`}
         >
@@ -675,7 +656,7 @@ function StepNode({ data }: StepNodeProps) {
       {data.note && (
         <span
           title={data.note}
-          className="absolute bottom-full left-1 z-10 mb-1 max-w-[95%] truncate rounded-[4px] border border-shu-500 bg-shu-50 px-2 text-[10px] leading-[18px] font-bold text-shu-600"
+          className="absolute bottom-full left-1 z-10 mb-1 max-w-[95%] truncate rounded-lg border border-shu-500 bg-shu-50 px-2 text-[10px] leading-[18px] font-bold text-shu-600"
         >
           {t.flow.note}
           {t.colon}
@@ -683,55 +664,23 @@ function StepNode({ data }: StepNodeProps) {
         </span>
       )}
       {data.diff && (
-        <span className={`absolute -top-2.5 right-2 z-10 rounded-[3px] px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
+        <span className={`absolute -top-2.5 right-2 z-10 rounded-md px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
           {DIFF_STYLE[data.diff].label()}
         </span>
       )}
-      <div
-        style={{ height: 24, background: `color-mix(in srgb, ${color} 10%, transparent)` }}
-        className="flex items-center gap-1.5 rounded-t-[3px] border-b border-slate-100 px-3"
-      >
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-        {KEYWORD[data.step.type] && (
-          <span className="shrink-0 rounded-[3px] px-1 font-mono text-[11px] leading-4 font-bold text-white" style={{ background: color }}>
-            {KEYWORD[data.step.type]}
-          </span>
+      <div style={{ height: NODE_HEAD_H }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
+        <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+        <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>
+        {data.step.name ? (
+          <span className="min-w-0 truncate text-[12px] text-slate-500">{data.step.name}</span>
+        ) : (
+          <AppTag def={data.def} title={title} />
         )}
-        {/* With a keyword the type is clear enough: make room for the name. */}
-        {!(KEYWORD[data.step.type] && data.step.name) && <AppTag def={data.def} title={typeTitle(data.step, data.def)} color={color} />}
-        {!(KEYWORD[data.step.type] && data.step.name) && (
-          <span className="shrink-0 text-[12px] font-bold whitespace-nowrap" style={{ color }}>
-            {typeTitle(data.step, data.def)}
-          </span>
-        )}
-        {data.step.name && <span className="truncate text-[12px] text-slate-500">{data.step.name}</span>}
-        {data.byAi && (
-          <span className="ml-auto bg-brand-500 shrink-0 rounded-[3px] px-1.5 text-[9px] font-bold text-white" title={t.unreviewed}>
-            AI
-          </span>
-        )}
-        {data.todos.length > 0 && (
-          <span
-            className={`${data.byAi ? "" : "ml-auto"} shrink-0 rounded-[3px] bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800`}
-            title={data.todos.join("\n")}
-          >
-            {t.todos.badge}
-          </span>
-        )}
-        {data.issueCount > 0 && (
-          <span className={`${data.byAi || data.todos.length > 0 ? "" : "ml-auto"} shrink-0 rounded-[3px] bg-shu-100 px-1.5 text-[10px] font-semibold text-shu-600`}>
-            ! {data.issueCount}
-          </span>
-        )}
-      </div>
-      <div style={{ height: NODE_HEAD_H - 24 }} className="flex items-center px-3 text-[14px]" title={plain(parts)}>
-        <span className="truncate">
-          <Sentence parts={parts} />
-        </span>
+        <NodeStatus data={data} />
       </div>
       {data.call && <CallBar call={data.call} />}
       {rows.length > 0 && (
-        <div style={{ paddingBottom: NODE_PAD_B }} className="border-t border-dashed border-slate-200">
+        <div style={{ paddingBottom: NODE_PAD_B }} className="border-t border-slate-100 pt-0.5">
           {rows.map((row, i) => (
             <NodeRow key={i} row={row} vars={data.vars} run={data.run} stepId={data.step.id ?? ""} />
           ))}
@@ -740,6 +689,38 @@ function StepNode({ data }: StepNodeProps) {
       {data.call?.unfolded && <InnerSteps call={data.call} defs={data.defs} />}
     </div>
   );
+}
+
+/** A small round mark and a word, the way Linear shows an issue's status. */
+function StatusMark({ kind, text, title }: { kind: "done" | "running" | "paused" | "error" | "todo" | "ai"; text?: string; title?: string }) {
+  const mark = {
+    done: "bg-moegi-500",
+    running: "bg-accent-500 animate-pulse",
+    paused: "bg-mizu-500",
+    error: "bg-shu-500",
+    todo: "border-[1.5px] border-dashed border-amber-600",
+    ai: "border-[1.5px] border-brand-500 bg-[conic-gradient(var(--color-brand-500)_180deg,transparent_0)]",
+  }[kind];
+  return (
+    <span title={title} className="flex shrink-0 items-center gap-1 text-[11.5px] whitespace-nowrap text-slate-500">
+      <span className={`h-[10px] w-[10px] shrink-0 rounded-full ${mark}`} />
+      {text}
+    </span>
+  );
+}
+
+/** The right end of a node's head: how it ran, what is left to do, who changed it. */
+function NodeStatus({ data }: { data: StepNodeProps["data"] }) {
+  const marks: React.ReactNode[] = [];
+  if (data.runState === "running") marks.push(<StatusMark key="run" kind="running" />);
+  if (data.runState === "succeeded") marks.push(<StatusMark key="run" kind="done" title={t.flow.ranOk} />);
+  if (data.runState === "paused") marks.push(<StatusMark key="run" kind="paused" />);
+  if (data.runState === "failed") marks.push(<StatusMark key="run" kind="error" text={t.flow.ranFailed} />);
+  if (data.byAi) marks.push(<StatusMark key="ai" kind="ai" text="AI" title={t.unreviewed} />);
+  if (data.todos.length > 0) marks.push(<StatusMark key="todo" kind="todo" text={t.todos.badge} title={data.todos.join("\n")} />);
+  if (data.issueCount > 0 && data.runState !== "failed") marks.push(<StatusMark key="issue" kind="error" text={String(data.issueCount)} title={t.flow.issues(data.issueCount)} />);
+  if (marks.length === 0) return null;
+  return <span className="ml-auto flex shrink-0 items-center gap-2 pl-1">{marks}</span>;
 }
 
 function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
@@ -752,10 +733,10 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
         style={{ width: TAIL_SIZE, height: TAIL_SIZE }}
         title={title}
         aria-label={title}
-        className={`flex cursor-pointer items-center justify-center rounded-[4px] border ${
+        className={`flex cursor-pointer items-center justify-center rounded-lg border ${
           data.selected
             ? "border-brand-500 bg-brand-50 text-brand-600"
-            : "border-dashed border-slate-400 bg-sheet text-slate-600 hover:border-solid hover:border-ink hover:bg-ink hover:text-white"
+            : "border-dashed border-slate-300 bg-sheet text-slate-500 hover:border-solid hover:border-primary hover:text-primary"
         }`}
       >
         <FlowHandles />
@@ -767,7 +748,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
     <div
       style={{ width: NODE_W, height: SLOT_H }}
       title={data.addCase ? t.flow.addCase : t.addStep}
-      className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-[4px] border border-dashed text-[13px] ${
+      className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed text-[13px] ${
         data.selected
           ? "border-brand-500 bg-brand-50 text-brand-600"
           : data.end
@@ -796,9 +777,9 @@ function FrameNode({ data }: NodeProps<Node<FrameData>>) {
   return (
     <div
       style={{ width: data.width, height: data.height }}
-      className={`flow-frame pointer-events-none relative rounded-[4px] border ${loop ? "flow-frame-loop" : "border-dashed"}`}
+      className={`flow-frame pointer-events-none relative rounded-lg border ${loop ? "flow-frame-loop" : "border-dashed"}`}
     >
-      <span className="flow-frame-tag absolute -top-[9px] left-2.5 flex items-center gap-1 rounded-[3px] px-1.5 text-[11px] leading-4 font-medium">
+      <span className="flow-frame-tag absolute -top-[9px] left-2.5 flex items-center gap-1 rounded-md px-1.5 text-[11px] leading-4 font-medium">
         <Icon size={11} strokeWidth={2} aria-hidden="true" />
         {t.flow.frame[data.kind]}
       </span>
@@ -907,13 +888,13 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
   const levels = [root, ...chain.map((level) => level.flow)];
   return (
     // As wide as its words: a centred panel would otherwise only get half the canvas.
-    <div className="flex w-max max-w-[min(760px,calc(100cqw-32px))] items-center gap-1 rounded-[4px] border border-slate-200 bg-sheet py-1 pr-1 pl-1 text-[12px] shadow-raised">
+    <div className="flex w-max max-w-[min(760px,calc(100cqw-32px))] items-center gap-1 rounded-lg border border-slate-200 bg-sheet py-1 pr-1 pl-1 text-[12px] shadow-raised">
       <button
         type="button"
         title={t.diveUp}
         aria-label={t.diveUp}
         onClick={() => leave(chain.length - 1)}
-        className="shrink-0 rounded-[3px] px-1.5 leading-[22px] text-slate-600 hover:bg-slate-100"
+        className="shrink-0 rounded-md px-1.5 leading-[22px] text-slate-600 hover:bg-slate-100"
       >
         ↑
       </button>
@@ -925,7 +906,7 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
               <button
                 type="button"
                 onClick={() => leave(depth)}
-                className="truncate rounded-[3px] px-1 leading-[22px] text-brand-600 hover:bg-slate-100 hover:underline"
+                className="truncate rounded-md px-1 leading-[22px] text-brand-600 hover:bg-slate-100 hover:underline"
               >
                 {level.name}
               </button>
@@ -937,14 +918,14 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
           </span>
         ))}
       </nav>
-      <span title={t.diveReadOnly} className="ml-1 shrink-0 rounded-[3px] bg-slate-100 px-1.5 text-[11px] leading-[20px] text-slate-500">
+      <span title={t.diveReadOnly} className="ml-1 shrink-0 rounded-md bg-slate-100 px-1.5 text-[11px] leading-[20px] text-slate-500">
         {t.diveViewOnly}
       </span>
       <button
         type="button"
         onClick={() => void open(shown.id)}
         title={t.diveOpen}
-        className="ml-1 shrink-0 rounded-[3px] bg-ink px-2 leading-[22px] text-[11px] font-medium text-paper hover:bg-slate-700"
+        className="ml-1 shrink-0 rounded-md border border-slate-300 bg-sheet px-2 leading-[20px] text-[11px] font-medium text-ink hover:bg-slate-100"
       >
         {t.diveOpenLabel} ↗
       </button>
@@ -1193,11 +1174,11 @@ export function FlowCanvas() {
       animated: e.loop || trail === "now",
       style: {
         stroke: trail ? TRAIL_STROKE[trail] : "var(--flow-edge)",
-        strokeWidth: trail ? 3 : 2,
+        strokeWidth: trail ? 2.5 : 1.5,
         ...(e.loop || trail === "now" ? { strokeDasharray: "5 4" } : {}),
       },
       // A plain colour: the marker id is built from it, so no var().
-      markerEnd: { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#8193a8" : "#5b6b80") },
+      markerEnd: { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
       // A taken line over the others where they share a stretch (a join, a loop's side).
       zIndex: trail ? 1 : 0,
     };
@@ -1292,7 +1273,7 @@ export function FlowCanvas() {
       onNodeMouseEnter={(_, node) => node.type === "step" && focus.set(node.id)}
       onNodeMouseLeave={() => focus.set(null)}
     >
-      <Background gap={24} size={1.2} color="var(--color-slate-300)" />
+      <Background gap={24} size={1.2} color="var(--color-slate-200)" />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
       {inside && (
         <Panel position="top-center">

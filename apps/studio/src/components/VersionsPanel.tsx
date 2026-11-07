@@ -75,10 +75,10 @@ function PublishedCard() {
   const unpublish = useStudio((s) => s.unpublish);
   const [confirm, setConfirm] = useState(false);
   return (
-    <section className="space-y-1.5 rounded-[4px] border border-slate-200 bg-paper p-3">
+    <section className="space-y-1.5 rounded-lg border border-slate-200 bg-paper p-3">
       <div className="flex items-center gap-2">
         {published ? (
-          <span className="rounded-[3px] bg-moegi-100 px-1.5 text-[11px] font-bold text-moegi-500">{t.published}</span>
+          <span className="rounded-md bg-moegi-100 px-1.5 text-[11px] font-bold text-moegi-500">{t.published}</span>
         ) : null}
         <span className="truncate text-sm font-semibold">
           {published ? t.publishedLabel(published.version, published.name) : t.notPublished}
@@ -92,7 +92,7 @@ function PublishedCard() {
           <button
             type="button"
             onClick={() => void publish()}
-            className="rounded-[4px] bg-ink px-3 py-1 text-xs font-medium text-sheet hover:bg-brand-700"
+            className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
           >
             {t.publishCurrent}
           </button>
@@ -143,14 +143,14 @@ function VersionRow({ version, defs }: { version: VersionSummary; defs: Map<stri
   return (
     <li className="group relative flex gap-3 pb-4 pl-1">
       <span className="absolute top-7 bottom-0 left-[16px] w-px bg-slate-200 group-last:hidden" />
-      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-[3px] bg-ink px-1 text-[10px] font-bold text-paper">
+      <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-md bg-ink px-1 text-[10px] font-bold text-paper">
         v{version.number}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-1.5">
           <span className="truncate text-sm font-semibold">{version.name}</span>
           {published && (
-            <span className="shrink-0 rounded-[3px] bg-moegi-100 px-1 text-[10px] font-bold text-moegi-500">{t.published}</span>
+            <span className="shrink-0 rounded-md bg-moegi-100 px-1 text-[10px] font-bold text-moegi-500">{t.published}</span>
           )}
           <span className="ml-auto shrink-0 text-xs text-slate-400">{relativeTime(version.createdAt)}</span>
         </div>
@@ -238,7 +238,7 @@ export function VersionsPanel() {
         <button
           type="submit"
           disabled={!name.trim()}
-          className="w-full rounded-[4px] bg-ink px-2 py-1 text-sm font-medium text-paper hover:bg-slate-700 disabled:bg-slate-300"
+          className="w-full rounded-lg bg-primary px-2 py-1 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-300"
         >
           {t.saveVersion}
         </button>
@@ -260,7 +260,7 @@ export function VersionsPanel() {
         <button
           type="button"
           onClick={() => void exportFlow()}
-          className="rounded-[4px] border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100"
+          className="rounded-lg border border-slate-300 px-3 py-1 text-xs hover:bg-slate-100"
         >
           {t.exportFlow}
         </button>

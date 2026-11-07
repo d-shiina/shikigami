@@ -8,8 +8,8 @@ import { listToText } from "./listText";
 import { readable, targetText } from "./sentence";
 import { locale, t } from "./i18n";
 
-export const NODE_HEAD_H = 58;
-export const ROW_H = 26;
+export const NODE_HEAD_H = 38;
+export const ROW_H = 28;
 export const NODE_PAD_B = 8;
 export const MAX_PARAM_ROWS = 5;
 

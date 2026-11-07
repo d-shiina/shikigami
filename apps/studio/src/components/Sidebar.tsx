@@ -35,13 +35,13 @@ function Item({ icon: Icon, label, on, onClick, count, tone, dot, busy, title, i
       onClick={onClick}
       aria-current={on ? "page" : undefined}
       title={title ?? label}
-      className={`flex h-8 w-full items-center gap-2 rounded-[4px] pr-2 text-[13px] ${indent ? "pl-7" : "pl-2"} ${on ? "bg-slate-200/70 font-semibold text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
+      className={`flex h-8 w-full items-center gap-2 rounded-lg pr-2 text-[13px] ${indent ? "pl-7" : "pl-2"} ${on ? "bg-slate-200/70 font-semibold text-ink" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
     >
       <Icon size={indent ? 14 : 16} strokeWidth={1.75} className={`shrink-0 ${on ? "text-ink" : "text-slate-500"}`} aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate text-left">{label}</span>
       {/* Only what waits on the person is counted (see ui-principles.md). */}
       {count !== undefined && count > 0 && (
-        <span className={`min-w-5 rounded-[3px] px-1 text-center text-[11px] leading-[18px] font-semibold text-white ${tone === "accent" ? "bg-accent-500" : "bg-shu-500"}`}>
+        <span className={`min-w-5 rounded-md px-1 text-center text-[11px] leading-[18px] font-semibold text-white ${tone === "accent" ? "bg-accent-500" : "bg-shu-500"}`}>
           {count}
         </span>
       )}
@@ -71,11 +71,11 @@ function Workspace() {
       type="button"
       onClick={() => setPlace("settings")}
       title={workspace ? t.bar.workspaceTitle(workspace.root, workspace.localRoot) : undefined}
-      className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[4px] px-1.5 text-[13px] font-semibold text-ink hover:bg-slate-100"
+      className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 text-[13px] font-semibold text-ink hover:bg-slate-100"
     >
       <img src="/mark.png" alt="" className="h-5 w-5 shrink-0" draggable={false} />
       <span className="truncate">{name}</span>
-      {workspace?.shared && <span className="shrink-0 rounded-[2px] bg-mizu-100 px-1 text-[10px] font-normal text-mizu-500">{t.workspaceShared}</span>}
+      {workspace?.shared && <span className="shrink-0 rounded-sm bg-mizu-100 px-1 text-[10px] font-normal text-mizu-500">{t.workspaceShared}</span>}
     </button>
   );
 }
@@ -106,7 +106,7 @@ export function Sidebar({ width, onCollapse }: { width: number; onCollapse: () =
           type="button"
           onClick={onCollapse}
           title={`${t.list.collapse} (Ctrl+B)`}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
         >
           <PanelLeftClose size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>

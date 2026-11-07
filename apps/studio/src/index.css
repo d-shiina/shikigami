@@ -41,6 +41,14 @@
   --color-brand-600: #0b5c8c;
   --color-brand-700: #0f3a66;
 
+  /*
+   * The one filled button of a place (実行, 新規作成, 保存…): the brand blue,
+   * like Linear's accent. Everything else is an outlined or plain button.
+   */
+  --color-primary: #0a6fa8;
+  --color-primary-hover: #0b5c8c;
+  --color-on-primary: #ffffff;
+
   --color-mizu-100: #d3f4f6;
   --color-mizu-500: #12a7b4;
   --color-moegi-100: #def1e2;
@@ -68,7 +76,8 @@
    *   raised 4dp   toolbars and the outline floating over the chart
    *   lifted 8dp   what is picked up: the selected step, menus, popovers
    *   dialog 24dp  dialogs and the command palette, above everything
-   * Corners stay nearly square.
+   * Corners are small and calm, as in Linear: 4-5px on chips and fields,
+   * 6px on buttons and nodes, 8px on frames, panels and dialogs.
    */
   --radius-xs: 3px;
   --radius-sm: 4px;
@@ -122,6 +131,10 @@
   --color-brand-600: #6dbbea;
   --color-brand-700: #a3d4f3;
 
+  --color-primary: #5db8ef;
+  --color-primary-hover: #82c8f2;
+  --color-on-primary: #0e0f11;
+
   --color-mizu-100: #0e3940;
   --color-mizu-500: #3fcbd5;
   --color-moegi-100: #16382a;
@@ -146,7 +159,7 @@
   --cat-office: #1f8a4c;
   --cat-file: #4a596c;
   --cat-other: #637387;
-  --flow-edge: #4a596c;
+  --flow-edge: #a3a8b0;
 }
 
 :root[data-theme="dark"] {
@@ -159,7 +172,7 @@
   --cat-office: #4cc27f;
   --cat-file: #a3acb5;
   --cat-other: #8e98a2;
-  --flow-edge: #8e98a2;
+  --flow-edge: #5a5e66;
 }
 
 /* React Flow's dark mode brings its own greys; keep the app's navy. */
@@ -223,19 +236,17 @@ textarea,
   pointer-events: none !important;
 }
 .flow-frame {
-  border-color: color-mix(in srgb, var(--cat-control) 28%, transparent);
+  border-color: var(--color-slate-300);
 }
 .flow-frame-loop {
-  border-color: color-mix(in srgb, var(--cat-control) 40%, transparent);
-  background-color: color-mix(in srgb, var(--cat-control) 5%, transparent);
+  border-color: var(--color-slate-200);
+  border-style: solid;
+  background-color: color-mix(in srgb, var(--color-slate-100) 45%, transparent);
 }
 .flow-frame-tag {
-  color: color-mix(in srgb, var(--cat-control) 80%, var(--color-desk));
-  background-color: color-mix(in srgb, var(--cat-control) 8%, var(--color-desk));
-  border: 1px solid color-mix(in srgb, var(--cat-control) 28%, transparent);
-}
-.flow-frame-loop .flow-frame-tag {
-  border-color: color-mix(in srgb, var(--cat-control) 40%, transparent);
+  color: var(--color-slate-500);
+  background-color: var(--color-desk);
+  border: 1px solid var(--color-slate-200);
 }
 
 .react-flow__edge-text {

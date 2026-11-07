@@ -564,6 +564,9 @@ export const en: Dict = {
     fixNow: (agent: string) => `Ask ${agent} to fix it now`,
   },
   flow: {
+    ranOk: "Done",
+    ranFailed: "Error",
+    issues: (n: number) => `${n} validation ${n === 1 ? "issue" : "issues"}`,
     addAtBlockEnd: (block: string) => `Add a node at the end of "${block}"`,
     aiAdded: "Added by AI",
     aiChanged: "Changed by AI",

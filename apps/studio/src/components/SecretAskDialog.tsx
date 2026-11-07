@@ -7,7 +7,7 @@ import { fieldLabel } from "../lib/secretKinds";
 
 const inputClass =
   "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-ink dark:bg-paper focus:outline-none";
-const primary = "rounded bg-ink px-3 py-1 text-sm text-paper";
+const primary = "rounded bg-primary px-3 py-1 text-sm text-on-primary";
 const quiet = "rounded px-3 py-1 text-sm text-slate-500 hover:bg-slate-100";
 
 const FIELD_INPUT: Record<SecretField, { type: string; autoComplete: string; mono?: boolean }> = {
@@ -172,7 +172,7 @@ export function SecretAskDialog() {
       <div
         role="dialog"
         aria-label={t.secretAskTitle}
-        className="max-h-[85vh] w-[440px] overflow-y-auto rounded-[4px] border border-slate-200 bg-sheet p-5 shadow-dialog"
+        className="max-h-[85vh] w-[440px] overflow-y-auto rounded-lg border border-slate-200 bg-sheet p-5 shadow-dialog"
       >
         <div className="mb-3 flex items-center gap-2">
           <span aria-hidden>🔑</span>

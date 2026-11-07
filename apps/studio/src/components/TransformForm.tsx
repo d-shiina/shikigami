@@ -33,7 +33,7 @@ import {
 import { ExpressionField, ResultLine, useResult } from "./ExpressionField";
 
 const inputClass =
-  "w-full rounded-[4px] border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none";
+  "w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none";
 
 const CATEGORIES: Category[] = ["text", "number", "date", "list"];
 
@@ -346,7 +346,7 @@ function PartsEditor({ value, types, scope, onChange }: { value: string; types: 
             type="button"
             title={t.transforms.removePart}
             disabled={parts.length <= 2}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded-[3px] text-slate-500 hover:bg-shu-50 hover:text-shu-600 disabled:opacity-40"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-shu-50 hover:text-shu-600 disabled:opacity-40"
             onClick={() => write(parts.filter((_, j) => j !== i))}
           >
             <X size={13} strokeWidth={1.75} />

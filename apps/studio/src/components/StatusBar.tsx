@@ -175,10 +175,10 @@ const THEMES: [ThemeChoice, () => string, ReactNode][] = [
 
 /** Segmented switch frame: small in the bar, labelled in settings. */
 const switchFrame = (labeled: boolean) =>
-  `flex shrink-0 items-center rounded-[3px] border border-slate-200 p-px ${labeled ? "" : "mx-1"}`;
+  `flex shrink-0 items-center rounded-md border border-slate-200 p-px ${labeled ? "" : "mx-1"}`;
 const switchButton = (on: boolean, labeled: boolean) =>
-  `${labeled ? "flex h-[26px] items-center gap-1.5 px-2.5 text-[13px]" : "grid h-[18px] place-items-center"} rounded-[2px] ${
-    on ? "bg-ink text-paper" : `${labeled ? "text-slate-600" : "text-slate-400"} hover:text-ink`
+  `${labeled ? "flex h-[26px] items-center gap-1.5 px-2.5 text-[13px]" : "grid h-[18px] place-items-center"} rounded-sm ${
+    on ? "bg-slate-200 text-ink" : `${labeled ? "text-slate-600" : "text-slate-400"} hover:text-ink`
   }`;
 
 /** ライト / ダーク / PCの設定, side by side as in VuePress's footer. `labeled` spells each out (settings). */

@@ -37,7 +37,7 @@ function convert(value: unknown, type: ConfigType): unknown {
   }
 }
 
-const field = "h-8 w-full min-w-0 rounded-[4px] border border-slate-200 bg-sheet px-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-brand-500";
+const field = "h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-sheet px-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-brand-500";
 
 function ValueInput({ item, onChange }: { item: ConfigItem; onChange: (value: unknown) => void }) {
   const value = item.value as unknown;
@@ -61,7 +61,7 @@ function ValueInput({ item, onChange }: { item: ConfigItem; onChange: (value: un
               type="button"
               data-value={b ? "" : undefined}
               onClick={() => onChange(b)}
-              className={`h-8 rounded-[4px] border px-3 text-[12.5px] ${value === b ? "border-brand-500 bg-brand-50 font-semibold text-brand-500" : "border-slate-200 text-slate-600"}`}
+              className={`h-8 rounded-lg border px-3 text-[12.5px] ${value === b ? "border-brand-500 bg-brand-50 font-semibold text-brand-500" : "border-slate-200 text-slate-600"}`}
             >
               {b ? t.project.sheet.yes : t.project.sheet.no}
             </button>
@@ -93,9 +93,9 @@ function ListInput({ values, onChange }: { values: string[]; onChange: (value: u
     setDraft("");
   };
   return (
-    <div className="flex flex-wrap items-center gap-1 rounded-[4px] border border-slate-200 px-1.5 py-1">
+    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 px-1.5 py-1">
       {values.map((v, i) => (
-        <span key={`${v}-${i}`} className="flex items-center gap-1 rounded-[3px] bg-slate-100 px-2 text-[12px] leading-6">
+        <span key={`${v}-${i}`} className="flex items-center gap-1 rounded-md bg-slate-100 px-2 text-[12px] leading-6">
           {v}
           <button type="button" onClick={() => onChange(values.filter((_, j) => j !== i))} className="text-slate-400 hover:text-ink">
             <X size={11} aria-hidden="true" />
@@ -140,7 +140,7 @@ export function readerOf(flow: Flow | null, path: string): { step: Step; variabl
   return step ? { step, variable: step.saveAs || "settings" } : null;
 }
 
-const cell = "h-8 w-full min-w-0 rounded-[4px] border border-slate-200 bg-sheet px-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-brand-500";
+const cell = "h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-sheet px-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-brand-500";
 
 /**
  * The settings as a table, one row per setting: name | value | type | ×.
@@ -193,7 +193,7 @@ function ConfigForm({ path, config }: { path: string; config: ConfigFile }) {
           const used = users.get(item.name) ?? [];
           const duplicate = item.name && names.indexOf(item.name) !== i;
           return (
-            <div key={i} data-row={i} className="group rounded-[4px] py-0.5 focus-within:bg-slate-50">
+            <div key={i} data-row={i} className="group rounded-lg py-0.5 focus-within:bg-slate-50">
               <div className="grid grid-cols-[1fr_1.3fr_28px_24px] items-center gap-x-2">
                 <input
                   className={`${cell} font-medium`}
@@ -206,7 +206,7 @@ function ConfigForm({ path, config }: { path: string; config: ConfigFile }) {
                 <span data-value-cell onKeyDown={(e) => onEnter(e, () => (i === items.length - 1 ? add() : setFocusRow(i + 1)))}>
                   <ValueInput item={item} onChange={(value) => update(i, { value: value as ConfigItem["value"] })} />
                 </span>
-                <label className="relative grid h-8 w-7 cursor-pointer place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100" title={t.project.sheet.types[type]}>
+                <label className="relative grid h-8 w-7 cursor-pointer place-items-center rounded-lg text-slate-500 hover:bg-slate-100" title={t.project.sheet.types[type]}>
                   <TypeIcon size={14} strokeWidth={1.75} aria-hidden="true" />
                   <select
                     className="absolute inset-0 cursor-pointer opacity-0"
@@ -229,7 +229,7 @@ function ConfigForm({ path, config }: { path: string; config: ConfigFile }) {
                   title={t.project.sheet.removeItem}
                   aria-label={t.project.sheet.removeItem}
                   onClick={() => editConfig({ ...config, items: items.filter((_, j) => j !== i) })}
-                  className="grid h-8 w-6 place-items-center rounded-[4px] text-slate-300 hover:bg-slate-100 hover:text-shu-500"
+                  className="grid h-8 w-6 place-items-center rounded-lg text-slate-300 hover:bg-slate-100 hover:text-shu-500"
                 >
                   <X size={13} aria-hidden="true" />
                 </button>
@@ -250,7 +250,7 @@ function ConfigForm({ path, config }: { path: string; config: ConfigFile }) {
                         key={step.id}
                         type="button"
                         onClick={() => step.id && select({ kind: "step", stepId: step.id })}
-                        className="rounded-[3px] bg-brand-50 px-1.5 text-[11px] leading-[18px] text-brand-500 hover:underline"
+                        className="rounded-md bg-brand-50 px-1.5 text-[11px] leading-[18px] text-brand-500 hover:underline"
                       >
                         {stepName(step, types)}
                       </button>
@@ -265,7 +265,7 @@ function ConfigForm({ path, config }: { path: string; config: ConfigFile }) {
       <button
         type="button"
         onClick={add}
-        className="mt-1 flex w-full items-center gap-2 rounded-[4px] border-[1.5px] border-dashed border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-600 hover:border-brand-500 hover:text-brand-500"
+        className="mt-1 flex w-full items-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-600 hover:border-brand-500 hover:text-brand-500"
       >
         <Plus size={14} aria-hidden="true" />
         {t.project.sheet.addItem}
@@ -320,7 +320,7 @@ export function FileSheet() {
   return (
     <aside
       aria-label={sheet.path}
-      className="absolute top-3 right-3 bottom-3 z-20 flex w-[460px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-[4px] border border-slate-200 bg-sheet shadow-lifted"
+      className="absolute top-3 right-3 bottom-3 z-20 flex w-[460px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-lifted"
     >
       <header className="shrink-0 border-b border-slate-100 px-4 pt-3 pb-2.5">
         <div className="flex items-center gap-2">
@@ -330,21 +330,21 @@ export function FileSheet() {
           </b>
           <span className="ml-auto flex items-center gap-1">
             {sheet.config !== null || sheet.raw ? (
-              <span className="flex rounded-[4px] bg-slate-100 p-0.5 text-[11.5px]">
+              <span className="flex rounded-lg bg-slate-100 p-0.5 text-[11.5px]">
                 {([false, true] as const).map((raw) => (
                   <button
                     key={String(raw)}
                     type="button"
                     disabled={!raw && parseConfigSafe(sheet.text) === null}
                     onClick={() => p.setRaw(raw)}
-                    className={`rounded-[3px] px-2.5 py-0.5 ${sheet.raw === raw ? "bg-sheet font-semibold text-ink shadow-sheet" : "text-slate-500"}`}
+                    className={`rounded-md px-2.5 py-0.5 ${sheet.raw === raw ? "bg-sheet font-semibold text-ink shadow-sheet" : "text-slate-500"}`}
                   >
                     {raw ? t.project.sheet.json : t.project.sheet.form}
                   </button>
                 ))}
               </span>
             ) : null}
-            <button type="button" onClick={close} title={t.close} className="grid h-7 w-7 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink">
+            <button type="button" onClick={close} title={t.close} className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink">
               <X size={16} aria-hidden="true" />
             </button>
           </span>
@@ -382,7 +382,7 @@ export function FileSheet() {
             type="button"
             disabled={!dirty}
             onClick={() => void p.saveSheet()}
-            className="rounded-[4px] bg-brand-700 px-3 py-1 text-[12px] font-semibold text-white disabled:opacity-40"
+            className="rounded-lg bg-brand-700 px-3 py-1 text-[12px] font-semibold text-white disabled:opacity-40"
           >
             {t.project.sheet.save}
             <kbd className="ml-1.5 font-sans text-[10px] opacity-70">Ctrl+S</kbd>

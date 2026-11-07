@@ -82,10 +82,10 @@ function FileRow({ file, role }: { file: ProjectFile; role: Role }) {
       onPointerDown={(e) => startFileDrag(e, file.path)}
       onContextMenu={menuFor(() => fileMenu(file.path))}
       title={`${file.path}\n${t.fileDrop.dragHint}`}
-      className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left ${open ? "bg-brand-50" : "hover:bg-slate-100"} ${dim ? "opacity-75" : ""}`}
+      className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left ${open ? "bg-brand-50" : "hover:bg-slate-100"} ${dim ? "opacity-75" : ""}`}
     >
       <span
-        className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[4px]"
+        className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg"
         style={{ color, background: `color-mix(in srgb, ${color} 13%, transparent)` }}
       >
         <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
@@ -113,11 +113,11 @@ function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: 
   return (
     <section
       data-shelf={role}
-      className={`rounded-[4px] pb-1 ${over ? "outline-2 outline-dashed" : ""}`}
+      className={`rounded-lg pb-1 ${over ? "outline-2 outline-dashed" : ""}`}
       style={over ? { outlineColor: color, background: `color-mix(in srgb, ${color} 6%, transparent)` } : undefined}
     >
       <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-[11px] text-slate-400">
-        <i className="inline-block h-2 w-2 rounded-[2px]" style={{ background: color }} />
+        <i className="inline-block h-2 w-2 rounded-sm" style={{ background: color }} />
         <b className="font-semibold text-slate-600">{t.project.shelves[role]}</b>
         <span className="ml-auto font-mono text-[10.5px]">{over ? t.project.dropHere(`${role}/`) : `${role}/`}</span>
       </div>
@@ -129,7 +129,7 @@ function Shelf({ role, files, over }: { role: Role; files: ProjectFile[]; over: 
           <button
             type="button"
             onClick={() => void createSettings()}
-            className="mx-2 flex w-[calc(100%-1rem)] items-center gap-2 rounded-[4px] border border-dashed border-slate-300 px-2 py-1.5 text-[11.5px] text-slate-500 hover:border-brand-500 hover:text-brand-500"
+            className="mx-2 flex w-[calc(100%-1rem)] items-center gap-2 rounded-lg border border-dashed border-slate-300 px-2 py-1.5 text-[11.5px] text-slate-500 hover:border-brand-500 hover:text-brand-500"
           >
             <FilePlus2 size={14} strokeWidth={1.75} aria-hidden="true" />
             {t.project.newSettings}
@@ -189,7 +189,7 @@ export function ProjectButton() {
       type="button"
       onClick={() => setOpen(true)}
       title={t.project.toggleTitle}
-      className="flex h-8 items-center gap-1.5 rounded-[4px] border border-slate-200 bg-sheet/95 px-2.5 text-[12px] text-slate-600 shadow-raised backdrop-blur hover:text-ink"
+      className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet/95 px-2.5 text-[12px] text-slate-600 shadow-raised backdrop-blur hover:text-ink"
     >
       <FolderOpen size={14} strokeWidth={1.75} aria-hidden="true" />
       {t.project.toggle}
@@ -220,11 +220,11 @@ function PartsShelf() {
             key={name}
             type="button"
             onClick={() => select({ kind: "part", name })}
-            className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-[12px] ${active ? "bg-brand-50 text-ink" : "text-slate-700 hover:bg-slate-100"}`}
+            className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] ${active ? "bg-brand-50 text-ink" : "text-slate-700 hover:bg-slate-100"}`}
           >
             <span className="min-w-0 flex-1 truncate">{part.label || name}</span>
             {!part.target && (
-              <span className="shrink-0 rounded-[3px] bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={t.todos.notPicked}>
+              <span className="shrink-0 rounded-md bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={t.todos.notPicked}>
                 {t.todos.badge}
               </span>
             )}
@@ -262,7 +262,7 @@ export function ProjectPanel() {
     <aside
       data-project-panel
       aria-label={t.project.title}
-      className={`flex h-full w-[264px] flex-col overflow-hidden rounded-[4px] border bg-sheet/95 shadow-raised backdrop-blur ${over ? "border-brand-500" : "border-slate-200"}`}
+      className={`flex h-full w-[264px] flex-col overflow-hidden rounded-lg border bg-sheet/95 shadow-raised backdrop-blur ${over ? "border-brand-500" : "border-slate-200"}`}
     >
       <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-slate-100 pr-1 pl-3">
         <b className="text-[13px] font-semibold text-ink">{t.project.title}</b>
@@ -273,7 +273,7 @@ export function ProjectPanel() {
             {adding && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setAdding(false)} />
-                <div className="absolute top-8 right-0 z-50 w-52 rounded-[4px] border border-slate-200 bg-sheet py-1 shadow-lifted">
+                <div className="absolute top-8 right-0 z-50 w-52 rounded-lg border border-slate-200 bg-sheet py-1 shadow-lifted">
                   <MenuItem
                     icon={Plus}
                     label={t.project.add}
@@ -324,7 +324,7 @@ export function ProjectPanel() {
                 onClick={() => void p.openFile(f.path)}
                 onPointerDown={(e) => startFileDrag(e, f.path)}
                 onContextMenu={menuFor(() => fileMenu(f.path))}
-                className="flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-[12px] text-slate-600 hover:bg-slate-100"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] text-slate-600 hover:bg-slate-100"
               >
                 <FileText size={14} strokeWidth={1.75} aria-hidden="true" />
                 <span className="truncate">{f.path}</span>
@@ -349,7 +349,7 @@ export function ProjectPanel() {
           </button>
           <span className="ml-auto text-slate-400">{keepWork ? t.project.workKept : t.project.workHint}</span>
           {work.length > 0 && (
-            <button type="button" onClick={() => void p.remove("work")} className="rounded-[3px] px-1 text-brand-500 hover:bg-brand-50">
+            <button type="button" onClick={() => void p.remove("work")} className="rounded-md px-1 text-brand-500 hover:bg-brand-50">
               {t.project.emptyWork}
             </button>
           )}
@@ -362,7 +362,7 @@ export function ProjectPanel() {
           {status && <span className={`ml-auto ${status === "failed" ? "text-shu-500" : "text-slate-400"}`}>{t.project.latest[status]}</span>}
         </div>
         <div
-          className={`mt-2 flex items-start gap-2 rounded-[4px] border-[1.5px] border-dashed px-2.5 py-2 leading-normal ${over === "panel" ? "border-brand-500 text-brand-500" : "border-slate-200 text-slate-400"}`}
+          className={`mt-2 flex items-start gap-2 rounded-lg border-[1.5px] border-dashed px-2.5 py-2 leading-normal ${over === "panel" ? "border-brand-500 text-brand-500" : "border-slate-200 text-slate-400"}`}
         >
           <Sparkles size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-brand-500" aria-hidden="true" />
           <span>{t.project.dropHint}</span>
@@ -378,7 +378,7 @@ function IconButton({ icon: Icon, title, onClick }: { icon: LucideIcon; title: s
       type="button"
       onClick={onClick}
       title={title}
-      className="grid h-7 w-7 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+      className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
     >
       <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
     </button>

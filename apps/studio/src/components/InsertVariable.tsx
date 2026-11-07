@@ -111,7 +111,7 @@ export function columnsByVariable(choices: InsertChoices): Record<string, string
   return Object.fromEntries(choices.loops.map((l) => [l.itemVar, l.columns]));
 }
 
-const inputClass = "w-full rounded-[4px] border border-slate-200 bg-sheet px-2 py-1 text-[13px] text-ink outline-none focus:border-brand-500";
+const inputClass = "w-full rounded-lg border border-slate-200 bg-sheet px-2 py-1 text-[13px] text-ink outline-none focus:border-brand-500";
 
 /** A text field that can take variables: 「変数」 inserts `{{ item.顧客 }}` where the cursor is. */
 export function TemplateInput({
@@ -180,7 +180,7 @@ export function TemplateInput({
         type="button"
         title={t.props.insertTitle}
         aria-expanded={open}
-        className="flex shrink-0 items-center gap-1 rounded-[4px] border border-slate-200 px-1.5 text-[11px] text-slate-600 hover:border-brand-500 hover:text-brand-600"
+        className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-1.5 text-[11px] text-slate-600 hover:border-brand-500 hover:text-brand-600"
         onMouseDown={(e) => {
           // Keep where the cursor was in the field.
           caret.current = input.current?.selectionStart ?? caret.current;
@@ -219,7 +219,7 @@ function InsertMenu({ choices, onPick }: { choices: InsertChoices; onPick: (expr
   return (
     <div
       role="menu"
-      className="absolute top-full right-0 z-30 mt-1 max-h-72 w-64 overflow-y-auto rounded-[4px] border border-slate-200 bg-sheet pb-1 shadow-lg"
+      className="absolute top-full right-0 z-30 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-sheet pb-1 shadow-lg"
     >
       {empty && <div className="px-2.5 py-2 text-[12px] text-slate-500">{t.props.insertNone}</div>}
       {choices.loops.map((l) => (

@@ -58,7 +58,7 @@ export function AgentPane({ width }: { width: number }) {
           type="button"
           onClick={() => newChat(chat.flowId ? { id: chat.flowId, name: chat.title } : null)}
           disabled={items.length === 0 && !chat.sessionId}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 enabled:hover:bg-slate-100 enabled:hover:text-ink disabled:text-slate-300"
           title={t.agent.newChat}
           aria-label={t.agent.newChat}
         >
@@ -67,7 +67,7 @@ export function AgentPane({ width }: { width: number }) {
         <button
           type="button"
           onClick={() => setPasteOpen(flow ? "into" : "new")}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
           title={t.paste.title}
           aria-label={t.paste.title}
         >
@@ -76,7 +76,7 @@ export function AgentPane({ width }: { width: number }) {
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-[4px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-ink"
           aria-label={t.close}
         >
           <X size={15} />
@@ -88,14 +88,14 @@ export function AgentPane({ width }: { width: number }) {
             {info.installable ? (
               <SetupCard />
             ) : (
-              <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
+              <div className="rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[12px] leading-relaxed text-shu-600">{info.problem}</div>
             )}
-            <div className="rounded-[4px] border border-slate-200 bg-paper px-3 py-2 text-[12px] leading-relaxed text-slate-700">
+            <div className="rounded-lg border border-slate-200 bg-paper px-3 py-2 text-[12px] leading-relaxed text-slate-700">
               {t.paste.other}
               <button
                 type="button"
                 onClick={() => setPasteOpen(flow ? "into" : "new")}
-                className="mt-1.5 flex h-7 items-center gap-1.5 rounded-[4px] border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
+                className="mt-1.5 flex h-7 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[12px] text-slate-700 hover:bg-slate-50"
               >
                 <ClipboardPaste size={14} strokeWidth={1.75} aria-hidden="true" />
                 {t.paste.title}
@@ -148,7 +148,7 @@ export function AgentPane({ width }: { width: number }) {
           rows={3}
           disabled={!info?.available}
           placeholder={chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
-          className="w-full resize-none rounded-[4px] border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
+          className="w-full resize-none rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
           <span className="min-w-0 truncate text-[10.5px] text-slate-500" title={busy ? t.agent.interruptHint : undefined}>
@@ -158,7 +158,7 @@ export function AgentPane({ width }: { width: number }) {
             <button
               type="button"
               onClick={() => void stop(chat.id)}
-              className="ml-auto h-8 shrink-0 rounded-[4px] border border-slate-300 px-3 text-[12px] text-slate-600 hover:bg-slate-100"
+              className="ml-auto h-8 shrink-0 rounded-lg border border-slate-300 px-3 text-[12px] text-slate-600 hover:bg-slate-100"
             >
               {t.stop}
             </button>
@@ -168,7 +168,7 @@ export function AgentPane({ width }: { width: number }) {
             disabled={!info?.available || chat.interrupting !== null || blockedElsewhere || draft.trim() === ""}
             onClick={() => void submit()}
             title={busy ? t.agent.interruptHint : undefined}
-            className={`${chat.turnId && !chat.interrupting ? "" : "ml-auto "}h-8 shrink-0 rounded-[4px] bg-ink px-4 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400`}
+            className={`${chat.turnId && !chat.interrupting ? "" : "ml-auto "}h-8 shrink-0 rounded-lg bg-primary px-4 text-[12px] font-semibold text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400`}
           >
             {busy ? t.agent.interrupt : t.agent.send}
           </button>
@@ -223,7 +223,7 @@ function ChatSwitcher({ chat }: { chat: Chat }) {
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         title={t.agent.chats}
-        className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-[4px] px-2 text-left hover:bg-slate-100"
+        className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-lg px-2 text-left hover:bg-slate-100"
       >
         <span className="min-w-0 truncate text-[13px] font-bold text-ink">{chatTitle(chat)}</span>
         <ChevronDown size={14} className="shrink-0 text-slate-500" />
@@ -237,7 +237,7 @@ function ChatSwitcher({ chat }: { chat: Chat }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-8 left-0 z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-[6px] border border-slate-200 bg-sheet py-1 shadow-lg">
+          <div className="absolute top-8 left-0 z-50 w-[min(320px,calc(100vw-32px))] overflow-hidden rounded-lg border border-slate-200 bg-sheet py-1 shadow-lg">
             <div className="max-h-[50vh] overflow-y-auto">
               {listed.map((c) => (
                 <div key={c.id} className={`group flex items-center gap-2 px-3 py-1.5 ${c.id === chat.id ? "bg-slate-100" : "hover:bg-slate-50"}`}>
@@ -253,7 +253,7 @@ function ChatSwitcher({ chat }: { chat: Chat }) {
                     <button
                       type="button"
                       onClick={() => remove(c.id)}
-                      className="grid h-5 w-5 shrink-0 place-items-center rounded-[4px] text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-slate-200 hover:text-ink focus:opacity-100"
+                      className="grid h-5 w-5 shrink-0 place-items-center rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-slate-200 hover:text-ink focus:opacity-100"
                       title={t.agent.removeChat}
                       aria-label={t.agent.removeChat}
                     >
@@ -312,7 +312,7 @@ function Item({ item }: { item: ChatItem }) {
     return (
       <div className="ml-8">
         {item.context && <div className="mb-0.5 truncate text-right text-[10px] text-slate-400">{item.context}</div>}
-        <div className="rounded-[4px] rounded-tr-[2px] bg-ink px-3 py-2 text-[13px] whitespace-pre-wrap text-sheet">{item.text}</div>
+        <div className="rounded-lg rounded-tr-sm bg-slate-100 px-3 py-2 text-[13px] whitespace-pre-wrap text-ink">{item.text}</div>
       </div>
     );
   }
@@ -325,7 +325,7 @@ function Item({ item }: { item: ChatItem }) {
       {item.status === "done" && item.message && <div className="text-[11px] text-slate-500">{item.message}</div>}
       {/* An expired login is explained by the sign-in box below instead. */}
       {item.status === "failed" && !item.needsLogin && (
-        <div className="rounded-[4px] border border-shu-100 bg-shu-50 px-2.5 py-1.5 text-[12px] whitespace-pre-wrap text-shu-600">
+        <div className="rounded-lg border border-shu-100 bg-shu-50 px-2.5 py-1.5 text-[12px] whitespace-pre-wrap text-shu-600">
           {item.message ?? t.agent.failed}
         </div>
       )}
@@ -403,7 +403,7 @@ export function AgentPicker({ id, disabled }: { id?: string; disabled?: boolean 
       <select
         id={id}
         disabled={disabled}
-        className="h-7 min-w-0 rounded-[4px] border border-slate-300 bg-sheet px-1.5 text-[12px] disabled:opacity-60"
+        className="h-7 min-w-0 rounded-lg border border-slate-300 bg-sheet px-1.5 text-[12px] disabled:opacity-60"
         value={info?.kind ?? "claudeCode"}
         onChange={(e) => {
           setError(null);
@@ -433,11 +433,11 @@ function SetupCard() {
   const name = info?.name ?? "AI";
   const busy = install.phase === "running" || install.phase === "stopping";
   const primary =
-    "flex h-8 items-center gap-1.5 rounded-[4px] bg-ink px-3 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400";
+    "flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-semibold text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400";
   // The sign-in box takes over once the installer has done its part.
   if (login.phase !== "idle") return null;
   return (
-    <div className="space-y-2 rounded-[4px] border border-brand-100 bg-brand-50 px-3 py-2.5 text-[12px] text-ink">
+    <div className="space-y-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2.5 text-[12px] text-ink">
       <div className="font-semibold">{t.agent.setup.title}</div>
       <div className="leading-relaxed text-slate-700">{t.agent.setup.lead}</div>
       <label className="flex items-center gap-2">
@@ -452,7 +452,7 @@ function SetupCard() {
             {install.phase === "stopping" ? t.agent.setup.stopping : t.agent.setup.installing}
           </div>
           {install.phase === "running" && install.lines.length > 0 && (
-            <pre className="max-h-24 overflow-y-auto rounded-[3px] bg-sheet px-2 py-1 font-mono text-[10.5px] leading-snug whitespace-pre-wrap text-slate-600">{install.lines.slice(-6).join("\n")}</pre>
+            <pre className="max-h-24 overflow-y-auto rounded-md bg-sheet px-2 py-1 font-mono text-[10.5px] leading-snug whitespace-pre-wrap text-slate-600">{install.lines.slice(-6).join("\n")}</pre>
           )}
           <button type="button" disabled={install.phase === "stopping"} onClick={() => void cancel()} className="text-slate-500 enabled:hover:text-ink disabled:opacity-50">
             {t.cancel}
@@ -484,9 +484,9 @@ function LoginBox({ name }: { name: string }) {
   const cancel = useAgent((s) => s.cancelLogin);
   const [code, setCode] = useState("");
   if (!needed && login.phase === "idle") return null;
-  const box = "space-y-2 rounded-[4px] border border-brand-100 bg-brand-50 px-3 py-2.5 text-[12px] text-ink";
+  const box = "space-y-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2.5 text-[12px] text-ink";
   const primary =
-    "h-8 rounded-[4px] bg-ink px-3 text-[12px] font-semibold text-sheet enabled:hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400";
+    "h-8 rounded-lg bg-primary px-3 text-[12px] font-semibold text-on-primary enabled:hover:bg-primary-hover disabled:bg-slate-200 disabled:text-slate-400";
   if (login.phase === "waiting") {
     return (
       <div className={box}>
@@ -509,7 +509,7 @@ function LoginBox({ name }: { name: string }) {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder={t.agent.pasteCode}
-            className="min-w-0 flex-1 rounded-[4px] border border-slate-300 bg-sheet px-2 text-[12px] outline-none focus:border-brand-500"
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-sheet px-2 text-[12px] outline-none focus:border-brand-500"
           />
           <button type="submit" disabled={!code.trim() || login.sendingCode} className={primary}>
             {t.agent.send}
