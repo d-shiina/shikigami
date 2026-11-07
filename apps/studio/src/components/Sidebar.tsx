@@ -9,7 +9,7 @@
 // Folded (Ctrl+B, or a window too narrow for it), the column keeps its icons
 // as a strip, as Linear and VS Code do: the places stay one click away and
 // their counts stay in sight. Hovering an icon names it.
-import { AppWindow, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
+import { AppWindow, Blocks, CalendarClock, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, PanelLeftClose, PanelLeftOpen, Settings2, Workflow } from "lucide-react";
 import { anyBusy, useAgent } from "../agent";
 import { useStudio, useStudioApi } from "../context";
 import { SIDEBAR_MINI } from "../lib/fit";
@@ -182,6 +182,7 @@ export function Sidebar({ width, onToggle, mini = false }: { width: number; onTo
           title={asks > 0 ? t.bar.secretAskTitle : t.secretsIntro}
           mini={mini}
         />
+        <Item icon={Blocks} label={t.extensions.place} on={place === "extensions"} onClick={go("extensions")} title={t.extensions.placeTitle} mini={mini} />
       </nav>
       <div className={mini ? "space-y-1 px-1.5 py-1.5" : "space-y-px px-2 py-1.5"}>
         {/* Another window, not a place: the published scenarios for the people who only run them. */}

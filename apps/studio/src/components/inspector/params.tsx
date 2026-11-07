@@ -16,6 +16,8 @@ import { VariableSetForm } from "../TransformForm";
 import { columnsByVariable, InsertProvider, ListSourceField, TemplateInput, useInsertChoices } from "../InsertVariable";
 import { listToText, textToList } from "../../lib/listText";
 import { pageAbove } from "../../lib/loopScope";
+import { credentialFor } from "../../lib/extensions";
+import { fieldLabel as secretFieldLabel } from "../../lib/secretKinds";
 import { FOR_EACH } from "../../lib/stepTypes";
 import { type JsonSchema, inputClass, CommitInput, PathField, Row, AddRow, Section } from "./fields";
 
@@ -37,20 +39,35 @@ function TextOrSecretField({
   label,
   schema,
   value,
+  stepType,
+  param,
   onChange,
 }: {
   label: string;
   schema: JsonSchema;
   value: unknown;
+  stepType: string;
+  param: string;
   onChange: (value: unknown) => void;
 }) {
-  const secrets = useStudio((s) => s.secrets);
+  const allSecrets = useStudio((s) => s.secrets);
   const openSecrets = useStudio((s) => s.setSecretsOpen);
+  const openSecretForm = useStudio((s) => s.openSecretForm);
+  const def = useStudio((s) => s.stepTypes.find((d) => d.type === stepType));
+  // An extension's setting says which kind of secret it takes (an API key…): offer those, and register one of that kind.
+  const credential = credentialFor(def, param);
+  const secrets = credential ? allSecrets.filter((s) => (s.kind ?? "login") === credential.kind) : allSecrets;
+  const register = () =>
+    credential && def?.plugin
+      ? openSecretForm({ name: credential.label, sites: [`plugin:${def.plugin.name}`], fields: ["password"], kind: credential.kind })
+      : openSecrets(true);
   const ref = isSecretRef(value) ? value : null;
   const [mode, setMode] = useState<"text" | "secret">(ref ? "secret" : "text");
   useEffect(() => setMode(ref ? "secret" : "text"), [ref]);
   // The param's schema lists the fields it takes (http.request auth also takes the OAuth access token).
-  const fields = (secretFieldsOf(schema) ?? ["username", "password", "totp"]) as SecretField[];
+  const all = (secretFieldsOf(schema) ?? ["username", "password", "totp"]) as SecretField[];
+  // An API key is one value; other kinds keep the fields the param takes.
+  const fields = credential?.kind === "apiKey" ? (["password"] as SecretField[]) : all;
 
   // A <div>, not Field's <label>: a label would forward clicks to its first button.
   return (
@@ -97,19 +114,20 @@ function TextOrSecretField({
           >
             {fields.map((f) => (
               <option key={f} value={f}>
-                {t.secretField[f]}
+                {credential ? secretFieldLabel(credential.kind, f) : t.secretField[f]}
               </option>
             ))}
           </select>
           <button
             type="button"
             className="whitespace-nowrap text-xs text-brand-600 hover:underline"
-            onClick={() => openSecrets(true)}
+            onClick={register}
           >
             ＋{t.secretRegister}
           </button>
         </div>
       )}
+      {credential && <span className="block text-[11px] text-slate-500">{t.extensions.secretHint(credential.label, t.secretKinds[credential.kind])}</span>}
     </div>
   );
 }
@@ -157,7 +175,7 @@ function ParamField({
 }) {
   const label = `${paramLabel(name, stepType)}${required ? " *" : ""}`;
   if (secretCapable) {
-    return <TextOrSecretField label={label} schema={schema} value={value} onChange={onChange} />;
+    return <TextOrSecretField label={label} schema={schema} value={value} stepType={stepType} param={name} onChange={onChange} />;
   }
   let hint = plainHint(schema.description);
   let editor: React.ReactNode;
@@ -170,7 +188,7 @@ function ParamField({
         <option value="">{t.props.unset}</option>
         {choices.map((v) => (
           <option key={String(v)} value={String(v)}>
-            {choiceLabel(name, v)}
+            {choiceLabel(name, v, stepType)}
           </option>
         ))}
       </select>
@@ -181,7 +199,7 @@ function ParamField({
         <option value="">{t.props.unset}</option>
         {schema.enum.map((v) => (
           <option key={String(v)} value={String(v)}>
-            {choiceLabel(name, v)}
+            {choiceLabel(name, v, stepType)}
           </option>
         ))}
       </select>

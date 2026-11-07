@@ -1370,6 +1370,10 @@
             "$ref": "#/$defs/PluginCredential"
           }
         },
+        "summary": {
+          "description": "What this step does, in one sentence for people (Studio shows it\nunder the node's name; `description` is written for AI clients).",
+          "type": "string"
+        },
         "external": {
           "description": "What this step sends outside the PC, when it does: shown on the\nreview panel before publishing.",
           "anyOf": [

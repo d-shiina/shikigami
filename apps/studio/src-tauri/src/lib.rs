@@ -7,6 +7,7 @@
 mod agent;
 mod commands;
 mod debug;
+mod extensions;
 mod picker;
 mod runner;
 mod schedules;
@@ -78,6 +79,7 @@ pub fn run() {
         .manage(agent::AgentTurns::default())
         .manage(agent::AgentLogin::default())
         .manage(agent::AgentInstall::default())
+        .manage(extensions::Extensions::default())
         .setup(move |app| {
             fit_to_screen(app);
             if let Err(e) = tray::create(app.handle()) {
@@ -123,6 +125,16 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::workspace_info,
+            extensions::list_extensions,
+            extensions::stage_extension,
+            extensions::stage_extension_update,
+            extensions::install_extension,
+            extensions::discard_extension,
+            extensions::set_extension_enabled,
+            extensions::uninstall_extension,
+            extensions::set_extension_registry,
+            extensions::fetch_extension_registry,
+            extensions::restart_for_extensions,
             commands::save_ai_guide,
             commands::paste_ai_answer,
             commands::set_workspace,

@@ -12,6 +12,12 @@ The design is in [design/plugins.md](design/plugins.md) (Japanese; the code call
 
 ## Using extensions
 
+### Studio's Extensions place
+
+The sidebar's Extensions place lists installed extensions (on/off, check for update, uninstall) and, in the Catalog tab, the registry below. Install takes a source and shows what the extension is (its nodes, the data they send outside, the secrets they need, the program it starts) before installing. Changes take effect after Studio restarts (the place offers a Restart button).
+
+An extension's nodes are listed in the palette under the extension's name, with its tag (e.g. "AI-OCR") before node names; their settings form is built from the manifest's JSON Schema.
+
 ### Installing
 
 | From | Write |
@@ -117,7 +123,7 @@ See the Japanese page for the full field table; in short:
 | `tag` | - | The "where" tag before node names (`AI-OCR`); defaults to `label` |
 | `icon` | - | A [Lucide](https://lucide.dev/icons) icon name (`scan-text`) |
 | `credentials` | - | Secrets taken: `kind` (`login` / `apiKey` / `oauth`), `label`, `description`, `params` (the `secretParams` taking it) |
-| `steps[]` | yes | `action`, `label` (a noun), `description` (for AI), `params` (JSON Schema; Studio's form), `examples` (validated on load), and optional `hasOutput`, `risk`, `secretParams`, `pathParams` (relative paths resolved from the flow's folder), `targets`, `external` (`service`, `data`, `param`), `resources`, `defaultTimeoutMs`, `deprecated` |
+| `steps[]` | yes | `action`, `label` (a noun), `description` (for AI), `summary` (one sentence for people, shown in Studio), `params` (JSON Schema; Studio's form), `examples` (validated on load), and optional `hasOutput`, `risk`, `secretParams`, `pathParams` (relative paths resolved from the flow's folder), `targets`, `external` (`service`, `data`, `param`), `resources`, `defaultTimeoutMs`, `deprecated` |
 
 A setting's name in Studio is its schema `title`, the line under it `description`; display names for `enum` values go in `x-enumLabels`. Unknown manifest fields are errors.
 

@@ -1,6 +1,7 @@
 // The review desk: AI edits waiting to be looked at, across every flow.
 // Opening one shows the flow's chart with what changed marked on
 // it, the changes in words, and one place to keep or send them back.
+import { CloudUpload } from "lucide-react";
 import type { HistoryEntry, Step, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
@@ -519,6 +520,12 @@ function EffectRow({ effect }: { effect: Effect }) {
       <span className={`min-w-0 ${effect.status === "same" ? "text-slate-500" : ""} ${effect.status === "removed" ? "line-through" : ""}`}>
         <span className={danger ? "font-semibold text-shu-600" : effect.reads ? "" : "font-semibold"}>{effect.action}</span>
         {effect.target && <span className="ml-1 font-mono text-[12px] break-all">{effect.target}</span>}
+        {effect.external && (
+          <span className="mt-0.5 flex items-center gap-1 text-[11.5px] text-amber-700">
+            <CloudUpload size={12} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+            {t.desk.sentOutside(effect.external.service, effect.external.data)}
+          </span>
+        )}
       </span>
     </button>
   );

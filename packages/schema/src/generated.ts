@@ -883,6 +883,11 @@ export interface PluginInfo {
    */
   credentials?: PluginCredential[];
   /**
+   * What this step does, in one sentence for people (Studio shows it
+   * under the node's name; `description` is written for AI clients).
+   */
+  summary?: string;
+  /**
    * What this step sends outside the PC, when it does: shown on the
    * review panel before publishing.
    */

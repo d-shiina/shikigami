@@ -25,6 +25,7 @@ import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
 import { RunsPage } from "./components/RunsPage";
 import { SecretsPage } from "./components/SecretsPage";
+import { ExtensionsPage } from "./components/ExtensionsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { FlowsPage } from "./components/FlowsPage";
 import { Sidebar } from "./components/Sidebar";
@@ -394,6 +395,11 @@ function Shell() {
             {place === "secrets" && (
               <div className="min-w-0 flex-1">
                 <SecretsPage />
+              </div>
+            )}
+            {place === "extensions" && (
+              <div className="min-w-0 flex-1">
+                <ExtensionsPage />
               </div>
             )}
             {place === "settings" && (

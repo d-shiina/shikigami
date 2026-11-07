@@ -184,6 +184,62 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   }
 }
 
+/** A node of an extension, as its manifest declares it. */
+export type ExtensionStep = { type: string; label: string; risk: StepTypeDef["risk"]; external?: { service: string; data: string } | null };
+
+/** What an extension's manifest says (`shikigami_plugins::install::manifest_summary`). */
+export type ExtensionSummary = {
+  name: string;
+  version?: string;
+  label: string;
+  description?: string;
+  publisher?: string;
+  homepage?: string;
+  tag?: string;
+  icon?: string;
+  /** The program it starts ("node main.mjs"). */
+  program?: string;
+  credentials?: { kind: SecretKind; label: string; description?: string }[];
+  steps?: ExtensionStep[];
+};
+
+/** An extension folder on this PC. */
+export type InstalledExtension = ExtensionSummary & {
+  dir: string;
+  enabled: boolean;
+  /** Installed by Shikigami (else a developer's SHIKIGAMI_PLUGINS folder: listed only). */
+  managed: boolean;
+  source?: { source: ExtensionSource; installedAt: string };
+  /** Why it cannot be loaded. */
+  problems: string[];
+};
+
+export type ExtensionSource = { kind: "file"; path: string } | { kind: "url"; url: string } | { kind: "github"; repo: string };
+
+/** A downloaded and checked extension, before it is installed. */
+export type ExtensionPreview = ExtensionSummary & { id: string; source: ExtensionSource; installedVersion: string | null };
+
+export type ExtensionList = { root: string; installed: InstalledExtension[]; registry: string | null; restartNeeded: boolean };
+
+/** One extension a registry index offers. */
+export type RegistryEntry = { name: string; label: string; description?: string; version?: string; publisher?: string; homepage?: string; source: string };
+
+export const extensionsApi = {
+  list: () => call<ExtensionList>("list_extensions"),
+  /** Downloads and checks; installs nothing. */
+  stage: (source: string) => call<ExtensionPreview>("stage_extension", { source }),
+  stageUpdate: (name: string) => call<ExtensionPreview>("stage_extension_update", { name }),
+  install: (id: string) => call<void>("install_extension", { id }),
+  discard: (id: string) => call<void>("discard_extension", { id }),
+  setEnabled: (name: string, enabled: boolean) => call<void>("set_extension_enabled", { name, enabled }),
+  uninstall: (name: string) => call<void>("uninstall_extension", { name }),
+  setRegistry: (url: string) => call<void>("set_extension_registry", { url }),
+  registry: () => call<RegistryEntry[]>("fetch_extension_registry"),
+  restart: () => call<void>("restart_for_extensions"),
+  /** A zip file picked in the file dialog, or null. */
+  pickZip: () => call<string | null>("runner_pick", { kind: "file", start: null }),
+};
+
 export const api = {
   workspaceInfo: () => call<WorkspaceInfo>("workspace_info"),
   /** Saves the default workspace and restarts Studio on it. */

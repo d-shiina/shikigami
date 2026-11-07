@@ -21,6 +21,7 @@
     {
       "action": "readDocument",
       "label": "AI-OCR の読み取り",
+      "summary": "画像や PDF を Azure の AI-OCR で読み取り、文字・表・帳票の項目を返します",
       "description": "Sends the image or PDF at `path` to Azure AI Document Intelligence (`endpoint`, key from a registered apiKey secret) and returns what it read: { text, pages: [{ page, lines: [text] }], tables: [{ rows: [[cell]] }], fields: { name: value }, model }. `model` prebuilt-read (text, default), prebuilt-layout (text and tables), prebuilt-invoice / prebuilt-receipt (also fields such as InvoiceTotal, VendorName). `locale` is a hint like ja-JP. A relative `path` is read from the flow's folder.",
       "params": {
         "type": "object",

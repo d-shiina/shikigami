@@ -132,6 +132,10 @@ pub struct StepManifest {
     pub action: String,
     pub label: String,
     pub description: String,
+    /// One sentence for people, shown in Studio under the node's name
+    /// (`description` is for AI clients and may be English).
+    #[serde(default)]
+    pub summary: String,
     pub params: Value,
     #[serde(default)]
     pub has_output: bool,
@@ -442,7 +446,14 @@ impl Manifest {
                         .get("description")
                         .and_then(Value::as_str)
                         .unwrap_or("text, or a registered secret { \"secret\": \"<name>\", \"field\": \"password\" }");
-                    secret_properties.insert(key.clone(), text_or_secret_schema(description));
+                    let mut schema = text_or_secret_schema(description);
+                    // Studio names the field by its title, as for other params.
+                    if let (Some(title), Some(map)) =
+                        (property.get("title"), schema.as_object_mut())
+                    {
+                        map.insert("title".into(), title.clone());
+                    }
+                    secret_properties.insert(key.clone(), schema);
                 }
                 None => p.add(
                     &format!("{at}/secretParams"),
@@ -566,6 +577,7 @@ impl Manifest {
                         })
                     })
                     .collect(),
+                summary: step.summary.clone(),
                 external: step.external.as_ref().map(|e| ExternalUse {
                     service: e.service.clone(),
                     data: e.data.clone(),

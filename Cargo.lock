@@ -4790,6 +4790,7 @@ dependencies = [
  "shikigami-adapters",
  "shikigami-agent",
  "shikigami-core",
+ "shikigami-plugins",
  "shikigami-runtime",
  "shikigami-secrets",
  "shikigami-system",

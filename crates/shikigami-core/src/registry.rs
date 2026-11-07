@@ -196,6 +196,10 @@ pub struct PluginInfo {
     /// right ones (and a form of that kind) for its secret params.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub credentials: Vec<PluginCredential>,
+    /// What this step does, in one sentence for people (Studio shows it
+    /// under the node's name; `description` is written for AI clients).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub summary: String,
     /// What this step sends outside the PC, when it does: shown on the
     /// review panel before publishing.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -19,6 +19,8 @@ export type Effect = {
   /** Only reads (risk "safe"). */
   reads: boolean;
   status: EffectStatus;
+  /** Data an extension's node sends to a service outside the PC, as its manifest declares. */
+  external?: { service: string; data: string };
 };
 
 /** Steps that only move around inside a window or ask the person: not effects outside. */
@@ -39,16 +41,20 @@ function targetOf(step: Step, def: StepTypeDef | undefined): string | null {
 /** One effect for a step that touches something outside, or null. */
 export function effectOf(step: Step, def: StepTypeDef | undefined, status: EffectStatus): Effect | null {
   if (INSIDE.test(step.type)) return null;
-  const target = targetOf(step, def);
+  const external = def?.plugin?.external ?? undefined;
+  // What leaves the PC is shown with where it goes (the endpoint), not the file it reads.
+  const sentTo = external?.param ? step.params?.[external.param] : undefined;
+  const target = typeof sentTo === "string" && sentTo.trim() ? sentTo.trim() : targetOf(step, def);
   const risk = def?.risk ?? "interactive";
-  if (risk === "safe" && !target) return null;
+  if (risk === "safe" && !target && !external) return null;
   return {
     stepId: step.id ?? "",
     action: stepLabel(step.type, def?.label),
     target: target ?? "",
     risk,
-    reads: risk === "safe",
+    reads: risk === "safe" && !external,
     status,
+    ...(external ? { external: { service: external.service, data: external.data } } : {}),
   };
 }
 
@@ -95,6 +101,7 @@ export function effects(
     seen.add(key);
     return true;
   });
-  const order = (e: Effect) => (e.status === "same" ? 10 : 0) + (e.risk === "dangerous" ? 0 : e.reads ? 2 : 1);
+  // Dangerous ones first, then what is sent outside the PC, then other changes, then reads.
+  const order = (e: Effect) => (e.status === "same" ? 10 : 0) + (e.risk === "dangerous" ? 0 : e.external ? 0.5 : e.reads ? 2 : 1);
   return unique.sort((a, b) => order(a) - order(b));
 }
