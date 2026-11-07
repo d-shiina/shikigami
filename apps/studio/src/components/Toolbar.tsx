@@ -1,10 +1,7 @@
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import type { Step } from "@shikigami/schema";
-import { useMemo } from "react";
 import { authorIssues, unsetIssues } from "../lib/todos";
-import { unsetParams } from "../lib/nodeRows";
-import { useTodos } from "../lib/useTodos";
+import { useTodos, useUnsetCount } from "../lib/useTodos";
 import { RecordButton } from "./RecordButton";
 
 function DockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
@@ -90,21 +87,7 @@ export function FlowTitle() {
   const setHistoryOpen = useStudio((s) => s.setHistoryOpen);
   const published = useStudio((s) => s.published);
   const todos = useTodos().length;
-  const flowSteps = useStudio((s) => s.flow?.steps);
-  const stepTypes = useStudio((s) => s.stepTypes);
-  // Required settings still empty, over the whole flow (blocks too).
-  const unset = useMemo(() => {
-    const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
-    let n = 0;
-    const walk = (steps: Step[]) => {
-      for (const step of steps) {
-        n += unsetParams(step, defs.get(step.type)).length;
-        for (const block of Object.values(step.blocks ?? {})) walk(block);
-      }
-    };
-    walk(flowSteps ?? []);
-    return n;
-  }, [flowSteps, stepTypes]);
+  const unset = useUnsetCount();
   if (!flow) return null;
   // A part to pick is counted as a to-do, not as an error.
   const errors = authorIssues(validation).length;

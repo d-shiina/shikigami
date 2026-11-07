@@ -4,6 +4,7 @@ import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { formatValue, relativeTime } from "../lib/changes";
 import { stepLabel, t } from "../lib/i18n";
+import { useFlowHealth } from "../lib/useTodos";
 
 const KIND_STYLE: Record<DiffKind, string> = {
   added: "bg-moegi-100 text-moegi-500",
@@ -74,6 +75,15 @@ function PublishedCard() {
   const publish = useStudio((s) => s.publish);
   const unpublish = useStudio((s) => s.unpublish);
   const [confirm, setConfirm] = useState(false);
+  const health = useFlowHealth();
+  // What unattended runs would trip over: said before publishing, not after.
+  const warnings = [
+    health.errors > 0 && t.publishWarn.errors(health.errors),
+    health.unset > 0 && t.publishWarn.unset(health.unset),
+    health.todos > 0 && t.publishWarn.todos(health.todos),
+    health.lastFailed && t.publishWarn.lastFailed,
+  ].filter((w): w is string => Boolean(w));
+  const [publishAnyway, setPublishAnyway] = useState(false);
   return (
     <section className="space-y-1.5 rounded-lg border border-slate-200 bg-paper p-3">
       <div className="flex items-center gap-2">
@@ -87,14 +97,29 @@ function PublishedCard() {
       </div>
       {published && !published.matchesCurrent && <p className="text-xs text-shu-600">{t.publishedBehind}</p>}
       <p className="text-[11px] leading-relaxed text-slate-500">{t.publishedHint}</p>
+      {!published?.matchesCurrent && warnings.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+          <p className="font-semibold">{t.publishWarn.title}</p>
+          <ul className="mt-0.5 list-disc pl-4">
+            {warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="flex items-center gap-3">
         {!published?.matchesCurrent && (
           <button
             type="button"
-            onClick={() => void publish()}
+            onClick={() => {
+              if (warnings.length > 0 && !publishAnyway) return setPublishAnyway(true);
+              setPublishAnyway(false);
+              void publish();
+            }}
+            onBlur={() => setPublishAnyway(false)}
             className="rounded-lg bg-primary px-3 py-1 text-xs font-medium text-on-primary hover:bg-primary-hover"
           >
-            {t.publishCurrent}
+            {publishAnyway ? t.publishWarn.anyway : t.publishCurrent}
           </button>
         )}
         {published && (
@@ -238,7 +263,7 @@ export function VersionsPanel() {
         <button
           type="submit"
           disabled={!name.trim()}
-          className="w-full rounded-lg bg-primary px-2 py-1 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-300"
+          className="w-full rounded-lg border border-slate-300 bg-paper px-2 py-1 text-sm font-medium text-ink hover:bg-slate-100 disabled:text-slate-400 disabled:hover:bg-paper"
         >
           {t.saveVersion}
         </button>
