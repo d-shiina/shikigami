@@ -90,7 +90,7 @@ export type ScheduleView = Schedule & { flowName: string | null; published: bool
 
 /** When this PC locks its screen by itself after no input. */
 export type ScreenLock = { afterSecs: number; by: "screenSaver" | "inactivityLimit" };
-export type ScheduleList = { schedules: ScheduleView[]; path: string; screenLock?: ScreenLock };
+export type ScheduleList = { schedules: ScheduleView[]; path: string; screenLock?: ScreenLock; remote: boolean };
 
 /** The agent of this PC and workspace, which fires the schedules. */
 export type AgentStatus = {
@@ -293,6 +293,7 @@ export const api = {
   listSchedules: () => call<ScheduleList>("list_schedules"),
   saveSchedule: (schedule: Schedule) => call<ScheduleList>("save_schedule", { schedule }),
   deleteSchedule: (id: string) => call<ScheduleList>("delete_schedule", { id }),
+  releaseRemoteSession: () => call<void>("release_remote_session"),
   /** null when the agent is not running: schedules do not fire then. */
   agentStatus: () => call<AgentStatus | null>("agent_status"),
   startAgent: () => call<AgentStatus | null>("start_agent"),

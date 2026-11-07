@@ -109,3 +109,63 @@ pub fn keep_awake() -> Box<dyn Send + Sync> {
         Box::new(Awake(handle.0 as isize))
     }
 }
+
+/// Whether this process runs in a Remote Desktop session.
+pub fn is_remote() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_REMOTESESSION};
+    // SAFETY: plain Win32 call.
+    unsafe { GetSystemMetrics(SM_REMOTESESSION) != 0 }
+}
+
+/// Ends the Remote Desktop connection of this session without locking it:
+/// the session moves to the PC's own screen (the console) and keeps
+/// running, so desktop nodes still work after the window is closed. What
+/// it shows is visible on a monitor plugged into the PC. Needs an
+/// administrator (`tscon`): when this process is not one, Windows asks.
+pub fn release_to_console() -> Result<(), String> {
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+    if !is_remote() {
+        return Err("this is not a Remote Desktop session".into());
+    }
+    let mut session = 0u32;
+    // SAFETY: the out pointer is valid for the call.
+    unsafe { ProcessIdToSessionId(std::process::id(), &raw mut session) }
+        .map_err(|e| format!("cannot tell this session: {e}"))?;
+    let windir = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let tscon = std::path::Path::new(&windir)
+        .join("System32")
+        .join("tscon.exe");
+    let out = std::process::Command::new(&tscon)
+        .args([session.to_string().as_str(), "/dest:console"])
+        .output()
+        .map_err(|e| format!("cannot start {}: {e}", tscon.display()))?;
+    if out.status.success() {
+        return Ok(());
+    }
+    // Not an administrator: ask Windows to run it as one (the person
+    // confirms on the UAC prompt).
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
+    use windows::core::HSTRING;
+    let args = format!("{session} /dest:console");
+    // SAFETY: the strings outlive the call.
+    let started = unsafe {
+        ShellExecuteW(
+            None,
+            &HSTRING::from("runas"),
+            &HSTRING::from(tscon.as_os_str()),
+            &HSTRING::from(args.as_str()),
+            None,
+            SW_HIDE,
+        )
+    };
+    // Values above 32 mean it started.
+    if started.0 as usize > 32 {
+        Ok(())
+    } else {
+        Err(format!(
+            "tscon failed ({}) and was not run as an administrator",
+            out.status
+        ))
+    }
+}

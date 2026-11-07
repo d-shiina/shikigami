@@ -25,6 +25,14 @@ shikigami agent uninstall
 - The mouse and keyboard are shared with Studio, the CLI and the MCP server: nodes that use them take turns across processes. While the screen is locked they stop with `DESKTOP_UNAVAILABLE` (browser and file work still runs). While a flow with such nodes runs, the display is kept on and the PC awake, so it does not turn off or sleep. Locking is not prevented: a password-protected screen saver, an inactivity limit set by policy, or Win+L still stops them. Keep the PC signed in and unlocked when desktop flows are due. In Studio's 「自動実行」, a schedule whose flow uses the mouse and keyboard says so when this PC locks by itself after a while without input.
 - Other processes talk to the agent over a local named pipe that only your user can write to (`\\.\pipe\shikigami-agent-…`).
 
+### Screen lock and Remote Desktop
+
+Nodes that use the mouse and keyboard cannot run while the screen is locked (Windows does not let input reach a locked screen). On a PC that cannot be kept unlocked (see [design/locked-runs.md](design/locked-runs.md), in Japanese):
+
+- `shikigami session status`: whether the screen takes input now, whether this is a Remote Desktop session, and after how many minutes without input the PC locks.
+- **A VM or PC you look at over Remote Desktop**: closing the window disconnects and locks the session. Disconnect with 「画面を残して切断」 in Studio's 「自動実行」, or `shikigami session release`, instead: the session is not locked and desktop flows keep running (it uses `tscon`; Windows may ask for an administrator). A monitor plugged into the PC shows the screen to anyone in front of it.
+- **Minimizing the Remote Desktop window stops drawing**: on the PC you connect from, run `reg add "HKCU\Software\Microsoft\Terminal Server Client" /v RemoteDesktop_SuppressWhenMinimized /t REG_DWORD /d 2 /f` once.
+
 ## Schedules
 
 Schedules belong to the PC that runs them (`schedules.json` in the per-PC area of the workspace, next to the run records). When several PCs share a workspace folder, only the PC a schedule was made on runs it.
