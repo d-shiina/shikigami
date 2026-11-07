@@ -292,7 +292,7 @@ function ParamField({
 }
 
 /** Items set rarely: shown under "詳しく指定" unless they hold a value. */
-const RARE = new Set(["testId", "css", "exact", "nth", "className", "placeholder", "frame"]);
+const RARE = new Set(["testId", "css", "exact", "nth", "className", "placeholder", "frame", "within", "after"]);
 /** ARIA roles offered for a browser target, whose role is free text. */
 const BROWSER_ROLES = ["button", "link", "textbox", "checkbox", "radio", "combobox", "listitem", "menuitem", "tab", "heading", "cell", "row", "image"];
 

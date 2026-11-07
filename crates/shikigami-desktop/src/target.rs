@@ -200,7 +200,18 @@ pub struct ElementQuery {
     pub exact: bool,
     #[serde(default)]
     pub nth: Option<usize>,
+    /// Look only inside this element (a group, pane or row that tells
+    /// same-named elements apart), itself found like `element`.
+    #[serde(default)]
+    pub within: Option<Box<ElementQuery>>,
+    /// The first match after this element in the window's order, e.g. the
+    /// text box that follows the label 「氏名」 (`nth` counts from there).
+    #[serde(default)]
+    pub after: Option<Box<ElementQuery>>,
 }
+
+/// How deep `within` / `after` may nest (the step schemas allow as much).
+pub const MAX_NESTING: usize = 2;
 
 /// Pixels from the window's top-left corner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -308,23 +319,7 @@ impl Target {
             return Err(StepError::invalid_params("target.window.match needs title"));
         }
         if let Some(element) = &self.element {
-            if element.id.is_none()
-                && element.name.is_none()
-                && element.role.is_none()
-                && element.class_name.is_none()
-            {
-                return Err(StepError::invalid_params(
-                    "target.element needs id, name or role",
-                ));
-            }
-            if let Some(role) = &element.role
-                && roles::control_type(role).is_none()
-            {
-                return Err(StepError::invalid_params(format!("unknown role '{role}'"))
-                    .with_details(
-                        json!({ "hint": format!("Use one of: {}", roles::names().join(", ")) }),
-                    ));
-            }
+            element.check("target.element", 0)?;
         }
         if self.element.is_some() && self.point.is_some() {
             return Err(StepError::invalid_params(
@@ -444,6 +439,39 @@ impl WindowQuery {
 }
 
 impl ElementQuery {
+    fn check(&self, at: &str, depth: usize) -> Result<(), StepError> {
+        if depth > MAX_NESTING {
+            return Err(StepError::invalid_params(format!(
+                "{at}: within / after nest more than {MAX_NESTING} levels"
+            )));
+        }
+        if self.id.is_none()
+            && self.name.is_none()
+            && self.role.is_none()
+            && self.class_name.is_none()
+        {
+            return Err(StepError::invalid_params(format!(
+                "{at} needs id, name or role"
+            )));
+        }
+        if let Some(role) = &self.role
+            && roles::control_type(role).is_none()
+        {
+            return Err(
+                StepError::invalid_params(format!("unknown role '{role}'")).with_details(
+                    json!({ "hint": format!("Use one of: {}", roles::names().join(", ")) }),
+                ),
+            );
+        }
+        if let Some(within) = &self.within {
+            within.check(&format!("{at}.within"), depth + 1)?;
+        }
+        if let Some(after) = &self.after {
+            after.check(&format!("{at}.after"), depth + 1)?;
+        }
+        Ok(())
+    }
+
     pub fn matches(&self, n: &NodeInfo) -> bool {
         self.id.as_deref().is_none_or(|id| id == n.id)
             && self
@@ -493,28 +521,60 @@ pub fn pick_window(query: &WindowQuery, windows: &[WindowInfo]) -> Result<usize,
 /// Index into `nodes` of the one element `query` means (the window itself,
 /// `nodes[0]`, is not searched).
 pub fn pick_element(query: &ElementQuery, nodes: &[NodeInfo]) -> Result<usize, StepError> {
-    let hits: Vec<usize> = (1..nodes.len())
+    pick_in(query, nodes, 1..nodes.len(), "target.element")
+}
+
+/// The indices of the subtree under `nodes[parent]` (not itself).
+fn subtree(nodes: &[NodeInfo], parent: usize) -> std::ops::Range<usize> {
+    let depth = nodes[parent].depth;
+    let end = (parent + 1..nodes.len())
+        .find(|&i| nodes[i].depth <= depth)
+        .unwrap_or(nodes.len());
+    parent + 1..end
+}
+
+fn pick_in(
+    query: &ElementQuery,
+    nodes: &[NodeInfo],
+    scope: std::ops::Range<usize>,
+    at: &str,
+) -> Result<usize, StepError> {
+    let scope = match &query.within {
+        Some(parent) => {
+            let parent = pick_in(parent, nodes, scope, &format!("{at}.within"))?;
+            subtree(nodes, parent)
+        }
+        None => scope,
+    };
+    let from = match &query.after {
+        Some(anchor) => pick_in(anchor, nodes, scope.clone(), &format!("{at}.after"))? + 1,
+        None => scope.start,
+    };
+    let hits: Vec<usize> = (from.max(scope.start)..scope.end)
         .filter(|&i| query.matches(&nodes[i]))
         .collect();
-    pick(query.nth, &hits).map_err(|kind| match kind {
+    // After an anchor the first match is the one meant (the box next to
+    // its label), unless nth says otherwise.
+    let nth = query.nth.or(query.after.as_ref().map(|_| 0));
+    pick(nth, &hits).map_err(|kind| match kind {
         Miss::None => StepError::new(
             "ELEMENT_NOT_FOUND",
-            "no element in the window matches target.element",
+            format!("no element in the window matches {at}"),
         )
         .with_details(json!({
             "hint": "Call inspect_ui with this window and copy id / name / role exactly as listed. Names match partially unless exact is true."
         })),
         Miss::Many => StepError::permanent(
             "ELEMENT_AMBIGUOUS",
-            format!("{} elements match target.element", hits.len()),
+            format!("{} elements match {at}", hits.len()),
         )
         .with_details(json!({
-            "hint": "Add id or role, use exact: true, or pick one with nth (0-based, in the order listed).",
+            "hint": "Add id or role, use exact: true, look inside the group that holds it (within), start after its label (after), or pick one with nth (0-based, in the order listed).",
             "matches": hits.iter().take(MAX_CANDIDATES).map(|&i| describe(&nodes[i])).collect::<Vec<_>>(),
         })),
         Miss::Nth(n) => StepError::new(
             "ELEMENT_NOT_FOUND",
-            format!("target.element.nth is {n} but only {} elements match", hits.len()),
+            format!("{at}.nth is {n} but only {} elements match", hits.len()),
         ),
     })
 }
@@ -601,12 +661,15 @@ pub fn app_allowed(sites: &[String], process: &str) -> bool {
     })
 }
 
+/// How far back the picker looks for the label of a nameless element.
+const MAX_LABEL_DISTANCE: usize = 8;
+
 /// A target for what the user pointed at on screen (the picker), built to
 /// be as sturdy as the app allows, and how it tells the element apart.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Picked {
     pub target: Value,
-    /// `window`, `id`, `name`, `nth` or `point`.
+    /// `window`, `id`, `name`, `within`, `after`, `nth` or `point`.
     pub how: &'static str,
 }
 
@@ -616,7 +679,9 @@ pub struct Picked {
 ///
 /// In order: the window by its exe name (with its title only when the app
 /// has several windows open); the element by an id unique in the window,
-/// else role + name (exact), else with `nth`; else the point.
+/// else role + name (exact), else role + name inside the nearest group the
+/// window has one of, else (no name) its role after the label before it,
+/// else with `nth`; else the point.
 pub fn picked_target(
     windows: &[WindowInfo],
     window: usize,
@@ -691,6 +756,74 @@ pub fn picked_target(
         target: json!({ "window": window_json, "element": e }),
         how,
     };
+    // A query that finds only `nodes[i]` in the whole window, by id or by
+    // role + name: what `within` and `after` can stand on.
+    let unique = |i: usize| -> Option<ElementQuery> {
+        let n = &nodes[i];
+        let by_id = (!n.id.is_empty()).then(|| ElementQuery {
+            id: Some(n.id.clone()),
+            ..ElementQuery::default()
+        });
+        let by_name = (!n.name.trim().is_empty()).then(|| ElementQuery {
+            role: Some(n.role.to_owned()),
+            name: Some(n.name.clone()),
+            exact: true,
+            ..ElementQuery::default()
+        });
+        [by_id, by_name]
+            .into_iter()
+            .flatten()
+            .find(|q| count(q) == [i])
+    };
+    let nested = |q: &ElementQuery| -> Value {
+        let mut e = element_json(q, None);
+        if let Some(within) = &q.within {
+            e["within"] = element_json(within, None);
+        }
+        if let Some(after) = &q.after {
+            e["after"] = element_json(after, None);
+        }
+        e
+    };
+    // Same-named elements told apart by the nearest group, pane or row
+    // around them that the window has only one of.
+    let inside = |q: &ElementQuery| -> Option<ElementQuery> {
+        let mut depth = node.depth;
+        for j in (1..index).rev() {
+            if nodes[j].depth >= depth {
+                continue;
+            }
+            depth = nodes[j].depth;
+            if let Some(parent) = unique(j) {
+                let scoped = ElementQuery {
+                    within: Some(Box::new(parent)),
+                    ..q.clone()
+                };
+                if pick_element(&scoped, nodes).ok() == Some(index) {
+                    return Some(scoped);
+                }
+            }
+        }
+        None
+    };
+    // An element without a name (an input box) by the label just before it:
+    // the nearest named element in front that the window has only one of.
+    let after_label = || -> Option<ElementQuery> {
+        let q = ElementQuery {
+            role: Some(node.role.to_owned()),
+            ..ElementQuery::default()
+        };
+        (1..index).rev().take(MAX_LABEL_DISTANCE).find_map(|j| {
+            if nodes[j].name.trim().is_empty() {
+                return None;
+            }
+            let anchored = ElementQuery {
+                after: Some(Box::new(unique(j)?)),
+                ..q.clone()
+            };
+            (pick_element(&anchored, nodes).ok() == Some(index)).then_some(anchored)
+        })
+    };
     if !node.id.is_empty() {
         let q = ElementQuery {
             id: Some(node.id.clone()),
@@ -711,14 +844,23 @@ pub fn picked_target(
         if hits.len() == 1 {
             return done(element_json(&q, None), "name");
         }
+        if let Some(scoped) = inside(&q) {
+            return done(nested(&scoped), "within");
+        }
         let nth = hits.iter().position(|&i| i == index);
         return done(element_json(&q, nth), "nth");
+    }
+    if let Some(anchored) = after_label() {
+        return done(nested(&anchored), "after");
     }
     if !node.id.is_empty() {
         let q = ElementQuery {
             id: Some(node.id.clone()),
             ..ElementQuery::default()
         };
+        if let Some(scoped) = inside(&q) {
+            return done(nested(&scoped), "within");
+        }
         let nth = count(&q).iter().position(|&i| i == index);
         return done(element_json(&q, nth), "nth");
     }

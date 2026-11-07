@@ -782,6 +782,8 @@ export const ja = {
     exact: "完全一致",
     match: "照合方法",
     nth: "何番目（0〜）",
+    within: "入っている部品（グループ・行）",
+    after: "直前の部品（ラベル）",
     window: "ウィンドウ",
     element: "部品",
     title: "タイトル",

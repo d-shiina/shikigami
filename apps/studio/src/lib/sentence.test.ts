@@ -70,6 +70,10 @@ describe("sentence", () => {
     expect(targetText({ window: win, image: { path: "C:\\RPA\\images\\保存.png", nth: 0 } })).toBe("「Citrix」の画像 保存.pngの1番目");
     expect(targetText({ window: win, ocr: { text: "検索" } })).toBe("「Citrix」の文字「検索」");
     expect(targetText({ window: win, region: { x: 1, y: 2, width: 30, height: 40 } })).toBe("「Citrix」の範囲 (1, 2, 30×40)");
+    expect(targetText({ window: win, element: { role: "button", name: "検索", within: { role: "group", name: "送り先" } } })).toBe(
+      "「Citrix」の「送り先」グループの中の「検索」ボタン",
+    );
+    expect(targetText({ window: win, element: { role: "textbox", after: { role: "text", name: "氏名" } } })).toBe("「Citrix」の「氏名」ラベルの後の欄");
   });
 
   it("names the image a desktop OCR step reads from a file", () => {

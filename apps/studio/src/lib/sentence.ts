@@ -139,8 +139,14 @@ function desktopJa(t: Record<string, unknown>): string {
   if (region) return `${name}の範囲 (${region.x}, ${region.y}, ${region.width}×${region.height})`;
   const el = t.element as Record<string, unknown> | undefined;
   if (!el) return `${name}ウィンドウ`;
-  if (el.id) return `${name}の [${el.id}]${nth(el)}`;
-  return `${name}の${targetJa(el)}`;
+  // 「送り先」の中の「氏名」の後の入力欄
+  const element = (q: Record<string, unknown>): string => {
+    const within = q.within as Record<string, unknown> | undefined;
+    const after = q.after as Record<string, unknown> | undefined;
+    const self = q.id ? ` [${String(q.id)}]${nth(q)}` : targetJa(q);
+    return `${within ? `${element(within)}の中の` : ""}${after ? `${element(after)}の後の` : ""}${self}`;
+  };
+  return `${name}の${element(el)}`;
 }
 
 function desktopEn(t: Record<string, unknown>): string {
@@ -157,8 +163,14 @@ function desktopEn(t: Record<string, unknown>): string {
   if (region) return `the area (${region.x}, ${region.y}, ${region.width}×${region.height}) of ${name}`;
   const el = t.element as Record<string, unknown> | undefined;
   if (!el) return `the ${name} window`;
-  if (el.id) return `[${el.id}]${nth(el)} in ${name}`;
-  return `${targetEn(el)} in ${name}`;
+  // the text box after "Name" in "Ship to"
+  const element = (q: Record<string, unknown>): string => {
+    const within = q.within as Record<string, unknown> | undefined;
+    const after = q.after as Record<string, unknown> | undefined;
+    const self = q.id ? `[${String(q.id)}]${nth(q)}` : targetEn(q);
+    return `${self}${after ? ` after ${element(after)}` : ""}${within ? ` in ${element(within)}` : ""}`;
+  };
+  return `${element(el)} in ${name}`;
 }
 
 /** The open flow's parts, for `{ part: "<name>" }` targets (set by the store). */
@@ -224,6 +236,9 @@ const ROLE: Record<string, string> = {
   row: "行",
   checkbox: "チェックボックス",
   combobox: "選択欄",
+  group: "グループ",
+  pane: "ペイン",
+  text: "ラベル",
 };
 
 /**
