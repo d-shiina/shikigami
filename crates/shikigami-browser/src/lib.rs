@@ -470,7 +470,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: OPEN,
             method: "open",
-            label: "ブラウザで開く",
+            label: "ページ表示",
             description: "Opens `url` in the browser context `context` (started on first use; reused afterwards). Output: { url, title }. Every other browser step needs a browser.open on the same context first; it opens in the current tab. `dialog` answers a JS dialog the page shows while loading (output then has `dialog`: its message). `headless: true` runs without a window. `session: \"<name>\"` keeps the login: the context starts with the cookies saved under that name and saves them again when it closes, so later runs skip the login page (check with browser.isVisible whether the login form is shown).",
             params: json!({
                 "url": { "type": "string", "minLength": 1 },
@@ -489,7 +489,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: ATTACH,
             method: "attach",
-            label: "開いているブラウザを使う",
+            label: "既存ブラウザへの接続",
             description: "Uses a browser the person started on this PC instead of opening a new one: its tabs, logins, client certificates and extensions (for sites only reachable from the person's browser, e.g. with SSO). The browser must be started with a debugging port and its own profile folder, e.g. msedge.exe --remote-debugging-port=9222 --user-data-dir=\"%LOCALAPPDATA%\\Shikigami\\edge-profile\" (Edge and Chrome ignore the port on their everyday profile; sign in there once). Only 127.0.0.1 is reached. Later steps on the same `context` work in it; `title` / `url` pick a tab as in browser.switchTab (default: the first tab). The browser is never closed: the run lets go of it when it ends. Output: { url, title }. Fails with BROWSER_NOT_RUNNING when nothing listens on `port`. Not for unattended runs: use browser.open with `session` there.",
             params: json!({
                 "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "ブラウザを起動したときの --remote-debugging-port（既定 9222）" },
@@ -539,7 +539,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: UPLOAD,
             method: "upload",
-            label: "ファイルを添付",
+            label: "ファイル添付",
             description: "Attaches the file `path` (or a list of files) to the file input `target`, or to the button that opens the file picker (the picker is answered without a window). Paths are relative to the flow folder. It only fills the form: click the send button next. Fails with FILE_NOT_FOUND when a file is missing.",
             params: json!({
                 "target": target,
@@ -558,7 +558,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: HOVER,
             method: "hover",
-            label: "マウスを乗せる",
+            label: "マウスオーバー",
             description: "Moves the mouse over `target`, e.g. to open a menu that appears on hover or show a tooltip. Follow with browser.click on the item that appears.",
             params: json!({ "target": target }),
             required: &["target"],
@@ -585,7 +585,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: GET_ATTRIBUTE,
             method: "getAttribute",
-            label: "属性を取得",
+            label: "属性の取得",
             description: "Reads the attribute `name` of `target` (e.g. href of a link, src of an image, value, data-id). href / src / action come as full addresses. Output: the text, or null when the element has no such attribute. With `all: true`, an array for every matching element. For the text a person sees use browser.getText.",
             params: json!({ "target": target, "name": { "type": "string", "minLength": 1, "description": "属性の名前（href・src・value・data-id など）" }, "all": { "type": "boolean" } }),
             required: &["target", "name"],
@@ -598,7 +598,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: SWITCH_TAB,
             method: "switchTab",
-            label: "タブを切り替える",
+            label: "タブ切り替え",
             description: "Makes another tab or popup window of the browser context current; every later step on this context works on it. Picks the newest tab whose title contains `title` and/or whose address contains `url`, or the `index`-th tab in opening order (0 = the first). Waits for it to open, so put it right after the click that opens a new tab or window. Output: { url, title, index }. Go back with browser.closeTab, or browser.switchTab { index: 0 }; when a popup closes itself, steps return to the tab before it by themselves.",
             params: json!({
                 "title": { "type": "string", "minLength": 1, "description": "タブのタイトルの一部" },
@@ -616,7 +616,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: CLOSE_TAB,
             method: "closeTab",
-            label: "タブを閉じる",
+            label: "タブ終了",
             description: "Closes the current tab (a popup or a tab opened by a link) and goes back to the tab that was current before it. Output: { url, title } of that tab. The last tab cannot be closed this way (use browser.close).",
             params: json!({}),
             required: &[],
@@ -627,7 +627,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: FILL,
             method: "fill",
-            label: "入力",
+            label: "文字入力",
             description: "Replaces the text of the input `target` with `value`: a template, or a registered secret { \"secret\": \"<name>\", \"field\": \"username\" | \"password\" | \"totp\" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text.",
             params: json!({ "target": target, "value": text_or_secret_schema("入力する文字。パスワードは登録済みシークレット { \"secret\": \"名前\", \"field\": \"password\" }") }),
             required: &["target", "value"],
@@ -643,7 +643,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: SELECT,
             method: "select",
-            label: "選択",
+            label: "項目選択",
             description: "Selects the option(s) `value` (visible label, or value) in the drop-down `target`.",
             params: json!({ "target": target, "value": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ] } }),
             required: &["target", "value"],
@@ -669,7 +669,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: GET_TEXT,
             method: "getText",
-            label: "文字を取得",
+            label: "文字の取得",
             description: "Reads the visible text of `target`. With `all: true`, returns an array with the text of every matching element. Use saveAs to keep it.",
             params: json!({ "target": target, "all": { "type": "boolean" } }),
             required: &["target"],
@@ -682,7 +682,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: GET_TABLE,
             method: "getTable",
-            label: "表を取得",
+            label: "表の取得",
             description: "Reads an HTML table into an array of objects keyed by the header cells (cell text as strings; use num() for amounts). `target` defaults to the first table on the page. Use with control.forEach.",
             params: json!({ "target": target }),
             required: &[],
@@ -695,7 +695,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: WAIT_FOR,
             method: "waitFor",
-            label: "要素を待つ",
+            label: "要素の待機",
             description: "Waits until `target` reaches `state` (visible by default; hidden, attached, detached). The limit is the step's `timeoutMs` (default 30000).",
             params: json!({ "target": target, "state": { "enum": ["visible", "hidden", "attached", "detached"] } }),
             required: &["target"],
@@ -721,7 +721,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: IS_VISIBLE,
             method: "isVisible",
-            label: "表示されているか",
+            label: "表示の確認",
             description: "Output: true when `target` is visible (waiting up to `waitMs`, default 2000), otherwise false. Never fails for a missing element: use it with control.if, e.g. to log in only when the login form is shown.",
             params: json!({ "target": target, "waitMs": { "type": "integer", "minimum": 0, "maximum": 20000 } }),
             required: &["target"],
@@ -734,7 +734,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: WAIT_FOR_HUMAN,
             method: "waitForHuman",
-            label: "人の操作を待つ",
+            label: "手動操作の待機",
             description: "Shows `message` to the person at the PC and waits until they finish something in the browser window (log in, approve MFA on their phone, solve a CAPTCHA): the step ends when `until` becomes visible. Waits up to the step's timeoutMs (default 5 minutes). Fails at once with HUMAN_REQUIRED in headless runs.",
             params: json!({
                 "message": { "type": "string", "description": "人に頼むこと（例：スマホで認証を承認してください）" },
@@ -751,7 +751,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: OAUTH_SIGN_IN,
             method: "authorize",
-            label: "OAuth でサインイン",
+            label: "OAuth サインイン",
             description: "Signs in to a web API with OAuth 2.0 (authorization code flow) so http.request can use { \"secret\": \"<name>\", \"field\": \"accessToken\" } as auth. The secret `secret` holds the app registered at the provider: username = client ID, password = client secret (empty for public clients), sites = the origins of tokenUrl and of the API. When saved tokens work (or can be refreshed) it finishes at once without a person. Otherwise it opens `authorizeUrl` in the browser context `context`, shows `message`, and waits (default 5 minutes) while the person signs in and allows access. The browser's request to `redirectUrl` (the redirect URI registered at the provider, any fixed URL such as https://www.example.com/callback; localhost is not needed) is caught inside the browser, so that page never loads; state is checked and the code is exchanged at `tokenUrl` (PKCE unless `pkce: false`). Output: { secret, signedIn, via: saved | refreshed | browser, expiresAt, scope } (never the tokens). Fails with HUMAN_REQUIRED in headless runs that need a person.",
             params: json!({
                 "secret": { "type": "string", "minLength": 1, "maxLength": 64, "description": "クライアントを登録したシークレットの名前（ユーザー名 = Client ID、パスワード = Client secret）" },
@@ -779,7 +779,7 @@ pub fn step_defs() -> Vec<(StepTypeDef, &'static str)> {
         Def {
             step_type: CLOSE,
             method: "close",
-            label: "ブラウザを閉じる",
+            label: "ブラウザ終了",
             description: "Closes the browser context `context`. Optional: contexts are closed when the run ends.",
             params: json!({}),
             required: &[],

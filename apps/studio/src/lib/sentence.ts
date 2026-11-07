@@ -266,7 +266,7 @@ export function transformPhrase(match: Match): Part[] {
   return out;
 }
 
-/** A node's kind as its header shows it: a recognised "変数に代入" by its form ("表の列を集計"). */
+/** A node's kind as its header shows it: a recognised "変数への代入" by its form ("表の列を集計"). */
 export function typeTitle(step: Step, def: StepTypeDef | undefined): string {
   const match = step.type === "variable.set" && step.params?.value === undefined ? recognize(step.params?.expression) : null;
   return match ? wordsOf(match.def).label : stepLabel(step.type, def?.label);

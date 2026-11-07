@@ -473,7 +473,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: READ_ROWS,
             kind: Kind::ReadRows,
-            label: "表を行ごとに読む",
+            label: "行の読み取り",
             description: "Reads the table on `sheet` as a list of records, one per row below the header row `headerRow` (default 1), keyed by the header texts. Each record also has `_row`, its row number, for writing back to the same row (cell \"E{{ row._row }}\"). Empty rows are skipped. Use with control.forEach. Values are text, numbers, true/false, dates as \"2026-10-28\" (\"2026-10-28T09:30:00\" with a time) or null. When the workbook is open in Excel on this PC, reads what is on the screen, unsaved changes included.",
             params: props(json!({ "headerRow": header_row })),
             required: &["path"],
@@ -492,7 +492,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: APPEND_ROWS,
             kind: Kind::AppendRows,
-            label: "表に行を追加",
+            label: "行の追加",
             description: "Adds `rows` (records keyed by the header texts of `headerRow`, default 1) below the last row of the table on `sheet`. Keys must match the headers exactly (`_row` is ignored); missing keys leave the cell empty. On a new workbook or empty sheet the header row is written from the records' keys first. Creates the workbook if the file does not exist. Output: { firstRow, count }. When the workbook is open in Excel on this PC, the step writes into the open workbook and saves it (the person's Excel stays open).",
             params: props(json!({
                 "rows": list_or_template(json!({ "type": "object" }), "追加する行。見出し名をキーにしたレコードの配列、または {{ 変数 }}"),
@@ -512,7 +512,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: READ_CELL,
             kind: Kind::ReadCell,
-            label: "セルを読む",
+            label: "セル読み取り",
             description: "Reads one cell (`cell`, e.g. B3) of `sheet`: text, a number, true/false, a date as \"2026-10-28\", an error such as \"#DIV/0!\", or null when empty. A formula gives the result Excel last calculated. Use saveAs to keep it.",
             params: props(
                 json!({ "cell": { "type": "string", "minLength": 2, "description": "セル番地（例 B3）" } }),
@@ -530,7 +530,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: WRITE_CELL,
             kind: Kind::WriteCell,
-            label: "セルに書く",
+            label: "セル書き込み",
             description: "Puts `value` in `cell` of `sheet` and saves the workbook, keeping the cell's formatting. `value`: text (always stays text), a number, true/false, null to empty the cell, { \"date\": \"2026-10-28\" } for a date, or { \"formula\": \"SUM(B2:B9)\" }. Creates the workbook if the file does not exist. A formula's result is calculated when the workbook is next opened in Excel. When the workbook is open in Excel on this PC, the step writes into the open workbook and saves it (the person's Excel stays open).",
             params: props(json!({
                 "cell": { "type": "string", "minLength": 2, "description": "セル番地（例 B3）" },
@@ -550,7 +550,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: READ_RANGE,
             kind: Kind::ReadRange,
-            label: "範囲を読む",
+            label: "範囲読み取り",
             description: "Reads `range` (e.g. A1:D20) of `sheet` as a list of rows, each a list of cell values (null for empty cells). Without `range`, reads from A1 to the last cell in use. For tables with a header row, excel.readRows is easier to use.",
             params: props(
                 json!({ "range": { "type": "string", "minLength": 2, "description": "範囲（例 A1:D20）。省略すると使われている範囲全体" } }),
@@ -568,7 +568,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: WRITE_RANGE,
             kind: Kind::WriteRange,
-            label: "範囲に書く",
+            label: "範囲書き込み",
             description: "Writes `values` (a list of rows, each a list of cell values as in excel.writeCell) with its top-left at `cell`, and saves the workbook. Cells outside `values` are left as they are. Creates the workbook if the file does not exist. Output: { range } written. When the workbook is open in Excel on this PC, the step writes into the open workbook and saves it (the person's Excel stays open).",
             params: props(json!({
                 "cell": { "type": "string", "minLength": 2, "description": "書き始める左上のセル（例 A1）" },
@@ -603,7 +603,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: ADD_SHEET,
             kind: Kind::AddSheet,
-            label: "シートを追加",
+            label: "シート追加",
             description: "Adds an empty sheet named `sheet` at the end and saves the workbook; does nothing when a sheet with that name exists, so re-running is safe. Creates the workbook if the file does not exist.",
             params: props(json!({})),
             required: &["path", "sheet"],
@@ -619,7 +619,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: RUN_MACRO,
             kind: Kind::RunMacro,
-            label: "マクロを実行",
+            label: "マクロ実行",
             description: "Runs the VBA macro `macro` (e.g. 集計 or Module1.集計; a Function's return value is the output) of the workbook `path` with `args`, in a separate, hidden Excel that never touches the user's open Excel windows, then saves the workbook (`save: false` to discard its changes) and closes it. Needs Windows with desktop Excel; macros must be enabled for the workbook on this PC. Use only for what other excel.* steps cannot do: read and write cells with them. A macro that shows a MsgBox waits forever and is ended at the step's timeoutMs (default 300000).",
             params: json!({
                 "path": props(json!({}))["path"],
@@ -657,7 +657,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: SORT,
             kind: Kind::Sort,
-            label: "表を並べ替え",
+            label: "並べ替え",
             description: "Sorts the table on `sheet` (header row `headerRow`, default 1, and the rows below it down to the last row in use) by `by`, a list of { column: header text, order: \"asc\" | \"desc\" } (the first is the main key), and saves the workbook. Uses Excel's own sort, so formatting moves with the rows. Uses the workbook open in Excel on this PC when it is open, otherwise a separate, hidden Excel. Needs Windows with desktop Excel. Output: { count } rows sorted.",
             params: props(json!({
                 "headerRow": header_row,
@@ -690,7 +690,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: EXPORT_PDF,
             kind: Kind::ExportPdf,
-            label: "PDF で保存",
+            label: "PDF 出力",
             description: "Saves the workbook `path` (or only `sheet`) as the PDF `to`, laid out as Excel prints it (print area, page setup). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Uses the workbook open in Excel on this PC when it is open (what is on the screen), otherwise opens the file read-only in a separate, hidden Excel. Needs Windows with desktop Excel. Output: { path }.",
             params: props(json!({
                 "to": { "type": "string", "minLength": 1, "description": "保存する PDF：フローのフォルダーからの相対パス（例 output/請求書.pdf）か絶対パス" },
@@ -709,7 +709,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         Def {
             step_type: FORMAT,
             kind: Kind::Format,
-            label: "書式を設定",
+            label: "書式設定",
             description: "Formats the cells `range` (e.g. \"A1:D1\", \"B2:B100\") on `sheet` and saves the workbook. Give only what to change: `bold`, `italic`, `fontColor` and `fillColor` as \"#RRGGBB\" (`fillColor: null` takes the fill away), `numberFormat` as in Excel (\"#,##0\", \"yyyy/mm/dd\", \"0.0%\"), `align` (left / center / right), `wrapText`, `borders` (true: thin lines around every cell, false: none), `columnWidth` (characters) or `autoFit` (fit the columns to their contents). Uses the workbook open in Excel on this PC when it is open, otherwise a separate, hidden Excel. Needs Windows with desktop Excel.",
             params: props(json!({
                 "range": { "type": "string", "minLength": 1, "description": "書式を変えるセル（例 A1:D1、B2:B100）" },

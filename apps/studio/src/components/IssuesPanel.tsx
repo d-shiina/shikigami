@@ -168,7 +168,7 @@ function IssueList({ issues, goTo }: { issues: ValidationIssue[]; goTo: (id: str
   );
 }
 
-/** " · 「表を行ごとに読む」": which node an issue is on, by the name the chart shows. */
+/** " · 「行の読み取り」": which node an issue is on, by the name the chart shows. */
 function stepName(flow: Flow | null, defs: StepTypeDef[], id: string | null | undefined): string {
   const step = flow && id ? findStep(flow.steps ?? [], id) : null;
   return step ? ` · ${t.quote(step.name || stepLabel(step.type, defs.find((d) => d.type === step.type)?.label))}` : "";

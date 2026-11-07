@@ -367,7 +367,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::CONFIG_READ,
-                "設定ファイルを読む",
+                "設定ファイル読み込み",
                 "Reads a settings file (usually config/settings.json in the flow's folder, made as a form in Studio) into an object of its values, e.g. { 締め日: 25, 送り先: \"...\" }; use them as {{ settings.締め日 }}. A plain JSON object file is returned as it is. Keep values people change (dates, recipients, folders) here instead of in the steps.",
                 object_schema(json!({ "path": path }), &["path"]),
                 RiskLevel::Safe,
@@ -381,7 +381,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::READ_TEXT,
-                "テキストファイルを読む",
+                "テキスト読み取り",
                 "Reads a whole text file into a string. `encoding` auto-detects UTF-8 (with or without BOM) and Shift_JIS. Split it with lines() or split().",
                 object_schema(
                     json!({ "path": path, "encoding": read_encoding }),
@@ -398,7 +398,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::WRITE_TEXT,
-                "テキストファイルに書く",
+                "テキスト書き込み",
                 "Writes `text` to a file, replacing it (or adding to its end with `append: true`). Missing folders are created. Output: the path.",
                 object_schema(
                     json!({ "path": path, "text": any, "append": flag, "encoding": write_encoding }),
@@ -416,7 +416,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::READ_CSV,
-                "CSV を読む",
+                "CSV 読み取り",
                 "Reads a CSV (or TSV with delimiter \"\\t\") into a list of records keyed by the header row; every cell is text (use num() for amounts). Blank header cells become 列N, repeated ones get _2. With `header: false` each row is a list of cells. Encoding is auto-detected (UTF-8 / Shift_JIS).",
                 object_schema(
                     json!({ "path": path, "encoding": read_encoding, "delimiter": delimiter, "header": flag }),
@@ -433,7 +433,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::WRITE_CSV,
-                "CSV に書く",
+                "CSV 書き込み",
                 "Writes `rows` (records, or lists of cells) to a CSV with a header row. `columns` sets which keys and in what order (default: every key, in order of appearance). `append: true` adds rows to the end of an existing file and follows its header. Lines end with CRLF. Output: the number of rows written.",
                 object_schema(
                     json!({
@@ -459,7 +459,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::EXISTS,
-                "ファイルの有無を確認",
+                "ファイルの有無確認",
                 "Outputs true when the file or folder exists. To wait for a file (e.g. a download), use wait.until with this step in its check block.",
                 object_schema(json!({ "path": path }), &["path"]),
                 RiskLevel::Safe,
@@ -473,7 +473,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::LIST,
-                "フォルダーの中を一覧",
+                "ファイル一覧",
                 "Lists the files in `folder` whose name matches `pattern` (wildcards * and ?, case-insensitive; default *). `type`: file (default), folder or all. `recursive` includes subfolders. Output: records { path, name, isFolder, size, modified } sorted by path; pick with filter() / sortBy().",
                 object_schema(
                     json!({
@@ -495,7 +495,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::COPY,
-                "コピー",
+                "ファイルコピー",
                 "Copies a file or folder to `to` (the full new path, not the destination folder: use pathJoin(folder, fileName(from))). Fails with FILE_EXISTS unless `overwrite` is true. Output: the new path.",
                 object_schema(
                     json!({ "from": path, "to": path, "overwrite": flag }),
@@ -529,7 +529,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::DELETE,
-                "削除",
+                "ファイル削除",
                 "Deletes a file, or a folder (a folder with contents needs `recursive: true`). Not moved to the Recycle Bin. A path that does not exist is not an error. Output: whether something was deleted.",
                 object_schema(json!({ "path": path, "recursive": flag }), &["path"]),
                 RiskLevel::Dangerous,
@@ -541,7 +541,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::CREATE_FOLDER,
-                "フォルダーを作成",
+                "フォルダー作成",
                 "Creates a folder and any missing parent folders; an existing folder is fine. Output: the path.",
                 object_schema(json!({ "path": folder }), &["path"]),
                 RiskLevel::Interactive,
@@ -555,7 +555,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::ZIP,
-                "zip に圧縮",
+                "zip 圧縮",
                 "Compresses a file or folder (or a list of them) into the zip file `to`. Fails with FILE_EXISTS unless `overwrite` is true. Output: the zip path.",
                 object_schema(
                     json!({
@@ -576,7 +576,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
         (
             def(
                 types::UNZIP,
-                "zip を展開",
+                "zip 展開",
                 "Extracts the zip file `path` into the folder `to` (Japanese names from Windows-made zips are read correctly). Fails with FILE_EXISTS before extracting anything if a file would be replaced, unless `overwrite` is true. Output: the extracted file paths.",
                 object_schema(
                     json!({ "path": path, "to": folder, "overwrite": flag }),

@@ -1,5 +1,5 @@
 // The value-handling forms (lib/transforms.ts) as palette entries: each adds
-// one "変数に代入" whose expression the form then edits, so the flow keeps a
+// one "変数への代入" whose expression the form then edits, so the flow keeps a
 // single way to say it (the AI writes the same thing) and the person chooses
 // the variables in the form.
 import { defaultExpression, TRANSFORMS, wordsOf } from "./transforms";

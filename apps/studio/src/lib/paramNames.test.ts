@@ -65,3 +65,21 @@ describe("names of node settings", () => {
     expect(plainHint("シート名")).toBeUndefined();
   });
 });
+
+// docs/design/wording.md: names of nodes, settings and value forms are
+// nouns ("待機時間", not "待つ"). Choices may stay as states ("表示されている").
+const verbEnding = /(?:[うくぐすつぬぶむる]|ない|か)$/;
+const nameOnly = (s: string) => s.replace(/[（(].*$/, "").trim();
+
+describe("names are nouns", () => {
+  it("names every setting with a noun", async () => {
+    const all = [...Object.values(paramsJa.labels), ...Object.values(paramsJa.for).flatMap((m) => Object.values(m as Record<string, string>))];
+    expect(all.filter((s) => verbEnding.test(nameOnly(s)))).toEqual([]);
+  });
+
+  it("names every value form with a noun", async () => {
+    const { transformsJa } = await import("./locales/transforms.ja");
+    const forms = Object.values((transformsJa as unknown as { items: Record<string, { label: string }> }).items);
+    expect(forms.map((f) => f.label).filter((s) => verbEnding.test(nameOnly(s)))).toEqual([]);
+  });
+});

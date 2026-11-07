@@ -317,7 +317,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: control::SWITCH.into(),
             category: StepCategory::Control,
-            label: "値で分岐".into(),
+            label: "値による分岐".into(),
             description: "Picks one of several branches by a value, like VBA `Select Case`. `value` is an expression evaluated once. `cases` holds only `control.case` steps, checked top to bottom: the first case whose `values` contains a value equal to it (or whose `condition` is truthy) runs its `body`, and no other case runs (no fall-through). When none matches, `default` runs. Use it instead of a chain of nested `control.if` when one value decides among three or more branches.".into(),
             params_schema: object_schema(json!({ "value": expression }), &["value"]),
             blocks: vec![block("cases", "ケース"), block("default", "どれにも該当しないとき")],
@@ -370,7 +370,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: control::WHILE.into(),
             category: StepCategory::Control,
-            label: "条件ループ".into(),
+            label: "繰り返し（条件）".into(),
             description: "Repeats `body` while `condition` is truthy. `maxIterations` (default 1000) guards against infinite loops.".into(),
             params_schema: object_schema(
                 json!({
@@ -396,7 +396,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: control::REPEAT.into(),
             category: StepCategory::Control,
-            label: "回数ループ".into(),
+            label: "繰り返し（回数）".into(),
             description: "Repeats `body` `count` times. `indexVar` (optional) receives the 0-based iteration index.".into(),
             params_schema: object_schema(
                 json!({
@@ -451,7 +451,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: control::TRY.into(),
             category: StepCategory::Control,
-            label: "例外処理".into(),
+            label: "エラー処理".into(),
             description: "Runs `try`; on failure runs `catch` with the error bound to `errorVar` (default `error`); always runs `finally`.".into(),
             params_schema: object_schema(json!({ "errorVar": ident }), &[]),
             blocks: vec![block("try", "try：まず実行"), block("catch", "catch：失敗したら"), block("finally", "finally：成功でも失敗でも最後に")],
@@ -514,7 +514,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: control::BREAK.into(),
             category: StepCategory::Control,
-            label: "ループを抜ける".into(),
+            label: "繰り返しの終了".into(),
             description: "Exits the innermost loop.".into(),
             params_schema: object_schema(json!({}), &[]),
             blocks: vec![],
@@ -534,7 +534,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: control::CONTINUE.into(),
             category: StepCategory::Control,
-            label: "次の繰り返しへ".into(),
+            label: "繰り返しのスキップ".into(),
             description: "Skips to the next iteration of the innermost loop.".into(),
             params_schema: object_schema(json!({}), &[]),
             blocks: vec![],
@@ -554,7 +554,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: control::FAIL.into(),
             category: StepCategory::Control,
-            label: "エラーを発生".into(),
+            label: "エラー発生".into(),
             description: "Fails the run (or jumps to the enclosing catch) with `message` and optional `code`.".into(),
             params_schema: object_schema(
                 json!({
@@ -580,7 +580,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: builtin::VARIABLE_SET.into(),
             category: StepCategory::Variable,
-            label: "変数に代入".into(),
+            label: "変数への代入".into(),
             description: "Assigns a value to variable `name`. Use `value` for a literal or template (`{{ … }}`), or `expression` to compute it.".into(),
             params_schema: json!({
                 "type": "object",
@@ -636,7 +636,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: control::WAIT_UNTIL.into(),
             category: StepCategory::Flow,
-            label: "条件を待つ".into(),
+            label: "条件の待機".into(),
             description: "Waits until `condition` is truthy, checking every `intervalMs` (default 500). The optional `check` block runs before each check, e.g. a step that reads a file or screen state into a variable with `saveAs`. The step's `timeoutMs` (default 30000) limits the whole wait; when it passes the step fails with WAIT_TIMEOUT. Use this, not flow.delay or retry, to wait for slow work to finish.".into(),
             params_schema: object_schema(
                 json!({
@@ -662,7 +662,7 @@ fn builtin_defs() -> Vec<StepTypeDef> {
             targets: Vec::new(),
             step_type: flow::CALL.into(),
             category: StepCategory::Control,
-            label: "サブフローを呼ぶ".into(),
+            label: "サブフロー呼び出し".into(),
             description: "Runs another flow (by its id from list_flows) as one step. `inputs` maps each input variable of the called flow to a value (templates allowed: \"{{ invoice }}\" keeps the type). `outputs` maps each output variable of the called flow to the variable of this flow that receives it. Both maps are keyed by the called flow's variable names. The called flow has its own variables: nothing else goes in or out, and `saveAs` / `retry` are not used. It always runs the called flow's current content. `timeoutMs` (optional) limits the whole call. Use extract_subflow to turn existing steps into a sub-flow.".into(),
             params_schema: object_schema(
                 json!({

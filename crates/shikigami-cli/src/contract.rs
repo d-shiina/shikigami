@@ -156,4 +156,25 @@ mod tests {
         assert!(codes.iter().all(|c| *c == "PART_NOT_PICKED"), "{report:?}");
         assert_eq!(codes.len(), 2);
     }
+
+    /// Node names on screen are nouns ("文字入力", not "入力する"):
+    /// docs/design/wording.md. A name ending in a verb's dictionary form
+    /// fails here.
+    #[test]
+    fn step_type_names_are_nouns() {
+        let runtime = shikigami_adapters::runtime(&shikigami_adapters::builtin());
+        let verbs: Vec<String> = runtime
+            .registry()
+            .iter()
+            .filter(|def| {
+                let label = def.label.trim_end_matches(['）', ')']);
+                let label = label.split(['（', '(']).next().unwrap_or(label);
+                label.ends_with(['う', 'く', 'ぐ', 'す', 'つ', 'ぬ', 'ぶ', 'む', 'る'])
+                    || label.ends_with("ない")
+                    || label.ends_with('か')
+            })
+            .map(|def| format!("{} ({})", def.step_type, def.label))
+            .collect();
+        assert!(verbs.is_empty(), "name these as nouns: {verbs:?}");
+    }
 }

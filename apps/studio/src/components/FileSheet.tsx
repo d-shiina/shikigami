@@ -277,7 +277,7 @@ function ConfigForm({ path, config }: { path: string; config: ConfigFile }) {
   );
 }
 
-/** The flow has no node reading this file yet: one click puts 「設定ファイルを読む」 at its start. */
+/** The flow has no node reading this file yet: one click puts 「設定ファイル読み込み」 at its start. */
 function AddReader({ path }: { path: string }) {
   const applyOps = useStudio((s) => s.applyOps);
   return (

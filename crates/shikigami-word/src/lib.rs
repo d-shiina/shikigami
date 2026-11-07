@@ -362,7 +362,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 targets: Vec::new(),
                 step_type: FILL_TEMPLATE.into(),
                 category: StepCategory::Office,
-                label: "Word に差し込む".into(),
+                label: "Word 差し込み".into(),
                 description: "Makes the document `path` from the .docx template `template` (the template is not changed): every {{ 名前 }} in the text, headers and footers is replaced by `values`[名前] (text, number, true/false, null for empty; \\n starts a new line), keeping the formatting of the template. {{ 顧客.氏名 }} reads a field of a record. A table row containing {{ 明細.品名 }} is repeated once per record of the list `values`.明細 (an empty list removes the row). Fails with TEMPLATE_VALUE_MISSING (listing the names) when a placeholder has no value. Output: { path, replaced }.".into(),
                 params_schema: schema(
                     json!({
@@ -404,7 +404,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 targets: Vec::new(),
                 step_type: READ_TEXT.into(),
                 category: StepCategory::Office,
-                label: "Word の文章を読む".into(),
+                label: "Word 読み取り".into(),
                 description: "Output: the body text of the .docx `path`, one paragraph per line (table cells are paragraphs too; tabs and line breaks kept). Headers and footers are not included.".into(),
                 params_schema: schema(json!({ "path": path("読む .docx（フルパス）") }), &["path"]),
                 blocks: vec![],
