@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { CASE_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
+import { ancestorsOf, CASE_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -99,6 +99,14 @@ describe("layoutFlow", () => {
     expect(layout.frames).toEqual([]);
     expect((layout.nodes[0]!.data as StepNodeData).head).toMatchObject({ collapsed: true, count: 3, width: NODE_W });
     expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual(["g>after"]);
+  });
+
+  it("finds the steps around a step, outermost first", () => {
+    const steps: Step[] = [log("a"), { id: "g", type: "control.group", blocks: { body: [{ id: "l", type: "control.repeat", blocks: { body: [log("x")] } }] } }];
+    expect(ancestorsOf(steps, "x")).toEqual(["g", "l"]);
+    expect(ancestorsOf(steps, "l")).toEqual(["g"]);
+    expect(ancestorsOf(steps, "a")).toEqual([]);
+    expect(ancestorsOf(steps, "nope")).toEqual([]);
   });
 
   it("shows a try's finally only once it has nodes; until then the head offers it", () => {

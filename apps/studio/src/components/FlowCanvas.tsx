@@ -28,6 +28,7 @@ import {
   CASE_H,
   type FrameKind,
   HEAD_H,
+  ancestorsOf,
   JOIN_SIZE,
   type JoinNodeData,
   layoutFlow,
@@ -999,10 +1000,17 @@ function useBringIntoView() {
   const outlineW = useStudio((s) => (s.outlineOpen ? OUTLINE_W : 0));
   // So does the project panel, with the outline beside it.
   const covered = outlineW + useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
+  const flow = useStudio((s) => s.flow);
   return useCallback(
-    (id: string) => {
-      const node = rf.getInternalNode(id);
-      if (!node) return;
+    function bring(id: string, again = true) {
+      // Inside a folded frame: the head of the outermost folded one shows where it is.
+      const around = flow ? ancestorsOf(flow.steps ?? [], id) : [];
+      const node = rf.getInternalNode(id) ?? around.map((a) => rf.getInternalNode(a)).find((n) => n && n.data.head && (n.data.head as { collapsed: boolean }).collapsed);
+      // A frame just opened to show it: its nodes are on the chart a frame later.
+      if (!node) {
+        if (again) requestAnimationFrame(() => bring(id, false));
+        return;
+      }
       const { x, y } = node.internals.positionAbsolute;
       const w = node.measured.width ?? NODE_W;
       const h = node.measured.height ?? 80;
@@ -1021,7 +1029,7 @@ function useBringIntoView() {
       // Centre in the part of the canvas the outline, the tools and the dock leave free.
       void rf.setCenter(x + w / 2 + (TOOLS_W - covered) / 2 / zoom, y + h / 2 + DOCK_H / 2 / zoom, { zoom, duration: 250 });
     },
-    [rf, width, height, covered],
+    [rf, width, height, covered, flow],
   );
 }
 

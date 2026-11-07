@@ -209,6 +209,18 @@ function lanes(step: Step, defs: Defs, collapsed: Collapsed = NONE): Lane[] {
   );
 }
 
+/** The steps around step `id`, outermost first (empty when it is at the top or not found). */
+export function ancestorsOf(steps: Step[], id: string): string[] {
+  for (const step of steps) {
+    if (step.id === id) return [];
+    for (const children of Object.values(step.blocks ?? {})) {
+      const inner = ancestorsOf(children, id);
+      if (inner.length > 0 || children.some((c) => c.id === id)) return [...(step.id ? [step.id] : []), ...inner];
+    }
+  }
+  return [];
+}
+
 /** How many steps are inside a step's blocks, all the way down. */
 function countInside(step: Step): number {
   return Object.values(step.blocks ?? {}).reduce((n, list) => n + list.reduce((m, s) => m + 1 + countInside(s), 0), 0);
