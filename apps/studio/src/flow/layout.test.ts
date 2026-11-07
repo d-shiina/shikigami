@@ -316,4 +316,39 @@ describe("layoutFlow", () => {
     expect(inside("if", "end:loop:body")).toBe(false);
     expect(inside("loop", "end:loop:body")).toBe(true);
   });
+
+  it("runs a try's \"finally\" after its columns meet, not beside them", () => {
+    const layout = layoutFlow(
+      [{ id: "try", type: "control.try", blocks: { try: [log("t")], catch: [log("c")], finally: [log("f")] } }, log("after")],
+      defs,
+    );
+    const into = (id: string) => layout.edges.filter((e) => e.target === id).map((e) => e.source).sort();
+    expect(into("join:try:then")).toEqual(["end:try:catch", "end:try:try"]);
+    expect(layout.edges.find((e) => e.source === "join:try:then")).toMatchObject({ target: "f", label: "最後に必ず" });
+    expect(into("join:try")).toEqual(["end:try:finally"]);
+    const pos = Object.fromEntries(layout.nodes.map((n) => [n.id, n.position]));
+    expect(pos.f!.y).toBeGreaterThan(pos["join:try:then"]!.y);
+  });
+
+  it("puts a frame's join on its bottom edge", () => {
+    const layout = layoutFlow([{ id: "if", type: "control.if", blocks: { then: [log("a")], else: [log("b")] } }], defs);
+    const frame = layout.frames[0]!;
+    expect(layout.nodes.find((n) => n.id === "join:if")!.position.y + 4).toBe(frame.y + frame.height);
+  });
+
+  it("goes on from no break, continue or fail, and adds no \"+\" after one", () => {
+    const layout = layoutFlow(
+      [{ id: "loop", type: "control.repeat", blocks: { body: [{ id: "if", type: "control.if", blocks: { then: [{ id: "brk", type: "control.break" }], else: [log("e")] } }] } }],
+      defs,
+    );
+    expect(layout.edges.some((e) => e.source === "brk")).toBe(false);
+    expect(layout.nodes.some((n) => n.id === "end:if:then")).toBe(false);
+    expect(layout.nodes.some((n) => n.id === "end:if:else")).toBe(true);
+  });
+
+  it("draws a wait's check going round like a loop", () => {
+    const layout = layoutFlow([{ id: "w", type: "wait.until", params: { condition: "{{ ok }}" }, blocks: { check: [log("c")] } }, log("after")], defs);
+    expect(layout.edges.find((e) => e.source === "end:w:check")).toMatchObject({ target: "c", loop: true, label: "もう一度確かめる" });
+    expect(layout.edges.find((e) => e.source === "join:w")?.label).toBe("条件を満たしたら");
+  });
 });

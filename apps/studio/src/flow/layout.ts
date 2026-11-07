@@ -6,7 +6,7 @@
 // together with it (the step is the frame's head), and a loop draws a line
 // from the end of its body back to where its body starts, inside its frame.
 import type { Step, StepTypeDef } from "@shikigami/schema";
-import { CASE, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
+import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
 import { laneLabel, loopBackLabel, loopExitLabel } from "../lib/keywords";
 import { nodeHeight } from "../lib/nodeRows";
 
@@ -41,10 +41,13 @@ const GAP_X = READ_ROOM + WRITE_ROOM + 32;
  */
 export const HEAD_H = 38;
 export const FRAME_TOP = 0;
-/** Under the blocks: room for the lines to turn into the join, then the join, then the frame's edge. */
-const JOIN_GAP = 28;
+/**
+ * Under the blocks: room for the lines to turn into the join, which sits on
+ * the frame's bottom edge (half in, half out), so the line on to the next
+ * step leaves from the edge and never starts inside the frame.
+ */
+const JOIN_GAP = 32;
 export const JOIN_SIZE = 8;
-const JOIN_BELOW = 14;
 /**
  * A loop's line back runs from the end of its body up the left of its frame,
  * LOOP_LINE_X in from the edge (outside the read chips and the frames of
@@ -56,6 +59,14 @@ export const LOOP_LINE_X = 14;
 /** Under a loop's body: room for its line back to turn, then the frame's edge. */
 const LOOP_BOTTOM = 36;
 const LOOP_FRAME = { left: READ_ROOM + 12 + 24, right: WRITE_ROOM + 12 };
+const WAIT_UNTIL = "wait.until";
+/**
+ * Steps that go round: the loops, and a wait that runs its check again until
+ * its condition holds. Each draws a line back to the start of its body.
+ */
+const CIRCLING: ReadonlySet<string> = new Set([...LOOP_TYPES, WAIT_UNTIL]);
+/** Steps the flow does not go on from: out of a loop, round to its next pass, or stopped with an error. */
+const TERMINAL: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
 const BLOCK_FRAME = { left: READ_ROOM + 12, right: WRITE_ROOM + 12 };
 /** Beside the blocks of a step: room for its frame to sit inside the frame of a step around it. */
 const BLOCK_ROOM = 16;
@@ -96,7 +107,13 @@ export type StepNodeData = {
 };
 
 /** Where the blocks of a frame meet again, on its bottom edge (a loop's is only where its line leaves). */
-export type JoinNodeData = { kind: "join"; parentId: string; shown: boolean };
+export type JoinNodeData = {
+  kind: "join";
+  parentId: string;
+  shown: boolean;
+  /** Not marked, but a single line passes through it (across the frame's edge). */
+  through?: boolean;
+};
 
 export type SlotNodeData = {
   kind: "slot";
@@ -156,7 +173,7 @@ export type Extra = ReadonlyMap<string, number>;
 const NO_EXTRA: Extra = new Map();
 
 function frameKind(type: string): FrameKind {
-  if (LOOP_TYPES.has(type)) return "loop";
+  if (CIRCLING.has(type)) return "loop";
   if (type === IF) return "if";
   if (type === SWITCH) return "switch";
   if (type === TRY) return "try";
@@ -200,6 +217,8 @@ function lanes(step: Step, defs: Defs, collapsed: Collapsed = NONE): Lane[] {
   }
   const fanOut = FAN_OUT_BLOCKS[step.type];
   const optional = OPTIONAL_BLOCKS[step.type];
+  // Nothing runs after a break, continue or fail: no "+" to add at the end of its block.
+  for (const lane of result) if (TERMINAL.has(lane.steps.at(-1)?.type ?? "")) lane.tail = false;
   return result.flatMap((lane) =>
     lane.name === optional && lane.steps.length === 0
       ? []
@@ -245,19 +264,42 @@ function measureList(steps: Step[], defs: Defs, extra: Extra, collapsed: Collaps
     h += m.h;
   }
   h += GAP_Y * (steps.length - 1);
-  return tail ? { w: Math.max(w, TAIL_SIZE), h: h + TAIL_GAP + TAIL_SIZE } : { w, h };
+  return tail ? { w: Math.max(w, TAIL_SIZE), h: h + tailGap(steps) + TAIL_SIZE } : { w, h };
+}
+
+/** Between a block's last node and its "+": room for the line out of a loop there to say when it leaves. */
+function tailGap(steps: Step[]): number {
+  return CIRCLING.has(steps.at(-1)?.type ?? "") ? GAP_Y : TAIL_GAP;
+}
+
+/**
+ * How a frame's blocks are laid out: side by side as columns, and, for a try
+ * with a "finally", that block after the columns have met again, since it
+ * runs after whichever of them ran.
+ */
+function frameParts(step: Step, ls: Lane[]): { columns: Lane[]; after: Lane | null } {
+  if (step.type !== TRY) return { columns: ls, after: null };
+  const after = ls.find((l) => l.name === "finally") ?? null;
+  return { columns: after ? ls.filter((l) => l !== after) : ls, after };
 }
 
 function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Size {
   const ls = lanes(step, defs, collapsed);
   const own = nodeSize(step, defs, extra);
   if (ls.length === 0) return own;
-  const ms = ls.map((l) => measureList(l.steps, defs, extra, collapsed, l.tail));
-  const w = ms.reduce((acc, m) => acc + m.w, 0) + GAP_X * (ms.length - 1);
-  const inner = Math.max(...ms.map((m) => m.h));
+  const { columns, after } = frameParts(step, ls);
+  const ms = columns.map((l) => measureList(l.steps, defs, extra, collapsed, l.tail));
+  let w = ms.reduce((acc, m) => acc + m.w, 0) + GAP_X * (ms.length - 1);
+  let inner = Math.max(...ms.map((m) => m.h));
   if (UNFRAMED.has(step.type)) return { w: Math.max(own.w, w), h: inner };
-  const h = own.h + GAP_Y + inner + (LOOP_TYPES.has(step.type) ? LOOP_BOTTOM : JOIN_GAP + JOIN_SIZE + JOIN_BELOW);
-  const room = (LOOP_TYPES.has(step.type) ? 32 : BLOCK_ROOM) * 2;
+  if (after) {
+    const m = measureList(after.steps, defs, extra, collapsed, after.tail);
+    w = Math.max(w, m.w);
+    inner += JOIN_GAP + JOIN_SIZE + GAP_Y + m.h;
+  }
+  const circling = CIRCLING.has(step.type);
+  const h = own.h + GAP_Y + inner + (circling ? LOOP_BOTTOM : JOIN_GAP + JOIN_SIZE / 2);
+  const room = (circling ? 32 : BLOCK_ROOM) * 2;
   return { w: Math.max(own.w, w + room), h };
 }
 
@@ -326,7 +368,7 @@ class Builder {
       this.nodes.push({
         id,
         type: "slot",
-        position: { x: x + (span - TAIL_SIZE) / 2, y: cursor - GAP_Y + TAIL_GAP },
+        position: { x: x + (span - TAIL_SIZE) / 2, y: cursor - GAP_Y + tailGap(steps) },
         data: { kind: "slot", parentId, block, label: slotLabel, tail: true },
       });
       for (const p of previous) this.edge(p, id);
@@ -364,7 +406,8 @@ class Builder {
     }
     if (!head) {
       this.nodes.push({ id, type: "step", position: { x: cx - own.w / 2, y }, data: base });
-      return { entry: id, exits: [id] };
+      // A break, continue or fail: the flow does not go on to the node under it.
+      return { entry: id, exits: TERMINAL.has(step.type) ? [] : [id] };
     }
     const optional = OPTIONAL_BLOCKS[step.type];
     const extras = {
@@ -382,13 +425,16 @@ class Builder {
       return { entry: id, exits: [id] };
     }
 
-    const sizes = ls.map((l) => measureList(l.steps, this.defs, this.extra, this.collapsed, l.tail));
-    const isLoop = LOOP_TYPES.has(step.type);
-    const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (ls.length - 1);
+    const { columns, after } = frameParts(step, ls);
+    const sizes = columns.map((l) => measureList(l.steps, this.defs, this.extra, this.collapsed, l.tail));
+    const afterSize = after ? measureList(after.steps, this.defs, this.extra, this.collapsed, after.tail) : null;
+    const isLoop = CIRCLING.has(step.type);
+    const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (columns.length - 1);
     let laneX = x + (span - total) / 2;
     const side = isLoop ? LOOP_FRAME : BLOCK_FRAME;
-    const left = Math.min(laneX, cx - own.w / 2) - side.left;
-    const right = Math.max(laneX + total, cx + own.w / 2) + side.right;
+    const inW = Math.max(total, afterSize?.w ?? 0);
+    const left = Math.min(cx - inW / 2, cx - own.w / 2) - side.left;
+    const right = Math.max(cx + inW / 2, cx + own.w / 2) + side.right;
     const height = measure(step, this.defs, this.extra, this.collapsed).h;
     this.nodes.push({
       id,
@@ -398,24 +444,49 @@ class Builder {
     });
     this.frames.push({ id, kind: frameKind(step.type), type: step.type, depth: this.depth, x: left, y: y - FRAME_TOP, width: right - left, height: height + FRAME_TOP });
 
-    // A loop's join is only where its line leaves: on the frame's bottom edge, so the line starts outside the frame.
-    const joinY = isLoop ? y + height - JOIN_SIZE : y + height - JOIN_BELOW - JOIN_SIZE;
+    // Where the frame is left, on its bottom edge: a loop's only lets its line
+    // out (its body goes round instead), a frame's columns meet there (a dot),
+    // and a single column's line passes through it.
+    const joinY = isLoop ? y + height - JOIN_SIZE : y + height - JOIN_SIZE / 2;
     const join = `join:${id}`;
-    this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: joinY }, data: { kind: "join", parentId: id, shown: !isLoop && ls.length > 1 } });
+    const bodyY = y + own.h + GAP_Y;
+    const columnsH = Math.max(...sizes.map((m) => m.h));
+    // A try's columns meet before its "finally", which runs after them.
+    const meet = after ? `join:${id}:then` : join;
+    this.nodes.push({
+      id: join,
+      type: "join",
+      position: { x: cx - JOIN_SIZE / 2, y: joinY },
+      data: { kind: "join", parentId: id, shown: !isLoop && !after && columns.length > 1, through: !isLoop && (after !== null || columns.length === 1) },
+    });
+    if (after) {
+      this.nodes.push({
+        id: meet,
+        type: "join",
+        position: { x: cx - JOIN_SIZE / 2, y: bodyY + columnsH + JOIN_GAP },
+        data: { kind: "join", parentId: id, shown: columns.length > 1, through: columns.length === 1 },
+      });
+    }
 
     this.depth += 1;
-    ls.forEach((lane, i) => {
+    columns.forEach((lane, i) => {
       const size = sizes[i] ?? SLOT;
-      const placed = this.list(lane.steps, y + own.h + GAP_Y, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
+      const placed = this.list(lane.steps, bodyY, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
       this.edge(id, placed.entry, lane.label || undefined, undefined, true);
       if (!isLoop) {
-        for (const e of placed.exits) this.edge(e, join);
+        for (const e of placed.exits) this.edge(e, meet);
       } else if (lane.steps.length > 0) {
         // Back to where the body starts; an empty body has nothing to run again.
         for (const e of placed.exits) this.edge(e, placed.entry, loopBackLabel(step), undefined, undefined, { detourX: left + LOOP_LINE_X });
       }
       laneX += size.w + GAP_X;
     });
+    if (after && afterSize) {
+      const afterY = bodyY + columnsH + JOIN_GAP + JOIN_SIZE + GAP_Y;
+      const placed = this.list(after.steps, afterY, cx - afterSize.w / 2, afterSize.w, id, after.name, after.label, after.start, after.tail);
+      this.edge(meet, placed.entry, after.label || undefined);
+      for (const e of placed.exits) this.edge(e, join);
+    }
     this.depth -= 1;
     // A loop leaves from the bottom of its frame once it is done: no line through its body.
     if (isLoop) {

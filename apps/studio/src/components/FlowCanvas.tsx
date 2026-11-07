@@ -288,7 +288,7 @@ function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: Bl
   return button;
 }
 
-function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
+function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
   if (detourX !== undefined) {
@@ -322,9 +322,12 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
   // Splits turn just below their step; joins turn just above the next step, so
   // branches of different lengths meet on one line instead of at staggered heights.
   const down = sourcePosition === Position.Bottom && targetY > sourceY;
-  const centerY = down && (label || edge.split) ? sourceY + 12 : down && Math.abs(sourceX - targetX) > 1 ? targetY - 16 : undefined;
+  // Into a join (on a frame's bottom edge), the lines meet just above it.
+  const intoJoin = target.startsWith("join:");
+  const centerY = down && (label || edge.split) ? sourceY + 12 : down && Math.abs(sourceX - targetX) > 1 ? targetY - (intoJoin ? 12 : 16) : undefined;
   // The offset must not reach past the turn, or the line runs on below it and doubles back.
-  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset: centerY === undefined ? 20 : 12, borderRadius: 4 });
+  const offset = centerY === undefined ? 20 : Math.max(0, Math.min(12, centerY - sourceY - 1));
+  const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset, borderRadius: 4 });
   const straight = Math.abs(sourceX - targetX) <= 1;
   return (
     <>
@@ -350,6 +353,13 @@ function BlockEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
 }
 
 const edgeTypes = { link: LinkEdge, block: BlockEdge };
+
+/** Under a step the flow does not go on from: where it goes instead. */
+const TERMINAL_NOTE: Record<string, (() => string) | undefined> = {
+  "control.break": () => t.flow.breakNote,
+  "control.continue": () => t.flow.continueNote,
+  "control.fail": () => t.flow.failNote,
+};
 
 const TRAIL_STROKE: Record<LineTrail, string> = {
   done: "var(--color-moegi-500)",
@@ -718,6 +728,12 @@ function StepNode({ data }: StepNodeProps) {
         </NodeToolbar>
       )}
       <FlowHandles x={head?.lineX} />
+      {/* A break, continue or fail: no line goes on from it, so say where the flow goes instead. */}
+      {!head && TERMINAL_NOTE[data.step.type] && !data.runState && (
+        <span className="pointer-events-none absolute top-full left-1/2 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-500">
+          {TERMINAL_NOTE[data.step.type]!()}
+        </span>
+      )}
       {/* Read-only inside a call, but a run still stops there. */}
       <BreakpointDot stepId={data.step.id ?? ""} on={data.breakpoint} owner={data.owner} />
       {(data.runState === "paused" || (data.runState === "failed" && data.pausedHere)) && (
@@ -877,10 +893,12 @@ function CaseTab({ data }: { data: StepNodeProps["data"] }) {
   );
 }
 
-/** Where the columns of a frame meet again, on its bottom edge. A loop's only lets its line out, unmarked. */
+/** Where the columns of a frame meet again, on its bottom edge (a dot). A single column's line passes through; a loop's only lets its line out. */
 function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
   return (
-    <div style={{ width: JOIN_SIZE, height: JOIN_SIZE }} className={data.shown ? "rounded-full bg-[var(--flow-edge)]" : ""}>
+    <div style={{ width: JOIN_SIZE, height: JOIN_SIZE }} className={`relative ${data.shown ? "rounded-full bg-[var(--flow-edge)]" : ""}`}>
+      {/* A single line across the frame's edge: drawn through, so it does not break off there. */}
+      {data.through && <span className="absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 bg-[var(--flow-edge)]" />}
       <FlowHandles />
     </div>
   );
