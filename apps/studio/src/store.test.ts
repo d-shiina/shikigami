@@ -863,4 +863,22 @@ describe("copying nodes", () => {
     expect(op.step.params).toEqual({ message: "1" });
     expect(op.step.id).not.toBe("s1");
   });
+
+  it("puts the picked nodes inside a new loop where they were, as one change", async () => {
+    const edit = vi.fn(async (_id: string, _rev: number, _ops: EditOp[]) => outcome(flow(2, steps)));
+    const store = createStudioStore(fakeApi({ edit, getFlow: vi.fn(async () => flow(1, steps)) }));
+    await store.getState().open("scn_a");
+    store.getState().select({ kind: "step", stepId: "s2" });
+    store.getState().selectTo("s3");
+    await store.getState().wrapSelected("control.repeat");
+    expect(edit).toHaveBeenCalledOnce();
+    const [add, ...moves] = edit.mock.calls[0]![2];
+    const wrapper = (add as Extract<EditOp, { op: "addStep" }>).step;
+    expect(add).toMatchObject({ op: "addStep", step: { type: "control.repeat" }, position: { parentId: null, block: null, index: 1 } });
+    expect(moves).toEqual([
+      { op: "moveStep", stepId: "s2", position: { parentId: wrapper.id, block: "body", index: 0 } },
+      { op: "moveStep", stepId: "s3", position: { parentId: wrapper.id, block: "body", index: 1 } },
+    ]);
+    expect(store.getState().selection).toEqual({ kind: "step", stepId: wrapper.id });
+  });
 });
