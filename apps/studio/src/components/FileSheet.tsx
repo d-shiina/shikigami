@@ -37,7 +37,7 @@ function convert(value: unknown, type: ConfigType): unknown {
   }
 }
 
-const field = "h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-sheet px-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-brand-500";
+const field = "h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-sheet px-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-primary";
 
 function ValueInput({ item, onChange }: { item: ConfigItem; onChange: (value: unknown) => void }) {
   const value = item.value as unknown;
@@ -140,7 +140,7 @@ export function readerOf(flow: Flow | null, path: string): { step: Step; variabl
   return step ? { step, variable: step.saveAs || "settings" } : null;
 }
 
-const cell = "h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-sheet px-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-brand-500";
+const cell = "h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-sheet px-2 text-[13px] text-ink outline-none placeholder:text-slate-400 focus:border-primary";
 
 /**
  * The settings as a table, one row per setting: name | value | type | ×.

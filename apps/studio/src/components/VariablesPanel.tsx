@@ -11,7 +11,7 @@ import { VarIcon } from "./VarIcon";
 
 const TYPES = Object.keys(t.varType) as VarType[];
 const DIRECTIONS = Object.keys(t.direction) as VarDirection[];
-const cell = "w-full rounded-lg border border-slate-200 bg-sheet px-1.5 py-0.5 text-xs focus:border-brand-500 focus:outline-none";
+const cell = "w-full rounded-lg border border-slate-200 bg-sheet px-1.5 py-0.5 text-xs focus:border-primary focus:outline-none";
 const row = "grid grid-cols-[64px_1fr] items-center gap-2";
 const rowLabel = "text-right text-[11px] text-slate-500";
 
@@ -245,7 +245,7 @@ export function VariablesPanel() {
         }}
       >
         <input
-          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none"
+          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-xs focus:border-primary focus:bg-sheet focus:outline-none"
           placeholder={t.name}
           value={name}
           onChange={(e) => setName(e.target.value)}

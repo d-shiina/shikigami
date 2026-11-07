@@ -30,9 +30,9 @@ describe("sentence", () => {
     expect(parts).toContainEqual({ text: "合計 " });
   });
 
-  it("falls back to the registry label for unknown types", () => {
+  it("falls back to the registry label and param names for unknown types", () => {
     const def: StepTypeDef = { type: "x.y", category: "other", label: "謎の操作", description: "", paramsSchema: {}, risk: "safe" };
-    expect(plain(sentence({ type: "x.y", params: { a: 1 } }, def))).toBe("謎の操作 a 1");
+    expect(plain(sentence({ type: "x.y", params: { a: 1 } }, def))).toBe("謎の操作 a：1");
   });
 
   it("describes browser targets by meaning", () => {

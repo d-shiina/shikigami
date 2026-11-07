@@ -9,7 +9,7 @@ import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleV
 import { t } from "../lib/i18n";
 import { blankWhen, DAYS, describeWhen, KINDS, normalizeDays, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
 
-const inputClass = "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm focus:border-ink focus:outline-none";
+const inputClass = "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm focus:border-primary focus:outline-none";
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -318,7 +318,7 @@ function AgentCard({ status, onChange }: { status: AgentStatus | null | undefine
             disabled={busy}
             title={r.agentStartHint}
             onClick={() => act(api.startAgent)}
-            className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover disabled:opacity-60"
+            className="flex items-center gap-1 rounded-lg border border-slate-300 bg-sheet px-3 py-1 text-sm font-medium text-ink hover:bg-slate-100 disabled:opacity-60"
           >
             <Play size={13} aria-hidden="true" />
             {r.agentStart}

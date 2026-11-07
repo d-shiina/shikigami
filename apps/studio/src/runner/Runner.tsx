@@ -48,7 +48,7 @@ function List({ items, selected, onSelect, locked }: { items: RunnerItem[]; sele
   const rows = items.filter((i) => !q || `${i.flow.name} ${i.flow.description ?? ""}`.toLowerCase().includes(q));
   return (
     <nav aria-label={t.flows} className="flex w-[240px] shrink-0 flex-col border-r border-slate-200 bg-sheet">
-      <div className="m-2.5 flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2 focus-within:border-brand-500">
+      <div className="m-2.5 flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2 focus-within:border-primary">
         <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
         <input
           value={query}
@@ -84,7 +84,7 @@ function List({ items, selected, onSelect, locked }: { items: RunnerItem[]; sele
   );
 }
 
-const INPUT = "w-full rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] focus:border-brand-500 focus:outline-none";
+const INPUT = "w-full rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] focus:border-primary focus:outline-none";
 
 function FieldRow({
   field,

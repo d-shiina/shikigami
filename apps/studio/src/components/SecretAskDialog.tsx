@@ -6,7 +6,7 @@ import { nextSecretAsk, type SecretAsk } from "../lib/secretAsk";
 import { fieldLabel } from "../lib/secretKinds";
 
 const inputClass =
-  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-ink dark:bg-paper focus:outline-none";
+  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-primary dark:bg-paper focus:outline-none";
 const primary = "rounded bg-primary px-3 py-1 text-sm text-on-primary";
 const quiet = "rounded px-3 py-1 text-sm text-slate-500 hover:bg-slate-100";
 

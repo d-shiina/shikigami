@@ -136,7 +136,7 @@ export function AiPasteDialog() {
                   }}
                   placeholder={t.paste.placeholder}
                   spellCheck={false}
-                  className="mt-1.5 h-48 w-full resize-y rounded-lg border border-slate-300 bg-paper px-2.5 py-2 font-mono text-[12px] leading-relaxed focus:border-brand-500 focus:outline-none"
+                  className="mt-1.5 h-48 w-full resize-y rounded-lg border border-slate-300 bg-paper px-2.5 py-2 font-mono text-[12px] leading-relaxed focus:border-primary focus:outline-none"
                 />
                 {flow ? (
                   <div className="mt-1.5 space-y-1" role="radiogroup" aria-label={t.paste.where}>

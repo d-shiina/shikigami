@@ -53,11 +53,13 @@
   --color-mizu-500: #12a7b4;
   --color-moegi-100: #def1e2;
   --color-moegi-500: #2f8a4c;
+  --color-moegi-600: #26703e;
   --color-shu-50: #fff1eb;
   --color-shu-100: #ffdccc;
   --color-shu-500: #e8501f;
   --color-shu-600: #c73d12;
   --color-accent-500: #f5872a;
+  --color-accent-600: #b85a0c;
 
   /*
    * The four strokes of the swirl, each given a role: what a file in the
@@ -139,11 +141,13 @@
   --color-mizu-500: #3fcbd5;
   --color-moegi-100: #16382a;
   --color-moegi-500: #5cc27e;
+  --color-moegi-600: #7bd197;
   --color-shu-50: #351913;
   --color-shu-100: #5a2818;
   --color-shu-500: #f06a3c;
   --color-shu-600: #ff8c66;
   --color-accent-500: #f79a48;
+  --color-accent-600: #f9b072;
   --color-amber-50: #33270f;
   --color-amber-700: #f2bd66;
 }

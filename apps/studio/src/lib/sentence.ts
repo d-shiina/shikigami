@@ -440,7 +440,7 @@ export function sentence(step: Step, def: StepTypeDef | undefined): Part[] {
   const parts: Part[] = [w(stepLabel(step.type, def?.label))];
   for (const [key, value] of Object.entries(step.params ?? {}).slice(0, 3)) {
     // A target reads as words ("billing.exe の [btnSave]"), never as JSON.
-    parts.push(...(key === "target" ? [w(` ${targetText(value)}`)] : [w(` ${key} `), code(value)]));
+    parts.push(...(key === "target" ? [w(` ${targetText(value)}`)] : [w(` ${t.paramNames.for[step.type]?.[key] ?? t.paramNames.labels[key] ?? key}：`), code(value)]));
   }
   return [...parts, ...saveAs(step)];
 }

@@ -300,7 +300,7 @@ export function FlowsPage() {
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {/* The page's name is in the title bar; here only how many there are. */}
           <span className="text-[12px] text-slate-500">{t.list.count(summaries.length)}</span>
-          <div className="ml-2 flex h-8 w-64 items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-brand-500">
+          <div className="ml-2 flex h-8 w-64 items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
             <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
             <input
               value={query}

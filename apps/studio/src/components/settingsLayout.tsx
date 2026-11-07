@@ -69,8 +69,8 @@ export function SettingsRow({
 }
 
 export const settingsInput =
-  "w-full rounded-md border border-slate-300 bg-sheet px-2 py-1 text-[13px] text-ink focus:border-ink focus:outline-none";
+  "w-full rounded-md border border-slate-300 bg-sheet px-2 py-1 text-[13px] text-ink focus:border-primary focus:outline-none";
 export const settingsSelect =
-  "rounded-md border border-slate-300 bg-sheet px-1.5 py-1 text-[13px] text-ink focus:border-ink focus:outline-none";
+  "rounded-md border border-slate-300 bg-sheet px-1.5 py-1 text-[13px] text-ink focus:border-primary focus:outline-none";
 export const settingsPrimary =
   "rounded-lg bg-primary px-3 py-1 text-[13px] font-medium text-on-primary hover:bg-primary-hover disabled:bg-slate-300";

@@ -148,7 +148,7 @@ export function AgentPane({ width }: { width: number }) {
           rows={3}
           disabled={!info?.available}
           placeholder={chat.flowId ? t.agent.placeholderEdit : t.agent.placeholderNew}
-          className="w-full resize-none rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500 disabled:bg-slate-100"
+          className="w-full resize-none rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-primary disabled:bg-slate-100"
         />
         <div className="mt-1.5 flex items-center gap-2">
           <span className="min-w-0 truncate text-[10.5px] text-slate-500" title={busy ? t.agent.interruptHint : undefined}>
@@ -509,7 +509,7 @@ function LoginBox({ name }: { name: string }) {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder={t.agent.pasteCode}
-            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-sheet px-2 text-[12px] outline-none focus:border-brand-500"
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-sheet px-2 text-[12px] outline-none focus:border-primary"
           />
           <button type="submit" disabled={!code.trim() || login.sendingCode} className={primary}>
             {t.agent.send}

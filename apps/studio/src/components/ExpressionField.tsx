@@ -163,7 +163,7 @@ export function ExpressionField({
           placeholder={placeholder}
           value={draft}
           title={t.exprField.hint}
-          className={`${BOX} relative resize-none overflow-hidden border-slate-200 bg-transparent text-transparent caret-ink placeholder:text-slate-400 focus:border-brand-500 focus:outline-none`}
+          className={`${BOX} relative resize-none overflow-hidden border-slate-200 bg-transparent text-transparent caret-ink placeholder:text-slate-400 focus:border-primary focus:outline-none`}
           onChange={(e) => {
             setDraft(e.target.value.replace(/\r?\n/g, " "));
             setCursor(e.target.selectionStart);

@@ -1,3 +1,4 @@
+import { nodeIcon } from "../../lib/nodeIcons";
 // A node in the inspector (read-only summary) and in the node editor (the
 // full form): docs/design/ui-principles.md §2.
 import type { Step, StepPatch, StepTypeDef } from "@shikigami/schema";
@@ -12,7 +13,6 @@ import { CALL, knownVariables, outputs, paramRows, TYPE_COLOR } from "../../lib/
 import { sentence, typeTitle } from "../../lib/sentence";
 import { AppTag } from "../AppTag";
 import { findStep, revertBlocker, touchedSteps } from "../../store";
-import { CATEGORY_COLOR } from "../CommandPalette";
 import { Sentence } from "../StoryView";
 import { ActorMark, usePendingReview } from "../Timeline";
 import { VarIcon } from "../VarIcon";
@@ -157,7 +157,7 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
   const def = stepTypes.find((d) => d.type === step.type);
   const update = (patch: StepPatch) => updateStep(id, patch);
   const issues = validation?.issues.filter((i) => i.stepId === id) ?? [];
-  const color = CATEGORY_COLOR[def?.category ?? step.type.split(".")[0] ?? "other"] ?? CATEGORY_COLOR.other;
+  const StepIcon = nodeIcon(step.type, def?.category ?? step.type.split(".")[0] ?? "other");
   const outs = outputs(step);
   const isCall = step.type === CALL;
 
@@ -166,20 +166,16 @@ export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
       <div className={inEditor ? "px-4 pt-1 pb-2" : "px-4 pt-4 pb-3"}>
         {/* The editor's header already says what the node is. */}
         {!inEditor && (
-        <div className="overflow-hidden rounded-lg border border-slate-200">
-          <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+        <div>
+          <div className="flex items-center gap-2" title={`${step.type} · ID: ${id}`}>
+            <StepIcon size={16} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+            <span className="text-[14px] font-semibold text-ink">{typeTitle(step, def)}</span>
             <AppTag def={def} title={typeTitle(step, def)} />
-            <span className="text-sm font-bold" style={{ color }} title={`${step.type} · ID: ${id}`}>
-              {typeTitle(step, def)}
-            </span>
           </div>
-          <div className="space-y-1 px-3 py-2">
-            <div className="text-[13px] leading-snug">
-              <Sentence parts={sentence(step, def)} />
-            </div>
-            {def && <p className="text-[11px] text-slate-500">{stepSummary(def.type, def.description)}</p>}
+          <div className="mt-1.5 text-[13px] leading-snug text-slate-600">
+            <Sentence parts={sentence(step, def)} />
           </div>
+          {def && <p className="mt-0.5 text-[12px] text-slate-500">{stepSummary(def.type, def.description)}</p>}
         </div>
         )}
         {pending

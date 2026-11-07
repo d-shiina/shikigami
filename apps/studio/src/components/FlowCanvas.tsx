@@ -97,8 +97,8 @@ const OUTLINE_W = 284;
 const PROJECT_W = 288;
 
 const DIFF_STYLE: Record<StepDiff, { border: string; tag: string; label: () => string }> = {
-  added: { border: "border-moegi-500", tag: "bg-moegi-500", label: () => t.flow.aiAdded },
-  changed: { border: "border-accent-500", tag: "bg-accent-500", label: () => t.flow.aiChanged },
+  added: { border: "border-moegi-500", tag: "border-moegi-500 text-moegi-500", label: () => t.flow.aiAdded },
+  changed: { border: "border-accent-500", tag: "border-accent-500 text-amber-700", label: () => t.flow.aiChanged },
 };
 
 /** Which way the chart runs, for rows deciding whether to show chips. */
@@ -664,7 +664,7 @@ function StepNode({ data }: StepNodeProps) {
         </span>
       )}
       {data.diff && (
-        <span className={`absolute -top-2.5 right-2 z-10 rounded-md px-2 text-[10px] leading-5 font-bold text-white ${DIFF_STYLE[data.diff].tag}`}>
+        <span className={`absolute -top-2.5 right-2 z-10 rounded-md border bg-sheet px-1.5 text-[10.5px] leading-4 font-medium ${DIFF_STYLE[data.diff].tag}`}>
           {DIFF_STYLE[data.diff].label()}
         </span>
       )}

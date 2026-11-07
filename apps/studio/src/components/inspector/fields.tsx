@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 // The building blocks of the inspector and the node editor: a "項目 | 値" row,
 // a collapsible section, a text field that commits on blur, a path field.
 import { useEffect, useMemo, useState } from "react";
@@ -41,7 +42,7 @@ export type JsonSchema = {
 };
 
 export const inputClass =
-  "w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none";
+  "w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-primary focus:bg-sheet focus:outline-none";
 
 /** Text field that commits on blur / Enter, so each edit is one undoable change. */
 export function CommitInput(props: {
@@ -203,9 +204,9 @@ export function AddRow({ choices, onAdd }: { choices: { key: string; label: stri
 /** A collapsible group of rows, like a Blender properties panel. */
 export function Section({ title, children, aside }: { title: string; children: React.ReactNode; aside?: React.ReactNode }) {
   return (
-    <details open className="group border-t border-slate-100 px-4 py-2">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-[11px] font-bold tracking-wider text-slate-600 select-none">
-        <span className="text-[9px] text-slate-400 transition-transform group-open:rotate-90">▶</span>
+    <details open className="group border-t border-slate-100 px-4 py-2.5">
+      <summary className="flex cursor-pointer list-none items-center gap-1 py-1 text-[12px] font-medium text-slate-500 select-none hover:text-ink">
+        <ChevronRight size={13} strokeWidth={2} className="shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
         {title}
         {aside && <span className="ml-auto font-normal tracking-normal">{aside}</span>}
       </summary>

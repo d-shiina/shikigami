@@ -33,7 +33,7 @@ import {
 import { ExpressionField, ResultLine, useResult } from "./ExpressionField";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-brand-500 focus:bg-sheet focus:outline-none";
+  "w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:border-primary focus:bg-sheet focus:outline-none";
 
 const CATEGORIES: Category[] = ["text", "number", "date", "list"];
 

@@ -111,7 +111,7 @@ export function columnsByVariable(choices: InsertChoices): Record<string, string
   return Object.fromEntries(choices.loops.map((l) => [l.itemVar, l.columns]));
 }
 
-const inputClass = "w-full rounded-lg border border-slate-200 bg-sheet px-2 py-1 text-[13px] text-ink outline-none focus:border-brand-500";
+const inputClass = "w-full rounded-lg border border-slate-200 bg-sheet px-2 py-1 text-[13px] text-ink outline-none focus:border-primary";
 
 /** A text field that can take variables: 「変数」 inserts `{{ item.顧客 }}` where the cursor is. */
 export function TemplateInput({

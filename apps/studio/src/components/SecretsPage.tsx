@@ -5,7 +5,7 @@ import { locale, t } from "../lib/i18n";
 import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
 
 const inputClass =
-  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-ink dark:bg-paper focus:outline-none";
+  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-primary dark:bg-paper focus:outline-none";
 
 type Draft = {
   name: string;

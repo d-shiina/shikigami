@@ -324,7 +324,7 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
         onChange={(e) => setReason(e.target.value)}
         rows={3}
         placeholder={t.evidence.reasonPlaceholder}
-        className="w-full resize-y rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500"
+        className="w-full resize-y rounded-lg border border-slate-300 bg-paper px-2.5 py-1.5 text-[13px] outline-none focus:border-primary"
       />
       {notes.map((n, i) => (
         <div key={n.stepId} className="rounded-lg border border-slate-200 bg-paper p-1.5">
@@ -345,7 +345,7 @@ export function SendBackForm({ onCancel, onSent, initialReason }: { onCancel: ()
             onChange={(e) => setNotes(notes.map((m, j) => (j === i ? { ...m, note: e.target.value } : m)))}
             rows={2}
             placeholder={t.evidence.notePlaceholder}
-            className="mt-1 w-full resize-y rounded-lg border border-slate-200 px-2 py-1 text-[12.5px] outline-none focus:border-brand-500"
+            className="mt-1 w-full resize-y rounded-lg border border-slate-200 px-2 py-1 text-[12.5px] outline-none focus:border-primary"
           />
         </div>
       ))}

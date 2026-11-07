@@ -226,14 +226,14 @@ export function VersionsPanel() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t.versionName}
-          className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:border-ink focus:outline-none"
+          className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:border-primary focus:outline-none"
         />
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder={t.versionNote}
           rows={2}
-          className="w-full resize-none rounded border border-slate-300 px-2 py-1 text-sm focus:border-ink focus:outline-none"
+          className="w-full resize-none rounded border border-slate-300 px-2 py-1 text-sm focus:border-primary focus:outline-none"
         />
         <button
           type="submit"
