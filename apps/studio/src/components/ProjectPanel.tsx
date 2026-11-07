@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  Image as ImageIcon,
   type LucideIcon,
   PanelLeftClose,
   PenLine,
@@ -31,6 +32,7 @@ import { startFileDrag, useFileDrag } from "./FileDrag";
 import { useStudio } from "../context";
 import { copyText, menuFor, type MenuSpec } from "../lib/contextMenu";
 import { locale, stepLabel, t } from "../lib/i18n";
+import { cleanUp, imageOf, unusedParts } from "../lib/imageParts";
 import { partUses } from "../lib/parts";
 import { latestLog, logStatus, ProjectContext, type Role, ROLES, roleOf, useProject, usersOf, walkSteps } from "../project";
 
@@ -200,11 +202,27 @@ export function ProjectButton() {
 
 /** The flow's named screen parts: pick one to see and fix it in the inspector. */
 function PartsShelf() {
-  const parts = useStudio((s) => s.flow?.parts);
-  const steps = useStudio((s) => s.flow?.steps);
+  const flow = useStudio((s) => s.flow);
+  const parts = flow?.parts;
+  const steps = flow?.steps;
   const selection = useStudio((s) => s.selection);
   const select = useStudio((s) => s.select);
+  const applyOps = useStudio((s) => s.applyOps);
+  const remove = useProject((s) => s.remove);
+  const [confirming, setConfirming] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const entries = Object.entries(parts ?? {});
+  const unused = unusedParts(flow);
+  const plan = flow && unused.length > 0 ? cleanUp(flow, unused) : null;
+  const clean = async () => {
+    if (!plan) return;
+    setConfirming(false);
+    if (!(await applyOps(plan.ops))) return;
+    // To the workspace's trash, like any file deleted from the panel.
+    for (const path of plan.files) await remove(path);
+    if (selection?.kind === "part" && unused.includes(selection.name)) select(null);
+    setNote(t.parts.cleanedUp(unused.length));
+  };
   return (
     <section className="pb-1" title={t.parts.shelfHint}>
       <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-[11px] text-slate-400">
@@ -215,6 +233,7 @@ function PartsShelf() {
       {entries.map(([name, part]) => {
         const active = selection?.kind === "part" && selection.name === name;
         const used = partUses(steps ?? [], name).length;
+        const image = Boolean(imageOf(part));
         return (
           <button
             key={name}
@@ -222,6 +241,11 @@ function PartsShelf() {
             onClick={() => select({ kind: "part", name })}
             className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[12px] ${active ? "bg-brand-50 text-ink" : "text-slate-700 hover:bg-slate-100"}`}
           >
+            {image ? (
+              <ImageIcon size={12} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-label={t.parts.app.image} />
+            ) : (
+              <span className="w-3 shrink-0" aria-hidden="true" />
+            )}
             <span className="min-w-0 flex-1 truncate">{part.label || name}</span>
             {!part.target && (
               <span className="shrink-0 rounded-md bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={t.todos.notPicked}>
@@ -233,6 +257,38 @@ function PartsShelf() {
         );
       })}
       {entries.length === 0 && <div className="px-2 pb-1 text-[11px] text-slate-400">{t.parts.empty}</div>}
+      {plan &&
+        (confirming ? (
+          <div role="group" className="mx-2 mt-1 rounded-lg border border-slate-200 bg-paper px-2 py-1.5 text-[11px] text-slate-600">
+            <p>{t.parts.cleanUpConfirm(unused.length, plan.files.length)}</p>
+            <div className="mt-1 flex justify-end gap-1">
+              <button type="button" className="rounded-md px-2 py-0.5 hover:bg-slate-100" onClick={() => setConfirming(false)}>
+                {t.cancel}
+              </button>
+              <button type="button" autoFocus className="rounded-md px-2 py-0.5 font-medium text-shu-600 hover:bg-shu-50" onClick={() => void clean()}>
+                {t.parts.cleanUpDo}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            title={t.parts.cleanUpTitle}
+            className="mx-1 mt-0.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-100 hover:text-ink"
+            onClick={() => {
+              setNote(null);
+              setConfirming(true);
+            }}
+          >
+            <Eraser size={12} strokeWidth={1.75} aria-hidden="true" />
+            {t.parts.cleanUp(unused.length)}
+          </button>
+        ))}
+      {note && (
+        <p role="status" className="px-2 pt-0.5 text-[11px] text-slate-600">
+          {note}
+        </p>
+      )}
     </section>
   );
 }

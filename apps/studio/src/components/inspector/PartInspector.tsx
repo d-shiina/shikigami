@@ -1,15 +1,18 @@
 // The inspector for a named screen part (`flow.parts`).
 import type { Part } from "@shikigami/schema";
 import { useStudio } from "../../context";
-import { Boxes, Pencil } from "lucide-react";
+import { Boxes, Image as ImageIcon, Pencil } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { stepLabel, t } from "../../lib/i18n";
 import { outline } from "../../lib/outline";
+import { imageOf, imagePathFor, partKind } from "../../lib/imageParts";
+import { useProjectMaybe } from "../../project";
 import { partUses } from "../../lib/parts";
 import { targetText } from "../../lib/sentence";
 import { CATEGORY_COLOR } from "../CommandPalette";
 import { type JsonSchema, CommitInput, Section } from "./fields";
+import { ImagePartEditor, Picture, savePicture, SnipButton, useProjectImage } from "./ImagePart";
 import { PointTools, ObjectFields, POINTERS, partContext } from "./params";
 
 /** A named part: its name, its target (pick it again, highlight it) and the nodes that use it. */
@@ -21,6 +24,9 @@ export function PartInspector({ name }: { name: string }) {
   const select = useStudio((s) => s.select);
   const part = flow?.parts?.[name];
   const [editing, setEditing] = useState(false);
+  const image = imageOf(part);
+  const picture = useProjectImage(image?.path);
+  const files = useProjectMaybe((s) => s.files, null);
   if (!flow || !part)
     return (
       <p className="p-4 text-sm text-slate-400">{t.parts.missing(name)}</p>
@@ -64,6 +70,13 @@ export function PartInspector({ name }: { name: string }) {
     CATEGORY_COLOR[part.app === "desktop" ? "windows" : "browser"] ??
     CATEGORY_COLOR.other;
   const pointer = POINTERS.has(part.app) ? part.app : undefined;
+  const kind = partKind(part);
+  const KindIcon = image ? ImageIcon : Boxes;
+  // An image part is found within its window (and a region of it, if given).
+  const scope: JsonSchema = {
+    ...schema,
+    properties: Object.fromEntries(Object.entries(wide.properties ?? {}).filter(([k]) => k === "window" || k === "region")),
+  };
 
   const usedBy = (
     <Section title={t.parts.usedBy}>
@@ -107,18 +120,26 @@ export function PartInspector({ name }: { name: string }) {
               background: `color-mix(in srgb, ${color} 10%, transparent)`,
             }}
           >
-            <Boxes
+            <KindIcon
               size={14}
               strokeWidth={1.75}
               style={{ color }}
               aria-hidden="true"
             />
             <span className="text-sm font-bold" style={{ color }}>
-              {t.parts.app[part.app] ?? t.parts.title}
+              {t.parts.app[kind] ?? t.parts.title}
             </span>
           </div>
           <div className="space-y-1 px-3 py-2">
             <div className="text-[13px] leading-snug">{part.label || name}</div>
+            {image && (
+              <Picture
+                src={picture}
+                alt={part.label || name}
+                maxHeight={96}
+                offset={(part.target as { offset?: { x: number; y: number } } | null)?.offset}
+              />
+            )}
             <p className="text-[11px] text-slate-500">
               {targetText(part.target)}
             </p>
@@ -162,7 +183,7 @@ export function PartInspector({ name }: { name: string }) {
               onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
             >
               <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
-                <Boxes
+                <KindIcon
                   size={15}
                   strokeWidth={1.75}
                   style={{ color }}
@@ -184,40 +205,106 @@ export function PartInspector({ name }: { name: string }) {
                     }
                   />
                 </label>
+                {image ? (
+                  <>
+                    <ImagePartEditor
+                      name={name}
+                      part={part}
+                      set={(next) => void applyOps([{ op: "setPart", name, part: next }])}
+                      scopeFields={
+                        <ObjectFields
+                          schema={scope}
+                          value={(part.target ?? undefined) as Record<string, unknown> | undefined}
+                          onChange={(next) =>
+                            next &&
+                            set({
+                              target: {
+                                ...Object.fromEntries(
+                                  Object.entries(
+                                    part.target as Record<string, unknown>,
+                                  ).filter(
+                                    ([k]) => k !== "window" && k !== "region",
+                                  ),
+                                ),
+                                ...(next as Record<string, unknown>),
+                              } as Part["target"],
+                            })
+                          }
+                        />
+                      }
+                    />
+                    {picture && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <PointTools
+                          large
+                          pick={false}
+                          adapter="desktop"
+                          schema={schema}
+                          value={part.target}
+                          onChange={() => {}}
+                        />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
                 {pointer && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <PointTools
-                      large
-                      adapter={pointer}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <PointTools
+                        large
+                        adapter={pointer}
+                        schema={schema}
+                        value={part.target}
+                        context={partContext(uses)}
+                        stepId={uses[0]?.id}
+                        onChange={(target) =>
+                          target && set({ target: target as Part["target"] })
+                        }
+                        more={
+                          // A desktop part not picked yet may be a picture
+                          // (a screen with nothing to pick): cut it out.
+                          part.app === "desktop" &&
+                          !part.target && (
+                            <SnipButton
+                              large
+                              onCut={async (cut) => {
+                                if (!flow) return;
+                                const path = imagePathFor(name, files);
+                                await savePicture(flow.id, path, cut);
+                                set({
+                                  target: {
+                                    window: cut.window,
+                                    image: { path },
+                                  } as Part["target"],
+                                });
+                              }}
+                            />
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+                  <section>
+                    <h3 className="text-[12px] font-semibold text-slate-700">
+                      {t.parts.howFound}
+                    </h3>
+                    <p className="mb-1.5 text-[11px] text-slate-500">
+                      {t.parts.howFoundHint}
+                    </p>
+                    <ObjectFields
                       schema={schema}
-                      value={part.target}
-                      context={partContext(uses)}
-                      stepId={uses[0]?.id}
+                      value={
+                        (part.target ?? undefined) as
+                          | Record<string, unknown>
+                          | undefined
+                      }
                       onChange={(target) =>
                         target && set({ target: target as Part["target"] })
                       }
                     />
-                  </div>
+                  </section>
+                  </>
                 )}
-                <section>
-                  <h3 className="text-[12px] font-semibold text-slate-700">
-                    {t.parts.howFound}
-                  </h3>
-                  <p className="mb-1.5 text-[11px] text-slate-500">
-                    {t.parts.howFoundHint}
-                  </p>
-                  <ObjectFields
-                    schema={schema}
-                    value={
-                      (part.target ?? undefined) as
-                        | Record<string, unknown>
-                        | undefined
-                    }
-                    onChange={(target) =>
-                      target && set({ target: target as Part["target"] })
-                    }
-                  />
-                </section>
               </div>
               <div className="flex items-center gap-2 border-t border-slate-200 px-4 py-3">
                 <button
