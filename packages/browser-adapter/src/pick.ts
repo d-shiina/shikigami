@@ -148,7 +148,7 @@ export async function pick(page: Page, options: PickOptions): Promise<Picked | C
       page.off("framenavigated", onNavigated);
     }
     if (outcome.outcome === "cancelled") return { status: "cancelled", url: page.url() };
-    return await describePicked(page, outcome.frame);
+    return await describeMarked(page, outcome.frame);
   } finally {
     finished = true;
     if (timer) clearTimeout(timer);
@@ -229,9 +229,13 @@ async function clear(page: Page): Promise<void> {
   await everyFrame(page, (frame) => frame.evaluate(removeOverlay, { hostId: HOST_ID, attrs: [PICKED, CANDIDATE, ARMED] }));
 }
 
-/** Turns the element tagged PICKED in `frame` into a Target (with `frame` when it is not the top page). */
-async function describePicked(page: Page, frame: PageFrame): Promise<Picked> {
-  const el = frame.locator(`[${PICKED}]`).first();
+/**
+ * Turns the element tagged `attr` (PICKED) in `frame` into a Target (with
+ * `frame` when it is not the top page). The recorder names what was clicked
+ * or typed into the same way.
+ */
+export async function describeMarked(page: Page, frame: PageFrame, attr: string = PICKED, timeoutMs = 30_000): Promise<Picked> {
+  const el = frame.locator(`[${attr}]`).first();
   const facts = await el.evaluate(
     (node, attr) => {
       const short = (s: string | null | undefined, n: number) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -252,8 +256,9 @@ async function describePicked(page: Page, frame: PageFrame): Promise<Picked> {
       };
     },
     CANDIDATE,
+    { timeout: timeoutMs },
   );
-  const aria = parseAria(await el.ariaSnapshot({ timeout: 2000 }).catch(() => ""));
+  const aria = parseAria(await el.ariaSnapshot({ timeout: Math.min(2000, timeoutMs) }).catch(() => ""));
   const where = await framePath(frame);
   const inFrame = (t: Target): Target => (where ? { ...t, frame: where } : t);
 
@@ -270,7 +275,7 @@ async function describePicked(page: Page, frame: PageFrame): Promise<Picked> {
   else if (aria) base = { role: aria.role as AriaRole };
   else base = { css: facts.tag };
 
-  const { matches, index } = await position(page, inFrame(base));
+  const { matches, index } = await position(page, inFrame(base), attr);
   const target = inFrame(matches > 1 && index >= 0 ? { ...base, nth: index } : base);
   const result: Picked = {
     status: "picked",
@@ -335,11 +340,11 @@ async function nameFrame(parent: PageFrame, handle: ElementHandle<Element>): Pro
 }
 
 /** How many elements `target` matches, and which of them is the picked one. */
-async function position(page: Page, target: Target): Promise<{ matches: number; index: number }> {
+export async function position(page: Page, target: Target, attr: string): Promise<{ matches: number; index: number }> {
   try {
     return await locate(page, target).evaluateAll(
-      (els, attr) => ({ matches: els.length, index: els.findIndex((e) => e.hasAttribute(attr)) }),
-      PICKED,
+      (els, a) => ({ matches: els.length, index: els.findIndex((e) => e.hasAttribute(a)) }),
+      attr,
     );
   } catch {
     return { matches: 0, index: -1 };

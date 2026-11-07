@@ -40,7 +40,7 @@
 | G13 | P1 | Studio・デバッグ | 選んだノードから実行する（前のノードを飛ばす）ことができない | UiPath：Run from this Activity／PAD：「ここから実行」 | 済み |
 | G14 | P1 | メール | メールの移動・既読にする・返信・転送・削除がない。Outlook（クラシック）なしで受信できない（Microsoft 365・IMAP） | UiPath：Move / Mark as Read / Reply To / Delete Outlook Mail Message・Get IMAP Mail／PAD：「メール メッセージの処理」・Exchange / Outlook / IMAP | 済み（IMAP は残り） |
 | G15 | P1 | スケジュール | 祝日・会社の休日を飛ばす・「第 3 営業日」の指定がない。メールが届いたら起動もない | UiPath：Orchestrator の Non-Working Days・キュートリガー／PAD：クラウドフローのメールトリガー | 済み |
-| G16 | P1 | 記録 | ブラウザの操作は記録できない（デスクトップだけ） | WinActor：Web レコーディング／UiPath：Web Recorder／PAD：Web レコーダー | 着手順 11 |
+| G16 | P1 | 記録 | ブラウザの操作は記録できない（デスクトップだけ） | WinActor：Web レコーディング／UiPath：Web Recorder／PAD：Web レコーダー | 済み |
 | G17 | P1 | Word | PDF で保存・文字の置換・表の読み取りがない（`word.fillTemplate` / `word.readText` だけ） | UiPath：Save Document As PDF・Replace Text／PAD：「Word 文書を保存」の PDF・「Word 文書内の語句の検索と置換」 | 着手順 12 |
 | G18 | P1 | 無人実行 | 画面がロックされた・サインアウトした PC ではデスクトップのノードが止まる（`DESKTOP_UNAVAILABLE`） | UiPath：無人ロボットがセッションを作る／PAD：ロックされた PC での無人実行 | 設計が要る |
 | G19 | P1 | 画像 | 画像認識で「画面から切り取る」・一致率・探す範囲がない | UiPath：Click Image・Find Image の Indicate on screen／PAD：画像をキャプチャ | 別（画像部品のスレッド） |
@@ -126,6 +126,8 @@
 
 - デスクトップの記録と同じ入口・同じ「記録した操作」の一覧。ブラウザは Playwright の中でクリック・入力・選択・ページの移動を拾い、`target` は「画面から選ぶ」と同じ作り方で作る。記録のあと「AI に整えてもらう」も同じ
 
+**対応**：済み。**記録** で「デスクトップ／ブラウザ」を選ぶ。アップロード・ドラッグ・新しいタブは記録しない（一覧に理由を出す）。
+
 ### G17 Word
 
 - `word.exportPdf`（COM、Excel のマクロと同じ経路）、`word.replaceText`（`.docx` を直接、書式を残す）、`word.readTables`（表を行の一覧で）
@@ -168,7 +170,7 @@
 | 7 | エラーが英語 | `errorText.ts`・検証の問題の日本語化 |
 | 8・25 | 管理サーバー・監査 | 管理サーバー、`shikigami audit`、`records.keepDays` |
 | 9 | 失敗の通知 | `policy.json` の `notify`（Teams・メール） |
-| 10 | 操作の記録 | デスクトップの記録 → AI が整える（ブラウザは G16） |
+| 10 | 操作の記録 | デスクトップ・ブラウザの記録 → AI が整える |
 | 11 | ブラウザ操作の欠け | タブ・iframe・JS ダイアログ・ホバー・スクロール・属性・ダウンロード・アップロード |
 | 12 | デスクトップ操作の欠け | スクロール・ドラッグ・ホバー・メニュー・表の一括読み |
 | 14 | Excel | 開いているブック・再計算・並べ替え・書式・フィルター・ピボット・PDF（行・シートの操作は G10・G11） |

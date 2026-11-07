@@ -188,7 +188,9 @@ impl Adapter for BrowserAdapter {
     /// `target` narrow it down). `action` asks for something else about the
     /// open page instead: `"pick"` waits for the person to click an element
     /// and returns it as a target (`message`, `candidates`, `timeoutMs`),
-    /// `"highlight"` outlines `target` / `targets` for a moment.
+    /// `"highlight"` outlines `target` / `targets` for a moment, `"record"`
+    /// records what the person does on the page until they press 終了
+    /// (`{ status, actions }`; `"stopRecording"` ends it from outside).
     fn inspect<'a>(
         &'a self,
         session: &'a str,
@@ -204,6 +206,8 @@ impl Adapter for BrowserAdapter {
                 Some(Value::String(a)) if a == "pick" => "pick",
                 Some(Value::String(a)) if a == "highlight" => "highlight",
                 Some(Value::String(a)) if a == "cancelPick" => "cancelPick",
+                Some(Value::String(a)) if a == "record" => "record",
+                Some(Value::String(a)) if a == "stopRecording" => "stopRecording",
                 _ => "snapshot",
             };
             self.client

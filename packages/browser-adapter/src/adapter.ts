@@ -13,6 +13,7 @@ import { chromium } from "playwright-core";
 import type { Browser, BrowserContext, BrowserContextOptions, CDPSession, Dialog, LaunchOptions, Locator, Page } from "playwright-core";
 
 import { cancelPick, highlight, pick } from "./pick.ts";
+import { record, stopRecording } from "./record.ts";
 import { AdapterError, describe, locate, type Target } from "./targets.ts";
 
 export interface AdapterOptions {
@@ -205,6 +206,10 @@ export class Adapter {
           return await this.highlight(params);
         case "cancelPick":
           return await cancelPick(this.session(params).page);
+        case "record":
+          return await this.record(params);
+        case "stopRecording":
+          return await stopRecording(this.session(params).page);
         case "authorize":
           return await this.authorize(params);
         case "close":
@@ -971,6 +976,22 @@ export class Adapter {
       }
     }
     return result;
+  }
+
+  /** Records what the person does on the page until they press 終了 (Studio's 「記録」). */
+  private async record(params: Params): Promise<unknown> {
+    const session = await this.sessionOrOpen(params);
+    if (session.headless && !this.options.scriptedHuman) {
+      throw new AdapterError("HUMAN_REQUIRED", "recording needs a person, but the browser runs without a window", {
+        details: { hint: "Open the page with a visible browser (SHIKIGAMI_BROWSER_HEADLESS unset)." },
+      });
+    }
+    return await record(session.page, {
+      title: typeof params.title === "string" ? params.title : undefined,
+      hint: typeof params.hint === "string" ? params.hint : undefined,
+      lang: typeof params.lang === "string" ? params.lang : undefined,
+      timeoutMs: typeof params.timeoutMs === "number" ? params.timeoutMs : 30 * 60_000,
+    });
   }
 
   /** Outlines `target` (or each of `targets`) for `durationMs`; waits `waitMs` so the person sees it. */

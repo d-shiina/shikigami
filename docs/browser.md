@@ -147,6 +147,16 @@ Elements inside an iframe, or inside a `<frame>` of an old frameset page, need `
 
 For logins, passwords and MFA, see [secrets.md](secrets.md). For web APIs that need an OAuth sign-in in the browser (`oauth.signIn`), see [oauth.md](oauth.md).
 
+### Recording
+
+**Record** in the dock under the flow diagram asks where to record. Choose **Browser** and a URL (filled from the flow's first `browser.open`): a browser opens with a red bar at the top, and Studio writes down what you do until you press the bar. While a run's browser is open, recording happens in that browser instead.
+
+- Clicks (right and double clicks too) become `browser.click`, text you type becomes one `browser.fill` per field, choices become `browser.select`, checkboxes `browser.check`, Enter/Tab/Escape `browser.press`, and a URL typed in the address bar `browser.open`.
+- The `target` is made the same way as **Pick on screen** (role and name first). A password field's text is never recorded: the node asks you to choose a secret.
+- Not recorded: drags, file uploads (add `browser.upload` yourself), and pages a click opened in a new tab.
+
+When you stop, the same **Recorded actions** list as desktop recording appears, with **Add as nodes** and **Have the AI tidy up**. The adapter's inspect takes `action: "record"` / `"stopRecording"`.
+
 ### Choosing elements (`target`)
 
 By meaning; CSS is the last resort.
