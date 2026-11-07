@@ -33,8 +33,8 @@ flowchart LR
     subgraph libs[共有ライブラリ（Rust）]
       CORE["shikigami-core<br/>Flow Core"]
       RT["shikigami-runtime<br/>RPA Runtime"]
-      WIN["shikigami-adapter-windows<br/>(UIA, 専用MTAスレッド)"]
-      BRC["shikigami-adapter-browser<br/>(Node子プロセスのクライアント)"]
+      WIN["shikigami-desktop<br/>(UIA, 専用MTAスレッド)"]
+      BRC["shikigami-browser<br/>(Node子プロセスのクライアント)"]
     end
 
     NODE["browser-adapter<br/>(Node.js + Playwright)"]
@@ -59,6 +59,8 @@ flowchart LR
 | `shikigami-studio` | ユーザー | GUI。Core/Runtime をライブラリとして内包 |
 | `shikigami mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作。CLI と同じ実行ファイルのサブコマンド（配布物を 1 つにするため） |
 | `shikigami` (CLI) | ユーザー / スケジューラー | ヘッドレス実行・管理 |
+| `shikigami agent` | Windows のサインイン（PC・ユーザー・ワークスペースごとに 1 つ） | スケジュールと管理サーバーのジョブを 1 件ずつ実行（[remote.md](remote.md)、[schedules.md](schedules.md)） |
+| `shikigami manager` | 管理者（サーバー） | 管理サーバー。並んだジョブを空いたエージェントに渡す（署名付き HTTP、[remote.md](remote.md)） |
 | `browser-adapter` (Node) | Runtime | Playwright 操作。必要時のみ起動 |
 
 Studio と MCP サーバーは **別プロセスで同じワークスペースを共有** する。同期は §7 の「ファイルを正とした楽観的並行制御＋変更通知」で行う。
@@ -97,8 +99,12 @@ shikigami/
 │  ├─ shikigami-runtime/      RPA Runtime（インタプリタ・Handler IF・実行記録）
 │  ├─ shikigami-cli/          CLI（`shikigami` バイナリ）
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
-│  ├─ shikigami-adapter-browser/  [Phase 3] Node サイドカーのクライアント
-│  ├─ shikigami-desktop/  [Phase 4] desktop.*（UI Automation）
+│  ├─ shikigami-adapters/ 組込アダプターすべてとインストール済みプラグインの一覧（どの Runtime もここから作る）
+│  ├─ shikigami-secrets/  ワークスペースの金庫（暗号化ファイル、鍵は Windows の資格情報マネージャー）
+│  ├─ shikigami-agent/    `shikigami agent`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
+│  ├─ shikigami-manager/  `shikigami manager`：エージェントがジョブを取りに行く管理サーバー
+│  ├─ shikigami-browser/  browser.*（Node サイドカーのクライアント）
+│  ├─ shikigami-desktop/  desktop.*（UI Automation）
 │  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き、マクロは COM）
 │  ├─ shikigami-word/     word.*（docx の差し込み・読み取り）
 │  ├─ shikigami-mail/     mail.*（Outlook：下書き・一覧・添付保存）
@@ -112,7 +118,7 @@ shikigami/
 │  └─ studio/                 Tauri 2 + React（src/ がフロント、src-tauri/ が Rust）
 ├─ packages/
 │  ├─ schema/                 @shikigami/schema：Rust から生成した TS 型
-│  └─ browser-adapter/        [Phase 3] Node.js + Playwright
+│  └─ browser-adapter/        Node.js + Playwright
 ├─ plugins/shikigami/        Claude Code プラグイン（MCP 設定＋スキル）
 ├─ schemas/                   生成された JSON Schema（コミット対象、CI でズレ検出）
 ├─ examples/                  サンプルフロー（テストでも使用）
@@ -127,10 +133,16 @@ shikigami/
 |---|---|---|
 | `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Flow`, `Step`, `EditOp`, `FlowService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
 | `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
-| `shikigami-cli` | core, runtime, mcp, clap | `shikigami flow/run/validate/step-types/schema/mcp` |
-| `shikigami-studio` | core, runtime, tauri, notify | Tauri コマンド（§7.1） |
-| `shikigami-mcp` | core, runtime, rmcp | `ShikigamiMcp`（MCP ツール、§6）, `serve_stdio` |
-| `shikigami-adapter-*` (P3/P4) | runtime | `StepTypeDef` + `ActionHandler` の組 |
+| `shikigami-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `shikigami flow/run/validate/step-types/schema/mcp` |
+| `shikigami-studio` | core, runtime, adapters, secrets, agent, tauri, notify | Tauri コマンド（§7.1） |
+| `shikigami-mcp` | core, runtime, secrets, rmcp | `ShikigamiMcp`（MCP ツール、§6）, `serve_stdio` |
+| `shikigami-adapters` | runtime, 各アダプターのクレート, plugins | `all()` / `load()`（このビルドと PC のアダプター）, `runtime()`, `table_columns()` |
+| `shikigami-secrets` | core | `Vault`（`SecretProvider`） |
+| `shikigami-agent` | core, runtime, secrets | `Agent`（スケジュール・ジョブの列・リモートの通信） |
+| `shikigami-manager` | core, runtime, agent（通信の型だけ）, axum | `Manager`, `router()` |
+| アダプターのクレート（`shikigami-browser`・`-desktop`・`-excel` …） | core, runtime | `impl Adapter`：`StepTypeDef` + `ActionHandler` の組 |
+
+フローを実行するプロセスはどれも同じ形で `Runtime` を作る：`shikigami_adapters::runtime(&adapters)` のあと `Runtime::for_workspace(root, vault)`（シークレットと `policy.json`）。ノードを単独で動かすとき（AI の `test_step`、Studio の「ノードの単体実行」）の一ノードのフローは `shikigami_runtime::single::flow_for` が作る。
 
 依存方向は **core ← runtime ← adapters ← (studio | mcp | cli)** の一方向。core は tokio にも Tauri にも依存しない（同期 API、どこからでも使える）。
 

@@ -725,4 +725,103 @@ mod tests {
         assert!(m.with_job("w1", &job.id, |j| j.cancel_requested).unwrap());
         assert!(m.try_claim("w2", &offer).is_none());
     }
+
+    fn bearer(token: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
+        h
+    }
+
+    #[test]
+    fn the_admin_api_wants_the_exact_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let m = Manager::open(dir.path()).unwrap();
+        assert!(m.admin(&bearer(m.admin_token())).is_ok());
+        for wrong in [HeaderMap::new(), bearer(""), bearer("nope")] {
+            let err = m.admin(&wrong).unwrap_err();
+            assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        }
+        // A token that only starts the same is still wrong.
+        let prefix = &m.admin_token()[..10];
+        assert!(m.admin(&bearer(prefix)).is_err());
+    }
+
+    #[test]
+    fn the_token_and_the_jobs_survive_a_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let (token, job) = {
+            let m = Manager::open(dir.path()).unwrap();
+            let flow: FlowId = serde_json::from_value(serde_json::json!("scn_a")).unwrap();
+            let job = m.add_job(NewJob {
+                flow_id: flow,
+                ..NewJob::default()
+            });
+            (m.admin_token().to_owned(), job.id)
+        };
+        let m = Manager::open(dir.path()).unwrap();
+        assert_eq!(m.admin_token(), token);
+        assert_eq!(m.job(&job).unwrap().state, JobState::Queued);
+    }
+
+    #[test]
+    fn unsigned_or_unknown_workers_are_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let m = Manager::open(dir.path()).unwrap();
+        let err = m
+            .authenticate(&HeaderMap::new(), "/v1/jobs/claim", b"{}")
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        let mut h = HeaderMap::new();
+        h.insert(protocol::HEADER_WORKER, "wkr_nobody".parse().unwrap());
+        h.insert(protocol::HEADER_TIME, now().to_string().parse().unwrap());
+        h.insert(protocol::HEADER_SIGNATURE, "AAAA".parse().unwrap());
+        let err = m.authenticate(&h, "/v1/jobs/claim", b"{}").unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        // A request signed long ago is refused before the worker is looked up.
+        h.insert(
+            protocol::HEADER_TIME,
+            (now() - 3600).to_string().parse().unwrap(),
+        );
+        assert!(m.authenticate(&h, "/v1/jobs/claim", b"{}").is_err());
+    }
+
+    #[test]
+    fn an_enrollment_code_is_single_use_and_another_workers_job_is_not_yours() {
+        let dir = tempfile::tempdir().unwrap();
+        let m = Manager::open(dir.path()).unwrap();
+        let code = m.new_code().code;
+        let request = |code: &str| -> EnrollRequest {
+            serde_json::from_value(serde_json::json!({
+                "code": code, "publicKey": "k", "machine": "PC1", "user": "u", "workspace": "w"
+            }))
+            .unwrap()
+        };
+        assert!(m.enroll(request(&code)).is_ok());
+        assert_eq!(
+            m.enroll(request(&code)).unwrap_err().0,
+            StatusCode::FORBIDDEN
+        );
+        let flow: FlowId = serde_json::from_value(serde_json::json!("scn_a")).unwrap();
+        let job = m.add_job(NewJob {
+            flow_id: flow.clone(),
+            ..NewJob::default()
+        });
+        let offer = ClaimRequest {
+            flows: vec![Offer {
+                flow_id: flow,
+                name: "a".into(),
+                version_uid: "v1".into(),
+            }],
+            desktop: None,
+            wait_secs: 0,
+        };
+        assert!(m.try_claim("w1", &offer).is_some());
+        assert_eq!(
+            m.with_job("w2", &job.id, |_| ()).unwrap_err().0,
+            StatusCode::CONFLICT
+        );
+    }
 }

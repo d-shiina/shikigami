@@ -248,9 +248,7 @@ impl ShikigamiMcp {
         // Steps look secrets up in the workspace's vault; this server only
         // ever reveals their names.
         let vault = Arc::new(Vault::open(service.store().root()));
-        let runtime = runtime
-            .with_secrets(vault.clone())
-            .with_policy(Policy::path(service.store().root()));
+        let runtime = runtime.for_workspace(service.store().root(), vault.clone());
         let approvals = ApprovalStore::new(service.store().local_root());
         let picks = PickRequestStore::new(service.store().local_root());
         Self {
@@ -1894,46 +1892,17 @@ impl ShikigamiMcp {
         let project_dir = flow_id
             .map(|id| self.svc().project_dir(&FlowId::new(id)))
             .transpose()?;
-        const OUTPUT: &str = "output";
-        let registry = self.inner.runtime.registry();
-        let def = registry.get(&step.step_type).ok_or_else(|| {
-            err(
+        if self.inner.runtime.registry().get(&step.step_type).is_none() {
+            return Err(err(
                 "UNKNOWN_STEP_TYPE",
                 format!(
                     "unknown step type '{}' (see list_step_types)",
                     step.step_type
                 ),
-            )
-        })?;
-        let mut flow = shikigami_core::Flow::new("test_step");
+            ));
+        }
+        // The AI names no result variable: it gets the result as `output`.
         step.save_as = None;
-        if def.has_output {
-            step.save_as = Some(OUTPUT.into());
-            flow.variables.push(shikigami_core::VariableDef {
-                direction: shikigami_core::VarDirection::Output,
-                ..shikigami_core::VariableDef::new(OUTPUT, shikigami_core::VarType::Any)
-            });
-        }
-        // A call's outputs become outputs of the test run, returned as `output`.
-        let call_outputs: Vec<String> = step
-            .params
-            .get("outputs")
-            .and_then(Value::as_object)
-            .filter(|_| step.step_type == shikigami_core::registry::flow::CALL)
-            .map(|m| {
-                m.values()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect()
-            })
-            .unwrap_or_default();
-        for name in &call_outputs {
-            flow.variables.push(shikigami_core::VariableDef {
-                direction: shikigami_core::VarDirection::Output,
-                ..shikigami_core::VariableDef::new(name.clone(), shikigami_core::VarType::Any)
-            });
-        }
-        shikigami_core::ops::assign_missing_ids(&mut step);
         let context = step.params.get("context").cloned();
         // Workbook steps: the workbook the step read or changed.
         let workbook = step.params.get("path").cloned();
@@ -1953,13 +1922,20 @@ impl ShikigamiMcp {
             self.show_target(&step.step_type, target, context.as_ref())
                 .await;
         }
-        flow.steps = vec![step];
+        let no_inputs = serde_json::Map::new();
+        let single = shikigami_runtime::single::flow_for(
+            step,
+            self.inner.runtime.registry(),
+            &no_inputs,
+            shikigami_runtime::single::Context::default(),
+        )
+        .map_err(|m| err("UNKNOWN_STEP_TYPE", m))?;
 
         let handle = self
             .inner
             .runtime
             .start(
-                flow,
+                single.flow.clone(),
                 RunOptions {
                     run_id: Some(self.inner.session.clone()),
                     keep_adapter_state: true,
@@ -1979,11 +1955,7 @@ impl ShikigamiMcp {
             .await
             .map_err(|e| err("INTERNAL", e.message))?;
 
-        let output = if call_outputs.is_empty() {
-            report.outputs.get(OUTPUT).cloned().unwrap_or(Value::Null)
-        } else {
-            Value::Object(report.outputs.clone())
-        };
+        let output = single.result(&report.outputs);
         let mut result = json!({ "status": report.status, "output": output });
         if report.status != RunStatus::Succeeded {
             result["error"] = json!(report.error);

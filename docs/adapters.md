@@ -19,6 +19,7 @@ Adapters are made per thing being operated, not per app technology (Win32 / WPF 
    - `name()`: the type name prefix
    - `install()`: registers the node types and handlers, and cleanup when a run ends (`on_run_finished`)
    - `inspect()` (optional): what the app shows right now, for the AI. MCP's `test_step` attaches it after running a node
+   - `table_columns()` (optional): for a node whose result is a table (a sheet, a CSV), the columns it will give, read from its file now. Studio offers them as `item.列` inside a repeat before the flow has run
 4. **Registration**: add one line to `all()` in `crates/shikigami-adapters/src/lib.rs`. The CLI, the MCP server and Studio all build their Runtime from there, so nothing else needs touching
 
 With that, validation and hints, `list_step_types` / `get_step_schema` (the list and examples for the AI), `test_step` and Studio's input forms come for free.

@@ -38,6 +38,15 @@ pub trait Adapter: Send + Sync + 'static {
             ))
         })
     }
+
+    /// The columns a step of this adapter will give as its result table
+    /// (an Excel sheet, a CSV file), read now from `params` (paths already
+    /// resolved), so Studio can offer `item.列` before the flow has run.
+    /// `None` for steps whose result is not a table or that cannot be read
+    /// yet. Plugins that read tables override this the same way.
+    fn table_columns(&self, _step_type: &str, _params: &Value) -> Option<Vec<String>> {
+        None
+    }
 }
 
 impl std::fmt::Debug for dyn Adapter {

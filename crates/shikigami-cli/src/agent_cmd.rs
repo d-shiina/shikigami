@@ -204,10 +204,10 @@ pub fn agent_cmd(
     let local_root = svc.store().local_root().to_path_buf();
     match cmd {
         AgentCmd::Run => {
-            let runtime = runtime
-                .clone()
-                .with_secrets(Arc::new(Vault::open(svc.store().root())))
-                .with_policy(Policy::path(svc.store().root()));
+            let runtime = runtime.clone().for_workspace(
+                svc.store().root(),
+                Arc::new(Vault::open(svc.store().root())),
+            );
             let policy_path = Policy::path(svc.store().root());
             let agent = Agent::new(Arc::new(svc), runtime);
             // Notifications still being sent when the agent stops (a run

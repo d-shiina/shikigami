@@ -579,10 +579,10 @@ fn real_main() -> Result<ExitCode> {
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            let runtime = runtime
-                .clone()
-                .with_secrets(Arc::new(Vault::open(svc.store().root())))
-                .with_policy(Policy::path(svc.store().root()));
+            let runtime = runtime.clone().for_workspace(
+                svc.store().root(),
+                Arc::new(Vault::open(svc.store().root())),
+            );
             let status = rt.block_on(run(
                 &runtime,
                 svc.store().local_root(),
@@ -1368,5 +1368,49 @@ mod load_file_tests {
         assert_eq!(flow.steps[0].step_type, "flow.call");
         assert_eq!(subs.len(), 1);
         assert_eq!(subs[0].name, "sub");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod cli_tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn the_command_line_is_well_formed() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn inputs_are_json_when_they_parse_and_text_otherwise() {
+        let inputs = parse_inputs(&[
+            "count=3".into(),
+            "name=山田".into(),
+            "rows=[1,2]".into(),
+            "url=https://example.com/?a=b".into(),
+        ])
+        .unwrap();
+        assert_eq!(inputs["count"], serde_json::json!(3));
+        assert_eq!(inputs["name"], serde_json::json!("山田"));
+        assert_eq!(inputs["rows"], serde_json::json!([1, 2]));
+        // Only the first `=` splits the name from the value.
+        assert_eq!(inputs["url"], serde_json::json!("https://example.com/?a=b"));
+        assert!(parse_inputs(&["no-equals".into()]).is_err());
+    }
+
+    #[test]
+    fn runs_the_published_version_unless_asked_for_the_draft() {
+        let cli = Cli::try_parse_from(["shikigami", "run", "scn_a"]).unwrap();
+        assert!(matches!(cli.command, Command::Run { draft: false, .. }));
+        let cli =
+            Cli::try_parse_from(["shikigami", "run", "scn_a", "--draft", "-i", "x=1"]).unwrap();
+        let Command::Run { draft, inputs, .. } = cli.command else {
+            panic!("not a run");
+        };
+        assert!(draft);
+        assert_eq!(inputs, vec!["x=1".to_owned()]);
+        // The name from before flows were renamed still works.
+        assert!(Cli::try_parse_from(["shikigami", "scenario", "list"]).is_ok());
     }
 }

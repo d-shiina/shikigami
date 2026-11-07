@@ -4,7 +4,7 @@ import type { Step } from "@shikigami/schema";
 import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { ExtractForm } from "./Inspector";
+import { ExtractForm } from "./inspector/StepInspector";
 
 const STEP_TOOL = "grid h-6 w-6 place-items-center rounded-[3px] text-[13px] text-slate-600 hover:bg-slate-100 hover:text-ink";
 
