@@ -61,6 +61,10 @@ AI が作業中でも入力欄は使える。送るボタンは「割り込む�
 
 `claude -p` の途中に文を差し込む公式の手段（stream-json 入力での追加メッセージ）は、いつ読まれるかが Claude Code の版で変わるので使わず、止めて続ける形にした。止めた時点までの編集は MCP 経由で既に保存されていて、確認待ちにも並ぶ。
 
+## 導入（ペインの中で完結）
+
+Claude Code が見つからないとき、ペインは「AI を使う準備」の枠を出す：使う AI の選択（今は Claude Code だけ。ほかの AI はこの一覧に足す）と「Claude Code を導入する」。押すと `agent_install` が Claude Code 公式のインストーラー（Windows は `irm https://claude.ai/install.ps1 | iex`、ほかは `install.sh`）を窓なしで走らせ、出力の行を `agent-install` イベントでペインに流す。終わると `find_claude()` で見つかるかを確かめ、未サインインならそのまま下のログインに続く。管理者権限は要らない（ユーザーフォルダーに入る）。`config.json` の `agent.kind` が `command` のときは導入もログインもその AI の手順に任せる。
+
 ## ログイン（ペインの中で完結）
 
 Claude Code のログインが切れている・未ログインのとき（`Failed to authenticate` / `Not logged in` など）は、エラー文を出す代わりにペインに「<AI 名> のログインが切れています ［ログイン］」を出す。

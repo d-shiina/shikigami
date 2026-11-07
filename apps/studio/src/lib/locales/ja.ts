@@ -393,6 +393,18 @@ export const ja = {
     loginExpired: (name: string) => `${name} のログインが切れています`,
     login: "ログイン",
     loginFailed: "ログインできませんでした",
+    installFailed: "インストールできませんでした",
+    setup: {
+      title: "AI を使う準備",
+      lead: "AI にフローを作ってもらうには、AI をこの PC に入れてサインインします。ターミナルは要りません。",
+      which: "使う AI",
+      claudeNote: "Claude Code は Anthropic の AI です。あなたの Claude アカウントで動き、料金もそのアカウントにかかります。ほかの AI は今後追加します。",
+      install: (name: string) => `${name} を導入する`,
+      retry: "もう一度",
+      installing: "インストールしています…（1〜2 分）",
+      stopping: "止めています…",
+      whatHappens: "あなたのユーザーフォルダーに入ります（管理者権限は不要）。終わるとサインインの画面が出ます。",
+    },
   },
   runMsg: {
     reviewBeforeResume: "AIの修正を確認してから再開できます",
@@ -551,6 +563,14 @@ export const ja = {
     frame: { loop: "繰り返し", if: "条件分岐", switch: "値で分岐", try: "エラー処理", parallel: "並列実行", group: "グループ" },
     /** Beside a switch's cases. */
     addCase: "ケースを追加",
+  },
+  fileDrop: {
+    files: "このフローのファイル",
+    dragHint: "設定欄にドラッグすると、そのファイルを使います",
+    fieldHint: "プロジェクトやエクスプローラーからファイルをドラッグして入れられます",
+    putHere: "ここに入れる",
+    makeNode: "このファイルを読むノードを作る",
+    where: "ファイルの設定欄か、フロー図の上で離してください",
   },
   project: {
     title: "プロジェクト",

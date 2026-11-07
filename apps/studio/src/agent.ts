@@ -9,7 +9,7 @@
 import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { AgentApi, AgentEvent, AgentInfo, AgentRequest, LoginEvent } from "./lib/api";
+import type { AgentApi, AgentEvent, AgentInfo, AgentKind, AgentRequest, InstallEvent, LoginEvent } from "./lib/api";
 import { t } from "./lib/i18n";
 
 export type AgentPart =
@@ -72,6 +72,14 @@ export type LoginState =
   | { phase: "waiting"; url: string | null; sendingCode: boolean }
   | { phase: "failed"; message: string };
 
+/** Installing the agent from the pane. */
+export type InstallState =
+  | { phase: "idle" }
+  | { phase: "running"; lines: string[] }
+  /** Asked to stop; the button is back once the installer is gone. */
+  | { phase: "stopping" }
+  | { phase: "failed"; message: string };
+
 export type FlowLabel = { id: string; name: string };
 
 export type AgentState = {
@@ -81,6 +89,7 @@ export type AgentState = {
   /** The conversation the pane shows. */
   current: string;
   login: LoginState;
+  install: InstallState;
   init(): Promise<void>;
   setOpen(open: boolean): void;
   /** The editor opened another flow: show its conversation. */
@@ -106,6 +115,10 @@ export type AgentState = {
   submitLoginCode(code: string): Promise<boolean>;
   cancelLogin(): Promise<void>;
   onLoginEvent(event: LoginEvent): void;
+  /** Installs the agent with its own installer, then signs in when needed. */
+  startInstall(kind: AgentKind): Promise<void>;
+  cancelInstall(): Promise<void>;
+  onInstallEvent(event: InstallEvent): void;
   onEvent(event: AgentEvent): void;
 };
 
@@ -263,12 +276,13 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       chats: [first, ...restored],
       current: first.id,
       login: { phase: "idle" },
+      install: { phase: "idle" },
 
       async init() {
         try {
           set({ info: await api.info() });
         } catch (e) {
-          set({ info: { available: false, name: "AI", command: null, problem: errorText(e), remembers: false } });
+          set({ info: { available: false, name: "AI", command: null, problem: errorText(e), remembers: false, installable: false } });
         }
       },
 
@@ -399,6 +413,42 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
       async cancelLogin() {
         set({ login: { phase: "idle" } });
         await api.cancelLogin().catch(() => undefined);
+      },
+
+      async startInstall(kind) {
+        set({ install: { phase: "running", lines: [] } });
+        try {
+          await api.install(kind);
+        } catch (e) {
+          set({ install: { phase: "failed", message: errorText(e) } });
+        }
+      },
+
+      async cancelInstall() {
+        if (get().install.phase !== "running") return;
+        set({ install: { phase: "stopping" } });
+        await api.cancelInstall().catch(() => set({ install: { phase: "idle" } }));
+      },
+
+      onInstallEvent(event) {
+        const install = get().install;
+        if (event.kind === "cancelled") {
+          if (install.phase === "stopping") set({ install: { phase: "idle" } });
+          return;
+        }
+        if (install.phase !== "running") return;
+        if (event.kind === "progress") {
+          set({ install: { phase: "running", lines: [...install.lines.slice(-19), event.line] } });
+          return;
+        }
+        if (!event.ok) {
+          set({ install: { phase: "failed", message: event.message ?? t.agent.installFailed } });
+          return;
+        }
+        set({ install: { phase: "idle" } });
+        // Installed: the pane now shows the agent, and signs in when the account is not there yet.
+        void get().init();
+        if (event.needsLogin) void get().startLogin();
       },
 
       onLoginEvent(event) {
