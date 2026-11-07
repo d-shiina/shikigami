@@ -150,7 +150,14 @@ export const paramsEn = {
     sql: "SQL",
     params: "Values for the SQL",
   } as Record<string, string>,
+  items: {
+    "dialog.form.fields": { name: "Result key", label: "Label", type: "Kind", required: "Required", default: "Initial value", options: "Choices" },
+    "excel.sort.by": { column: "Column", order: "Order" },
+    "excel.pivot.values": { column: "Column", function: "Summary" },
+    "excel.filter.filters": { column: "Column", values: "Values to keep" },
+  } as Record<string, Record<string, string>>,
   for: {
+    "dialog.form": { fields: "Fields" },
     "desktop.setWindow": { state: "Window state", front: "Bring to front", x: "Left edge", y: "Top edge", width: "Width", height: "Height" },
     "process.list": { name: "Program name" },
     "process.kill": { name: "Program name" },
@@ -206,6 +213,8 @@ export const paramsEn = {
     "flow.delay": { ms: "Wait (ms)" },
   } as Record<string, Record<string, string>>,
   choices: {
+    order: { asc: "Ascending", desc: "Descending" },
+    function: { sum: "Sum", count: "Count", average: "Average", max: "Max", min: "Min" },
     action: { back: "Back", forward: "Forward", reload: "Reload" },
     level: { debug: "Detail", info: "Info", warn: "Warning", warning: "Warning", error: "Error" },
     state: { visible: "Shown", hidden: "Not shown", attached: "On the page", detached: "Gone from the page", enabled: "Can be used", maximized: "Maximized", minimized: "Minimized", normal: "Normal size" },
@@ -219,7 +228,7 @@ export const paramsEn = {
     buttons: { ok: "OK", okCancel: "OK, Cancel", yesNo: "Yes, No", yesNoCancel: "Yes, No, Cancel" },
     kind: { file: "One file", files: "Several files", folder: "A folder", save: "Where to save" },
     align: { left: "Left", center: "Centre", right: "Right" },
-    type: { all: "All", file: "Files", folder: "Folders" },
+    type: { all: "All", file: "Files", folder: "Folders", text: "Text", multiline: "Multi-line text", number: "Number", date: "Date", select: "Choice", checkbox: "Checkbox" },
     encoding: { auto: "Detect", "utf-8": "UTF-8", "utf-8-bom": "UTF-8 (with BOM)", shift_jis: "Shift_JIS" },
     authType: { basic: "User name and password (Basic)", bearer: "Token (Bearer)", header: "Custom header" },
     via: { outlook: "Outlook", microsoft365: "Microsoft 365", smtp: "SMTP server" },

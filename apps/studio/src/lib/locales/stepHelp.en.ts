@@ -94,6 +94,7 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "http.request": { summary: "Call a web API (GET, POST…)", words: "api http rest json request" },
   "oauth.signIn": { summary: "Sign in to a web API with OAuth", words: "login auth token box" },
   "dialog.message": { summary: "Show a message to the person at the PC", words: "notify alert message box confirm" },
+  "dialog.form": { summary: "Ask the person at the PC for several values (text, numbers, dates, choices, checks) in one form", words: "form input fields date choice checkbox custom form" },
   "dialog.input": { summary: "Ask the person at the PC to type something", words: "input ask prompt question" },
   "dialog.selectFile": { summary: "Ask the person at the PC to pick a file or folder", words: "choose pick browse" },
   "clipboard.get": { summary: "Read text on the clipboard", words: "copy paste" },
