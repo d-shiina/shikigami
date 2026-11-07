@@ -109,10 +109,13 @@ function ListInput({ values, onChange }: { values: string[]; onChange: (value: u
         placeholder="＋"
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            add();
-          }
+          if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+          // Enter adds what was typed as one element; the table's Enter (next row)
+          // only when there is nothing to add, else the row would be rebuilt from the old list.
+          if (!draft.trim()) return;
+          e.preventDefault();
+          e.stopPropagation();
+          add();
         }}
         onBlur={add}
       />

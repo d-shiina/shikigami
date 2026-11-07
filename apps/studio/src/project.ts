@@ -222,6 +222,8 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
       },
       async load(id) {
         if (id === get().flowId) return;
+        // A setting typed just before the switch is still waiting for its autosave.
+        if (get().sheet?.config && !get().sheet?.raw) await get().saveSheet();
         set({ flowId: id, files: null, sheet: null, error: null, notice: null });
         await refresh();
       },
