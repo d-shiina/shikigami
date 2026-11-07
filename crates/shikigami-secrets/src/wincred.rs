@@ -85,8 +85,10 @@ pub(crate) fn blob_text(blob: &[u8]) -> Option<String> {
     }
     if blob.len().is_multiple_of(2) {
         let units: Vec<u16> = blob
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
             .collect();
         // Text written as UTF-16 has zero high bytes for ASCII, and is not
         // valid UTF-8 for kana and kanji; a short UTF-8 ASCII password
