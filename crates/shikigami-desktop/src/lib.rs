@@ -97,6 +97,18 @@ pub mod types {
     pub const SAP_RUN_TRANSACTION: &str = "sap.runTransaction";
 }
 
+/// `engine` of desktop.readText and target.ocr: the built-in engines and
+/// those added with [`backend::register_ocr_engine`] before the adapter is
+/// installed.
+fn ocr_engine_schema() -> Value {
+    let mut names = vec!["paddle".to_owned(), "windows".to_owned()];
+    names.extend(backend::ocr_engine_names());
+    json!({
+        "enum": names,
+        "description": "OCR エンジン：paddle（標準、PaddleOCR）または windows（Windows 標準 OCR）。拡張機能が足したエンジンも名前で選べる。既定は PaddleOCR（入っていなければ Windows OCR）"
+    })
+}
+
 /// How much earlier than the step timeout the adapter stops waiting.
 const TIMEOUT_MARGIN_MS: u64 = 500;
 /// How often a missing window or element is looked for again.
@@ -883,10 +895,11 @@ impl DesktopStep {
         let fallback = (cfg!(windows) && options.engine.is_none() && !options.accurate)
             .then(|| paddle::engine().err())
             .flatten();
-        let engine = match (options.engine, &fallback) {
-            _ if options.accurate => "paddle-accurate",
-            (Some(OcrEngine::Windows), _) | (None, Some(_)) => "windows",
-            _ => "paddle",
+        let engine = match (&options.engine, &fallback) {
+            _ if options.accurate => "paddle-accurate".to_owned(),
+            (Some(OcrEngine::Windows), _) | (None, Some(_)) => "windows".to_owned(),
+            (Some(other @ OcrEngine::Other(_)), _) => other.name().to_owned(),
+            _ => "paddle".to_owned(),
         };
         let lines = visual::read_lines(self.backend.as_ref(), &picture, options).await?;
         let mut output = visual::read_output(&lines);
@@ -1085,7 +1098,7 @@ fn target_schema(allow: Allow) -> Value {
             "exact": { "type": "boolean", "description": "行全体がこの文字のときだけ" },
             "nth": { "type": "integer", "minimum": 0, "description": "複数見つかったときの 0 始まりの番号（上から、同じ行は左から）" },
             "language": { "type": "string", "minLength": 2, "description": "Windows OCR の言語（ja, en-US など。既定はユーザーの言語）。PaddleOCR は日本語・中国語・英語をまとめて読むので不要" },
-            "engine": { "enum": ["paddle", "windows"], "description": "OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）" },
+            "engine": ocr_engine_schema(),
             "accurate": { "type": "boolean", "description": "高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）" }
         },
         "required": ["text"],
@@ -1374,7 +1387,7 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
                 "target": picture,
                 "file": { "type": "string", "minLength": 1, "description": "画面の代わりに読む画像ファイルのフルパス" },
                 "language": { "type": "string", "minLength": 2, "description": "Windows OCR の言語（ja, en-US など）。PaddleOCR では不要" },
-                "engine": { "enum": ["paddle", "windows"], "description": "OCR エンジン。既定は PaddleOCR（入っていなければ Windows OCR）" },
+                "engine": ocr_engine_schema(),
             "accurate": { "type": "boolean", "description": "高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）" }
             }),
             required: &[],
@@ -1594,6 +1607,8 @@ pub fn definitions() -> Vec<StepTypeDef> {
     step_defs().into_iter().map(|(def, _)| def).collect()
 }
 
+#[cfg(test)]
+mod ocr_bench;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;

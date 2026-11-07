@@ -232,7 +232,7 @@ export const paramsEn = {
     direction: { up: "Up", down: "Down", left: "Left", right: "Right", top: "To the top", bottom: "To the bottom" },
     button: { left: "Left", right: "Right" },
     unit: { line: "Lines", page: "Pages" },
-    engine: { paddle: "PaddleOCR", windows: "Windows OCR" },
+    engine: { paddle: "Standard (PaddleOCR)", windows: "Windows OCR" },
     buttons: { ok: "OK", okCancel: "OK, Cancel", yesNo: "Yes, No", yesNoCancel: "Yes, No, Cancel" },
     kind: { file: "One file", files: "Several files", folder: "A folder", save: "Where to save" },
     align: { left: "Left", center: "Centre", right: "Right" },
