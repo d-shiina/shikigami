@@ -1208,7 +1208,7 @@ export const en: Dict = {
   },
   askCopied: "Copied the request for the AI. Paste it into an AI such as Claude Code. Once you have reviewed the fix, resume from here.",
   paramNames: paramsEn,
-  outputLabels: { writes: "Writes", item: "Item", index: "Index", result: "Result" },
+  outputLabels: { writes: "Writes", item: "Item", index: "Index", error: "Error", result: "Result" },
   verbs: {
     add: "Added",
     update: "Changed",

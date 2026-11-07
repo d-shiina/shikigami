@@ -27,6 +27,7 @@ import { VariablesPanel } from "./VariablesPanel";
 import { columnsByVariable, InsertProvider, ListSourceField, TemplateInput, useInsertChoices } from "./InsertVariable";
 import { listToText, textToList } from "../lib/listText";
 import { pageAbove } from "../lib/loopScope";
+import { FOR_EACH } from "../lib/stepTypes";
 
 type JsonSchema = {
   type?: string;
@@ -1053,7 +1054,7 @@ function ParamsEditor({
             );
             return (
               <Row key={key} label={`${paramLabel(key, step.type)}${required ? " *" : ""}`} title={key} socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined} onRemove={onRemove}>
-                {step.type === "control.forEach" && key === "items" ? (
+                {step.type === FOR_EACH && key === "items" ? (
                   <ListSourceField step={step} defs={stepTypes} value={typeof params[key] === "string" ? params[key] : ""} onChange={setParam} expression={field} />
                 ) : (
                   field

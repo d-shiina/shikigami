@@ -2,6 +2,7 @@
 // plus output rows for the variables the step writes. Display only; the
 // layout uses the same rows to size nodes, so both always agree.
 import type { Step, StepTypeDef, VariableDef } from "@shikigami/schema";
+import { BINDS, CALL, FOR_EACH, REPEAT, TRY, VARIABLE_SET } from "./stepTypes";
 import { formatValue } from "./changes";
 import { listToText } from "./listText";
 import { readable, targetText } from "./sentence";
@@ -98,7 +99,7 @@ function paramKeys(step: Step, def: StepTypeDef | undefined): string[] {
   return keys;
 }
 
-export const CALL = "flow.call";
+export { CALL } from "./stepTypes";
 
 /** A call's `inputs` / `outputs` map, keyed by the called flow's variables. */
 export function callMap(step: Step, key: "inputs" | "outputs"): Record<string, unknown> {
@@ -110,24 +111,21 @@ export function callMap(step: Step, key: "inputs" | "outputs"): Record<string, u
 export function outputs(step: Step): { label: string; variable: string }[] {
   const p = step.params ?? {};
   const out: { label: string; variable: string }[] = [];
-  if (step.type === "variable.set" && typeof p.name === "string") out.push({ label: t.outputLabels.writes, variable: p.name });
+  if (step.type === VARIABLE_SET && typeof p.name === "string") out.push({ label: t.outputLabels.writes, variable: p.name });
   if (step.type === CALL) {
     for (const [name, target] of Object.entries(callMap(step, "outputs"))) {
       if (typeof target === "string" && target) out.push({ label: name, variable: target });
     }
   }
-  if (step.type === "control.forEach") {
-    out.push({ label: t.outputLabels.item, variable: typeof p.itemVar === "string" ? p.itemVar : "item" });
-    if (typeof p.indexVar === "string") out.push({ label: t.outputLabels.index, variable: p.indexVar });
-  }
+  if (step.type === FOR_EACH) out.push({ label: t.outputLabels.item, variable: typeof p.itemVar === "string" ? p.itemVar : "item" });
+  if ((step.type === FOR_EACH || step.type === REPEAT) && typeof p.indexVar === "string") out.push({ label: t.outputLabels.index, variable: p.indexVar });
+  if (step.type === TRY && typeof p.errorVar === "string") out.push({ label: t.outputLabels.error, variable: p.errorVar });
   if (step.saveAs) out.push({ label: t.outputLabels.result, variable: step.saveAs });
   return out;
 }
 
-const OUTPUT_KEYS: Record<string, string[]> = {
-  "variable.set": ["name"],
-  "control.forEach": ["itemVar", "indexVar"],
-};
+/** Params shown as outputs (the variables a node binds), not as rows of their own. */
+const OUTPUT_KEYS = BINDS;
 
 /** A call shows one row per input it passes, labelled with the called flow's variable. */
 function callInputRows(step: Step, known: ReadonlySet<string>): Extract<Row, { kind: "param" }>[] {

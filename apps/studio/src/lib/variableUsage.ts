@@ -2,6 +2,7 @@
 // which steps write it and which read it. Display only, like dataFlow.ts.
 import type { Step, VarDirection, VariableDef, VarType } from "@shikigami/schema";
 import { CALL, callMap, knownVariables, outputs, referencedVariables } from "./nodeRows";
+import { BINDS } from "./stepTypes";
 
 export type VariableUsage = {
   name: string;
@@ -16,10 +17,7 @@ export type VariableUsage = {
 };
 
 /** Params that name the variable a step writes, not a value it reads. */
-const WRITE_KEYS: Record<string, string[]> = {
-  "variable.set": ["name"],
-  "control.forEach": ["itemVar", "indexVar"],
-};
+const WRITE_KEYS = BINDS;
 
 const ORDER: VariableUsage["direction"][] = ["input", "inOut", "output", "local", "made"];
 

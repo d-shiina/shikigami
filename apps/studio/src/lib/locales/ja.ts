@@ -1207,7 +1207,7 @@ export const ja = {
   },
   askCopied: "AI への依頼文をコピーしました。Claude Code などの AI に貼り付けてください。修正内容を確認すると、ここから再開できます。",
   paramNames: paramsJa,
-  outputLabels: { writes: "書き込む", item: "要素", index: "番号", result: "結果" },
+  outputLabels: { writes: "書き込む", item: "要素", index: "番号", error: "エラー", result: "結果" },
   verbs: {
     add: "追加",
     update: "変更",

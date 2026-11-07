@@ -40,6 +40,7 @@ import {
   type SecretRequest,
   type StepTestResult,
 } from "./lib/api";
+import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
 import { errorLine } from "./lib/errorText";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
@@ -188,7 +189,7 @@ export function diveChain(root: Flow | null, called: Record<string, Flow>, path:
   let current = root;
   for (const stepId of path) {
     const step = current ? findStep(current.steps ?? [], stepId) : undefined;
-    const target = step?.type === "flow.call" ? step.params?.flow : undefined;
+    const target = step?.type === CALL ? step.params?.flow : undefined;
     const callee = typeof target === "string" ? called[target] : undefined;
     if (!callee) break;
     chain.push({ stepId, flow: callee });
@@ -212,7 +213,7 @@ export function calledIds(steps: Step[]): string[] {
   const ids = new Set<string>();
   const walk = (list: Step[]) => {
     for (const step of list) {
-      const target = step.type === "flow.call" ? step.params?.flow : undefined;
+      const target = step.type === CALL ? step.params?.flow : undefined;
       if (typeof target === "string" && target) ids.add(target);
       for (const children of Object.values(step.blocks ?? {})) walk(children);
     }
@@ -719,9 +720,6 @@ const DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   "browser.press": { key: "Enter" },
 };
 
-const SWITCH = "control.switch";
-const FOR_EACH = "control.forEach";
-const CASE = "control.case";
 
 /** A case of a switch, with nothing to compare to yet. */
 function newCase(body: Step[] = []): Step {

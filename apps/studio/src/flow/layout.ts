@@ -5,6 +5,7 @@
 // Steps run top to bottom; a step's blocks sit side by side below it, framed
 // together with it, and loops draw a back-edge from the end of their body.
 import type { Step, StepTypeDef } from "@shikigami/schema";
+import { CASE, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
 import { blockLabel } from "../lib/keywords";
 import { nodeHeight } from "../lib/nodeRows";
 
@@ -123,25 +124,23 @@ type Defs = ReadonlyMap<string, StepTypeDef>;
 export type Extra = ReadonlyMap<string, number>;
 const NO_EXTRA: Extra = new Map();
 
-const LOOP_TYPES = new Set(["control.while", "control.repeat", "control.forEach"]);
-
 function frameKind(type: string): FrameKind {
   if (LOOP_TYPES.has(type)) return "loop";
-  if (type === "control.if") return "if";
-  if (type === "control.switch") return "switch";
-  if (type === "control.try") return "try";
-  if (type === "control.parallel") return "parallel";
+  if (type === IF) return "if";
+  if (type === SWITCH) return "switch";
+  if (type === TRY) return "try";
+  if (type === PARALLEL) return "parallel";
   return "group";
 }
 /** Blocks whose children are branches of their own: each child gets its own lane. */
-const FAN_OUT_BLOCKS: Record<string, string> = { "control.parallel": "branches", "control.switch": "cases" };
+const FAN_OUT_BLOCKS: Record<string, string> = { [PARALLEL]: "branches", [SWITCH]: "cases" };
 /**
  * The cases of a switch get one more lane, empty, to add the next case in:
  * a case is a branch beside the others, never a node under one.
  */
-const ADD_LANE_BLOCKS: Record<string, string> = { "control.switch": "cases" };
+const ADD_LANE_BLOCKS: Record<string, string> = { [SWITCH]: "cases" };
 /** Steps that are one branch of the step around them: framed by it, not on their own. */
-const UNFRAMED = new Set(["control.case"]);
+const UNFRAMED = new Set([CASE]);
 
 /** `tail`: ends in a "+" to add at its end (not a lane of one of a parallel's branches, where that would start another branch). */
 type Lane = { name: string; label: string; steps: Step[]; start: number; tail: boolean };

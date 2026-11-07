@@ -10,7 +10,7 @@ import { ChevronLeft, Play, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { resultStep } from "../lib/loopScope";
+import { enclosingLoops, resultStep } from "../lib/loopScope";
 import { TYPE_COLOR, knownVariables } from "../lib/nodeRows";
 import { runScope, sampleOf, shortValue } from "../lib/runScope";
 import { sentence, typeTitle } from "../lib/sentence";
@@ -156,7 +156,7 @@ function Usable({ step }: { step: Step }) {
   const sourceOf = (itemVar: string): string | undefined => {
     const loop = choices.loops.find((l) => l.itemVar === itemVar);
     if (!loop) return undefined;
-    const items = findLoopItems(flow?.steps ?? [], step.id ?? "", itemVar);
+    const items = enclosingLoops(flow?.steps ?? [], step.id ?? "").find((l) => l.itemVar === itemVar)?.items ?? null;
     const reader = items ? resultStep(flow?.steps ?? [], items) : null;
     const path = typeof reader?.params?.path === "string" ? reader.params.path : undefined;
     return path ?? (reader ? reader.name || typeTitle(reader, stepTypes.find((d) => d.type === reader.type)) : (items ?? undefined));
@@ -208,24 +208,6 @@ function Usable({ step }: { step: Step }) {
 /** `item.顧客`, or `item['税込 金額']` for a name that is not a plain word. */
 function access(column: string): string {
   return /^[\p{L}_][\p{L}\p{N}_]*$/u.test(column) ? `.${column}` : `['${column.replace(/'/g, "\\'")}']`;
-}
-
-/** The list the repeat binding `itemVar` around `id` walks over, when it is a plain variable. */
-function findLoopItems(steps: Step[], id: string, itemVar: string): string | null {
-  const walk = (list: Step[], around: Step[]): Step[] | null => {
-    for (const s of list) {
-      if (s.id === id) return around;
-      const inner = s.type === "control.forEach" ? [s, ...around] : around;
-      for (const children of Object.values(s.blocks ?? {})) {
-        const found = walk(children, inner);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-  const loop = (walk(steps, []) ?? []).find((l) => (typeof l.params?.itemVar === "string" ? l.params.itemVar : "item") === itemVar);
-  const items = loop?.params?.items;
-  return typeof items === "string" && /^[\p{L}_][\p{L}\p{N}_]*$/u.test(items.trim()) ? items.trim() : null;
 }
 
 /** The node's result: its run alone, or else what the last run did there. */

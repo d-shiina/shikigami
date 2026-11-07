@@ -1,3 +1,4 @@
+import { CASE, PARALLEL, SWITCH } from "../lib/stepTypes";
 import {
   Background,
   BaseEdge,
@@ -1055,7 +1056,7 @@ export function FlowCanvas() {
       if (n.data.kind !== "step") continue;
       // Nor among a switch's cases: what goes there is a case (see the "+" beside them).
       const parentType = n.data.parentId ? types.get(n.data.parentId) : undefined;
-      if (parentType === "control.parallel" || (parentType === "control.switch" && n.data.block === "cases")) continue;
+      if (parentType === PARALLEL || (parentType === SWITCH && n.data.block === "cases")) continue;
       map.set(n.id, { parentId: n.data.parentId, block: n.data.block, index: n.data.index });
     }
     return map;
@@ -1229,7 +1230,7 @@ export function FlowCanvas() {
           // An empty block is there to be filled: clicking it opens the palette for it.
           select({ kind: "slot", parentId: data.parentId, block: data.block });
           // Beside a switch's cases it adds the next case.
-          if (data.addCase) return void addStep("control.case");
+          if (data.addCase) return void addStep(CASE);
           const box = (event.target as Element).closest(".react-flow__node")?.getBoundingClientRect();
           setPaletteOpen(true, null, box);
         }

@@ -341,8 +341,10 @@ pub async fn table_columns(
     params: Value,
 ) -> CmdResult<Vec<String>> {
     let folder = state.service.project_dir(&id)?;
+    let adapters = state.adapters.clone();
     Ok(tokio::task::spawn_blocking(move || {
-        shikigami_adapters::table_columns(&step_type, &params, &folder).unwrap_or_default()
+        shikigami_adapters::table_columns(&adapters, &step_type, &params, &folder)
+            .unwrap_or_default()
     })
     .await
     .unwrap_or_default())

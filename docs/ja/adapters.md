@@ -19,6 +19,7 @@ Shikigami が操作できるアプリは「アダプター」単位で増やし�
    - `name()`：型名の接頭辞
    - `install()`：ノード型とハンドラーの登録、実行終了時の後片付け（`on_run_finished`）
    - `inspect()`（任意）：いまアプリに何が映っているかを AI 向けに返す。MCP の `test_step` は実行後にこれを付けて返す
+   - `table_columns()`（任意）：結果が表になるノード（シート・CSV）について、その列名を今ファイルから読んで返す。Studio はこれで、フローを実行する前から繰り返しの中で `item.列` を選べるようにする
 4. **一覧への登録**：`crates/shikigami-adapters/src/lib.rs` の `all()` に 1 行足す。CLI・MCP サーバー・Studio はすべてここから Runtime を作るので、ほかに触る場所はない
 
 これだけで、検証とヒント、`list_step_types` / `get_step_schema`（AI 向けの一覧と記述例）、`test_step`、Studio の入力フォームが自動で付きます。

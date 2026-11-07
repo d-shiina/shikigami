@@ -5,9 +5,7 @@ import type { Step, VariableDef } from "@shikigami/schema";
 import { isPlainName } from "./expr";
 import { outputs } from "./nodeRows";
 
-export const FOR_EACH = "control.forEach";
-/** Nodes whose result is a table: their columns can be read from the file before a run. */
-export const TABLE_READERS = new Set(["excel.readRows", "file.readCsv"]);
+import { FOR_EACH } from "./stepTypes";
 
 export interface Loop {
   step: Step;
