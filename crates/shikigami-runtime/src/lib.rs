@@ -19,6 +19,7 @@ pub mod node;
 pub mod record;
 mod runlog;
 pub mod sidecar;
+pub mod single;
 mod used_secrets;
 
 use std::collections::HashMap;
@@ -144,6 +145,15 @@ impl Runtime {
     pub fn with_policy(mut self, path: PathBuf) -> Self {
         self.policy_path = Some(Arc::new(path));
         self
+    }
+
+    /// Binds the runtime to a workspace: its secrets (the vault opened at
+    /// `root`) and its `policy.json`. Every process that runs flows of a
+    /// workspace (Studio, the MCP server, `shikigami run`, `shikigami
+    /// agent`) builds its runtime with this one call, so something a
+    /// workspace run needs is added here once, not in each of them.
+    pub fn for_workspace(self, root: &std::path::Path, secrets: Arc<dyn SecretProvider>) -> Self {
+        self.with_secrets(secrets).with_policy(Policy::path(root))
     }
 
     /// Step types this runtime can execute. Use the same registry for the

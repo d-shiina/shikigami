@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use shikigami_core::FlowId;
-use shikigami_core::{ApprovalStore, FileStore, FlowService, Policy, RunId};
+use shikigami_core::{ApprovalStore, FileStore, FlowService, RunId};
 use shikigami_runtime::{Adapter, DebugControl, RunSnapshot, Runtime, Stopper};
 use shikigami_secrets::Vault;
 
@@ -64,9 +64,7 @@ pub fn run() {
     let vault = Arc::new(Vault::open(service.store().root()));
     let state = AppState {
         service: service.clone(),
-        runtime: runtime
-            .with_secrets(vault.clone())
-            .with_policy(Policy::path(service.store().root())),
+        runtime: runtime.for_workspace(service.store().root(), vault.clone()),
         approvals: ApprovalStore::new(service.store().local_root()),
         runs: Mutex::new(HashMap::new()),
         vault,
@@ -179,6 +177,7 @@ pub fn run() {
             commands::get_observation,
             commands::run_record,
             commands::run_flow,
+            commands::test_step,
             commands::stop_run,
             commands::run_status,
             debug::debug_run,

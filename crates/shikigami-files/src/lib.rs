@@ -60,6 +60,10 @@ impl Adapter for FileAdapter {
         "file"
     }
 
+    fn table_columns(&self, step_type: &str, params: &Value) -> Option<Vec<String>> {
+        (step_type == types::READ_CSV).then(|| read_csv_columns(params).ok())?
+    }
+
     fn install(&self, mut builder: RuntimeBuilder) -> RuntimeBuilder {
         for (def, kind) in step_defs() {
             builder = builder.register(def, FileStep { kind });

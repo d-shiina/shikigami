@@ -9,7 +9,7 @@ import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { fieldAccess } from "../lib/expr";
 import { t } from "../lib/i18n";
-import { enclosingLoops, listSources, otherVariables, resultStep, TABLE_READERS } from "../lib/loopScope";
+import { enclosingLoops, listSources, otherVariables, resultStep } from "../lib/loopScope";
 import { columnsOf, type RunScope } from "../lib/runScope";
 import { typeTitle } from "../lib/sentence";
 
@@ -73,10 +73,12 @@ export function useInsertChoices(step: Step, scope: RunScope): InsertChoices {
   const flow = useStudio((s) => s.flow);
   const steps = flow?.steps ?? [];
   const loops = useMemo(() => enclosingLoops(steps, step.id ?? ""), [steps, step.id]);
-  // The table-reading nodes the loops walk over, as a stable key for reading their files.
+  // The nodes whose results the loops walk over, as a stable key for reading their files.
+  // Whether a node's result is a table, and its columns, is the adapter's to say
+  // (`Adapter::table_columns`): a node that reads no table answers nothing.
   const readers = loops
     .map((l) => (l.items ? resultStep(steps, l.items) : null))
-    .map((s) => (s && TABLE_READERS.has(s.type) ? { type: s.type, params: s.params ?? {} } : null));
+    .map((s) => (s && typeof s.params?.path === "string" ? { type: s.type, params: s.params ?? {} } : null));
   const key = JSON.stringify(readers);
   const [fromFiles, setFromFiles] = useState<(string[] | null)[]>([]);
   useEffect(() => {

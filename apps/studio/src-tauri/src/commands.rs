@@ -341,8 +341,10 @@ pub async fn table_columns(
     params: Value,
 ) -> CmdResult<Vec<String>> {
     let folder = state.service.project_dir(&id)?;
+    let adapters = state.adapters.clone();
     Ok(tokio::task::spawn_blocking(move || {
-        shikigami_adapters::table_columns(&step_type, &params, &folder).unwrap_or_default()
+        shikigami_adapters::table_columns(&adapters, &step_type, &params, &folder)
+            .unwrap_or_default()
     })
     .await
     .unwrap_or_default())
@@ -729,6 +731,110 @@ pub async fn run_flow(
             details: e.details,
         })?;
     track_run(app, &state, id, handle, RUN_EVENT)
+}
+
+/// What 「ノードの単体実行」 gave: the node ran alone, with the values the
+/// last run left (see `shikigami_runtime::single`).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StepTest {
+    status: shikigami_runtime::RunStatus,
+    output: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<shikigami_runtime::RunError>,
+    logs: Vec<StepTestLog>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StepTestLog {
+    level: shikigami_runtime::LogLevel,
+    message: String,
+}
+
+/// The browser that 「画面から選ぶ」 opens outside a run: a node run alone
+/// works on the same page, so pick-then-run needs no run of the flow.
+const STUDIO_BROWSER: &str = "studio-pick";
+
+/// Runs one node of the stored flow on its own. Nothing before it runs:
+/// `values` are the variables it reads, from the last run. The run is not
+/// recorded under `runs/` (it is not a run of the flow).
+#[tauri::command]
+pub async fn test_step(
+    state: State<'_, AppState>,
+    id: FlowId,
+    step_id: StepId,
+    values: Option<Map<String, Value>>,
+) -> CmdResult<StepTest> {
+    let flow = state.service.get(&id)?;
+    let step = flow
+        .find_step(&step_id)
+        .cloned()
+        .ok_or_else(|| err("STEP_NOT_FOUND", format!("no step {step_id}")))?;
+    let inputs = values.unwrap_or_default();
+    let single = shikigami_runtime::single::flow_for(
+        step,
+        state.runtime.registry(),
+        &inputs,
+        shikigami_runtime::single::Context {
+            flow_id: Some(id.clone()),
+            parts: Some(&flow.parts),
+        },
+    )
+    .map_err(|m| err("UNKNOWN_STEP_TYPE", m))?;
+    let subflows = state.service.subflows(&flow)?;
+    let handle = state
+        .runtime
+        .start(
+            single.flow.clone(),
+            RunOptions {
+                inputs,
+                run_id: Some(RunId::new(STUDIO_BROWSER)),
+                keep_adapter_state: true,
+                subflows,
+                project_dir: Some(state.service.project_dir(&id)?),
+                origin: RunOrigin::new(RunTrigger::Studio),
+                ..RunOptions::default()
+            },
+        )
+        .map_err(|e| ErrorPayload {
+            code: e.code,
+            message: e.message,
+            details: e.details,
+        })?;
+    // 「中止」 stops it like any run (`stop_run` with this id).
+    let run_id = handle.run_id.clone();
+    if let Ok(mut runs) = state.runs.lock() {
+        runs.insert(
+            run_id.clone(),
+            ActiveRun {
+                cancel: handle.stopper(),
+                snapshot: handle.snapshot_cell(),
+                flow_id: id.clone(),
+                debug: None,
+            },
+        );
+    }
+    let mut logs = Vec::new();
+    let report = handle
+        .wait_with(|event: &RunEventEnvelope| {
+            if let RunEvent::Log { level, message, .. } = &event.event {
+                logs.push(StepTestLog {
+                    level: *level,
+                    message: message.clone(),
+                });
+            }
+        })
+        .await;
+    if let Ok(mut runs) = state.runs.lock() {
+        runs.remove(&run_id);
+    }
+    let report = report.map_err(|e| err("INTERNAL", e.message))?;
+    Ok(StepTest {
+        status: report.status,
+        output: single.result(&report.outputs),
+        error: report.error,
+        logs,
+    })
 }
 
 /// Records a started run, sends its events to the windows as `event`, and

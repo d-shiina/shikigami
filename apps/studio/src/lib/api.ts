@@ -32,6 +32,15 @@ import type {
   WorkspaceInfo,
 } from "@shikigami/schema";
 import { isErrorPayload } from "@shikigami/schema";
+import type { LogLevel, RunError, RunStatus } from "@shikigami/schema";
+
+/** What a node run alone gave (Tauri `test_step`). */
+export type StepTestResult = {
+  status: RunStatus;
+  output: unknown;
+  error?: RunError;
+  logs: { level: LogLevel; message: string }[];
+};
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -254,6 +263,8 @@ export const api = {
   debugRun: (runId: string, command: DebugCommand) =>
     call<{ revision: number; updated: boolean }>("debug_run", { runId, command }),
   stopRun: (runId: string) => call<void>("stop_run", { runId }),
+  /** 「ノードの単体実行」: only the node runs, reading `values`; not recorded as a run. */
+  testStep: (id: string, stepId: string, values: Record<string, unknown>) => call<StepTestResult>("test_step", { id, stepId, values }),
   /** The picker (`action: "pick"`) and highlight (`action: "highlight"`) of an adapter. */
   pointAt: (adapter: string, params: Record<string, unknown>, session?: string) =>
     call<Record<string, unknown>>("point_at", { adapter, session, params }),

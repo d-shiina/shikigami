@@ -2,6 +2,7 @@
 // for the AI (and `code` is fixed by contract), so Studio words the error
 // itself from `code`, `details` and the node's params (competitive-gaps.md #7).
 import type { Step } from "@shikigami/schema";
+import { FAIL } from "./stepTypes";
 import { locale, t } from "./i18n";
 import { targetText } from "./sentence";
 
@@ -97,7 +98,7 @@ const say = (text: Text, c: ErrorContext) => (typeof text === "function" ? text(
  * flow's author wrote for people anyway.
  */
 export function explainError(error: ErrorLike, step?: Step | null): Explained {
-  const entry = step?.type === "control.fail" ? undefined : t.runErrors[error.code];
+  const entry = step?.type === FAIL ? undefined : t.runErrors[error.code];
   if (!entry) return { what: error.message, todo: "", known: false };
   const c = context(record(error.details), step);
   return { what: say(entry.what, c), todo: say(entry.todo, c), known: true };

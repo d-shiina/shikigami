@@ -7,7 +7,7 @@
 
 use serde::Serialize;
 use serde_json::{Map, Value};
-use shikigami_core::{ErrorPayload, Flow, FlowId, RunId};
+use shikigami_core::{ErrorPayload, Flow, FlowId, FlowService, RunId};
 use shikigami_runtime::record::{list_runs, read_report};
 use shikigami_runtime::{RunOptions, RunOrigin, RunStatus, RunTrigger};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -55,10 +55,18 @@ pub struct LastRun {
     finished_at: OffsetDateTime,
 }
 
-/// The published flows, by name, with the last time each ran.
+/// The published flows, by name, with the last time each ran. Read off the
+/// main thread: it reads up to [`RECENT_RUNS`] run reports, and a slow disk
+/// must not stop every window while it does.
 #[tauri::command]
-pub fn runner_list(state: State<'_, AppState>) -> CmdResult<Vec<RunnerItem>> {
-    let svc = &state.service;
+pub async fn runner_list(state: State<'_, AppState>) -> CmdResult<Vec<RunnerItem>> {
+    let svc = state.service.clone();
+    tokio::task::spawn_blocking(move || list_published(&svc))
+        .await
+        .map_err(|e| err("INTERNAL", e.to_string()))?
+}
+
+fn list_published(svc: &FlowService) -> CmdResult<Vec<RunnerItem>> {
     let mut last: std::collections::HashMap<FlowId, LastRun> = Default::default();
     let root = svc.store().local_root();
     for run_id in list_runs(root)
@@ -168,9 +176,25 @@ pub async fn runner_pick(kind: String, start: Option<String>) -> CmdResult<Optio
 }
 
 /// Opens the run window, or brings it to the front.
+///
+/// Async on purpose: a synchronous command runs on the main thread, and
+/// making a window there waits for the main thread itself, so Studio froze
+/// on Windows (tauri-apps/wry#583).
 #[tauri::command]
-pub fn open_runner(app: AppHandle) -> CmdResult<()> {
+pub async fn open_runner(app: AppHandle) -> CmdResult<()> {
     show_runner(&app).map_err(|e| err("WINDOW_FAILED", e.to_string()))
+}
+
+/// [`show_runner`] from an event handler (tray icon, tray menu): handlers
+/// run on the main thread, where making a window deadlocks on Windows, so
+/// the window is made from another thread.
+pub(crate) fn show_runner_later(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = show_runner(&app) {
+            tracing::warn!(error = %e, "cannot open the run window");
+        }
+    });
 }
 
 pub(crate) fn show_runner(app: &AppHandle) -> tauri::Result<()> {
