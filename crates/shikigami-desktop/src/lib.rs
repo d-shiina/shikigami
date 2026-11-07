@@ -48,6 +48,7 @@ mod jab;
 pub mod jabmap;
 pub mod keys;
 pub mod menu;
+pub mod ocr_table;
 #[cfg(windows)]
 mod overlay;
 pub mod paddle;
@@ -904,6 +905,32 @@ impl DesktopStep {
         let lines = visual::read_lines(self.backend.as_ref(), &picture, options).await?;
         let mut output = visual::read_output(&lines);
         output["engine"] = json!(engine);
+        if params.get("table").and_then(Value::as_bool) == Some(true) {
+            let header = params.get("headerRow").and_then(Value::as_u64).unwrap_or(1) as usize;
+            // Lines are in window pixels; the picture's own pixels for the
+            // ruled lines.
+            let (dx, dy) = picture.origin;
+            let local: Vec<vision::OcrLine> = lines
+                .iter()
+                .map(|l| vision::OcrLine {
+                    words: l
+                        .words
+                        .iter()
+                        .map(|w| vision::OcrWord {
+                            rect: w.rect.offset(-dx, -dy),
+                            ..w.clone()
+                        })
+                        .collect(),
+                })
+                .collect();
+            let table = ocr_table::read_table(&picture.image, &local);
+            let json = table.map_or_else(
+                || json!({ "cells": [], "rows": [] }),
+                |t| ocr_table::table_json(&t, header),
+            );
+            output["cells"] = json["cells"].clone();
+            output["rows"] = json["rows"].clone();
+        }
         if let Some(reason) = fallback {
             output["warning"] = json!(format!(
                 "Read with Windows OCR because PaddleOCR is not available ({reason}); Japanese is read much worse. Reinstall Shikigami, or run `pnpm studio:bundle-ocr` in a development checkout."
@@ -1382,17 +1409,20 @@ fn step_defs() -> Vec<(StepTypeDef, Kind)> {
             step_type: READ_TEXT,
             kind: Kind::ReadText,
             label: "文字認識（OCR）",
-            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"; accurate: true reads with larger models, much better on handwriting but several times slower): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height }], engine, warning? } (places in window pixels; engine is \"paddle\", \"paddle-accurate\" or \"windows\", and warning says when the default fell back to Windows OCR). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
+            description: "Reads the text shown in `target` with OCR (offline; PaddleOCR, which reads Japanese, Chinese and English, or Windows OCR where PaddleOCR is not installed or with engine: \"windows\"; accurate: true reads with larger models, much better on handwriting but several times slower): the whole window, `target.element`, or `target.region` (pixels from the window's top-left). Or reads an image `file` (PNG, JPEG, BMP, TIFF) instead of a window. Output: { text, lines: [{ text, x, y, width, height, confidence?, unsure? }], engine, warning? } (places in window pixels; engine is \"paddle\", \"paddle-accurate\", \"windows\" or an added engine's name, and warning says when the default fell back to Windows OCR; confidence is 0–1 and unsure lists the positions in text of characters read with low confidence, where the engine says). With table: true it also splits the table on the picture into rows and columns by its ruled lines (or, without lines, by the gaps between columns of text): cells (every row as a list of texts) and rows (the rows after headerRow, default 1, as records named by its cells: e.g. {{ invoice.rows[0].金額 }}). For apps whose elements inspect_ui does not show; use desktop.getValue where it does.",
             params: json!({
                 "target": picture,
                 "file": { "type": "string", "minLength": 1, "description": "画面の代わりに読む画像ファイルのフルパス" },
                 "language": { "type": "string", "minLength": 2, "description": "Windows OCR の言語（ja, en-US など）。PaddleOCR では不要" },
                 "engine": ocr_engine_schema(),
-            "accurate": { "type": "boolean", "description": "高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）" }
+            "accurate": { "type": "boolean", "description": "高精度：PaddleOCR の大きいモデルで読む（手書きに強いが数倍〜10 倍遅い）" },
+                "table": { "type": "boolean", "description": "表の読み取り：罫線（なければ文字の並び）で表を行と列に分け、出力に cells（行ごとの文字の並び）と rows（見出しの行の名前で引ける各行）を足す" },
+                "headerRow": { "type": "integer", "minimum": 0, "description": "見出しの行：表の何行目が見出しか（既定 1、0 で見出しなし）。table と使う" }
             }),
             required: &[],
             has_output: true,
             examples: vec![
+                json!({ "type": READ_TEXT, "name": "請求書の明細を読む", "params": { "file": "{{ outDir }}\\請求書.png", "table": true }, "saveAs": "invoice" }),
                 json!({ "type": READ_TEXT, "name": "合計欄を読む", "params": { "target": { "window": { "title": "Citrix" }, "region": { "x": 620, "y": 410, "width": 180, "height": 32 } } }, "saveAs": "total" }),
                 json!({ "type": READ_TEXT, "name": "請求書画像を読む", "params": { "file": "{{ outDir }}\\請求書.png" }, "saveAs": "total" }),
             ],

@@ -1,3 +1,4 @@
+import { Search } from "lucide-react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { authorIssues, unsetIssues } from "../lib/todos";
@@ -54,6 +55,22 @@ function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => 
         </button>
       ))}
     </div>
+  );
+}
+
+/** Opens the search over the chart (also Ctrl+F). */
+export function SearchButton() {
+  const setOpen = useStudio((s) => s.setSearchOpen);
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      title={t.search.placeholder}
+      aria-label={t.search.label}
+      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-sheet/95 text-slate-600 shadow-raised backdrop-blur hover:text-ink"
+    >
+      <Search size={14} aria-hidden="true" />
+    </button>
   );
 }
 

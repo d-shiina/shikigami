@@ -275,6 +275,10 @@ export type StudioState = {
   folded: Record<string, string[]>;
   outlineOpen: boolean;
   paletteOpen: boolean;
+  /** The search over the chart (Ctrl+F). */
+  searchOpen: boolean;
+  /** Counts each Ctrl+F (or search button), so an open box takes the focus again. */
+  searchAsked: number;
   /** Where the palette adds, when it was opened from a "+" between nodes; otherwise after the selection. */
   paletteAt: InsertAt | null;
   paletteAnchor: PaletteAnchor | null;
@@ -437,6 +441,7 @@ export type StudioState = {
   setReviewing(on: boolean): void;
   /** Opens the node palette, adding at `at` (or after the selection) when a node is picked. */
   setPaletteOpen(open: boolean, at?: InsertAt | null, anchor?: PaletteAnchor | null): void;
+  setSearchOpen(open: boolean): void;
   loadVersions(): Promise<void>;
   createVersion(name: string, note: string): Promise<boolean>;
   restoreVersion(number: number): Promise<void>;
@@ -882,6 +887,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       folded: loadFolded(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
       paletteOpen: false,
+      searchOpen: false,
+      searchAsked: 0,
       paletteAt: null,
       paletteAnchor: null,
       place: "library",
@@ -1968,6 +1975,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       setReviewing(on) {
         set({ reviewing: on, place: on ? "review" : "flows", secretsOpen: false });
+      },
+
+      setSearchOpen(open) {
+        set((s) => ({ searchOpen: open, searchAsked: open ? s.searchAsked + 1 : s.searchAsked }));
       },
 
       setPaletteOpen(open, at, anchor) {
