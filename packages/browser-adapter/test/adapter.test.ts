@@ -313,6 +313,32 @@ describe("pointing at the page", () => {
     await person.call("closeRun", f);
   });
 
+  it("opens the page itself when no browser is open and a url is given (Studio with no run)", async () => {
+    const s = { runId: "studio-pick" };
+    const err = await failure(person.call("pick", { ...s, timeoutMs: 500 }));
+    expect(err.code).toBe("BROWSER_NOT_OPEN");
+    const asked = person.call("pick", { ...s, url: base, timeoutMs: 5000 });
+    // The browser is opening: looking at it meanwhile would get in the way.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    for (let i = 0; i < 50; i++) {
+      if (await person.call("isVisible", { ...s, target: { text: "クリックして教えてください" }, waitMs: 100 })) break;
+    }
+    await person.call("click", { ...s, target: { role: "button", name: "ログイン" } });
+    expect(await asked).toMatchObject({ status: "picked", target: { role: "button", name: "ログイン" } });
+    // The browser stays open for the next pick, on the page the person is at: the url is not opened again.
+    await person.call("fill", { ...s, target: { label: "ユーザー名" }, value: "demo" });
+    await person.call("fill", { ...s, target: { label: "パスワード" }, value: "shikigami" });
+    await person.call("click", { ...s, target: { role: "button", name: "ログイン" } });
+    await person.call("waitFor", { ...s, target: { role: "heading", name: "受注一覧" } });
+    const again = person.call("pick", { ...s, url: base, timeoutMs: 5000 });
+    for (let i = 0; i < 50; i++) {
+      if (await person.call("isVisible", { ...s, target: { text: "クリックして教えてください" }, waitMs: 100 })) break;
+    }
+    await person.call("click", { ...s, target: { role: "button", name: "A-1001 を出荷" } });
+    expect(await again).toMatchObject({ status: "picked", target: { role: "button", name: "A-1001 を出荷" } });
+    await person.call("closeRun", s);
+  });
+
   it("needs a visible browser", async () => {
     const unseen = { runId: "run_pick_headless" };
     await adapter.call("open", { ...unseen, url: base });

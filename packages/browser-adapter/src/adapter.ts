@@ -272,6 +272,16 @@ export class Adapter {
     return session;
   }
 
+  /**
+   * The context's session; when none is open and `url` is given, a browser
+   * opened on that page (Studio's 「画面から選ぶ」 with no run going).
+   */
+  private async sessionOrOpen(params: Params): Promise<Session> {
+    const session = this.sessions.get(this.key(params));
+    if ((!session || session.page.isClosed()) && typeof params.url === "string" && params.url) await this.open(params);
+    return this.session(params);
+  }
+
   /** The context's session, started (with a new window) on first use. */
   private async ensureSession(params: Params): Promise<Session> {
     const key = this.key(params);
@@ -885,7 +895,7 @@ export class Adapter {
    * when it repeats), or `{ status: "cancelled" }`.
    */
   private async pick(params: Params): Promise<unknown> {
-    const session = this.session(params);
+    const session = await this.sessionOrOpen(params);
     if (session.headless && !this.options.scriptedHuman) {
       throw new AdapterError("HUMAN_REQUIRED", "pointing needs a person, but the browser runs without a window", {
         details: {
@@ -913,7 +923,7 @@ export class Adapter {
 
   /** Outlines `target` (or each of `targets`) for `durationMs`; waits `waitMs` so the person sees it. */
   private async highlight(params: Params): Promise<unknown> {
-    const session = this.session(params);
+    const session = await this.sessionOrOpen(params);
     const targets = Array.isArray(params.targets)
       ? (params.targets as Target[])
       : params.target

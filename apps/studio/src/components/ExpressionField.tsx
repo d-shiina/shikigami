@@ -12,6 +12,7 @@ import { locale, t } from "../lib/i18n";
 import { TYPE_COLOR } from "../lib/nodeRows";
 import { normalize } from "../lib/palette";
 import { columnsOf, type RunScope, sampleOf, shortValue } from "../lib/runScope";
+import { useFieldRegistration } from "./InsertVariable";
 
 /** Fonts and spacing shared by the field and the coloured copy under it, so the letters line up. */
 const BOX = "block w-full rounded-[4px] border px-2 py-1 font-mono text-xs leading-5 whitespace-pre-wrap break-all";
@@ -113,6 +114,18 @@ export function ExpressionField({
   };
 
   const help = context.call ? t.functionHelp[context.call.name] : undefined;
+  const latest = useRef({ draft, cursor });
+  latest.current = { draft, cursor };
+  const insertAt = (expression: string) => {
+    const { draft, cursor } = latest.current;
+    const next = draft.slice(0, cursor) + expression + draft.slice(cursor);
+    const at = cursor + expression.length;
+    setDraft(next);
+    setCursor(at);
+    onCommit(next);
+    requestAnimationFrame(() => area.current?.setSelectionRange(at, at));
+  };
+  const register = useFieldRegistration(label, insertAt);
 
   return (
     <div className="relative">
@@ -159,7 +172,10 @@ export function ExpressionField({
           }}
           onSelect={sync}
           onClick={sync}
-          onFocus={() => setFocused(true)}
+          onFocus={() => {
+            setFocused(true);
+            register();
+          }}
           onBlur={() => {
             setFocused(false);
             setOpen(false);

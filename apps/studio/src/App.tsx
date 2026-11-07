@@ -16,6 +16,7 @@ import { HistoryDialog } from "./components/HistoryDialog";
 import { Inspector } from "./components/Inspector";
 import { OutlinePanel } from "./components/Outline";
 import { FileSheet } from "./components/FileSheet";
+import { NodeEditor } from "./components/NodeEditor";
 import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
 import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
 import { Resizer } from "./components/Resizer";
@@ -162,7 +163,9 @@ function Editor({
   const projectOpen = useProject((s) => s.panelOpen);
   const outlineLeft = projectOpen ? 12 + 264 + 12 : 12;
   return (
-    <div className={`grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
+    <div className={`relative grid min-h-0 min-w-0 flex-1 ${right === null ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-[auto_minmax(0,1fr)_auto]"}`}>
+      {/* A node opened full size covers the chart and the right pane. */}
+      <NodeEditor />
       <div className="min-h-0">{list}</div>
       <main className="flex min-h-0 min-w-0 flex-col">
         <div className="@container relative min-h-0 flex-1">

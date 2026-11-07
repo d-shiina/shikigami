@@ -4,7 +4,7 @@
 // list a repeat walks over chosen from the results of the nodes above it.
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { Braces } from "lucide-react";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useStudio } from "../context";
 import { api } from "../lib/api";
 import { fieldAccess } from "../lib/expr";
@@ -21,6 +21,49 @@ export interface InsertChoices {
 
 const InsertContext = createContext<InsertChoices | null>(null);
 export const InsertProvider = InsertContext.Provider;
+
+/**
+ * The field last focused, so the editor's 「使える値」 column can put a value
+ * into it with one click. `insert` takes a plain expression (`item.顧客`)
+ * and wraps it the way the field needs.
+ */
+export type ActiveField = { label: string; insert: (expression: string) => void };
+let activeField: ActiveField | null = null;
+const fieldWatchers = new Set<() => void>();
+export function setActiveField(field: ActiveField | null) {
+  // Losing focus to the editor's own buttons must not forget the field.
+  if (field === null && activeField === null) return;
+  activeField = field;
+  for (const w of fieldWatchers) w();
+}
+/** Forgets `field` when it is the one registered: its input is gone (the row removed, the editor closed). */
+export function dropActiveField(field: ActiveField) {
+  if (activeField === field) setActiveField(null);
+}
+/** A field that registers on focus and forgets itself when it unmounts. */
+export function useFieldRegistration(label: string | undefined, insert: (expression: string) => void): () => void {
+  const self = useRef<ActiveField | null>(null);
+  const latest = useRef(insert);
+  latest.current = insert;
+  useEffect(() => () => {
+    if (self.current) dropActiveField(self.current);
+  }, []);
+  return () => {
+    if (!label) return;
+    self.current ??= { label, insert: (expression) => latest.current(expression) };
+    self.current.label = label;
+    setActiveField(self.current);
+  };
+}
+export function useActiveField(): ActiveField | null {
+  return useSyncExternalStore(
+    (w) => {
+      fieldWatchers.add(w);
+      return () => fieldWatchers.delete(w);
+    },
+    () => activeField,
+  );
+}
 
 /**
  * What a node's fields can insert. Columns come from the last run when it
@@ -74,11 +117,14 @@ export function TemplateInput({
   onCommit,
   placeholder,
   className,
+  label,
 }: {
   value: string;
   onCommit: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /** The setting's name, for 「クリックで「入力する文字」に入ります」. */
+  label?: string;
 }) {
   const choices = useContext(InsertContext);
   const [draft, setDraft] = useState(value);
@@ -95,12 +141,19 @@ export function TemplateInput({
   }, [open]);
   const commit = (text = draft) => text !== value && onCommit(text);
   const insert = (expression: string) => {
-    const at = caret.current ?? draft.length;
+    // Where the cursor is now when the field still has the focus (a click in
+    // 「使える値」 keeps it), else where it was when the field lost it.
+    const live = input.current && document.activeElement === input.current ? input.current.selectionStart : null;
+    const at = live ?? caret.current ?? draft.length;
     const text = `${draft.slice(0, at)}{{ ${expression} }}${draft.slice(at)}`;
     setDraft(text);
     setOpen(false);
     commit(text);
+    caret.current = at + expression.length + 6;
+    if (live !== null) requestAnimationFrame(() => input.current?.setSelectionRange(caret.current, caret.current));
   };
+  // The draft the registered insert sees is the latest one.
+  const register = useFieldRegistration(label, insert);
   const field = (
     <input
       ref={input}
@@ -108,6 +161,7 @@ export function TemplateInput({
       value={draft}
       placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
+      onFocus={register}
       onBlur={(e) => {
         caret.current = e.target.selectionStart;
         commit();

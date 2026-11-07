@@ -1,7 +1,7 @@
 import type { Part, Step, StepPatch, StepTypeDef } from "@shikigami/schema";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
-import { Boxes, Crosshair, FolderOpen, ScanSearch } from "lucide-react";
+import { Boxes, Crosshair, FolderOpen, Maximize2, ScanSearch } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectMaybe } from "../project";
 import { api, type SecretField } from "../lib/api";
@@ -26,6 +26,7 @@ import { VarIcon } from "./VarIcon";
 import { VariablesPanel } from "./VariablesPanel";
 import { columnsByVariable, InsertProvider, ListSourceField, TemplateInput, useInsertChoices } from "./InsertVariable";
 import { listToText, textToList } from "../lib/listText";
+import { pageAbove } from "../lib/loopScope";
 
 type JsonSchema = {
   type?: string;
@@ -137,7 +138,7 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <label className={`grid ${onRemove ? "grid-cols-[84px_1fr_auto]" : "grid-cols-[84px_1fr]"} items-start gap-x-2 py-1`}>
+    <label className={`grid ${onRemove ? "grid-cols-[84px_1fr_auto] [[data-wide]_&]:grid-cols-[132px_1fr_auto]" : "grid-cols-[84px_1fr] [[data-wide]_&]:grid-cols-[132px_1fr]"} items-start gap-x-2 py-1`}>
       <span className="relative flex min-h-[26px] items-center justify-end text-right text-[11px] leading-tight text-slate-500" title={title}>
         {socket && <span className="mr-1.5 h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
         {label}
@@ -172,7 +173,7 @@ function Row({
 function AddRow({ choices, onAdd }: { choices: { key: string; label: string }[]; onAdd: (key: string) => void }) {
   if (choices.length === 0) return null;
   return (
-    <div className="grid grid-cols-[84px_1fr] gap-x-2 py-1">
+    <div className="grid grid-cols-[84px_1fr] gap-x-2 py-1 [[data-wide]_&]:grid-cols-[132px_1fr]">
       <span />
       <select
         className="w-full cursor-pointer rounded-[4px] border border-dashed border-slate-300 bg-transparent px-2 py-1 text-[11px] text-slate-500 hover:border-brand-500 hover:text-brand-600 focus:outline-none"
@@ -255,7 +256,7 @@ function TextOrSecretField({
         ))}
       </div>
       {mode === "text" ? (
-        <TemplateInput value={typeof value === "string" ? value : ""} onCommit={(text) => onChange(text === "" ? null : text)} />
+        <TemplateInput value={typeof value === "string" ? value : ""} label={label} onCommit={(text) => onChange(text === "" ? null : text)} />
       ) : (
         <div className="flex items-center gap-1">
           <select
@@ -317,6 +318,7 @@ function ParamField({
   socket,
   secretCapable,
   pointer,
+  stepId,
   isPath,
   binds,
   onRemove,
@@ -332,6 +334,8 @@ function ParamField({
   secretCapable: boolean;
   /** The adapter that can pick this target on screen and highlight it. */
   pointer?: string;
+  /** The node, for the picker to find its 「ページを開く」. */
+  stepId?: string;
   /** A file or folder of the flow's folder (`input/orders.xlsx`). */
   isPath?: boolean;
   /** A variable name the node defines (a repeat's 要素): plain text, nothing to insert. */
@@ -390,7 +394,7 @@ function ParamField({
   } else if (schema.type === "string" && binds) {
     editor = <CommitInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "string") {
-    editor = <TemplateInput value={String(value ?? "")} onCommit={(text) => onChange(text === "" ? null : text)} />;
+    editor = <TemplateInput value={String(value ?? "")} label={paramLabel(name, stepType)} onCommit={(text) => onChange(text === "" ? null : text)} />;
   } else if (schema.type === "array" && isScalarList(schema, value)) {
     // A few plain values (a case's values): one line, comma-separated.
     hint = t.props.listHint;
@@ -410,7 +414,7 @@ function ParamField({
         <div className="mb-1 flex flex-wrap items-center gap-1.5 pl-1 text-[11px] text-slate-500" title={schema.description ?? name}>
           {socket && <span className="h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
           {label}
-          {pointer && <PointTools adapter={pointer} schema={schema} value={value} onChange={onChange} />}
+          {pointer && <PointTools adapter={pointer} schema={schema} value={value} stepId={stepId} onChange={onChange} />}
         </div>
         <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} onChange={onChange} />
       </div>
@@ -507,6 +511,7 @@ function TargetField({
             schema={schema}
             value={value}
             context={typeof step.params?.context === "string" ? step.params.context : undefined}
+            stepId={step.id}
             onChange={onChange}
           />
         )}
@@ -656,6 +661,7 @@ function PartInspector({ name }: { name: string }) {
               schema={schema}
               value={part.target}
               context={partContext(uses)}
+              stepId={uses[0]?.id}
               onChange={(target) => target && set({ target: target as Part["target"] })}
             />
           )}
@@ -697,6 +703,8 @@ function PartInspector({ name }: { name: string }) {
 const partContext = (uses: readonly Step[]) =>
   uses.map((u) => u.params?.context).find((c): c is string => typeof c === "string" && c !== "");
 
+/** The browser Studio opens to pick parts with no run going (the adapter keeps it by this name). */
+const STUDIO_BROWSER = "studio-pick";
 /** The adapters whose targets can be picked on screen from Studio. */
 const POINTERS = new Set(["desktop", "browser"]);
 const pointerOf = (type: string) => {
@@ -713,6 +721,7 @@ function PointTools({
   schema,
   value,
   context,
+  stepId,
   onChange,
 }: {
   adapter: string;
@@ -720,18 +729,25 @@ function PointTools({
   value: unknown;
   /** The browser context the node uses (`context` param). */
   context?: string;
+  /** The node, to find the 「ページを開く」 above it. */
+  stepId?: string;
   onChange: (value: unknown) => void;
 }) {
   const run = useStudio((s) => s.run);
+  const flow = useStudio((s) => s.flow);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; warn?: boolean } | null>(null);
   const canPoint = Boolean(schema.properties?.point);
-  // A browser part is picked in the browser a run opened: there is none
-  // until the flow runs (or is paused at a node).
+  // A browser part is picked in the browser a run opened. With no run going,
+  // Studio opens the page of the nearest 「ページを開く」 above in a browser of
+  // its own, which stays open for the next pick.
   const browser = adapter === "browser";
-  const session = browser && run && isActive(run) ? run.runId : undefined;
-  const unavailable = browser && !session;
-  const extra = browser && context ? { context } : {};
+  const running = browser && run && isActive(run) ? run.runId : undefined;
+  const page = browser && !running && stepId ? pageAbove(flow?.steps ?? [], stepId, context) : null;
+  const session = running ?? (browser ? STUDIO_BROWSER : undefined);
+  const unavailable = browser && !running && !page?.url;
+  const extra = browser ? { ...(context ? { context } : {}), ...(page?.url ? { url: page.url } : {}) } : {};
+  const why = !browser || running || page?.url ? undefined : page ? t.picker.urlIsExpression : t.picker.needsOpen;
   const pick = async () => {
     setBusy(true);
     setNote(null);
@@ -769,7 +785,7 @@ function PointTools({
         <button
           type="button"
           className={button}
-          title={unavailable ? t.picker.needsRun : browser ? t.picker.pickBrowserTitle : t.picker.pickTitle}
+          title={why ?? (running ? t.picker.pickBrowserTitle : page?.url ? t.picker.pickOpensTitle(page.url) : t.picker.pickTitle)}
           disabled={busy || unavailable}
           onClick={() => void pick()}
         >
@@ -779,7 +795,7 @@ function PointTools({
         <button
           type="button"
           className={button}
-          title={unavailable ? t.picker.needsRun : t.picker.highlightTitle}
+          title={why ?? t.picker.highlightTitle}
           disabled={busy || unavailable || !isRecord(value)}
           onClick={() => void highlight()}
         >
@@ -1069,6 +1085,7 @@ function ParamsEditor({
               socket={ref ? TYPE_COLOR[vars.get(ref) ?? "any"] : undefined}
               secretCapable={def?.secretParams?.includes(key) ?? false}
               pointer={key === "target" ? pointerOf(step.type) : undefined}
+              stepId={step.id}
               isPath={def?.pathParams?.includes(key) ?? false}
               binds={def?.bindsVariables?.includes(key) ?? false}
               // The whole params, not a merge patch: a merge would keep the
@@ -1315,7 +1332,7 @@ export function ExtractForm({ step }: { step: Step }) {
   );
 }
 
-function StepInspector() {
+export function StepInspector({ inEditor }: { inEditor?: boolean } = {}) {
   const flow = useStudio((s) => s.flow);
   const selection = useStudio((s) => s.selection);
   const stepTypes = useStudio((s) => s.stepTypes);
@@ -1325,6 +1342,7 @@ function StepInspector() {
   const revert = useStudio((s) => s.revert);
   const pending = usePendingReview();
   const history = useStudio((s) => s.history);
+  const openEditor = useStudio((s) => s.openEditor);
   const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
   const links = useMemo(() => {
     const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
@@ -1345,13 +1363,26 @@ function StepInspector() {
 
   return (
     <div className="pb-6">
-      <div className="px-4 pt-4 pb-3">
+      <div className={inEditor ? "px-4 pt-1 pb-2" : "px-4 pt-4 pb-3"}>
+        {/* The editor's header already says what the node is. */}
+        {!inEditor && (
         <div className="overflow-hidden rounded-[4px] border border-slate-200">
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
             <span className="text-sm font-bold" style={{ color }} title={`${step.type} · ID: ${id}`}>
               {typeTitle(step, def)}
             </span>
+            {!inEditor && (
+              <button
+                type="button"
+                title={t.editor.openTitle}
+                onClick={() => openEditor(id)}
+                className="ml-auto flex items-center gap-1 rounded-[3px] px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-white/60 hover:text-ink"
+              >
+                <Maximize2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                {t.editor.open}
+              </button>
+            )}
           </div>
           <div className="space-y-1 px-3 py-2">
             <div className="text-[13px] leading-snug">
@@ -1360,6 +1391,7 @@ function StepInspector() {
             {def && <p className="text-[11px] text-slate-500">{stepSummary(def.type, def.description)}</p>}
           </div>
         </div>
+        )}
         {pending
           .filter((e) => touchedSteps(e).includes(id))
           .map((e) => (

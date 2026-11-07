@@ -1,0 +1,268 @@
+// One node, full size: double-clicking a node on the chart opens it here.
+// Left, the values the node can use (the row being repeated and its
+// columns, read from the Excel/CSV file before any run; the other
+// variables), a click away from the field being edited. Middle, the same
+// settings as the right pane, with room. Right, what 「このノードだけ試す」
+// gave: the flow runs up to the node, runs it, pauses, and its result and
+// log lines show here.
+import type { Step } from "@shikigami/schema";
+import { ChevronLeft, Play, Square } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useStudio } from "../context";
+import { t } from "../lib/i18n";
+import { resultStep } from "../lib/loopScope";
+import { TYPE_COLOR, knownVariables } from "../lib/nodeRows";
+import { runScope, sampleOf, shortValue } from "../lib/runScope";
+import { sentence, typeTitle } from "../lib/sentence";
+import { findStep, isActive } from "../store";
+import { StepInspector } from "./Inspector";
+import { useActiveField, useInsertChoices } from "./InsertVariable";
+import { Sentence } from "./StoryView";
+import { ValueView } from "./ValueView";
+
+export function NodeEditor() {
+  const editing = useStudio((s) => s.editing);
+  const flow = useStudio((s) => s.flow);
+  const step = editing && flow ? findStep(flow.steps ?? [], editing) : null;
+  const close = useStudio((s) => s.closeEditor);
+  useEffect(() => {
+    if (!step) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !(e.target instanceof HTMLElement && e.target.closest("[role=menu],[aria-expanded=true]"))) close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [step, close]);
+  // The node went away (undo, the AI removed it): nothing to edit.
+  useEffect(() => {
+    if (editing && !step) close();
+  }, [editing, step, close]);
+  // The settings pane shows the selected node: a link to another node in it
+  // (「変数のつながり」) moves the whole editor there, never only the middle.
+  const selection = useStudio((s) => s.selection);
+  const openEditor = useStudio((s) => s.openEditor);
+  useEffect(() => {
+    if (!editing) return;
+    if (selection?.kind === "step" && selection.stepId !== editing) openEditor(selection.stepId);
+    else if (selection?.kind !== "step") close();
+  }, [editing, selection, openEditor, close]);
+  if (!step?.id) return null;
+  return <Editor key={step.id} step={step} />;
+}
+
+function Editor({ step }: { step: Step }) {
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const def = stepTypes.find((d) => d.type === step.type);
+  const close = useStudio((s) => s.closeEditor);
+  return (
+    <div className="absolute inset-0 z-30 grid grid-rows-[48px_minmax(0,1fr)] bg-paper" role="dialog" aria-label={typeTitle(step, def)}>
+      <header className="flex items-center gap-3 border-b border-slate-200 px-4">
+        <button type="button" onClick={close} className="flex items-center gap-0.5 rounded-[4px] px-1.5 py-1 text-[12px] text-slate-600 hover:bg-slate-100 hover:text-ink">
+          <ChevronLeft size={14} aria-hidden="true" />
+          {t.editor.back}
+        </button>
+        <span className="text-[15px] font-bold text-ink">{typeTitle(step, def)}</span>
+        <span className="min-w-0 truncate text-[12.5px] text-slate-600">
+          <Sentence parts={sentence(step, def)} />
+        </span>
+        <span className="ml-auto flex items-center gap-2">
+          <TryButton stepId={step.id!} />
+          <button type="button" onClick={close} className="rounded-[4px] bg-ink px-3 py-1.5 text-[12.5px] font-semibold text-paper hover:bg-ink/90">
+            {t.close}
+          </button>
+        </span>
+      </header>
+      <div className="grid min-h-0 grid-cols-[300px_minmax(0,1fr)_380px]">
+        <section className="flex min-h-0 flex-col border-r border-slate-200">
+          <h3 className="shrink-0 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-bold tracking-wider text-slate-600">{t.editor.usable}</h3>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <Usable step={step} />
+          </div>
+        </section>
+        <section className="flex min-h-0 flex-col">
+          <h3 className="shrink-0 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-bold tracking-wider text-slate-600">{t.editor.settings}</h3>
+          <div className="min-h-0 flex-1 overflow-y-auto" data-wide>
+            <StepInspector inEditor />
+          </div>
+        </section>
+        <section className="flex min-h-0 flex-col border-l border-slate-200">
+          <h3 className="shrink-0 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-bold tracking-wider text-slate-600">{t.editor.result}</h3>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <Result stepId={step.id!} hasOutput={def?.hasOutput ?? false} />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function TryButton({ stepId }: { stepId: string }) {
+  const run = useStudio((s) => s.run);
+  const trying = useStudio((s) => s.trying);
+  const tryStep = useStudio((s) => s.tryStep);
+  const stopRun = useStudio((s) => s.stopRun);
+  const active = run !== null && isActive(run);
+  if (active)
+    return (
+      <button type="button" onClick={() => void stopRun()} className="flex items-center gap-1.5 rounded-[4px] border border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50">
+        <Square size={12} aria-hidden="true" />
+        {trying ? t.editor.trying : t.editor.stopRun}
+      </button>
+    );
+  return (
+    <button type="button" title={t.editor.tryTitle} onClick={() => void tryStep(stepId)} className="flex items-center gap-1.5 rounded-[4px] border border-slate-300 px-3 py-1.5 text-[12.5px] text-slate-700 hover:border-brand-500 hover:text-brand-600">
+      <Play size={12} aria-hidden="true" />
+      {t.editor.tryNode}
+    </button>
+  );
+}
+
+/** The values the node can use; a click puts one into the field last focused. */
+function Usable({ step }: { step: Step }) {
+  const flow = useStudio((s) => s.flow);
+  const run = useStudio((s) => s.run);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const scope = useMemo(() => runScope(run, flow?.id), [run, flow?.id]);
+  const choices = useInsertChoices(step, scope);
+  const vars = useMemo(() => knownVariables(flow?.variables, flow?.steps ?? []), [flow]);
+  const field = useActiveField();
+  const [done, setDone] = useState<string | null>(null);
+  const put = (expression: string) => {
+    if (!field) return;
+    field.insert(expression);
+    setDone(field.label);
+    setTimeout(() => setDone(null), 1500);
+  };
+  const sourceOf = (itemVar: string): string | undefined => {
+    const loop = choices.loops.find((l) => l.itemVar === itemVar);
+    if (!loop) return undefined;
+    const items = findLoopItems(flow?.steps ?? [], step.id ?? "", itemVar);
+    const reader = items ? resultStep(flow?.steps ?? [], items) : null;
+    const path = typeof reader?.params?.path === "string" ? reader.params.path : undefined;
+    return path ?? (reader ? reader.name || typeTitle(reader, stepTypes.find((d) => d.type === reader.type)) : (items ?? undefined));
+  };
+  const empty = choices.loops.length === 0 && choices.variables.length === 0;
+  const row = (key: string, label: string, expression: string, note: string, color?: string) => (
+    <button
+      key={key}
+      type="button"
+      disabled={!field}
+      title={field ? t.editor.clickTo(field.label) : t.editor.pickField}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => put(expression)}
+      className="flex w-full items-baseline gap-2 px-4 py-1 text-left text-[12.5px] hover:bg-brand-50 disabled:cursor-default disabled:hover:bg-transparent"
+    >
+      {color && <span className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-full" style={{ background: color }} />}
+      <span className="truncate text-ink">{label}</span>
+      <span className="ml-auto shrink-0 font-mono text-[10.5px] text-slate-400">{note}</span>
+    </button>
+  );
+  return (
+    <div className="pb-3">
+      <p className="px-4 pt-2 pb-1 text-[11px] leading-snug text-slate-500">{done ? t.editor.insertedInto(done) : field ? t.editor.clickTo(field.label) : t.editor.pickField}</p>
+      {empty && <p className="px-4 py-2 text-[12px] leading-relaxed text-slate-500">{t.editor.none}</p>}
+      {choices.loops.map((l) => {
+        const source = sourceOf(l.itemVar);
+        const value = scope.values[l.itemVar];
+        return (
+          <div key={l.itemVar} className="pt-2">
+            <div className="px-4 pb-0.5 text-[11px] font-semibold text-slate-600">
+              {t.editor.loopRows(l.itemVar)}
+              {source && <span className="ml-1 font-normal text-slate-400">← {t.editor.fromTable(source)}</span>}
+            </div>
+            {l.columns.map((c) => row(`${l.itemVar}.${c}`, c, `${l.itemVar}${access(c)}`, shortValue(sampleOf(value, c), 24)))}
+            {l.columns.length === 0 && <p className="px-4 py-1 text-[11px] leading-snug text-slate-500">{t.editor.noColumns}</p>}
+          </div>
+        );
+      })}
+      {choices.variables.length > 0 && (
+        <div className="pt-2">
+          <div className="px-4 pb-0.5 text-[11px] font-semibold text-slate-600">{t.editor.others}</div>
+          {choices.variables.map((v) => row(`v:${v}`, v, v, shortValue(scope.values[v], 24), TYPE_COLOR[vars.get(v) ?? "any"]))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** `item.顧客`, or `item['税込 金額']` for a name that is not a plain word. */
+function access(column: string): string {
+  return /^[\p{L}_][\p{L}\p{N}_]*$/u.test(column) ? `.${column}` : `['${column.replace(/'/g, "\\'")}']`;
+}
+
+/** The list the repeat binding `itemVar` around `id` walks over, when it is a plain variable. */
+function findLoopItems(steps: Step[], id: string, itemVar: string): string | null {
+  const walk = (list: Step[], around: Step[]): Step[] | null => {
+    for (const s of list) {
+      if (s.id === id) return around;
+      const inner = s.type === "control.forEach" ? [s, ...around] : around;
+      for (const children of Object.values(s.blocks ?? {})) {
+        const found = walk(children, inner);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  const loop = (walk(steps, []) ?? []).find((l) => (typeof l.params?.itemVar === "string" ? l.params.itemVar : "item") === itemVar);
+  const items = loop?.params?.items;
+  return typeof items === "string" && /^[\p{L}_][\p{L}\p{N}_]*$/u.test(items.trim()) ? items.trim() : null;
+}
+
+/** What the last run did at this node: its state, the value it saved, and its log lines. */
+function Result({ stepId, hasOutput }: { stepId: string; hasOutput: boolean }) {
+  const run = useStudio((s) => s.run);
+  const flow = useStudio((s) => s.flow);
+  const trying = useStudio((s) => s.trying);
+  const debug = useStudio((s) => s.debug);
+  const stopRun = useStudio((s) => s.stopRun);
+  const step = flow ? findStep(flow.steps ?? [], stepId) : null;
+  const state = run?.flowId === flow?.id ? run?.steps[stepId] : undefined;
+  const change = run && run.flowId === flow?.id && step?.saveAs ? [...run.changes].reverse().find((c) => c.stepId === stepId && c.variable === step.saveAs) : undefined;
+  const lines = run && run.flowId === flow?.id ? run.logs.filter((l) => l.stepId === stepId) : [];
+  if (!run || run.flowId !== flow?.id || (!state && !trying)) return <p className="px-4 py-3 text-[12px] leading-relaxed text-slate-500">{t.editor.noResult}</p>;
+  const active = isActive(run);
+  const headline =
+    trying || state === "running" ? t.editor.running
+    : state === "failed" ? t.editor.failed
+    : state === "skipped" ? t.editor.skipped
+    : active && run.pause ? t.editor.pausedAfter
+    : t.editor.finished;
+  const tone = state === "failed" ? "text-shu-600" : state === "succeeded" || (active && run.pause) ? "text-moegi-600" : "text-slate-600";
+  return (
+    <div className="space-y-3 px-4 py-3 text-[12.5px]">
+      <div className={`font-semibold ${tone}`}>{headline}</div>
+      {active && run.pause && !trying && (
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void debug({ action: "continue" })} className="rounded-[4px] border border-slate-300 px-2.5 py-1 text-[12px] hover:bg-slate-50">
+            {t.editor.continueRun}
+          </button>
+          <button type="button" onClick={() => void stopRun()} className="rounded-[4px] border border-slate-300 px-2.5 py-1 text-[12px] hover:bg-slate-50">
+            {t.editor.stopRun}
+          </button>
+        </div>
+      )}
+      {hasOutput && (
+        <div>
+          <div className="pb-1 text-[11px] font-semibold text-slate-600">
+            {t.editor.output}
+            {step?.saveAs && <span className="ml-1.5 font-mono font-normal text-slate-500">{step.saveAs}</span>}
+          </div>
+          {change ? <ValueView value={change.value} /> : <span className="text-slate-400">—</span>}
+        </div>
+      )}
+      {!hasOutput && <div className="text-[11.5px] text-slate-400">{t.editor.noOutput}</div>}
+      {lines.length > 0 && (
+        <div>
+          <div className="pb-1 text-[11px] font-semibold text-slate-600">{t.editor.log}</div>
+          <ul className="space-y-0.5 font-mono text-[11px] leading-snug">
+            {lines.map((l) => (
+              <li key={l.seq} className={l.level === "error" ? "text-shu-600" : l.level === "warn" ? "text-accent-600" : "text-slate-600"}>
+                {l.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
