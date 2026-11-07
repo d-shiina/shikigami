@@ -16,6 +16,7 @@ import {
   Eye,
   EyeOff,
   FoldVertical,
+  FolderOutput,
   LogIn,
   MessageSquareText,
   Plus,
@@ -37,6 +38,7 @@ import { copyText, type MenuEntry, type MenuSpec } from "../lib/contextMenu";
 import { stepLabel, t } from "../lib/i18n";
 import { handOffText } from "../lib/todos";
 import { canStartAt } from "../lib/startAt";
+import { useProjectMaybe } from "../project";
 
 /** A call step as the chart shows it. */
 export type CallMenu = { key: string; canEnter: boolean; unfolded: boolean };
@@ -137,6 +139,7 @@ export function useSlotMenu() {
 /** Right-click on the chart's background: what the dock and the corners offer. */
 export function usePaneMenu() {
   const store = useStudioApi();
+  const openFile = useProjectMaybe((p) => p.open, null);
   return (options: { fit: () => void; inside: boolean }): MenuSpec[] => {
     const s = store.getState();
     if (options.inside) {
@@ -161,6 +164,7 @@ export function usePaneMenu() {
       "-",
       { label: t.paste.menu, icon: ClipboardPaste, run: () => store.getState().setPasteOpen("into") },
       s.flow && { label: t.paste.copyFlow, icon: ClipboardCopy, run: () => copyText(handOffText(store.getState().flow!)) },
+      s.flow && openFile && { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void openFile("", false) },
       ended && { label: t.clearTrail, icon: Eraser, run: () => store.getState().hideTrail() },
       breakpoints > 0 && { label: t.clearBreakpoints(breakpoints), icon: CircleDot, run: () => store.getState().clearBreakpoints() },
       {

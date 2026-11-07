@@ -2,7 +2,7 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@shikigami/schema";
-import { BookOpen, ClipboardPaste, Copy, ExternalLink, FolderOpen, MessageSquareText, MousePointerClick, Search, Trash2, Upload, Workflow } from "lucide-react";
+import { BookOpen, ClipboardPaste, Copy, ExternalLink, FolderOpen, FolderOutput, MessageSquareText, MousePointerClick, Search, Trash2, Upload, Workflow } from "lucide-react";
 import { useAgent, useAgentApi } from "../agent";
 import { useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
@@ -10,6 +10,7 @@ import { relativeTime } from "../lib/changes";
 import { copyText, menuFor } from "../lib/contextMenu";
 import { agent } from "../lib/api";
 import { t } from "../lib/i18n";
+import { projectApi } from "../project";
 import { SAMPLES, type Sample, tutorialUrl } from "../lib/samples";
 
 const SORT_KEY = "shikigami.studio.sort";
@@ -229,6 +230,7 @@ function Row({ summary, query }: { summary: FlowSummary; query: string }) {
             void duplicate(summary.id);
           },
         },
+        { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void projectApi.open(summary.id, "", false).catch(() => {}) },
         { label: t.menu.copyId, icon: Copy, run: () => copyText(summary.id) },
         "-",
         { label: t.delete, icon: Trash2, danger: true, confirm: t.menu.confirmDelete, run: () => void remove(summary.id) },

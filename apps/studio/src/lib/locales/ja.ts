@@ -747,7 +747,7 @@ export const ja = {
     dropHere: (shelf: string) => `${shelf} に追加`,
     add: "ファイルを追加",
     newSettings: "設定ファイルを作成",
-    openFolder: "フォルダーをエクスプローラーで開く",
+    openFolder: "フローのフォルダーをエクスプローラーで開く",
     menu: {
       open: "開く",
       openWithApp: "アプリで開く",
@@ -1572,6 +1572,7 @@ export const ja = {
     breakpointOff: "ブレークポイントを外す",
     askAgent: (name: string) => `${name} に聞く`,
     copyId: "ID をコピー",
+    openFlowFolder: "フローのフォルダーを開く",
     addHere: "ここにノードを追加",
     wrapIn: (name: string) => `${name}で囲む`,
     extract: "サブフローにまとめる…",

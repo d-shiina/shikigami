@@ -19,6 +19,7 @@ import {
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  FolderOutput,
   Image as ImageIcon,
   type LucideIcon,
   PanelLeftClose,
@@ -356,7 +357,7 @@ export function ProjectPanel() {
               </>
             )}
           </span>
-          <IconButton icon={ExternalLink} title={t.project.openFolder} onClick={() => void p.open("", false)} />
+          <IconButton icon={FolderOutput} title={t.project.openFolder} onClick={() => void p.open("", false)} />
           <IconButton icon={PanelLeftClose} title={t.close} onClick={() => p.setPanelOpen(false)} />
         </span>
         <input

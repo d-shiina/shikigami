@@ -1,5 +1,6 @@
-import { Search } from "lucide-react";
+import { FolderOutput, Search } from "lucide-react";
 import { useStudio } from "../context";
+import { useProjectMaybe } from "../project";
 import { t } from "../lib/i18n";
 import { authorIssues, unsetIssues } from "../lib/todos";
 import { useTodos, useUnsetCount } from "../lib/useTodos";
@@ -97,6 +98,8 @@ export function OutlineButton() {
  * The open flow in the title bar, after the workspace it is stored in:
  * its name, its revision (opens History) and whether it is sound (opens
  * Issues). The window holds one flow, so the window's bar names it.
+ * Beside the name, the flow's folder (its input, settings, templates and
+ * output) opens in Explorer: the flow is that folder.
  */
 export function FlowTitle() {
   const flow = useStudio((s) => s.flow);
@@ -106,6 +109,7 @@ export function FlowTitle() {
   const published = useStudio((s) => s.published);
   const todos = useTodos().length;
   const unset = useUnsetCount();
+  const open = useProjectMaybe((p) => p.open, null);
   if (!flow) return null;
   // A part to pick is counted as a to-do, not as an error.
   const errors = authorIssues(validation).length;
@@ -114,6 +118,17 @@ export function FlowTitle() {
       <span className="min-w-[5em] truncate text-[13px] font-bold" title={flow.name}>
         {flow.name}
       </span>
+      {open && (
+        <button
+          type="button"
+          onClick={() => void open("", false)}
+          title={t.project.openFolder}
+          aria-label={t.project.openFolder}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-ink"
+        >
+          <FolderOutput size={14} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
       {/* The revision opens how the flow got here: its record and versions. */}
       <button
         type="button"
