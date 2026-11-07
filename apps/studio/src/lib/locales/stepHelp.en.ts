@@ -5,6 +5,8 @@ export const stepHelpEn: Record<string, { summary: string; words: string }> = {
   "browser.download": { summary: "Click to download a file and save it", words: "download save csv export file" },
   "browser.upload": { summary: "Attach a file to a form on the page", words: "upload attach file browse send" },
   "browser.attach": { summary: "Use the Edge or Chrome a person has open (with its sign-ins, certificates, extensions)", words: "attach connect existing open browser sso certificate extension" },
+  "browser.check": { summary: "Check or uncheck a checkbox (the same state however often it runs)", words: "check uncheck checkbox radio agree tick" },
+  "browser.navigate": { summary: "Go back, go forward or reload the page", words: "back forward reload refresh" },
   "browser.hover": { summary: "Move the mouse over an element (menus that open on hover…)", words: "hover mouseover menu tooltip" },
   "browser.scroll": { summary: "Scroll the page or a list (to the end, or until an element shows)", words: "scroll down up load more infinite" },
   "browser.getAttribute": { summary: "Read an attribute of an element (link address, image address…)", words: "attribute href link url src get" },

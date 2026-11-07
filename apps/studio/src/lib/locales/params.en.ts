@@ -44,6 +44,9 @@ export const paramsEn = {
     waitMs: "Wait (ms)",
     button: "Button",
     double: "Double-click",
+    modifiers: "Keys held down",
+    typing: "Type one key at a time",
+    checked: "Checked",
     amount: "Amount",
     direction: "Direction",
     unit: "Unit",
@@ -148,6 +151,7 @@ export const paramsEn = {
     params: "Values for the SQL",
   } as Record<string, string>,
   for: {
+    "browser.navigate": { action: "Where to" },
     "variable.set": { name: "Variable" },
     "control.switch": { value: "Value to compare" },
     "control.fail": { message: "Error message" },
@@ -194,6 +198,7 @@ export const paramsEn = {
     "flow.delay": { ms: "Wait (ms)" },
   } as Record<string, Record<string, string>>,
   choices: {
+    action: { back: "Back", forward: "Forward", reload: "Reload" },
     level: { debug: "Detail", info: "Info", warn: "Warning", warning: "Warning", error: "Error" },
     state: { visible: "Shown", hidden: "Not shown", attached: "On the page", detached: "Gone from the page", enabled: "Can be used" },
     dialog: { accept: "OK", dismiss: "Cancel" },
