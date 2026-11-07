@@ -29,6 +29,7 @@ function fakeAgent(overrides: Partial<AgentApi> = {}): AgentApi {
     install: vi.fn(async () => undefined),
     cancelInstall: vi.fn(async () => undefined),
     openUrl: vi.fn(async () => undefined),
+    openLink: vi.fn(async () => undefined),
     ...overrides,
   };
 }

@@ -418,6 +418,8 @@ export const ja = {
     preparing: (tool: string) => `「${tool}」を作成中`,
     elapsed: (s: number) => (s < 60 ? `${s}秒` : `${Math.floor(s / 60)}分${s % 60}秒`),
     failed: "エラーが発生しました",
+    copyCode: "コピー",
+    copiedCode: "コピー済み",
     toolFailed: "失敗：",
     signIn: "ブラウザでサインインしてください",
     openBrowser: "ブラウザが開かないときはここから開く",

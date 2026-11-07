@@ -945,19 +945,52 @@ pub fn agent_open_url(url: String) -> CmdResult<()> {
     if !is_sign_in_url(&url) && !is_docs_url(&url) {
         return Err(err("INVALID_INPUT", "開けない URL です"));
     }
+    agent_open_any(&url)
+}
+
+/// Hands an address already checked by the caller to the default browser.
+fn agent_open_any(url: &str) -> CmdResult<()> {
     let mut command = if cfg!(windows) {
         let mut c = std::process::Command::new("explorer");
-        c.arg(&url);
+        c.arg(url);
         c
     } else {
         let mut c = std::process::Command::new("xdg-open");
-        c.arg(&url);
+        c.arg(url);
         c
     };
     command
         .spawn()
         .map(drop)
         .map_err(|e| err("AGENT_FAILED", format!("ブラウザを開けません: {e}")))
+}
+
+/// Opens a web page the AI linked to in its reply, in the default browser.
+/// Only a plain http(s) address: no other scheme (file:, ms-settings: and
+/// the like would start programs), and nothing that could split the argument.
+#[tauri::command]
+pub fn agent_open_link(url: String) -> CmdResult<()> {
+    if !is_web_link(&url) {
+        return Err(err("INVALID_INPUT", "開けない URL です"));
+    }
+    agent_open_any(&url)
+}
+
+fn is_web_link(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    let rest = match lower
+        .strip_prefix("https://")
+        .or_else(|| lower.strip_prefix("http://"))
+    {
+        Some(rest) => rest,
+        None => return false,
+    };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    !host.is_empty()
+        && url.len() <= 2048
+        && !url
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || "\"<>\\^`{|}".contains(c))
 }
 
 /// A sign-in page of any agent Studio knows.
@@ -1504,6 +1537,16 @@ mod tests {
         assert!(!is_sign_in_url(
             "https://github.com/d-shiina/shikigami/blob/main/docs/a.md"
         ));
+
+        assert!(is_web_link("https://example.com/a?b=1&c=2#d"));
+        assert!(is_web_link("HTTP://example.com"));
+        assert!(!is_web_link("https://"));
+        assert!(!is_web_link("file:///C:/Windows/System32/calc.exe"));
+        assert!(!is_web_link("javascript:alert(1)"));
+        assert!(!is_web_link("ms-settings:"));
+        assert!(!is_web_link("https://example.com/ x"));
+        assert!(!is_web_link("https://example.com/\"x"));
+        assert!(!is_web_link("https://example.com/\nx"));
     }
 
     #[test]

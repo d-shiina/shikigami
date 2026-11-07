@@ -419,6 +419,8 @@ export const en: Dict = {
     preparing: (tool: string) => `Preparing: ${tool}`,
     elapsed: (s: number) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`),
     failed: "An error occurred",
+    copyCode: "Copy",
+    copiedCode: "Copied",
     toolFailed: "Failed: ",
     signIn: "Sign in in the browser",
     openBrowser: "Open it here if the browser does not open",

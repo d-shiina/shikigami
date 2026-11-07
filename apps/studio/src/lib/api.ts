@@ -366,6 +366,8 @@ export const agent = {
   install: (kind: AgentKind) => call<void>("agent_install", { kind }),
   cancelInstall: () => call<void>("agent_install_cancel"),
   openUrl: (url: string) => call<void>("agent_open_url", { url }),
+  /** Opens a web page the AI linked to (http and https only). */
+  openLink: (url: string) => call<void>("agent_open_link", { url }),
   onEvent: (handler: (e: AgentEvent) => void): Promise<UnlistenFn> =>
     listen<AgentEvent>("agent-event", (e) => handler(e.payload)),
   onLogin: (handler: (e: LoginEvent) => void): Promise<UnlistenFn> =>
