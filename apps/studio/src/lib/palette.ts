@@ -71,16 +71,17 @@ const COMMON = [
  */
 export const SUBGROUPS: Record<string, [string, string[]][]> = {
   browser: [
-    ["open", ["browser.open", "browser.attach", "browser.switchTab", "browser.closeTab", "browser.close"]],
-    ["operate", ["browser.click", "browser.fill", "browser.select", "browser.press", "browser.hover", "browser.scroll", "browser.upload", "browser.download"]],
+    ["open", ["browser.open", "browser.attach", "browser.navigate", "browser.switchTab", "browser.closeTab", "browser.close"]],
+    ["operate", ["browser.click", "browser.fill", "browser.select", "browser.check", "browser.press", "browser.hover", "browser.scroll", "browser.upload", "browser.download"]],
     ["read", ["browser.getText", "browser.getTable", "browser.getAttribute", "browser.isVisible", "browser.screenshot"]],
     ["wait", ["browser.waitFor", "browser.waitForHuman"]],
   ],
   excel: [
     ["read", ["excel.readRows", "excel.readCell", "excel.readRange", "excel.listSheets"]],
-    ["write", ["excel.writeCell", "excel.writeRange", "excel.appendRows", "excel.addSheet"]],
+    ["write", ["excel.writeCell", "excel.writeRange", "excel.appendRows", "excel.insertRows", "excel.deleteRows", "excel.clearRange"]],
+    ["sheet", ["excel.addSheet", "excel.renameSheet", "excel.copySheet", "excel.deleteSheet"]],
     ["arrange", ["excel.sort", "excel.filter", "excel.format", "excel.pivot", "excel.recalculate"]],
-    ["output", ["excel.exportPdf", "excel.runMacro"]],
+    ["output", ["excel.saveAs", "excel.exportPdf", "excel.runMacro"]],
   ],
   word: [["", ["word.fillTemplate", "word.readText"]]],
   outlook: [["", ["mail.list", "mail.saveAttachments", "mail.createDraft", "mail.send"]]],
@@ -91,10 +92,10 @@ export const SUBGROUPS: Record<string, [string, string[]][]> = {
     ["zipPdf", ["file.zip", "file.unzip", "pdf.merge", "pdf.split", "pdf.extractPages"]],
   ],
   windows: [
-    ["open", ["desktop.launch", "sap.runTransaction", "desktop.closeWindow"]],
+    ["open", ["desktop.launch", "sap.runTransaction", "desktop.setWindow", "desktop.closeWindow"]],
     [
       "operate",
-      ["desktop.click", "desktop.setValue", "desktop.select", "desktop.selectMenu", "desktop.type", "desktop.press", "desktop.mouseClick", "desktop.hover", "desktop.drag", "desktop.scroll", "desktop.mouseScroll"],
+      ["desktop.click", "desktop.setValue", "desktop.select", "desktop.check", "desktop.selectMenu", "desktop.type", "desktop.press", "desktop.mouseClick", "desktop.hover", "desktop.drag", "desktop.scroll", "desktop.mouseScroll"],
     ],
     ["read", ["desktop.getValue", "desktop.getTable", "desktop.readText", "desktop.isVisible", "desktop.screenshot"]],
     ["wait", ["desktop.waitFor"]],
@@ -103,14 +104,17 @@ export const SUBGROUPS: Record<string, [string, string[]][]> = {
   database: [["", ["db.query", "db.execute"]]],
   system: [
     ["dialog", ["dialog.message", "dialog.input", "dialog.selectFile"]],
-    ["system", ["clipboard.get", "clipboard.set", "process.run"]],
+    ["system", ["clipboard.get", "clipboard.set", "process.run", "process.list", "process.kill"]],
   ],
   control: [
     ["branch", ["control.if", "control.switch", "control.parallel"]],
     ["loop", ["control.forEach", "control.repeat", "control.while", "control.break", "control.continue"]],
     ["error", ["control.try", "control.group", "control.fail"]],
+    ["call", ["flow.call"]],
   ],
+  variable: [["", ["variable.set"]]],
   flow: [["", ["flow.delay", "wait.until"]]],
+  log: [["", ["log.message"]]],
 };
 
 const PLACE = new Map<string, { sub: string; order: number }>();

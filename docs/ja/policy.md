@@ -66,7 +66,7 @@
 | 項目 | 既定 | 意味 |
 |---|---|---|
 | `sites` | 空（どこでも） | `browser.open`・`oauth.signIn`（`authorizeUrl` と `tokenUrl`）・`http.request`（と、`targets` で宣言したプラグインのステップ）が開いてよいサイト。オリジン（`https://example.com`、ポート付きも可）か、サブドメインすべての `https://*.example.com`。http と https は別。`about:blank` はいつでも可、`file:` などは不可 |
-| `apps` | 空（どれでも） | `desktop.launch`・`process.run` が起動してよいプログラム。フォルダ付きならそのパスだけ、ファイル名だけならどのフォルダでも。大文字小文字・`/` と `\`・`.exe` の有無は区別しない |
+| `apps` | 空（どれでも） | `desktop.launch`・`process.run` が起動してよい、`process.kill` が終了させてよいプログラム。フォルダ付きならそのパスだけ、ファイル名だけならどのフォルダでも。大文字小文字・`/` と `\`・`.exe` の有無は区別しない |
 | `ai.runFlow` | safe/interactive は allow、dangerous は ask | AI の `run_flow`。実行しうるステップ（呼び出し先を含む）のいちばん高い危険度で決まる |
 | `ai.testStep` | 同上 | AI の `test_step`。ブロックの中のステップと、`flow.call` の呼び出し先を含めたいちばん高い危険度 |
 | `ai.deleteFlow` | ask | AI の `delete_flow` |

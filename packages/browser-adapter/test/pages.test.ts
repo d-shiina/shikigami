@@ -33,6 +33,13 @@ const PAGES: Record<string, string> = {
     <input type="file" id="hidden" hidden onchange="document.getElementById('n').textContent = 'hidden:' + this.files[0].name">
     <button onclick="document.getElementById('hidden').click()">ファイルを選ぶ</button>
     <p id="n"></p>`,
+  "/clicks": `<title>操作</title>
+    <div id="cell" ondblclick="document.getElementById('c').textContent = 'ダブル'" oncontextmenu="event.preventDefault(); document.getElementById('c').textContent = '右'" onclick="document.getElementById('c').textContent = event.ctrlKey ? 'Ctrl' : '左'">明細</div>
+    <p id="c"></p>
+    <label><input type="checkbox" id="agree"> 同意する</label>
+    <label>コード <input id="code" onkeydown="document.getElementById('k').textContent = String(Number(document.getElementById('k').textContent) + 1)"></label>
+    <p id="k">0</p>
+    <a href="/detail">詳細へ</a>`,
   "/inner": `<button onclick="this.textContent = '押しました'">奥のボタン</button>`,
 };
 
@@ -234,5 +241,49 @@ describe("downloads and uploads", () => {
     const missing = await failure(adapter.call("upload", { ...r, target: { label: "請求書" }, path: join(dir, "ない.pdf") }));
     expect(missing.code).toBe("FILE_NOT_FOUND");
     await adapter.call("closeRun", r);
+  });
+});
+
+describe("clicks, checkboxes, typing and moving between pages", () => {
+  const tab = { runId: "run_clicks", context: "clicks" };
+  const read = (id: string) => adapter.call("getText", { ...tab, target: { css: `#${id}` } });
+  beforeAll(async () => {
+    await adapter.call("open", { ...tab, url: `${base}/clicks` });
+  });
+
+  it("right-clicks, double-clicks and clicks with a key held", async () => {
+    await adapter.call("click", { ...tab, target: { text: "明細" }, button: "right" });
+    expect(await read("c")).toBe("右");
+    await adapter.call("click", { ...tab, target: { text: "明細" }, double: true });
+    expect(await read("c")).toBe("ダブル");
+    await adapter.call("click", { ...tab, target: { text: "明細" }, modifiers: ["Control"] });
+    expect(await read("c")).toBe("Ctrl");
+  });
+
+  it("sets a checkbox the same way however often it runs", async () => {
+    const checked = () => adapter.call("isVisible", { ...tab, target: { css: "#agree:checked" }, waitMs: 100 });
+    await adapter.call("check", { ...tab, target: { label: "同意する" } });
+    await adapter.call("check", { ...tab, target: { label: "同意する" } });
+    expect(await checked()).toBe(true);
+    await adapter.call("check", { ...tab, target: { label: "同意する" }, checked: false });
+    expect(await checked()).toBe(false);
+  });
+
+  it("types one key at a time when asked", async () => {
+    await adapter.call("fill", { ...tab, target: { label: "コード" }, value: "ab1" });
+    expect(await read("k")).toBe("0");
+    await adapter.call("fill", { ...tab, target: { label: "コード" }, value: "ab1", typing: true });
+    // A key event for each letter (clearing the field may add one).
+    expect(Number(await read("k"))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("goes back, forward and reloads", async () => {
+    await adapter.call("click", { ...tab, target: { role: "link", name: "詳細へ" } });
+    await adapter.call("waitFor", { ...tab, target: { role: "heading", name: "受注の詳細" } });
+    expect(await adapter.call("navigate", { ...tab, action: "back" })).toMatchObject({ title: "操作" });
+    expect(await adapter.call("navigate", { ...tab, action: "forward" })).toMatchObject({ title: "詳細" });
+    expect(await adapter.call("navigate", { ...tab, action: "reload" })).toMatchObject({ title: "詳細" });
+    expect((await failure(adapter.call("navigate", { ...tab, action: "forward" }))).code).toBe("NAVIGATION_FAILED");
+    expect((await failure(adapter.call("navigate", { ...tab, action: "up" }))).code).toBe("INVALID_PARAMS");
   });
 });

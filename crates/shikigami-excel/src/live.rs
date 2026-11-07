@@ -403,7 +403,16 @@ fn save(book: &Object, session: &Session) -> Result<(), StepError> {
 fn step(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<Value, StepError> {
     if matches!(
         kind,
-        Kind::WriteCell | Kind::WriteRange | Kind::AppendRows | Kind::AddSheet
+        Kind::WriteCell
+            | Kind::WriteRange
+            | Kind::AppendRows
+            | Kind::AddSheet
+            | Kind::InsertRows
+            | Kind::DeleteRows
+            | Kind::ClearRange
+            | Kind::DeleteSheet
+            | Kind::RenameSheet
+            | Kind::CopySheet
     ) {
         writable(book)?;
     }
@@ -495,12 +504,99 @@ fn step(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
             save(book, session)?;
             Ok(Value::Null)
         }
+        Kind::InsertRows | Kind::DeleteRows => {
+            let row = crate::sheets::row_number(params, "row", None)?;
+            let count = crate::sheets::row_number(params, "count", Some(1))?;
+            let sheet = sheet(book, sheet_name)?;
+            let last = row.saturating_add(count - 1).min(crate::a1::MAX_ROW);
+            session.check()?;
+            let rows = sheet.object("Range", vec![Var::str(&format!("{row}:{last}"))])?;
+            rows.call(
+                if kind == Kind::InsertRows {
+                    "Insert"
+                } else {
+                    "Delete"
+                },
+                vec![],
+            )?;
+            save(book, session)?;
+            Ok(Value::Null)
+        }
+        Kind::ClearRange => {
+            let range = book::range_address(&crate::string(params, "range")?)?;
+            let sheet = sheet(book, sheet_name)?;
+            session.check()?;
+            cells(&sheet, range)?.call("ClearContents", vec![])?;
+            save(book, session)?;
+            Ok(Value::Null)
+        }
+        Kind::DeleteSheet => {
+            let name = crate::string(params, "sheet")?;
+            let names = sheet_names(book)?;
+            if !names.contains(&name) {
+                return Ok(Value::Null);
+            }
+            if names.len() == 1 {
+                return Err(StepError::permanent(
+                    "LAST_SHEET",
+                    format!("'{name}' is the only sheet, and a workbook needs one"),
+                ));
+            }
+            session.check()?;
+            discard_sheet(book, &sheet(book, Some(&name))?);
+            if sheet_names(book)?.contains(&name) {
+                return Err(StepError::permanent(
+                    "SHEET_NOT_DELETED",
+                    format!("Excel did not delete the sheet '{name}'"),
+                )
+                .with_details(json!({ "hint": "The workbook structure may be protected (Review > Protect Workbook)." })));
+            }
+            save(book, session)?;
+            Ok(Value::Null)
+        }
+        Kind::RenameSheet | Kind::CopySheet => {
+            let from = crate::string(params, "sheet")?;
+            let to = crate::string(params, "name")?;
+            crate::sheets::check_name(&to)?;
+            let names = sheet_names(book)?;
+            if kind == Kind::RenameSheet && !names.contains(&from) && names.contains(&to) {
+                return Ok(Value::Null);
+            }
+            if from == to && kind == Kind::RenameSheet {
+                return sheet(book, Some(&from)).map(|_| Value::Null);
+            }
+            let source = sheet(book, Some(&from))?;
+            if names
+                .iter()
+                .any(|n| n.to_lowercase() == to.to_lowercase() && *n != from)
+            {
+                return Err(StepError::permanent(
+                    "SHEET_EXISTS",
+                    format!("there is already a sheet named '{to}'"),
+                ));
+            }
+            session.check()?;
+            let target = if kind == Kind::CopySheet {
+                // Worksheet.Copy(Before, After): the copy comes right after.
+                source.call("Copy", vec![Var::missing(), Var::from_object(&source)])?;
+                let index = source.get("Index")?.to_i64()?;
+                book.get("Sheets")?
+                    .object("Sheets")?
+                    .object("Item", vec![Var::i32(index as i32 + 1)])?
+            } else {
+                source
+            };
+            target.put("Name", Var::str(&to))?;
+            save(book, session)?;
+            Ok(Value::Null)
+        }
         Kind::Recalculate
         | Kind::Sort
         | Kind::ExportPdf
         | Kind::Format
         | Kind::Filter
-        | Kind::Pivot => work(kind, params, book, session),
+        | Kind::Pivot
+        | Kind::SaveAs => work(kind, params, book, session),
         Kind::RunMacro => Err(StepError::permanent(
             "INTERNAL",
             "runMacro has its own Excel",
@@ -1003,11 +1099,91 @@ fn work(kind: Kind, params: &Value, book: &Object, session: &Session) -> Result<
                 })?;
             Ok(json!({ "path": to }))
         }
+        Kind::SaveAs => save_as(params, book, session),
         Kind::Format => format_cells(params, book, session),
         Kind::Filter => filter(params, book, session),
         Kind::Pivot => pivot(params, book, session),
         _ => Err(StepError::permanent("INTERNAL", "not an Excel-only step")),
     }
+}
+
+// Workbooks.SaveAs FileFormat values.
+const XL_OPEN_XML_WORKBOOK: i32 = 51;
+const XL_OPEN_XML_MACRO: i32 = 52;
+const XL_BINARY: i32 = 50;
+const XL_EXCEL8: i32 = 56;
+const XL_CSV: i32 = 6;
+const XL_CSV_UTF8: i32 = 62;
+
+/// Where `to` goes, after checking it may be written.
+fn output_file(params: &Value) -> Result<String, StepError> {
+    let to = crate::string(params, "to")?;
+    let overwrite = params
+        .get("overwrite")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !overwrite && Path::new(&to).exists() {
+        return Err(
+            StepError::permanent("FILE_EXISTS", format!("{to} already exists"))
+                .with_details(json!({ "hint": "Set overwrite: true to replace it." })),
+        );
+    }
+    if let Some(parent) = Path::new(&to)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            StepError::permanent(
+                "FILE_ERROR",
+                format!("cannot create {}: {e}", parent.display()),
+            )
+        })?;
+    }
+    Ok(to)
+}
+
+fn save_as(params: &Value, book: &Object, session: &Session) -> Result<Value, StepError> {
+    let to = output_file(params)?;
+    let extension = Path::new(&to)
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let format = match extension.as_str() {
+        "xlsx" => XL_OPEN_XML_WORKBOOK,
+        "xlsm" => XL_OPEN_XML_MACRO,
+        "xlsb" => XL_BINARY,
+        "xls" => XL_EXCEL8,
+        "csv" if params.get("encoding").and_then(Value::as_str) == Some("shift_jis") => XL_CSV,
+        "csv" => XL_CSV_UTF8,
+        "pdf" => return work(Kind::ExportPdf, params, book, session),
+        _ => {
+            return Err(StepError::permanent(
+                "UNSUPPORTED_FORMAT",
+                format!("cannot save as .{extension}"),
+            )
+            .with_details(
+                json!({ "hint": "End `to` with .xlsx, .xlsm, .xlsb, .xls, .csv or .pdf." }),
+            ));
+        }
+    };
+    // A CSV holds the active sheet.
+    let sheet_name = crate::optional_string(params, "sheet")?;
+    if format == XL_CSV || format == XL_CSV_UTF8 || sheet_name.is_some() {
+        sheet(book, sheet_name.as_deref())?.call("Activate", vec![])?;
+    }
+    session.check()?;
+    // The copy has no password to open it.
+    let _ = book.put("Password", Var::str(""));
+    let full = std::path::absolute(&to).unwrap_or_else(|_| Path::new(&to).to_path_buf());
+    book.call(
+        "SaveAs",
+        vec![Var::str(&full.to_string_lossy()), Var::i32(format)],
+    )
+    .map_err(|e| {
+        StepError::permanent("SAVE_FAILED", format!("Excel could not save {to}: {}", e.message))
+            .with_details(json!({ "hint": "Check that the folder can be written to and that the file is not open in another program. A workbook with macros needs .xlsm (or .xls / .xlsb) to keep them." }))
+    })?;
+    Ok(json!({ "path": to }))
 }
 
 /// The steps only Excel can do: on the open workbook, or else in an Excel
@@ -1018,7 +1194,11 @@ pub fn run_excel_only(
     timeout: Duration,
     cancel: &CancellationToken,
 ) -> Result<Value, StepError> {
-    if let Some(result) = try_run(kind, params, timeout, cancel) {
+    // Saving a copy works on the file as saved, so the person's open
+    // workbook is never switched to the new file.
+    if kind != Kind::SaveAs
+        && let Some(result) = try_run(kind, params, timeout, cancel)
+    {
         return result;
     }
     let path = crate::string(params, "path")?;
@@ -1028,7 +1208,8 @@ pub fn run_excel_only(
             format!("{path} does not exist"),
         ));
     }
-    if kind != Kind::ExportPdf && book::open_in_excel(Path::new(&path)) {
+    let read_only = matches!(kind, Kind::ExportPdf | Kind::SaveAs);
+    if !read_only && book::open_in_excel(Path::new(&path)) {
         // Open somewhere this Excel cannot reach (another user, another
         // Excel instance): saving would fail or clash.
         return Err(book::in_use(Path::new(&path)));
@@ -1054,12 +1235,27 @@ pub fn run_excel_only(
                 app.put("DisplayAlerts", Var::bool(false))?;
                 let _ = app.put("AskToUpdateLinks", Var::bool(false));
                 let books = app.get("Workbooks")?.object("Workbooks")?;
-                // Workbooks.Open(Filename, UpdateLinks:=0, ReadOnly)
-                let read_only = kind == Kind::ExportPdf;
-                let book = books.object(
-                    "Open",
-                    vec![Var::str(&path), Var::i32(0), Var::bool(read_only)],
-                )?;
+                // Workbooks.Open(Filename, UpdateLinks:=0, ReadOnly, Format,
+                // Password): a password (even an empty one) keeps Excel from
+                // asking for it on a screen nobody may be watching.
+                let password = crate::optional_string(&params, "password")?.unwrap_or_default();
+                let full =
+                    std::path::absolute(&path).unwrap_or_else(|_| Path::new(&path).to_path_buf());
+                let book = books
+                    .object(
+                        "Open",
+                        vec![
+                            Var::str(&full.to_string_lossy()),
+                            Var::i32(0),
+                            Var::bool(read_only),
+                            Var::missing(),
+                            Var::str(&password),
+                        ],
+                    )
+                    .map_err(|e| {
+                        StepError::permanent("WORKBOOK_UNREADABLE", format!("Excel could not open {path}: {}", e.message))
+                            .with_details(json!({ "hint": "If the workbook has a password to open it, give `password` (a registered secret) to excel.saveAs; check that it is right." }))
+                    })?;
                 let result = work(kind, &params, &book, session);
                 let _ = book.call("Close", vec![Var::bool(false)]);
                 result

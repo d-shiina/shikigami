@@ -155,18 +155,33 @@ Params:
 Output: yes (saveAs)
 Example: `{"type":"browser.attach","name":"開いている Edge の勤怠システムを使う","params":{"title":"勤怠"}}`
 
-#### browser.click (クリック)
+#### browser.check (チェック状態)
 
-Clicks the element `target` (waits until it is visible and enabled). When the click shows a JS dialog (alert / confirm / prompt), set `dialog`: "accept" (OK) or "dismiss" (Cancel), or { "action": "accept", "promptText": "…" } for a prompt; the step then waits for the dialog, answers it and outputs its message (saveAs to read e.g. a receipt number). Without `dialog`, dialogs are dismissed (a confirm is cancelled). A dialog drawn by the page itself is not a JS dialog: click its button. A link or button that opens a new tab or window: follow with browser.switchTab. An element inside an iframe: add `frame` to the target.
+Sets the checkbox (or radio button / switch) `target` to checked (`checked: true`, the default) or unchecked (`checked: false`). Does nothing when it already is, so running the flow twice never flips it back (a browser.click would). For a radio button only `checked: true` makes sense: check the other option to move away.
 
 Params:
 - `target`*: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
+- `checked`: true | false — チェックを付ける（外すときは false、既定は付ける）
+- `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
+Example: `{"type":"browser.check","name":"利用規約に同意","params":{"target":{"role":"checkbox","name":"利用規約に同意する"}}}`
+Example: `{"type":"browser.check","name":"メール配信を外す","params":{"target":{"label":"お知らせメールを受け取る"},"checked":false}}`
+
+#### browser.click (クリック)
+
+Clicks the element `target` (waits until it is visible and enabled). `button: "right"` right-clicks (to open the page's own menu), `double: true` double-clicks, `modifiers` holds keys down during the click (e.g. ["Control"] to open a link in a new tab, ["Shift"] to extend a selection). To set a checkbox, use browser.check, not a click. When the click shows a JS dialog (alert / confirm / prompt), set `dialog`: "accept" (OK) or "dismiss" (Cancel), or { "action": "accept", "promptText": "…" } for a prompt; the step then waits for the dialog, answers it and outputs its message (saveAs to read e.g. a receipt number). Without `dialog`, dialogs are dismissed (a confirm is cancelled). A dialog drawn by the page itself is not a JS dialog: click its button. A link or button that opens a new tab or window: follow with browser.switchTab. An element inside an iframe: add `frame` to the target.
+
+Params:
+- `target`*: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
+- `button`: "left" | "right" — 押すボタン（既定は左）
+- `double`: true | false — ダブルクリックする
+- `modifiers`: list of "Control" | "Shift" | "Alt" — 押しながらクリックするキー
 - `dialog`: "accept" | "dismiss" or { action*: "accept" | "dismiss", promptText: text } — この操作で出る JS のダイアログ（alert・confirm・prompt）への答え。accept = OK、dismiss = キャンセル。prompt に入れる文字は { "action": "accept", "promptText": "…" }
 - `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
 Output: yes (saveAs)
 Example: `{"type":"browser.click","name":"ログインする","params":{"target":{"role":"button","name":"ログイン"}}}`
 Example: `{"type":"browser.click","name":"削除して確認に OK","params":{"target":{"role":"button","name":"削除"},"dialog":"accept"}}`
 Example: `{"type":"browser.click","name":"フレームの中の検索","params":{"target":{"role":"button","name":"検索","frame":{"name":"main"}}}}`
+Example: `{"type":"browser.click","name":"明細の行を開く","params":{"target":{"role":"row","name":"{{ order.id }}"},"double":true}}`
 
 #### browser.close (ブラウザ終了)
 
@@ -200,11 +215,12 @@ Example: `{"type":"browser.download","name":"請求書を落とす（サイト�
 
 #### browser.fill (文字入力)
 
-Replaces the text of the input `target` with `value`: a template, or a registered secret { "secret": "<name>", "field": "username" | "password" | "totp" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text.
+Replaces the text of the input `target` with `value`: a template, or a registered secret { "secret": "<name>", "field": "username" | "password" | "totp" } (list_secrets shows the names). Secrets are typed only on the sites registered with them and never appear in logs or screenshots. Never write a password as text. `typing: true` clears the field and types the text one key at a time, for pages that react to each key (suggestions, inputs that format as you type) and ignore a pasted value; leave it out otherwise (it is slower).
 
 Params:
 - `target`*: screen target: { "part": "<name>" } — 操作する要素。意味で指定する: { "role": "button", "name": "ログイン" } が第一候補、入力欄は { "label": "ユーザー名" }。css は最終手段
 - `value`*: text or { secret*: text, field*: "username" | "password" | "totp" } [may be a secret] — 入力する文字。パスワードは登録済みシークレット { "secret": "名前", "field": "password" }
+- `typing`: true | false — 1 文字ずつキーを打って入力する（キー入力を見ているページ向け）
 - `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
 Example: `{"type":"browser.fill","name":"ユーザー名を入力","params":{"target":{"label":"ユーザー名"},"value":{"secret":"受注システム","field":"username"}}}`
 Example: `{"type":"browser.fill","name":"パスワードを入力","params":{"target":{"label":"パスワード"},"value":{"secret":"受注システム","field":"password"}}}`
@@ -262,6 +278,17 @@ Params:
 - `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
 Output: yes (saveAs)
 Example: `{"type":"browser.isVisible","name":"ログイン画面か確かめる","params":{"target":{"label":"パスワード"}},"saveAs":"needsLogin"}`
+
+#### browser.navigate (ページ移動)
+
+Goes `action`: "back" (the browser's Back), "forward" or "reload" in the current tab, and waits for the page to load. Output: { url, title }. To go to an address, use browser.open on the same context (it opens in the current tab). Fails with NAVIGATION_FAILED when there is no page to go back or forward to.
+
+Params:
+- `action`*: "back" | "forward" | "reload" — 戻る・進む・再読み込み
+- `context`: text — ブラウザの作業領域の名前（既定 default）。並行ブランチで別々の名前にすると同時に動く
+Output: yes (saveAs)
+Example: `{"type":"browser.navigate","name":"一覧に戻る","params":{"action":"back"}}`
+Example: `{"type":"browser.navigate","name":"最新の状態を読み込む","params":{"action":"reload"}}`
 
 #### browser.open (ページ表示)
 
@@ -545,6 +572,16 @@ Example: `{"type":"db.query","params":{"connection":"DSN=基幹システム;Trus
 
 ### desktop.*
 
+#### desktop.check (チェック状態)
+
+Sets the checkbox `target` to checked (`checked: true`, the default) or unchecked (`checked: false`), without the mouse. Does nothing when it already is, so running the flow twice never flips it back (desktop.click would). Fails with NOT_A_CHECKBOX when the target has no checked state.
+
+Params:
+- `target`*: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
+- `checked`: true | false — チェックを付ける（外すときは false、既定は付ける）
+Example: `{"type":"desktop.check","name":"メール送信をオン","params":{"target":{"window":{"process":"billing.exe"},"element":{"role":"checkbox","name":"メール送信"}}}}`
+Example: `{"type":"desktop.check","name":"印刷をオフ","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"chkPrint"}},"checked":false}}`
+
 #### desktop.click (クリック)
 
 Activates `target` without the mouse: presses a button or menu item, toggles a checkbox, selects a list item or tab, expands a tree item. Works even when the window is behind others. Waits until the element exists and is enabled. For elements that only react to a real mouse click, use desktop.mouseClick.
@@ -568,7 +605,7 @@ Brings the window to the front and drags with the real mouse (left button) from 
 
 Params:
 - `target`*: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
-- `to`*: { window*: { title: text, process: text, className: text, exact: true | false, nth: whole number }, element: { id: text, name: text, role: "button" | "calendar" | "checkbox" | "combobox" | "textbox" | "link" | "image" | "listitem" | "list" | "menu" | "menubar" | "menuitem" | "progressbar" | "radio" | "scrollbar" | "slider" | "spinbutton" | "status" | "tablist" | "tab" | "text" | "toolbar" | "tooltip" | "tree" | "treeitem" | "custom" | "group" | "thumb" | "grid" | "row" | "document" | "splitbutton" | "window" | "pane" | "header" | "columnheader" | "table" | "titlebar" | "separator" | "semanticzoom" | "appbar", className: text, exact: true | false, nth: whole number }, point: { x*: whole number, y*: whole number }, image: { path*: text, threshold: number, nth: whole number }, ocr: { text*: text, exact: true | false, nth: whole number, language: text, engine: "paddle" | "windows", accurate: true | false }, offset: { x*: whole number, y*: whole number }, region: { x*: whole number, y*: whole number, width*: whole number, height*: whole number } } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
+- `to`*: { window*: { title: text, match: "contains" | "exact" | "prefix" | "suffix" | "pattern", process: text, className: text, exact: true | false, nth: whole number }, element: { id: text, name: text, role: "button" | "calendar" | "checkbox" | "combobox" | "textbox" | "link" | "image" | "listitem" | "list" | "menu" | "menubar" | "menuitem" | "progressbar" | "radio" | "scrollbar" | "slider" | "spinbutton" | "status" | "tablist" | "tab" | "text" | "toolbar" | "tooltip" | "tree" | "treeitem" | "custom" | "group" | "thumb" | "grid" | "row" | "document" | "splitbutton" | "window" | "pane" | "header" | "columnheader" | "table" | "titlebar" | "separator" | "semanticzoom" | "appbar", className: text, exact: true | false, nth: whole number }, point: { x*: whole number, y*: whole number }, image: { path*: text, threshold: number, nth: whole number }, ocr: { text*: text, exact: true | false, nth: whole number, language: text, engine: "paddle" | "windows", accurate: true | false }, offset: { x*: whole number, y*: whole number }, region: { x*: whole number, y*: whole number, width*: whole number, height*: whole number } } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
 Example: `{"type":"desktop.drag","name":"明細を 1 行目へ移す","params":{"target":{"window":{"process":"billing.exe"},"element":{"role":"row","name":"{{ orderNo }}"}},"to":{"window":{"process":"billing.exe"},"element":{"role":"row","nth":0}}}}`
 
 #### desktop.getTable (表の取得)
@@ -720,6 +757,22 @@ Params:
 Example: `{"type":"desktop.setValue","name":"顧客コードを入力","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"txtCustomer"}},"value":"{{ customerCode }}"}}`
 Example: `{"type":"desktop.setValue","name":"パスワードを入力","params":{"target":{"window":{"process":"billing.exe"},"element":{"id":"txtPassword"}},"value":{"secret":"請求システム","field":"password"}}}`
 
+#### desktop.setWindow (ウィンドウ状態)
+
+Changes how the window `target.window` is shown: `state` "maximized", "minimized" or "normal"; `x` / `y` / `width` / `height` (screen pixels; what is left out stays) move and size it (a maximized window is restored first); `front: true` brings it to the front. Output: { state, x, y, width, height } afterwards. Use it before steps whose places depend on the window's size (desktop.mouseClick with point, images), so every run starts from the same layout.
+
+Params:
+- `target`*: screen target: { "part": "<name>" } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
+- `state`: "maximized" | "minimized" | "normal" — 最大化・最小化・元のサイズ
+- `front`: true | false — 前面に出す
+- `x`: whole number — 左端の位置（画面の左からのピクセル）
+- `y`: whole number — 上端の位置（画面の上からのピクセル）
+- `width`: whole number — 幅（ピクセル）
+- `height`: whole number — 高さ（ピクセル）
+Output: yes (saveAs)
+Example: `{"type":"desktop.setWindow","name":"請求システムを最大化","params":{"target":{"window":{"process":"billing.exe"}},"state":"maximized"}}`
+Example: `{"type":"desktop.setWindow","name":"決まった位置と大きさにする","params":{"target":{"window":{"title":"販売管理"}},"x":0,"y":0,"width":1280,"height":800,"front":true}}`
+
 #### desktop.type (キーボード入力)
 
 Brings the window to the front, focuses `target` and types `text` with the keyboard (does not clear the field first). For apps that ignore desktop.setValue. With `target.image` / `target.ocr` it first clicks that place (e.g. a label's text with `offset` to the field beside it). `text` may be a registered secret, typed only into the apps registered with it.
@@ -804,6 +857,46 @@ Output: yes (saveAs)
 Example: `{"type":"excel.appendRows","name":"結果を 1 行追加","params":{"path":"output/結果.xlsx","rows":[{"受注番号":"{{ order.受注番号 }}","金額":"{{ order.金額 }}","受注日":{"date":"{{ order.受注日 }}"}}]}}`
 Example: `{"type":"excel.appendRows","params":{"path":"output/結果.xlsx","sheet":"集計","rows":"{{ results }}"}}`
 
+#### excel.clearRange (範囲のクリア)
+
+Empties the cells `range` (e.g. "A2:F1000") of `sheet`, values and formulas, keeping their formats, and saves the workbook. Use it to empty a template's table before writing new rows. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`: text — シート名（完全一致）。省略すると先頭のシート
+- `range`*: text — 空にするセル（例 A2:F1000）
+Example: `{"type":"excel.clearRange","name":"前回の明細を消す","params":{"path":"templates/日報.xlsx","sheet":"明細","range":"A2:H500"}}`
+
+#### excel.copySheet (シートのコピー)
+
+Copies the sheet `sheet` (values, formulas, formats, column widths) as a new sheet `name`, right after it, and saves the workbook. Fails with SHEET_EXISTS when `name` exists. A sheet with tables (Format as Table) or pivot tables can only be copied while the workbook is open in Excel on this PC (SHEET_NOT_COPYABLE otherwise).
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`*: text — シート名（完全一致）。省略すると先頭のシート
+- `name`*: text — 新しいシート名
+Example: `{"type":"excel.copySheet","name":"ひな形から今月のシートを作る","params":{"path":"output/月報.xlsx","sheet":"ひな形","name":"{{ month }}月"}}`
+
+#### excel.deleteRows (行の削除)
+
+Deletes `count` (default 1) rows from row `row` of `sheet`, moving the rows below up, and saves the workbook. To delete rows found with excel.readRows, use their `_row` and go from the bottom up (control.forEach over reverse(...)), because the rows below move up after each delete. Formulas that pointed at the deleted rows show #REF!, as in Excel. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`: text — シート名（完全一致）。省略すると先頭のシート
+- `row`*: whole number or text — 行番号（readRows の行なら {{ row._row }}）
+- `count`: whole number or text — 行の数（既定 1）
+Example: `{"type":"control.forEach","params":{"items":"reverse(filter(orders, o => o.状態 == '取消'))","itemVar":"order"},"blocks":{"body":[{"type":"excel.deleteRows","name":"取消の行を消す","params":{"path":"input/受注.xlsx","sheet":"受注","row":"{{ order._row }}"}}]}}`
+
+#### excel.deleteSheet (シートの削除)
+
+Deletes the sheet `sheet` and saves the workbook; does nothing when there is no such sheet, so re-running is safe. Refuses (SHEET_REFERENCED, with the cells in details.usedBy) when formulas or named ranges of other sheets use it, unless the workbook is open in Excel on this PC (Excel then deletes it as a person would, turning those references into #REF!). The only sheet of a workbook cannot be deleted (LAST_SHEET).
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`*: text — シート名（完全一致）。省略すると先頭のシート
+Example: `{"type":"excel.deleteSheet","name":"作業用のシートを消す","params":{"path":"output/集計.xlsx","sheet":"作業"}}`
+
 #### excel.exportPdf (PDF 出力)
 
 Saves the workbook `path` (or only `sheet`) as the PDF `to`, laid out as Excel prints it (print area, page setup). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Uses the workbook open in Excel on this PC when it is open (what is on the screen), otherwise opens the file read-only in a separate, hidden Excel. Needs Windows with desktop Excel. Output: { path }.
@@ -850,6 +943,17 @@ Params:
 - `autoFit`: true | false — 列の幅を中身に合わせる
 Example: `{"type":"excel.format","name":"見出しを太字・水色にする","params":{"path":"input/受注.xlsx","sheet":"受注","range":"A1:F1","bold":true,"fillColor":"#DDEBF7","align":"center"}}`
 Example: `{"type":"excel.format","name":"金額を 3 桁区切りにする","params":{"path":"input/受注.xlsx","sheet":"受注","range":"E2:E1000","numberFormat":"#,##0","autoFit":true}}`
+
+#### excel.insertRows (行の挿入)
+
+Inserts `count` (default 1) empty rows at row `row` of `sheet`, moving that row and the ones below it down, and saves the workbook. Formulas and named ranges that point below follow the rows, as in Excel. When the workbook is open in Excel on this PC, the step works on the open workbook and saves it.
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`: text — シート名（完全一致）。省略すると先頭のシート
+- `row`*: whole number or text — 行番号（readRows の行なら {{ row._row }}）
+- `count`: whole number or text — 行の数（既定 1）
+Example: `{"type":"excel.insertRows","name":"見出しの下に 1 行空ける","params":{"path":"input/受注.xlsx","sheet":"受注","row":2}}`
 
 #### excel.listSheets (シート一覧)
 
@@ -917,6 +1021,16 @@ Params:
 - `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
 Example: `{"type":"excel.recalculate","name":"数式を計算し直す","params":{"path":"output/集計.xlsx"}}`
 
+#### excel.renameSheet (シート名の変更)
+
+Renames the sheet `sheet` to `name` and saves the workbook. Formulas and named ranges that use the sheet are changed to the new name, as in Excel. Does nothing when `sheet` is gone and `name` exists (already renamed), so re-running is safe; fails with SHEET_EXISTS when both exist.
+
+Params:
+- `path`*: text [path] — ブック（.xlsx / .xlsm）：フローのフォルダーからの相対パス（例 input/受注.xlsx）か絶対パス（C:\work\受注.xlsx）
+- `sheet`*: text — シート名（完全一致）。省略すると先頭のシート
+- `name`*: text — 新しいシート名
+Example: `{"type":"excel.renameSheet","params":{"path":"output/月報.xlsx","sheet":"ひな形","name":"{{ month }}月"}}`
+
 #### excel.runMacro (マクロ実行)
 
 Runs the VBA macro `macro` (e.g. 集計 or Module1.集計; a Function's return value is the output) of the workbook `path` with `args`, in a separate, hidden Excel that never touches the user's open Excel windows, then saves the workbook (`save: false` to discard its changes) and closes it. Needs Windows with desktop Excel; macros must be enabled for the workbook on this PC. Use only for what other excel.* steps cannot do: read and write cells with them. A macro that shows a MsgBox waits forever and is ended at the step's timeoutMs (default 300000).
@@ -929,6 +1043,22 @@ Params:
 Output: yes (saveAs)
 Example: `{"type":"excel.runMacro","name":"集計マクロを実行","params":{"path":"templates/集計.xlsm","macro":"Module1.集計"}}`
 Example: `{"type":"excel.runMacro","params":{"path":"templates/集計.xlsm","macro":"月次レポート","args":["{{ month }}",2026]},"saveAs":"result"}`
+
+#### excel.saveAs (名前を付けて保存)
+
+Saves a copy of the workbook `path` as `to`, in the format of `to`'s extension: .xlsx, .xlsm, .xlsb, .xls (Excel 97-2003), .csv (only `sheet`, or the first sheet; UTF-8 with BOM, or Shift_JIS with encoding "shift_jis") or .pdf. `path` may be an .xls or a password-protected workbook (`password`, a registered secret): save it as .xlsx first, and the other excel.* steps can then work on the copy, which has no password. Opens the saved file read-only in a separate, hidden Excel (changes not yet saved in an open Excel are not in the copy). Fails with FILE_EXISTS when `to` exists unless `overwrite` is true. Needs Windows with desktop Excel. Output: { path }.
+
+Params:
+- `path`*: text [path] — 元のブック（.xlsx・.xlsm・.xls・.xlsb・.csv）：フローのフォルダーからの相対パス（例 input/受注.xls）か絶対パス
+- `to`*: text [path] — 保存先：拡張子（.xlsx・.xlsm・.xlsb・.xls・.csv・.pdf）で形式が決まる
+- `sheet`: text — CSV・PDF にするシート（省略すると CSV は先頭のシート、PDF はブック全体）
+- `password`: { secret*: text, field*: "username" | "password" | "totp" } [may be a secret] — A registered secret, e.g. { "secret": "受注システム", "field": "password" }. Only the name is written here; the value is looked up when the step runs.
+- `encoding`: "utf-8" | "shift_jis" — CSV の文字コード（既定 utf-8、BOM 付き）
+- `overwrite`: true | false — 同じ名前のファイルがあれば上書きする（既定 false）
+Output: yes (saveAs)
+Example: `{"type":"excel.saveAs","name":"古い形式のブックを xlsx にする","params":{"path":"input/受注.xls","to":"work/受注.xlsx","overwrite":true}}`
+Example: `{"type":"excel.saveAs","params":{"path":"input/給与.xlsx","password":{"secret":"給与ブック","field":"password"},"to":"work/給与.xlsx","overwrite":true}}`
+Example: `{"type":"excel.saveAs","params":{"path":"output/集計.xlsx","sheet":"集計","to":"output/集計.csv","encoding":"shift_jis","overwrite":true}}`
 
 #### excel.sort (並べ替え)
 
@@ -1303,6 +1433,24 @@ Example: `{"type":"pdf.split","params":{"path":"input/まとめて読み取り.p
 
 ### process.*
 
+#### process.kill (プロセス終了)
+
+Ends every running process of the program `name` (e.g. "sales.exe"; case and .exe do not matter) with its child processes, without asking it to save. Use it to restart an application that hangs (then desktop.launch it again). Outputs { killed } (0 when it was not running, which is not an error). Unsaved work in that program is lost. A process of another user or of an administrator fails with PROCESS_KILL_FAILED.
+
+Params:
+- `name`*: text
+Output: yes (saveAs)
+Example: `{"type":"process.kill","params":{"name":"sales.exe"}}`
+
+#### process.list (プロセス一覧)
+
+Outputs the programs running on this PC as [{ pid, name }]. With `name` (e.g. "EXCEL" or "EXCEL.EXE"; case and .exe do not matter) only that program's processes, so `length(list) > 0` tells whether it is running.
+
+Params:
+- `name`: text
+Output: yes (saveAs)
+Example: `{"type":"process.list","params":{"name":"EXCEL"},"saveAs":"excels"}`
+
 #### process.run (プログラム実行)
 
 Runs a command-line program with `args` (a list; no shell, so no quoting needed), waits for it and outputs { exitCode, stdout, stderr } (text, UTF-8 or Shift_JIS detected). An exit code not in `okExitCodes` (default [0]) fails the step with PROCESS_FAILED. The step's timeoutMs stops the program. For shell built-ins use program "cmd" with args ["/c", ...]. To open an application window use desktop.launch instead.
@@ -1326,7 +1474,7 @@ Example: `{"type":"process.run","params":{"program":"robocopy","args":["C:\\work
 Starts the SAP transaction `code` (e.g. VA03, /nVA03 is not needed) in the SAP GUI window `target.window`, as typing it into the command field does. Output: the status bar then, { type, text } (type S success, W warning, E error, A abort, I info, or empty). Needs SAP GUI Scripting (enabled on the SAP server with sapgui/user_scripting and in SAP GUI's options). The other steps on SAP GUI are the usual desktop.* ones with SAP component ids from inspect_ui.
 
 Params:
-- `target`*: { window*: { title: text, process: text, className: text, exact: true | false, nth: whole number }, element: { id: text, name: text, role: "button" | "calendar" | "checkbox" | "combobox" | "textbox" | "link" | "image" | "listitem" | "list" | "menu" | "menubar" | "menuitem" | "progressbar" | "radio" | "scrollbar" | "slider" | "spinbutton" | "status" | "tablist" | "tab" | "text" | "toolbar" | "tooltip" | "tree" | "treeitem" | "custom" | "group" | "thumb" | "grid" | "row" | "document" | "splitbutton" | "window" | "pane" | "header" | "columnheader" | "table" | "titlebar" | "separator" | "semanticzoom" | "appbar", className: text, exact: true | false, nth: whole number } } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
+- `target`*: { window*: { title: text, match: "contains" | "exact" | "prefix" | "suffix" | "pattern", process: text, className: text, exact: true | false, nth: whole number }, element: { id: text, name: text, role: "button" | "calendar" | "checkbox" | "combobox" | "textbox" | "link" | "image" | "listitem" | "list" | "menu" | "menubar" | "menuitem" | "progressbar" | "radio" | "scrollbar" | "slider" | "spinbutton" | "status" | "tablist" | "tab" | "text" | "toolbar" | "tooltip" | "tree" | "treeitem" | "custom" | "group" | "thumb" | "grid" | "row" | "document" | "splitbutton" | "window" | "pane" | "header" | "columnheader" | "table" | "titlebar" | "separator" | "semanticzoom" | "appbar", className: text, exact: true | false, nth: whole number } } — 操作する対象。例 { "window": { "process": "billing.exe" }, "element": { "id": "btnSave" } }
 - `code`*: text — トランザクションコード（例 VA03）
 Output: yes (saveAs)
 Example: `{"type":"sap.runTransaction","name":"受注照会を開く","params":{"target":{"window":{"process":"saplogon.exe","title":"SAP Easy Access"}},"code":"VA03"},"saveAs":"status"}`

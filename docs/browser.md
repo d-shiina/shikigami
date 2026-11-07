@@ -40,12 +40,14 @@ The CLI builds into `target/demo`, so it does not fail to overwrite `target\debu
 |---|---|---|
 | `browser.open` | `url`, `headless`, `session` (name under which the login state is saved and reused), `dialog` | `{ url, title }` |
 | `browser.attach` | `port` (default 9222), `title` / `url` (which tab) | `{ url, title }` |
-| `browser.click` | `target`, `dialog` (answer to the JS dialog the click shows) | the dialog's message / `null` |
+| `browser.click` | `target`, `button` (`right` for a right-click), `double` (double-click), `modifiers` (keys held down, e.g. `["Control"]`), `dialog` (answer to the JS dialog the click shows) | the dialog's message / `null` |
 | `browser.download` | `target` (what to click), `path` (the file) or `folder` (keep the site's name) | `{ path, fileName }` |
 | `browser.upload` | `target` (the file input, or the button that opens the file picker), `path` (a file or a list) | – |
 | `browser.hover` | `target` | – |
 | `browser.scroll` | `target` (bring into view) and/or `to` (`top` / `bottom`) | – |
-| `browser.fill` | `target`, `value` (text, or a registered secret `{ "secret": "name", "field": "password" }`) | – |
+| `browser.fill` | `target`, `value` (text, or a registered secret `{ "secret": "name", "field": "password" }`), `typing` (one key at a time, for pages that react to each key) | – |
+| `browser.check` | `target`, `checked` (default `true`; `false` unchecks) | – (nothing happens when it already is) |
+| `browser.navigate` | `action` (`back` / `forward` / `reload`) | `{ url, title }` |
 | `browser.select` | `target`, `value` (visible label, or a list) | – |
 | `browser.press` | `key` (`Enter` and so on), `target` (the page when omitted), `dialog` | the dialog's message / `null` |
 | `browser.getText` | `target`, `all` (`true` for a list of every match) | text / list |

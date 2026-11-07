@@ -57,6 +57,8 @@ import {
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence, typeTitle } from "../lib/sentence";
 import { AppTag } from "./AppTag";
+import { HoverPreview } from "./HoverPreview";
+import { previewSource } from "../lib/preview";
 import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { CATEGORY_COLOR } from "./CommandPalette";
@@ -457,8 +459,9 @@ function ValueText({ value, refs, color, run, stepId }: { value: string; refs: s
   );
 }
 
-function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, string | undefined>; run: RunValues; stepId: string }) {
+function NodeRow({ row, vars, run, stepId, sheet }: { row: Row; vars: Map<string, string | undefined>; run: RunValues; stepId: string; sheet?: string }) {
   const focused = useFocus();
+  const parts = useStudio((s) => s.flow?.parts);
   const typeColor = (name: string): string => TYPE_COLOR[vars.get(name) ?? "any"] ?? "var(--cat-other)";
   if (row.kind === "more") {
     return <div style={{ height: ROW_H }} className="flex items-center px-3 text-[11px] text-slate-400">{t.flow.moreRows(row.count)}</div>;
@@ -494,13 +497,37 @@ function NodeRow({ row, vars, run, stepId }: { row: Row; vars: Map<string, strin
           {t.flow.unsetValue}
         </span>
       ) : row.file ? (
-        <FileValue file={row.file} />
+        <FileValue file={row.file} sheet={sheet} />
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-ink" title={row.value}>
+        <ParamValue row={row} parts={parts}>
           <ValueText value={row.value} refs={row.refs} color={typeColor} run={run} stepId={stepId} />
-        </span>
+        </ParamValue>
       )}
     </div>
+  );
+}
+
+/**
+ * A setting's value on the node. Resting the pointer on it shows what it
+ * names (a picture by its path, the picture of a part) or the whole text
+ * when it is cut short; otherwise the tooltip has the text.
+ */
+function ParamValue({ row, parts, children }: { row: Extract<Row, { kind: "param" }>; parts: Flow["parts"]; children: React.ReactNode }) {
+  const className = "flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-ink";
+  // A node pointing at a named part shows the part's picture.
+  const raw = row.raw && typeof row.raw === "object" && typeof (row.raw as { part?: unknown }).part === "string" ? (parts?.[(row.raw as { part: string }).part]?.target ?? row.raw) : row.raw;
+  const source = previewSource(raw) ?? (row.full ? { kind: "text" as const, text: row.full } : null);
+  if (!source) {
+    return (
+      <span className={className} title={row.value}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <HoverPreview source={source} className={className}>
+      {children}
+    </HoverPreview>
   );
 }
 
@@ -516,16 +543,18 @@ const ROLE_VAR: Record<string, string> = {
  * colour, marked when Excel has it open (a write would fail), and opened in
  * its sheet or app on double-click.
  */
-function FileValue({ file }: { file: NonNullable<Extract<Row, { kind: "param" }>["file"]> }) {
+function FileValue({ file, sheet }: { file: NonNullable<Extract<Row, { kind: "param" }>["file"]>; sheet?: string }) {
   const color = ROLE_VAR[file.role] ?? "var(--color-slate-400)";
   const entry = useProjectMaybe((s) => s.files?.files.find((f) => f.path.toLowerCase() === file.path.toLowerCase()) ?? null, null);
   const known = useProjectMaybe((s) => s.files !== null, false);
   const openFile = useProjectMaybe((s) => s.openFile, null);
   const missing = known && !entry && file.role !== "output" && file.role !== "work" && !file.path.includes("{{");
+  const source = previewSource(file.path, { sheet });
   return (
-    <span
+    <HoverPreview
+      source={source}
       className="flex h-[20px] min-w-0 flex-1 items-center gap-1.5 leading-[20px] text-ink"
-      title={entry?.inUse ? `${file.path} · ${t.project.inUse}` : file.path}
+      title={source ? (entry?.inUse ? t.project.inUse : undefined) : entry?.inUse ? `${file.path} · ${t.project.inUse}` : file.path}
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (entry && openFile) void openFile(file.path);
@@ -534,7 +563,7 @@ function FileValue({ file }: { file: NonNullable<Extract<Row, { kind: "param" }>
       <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: color }} />
       <span className={`min-w-0 flex-1 truncate text-[12px] ${missing ? "text-shu-500 line-through decoration-1" : ""}`}>{file.path}</span>
       {entry?.inUse && <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-shu-500" />}
-    </span>
+    </HoverPreview>
   );
 }
 
@@ -708,7 +737,7 @@ function StepNode({ data }: StepNodeProps) {
       {rows.length > 0 && (
         <div style={{ paddingBottom: NODE_PAD_B }} className="border-t border-slate-100 pt-0.5">
           {rows.map((row, i) => (
-            <NodeRow key={i} row={row} vars={data.vars} run={data.run} stepId={data.step.id ?? ""} />
+            <NodeRow key={i} row={row} vars={data.vars} run={data.run} stepId={data.step.id ?? ""} sheet={typeof data.step.params?.sheet === "string" ? data.step.params.sheet : undefined} />
           ))}
         </div>
       )}

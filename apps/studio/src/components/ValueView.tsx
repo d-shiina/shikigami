@@ -3,6 +3,8 @@
 // lines. Display only.
 import type { VariableChange } from "../store";
 import { locale, t } from "../lib/i18n";
+import { previewSource } from "../lib/preview";
+import { HoverPreview, PreviewBody } from "./HoverPreview";
 
 const MAX_ROWS = 8;
 const MAX_COLS = 6;
@@ -28,8 +30,8 @@ export function shortText(v: unknown): string {
 function Cell({ value }: { value: unknown }) {
   const text = shortText(value);
   return (
-    <td className={`max-w-[160px] truncate px-1.5 py-0.5 ${typeof value === "number" ? "text-right tabular-nums" : ""}`} title={text}>
-      {text}
+    <td className={`max-w-[160px] truncate px-1.5 py-0.5 ${typeof value === "number" ? "text-right tabular-nums" : ""}`} title={previewSource(value) ? undefined : text}>
+      <HoverPreview value={value}>{text}</HoverPreview>
     </td>
   );
 }
@@ -105,7 +107,15 @@ export function ValueView({ value }: { value: unknown }) {
       </div>
     );
   }
-  return <div className={`text-[13px] font-semibold ${typeof value === "number" ? "tabular-nums" : ""}`}>{shortText(value)}</div>;
+  const source = previewSource(value);
+  if (source?.kind === "imageData") return <PreviewBody source={source} />;
+  return (
+    <div>
+      <div className={`text-[13px] font-semibold ${typeof value === "number" ? "tabular-nums" : ""} ${source ? "break-all" : ""}`}>{shortText(value)}</div>
+      {/* A path to a picture or a table shows what is in it. */}
+      {source && <PreviewBody source={source} head={false} />}
+    </div>
+  );
 }
 
 /** A reported change as it should read: masked, cut short, or laid out. */

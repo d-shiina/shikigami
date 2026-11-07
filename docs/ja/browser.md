@@ -40,12 +40,14 @@ CLI は `target/demo` にビルドするので、MCP サーバーなどで `targ
 |---|---|---|
 | `browser.open` | `url`, `headless`, `session`（ログイン状態を保存・再利用する名前）, `dialog` | `{ url, title }` |
 | `browser.attach` | `port`（既定 9222）, `title` / `url`（使うタブ） | `{ url, title }` |
-| `browser.click` | `target`, `dialog`（クリックで出る JS のダイアログへの答え） | ダイアログの文 / `null` |
+| `browser.click` | `target`, `button`（`right` で右クリック）, `double`（ダブルクリック）, `modifiers`（`["Control"]` など押しながらのキー）, `dialog`（クリックで出る JS のダイアログへの答え） | ダイアログの文 / `null` |
 | `browser.download` | `target`（押すもの）, `path`（保存するファイル）か `folder`（サイトの名前のまま） | `{ path, fileName }` |
 | `browser.upload` | `target`（ファイルの入力欄、またはファイル選択を開くボタン）, `path`（ファイル 1 つか配列） | – |
 | `browser.hover` | `target` | – |
 | `browser.scroll` | `target`（見えるところまで）と `to`（`top` / `bottom`）のどちらか、または両方 | – |
-| `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`） | – |
+| `browser.fill` | `target`, `value`（文字、または登録済みシークレット `{ "secret": "名前", "field": "password" }`）, `typing`（1 文字ずつキーを打つ。キー入力を見ているページ向け） | – |
+| `browser.check` | `target`, `checked`（既定 `true`、`false` で外す） | –（すでにその状態なら何もしない） |
+| `browser.navigate` | `action`（`back` 戻る / `forward` 進む / `reload` 再読み込み） | `{ url, title }` |
 | `browser.select` | `target`, `value`（表示名、または配列） | – |
 | `browser.press` | `key`（`Enter` など）, `target`（省略時はページ）, `dialog` | ダイアログの文 / `null` |
 | `browser.getText` | `target`, `all`（`true` で全一致の配列） | 文字列 / 配列 |

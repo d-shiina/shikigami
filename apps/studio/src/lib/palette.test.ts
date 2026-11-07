@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { insertPlace } from "../store";
 import { setLocale, t } from "./i18n";
 import { en } from "./locales/en";
-import { bySection, frequent, frequentBySection, groupOf, groups, nextAfter, normalize, paletteItems, search, stepSummary } from "./palette";
+import { SUBGROUPS, bySection, frequent, frequentBySection, groupOf, groups, nextAfter, normalize, paletteItems, search, stepSummary } from "./palette";
 import { toKana } from "./romaji";
 
 const def = (type: string, category: string, label: string, description = ""): StepTypeDef =>
@@ -144,6 +144,12 @@ describe("node palette, finding by what a node is for", () => {
     expect(view[1]![1].map((i) => i.key)).toContain("control.if");
     // Search results too, the section of the best match first.
     expect(bySection(search(items, "ログ")).map(([s]) => s)[0]).toBe("flow");
+  });
+
+  it("gives every built-in node a place in its group", () => {
+    const placed = new Set(Object.values(SUBGROUPS).flatMap((subs) => subs.flatMap(([, types]) => types)));
+    const missing = Object.keys(t.stepHelp).filter((type) => type !== "control.case" && !placed.has(type));
+    expect(missing).toEqual([]);
   });
 
   it("offers what usually follows a node", () => {

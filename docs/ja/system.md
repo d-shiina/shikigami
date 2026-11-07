@@ -8,6 +8,8 @@
 |---|---|---|---|
 | `http.request` | Web API を呼ぶ | `{ status, headers, body }` | dangerous |
 | `process.run` | コマンドラインのプログラムを実行して終わるまで待つ | `{ exitCode, stdout, stderr }` | dangerous |
+| `process.list` | 動いているプログラムを調べる（`name` でそのプログラムだけ） | `[{ pid, name }]` | safe |
+| `process.kill` | `name` のプログラムを子プロセスごと強制終了する | `{ killed }` | dangerous |
 | `clipboard.get` / `clipboard.set` | クリップボードのテキストを読む / 入れる（Windows） | テキスト | safe / interactive |
 | `dialog.message` | メッセージを出して押されたボタンを返す（Windows） | `ok` `cancel` `yes` `no` | interactive |
 | `dialog.input` | 1 行入力してもらう（Windows。キャンセルは空文字） | テキスト | interactive |
@@ -30,6 +32,13 @@
 - コンソールは表示しない。ノードの `timeoutMs` を過ぎるとプログラムを終了させる。
 - ノードが終わる（完了・停止・タイムアウト）と、そのプログラムが起動した子プロセスもまとめて終了させる（Windows はジョブオブジェクト）。再試行中に前の試行の残りが動き続けることはない。
 - 画面のあるアプリを開いたまま残すときは `desktop.launch` を使う（`cmd /c start …` で開いたアプリもノード終了時に閉じる）。
+
+## `process.list` / `process.kill`
+
+- `name` は `EXCEL`・`EXCEL.EXE` のどちらでもよい（大文字・小文字と `.exe` は区別しない）。
+- 固まった業務アプリを落として立ち上げ直すときは `process.kill` のあとに `desktop.launch`。保存していない内容は消える。動いていなければ `{ killed: 0 }` で、エラーにはしない。
+- 動いているかどうかは `process.list` の結果の `length(list) > 0`。
+- 別のユーザーや管理者として動いているプログラムは終了できない（`PROCESS_KILL_FAILED`）。`policy.json` の `apps` を書くと、そこにあるプログラムだけを終了させられる。
 
 ## クリップボードとダイアログ
 
