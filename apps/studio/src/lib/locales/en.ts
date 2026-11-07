@@ -1712,7 +1712,7 @@ export const en: Dict = {
     notPublished: "Does not run: no published version",
     flowMissing: "Flow not found",
     remoteNote:
-      "You are connected by Remote Desktop. Closing this window (disconnecting) locks the screen, and flows that use the mouse and keyboard stop. "Disconnect, keep the screen" disconnects without locking.",
+      "You are connected by Remote Desktop. Closing this window (disconnecting) locks the screen, and flows that use the mouse and keyboard stop. 'Disconnect, keep the screen' disconnects without locking.",
     release: "Disconnect, keep the screen",
     releaseConfirm: "Disconnect now",
     releaseWarn: "If a monitor is plugged into the PC, people in front of it can see the screen. Windows may ask for an administrator.",
