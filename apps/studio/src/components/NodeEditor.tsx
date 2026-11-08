@@ -13,14 +13,13 @@ import { t } from "../lib/i18n";
 import { enclosingLoops, resultStep } from "../lib/loopScope";
 import { TYPE_COLOR, knownVariables } from "../lib/nodeRows";
 import { runScope, sampleOf, shortValue } from "../lib/runScope";
-import { sentence, typeTitle } from "../lib/sentence";
+import { typeTitle } from "../lib/sentence";
 import { stepInputs } from "../lib/stepTest";
 import { findStep, isActive, type StepTest } from "../store";
 import { useProjectMaybe } from "../project";
 import { startFileDrag } from "./FileDrag";
 import { StepInspector } from "./inspector/StepInspector";
 import { useActiveField, useInsertChoices } from "./InsertVariable";
-import { Sentence } from "./StoryView";
 import { OcrResult, isOcrOutput } from "./OcrResult";
 import { ValueView } from "./ValueView";
 
@@ -65,10 +64,9 @@ function Editor({ step }: { step: Step }) {
           <ChevronLeft size={14} aria-hidden="true" />
           {t.editor.back}
         </button>
-        <span className="text-[15px] font-bold text-ink">{typeTitle(step, def)}</span>
-        <span className="min-w-0 truncate text-[12.5px] text-slate-600">
-          <Sentence parts={sentence(step, def)} />
-        </span>
+        <span className="shrink-0 text-[15px] font-bold text-ink">{typeTitle(step, def)}</span>
+        {/* The name, typed in place: the form below is only what the node does. */}
+        <NameInput step={step} />
         <span className="ml-auto flex items-center gap-2">
           {/* One way out: "フロー図に戻る" on the left (or Esc). */}
           <RunButtons step={step} def={def} />
@@ -96,6 +94,35 @@ function Editor({ step }: { step: Step }) {
         </section>
       </div>
     </div>
+  );
+}
+
+/** The node's name in the header, plain text until pointed at (n8n, Linear). */
+function NameInput({ step }: { step: Step }) {
+  const updateStep = useStudio((s) => s.updateStep);
+  const [draft, setDraft] = useState(step.name ?? "");
+  useEffect(() => setDraft(step.name ?? ""), [step.name]);
+  const commit = () => {
+    const name = draft.trim();
+    if (name !== (step.name ?? "")) void updateStep(step.id!, { name });
+  };
+  return (
+    <input
+      value={draft}
+      aria-label={t.stepName}
+      title={t.editor.renameTitle}
+      placeholder={t.editor.namePlaceholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          setDraft(step.name ?? "");
+        }
+      }}
+      className="min-w-0 max-w-[420px] flex-1 truncate rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-[13px] text-slate-700 placeholder:text-slate-400 hover:border-slate-200 focus:border-primary focus:bg-sheet focus:outline-none"
+    />
   );
 }
 

@@ -149,3 +149,49 @@ describe("a list of records", () => {
     expect((edit.mock.calls.at(-1) as unknown as [string, number, { patch: { replaceParams: object } }[]])[2][0]!.patch.replaceParams).toEqual({});
   });
 });
+
+describe("the settings of the node opened full size", () => {
+  it("shows what the node needs, and keeps the rest behind one 「＋ 設定を追加」", async () => {
+    const mailDef = {
+      type: "mail.send",
+      category: "mail",
+      label: "メールを送信",
+      description: "",
+      paramsSchema: {
+        type: "object",
+        properties: { to: { type: "string", description: "宛先のメールアドレス" }, subject: { type: "string" }, cc: { type: "string" } },
+        required: ["to", "subject"],
+      },
+      blocks: [],
+      hasOutput: true,
+      risk: "dangerous",
+    } as unknown as StepTypeDef;
+    const mailFlow = { ...flow, steps: [{ id: "s1", type: "mail.send", name: "知らせる", params: { to: "a@example.com", subject: "済" } }] } as unknown as Flow;
+    const edit = vi.fn(async () => {
+      throw new Error("not saved in this test");
+    });
+    const store = await studio({ listStepTypes: vi.fn(async () => [mailDef]), getFlow: vi.fn(async () => mailFlow), edit } as Partial<Api>);
+    store.setState({ stepTypes: [mailDef] });
+    store.getState().openEditor("s1");
+    render(
+      <StudioContext.Provider value={store}>
+        <NodeEditor />
+      </StudioContext.Provider>,
+    );
+    // The name is in the header; no memo box, no empty result variable, no section of their own.
+    expect((screen.getByRole("textbox", { name: "表示名" }) as HTMLInputElement).value).toBe("知らせる");
+    expect(screen.queryByPlaceholderText(/このノードで何をするか/)).toBeNull();
+    expect(screen.queryByPlaceholderText("変数名")).toBeNull();
+    expect(screen.queryByText("基本")).toBeNull();
+    expect(screen.queryByText("変数のつながり")).toBeNull();
+    // What a setting means sits behind a ?, not under the field.
+    expect(screen.getByTitle("宛先のメールアドレス")).toBeTruthy();
+    // One menu for everything optional: the node's settings, its result, how it runs, a memo.
+    const menus = screen.getAllByRole("combobox", { name: "＋ 設定を追加" });
+    expect(menus).toHaveLength(1);
+    const options = [...menus[0]!.querySelectorAll("option")].map((o) => o.textContent);
+    expect(options).toEqual(expect.arrayContaining(["結果を保存する変数", "待ち時間（ミリ秒）", "メモ"]));
+    fireEvent.change(menus[0]!, { target: { value: "description" } });
+    expect(screen.getByPlaceholderText(/このノードで何をするか/)).toBeTruthy();
+  });
+});

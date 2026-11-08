@@ -21,7 +21,7 @@ import { pageAbove } from "../../lib/loopScope";
 import { credentialFor } from "../../lib/extensions";
 import { fieldLabel as secretFieldLabel } from "../../lib/secretKinds";
 import { FOR_EACH } from "../../lib/stepTypes";
-import { type JsonSchema, inputClass, CommitInput, PathField, Row, AddRow, Section } from "./fields";
+import { type AddChoice, type JsonSchema, inputClass, CommitInput, PathField, Row, AddRow, Section } from "./fields";
 
 type SecretRef = { secret: string; field: SecretField };
 
@@ -264,7 +264,7 @@ function ParamField({
           {label}
           {pointer && <PointTools adapter={pointer} schema={schema} value={value} stepId={stepId} onChange={onChange} />}
         </div>
-        <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} onChange={onChange} />
+        <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} foldEmpty={Boolean(pointer)} onChange={onChange} />
       </div>
     );
   } else {
@@ -285,7 +285,7 @@ function ParamField({
     );
   }
   return (
-    <Row label={label} title={schema.description ? `${schema.description}（${name}）` : name} socket={socket} hint={hint} onRemove={onRemove}>
+    <Row label={label} title={schema.description ? `${schema.description}（${name}）` : name} socket={socket} help={hint} onRemove={onRemove}>
       {editor}
     </Row>
   );
@@ -430,7 +430,7 @@ function TargetField({
         )
       ) : (
         <>
-          <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} onChange={onChange} />
+          <ObjectFields schema={schema} value={value as Record<string, unknown> | undefined} foldEmpty onChange={onChange} />
           {isRecord(value) &&
             (making ? (
               <div className="mt-1 flex items-center gap-1">
@@ -664,26 +664,36 @@ export function ObjectFields({
   value,
   onChange,
   labels,
+  foldEmpty = false,
 }: {
   schema: JsonSchema;
   value: Record<string, unknown> | undefined;
   onChange: (value: unknown) => void;
   /** Names of the items, when they are not a target's. */
   labels?: Record<string, string>;
+  /**
+   * A target already set (「登録」ボタン): only its items in use, the empty
+   * ones under 「詳しく指定」 with the rare ones. An empty target shows the
+   * usual items to fill in.
+   */
+  foldEmpty?: boolean;
 }) {
   const fieldLabel = (key: string) => labels?.[key] ?? t.targetFields[key] ?? key;
   const props = schema.properties ?? {};
   const current = value ?? {};
   const keys = Object.keys(props);
-  const rare = keys.filter((k) => RARE.has(k));
-  const [more, setMore] = useState(() => rare.some((k) => current[k] !== undefined));
+  const filled = (k: string) => current[k] !== undefined;
+  // Decided once when the form opens, so an item never vanishes while typing.
+  const [inUse] = useState(() => (foldEmpty && keys.some(filled) ? new Set(keys.filter(filled)) : null));
+  const rare = keys.filter((k) => RARE.has(k) || (inUse !== null && !inUse.has(k)));
+  const [more, setMore] = useState(() => keys.some((k) => RARE.has(k) && filled(k)));
   const set = (key: string, v: unknown) => {
     const next = { ...current };
     if (v === null || v === undefined || v === "" || v === false || (isRecord(v) && Object.keys(v).length === 0)) delete next[key];
     else next[key] = v;
     onChange(Object.keys(next).length === 0 ? null : next);
   };
-  const shown = keys.filter((k) => more || !RARE.has(k));
+  const shown = keys.filter((k) => more || !rare.includes(k));
   return (
     <div className="space-y-1 rounded-lg border border-slate-200 bg-paper px-2 py-1.5">
       {shown.map((key) => {
@@ -695,7 +705,7 @@ export function ObjectFields({
               <div className="mb-1 text-[11px] font-semibold text-slate-600" title={sub.description}>
                 {fieldLabel(key)}
               </div>
-              <ObjectFields schema={sub} value={v as Record<string, unknown> | undefined} onChange={(next) => set(key, next)} />
+              <ObjectFields schema={sub} value={v as Record<string, unknown> | undefined} foldEmpty={foldEmpty} onChange={(next) => set(key, next)} />
             </div>
           );
         }
@@ -805,11 +815,25 @@ export function ParamsEditor({
   def,
   vars,
   update,
+  flat = false,
+  more = [],
+  onMore,
+  after,
 }: {
   step: Step;
   def?: StepTypeDef;
   vars: Map<string, string | undefined>;
   update: (p: StepPatch) => void;
+  /**
+   * The node opened full size: the rows straight under the column's own
+   * 「設定」 heading (no second heading), and one 「＋ 設定を追加」 for
+   * everything optional, the node's other settings (`more`) included.
+   */
+  flat?: boolean;
+  more?: AddChoice[];
+  onMore?: (key: string) => void;
+  /** Rows of the node's other settings that are in use, before 「＋ 設定を追加」. */
+  after?: React.ReactNode;
 }) {
   const schema = (def?.paramsSchema ?? {}) as JsonSchema;
   const props = schema.properties ?? {};
@@ -836,7 +860,7 @@ export function ParamsEditor({
   const shown = (key: string) => isRequired(key) || params[key] !== undefined || added.has(key);
   const hidden = Object.keys(props)
     .filter((key) => !shown(key))
-    .map((key) => ({ key, label: paramLabel(key, step.type) }));
+    .map((key) => ({ key, label: paramLabel(key, step.type), ...(more.length > 0 ? { group: t.params } : {}) }));
   const remove = (key: string) => {
     setAdded((prev) => {
       const next = new Set(prev);
@@ -853,7 +877,7 @@ export function ParamsEditor({
   const toggle = (
     <button
       type="button"
-      className="text-[10px] text-brand-600 hover:underline"
+      className={flat ? "text-[11px] text-slate-500 hover:text-brand-600 hover:underline" : "text-[10px] text-brand-600 hover:underline"}
       onClick={(e) => {
         e.preventDefault();
         setRaw(!raw);
@@ -863,10 +887,20 @@ export function ParamsEditor({
     </button>
   );
 
-  return (
-    <InsertProvider value={choices}>
-      <Section title={t.params} aside={toggle}>
-      {raw || Object.keys(props).length === 0 ? (
+  const add = (key: string) => (key in props ? setAdded((prev) => new Set(prev).add(key)) : onMore?.(key));
+  const rest = (
+    <>
+      {after}
+      <AddRow choices={more} onAdd={add} />
+    </>
+  );
+  const body = (
+      flat && !raw && Object.keys(props).length === 0 ? (
+        <>
+          <p className="py-1 text-[12px] text-slate-500">{t.editor.nothingToSet}</p>
+          {rest}
+        </>
+      ) : raw || Object.keys(props).length === 0 ? (
         <div className="space-y-1">
           <textarea className={`${inputClass} font-mono`} rows={8} value={text} onChange={(e) => setText(e.target.value)} />
           {error && <div className="text-xs text-shu-600">{error}</div>}
@@ -887,7 +921,10 @@ export function ParamsEditor({
           </button>
         </div>
       ) : step.type === "variable.set" && params.value === undefined ? (
-        <VariableSetForm step={step} types={vars} scope={scope} update={update} />
+        <>
+          <VariableSetForm step={step} types={vars} scope={scope} update={update} />
+          {flat && rest}
+        </>
       ) : (
         <>
         {Object.entries(props).filter(([key]) => shown(key)).map(([key, propSchema]) => {
@@ -953,10 +990,24 @@ export function ParamsEditor({
             />
           );
         })}
-        <AddRow choices={hidden} onAdd={(key) => setAdded((prev) => new Set(prev).add(key))} />
+        {after}
+        <AddRow choices={[...hidden, ...more]} onAdd={add} />
         </>
+      )
+  );
+  return (
+    <InsertProvider value={choices}>
+      {flat ? (
+        <div className="px-4 py-2.5">
+          {body}
+          {raw && after}
+          {Object.keys(props).length > 0 && <div className="flex justify-end pt-3">{toggle}</div>}
+        </div>
+      ) : (
+        <Section title={t.params} aside={toggle}>
+          {body}
+        </Section>
       )}
-      </Section>
     </InsertProvider>
   );
 }

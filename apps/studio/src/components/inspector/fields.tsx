@@ -2,7 +2,7 @@ import { ChevronRight } from "lucide-react";
 // The building blocks of the inspector and the node editor: a "項目 | 値" row,
 // a collapsible section, a text field that commits on blur, a path field.
 import { useEffect, useMemo, useState } from "react";
-import { FolderOpen } from "lucide-react";
+import { CircleHelp, FolderOpen } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectMaybe } from "../../project";
 import { t } from "../../lib/i18n";
@@ -133,13 +133,20 @@ export function PathField({ value, folder, onChange }: { value: string; folder: 
 export function Row({
   label,
   hint,
+  help,
   title,
   socket,
   onRemove,
   children,
 }: {
   label: string;
+  /** Shown under the value, always (a preview of what the row will do). */
   hint?: string;
+  /**
+   * What the setting means: behind a ? beside the label, so a form of four
+   * settings is four rows and not four rows with a paragraph under each.
+   */
+  help?: string;
   title?: string;
   socket?: string;
   /** An optional setting: × clears it and takes the row away. */
@@ -151,6 +158,11 @@ export function Row({
       <span className="relative flex min-h-[26px] items-center justify-end text-right text-[11px] leading-tight text-slate-500" title={title}>
         {socket && <span className="mr-1.5 h-2 w-2 shrink-0 rounded-full ring-2 ring-white" style={{ background: socket }} />}
         {label}
+        {help && help !== label && (
+          <span title={help} aria-label={help} className="ml-1 shrink-0 cursor-help text-slate-400 hover:text-slate-600">
+            <CircleHelp size={11} strokeWidth={1.75} aria-hidden="true" />
+          </span>
+        )}
       </span>
       <span className="min-w-0">
         {children}
@@ -179,8 +191,16 @@ export function Row({
  * ones and those with a value are shown, so a node starts with one or two
  * rows instead of every setting it could take.
  */
-export function AddRow({ choices, onAdd }: { choices: { key: string; label: string }[]; onAdd: (key: string) => void }) {
+export type AddChoice = { key: string; label: string; /** The heading it is listed under (設定・出力・実行の設定). */ group?: string };
+
+export function AddRow({ choices, onAdd }: { choices: AddChoice[]; onAdd: (key: string) => void }) {
   if (choices.length === 0) return null;
+  const groups = [...new Set(choices.map((c) => c.group ?? ""))];
+  const option = (c: AddChoice) => (
+    <option key={c.key} value={c.key}>
+      {c.label}
+    </option>
+  );
   return (
     <div className="grid grid-cols-[84px_1fr] gap-x-2 py-1 [[data-wide]_&]:grid-cols-[132px_1fr]">
       <span />
@@ -191,11 +211,17 @@ export function AddRow({ choices, onAdd }: { choices: { key: string; label: stri
         onChange={(e) => e.target.value && onAdd(e.target.value)}
       >
         <option value="">{t.props.addSetting}</option>
-        {choices.map((c) => (
-          <option key={c.key} value={c.key}>
-            {c.label}
-          </option>
-        ))}
+        {groups.length <= 1
+          ? choices.map(option)
+          : groups.map((g) =>
+              g === "" ? (
+                choices.filter((c) => !c.group).map(option)
+              ) : (
+                <optgroup key={g} label={g}>
+                  {choices.filter((c) => c.group === g).map(option)}
+                </optgroup>
+              ),
+            )}
       </select>
     </div>
   );
