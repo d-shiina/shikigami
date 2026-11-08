@@ -581,6 +581,11 @@ export interface FlowSummary {
    * Output variables (`output` and `inOut`): what a call can receive.
    */
   outputs?: string[];
+  /**
+   * Secrets its steps refer to by name: the secrets page shows where
+   * each one is used.
+   */
+  secrets?: string[];
 }
 /**
  * Input for creating a flow.

@@ -1,11 +1,19 @@
-import { useEffect, useState } from "react";
+// The secrets place: a list of the registered secrets (built like the flow
+// library: a toolbar, then a table without boxes) and, for one of them, a
+// settings-style form. Values are never shown: the list has names, kinds,
+// sites and the flows that use each one; the form keeps saved values hidden
+// and only takes new ones.
+import type { LucideIcon } from "lucide-react";
+import { AlertTriangle, AppWindow, ArrowLeft, Check, Key, KeyRound, Lock, Pencil, Search, ShieldCheck, Trash2, Workflow } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { api, type SecretInfo, type SecretKind, type WindowsCredentialInfo } from "../lib/api";
+import { relativeTime } from "../lib/changes";
 import { locale, t } from "../lib/i18n";
 import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
+import { SettingsGroup, SettingsRow, settingsInput, settingsPrimary } from "./settingsLayout";
 
-const inputClass =
-  "w-full rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-ink focus:border-primary dark:bg-paper focus:outline-none";
+const KIND_ICON: Record<SecretKind, LucideIcon> = { login: KeyRound, apiKey: Key, oauth: AppWindow };
 
 type Draft = {
   name: string;
@@ -55,17 +63,18 @@ function useWindowsCredentials(wanted: boolean): WindowsCredentialInfo[] | null 
   return list;
 }
 
+/** A segmented choice: one of a few options, side by side. */
 function Choice<T extends string>({ value, options, label, onChange }: { value: T; options: Record<T, string>; label: string; onChange: (v: T) => void }) {
   return (
-    <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={label}>
+    <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-slate-100 p-0.5" role="radiogroup" aria-label={label}>
       {(Object.keys(options) as T[]).map((key) => (
         <button
           key={key}
           type="button"
           role="radio"
           aria-checked={value === key}
-          className={`rounded-lg border px-2.5 py-1 text-sm ${
-            value === key ? "border-slate-400 bg-slate-100 font-medium text-ink" : "border-slate-300 text-slate-700 hover:bg-slate-100"
+          className={`h-7 rounded-md px-2.5 text-[13px] ${
+            value === key ? "bg-sheet font-medium text-ink shadow-sm ring-1 ring-slate-300" : "text-slate-600 hover:text-ink"
           }`}
           onClick={() => onChange(key)}
         >
@@ -94,26 +103,25 @@ export function draftFor(
   return { draft: { ...draftOf(existing), sites: [...existing.sites, ...added].join("\n") }, isNew: false, added };
 }
 
-function Labeled({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
-      {children}
-      {hint && <span className="block text-[11px] text-slate-400">{hint}</span>}
-    </label>
-  );
+
+function when(at: string): string {
+  return new Date(at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
+/** A saved value: never shown, only that there is one. */
+const MASK = "••••••••";
+
 /**
- * Registers logins under a name. Values go to the backend once and never come
- * back: editing shows empty password fields and keeps the stored value unless
- * something is typed.
+ * Registers or changes one secret. Values go to the backend once and never
+ * come back: a saved password shows as a hidden placeholder and is kept
+ * unless something is typed.
  */
 function SecretForm({
   initial,
   isNew,
   asked,
   added = [],
+  usedBy,
   onDone,
 }: {
   initial: Draft;
@@ -122,23 +130,31 @@ function SecretForm({
   asked?: boolean;
   /** Sites the request adds to a saved secret. */
   added?: string[];
+  /** Flows that refer to it, to open from here. */
+  usedBy: { id: string; name: string }[];
   onDone: () => void;
 }) {
   const saveSecret = useStudio((s) => s.saveSecret);
+  const signOut = useStudio((s) => s.signOutSecret);
+  const oauth = useStudio((s) => s.secrets.find((x) => x.name === initial.name));
+  const removeSecret = useStudio((s) => s.removeSecret);
+  const openFlow = useOpenFlow();
   const [draft, setDraft] = useState(initial);
+  const [confirming, setConfirming] = useState(false);
   const edit = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
   const fields = KIND_FIELDS[draft.kind];
   const fromWindows = draft.store === "windows";
   const credentials = useWindowsCredentials(fromWindows);
   const picked = credentials?.find((c) => c.target === draft.windowsCredential.trim());
+  const saved = !isNew && initial.store !== "windows";
 
   return (
     <form
-      className="space-y-3 rounded-lg border border-slate-200 bg-sheet p-4 shadow-sheet"
+      className="space-y-5"
       autoComplete="off"
       onSubmit={async (e) => {
         e.preventDefault();
-        const saved = await saveSecret({
+        const ok = await saveSecret({
           name: draft.name.trim(),
           kind: draft.kind,
           username: fields.includes("username") && !fromWindows ? draft.username : undefined,
@@ -149,122 +165,193 @@ function SecretForm({
           sites: draft.sites.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
           description: draft.description,
         });
-        if (saved) onDone();
+        if (ok) onDone();
       }}
     >
-      {asked && <p className="rounded bg-brand-50 px-2 py-1.5 text-xs text-slate-700">{t.secretAskHint}</p>}
+      {/* Where this is, and the way back to the list. */}
+      <div className="flex items-center gap-1.5 text-[13px]">
+        <button type="button" onClick={onDone} className="flex h-7 items-center gap-1 rounded-md px-1.5 text-slate-600 hover:bg-slate-100 hover:text-ink">
+          <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
+          {t.secrets}
+        </button>
+        <span className="text-slate-400">/</span>
+        <span className="font-semibold text-ink">{isNew ? initial.name || t.secretPage.newTitle : initial.name}</span>
+      </div>
+      {asked && <p className="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-[13px] text-slate-700">{t.secretAskHint}</p>}
       {added.length > 0 && (
-        <p className="rounded border border-shu-600/40 bg-shu-600/5 px-2 py-1.5 text-xs text-slate-700">
-          {t.secretAskAdded(initial.name, added)}
-        </p>
+        <p className="rounded-lg border border-shu-600/40 bg-shu-600/5 px-3 py-2 text-[13px] text-slate-700">{t.secretAskAdded(initial.name, added)}</p>
       )}
-      <Labeled label={t.secretName}>
-        <input
-          className={inputClass}
-          value={draft.name}
-          disabled={!isNew}
-          required
-          placeholder={t.secretNamePlaceholder}
-          onChange={(e) => edit({ name: e.target.value })}
-        />
-      </Labeled>
-      <fieldset className="space-y-1">
-        <legend className="text-xs font-medium text-slate-600">{t.secretKind}</legend>
-        <div className="flex gap-1" role="radiogroup">
-          {SECRET_KINDS.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              role="radio"
-              aria-checked={draft.kind === kind}
-              className={`rounded-lg border px-2.5 py-1 text-sm ${
-                draft.kind === kind
-                  ? "border-slate-400 bg-slate-100 font-medium text-ink"
-                  : "border-slate-300 text-slate-700 hover:bg-slate-100"
-              }`}
-              onClick={() => edit({ kind })}
-            >
-              {t.secretKinds[kind]}
-            </button>
-          ))}
-        </div>
-        <span className="block text-[11px] text-slate-500">{t.secretKindHints[draft.kind]}</span>
-      </fieldset>
-      <fieldset className="space-y-1">
-        <legend className="text-xs font-medium text-slate-600">{t.secretStore}</legend>
-        <Choice value={draft.store} options={t.secretStores} label={t.secretStore} onChange={(store) => edit({ store })} />
-        <span className="block text-[11px] text-slate-500">{t.secretStoreHints[draft.store]}</span>
-      </fieldset>
-      {fromWindows && (
-        <Labeled
-          label={t.secretWindowsTarget}
-          hint={picked?.username ? t.secretWindowsUser(picked.username) : credentials?.length === 0 ? t.secretWindowsNone : undefined}
-        >
+
+      <SettingsGroup title={t.secretPage.basic}>
+        <SettingsRow label={t.secretPage.name} hint={t.secretPage.nameHint} htmlFor="secret-name">
           <input
-            className={`${inputClass} font-mono text-xs`}
-            list="windows-credentials"
+            id="secret-name"
+            className={`${settingsInput} disabled:bg-slate-50 disabled:text-slate-600`}
+            value={draft.name}
+            disabled={!isNew}
             required
-            value={draft.windowsCredential}
-            onChange={(e) => edit({ windowsCredential: e.target.value })}
+            autoFocus={isNew && !asked}
+            placeholder={t.secretNamePlaceholder}
+            onChange={(e) => edit({ name: e.target.value })}
           />
-          <datalist id="windows-credentials">
-            {(credentials ?? []).map((c) => (
-              <option key={c.target} value={c.target}>
-                {c.username}
-              </option>
-            ))}
-          </datalist>
-        </Labeled>
-      )}
-      {fields.includes("username") && !fromWindows && (
-        <Labeled label={fieldLabel(draft.kind, "username")}>
-          <input
-            className={inputClass}
-            value={draft.username}
-            autoFocus={asked}
-            onChange={(e) => edit({ username: e.target.value })}
+        </SettingsRow>
+        <SettingsRow label={t.secretKind} hint={t.secretKindHints[draft.kind]}>
+          <Choice
+            value={draft.kind}
+            options={Object.fromEntries(SECRET_KINDS.map((k) => [k, t.secretKinds[k]])) as Record<SecretKind, string>}
+            label={t.secretKind}
+            onChange={(kind) => edit({ kind })}
           />
-        </Labeled>
+        </SettingsRow>
+        <SettingsRow label={t.secretPage.note} hint={t.secretPage.noteHint} htmlFor="secret-note">
+          <input id="secret-note" className={settingsInput} value={draft.description} onChange={(e) => edit({ description: e.target.value })} />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t.secretPage.values} description={t.secretPage.safety}>
+        {draft.kind !== "apiKey" && (
+          <SettingsRow label={t.secretPage.store} hint={t.secretStoreHints[draft.store]}>
+            <Choice value={draft.store} options={t.secretStores} label={t.secretPage.store} onChange={(store) => edit({ store })} />
+          </SettingsRow>
+        )}
+        {fromWindows && (
+          <SettingsRow
+            label={t.secretWindowsTarget}
+            hint={picked?.username ? t.secretWindowsUser(picked.username) : credentials?.length === 0 ? t.secretWindowsNone : undefined}
+            htmlFor="secret-windows"
+          >
+            <input
+              id="secret-windows"
+              className={`${settingsInput} font-mono text-xs`}
+              list="windows-credentials"
+              required
+              value={draft.windowsCredential}
+              onChange={(e) => edit({ windowsCredential: e.target.value })}
+            />
+            <datalist id="windows-credentials">
+              {(credentials ?? []).map((c) => (
+                <option key={c.target} value={c.target}>
+                  {c.username}
+                </option>
+              ))}
+            </datalist>
+          </SettingsRow>
+        )}
+        {fields.includes("username") && !fromWindows && (
+          <SettingsRow label={fieldLabel(draft.kind, "username")} htmlFor="secret-user">
+            <input id="secret-user" className={settingsInput} value={draft.username} autoFocus={asked} onChange={(e) => edit({ username: e.target.value })} />
+          </SettingsRow>
+        )}
+        {!fromWindows && (
+          <SettingsRow label={fieldLabel(draft.kind, "password")} hint={saved ? t.secretPage.stored : undefined} htmlFor="secret-password">
+            <input
+              id="secret-password"
+              className={`${settingsInput} placeholder:tracking-widest`}
+              type="password"
+              autoComplete="new-password"
+              placeholder={saved ? MASK : undefined}
+              value={draft.password}
+              onChange={(e) => edit({ password: e.target.value })}
+            />
+          </SettingsRow>
+        )}
+        {fields.includes("totp") && (
+          <SettingsRow label={t.secretPage.totp} hint={t.secretPage.totpHint} htmlFor="secret-totp">
+            <input
+              id="secret-totp"
+              className={`${settingsInput} font-mono text-xs`}
+              type="password"
+              autoComplete="off"
+              value={draft.totp}
+              onChange={(e) => edit({ totp: e.target.value })}
+            />
+          </SettingsRow>
+        )}
+      </SettingsGroup>
+
+      {!isNew && draft.kind === "oauth" && initial.kind === "oauth" && oauth && (
+        <SettingsGroup title={t.secretPage.signIn}>
+          <SettingsRow label={t.secretPage.signInState} hint={oauthDetail(oauth)}>
+            <div className="flex items-center gap-3">
+              <KindState secret={oauth} />
+              {oauth.signedIn && (
+                <button
+                  type="button"
+                  className="h-7 rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] text-slate-700 hover:bg-slate-50"
+                  onClick={() => window.confirm(t.secretConfirmSignOut(oauth.name)) && void signOut(oauth.name)}
+                >
+                  {t.secretSignOut}
+                </button>
+              )}
+            </div>
+          </SettingsRow>
+        </SettingsGroup>
       )}
-      {!fromWindows && (
-        <Labeled label={fieldLabel(draft.kind, "password")} hint={isNew || initial.store === "windows" ? undefined : t.secretPasswordKeep}>
-          <input
-            className={inputClass}
-            type="password"
-            autoComplete="new-password"
-            value={draft.password}
-            onChange={(e) => edit({ password: e.target.value })}
+
+      <SettingsGroup title={t.secretPage.allowed}>
+        <SettingsRow
+          label={draft.kind === "login" ? t.secretPage.sitesLogin : t.secretPage.sitesApi}
+          hint={t.secretPage.oneLine + t.secretSitesHintKind[draft.kind]}
+          htmlFor="secret-sites"
+          align="start"
+        >
+          <textarea
+            id="secret-sites"
+            className={`${settingsInput} font-mono text-xs`}
+            rows={3}
+            value={draft.sites}
+            placeholder={draft.kind === "login" ? "https://example.com" : "https://api.example.com"}
+            onChange={(e) => edit({ sites: e.target.value })}
           />
-        </Labeled>
+        </SettingsRow>
+      </SettingsGroup>
+
+      {!isNew && (
+        <SettingsGroup title={t.secretPage.usedBy}>
+          {usedBy.length === 0 ? (
+            <p className="px-4 py-2.5 text-[13px] text-slate-500">{t.secretPage.usedByNone}</p>
+          ) : (
+            usedBy.map((flow) => (
+              <button
+                key={flow.id}
+                type="button"
+                onClick={() => openFlow(flow.id)}
+                className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] text-ink hover:bg-slate-50"
+              >
+                <Workflow size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
+                {flow.name}
+              </button>
+            ))
+          )}
+        </SettingsGroup>
       )}
-      <Labeled label={draft.kind === "login" ? t.secretSites : t.secretSitesApi} hint={t.secretSitesHintKind[draft.kind]}>
-        <textarea
-          className={`${inputClass} font-mono text-xs`}
-          rows={2}
-          value={draft.sites}
-          placeholder={draft.kind === "login" ? "https://example.com" : "https://api.example.com"}
-          onChange={(e) => edit({ sites: e.target.value })}
-        />
-      </Labeled>
-      {fields.includes("totp") && (
-        <Labeled label={t.secretTotp} hint={t.secretTotpHint}>
-          <input
-            className={`${inputClass} font-mono text-xs`}
-            type="password"
-            autoComplete="off"
-            value={draft.totp}
-            onChange={(e) => edit({ totp: e.target.value })}
-          />
-        </Labeled>
-      )}
-      <Labeled label={t.secretDescription}>
-        <input className={inputClass} value={draft.description} onChange={(e) => edit({ description: e.target.value })} />
-      </Labeled>
-      <div className="flex justify-end gap-2">
-        <button type="button" className="rounded-lg px-3 py-1 text-sm text-slate-600 hover:bg-slate-100" onClick={onDone}>
+
+      {/* Deleting sits apart on the left; saving, the page's one filled button, ends the row. */}
+      <div className="flex items-center gap-2 border-t border-slate-200 pt-4">
+        {!isNew && (
+          <button
+            type="button"
+            title={t.secretPage.deleteHint}
+            className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] ${confirming ? "bg-shu-600 text-white" : "text-slate-600 hover:bg-shu-50 hover:text-shu-600"}`}
+            onClick={() => {
+              if (confirming) {
+                void removeSecret(initial.name);
+                onDone();
+              }
+              setConfirming(!confirming);
+            }}
+            onBlur={() => setConfirming(false)}
+          >
+            <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+            {confirming ? t.secretPage.confirmDelete : t.secretPage.delete}
+          </button>
+        )}
+        {confirming && <span className="text-[12px] text-slate-500">{t.secretPage.deleteHint}</span>}
+        <span className="flex-1" />
+        <button type="button" className="h-8 rounded-lg px-3 text-[13px] text-slate-600 hover:bg-slate-100" onClick={onDone}>
           {t.cancel}
         </button>
-        <button type="submit" className="rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover">
+        <button type="submit" className={`h-8 ${settingsPrimary}`}>
           {t.secretSave}
         </button>
       </div>
@@ -272,149 +359,365 @@ function SecretForm({
   );
 }
 
-function when(at: string): string {
-  return new Date(at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { dateStyle: "medium", timeStyle: "short" });
+/** Opens a flow in the editor. */
+function useOpenFlow() {
+  const open = useStudio((s) => s.open);
+  const setPlace = useStudio((s) => s.setPlace);
+  return (id: string) => {
+    setPlace("flows");
+    void open(id);
+  };
 }
 
-/** Whether an OAuth app is signed in, until when, and whether that renews itself. */
-function OAuthLine({ secret, now = Date.now() }: { secret: SecretInfo; now?: number }) {
+/** When an OAuth app's sign-in ends and whether it renews itself, in words. */
+function oauthDetail(secret: SecretInfo, sep = locale === "ja" ? "・" : " · "): string {
   const status = secret.oauth;
-  if (!status) return <p className="mt-1 text-[11px] text-slate-500">{t.secretOauthNotSignedIn}</p>;
-  const expired = status.expiresAt !== undefined && Date.parse(status.expiresAt) <= now;
-  const parts = [
+  if (!status) return t.secretOauthNotSignedIn;
+  return [
     status.expiresAt && t.secretOauthExpires(when(status.expiresAt)),
     status.obtainedAt && t.secretOauthObtained(when(status.obtainedAt)),
     status.refreshable ? t.secretOauthRefreshable : t.secretOauthNotRefreshable,
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .join(sep);
+}
+
+/** The second line of the kind column: where the values live, or how an OAuth app stands. */
+function KindState({ secret, now = Date.now() }: { secret: SecretInfo; now?: number }) {
+  if (secret.windowsCredential) {
+    return (
+      <div className="truncate text-[12px] text-slate-500" title={secret.windowsCredential}>
+        {t.secretPage.windows}
+      </div>
+    );
+  }
+  if (secret.kind !== "oauth") return null;
+  const status = secret.oauth;
+  const expired = status?.expiresAt !== undefined && Date.parse(status.expiresAt) <= now && !status.refreshable;
+  const title = oauthDetail(secret, "\n");
   return (
-    <p className="mt-1 text-[11px] text-slate-600">
-      {expired && <span className="mr-1 rounded bg-shu-600/10 px-1 text-shu-600">{t.secretOauthExpired}</span>}
-      {parts.join(locale === "ja" ? "・" : " · ")}
-    </p>
+    <div className="flex items-center gap-1 text-[12px]" title={title}>
+      {expired ? (
+        <span className="flex items-center gap-1 text-shu-600">
+          <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
+          {t.secretPage.expired}
+        </span>
+      ) : secret.signedIn ? (
+        <span className="flex items-center gap-1 text-slate-600">
+          <Check size={12} strokeWidth={2} className="text-moegi-600" aria-hidden="true" />
+          {t.secretPage.signedIn}
+        </span>
+      ) : (
+        <span className="text-slate-500">{t.secretPage.notSignedIn}</span>
+      )}
+    </div>
   );
 }
 
-/** The secrets place: registered logins, and the form to add or change one. */
+/** At most `n` items, then how many more. */
+function Some({ items, n, render }: { items: string[]; n: number; render: (item: string) => React.ReactNode }) {
+  return (
+    <>
+      {items.slice(0, n).map(render)}
+      {items.length > n && <div className="text-[12px] text-slate-500">{t.secretPage.more(items.length - n)}</div>}
+    </>
+  );
+}
+
+function Row({ secret, usedBy, onEdit }: { secret: SecretInfo; usedBy: { id: string; name: string }[]; onEdit: () => void }) {
+  const removeSecret = useStudio((s) => s.removeSecret);
+  const openFlow = useOpenFlow();
+  const [confirming, setConfirming] = useState(false);
+  const Icon = KIND_ICON[secret.kind ?? "login"];
+  const sub = [secret.username, secret.description].filter(Boolean).join("・");
+  return (
+    <tr
+      tabIndex={0}
+      onClick={onEdit}
+      onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onEdit()}
+      className="group cursor-pointer border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+    >
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Icon size={14} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+          <span className="truncate text-[13px] font-semibold text-ink">{secret.name}</span>
+        </div>
+        {sub && <div className="mt-0.5 truncate pl-[22px] text-[12px] text-slate-500">{sub}</div>}
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="text-[13px] text-slate-700">{t.secretKinds[secret.kind ?? "login"]}</div>
+        <KindState secret={secret} />
+      </td>
+      <td className="px-3 py-2.5">
+        {secret.sites.length === 0 ? (
+          <div className="text-[13px] leading-5 text-slate-500">{t.secretPage.noSites}</div>
+        ) : (
+          <Some
+            items={secret.sites}
+            n={2}
+            render={(site) => (
+              <div key={site} className="truncate font-mono text-[12px] text-slate-600" title={site}>
+                {site.replace(/^https?:\/\//, "")}
+              </div>
+            )}
+          />
+        )}
+      </td>
+      <td className="px-3 py-2.5">
+        {usedBy.length === 0 ? (
+          <div className="text-[13px] leading-5 text-slate-500">{t.secretPage.unused}</div>
+        ) : (
+          <Some
+            items={usedBy.map((f) => f.id)}
+            n={2}
+            render={(id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openFlow(id);
+                }}
+                className="flex max-w-full items-center gap-1.5 text-left text-[13px] leading-5 text-slate-700 hover:text-ink hover:underline"
+              >
+                <Workflow size={12} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
+                <span className="truncate">{usedBy.find((f) => f.id === id)?.name}</span>
+              </button>
+            )}
+          />
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-[12px] whitespace-nowrap text-slate-500">{secret.updatedAt ? relativeTime(secret.updatedAt) : "—"}</td>
+      <td className="w-[1%] px-2 py-2 whitespace-nowrap">
+        <span className="invisible flex justify-end gap-0.5 group-focus-within:visible group-hover:visible">
+          <button
+            type="button"
+            title={t.secretPage.edit}
+            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-ink"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+          >
+            <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            title={confirming ? t.secretPage.deleteHint : t.secretPage.delete}
+            className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] ${confirming ? "bg-shu-600 text-white" : "text-slate-500 hover:bg-shu-50 hover:text-shu-600"}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirming) void removeSecret(secret.name);
+              setConfirming(!confirming);
+            }}
+            onBlur={() => setConfirming(false)}
+          >
+            <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+            {confirming && t.secretPage.confirmDelete}
+          </button>
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+/** The first screen with nothing registered: what a secret is, and the one way to add one. */
+function Empty({ onAdd }: { onAdd: () => void }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-sheet p-6">
+      <div className="flex items-start gap-4">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600">
+          <KeyRound size={20} strokeWidth={1.75} aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-semibold text-ink">{t.secretPage.emptyTitle}</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-slate-600">{t.secretPage.emptyLead}</p>
+          <ul className="mt-3 space-y-1.5">
+            {t.secretPage.emptyPoints.map((point, i) => {
+              const Icon = [Lock, ShieldCheck, KeyRound][i] ?? Lock;
+              return (
+                <li key={point} className="flex items-center gap-2 text-[13px] text-slate-700">
+                  <Icon size={14} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+                  {point}
+                </li>
+              );
+            })}
+          </ul>
+          <button type="button" onClick={onAdd} className="mt-5 flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover">
+            ＋ {t.secretPage.add}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Secrets registered on another PC or Windows user: only the names, and the way out. */
+function KeyMissing({ secrets }: { secrets: SecretInfo[] }) {
+  const resetSecrets = useStudio((s) => s.resetSecrets);
+  return (
+    <section className="rounded-lg border border-shu-600/40 bg-sheet p-5">
+      <h2 className="flex items-center gap-2 text-[14px] font-semibold text-ink">
+        <AlertTriangle size={16} strokeWidth={1.75} className="text-shu-600" aria-hidden="true" />
+        {t.secretPage.keyMissingTitle}
+      </h2>
+      <p className="mt-1 text-[13px] leading-relaxed text-slate-600">{t.secretKeyMissing}</p>
+      {secrets.length > 0 && (
+        <ul className="mt-3 border-y border-slate-200">
+          {secrets.map((s) => (
+            <li key={s.name} className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-[13px] last:border-b-0">
+              <Lock size={14} strokeWidth={1.75} className="text-slate-400" aria-hidden="true" />
+              {s.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        className="mt-4 h-8 rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover"
+        onClick={() => window.confirm(t.secretConfirmReset) && void resetSecrets()}
+      >
+        {t.secretReset}
+      </button>
+    </section>
+  );
+}
+
+/** The secrets place: registered secrets, and the form to add or change one. */
 export function SecretsPage() {
   const secrets = useStudio((s) => s.secrets);
+  const summaries = useStudio((s) => s.summaries);
   const keyLocation = useStudio((s) => s.secretKeyLocation);
-  const removeSecret = useStudio((s) => s.removeSecret);
-  const signOut = useStudio((s) => s.signOutSecret);
   const keyMissing = useStudio((s) => s.secretKeyMissing);
-  const resetSecrets = useStudio((s) => s.resetSecrets);
   const prefill = useStudio((s) => s.secretPrefill);
   const clearPrefill = useStudio((s) => s.clearSecretPrefill);
-  const [editing, setEditing] = useState<{ draft: Draft; isNew: boolean; asked?: boolean; added?: string[] } | null>(
-    null,
-  );
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState<{ draft: Draft; isNew: boolean; asked?: boolean; added?: string[] } | null>(null);
   useEffect(() => {
     if (!prefill) return;
     setEditing({ ...draftFor(secrets, prefill), asked: true });
     clearPrefill();
   }, [prefill, secrets, clearPrefill]);
-  return (
-    <div className="h-full overflow-y-auto bg-paper">
-      <div className="mx-auto max-w-[640px] px-6 py-6">
-        {/* The page's one primary action ends its title row. */}
-        <div className="mb-2 flex items-center">
-          <h2 className="text-lg font-bold">{t.secrets}</h2>
-          {!keyMissing && !editing && (
-            <button type="button" className="ml-auto rounded-lg bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover" onClick={() => setEditing({ draft: empty, isNew: true })}>
-              {t.secretNew}
-            </button>
-          )}
-        </div>
-        <p className="mb-1 text-xs text-slate-600">{t.secretsIntro}</p>
-        {keyLocation && <p className="mb-4 text-[11px] text-slate-400">{t.secretKeyNote(keyLocation)}</p>}
 
-        {keyMissing ? (
-          <div className="space-y-2 rounded border border-shu-600/40 bg-shu-600/5 p-3 text-sm">
-            <p>{t.secretKeyMissing}</p>
-            <ul className="text-xs text-slate-500">
-              {secrets.map((s) => (
-                <li key={s.name}>{s.name}</li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              className="rounded bg-primary px-3 py-1 text-sm text-on-primary hover:bg-primary-hover"
-              onClick={() => window.confirm(t.secretConfirmReset) && void resetSecrets()}
-            >
-              {t.secretReset}
-            </button>
-          </div>
-        ) : editing ? (
+  // Which flows refer to each secret, by name.
+  const usedBy = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }[]>();
+    for (const flow of summaries) {
+      for (const name of flow.secrets ?? []) map.set(name, [...(map.get(name) ?? []), { id: flow.id, name: flow.name }]);
+    }
+    return map;
+  }, [summaries]);
+  const q = query.trim().toLowerCase();
+  const rows = useMemo(
+    () =>
+      secrets
+        .filter(
+          (s) =>
+            !q ||
+            [s.name, s.username, s.description ?? "", ...s.sites, ...(usedBy.get(s.name) ?? []).map((f) => f.name)]
+              .join(" ")
+              .toLowerCase()
+              .includes(q),
+        )
+        .sort((a, b) => a.name.localeCompare(b.name, "ja")),
+    [secrets, q, usedBy],
+  );
+  const add = () => setEditing({ draft: empty, isNew: true });
+
+  return (
+    <div className="@container h-full overflow-y-auto bg-paper">
+      {editing && !keyMissing ? (
+        <div className="mx-auto max-w-[880px] px-6 py-5">
           <SecretForm
             key={`${editing.draft.name}\n${editing.draft.sites}`}
             initial={editing.draft}
             isNew={editing.isNew}
             asked={editing.asked}
             added={editing.added}
+            usedBy={usedBy.get(editing.draft.name) ?? []}
             onDone={() => setEditing(null)}
           />
-        ) : (
-          <>
-            <ul className="mb-3 space-y-2">
-              {secrets.length === 0 && <li className="text-sm text-slate-400">{t.secretNone}</li>}
-              {secrets.map((s) => (
-                <li key={s.name} className="rounded-lg border border-slate-200 bg-sheet p-3 shadow-sheet">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{s.name}</span>
-                    <span className="rounded-lg border border-slate-300 px-1 text-[11px] text-slate-600">
-                      {t.secretKinds[s.kind ?? "login"]}
-                    </span>
-                    {s.windowsCredential && (
-                      <span className="rounded-lg border border-slate-300 px-1 text-[11px] text-slate-600" title={s.windowsCredential}>
-                        {t.secretWindowsBadge}
-                      </span>
+        </div>
+      ) : (
+        <div className="mx-auto max-w-[1040px] px-6 py-5">
+          {keyMissing ? (
+            <KeyMissing secrets={secrets} />
+          ) : secrets.length === 0 ? (
+            <Empty onAdd={add} />
+          ) : (
+            <>
+              {/* Read left to right: how many, how to narrow them, then adding one, the filled button, at the end. */}
+              <div className="mb-3 flex items-center gap-2">
+                <span className="text-[12px] text-slate-500">{t.list.count(secrets.length)}</span>
+                <div className="ml-2 flex h-7 w-72 min-w-36 shrink items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
+                  <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+                    placeholder={t.secretPage.search}
+                    className="min-w-0 flex-1 bg-transparent text-[13px] focus:outline-none"
+                  />
+                  {q && <span className="shrink-0 text-[11px] text-slate-400">{t.list.count(rows.length)}</span>}
+                </div>
+                <span className="flex-1" />
+                <button
+                  type="button"
+                  onClick={add}
+                  className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover"
+                >
+                  ＋ {t.secretPage.add}
+                </button>
+              </div>
+              <div className="border-y border-slate-200">
+                <table className="w-full table-fixed border-collapse text-left">
+                  <colgroup>
+                    <col />
+                    <col className="w-[150px]" />
+                    <col className="w-[220px]" />
+                    <col className="w-[200px]" />
+                    <col className="w-[96px]" />
+                    <col className="w-[84px]" />
+                  </colgroup>
+                  <thead className="text-[11px] text-slate-500">
+                    <tr>
+                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.name}</th>
+                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.kind}</th>
+                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.sites}</th>
+                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.flows}</th>
+                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.updated}</th>
+                      <th className="border-b border-slate-200" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-6 text-center text-[13px] text-slate-500">
+                          {t.list.notFound}
+                        </td>
+                      </tr>
+                    ) : (
+                      rows.map((s) => (
+                        <Row key={s.name} secret={s} usedBy={usedBy.get(s.name) ?? []} onEdit={() => setEditing({ draft: draftOf(s), isNew: false })} />
+                      ))
                     )}
-                    <span className="text-xs text-slate-500">{s.username}</span>
-                    <button
-                      type="button"
-                      className="ml-auto text-xs text-brand-600 hover:underline"
-                      onClick={() => setEditing({ draft: draftOf(s), isNew: false })}
-                    >
-                      {t.secretEdit}
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs text-slate-400 hover:text-shu-600"
-                      onClick={() => window.confirm(t.secretConfirmDelete(s.name)) && void removeSecret(s.name)}
-                    >
-                      {t.secretDelete}
-                    </button>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-slate-500">
-                    {s.fields.map((f) => (
-                      <span key={f} className="rounded bg-slate-100 px-1">
-                        {fieldLabel(s.kind, f)}
-                      </span>
-                    ))}
-                    {s.signedIn && (
-                      <span className="rounded bg-brand-50 px-1 text-slate-600">
-                        {t.secretSignedIn}
-                        <button
-                          type="button"
-                          className="ml-1 text-brand-600 hover:underline"
-                          onClick={() => window.confirm(t.secretConfirmSignOut(s.name)) && void signOut(s.name)}
-                        >
-                          {t.secretSignOut}
-                        </button>
-                      </span>
-                    )}
-                    {s.sites.map((site) => (
-                      <span key={site} className="font-mono">
-                        {site}
-                      </span>
-                    ))}
-                  </div>
-                  {s.kind === "oauth" && <OAuthLine secret={s} />}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+          {/* How the values are kept, said once under the list. */}
+          {!keyMissing && secrets.length > 0 && (
+            <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-relaxed text-slate-500">
+              <Lock size={12} strokeWidth={1.75} className="mt-[3px] shrink-0" aria-hidden="true" />
+              <span>
+                {t.secretPage.safety}
+                {keyLocation && ` ${t.secretPage.keyAt(keyLocation)}`}
+              </span>
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

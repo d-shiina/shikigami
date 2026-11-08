@@ -101,7 +101,33 @@ impl Flow {
             updated_at: self.metadata.updated_at,
             inputs: self.names_of(VarDirection::is_input),
             outputs: self.names_of(VarDirection::is_output),
+            secrets: self.secret_names(),
         }
+    }
+
+    /// Names of the secrets the flow's steps refer to
+    /// (`{ "secret": "<name>", "field": .. }` anywhere in their params),
+    /// sorted and without repeats.
+    pub fn secret_names(&self) -> Vec<String> {
+        fn visit(value: &Value, names: &mut std::collections::BTreeSet<String>) {
+            match value {
+                Value::Object(map) => {
+                    if let Some(Value::String(name)) = map.get("secret")
+                        && map.contains_key("field")
+                    {
+                        names.insert(name.clone());
+                    }
+                    map.values().for_each(|v| visit(v, names));
+                }
+                Value::Array(items) => items.iter().for_each(|v| visit(v, names)),
+                _ => {}
+            }
+        }
+        let mut names = std::collections::BTreeSet::new();
+        for step in self.walk() {
+            step.params.values().for_each(|v| visit(v, &mut names));
+        }
+        names.into_iter().collect()
     }
 
     fn names_of(&self, keep: impl Fn(VarDirection) -> bool) -> Vec<String> {
@@ -509,6 +535,10 @@ pub struct FlowSummary {
     /// Output variables (`output` and `inOut`): what a call can receive.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs: Vec<String>,
+    /// Secrets its steps refer to by name: the secrets page shows where
+    /// each one is used.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<String>,
 }
 
 pub(crate) fn now() -> OffsetDateTime {
@@ -541,6 +571,32 @@ mod tests {
         let ids: Vec<_> = flow.walk().map(|s| s.id.as_str()).collect();
         // Blocks are stored in a BTreeMap, so "else" sorts before "then".
         assert_eq!(ids, ["a", "b", "d", "c", "e"]);
+    }
+
+    #[test]
+    fn summary_lists_the_secrets_its_steps_refer_to() {
+        let mut flow = Flow::new("t");
+        let mut login = Step::new("browser.type").with_id("a");
+        login.params.insert(
+            "value".into(),
+            json!({ "secret": "受注", "field": "password" }),
+        );
+        let mut http = Step::new("http.request").with_id("c");
+        http.params.insert(
+            "auth".into(),
+            json!({ "secret": "API", "field": "password" }),
+        );
+        let mut text = Step::new("log.message").with_id("d");
+        text.params
+            .insert("message".into(), json!({ "secret": "not a reference" }));
+        flow.steps = vec![
+            login,
+            Step::new("control.if")
+                .with_id("b")
+                .with_block("then", vec![http]),
+            text,
+        ];
+        assert_eq!(flow.summary().secrets, ["API", "受注"]);
     }
 
     #[test]

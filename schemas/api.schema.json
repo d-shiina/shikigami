@@ -601,6 +601,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "secrets": {
+          "description": "Secrets its steps refer to by name: the secrets page shows where\neach one is used.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
