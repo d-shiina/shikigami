@@ -157,9 +157,12 @@ type Marks = {
   /** What the send-back form starts with, when an answer opened it. */
   sendBackWith: string | undefined;
   setSendBackWith(text: string | undefined): void;
-  /** The send-back form is open. Kept here so it survives switching between the report and the chart. */
-  sending: boolean;
-  setSending(on: boolean): void;
+  /**
+   * The flow whose send-back form is open. Kept here so it survives switching between the
+   * report and the chart, and tied to the flow so it never opens on another one.
+   */
+  sending: string | null;
+  setSending(flowId: string | null): void;
   see(key: string): void;
   answer(key: string, value: "ok" | "no" | null): void;
 };
@@ -168,8 +171,8 @@ const useMarks = create<Marks>((set) => ({
   answers: {},
   sendBackWith: undefined,
   setSendBackWith: (text) => set({ sendBackWith: text }),
-  sending: false,
-  setSending: (on) => set(on ? { sending: true } : { sending: false, sendBackWith: undefined }),
+  sending: null,
+  setSending: (flowId) => set(flowId ? { sending: flowId } : { sending: null, sendBackWith: undefined }),
   see: (key) => set((m) => (m.seen[key] ? m : { seen: { ...m.seen, [key]: true } })),
   answer: (key, value) =>
     set((m) => {
@@ -326,7 +329,7 @@ export function ReviewReport() {
   const observed = r.evidence.filter((e): e is Observed => e.kind === "observation");
   const sendBackWithText = (text: string) => {
     setSendBackWith(text);
-    setSending(true);
+    setSending(r.flowId ?? null);
   };
   const changedIds = cards.filter((c) => c.kind !== "removed" && !c.movedOnly).map((c) => c.stepId);
   const showRuns = runsOpen ?? r.freshPromises.length === 0;
@@ -462,19 +465,20 @@ export function ReviewFoot({ report }: { report: boolean }) {
   usePollEvidence(r.flowId);
   const setView = useReviewView((s) => s.setView);
   const sendBackWith = useMarks((m) => m.sendBackWith);
-  const sending = useMarks((m) => m.sending);
+  const sending = useMarks((m) => m.sending !== null && m.sending === r.flowId);
   const setSending = useMarks((m) => m.setSending);
   if (!r.newest) return null;
   return (
     <div className={`shrink-0 border-t border-slate-200 bg-sheet ${report ? "shadow-raised" : ""}`}>
-      <div className={report ? "mx-auto max-w-[940px] px-6" : "px-4"}>
+      {/* A long send-back (many notes, a tall reason) scrolls here instead of pushing the buttons off screen. */}
+      <div className={`max-h-[60vh] overflow-y-auto ${report ? "mx-auto max-w-[940px] px-6" : "px-4"}`}>
         <ReviewActions
           compact={!report}
           unanswered={r.unanswered}
           broken={r.broken}
           sending={sending}
-          setSending={setSending}
-          initialReason={sendBackWith}
+          setSending={(on) => setSending(on ? (r.flowId ?? null) : null)}
+          initialReason={sending ? sendBackWith : undefined}
           onBack={report ? undefined : () => setView("report")}
         />
       </div>
