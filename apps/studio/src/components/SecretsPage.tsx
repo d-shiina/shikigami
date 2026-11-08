@@ -4,13 +4,14 @@
 // sites and the flows that use each one; the form keeps saved values hidden
 // and only takes new ones.
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, AppWindow, ArrowLeft, Check, Key, KeyRound, Lock, Pencil, Search, ShieldCheck, Trash2, Workflow } from "lucide-react";
+import { AlertTriangle, AppWindow, ArrowLeft, Check, Key, KeyRound, Lock, Pencil, ShieldCheck, Trash2, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useStudio } from "../context";
 import { api, type SecretInfo, type SecretKind, type WindowsCredentialInfo } from "../lib/api";
 import { relativeTime } from "../lib/changes";
 import { locale, t } from "../lib/i18n";
 import { fieldLabel, KIND_FIELDS, SECRET_KINDS } from "../lib/secretKinds";
+import { type Chip, type Column, DataTable, FilterChips, SearchBox, SelectionBar } from "./DataTable";
 import { SettingsGroup, SettingsRow, settingsInput, settingsPrimary } from "./settingsLayout";
 
 const KIND_ICON: Record<SecretKind, LucideIcon> = { login: KeyRound, apiKey: Key, oauth: AppWindow };
@@ -422,51 +423,110 @@ function Some({ items, n, render }: { items: string[]; n: number; render: (item:
   );
 }
 
-function Row({ secret, usedBy, onEdit }: { secret: SecretInfo; usedBy: { id: string; name: string }[]; onEdit: () => void }) {
+type FlowRef = { id: string; name: string };
+type KindFilter = "all" | SecretKind | "unused";
+
+/** Edit and delete, at the end of a row on hover. Deleting asks once more in place. */
+function RowActions({ secret, onEdit }: { secret: SecretInfo; onEdit: () => void }) {
   const removeSecret = useStudio((s) => s.removeSecret);
-  const openFlow = useOpenFlow();
   const [confirming, setConfirming] = useState(false);
-  const Icon = KIND_ICON[secret.kind ?? "login"];
-  const sub = [secret.username, secret.description].filter(Boolean).join("・");
   return (
-    <tr
-      tabIndex={0}
-      onClick={onEdit}
-      onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onEdit()}
-      className="group cursor-pointer border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
-    >
-      <td className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <Icon size={14} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
-          <span className="truncate text-[13px] font-semibold text-ink">{secret.name}</span>
-        </div>
-        {sub && <div className="mt-0.5 truncate pl-[22px] text-[12px] text-slate-500">{sub}</div>}
-      </td>
-      <td className="px-3 py-2.5">
-        <div className="text-[13px] text-slate-700">{t.secretKinds[secret.kind ?? "login"]}</div>
-        <KindState secret={secret} />
-      </td>
-      <td className="px-3 py-2.5">
-        {secret.sites.length === 0 ? (
+    <>
+      <button
+        type="button"
+        title={t.secretPage.edit}
+        className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-ink"
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit();
+        }}
+      >
+        <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        title={confirming ? t.secretPage.deleteHint : t.secretPage.delete}
+        className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] ${confirming ? "bg-shu-600 text-white" : "text-slate-500 hover:bg-shu-50 hover:text-shu-600"}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (confirming) void removeSecret(secret.name);
+          setConfirming(!confirming);
+        }}
+        onBlur={() => setConfirming(false)}
+      >
+        <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+        {confirming && t.secretPage.confirmDelete}
+      </button>
+    </>
+  );
+}
+
+/** The columns of the secrets table. */
+function useColumns(usedBy: Map<string, FlowRef[]>): Column<SecretInfo>[] {
+  const openFlow = useOpenFlow();
+  return [
+    {
+      id: "name",
+      header: t.secretPage.name,
+      sortValue: (s) => s.name,
+      cell: (s) => {
+        const Icon = KIND_ICON[s.kind ?? "login"];
+        const sub = [s.username, s.description].filter(Boolean).join("・");
+        return (
+          <>
+            <div className="flex items-center gap-2">
+              <Icon size={14} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+              <span className="truncate text-[13px] font-semibold text-ink">{s.name}</span>
+            </div>
+            {sub && <div className="mt-0.5 truncate pl-[22px] text-[12px] text-slate-500">{sub}</div>}
+          </>
+        );
+      },
+    },
+    {
+      id: "kind",
+      header: t.secretPage.kind,
+      width: "w-[150px]",
+      sortValue: (s) => SECRET_KINDS.indexOf(s.kind ?? "login"),
+      cell: (s) => (
+        <>
+          <div className="text-[13px] leading-5 text-slate-700">{t.secretKinds[s.kind ?? "login"]}</div>
+          <KindState secret={s} />
+        </>
+      ),
+    },
+    {
+      id: "sites",
+      header: t.secretPage.sites,
+      width: "w-[210px]",
+      hideBelow: 860,
+      sortValue: (s) => s.sites[0] ?? "\uffff",
+      cell: (s) =>
+        s.sites.length === 0 ? (
           <div className="text-[13px] leading-5 text-slate-500">{t.secretPage.noSites}</div>
         ) : (
           <Some
-            items={secret.sites}
+            items={s.sites}
             n={2}
             render={(site) => (
-              <div key={site} className="truncate font-mono text-[12px] text-slate-600" title={site}>
+              <div key={site} className="truncate font-mono text-[12px] leading-5 text-slate-600" title={site}>
                 {site.replace(/^https?:\/\//, "")}
               </div>
             )}
           />
-        )}
-      </td>
-      <td className="px-3 py-2.5">
-        {usedBy.length === 0 ? (
-          <div className="text-[13px] leading-5 text-slate-500">{t.secretPage.unused}</div>
-        ) : (
+        ),
+    },
+    {
+      id: "flows",
+      header: t.secretPage.flows,
+      width: "w-[200px]",
+      sortValue: (s) => (usedBy.get(s.name) ?? []).length,
+      cell: (s) => {
+        const flows = usedBy.get(s.name) ?? [];
+        if (flows.length === 0) return <div className="text-[13px] leading-5 text-slate-500">{t.secretPage.unused}</div>;
+        return (
           <Some
-            items={usedBy.map((f) => f.id)}
+            items={flows.map((f) => f.id)}
             n={2}
             render={(id) => (
               <button
@@ -479,44 +539,22 @@ function Row({ secret, usedBy, onEdit }: { secret: SecretInfo; usedBy: { id: str
                 className="flex max-w-full items-center gap-1.5 text-left text-[13px] leading-5 text-slate-700 hover:text-ink hover:underline"
               >
                 <Workflow size={12} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
-                <span className="truncate">{usedBy.find((f) => f.id === id)?.name}</span>
+                <span className="truncate">{flows.find((f) => f.id === id)?.name}</span>
               </button>
             )}
           />
-        )}
-      </td>
-      <td className="px-3 py-2.5 text-[12px] whitespace-nowrap text-slate-500">{secret.updatedAt ? relativeTime(secret.updatedAt) : "—"}</td>
-      <td className="w-[1%] px-2 py-2 whitespace-nowrap">
-        <span className="invisible flex justify-end gap-0.5 group-focus-within:visible group-hover:visible">
-          <button
-            type="button"
-            title={t.secretPage.edit}
-            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-ink"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-          >
-            <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title={confirming ? t.secretPage.deleteHint : t.secretPage.delete}
-            className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] ${confirming ? "bg-shu-600 text-white" : "text-slate-500 hover:bg-shu-50 hover:text-shu-600"}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirming) void removeSecret(secret.name);
-              setConfirming(!confirming);
-            }}
-            onBlur={() => setConfirming(false)}
-          >
-            <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
-            {confirming && t.secretPage.confirmDelete}
-          </button>
-        </span>
-      </td>
-    </tr>
-  );
+        );
+      },
+    },
+    {
+      id: "updated",
+      header: t.secretPage.updated,
+      width: "w-[96px]",
+      hideBelow: 720,
+      sortValue: (s) => s.updatedAt,
+      cell: (s) => <div className="text-[12px] leading-5 whitespace-nowrap text-slate-500">{s.updatedAt ? relativeTime(s.updatedAt) : "—"}</div>,
+    },
+  ];
 }
 
 /** The first screen with nothing registered: what a secret is, and the one way to add one. */
@@ -605,21 +643,42 @@ export function SecretsPage() {
     }
     return map;
   }, [summaries]);
+  const [kind, setKind] = useState<KindFilter>("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const removeSecret = useStudio((s) => s.removeSecret);
+  const columns = useColumns(usedBy);
   const q = query.trim().toLowerCase();
+  const keep = (k: KindFilter) => (s: SecretInfo) =>
+    k === "all" || (k === "unused" ? !(usedBy.get(s.name) ?? []).length : (s.kind ?? "login") === k);
   const rows = useMemo(
     () =>
-      secrets
-        .filter(
-          (s) =>
-            !q ||
+      secrets.filter(
+        (s) =>
+          keep(kind)(s) &&
+          (!q ||
             [s.name, s.username, s.description ?? "", ...s.sites, ...(usedBy.get(s.name) ?? []).map((f) => f.name)]
               .join(" ")
               .toLowerCase()
-              .includes(q),
-        )
-        .sort((a, b) => a.name.localeCompare(b.name, "ja")),
-    [secrets, q, usedBy],
+              .includes(q)),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [secrets, q, usedBy, kind],
   );
+  const chips: Chip<KindFilter>[] = (["all", ...SECRET_KINDS, "unused"] as KindFilter[])
+    .map((value) => ({
+      value,
+      label: value === "all" ? t.list.all : value === "unused" ? t.secretPage.unused : t.secretKinds[value],
+      count: secrets.filter(keep(value)).length,
+    }))
+    .filter((c) => c.value === "all" || c.value === kind || (c.count ?? 0) > 0);
+  // Picked rows the list no longer has (deleted, or another filter) drop out.
+  const picked = new Set([...selected].filter((name) => secrets.some((s) => s.name === name)));
+  const deletePicked = async () => {
+    for (const name of picked) await removeSecret(name);
+    setSelected(new Set());
+    setConfirmBulk(false);
+  };
   const add = () => setEditing({ draft: empty, isNew: true });
 
   return (
@@ -644,20 +703,35 @@ export function SecretsPage() {
             <Empty onAdd={add} />
           ) : (
             <>
-              {/* Read left to right: how many, how to narrow them, then adding one, the filled button, at the end. */}
-              <div className="mb-3 flex items-center gap-2">
-                <span className="text-[12px] text-slate-500">{t.list.count(secrets.length)}</span>
-                <div className="ml-2 flex h-7 w-72 min-w-36 shrink items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
-                  <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-                    placeholder={t.secretPage.search}
-                    className="min-w-0 flex-1 bg-transparent text-[13px] focus:outline-none"
-                  />
-                  {q && <span className="shrink-0 text-[11px] text-slate-400">{t.list.count(rows.length)}</span>}
-                </div>
+              {/* Read left to right: how many, how to narrow them, then adding one, the filled button, at the end.
+                  While rows are picked, the bar of what to do with them takes the count's place. */}
+              <div className="mb-2 flex items-center gap-2">
+                {picked.size > 0 ? (
+                  <SelectionBar
+                    count={picked.size}
+                    onClear={() => {
+                      setSelected(new Set());
+                      setConfirmBulk(false);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => (confirmBulk ? void deletePicked() : setConfirmBulk(true))}
+                      onBlur={() => setConfirmBulk(false)}
+                      className={`flex h-6 items-center gap-1 rounded-md px-2 text-[12px] ${confirmBulk ? "bg-shu-600 text-white" : "text-slate-700 hover:bg-shu-50 hover:text-shu-600"}`}
+                    >
+                      <Trash2 size={13} strokeWidth={1.75} aria-hidden="true" />
+                      {confirmBulk ? t.secretPage.confirmDeleteMany(picked.size) : t.secretPage.delete}
+                    </button>
+                  </SelectionBar>
+                ) : (
+                  <>
+                    <span className="text-[12px] text-slate-500">{t.list.count(secrets.length)}</span>
+                    <div className="ml-2">
+                      <SearchBox value={query} onChange={setQuery} placeholder={t.secretPage.search} hits={rows.length} />
+                    </div>
+                  </>
+                )}
                 <span className="flex-1" />
                 <button
                   type="button"
@@ -667,41 +741,22 @@ export function SecretsPage() {
                   ＋ {t.secretPage.add}
                 </button>
               </div>
-              {/* Narrow panes (the AI pane open, a small window) scroll the table sideways rather than squeeze the names. */}
-              <div className="overflow-x-auto border-y border-slate-200">
-                <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
-                  <colgroup>
-                    <col />
-                    <col className="w-[150px]" />
-                    <col className="w-[220px]" />
-                    <col className="w-[200px]" />
-                    <col className="w-[96px]" />
-                    <col className="w-[84px]" />
-                  </colgroup>
-                  <thead className="text-[11px] text-slate-500">
-                    <tr>
-                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.name}</th>
-                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.kind}</th>
-                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.sites}</th>
-                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.flows}</th>
-                      <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.secretPage.updated}</th>
-                      <th className="border-b border-slate-200" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-3 py-6 text-center text-[13px] text-slate-500">
-                          {t.list.notFound}
-                        </td>
-                      </tr>
-                    ) : (
-                      rows.map((s) => (
-                        <Row key={s.name} secret={s} usedBy={usedBy.get(s.name) ?? []} onEdit={() => setEditing({ draft: draftOf(s), isNew: false })} />
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div className="mb-3">
+                <FilterChips chips={chips} value={kind} onChange={setKind} label={t.secretKind} />
+              </div>
+              <div className="border-b border-slate-200">
+                <DataTable
+                  columns={columns}
+                  rows={rows}
+                  rowKey={(s) => s.name}
+                  onOpen={(s) => setEditing({ draft: draftOf(s), isNew: false })}
+                  selected={picked}
+                  onSelect={setSelected}
+                  initialSort={{ column: "name", descending: false }}
+                  empty={t.list.notFound}
+                  storageKey="shikigami.studio.secrets.sort"
+                  rowActions={(s) => <RowActions secret={s} onEdit={() => setEditing({ draft: draftOf(s), isNew: false })} />}
+                />
               </div>
             </>
           )}
