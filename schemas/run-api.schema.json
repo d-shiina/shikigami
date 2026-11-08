@@ -233,7 +233,7 @@
           ]
         },
         {
-          "description": "A step waits for a person (e.g. to log in or approve MFA on the\nscreen). Writer shows `message` until the step finishes.",
+          "description": "A step waits for a person (e.g. to log in or approve MFA on the\nscreen). Studio shows `message` until the step finishes.",
           "type": "object",
           "properties": {
             "type": {
@@ -254,7 +254,7 @@
           ]
         },
         {
-          "description": "A loop (`forEach`, `repeat`, `while`) starts a round: `round` counts\nfrom 1, `total` is how many it will run at most when known (the\nitems of a `forEach`, the count of a `repeat`). Writer shows how far\na loop got on its frame, during the run and after it.",
+          "description": "A loop (`forEach`, `repeat`, `while`) starts a round: `round` counts\nfrom 1, `total` is how many it will run at most when known (the\nitems of a `forEach`, the count of a `repeat`). Studio shows how far\na loop got on its frame, during the run and after it.",
           "type": "object",
           "properties": {
             "type": {
@@ -539,7 +539,7 @@
       "description": "How a run was started.",
       "oneOf": [
         {
-          "description": "\"Run\" in Writer (a person watching).",
+          "description": "\"Run\" in Studio (a person watching).",
           "type": "string",
           "const": "studio"
         },

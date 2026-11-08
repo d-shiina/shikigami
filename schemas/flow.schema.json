@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Flow",
-  "description": "A flow: the unit that AI clients, Writer and the Runtime share.",
+  "description": "A flow: the unit that AI clients, Studio and the Runtime share.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -34,7 +34,7 @@
       }
     },
     "revision": {
-      "description": "Monotonic revision, incremented by every committed edit. Used for\noptimistic concurrency between Writer, MCP clients and the CLI.",
+      "description": "Monotonic revision, incremented by every committed edit. Used for\noptimistic concurrency between Studio, MCP clients and the CLI.",
       "type": "integer",
       "format": "uint64",
       "minimum": 0,
@@ -201,7 +201,7 @@
           "$ref": "#/$defs/PartApp"
         },
         "target": {
-          "description": "The target, exactly as the nodes of `app` take it. Left out (null)\nwhen the author could not see the screen (an AI in a chat window):\na person picks it in Writer, and until then the nodes that use the\npart do not validate (`PART_NOT_PICKED`)."
+          "description": "The target, exactly as the nodes of `app` take it. Left out (null)\nwhen the author could not see the screen (an AI in a chat window):\na person picks it in Studio, and until then the nodes that use the\npart do not validate (`PART_NOT_PICKED`)."
         }
       },
       "additionalProperties": false,
@@ -292,7 +292,7 @@
           ]
         },
         "meta": {
-          "description": "Free-form metadata (Writer layout hints, AI provenance such as the UI\nelement a selector was derived from). Never interpreted by the Runtime.",
+          "description": "Free-form metadata (Studio layout hints, AI provenance such as the UI\nelement a selector was derived from). Never interpreted by the Runtime.",
           "type": "object",
           "additionalProperties": true
         }
