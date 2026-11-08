@@ -40,6 +40,23 @@ describe("AskDialog", () => {
     expect(seen).toEqual([]);
   });
 
+  it("gives the focus back to what opened it", async () => {
+    render(
+      <>
+        <button type="button">開く</button>
+        <AskDialog />
+      </>,
+    );
+    const opener = screen.getByRole("button", { name: "開く" });
+    opener.focus();
+    const answer = act(() => confirmAsk({ title: "削除しますか？", confirm: "削除" }));
+    const main = await screen.findByRole("button", { name: "削除" });
+    expect(document.activeElement).toBe(main);
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" });
+    await answer;
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("offers a second way through", async () => {
     render(<AskDialog />);
     const answer = act(() => chooseAsk({ title: "変更を保存しますか？", confirm: "保存", other: "保存しない" }));

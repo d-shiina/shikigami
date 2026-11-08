@@ -7,7 +7,7 @@
 // field, Esc cancels, Tab stays inside the dialog, and focus goes back to
 // where it was. Nothing moves, so there is nothing to reduce for
 // "reduce motion".
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { settle, useAsk } from "../lib/ask";
 import { t } from "../lib/i18n";
 
@@ -27,6 +27,17 @@ export function AskDialog() {
   const [value, setValue] = useState("");
   const [touched, setTouched] = useState(false);
 
+  // Focus returns to what had it (the row, the button) once the last question is answered.
+  // A layout effect declared before the one below, so it reads the focus before the dialog takes it.
+  const opened = !!ask;
+  useLayoutEffect(() => {
+    if (!opened) return;
+    const before = document.activeElement as HTMLElement | null;
+    return () => {
+      if (before?.isConnected) before.focus();
+    };
+  }, [opened]);
+
   // Each question starts from its own text; focus goes to the field or the main button.
   useLayoutEffect(() => {
     if (!ask) return;
@@ -44,14 +55,6 @@ export function AskDialog() {
       mainRef.current?.focus();
     }
   }, [ask]);
-
-  // Focus returns to what had it (the row, the button) once the last question is answered.
-  const opened = !!ask;
-  useEffect(() => {
-    if (!opened) return;
-    const before = document.activeElement as HTMLElement | null;
-    return () => before?.focus?.();
-  }, [opened]);
 
   if (!ask) return null;
 
