@@ -261,10 +261,9 @@ type BlockEdgeData = {
   half?: number;
   /** Into a try's "失敗したとき". */
   failure?: boolean;
-  /** The loop or branch it belongs to, and its place among a branch's ways out (see LayoutEdge). */
+  /** The loop it belongs to (see LayoutEdge). */
   owner?: string;
-  alt?: { i: number; n: number };
-  /** The step picked in the chart: pointing at or picking a loop or branch moves its lines. */
+  /** The step picked in the chart: pointing at or picking a loop moves its line back. */
   selectedId?: string | null;
   /** Into a try's "失敗したとき": where its failures come from (see FAIL_X). */
   bracket?: { x: number; ticks: { x: number; y: number }[] };
@@ -331,7 +330,7 @@ function useTurn(n: number, on: boolean): number | null {
 
 /**
  * While an if or a switch is pointed at, the columns it does not take this turn
- * are dimmed, in turn, so its ways out read as one or the other. Only while
+ * (their nodes and lines) are dimmed, in turn, so its ways out read as one or the other. Only while
  * pointed at: a branch that is picked to edit its settings stays still.
  * Done with a style sheet keyed on node ids, so nothing on the chart re-renders.
  */
@@ -349,7 +348,11 @@ function BranchLight({ layout }: { layout: Layout }) {
   const nodes = layout.nodes.filter((n) => off(n.branches)).map((n) => n.id);
   const frames = layout.frames.filter((f) => off(f.branches)).map((f) => `frame:${f.id}`);
   const dim = new Set(nodes);
-  const edges = layout.edges.filter((e) => dim.has(e.source) && dim.has(e.target)).map((e) => e.id);
+  // The lines among them, and the line down into each of them from the decision. Only dimmed:
+  // a line's colour says where a run went (see TRAIL_STROKE), so pointing at one never recolours it.
+  const edges = layout.edges
+    .filter((e) => (dim.has(e.source) && dim.has(e.target)) || (e.owner === owner && e.alt !== undefined && e.alt.i !== turn))
+    .map((e) => e.id);
   const selectors = [
     ...[...nodes, ...frames].map((id) => `.react-flow__node[data-id="${CSS.escape(id)}"]`),
     ...edges.map((id) => `[data-testid="rf__edge-${CSS.escape(id)}"]`),
@@ -362,11 +365,9 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
   const r = 4;
-  // Pointing at (or picking) a loop sends its line back round; pointing at a branch lights its ways out in turn.
+  // Pointing at (or picking) a loop sends its line back round (a branch's ways out are lit in turn by BranchLight).
   const pointed = useFocus();
   const active = !!edge.owner && (pointed === edge.owner || edge.selectedId === edge.owner);
-  const turn = useTurn(edge.alt?.n ?? 1, !!edge.owner && pointed === edge.owner && !!edge.alt);
-  const lit = edge.alt !== undefined && turn === edge.alt.i;
   const sideLabel = (x: number, y: number) =>
     label && (
       <EdgeLabelRenderer>
@@ -484,7 +485,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
   const straight = Math.abs(sourceX - targetX) <= 1;
   return (
     <>
-      <BaseEdge id={id} path={path} style={lit ? { ...style, stroke: "var(--color-primary)", strokeWidth: 2 } : style} markerEnd={markerEnd} />
+      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
       <EdgeLabelRenderer>
         {label ? (
           // The "+" sits after the label; a spacer as wide on the other side keeps the label centred on the line.
@@ -494,7 +495,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
           >
             {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
             <span
-              className={`max-w-[300px] truncate rounded-md border bg-sheet px-2 text-[11.5px] leading-[18px] font-medium transition-colors ${lit ? "border-primary text-primary" : "border-slate-200 text-ink"}`}
+              className={`max-w-[300px] truncate rounded-md border bg-sheet px-2 text-[11.5px] leading-[18px] font-medium border-slate-200 text-ink`}
             >
               {label}
             </span>
@@ -1627,7 +1628,6 @@ export function FlowCanvas() {
         failure: e.failure,
         bracket: e.bracket,
         owner: e.owner,
-        alt: e.alt,
         selectedId,
         split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
