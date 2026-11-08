@@ -31,12 +31,19 @@ pub(crate) struct RunLog {
     offset: UtcOffset,
     /// What each step is called in the log: its name, else its type's label.
     names: StepNames,
+    /// Logs (and their pictures) older than this many days are deleted
+    /// when the run ends, like the run records (`records.keepDays`).
+    keep_days: Option<u32>,
 }
 
 impl RunLog {
     /// Starts `logs/<stamp>_running.log`. `None` (and a warning) when the
     /// folder cannot be written: a run never fails for its log.
-    pub(crate) fn create(project_dir: &Path, names: StepNames) -> Option<Self> {
+    pub(crate) fn create(
+        project_dir: &Path,
+        names: StepNames,
+        keep_days: Option<u32>,
+    ) -> Option<Self> {
         let dir = project_dir.join(LOGS_FOLDER);
         let offset = UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC);
         let now = OffsetDateTime::now_utc().to_offset(offset);
@@ -88,6 +95,7 @@ impl RunLog {
             file: BufWriter::new(file),
             offset,
             names,
+            keep_days,
         })
     }
 
@@ -223,11 +231,16 @@ impl RunLog {
     }
 
     /// Renames the file after how the run ended and deletes the oldest
-    /// logs beyond [`LOGS_KEPT`].
+    /// logs beyond [`LOGS_KEPT`] and those older than `keep_days`.
     pub(crate) fn finish(mut self, status: RunStatus) {
         let _ = self.file.flush();
         let Self {
-            dir, stamp, file, ..
+            dir,
+            stamp,
+            file,
+            offset,
+            keep_days,
+            ..
         } = self;
         drop(file);
         let from = dir.join(file_name(&stamp, RUNNING));
@@ -236,6 +249,10 @@ impl RunLog {
             tracing::warn!(path = %from.display(), error = %e, "could not name the run log");
         }
         prune(&dir);
+        if let Some(days) = keep_days {
+            let today = OffsetDateTime::now_utc().to_offset(offset).date();
+            prune_older(&dir, days, today);
+        }
     }
 }
 
@@ -284,6 +301,32 @@ fn prune(dir: &Path) {
         // The picture of a failed run goes with its log.
         let _ = fs::remove_file(path.with_extension("png"));
         let _ = fs::remove_file(path);
+    }
+}
+
+/// Deletes run logs (and the picture of a failed run) from days before
+/// `today - days`, by the date their name starts with.
+fn prune_older(dir: &Path, days: u32, today: time::Date) {
+    let Some(cutoff) = today.checked_sub(time::Duration::days(i64::from(days))) else {
+        return;
+    };
+    let cutoff = format!(
+        "{:04}{:02}{:02}",
+        cutoff.year(),
+        u8::from(cutoff.month()),
+        cutoff.day()
+    );
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for path in entries.filter_map(|e| e.ok().map(|e| e.path())) {
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if is_run_log(name) && name[..8] < *cutoff {
+            let _ = fs::remove_file(path.with_extension("png"));
+            let _ = fs::remove_file(&path);
+        }
     }
 }
 
@@ -351,5 +394,35 @@ mod tests {
         assert_eq!(names.len(), LOGS_KEPT + 1);
         assert!(names.contains(&"memo.log".to_owned()));
         assert!(!names.contains(&"20260101-000000_succeeded.log".to_owned()));
+    }
+
+    #[test]
+    fn logs_older_than_keep_days_go_with_their_pictures() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in [
+            "20260801-090000_failed.log",
+            "20260801-090000_failed.png",
+            "20260810-090000_succeeded.log",
+            "20260811-090000_succeeded.log",
+            "memo.log",
+        ] {
+            fs::write(dir.path().join(name), "").unwrap();
+        }
+        let today = time::Date::from_calendar_date(2026, time::Month::November, 8).unwrap();
+        // 90 days before 2026-11-08 is 2026-08-10: that day stays.
+        prune_older(dir.path(), 90, today);
+        let mut names: Vec<String> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "20260810-090000_succeeded.log",
+                "20260811-090000_succeeded.log",
+                "memo.log"
+            ]
+        );
     }
 }

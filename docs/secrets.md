@@ -109,6 +109,12 @@ With `session: "<name>"` on `browser.open`, that context starts with the saved c
 - In screenshots, password fields and fields a secret was typed into are blacked out.
 - Values are also removed from the text the browser adapter returns (`getText` / `getTable` / the page's accessibility tree / page details on errors), including values a person typed into password fields by hand.
 
+### Personal data
+
+Mark a variable that holds personal data (names, addresses, mail, rows of customers) with `"personal": true` (Studio: the variable's **Personal data** box, or right-click in the Variables table). Its values are then masked as `***` the same way: in run logs, the flow's `logs/`, errors, run records and outputs, notifications, what a management server receives and what an AI reads back with `get_run_logs` / `get_run_status` / `run_tests`. Parts copied elsewhere (one row's name into another variable, a message built from it) are masked too, except parts shorter than 4 characters inside a list or object. Unlike a secret it may have a default and may be passed in as plain text; its default is left out of exported bundles and of **Copy for an AI**, and saving a run as a test case leaves it out.
+
+Not covered: what a node returns to an AI trying it on its own (`test_step`), what `inspect_page` / `inspect_ui` show, and pictures of failed runs (only password fields are blacked out). Turn the pictures off with `records.failureScreenshots: false` when screens show personal data.
+
 ## From AI (MCP)
 
 - The AI never asks for passwords in the chat. `list_secrets` shows it only **names, kinds, sites and which fields are set** (neither values nor usernames).

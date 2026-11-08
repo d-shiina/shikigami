@@ -110,6 +110,11 @@ function VariableRow({ variable }: { variable: VariableDef }) {
           {variable.name}
         </span>
         {variable.secret && <span className="shrink-0 rounded-sm bg-slate-200 px-1 text-[9px] text-slate-600">{t.secret}</span>}
+        {variable.personal && !variable.secret && (
+          <span className="shrink-0 rounded-sm bg-slate-200 px-1 text-[9px] text-slate-600" title={t.personalHint}>
+            {t.personal}
+          </span>
+        )}
         <span
           className="ml-auto shrink-0 rounded-sm px-1.5 text-[10px] leading-4 font-semibold"
           style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}
@@ -202,6 +207,20 @@ function VariableRow({ variable }: { variable: VariableDef }) {
             />
           </label>
           {variable.secret && <p className="text-[11px] text-slate-400">{t.secretNoDefault}</p>}
+          {!variable.secret && (
+            <>
+              <label className={row} title={t.personalHint}>
+                <span className={rowLabel}>{t.personal}</span>
+                <input
+                  type="checkbox"
+                  className="justify-self-start"
+                  checked={variable.personal ?? false}
+                  onChange={(e) => update({ personal: e.target.checked || undefined })}
+                />
+              </label>
+              {variable.personal && <p className="text-[11px] text-slate-400">{t.personalHint}</p>}
+            </>
+          )}
           {changes && (
             <div className="pt-2">
               <div className="pb-1 text-[11px] font-bold text-slate-600">{t.vars.changes(traced.length)}</div>

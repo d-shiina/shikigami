@@ -6,7 +6,7 @@
 import { menuFor } from "../lib/contextMenu";
 import { useVariableMenu } from "./menus";
 import type { Step, StepTypeDef, VarDirection, VariableDef, VarType } from "@shikigami/schema";
-import { Lock, Trash2 } from "lucide-react";
+import { Lock, Trash2, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { varFocus, focus } from "../lib/focus";
@@ -234,6 +234,11 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                 {u.name}
               </span>
               {u.def?.secret && <Lock size={11} strokeWidth={2} className="shrink-0 text-slate-400" aria-label={t.secret} />}
+              {u.def?.personal && !u.def.secret && (
+                <span className="shrink-0" title={t.personalHint}>
+                  <UserRound size={11} strokeWidth={2} className="text-slate-400" aria-label={t.personal} />
+                </span>
+              )}
             </div>
             {u.def?.description && (
               <div className="mt-0.5 line-clamp-2 pl-[30px] text-[11px] text-slate-500" title={u.def.description}>
@@ -376,6 +381,20 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                 >
                   <Lock size={13} strokeWidth={1.75} aria-hidden="true" />
                   {t.vars.table.makeSecret}
+                </button>
+              )}
+              {pickedDefs.some((v) => !v.secret && !v.personal) && (
+                <button
+                  type="button"
+                  title={t.personalHint}
+                  onClick={async () => {
+                    for (const v of pickedDefs) if (!v.secret && !v.personal) await setVariable({ ...v, personal: true });
+                    clear();
+                  }}
+                  className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-slate-700 hover:bg-slate-200 hover:text-ink"
+                >
+                  <UserRound size={13} strokeWidth={1.75} aria-hidden="true" />
+                  {t.vars.table.makePersonal}
                 </button>
               )}
               <button

@@ -425,6 +425,13 @@ export interface VariableDef {
    */
   secret?: boolean;
   /**
+   * Personal data (names, addresses, mail, rows of customers…): masked
+   * like a secret in logs, events, run records, errors and notifications,
+   * and left out of exported bundles and saved test cases. Unlike a
+   * secret it may have a default and be passed in as plain text.
+   */
+  personal?: boolean;
+  /**
    * What a `string` input holds, so the run window can offer the right
    * field (a file picker, a calendar). Runs do not check it.
    */
@@ -1660,7 +1667,8 @@ export interface FlowPolicy {
  */
 export interface RecordsPolicy {
   /**
-   * Delete run records older than this many days.
+   * Delete run records older than this many days ([`DEFAULT_KEEP_DAYS`]
+   * when left out, `0` keeps them for good).
    */
   keepDays?: number | null;
   /**
@@ -1929,15 +1937,13 @@ export interface ByRisk2 {
   dangerous?: ("allow" | "deny") | "ask";
 }
 /**
- * How long run records are kept. Each PC applies it to its own records;
- * without a limit they are kept until deleted by hand.
- *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
  * via the `definition` "RecordsPolicy".
  */
 export interface RecordsPolicy1 {
   /**
-   * Delete run records older than this many days.
+   * Delete run records older than this many days ([`DEFAULT_KEEP_DAYS`]
+   * when left out, `0` keeps them for good).
    */
   keepDays?: number | null;
   /**

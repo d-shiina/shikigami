@@ -270,6 +270,9 @@
               "secret": {
                 "type": "boolean"
               },
+              "personal": {
+                "type": "boolean"
+              },
               "format": {
                 "anyOf": [
                   {
@@ -2441,6 +2444,9 @@
               "secret": {
                 "type": "boolean"
               },
+              "personal": {
+                "type": "boolean"
+              },
               "format": {
                 "anyOf": [
                   {
@@ -2856,6 +2862,9 @@
                 "type": "string"
               },
               "secret": {
+                "type": "boolean"
+              },
+              "personal": {
                 "type": "boolean"
               },
               "format": {

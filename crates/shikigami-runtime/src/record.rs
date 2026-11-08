@@ -267,7 +267,8 @@ fn started_ms(run_id: &RunId) -> Option<u64> {
 }
 
 /// Deletes run records the workspace's `records` settings no longer keep
-/// (older than `keepDays`, beyond the newest `keepRuns`). Runs still going
+/// (older than `keepDays`, 90 days when left out, beyond the newest
+/// `keepRuns`). Runs still going
 /// (no `report.json` yet) and `keep` are never deleted. Returns how many
 /// were removed; failures are logged and skipped.
 pub fn prune(
@@ -275,10 +276,11 @@ pub fn prune(
     records: &shikigami_core::policy::RecordsPolicy,
     keep: &[RunId],
 ) -> usize {
-    if records.keep_days.is_none() && records.keep_runs.is_none() {
+    let keep_days = records.days_kept();
+    if keep_days.is_none() && records.keep_runs.is_none() {
         return 0;
     }
-    if let Some(days) = records.keep_days {
+    if let Some(days) = keep_days {
         crate::audit::prune_mcp_log(workspace, days);
     }
     let Ok(ids) = list_runs(workspace) else {
@@ -291,9 +293,7 @@ pub fn prune(
             .unwrap_or_default(),
     )
     .unwrap_or(u64::MAX);
-    let cutoff = records
-        .keep_days
-        .map(|days| now_ms.saturating_sub(u64::from(days) * 86_400_000));
+    let cutoff = keep_days.map(|days| now_ms.saturating_sub(u64::from(days) * 86_400_000));
     let mut removed = 0;
     for (index, id) in ids.iter().enumerate() {
         let too_many = records
@@ -430,11 +430,34 @@ mod prune_tests {
     }
 
     #[test]
-    fn keeps_everything_without_limits() {
+    fn keeps_everything_with_keep_days_zero() {
         let tmp = tempfile::tempdir().unwrap();
         record(tmp.path(), &id_at(1, 1), true);
-        assert_eq!(prune(tmp.path(), &RecordsPolicy::default(), &[]), 0);
+        let forever = RecordsPolicy {
+            keep_days: Some(0),
+            ..RecordsPolicy::default()
+        };
+        assert_eq!(prune(tmp.path(), &forever, &[]), 0);
         assert_eq!(list_runs(tmp.path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn keeps_ninety_days_by_default() {
+        let tmp = tempfile::tempdir().unwrap();
+        let now = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
+        .unwrap();
+        let day = 86_400_000;
+        let old = record(tmp.path(), &id_at(now - 91 * day, 1), true);
+        let recent = record(tmp.path(), &id_at(now - 89 * day, 2), true);
+        assert_eq!(prune(tmp.path(), &RecordsPolicy::default(), &[]), 1);
+        let left = list_runs(tmp.path()).unwrap();
+        assert_eq!(left, vec![recent]);
+        assert!(!left.contains(&old));
     }
 
     #[test]
@@ -481,7 +504,12 @@ mod prune_tests {
     fn a_finishing_run_prunes_others_but_not_itself() {
         let tmp = tempfile::tempdir().unwrap();
         let policy = tmp.path().join("policy.json");
-        fs::write(&policy, r#"{ "records": { "keepRuns": 1 } }"#).unwrap();
+        // keepDays 0: these ids are from 1970, so only keepRuns decides.
+        fs::write(
+            &policy,
+            r#"{ "records": { "keepRuns": 1, "keepDays": 0 } }"#,
+        )
+        .unwrap();
         let older = record(tmp.path(), &id_at(1, 1), true);
         let mine = RunId::new(id_at(2, 2));
         let newer = record(tmp.path(), &id_at(3, 3), true);

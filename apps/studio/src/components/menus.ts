@@ -31,6 +31,7 @@ import {
   UnfoldVertical,
   Variable,
   Lock,
+  UserRound,
 } from "lucide-react";
 import { useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
@@ -190,12 +191,19 @@ export function useVariableMenu() {
       { label: t.menu.copyName, icon: Copy, run: () => copyText(name) },
       // On the chart, variables are edited in the flow's settings; the 変数 table edits them in place.
       declared && !inTable && { label: t.menu.variableSettings, icon: Variable, run: () => store.getState().showFlowProps() },
-      // In the table, secrecy is the one setting without a column of its own.
+      // In the table, secrecy and personal data are the settings without a column of their own.
       declared &&
         inTable && {
           label: variable.secret ? t.vars.table.unmakeSecret : t.vars.table.makeSecret,
           icon: Lock,
           run: () => void store.getState().setVariable(variable.secret ? { ...variable, secret: false } : { ...variable, secret: true, default: undefined }),
+        },
+      declared &&
+        inTable &&
+        !variable.secret && {
+          label: variable.personal ? t.vars.table.unmakePersonal : t.vars.table.makePersonal,
+          icon: UserRound,
+          run: () => void store.getState().setVariable({ ...variable, personal: variable.personal ? undefined : true }),
         },
       writer && onOpenWriter && { label: t.menu.openWriter, icon: LogIn, run: () => onOpenWriter(writer) },
       "-",

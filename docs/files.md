@@ -30,7 +30,7 @@ flows/<id>/
   templates/      layouts the output is made from (Excel, Word)
   output/         what runs produce
   work/           scratch space, emptied at the start of every run
-  logs/           a readable log per run: 20261029-140512_failed.log (the newest 100 are kept)
+  logs/           a readable log per run: 20261029-140512_failed.log (the newest 100, at most 90 days old by default: `records.keepDays`)
 ```
 
 - Relative paths in a node's file params (`input/orders.xlsx`) resolve from the flow's folder, so the flow keeps working when the workspace moves or is shared. A subflow resolves from its own folder. Paths that leave the folder (`..`) get the `PATH_OUTSIDE_PROJECT` warning; absolute paths work as before.

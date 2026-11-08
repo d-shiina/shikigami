@@ -79,6 +79,13 @@ describe("text for the AI", () => {
     expect(text).not.toContain("hunter2");
     expect(text).toContain('"default": 3');
   });
+
+  it("leaves out the default of personal data", () => {
+    const withPersonal = { ...flow, variables: [{ name: "顧客名", type: "string", personal: true, default: "山田花子" }] } as Flow;
+    const text = flowForChat(withPersonal);
+    expect(text).not.toContain("山田花子");
+    expect(text).toContain('"personal": true');
+  });
 });
 
 describe("isUnset", () => {

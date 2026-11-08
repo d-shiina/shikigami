@@ -895,13 +895,13 @@ impl Executor {
         self.secret_vars = flow
             .variables
             .iter()
-            .filter(|v| v.secret)
+            .filter(|v| v.masked())
             .map(|v| v.name.clone())
             .collect();
         for var in &flow.variables {
             if !self.vars.contains_key(&var.name) {
                 let value = var.default.clone().unwrap_or(Value::Null);
-                if var.secret {
+                if var.masked() {
                     self.emitter.add_secret(&value);
                 }
                 self.set_var(&var.name, value, None);
@@ -1588,7 +1588,7 @@ impl Executor {
         child.secret_vars = callee
             .variables
             .iter()
-            .filter(|v| v.secret)
+            .filter(|v| v.masked())
             .map(|v| v.name.clone())
             .collect();
         child.iteration = None;
