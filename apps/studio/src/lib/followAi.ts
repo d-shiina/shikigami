@@ -21,6 +21,9 @@ export function shouldFollow(createdId: string, known: boolean, activity: AgentA
   const open = where.flow;
   if (!open) return true;
   if (open.id === createdId) return false;
+  // Asked for a new flow, the person wants to watch it grow, whatever was open.
+  // (Flows are saved as they are edited, so nothing open is lost.)
+  if (activity.flowId === null || activity.flowId === createdId) return true;
   return (open.steps ?? []).length === 0;
 }
 

@@ -9,11 +9,19 @@ describe("shouldFollow", () => {
     expect(shouldFollow("scn_new", false, working, { place: "flows", flow: null })).toBe(true);
   });
 
-  it("replaces only an empty flow", () => {
+  it("replaces only an empty flow when asked about another one", () => {
     const empty = { id: "scn_empty", steps: [] };
     const full = { id: "scn_full", steps: [{ id: "stp_1", type: "log.write" }] };
-    expect(shouldFollow("scn_new", false, working, { place: "flows", flow: empty })).toBe(true);
-    expect(shouldFollow("scn_new", false, working, { place: "flows", flow: full })).toBe(false);
+    const aboutFull = { flowId: "scn_full", tool: "create_flow" };
+    expect(shouldFollow("scn_new", false, aboutFull, { place: "flows", flow: empty })).toBe(true);
+    expect(shouldFollow("scn_new", false, aboutFull, { place: "flows", flow: full })).toBe(false);
+  });
+
+  it("opens a flow asked for in a new-flow conversation, over the flow open", () => {
+    const full = { id: "scn_full", steps: [{ id: "stp_1", type: "log.write" }] };
+    expect(shouldFollow("scn_new", false, working, { place: "flows", flow: full })).toBe(true);
+    // The conversation already moved to the flow it made.
+    expect(shouldFollow("scn_new", false, { flowId: "scn_new", tool: "create_flow" }, { place: "flows", flow: full })).toBe(true);
   });
 
   it("stays put when the AI is idle, the flow was known, or the person is elsewhere", () => {
