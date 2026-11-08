@@ -54,17 +54,19 @@ async function studio(overrides: Partial<Api> = {}) {
 }
 
 describe("the right pane", () => {
-  it("shows a node's settings read-only and opens the node to change them", async () => {
+  it("edits the selected node beside the chart, and opens it full size on 「広げる」", async () => {
     const store = await studio();
     render(
       <StudioContext.Provider value={store}>
         <StepInspector />
       </StudioContext.Provider>,
     );
-    expect(screen.getByText("price * 2")).toBeTruthy();
-    // Nothing to type into: settings are edited in the node opened full size.
-    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: /設定を開く/ }));
+    // The settings are edited here, with the chart still in view.
+    expect(screen.getByDisplayValue("total")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "表示名" }) as HTMLInputElement).value).toBe("二倍にする");
+    // Running it alone is right there too, above its result.
+    expect(screen.getByRole("button", { name: "ノードの単体実行" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /広げる/ }));
     expect(store.getState().editing).toBe("s1");
   });
 });

@@ -1062,7 +1062,7 @@ export const en: Dict = {
     none: "Nothing to use yet. Add a node that reads a table before this one and its result appears here",
     clickTo: (label: string) => `Click to put it into "${label}"`,
     pickField: "Click the field to fill first",
-    noResult: "Not run yet. \"Run this node only\" runs just this node; \"Run up to here\" runs from the start through this node. The result shows here",
+    noResult: "Not run yet",
     pausedAfter: "Ran up to this node and paused",
     finished: "The run finished",
     failed: "This node failed",
@@ -1137,6 +1137,8 @@ export const en: Dict = {
     header: "Header",
   },
   props: {
+    expand: "Expand",
+    expandTitle: "Open full size (values to use and the result side by side)",
     unregistered: (name: string) => `${name} (not registered)`,
     unset: "(not set)",
     numberHint: "A number (a variable name or a calculation also works)",
