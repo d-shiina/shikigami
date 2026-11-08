@@ -28,11 +28,13 @@ const START_GAP = 44;
 /** From the "+" at the end (or the last node) down to the end: room for the label of a line out of a loop. */
 const END_GAP = 36;
 /**
- * The small "+" at the end of a block that has nodes (a branch, a loop's
- * body, …), on the line just under its last node: it adds a node there,
- * inside the block. The line runs through it on to what comes next.
+ * The 「＋ ノード追加」 at the end of a block that has nodes (a branch, a
+ * loop's body, …), on the line just under its last node: it adds a node
+ * there, inside the block. The line runs through it on to what comes next.
+ * TAIL_SIZE tall and TAIL_W wide, as the one on a line between nodes.
  */
 export const TAIL_SIZE = 24;
+export const TAIL_W = 96;
 const TAIL_GAP = 16;
 /**
  * Room beside a step: its sockets (where a variable's line starts or ends) sit
@@ -385,7 +387,7 @@ function measureList(steps: Step[], defs: Defs, extra: Extra, collapsed: Collaps
     h += m.h;
   }
   h += GAP_Y * (steps.length - 1);
-  return tail ? { w: Math.max(w, TAIL_SIZE), h: h + tailGap(steps) + TAIL_SIZE } : { w, h };
+  return tail ? { w: Math.max(w, TAIL_W), h: h + tailGap(steps) + TAIL_SIZE } : { w, h };
 }
 
 /** Between a block's last node and its "+": room for the line out of a loop there to say when it leaves. */
@@ -506,7 +508,7 @@ class Builder {
       this.nodes.push({
         id,
         type: "slot",
-        position: { x: x + (span - TAIL_SIZE) / 2, y: cursor - GAP_Y + tailGap(steps) },
+        position: { x: x + (span - TAIL_W) / 2, y: cursor - GAP_Y + tailGap(steps) },
         data: { kind: "slot", parentId, block, label: slotLabel, tail: true },
       });
       for (const p of previous) this.edge(p, id);

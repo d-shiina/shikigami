@@ -45,6 +45,7 @@ import {
   END_ID,
   type StepNodeData,
   TAIL_SIZE,
+  TAIL_W,
   TERMINAL_H,
   type TerminalNodeData,
   WRITE_ROOM,
@@ -304,33 +305,56 @@ type BlockEdgeData = {
 };
 
 /**
- * The "+" on a line between nodes: shown while the pointer is on the line,
- * it opens the node palette to add a node right there.
+ * 「＋ ノード追加」: how every place a node can be added looks on the chart, on a
+ * line between nodes as at the end of a block (see SlotNode), as wide as
+ * TAIL_W. It shows where the pointer is (see SlotNode), so the chart stays
+ * quiet; an empty block says it in full all the time instead.
+ */
+const ADD_PILL =
+  "flex h-[22px] shrink-0 items-center justify-center gap-1 rounded-md border border-dashed border-slate-400 bg-sheet text-[11.5px] leading-none whitespace-nowrap text-slate-600 hover:border-solid hover:border-primary hover:text-primary";
+
+/** ADD_PILL while its place is the one picked (its palette is open). */
+const ADD_PILL_ON =
+  "flex h-[22px] shrink-0 items-center justify-center gap-1 rounded-md border border-brand-500 bg-brand-50 text-[11.5px] leading-none whitespace-nowrap text-brand-600";
+
+/** What an add button says: the same words everywhere (the toolbar's, an empty block's). */
+function AddLabel() {
+  return (
+    <>
+      <Plus size={12} strokeWidth={2.25} aria-hidden="true" />
+      {t.addStep}
+    </>
+  );
+}
+
+/**
+ * The 「＋ ノード追加」 on a line between nodes: shown while the pointer is on
+ * the line, it opens the node palette to add a node right there.
  */
 function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: BlockEdgeData; x?: number; y?: number; inline?: boolean }) {
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   if (!data.insert) return null;
   const at = data.insert;
-  const button = (
+  return (
     <button
       type="button"
       title={t.menu.addHere}
-      aria-label={t.menu.addHere}
       onMouseEnter={() => data.hover?.(edgeId)}
       onMouseLeave={() => data.hover?.(null)}
+      onFocus={() => data.hover?.(edgeId)}
+      onBlur={() => data.hover?.(null)}
       onClick={(e) => {
         e.stopPropagation();
         setPaletteOpen(true, at, e.currentTarget.getBoundingClientRect());
       }}
-      style={inline ? undefined : { transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
-      className={`nodrag nopan pointer-events-auto flex h-[18px] w-[18px] items-center justify-center rounded-md border border-slate-300 bg-sheet text-slate-600 shadow-raised hover:border-primary hover:bg-primary hover:text-on-primary ${
-        inline ? "ml-1 shrink-0" : "absolute"
-      } ${data.hovered ? "opacity-100" : "pointer-events-none opacity-0"}`}
+      style={{ width: TAIL_W, ...(inline ? {} : { transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }) }}
+      className={`nodrag nopan pointer-events-auto shadow-raised ${ADD_PILL} ${inline ? "ml-1" : "absolute"} ${
+        data.hovered ? "opacity-100" : "pointer-events-none opacity-0"
+      }`}
     >
-      <Plus size={12} strokeWidth={2.25} aria-hidden="true" />
+      <AddLabel />
     </button>
   );
-  return button;
 }
 
 /** Nothing on the chart moves for someone who asked for less motion. */
@@ -474,7 +498,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
               style={{ transform: `translate(-50%, -100%) translate(${targetX}px, ${targetY - 10}px)` }}
               className="pointer-events-none absolute flex items-center"
             >
-              {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
+              {edge.insert && <span style={{ width: TAIL_W }} className="ml-1 shrink-0" />}
               <span className="max-w-[300px] truncate rounded-md border border-[color-mix(in_srgb,var(--color-shu-500)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-shu-500)_7%,var(--color-sheet))] px-2 text-[11.5px] leading-[18px] font-medium text-shu-600">
                 {label}
               </span>
@@ -534,7 +558,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
             style={{ transform: `translate(-50%, -100%) translate(${targetX}px, ${targetY - 10}px)` }}
             className="pointer-events-none absolute flex items-center"
           >
-            {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
+            {edge.insert && <span style={{ width: TAIL_W }} className="ml-1 shrink-0" />}
             <span
               className={`max-w-[300px] truncate rounded-md border bg-sheet px-2 text-[11.5px] leading-[18px] font-medium border-slate-200 text-ink`}
             >
@@ -1184,24 +1208,36 @@ function NodeStatus({ data }: { data: StepNodeProps["data"] }) {
   return <span className="ml-auto flex shrink-0 items-center gap-2 pl-1">{marks}</span>;
 }
 
-function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
-  // An empty block or an empty flow, or the small "+" under the last node of a block (or the flow): each adds a node there.
+/** A tail's 「＋ ノード追加」: on the end of the flow always, at the end of a block while the pointer is in that block (see areaOf). */
+type TailData = SlotNodeData & { selected: boolean; areaOf?: (focused: string) => string | null | undefined; trail?: LineTrail };
+
+function SlotNode({ id, data }: NodeProps<Node<TailData>>) {
+  // An empty block or an empty flow, or the 「＋ ノード追加」 under the last node of a block (or the flow): each adds a node there.
+  const focused = useFocus();
   if (data.tail) {
-    // The end of a block with nodes: a small "+" on the line, inside the frame.
+    // The end of a block with nodes: on the line, inside the frame. Hidden, the line runs on through.
     const title = data.label ? t.flow.addAtBlockEnd(data.label) : t.menu.addHere;
+    const shown =
+      data.selected || data.parentId === null || focused === id || (focused !== null && data.areaOf?.(focused) === data.parentId);
     return (
-      <div
-        style={{ width: TAIL_SIZE, height: TAIL_SIZE }}
-        title={title}
-        aria-label={title}
-        className={`flex cursor-pointer items-center justify-center rounded-lg border ${
-          data.selected
-            ? "border-brand-500 bg-brand-50 text-brand-600"
-            : "border-dashed border-slate-300 bg-sheet text-slate-500 hover:border-solid hover:border-primary hover:text-primary"
-        }`}
-      >
+      <div style={{ width: TAIL_W, height: TAIL_SIZE }} title={title} className="group relative flex cursor-pointer items-center justify-center">
         <FlowHandles />
-        <Plus size={14} strokeWidth={2.25} aria-hidden="true" />
+        <svg aria-hidden="true" width={TAIL_W} height={TAIL_SIZE} className="absolute inset-0 overflow-visible">
+          <line
+            x1={TAIL_W / 2}
+            x2={TAIL_W / 2}
+            y1={0}
+            y2={TAIL_SIZE}
+            stroke={data.trail ? TRAIL_STROKE[data.trail] : "var(--flow-edge)"}
+            strokeWidth={data.trail ? 2.5 : 1.5}
+          />
+        </svg>
+        <span
+          style={{ width: TAIL_W }}
+          className={`relative ${data.selected ? ADD_PILL_ON : ADD_PILL} ${shown ? "opacity-100" : "opacity-0 group-hover:opacity-100 in-focus-visible:opacity-100"}`}
+        >
+          <AddLabel />
+        </span>
       </div>
     );
   }
@@ -1590,6 +1626,17 @@ export function FlowCanvas() {
       layout.nodes.flatMap((n) => (n.data.kind === "step" && (n.data.step.onError ?? flowDefault) === "continue" ? [n.id] : [])),
     );
   }, [layout, flow]);
+  // The block the pointer is in, from what it is on (see focus): a frame's own
+  // head or a step inside it. A block's 「＋ ノード追加」 at its end shows then.
+  const areaOf = useMemo(() => {
+    const area = new Map<string, string | null>();
+    for (const n of layout.nodes) {
+      if (n.data.kind === "step") area.set(n.id, n.data.head ? n.id : n.data.parentId);
+      else if (n.data.kind === "slot") area.set(n.id, n.data.parentId);
+      else if (n.data.kind === "terminal") area.set(n.id, null);
+    }
+    return (focused: string) => area.get(focused);
+  }, [layout]);
   // A node added on a line goes just before the step the line leads to. Not
   // where that would start another branch running at the same time.
   const insertBefore = useMemo(() => {
@@ -1698,7 +1745,8 @@ export function FlowCanvas() {
       data: {
         ...slot,
         selected: !inside && selection?.kind === "slot" && selection.parentId === slot.parentId && selection.block === slot.block,
-      },
+        areaOf,
+      } satisfies TailData,
     };
   });
 
@@ -1752,6 +1800,14 @@ export function FlowCanvas() {
     return out;
   }, [states, layout.nodes]);
   const taken = trailLines(layout.edges, trailStates, tails, continues);
+  // The line runs on through a hidden 「＋ ノード追加」 at a block's end, in the colour of the way out of it.
+  for (const node of nodes) {
+    const data = node.data as TailData;
+    if (data.kind !== "slot" || !data.tail) continue;
+    const out = layout.edges.find((e) => e.source === node.id);
+    const trail = out && taken.get(out.id);
+    if (trail) node.data = { ...data, trail };
+  }
   // Lines into a join end in it (or pass through); a loop's decision takes an arrow like a node.
   const plainJoins = new Set(layout.nodes.filter((n) => n.data.kind === "join" && !n.data.question).map((n) => n.id));
   const edges: Edge[] = layout.edges.map((e) => {
@@ -1785,7 +1841,7 @@ export function FlowCanvas() {
         ...(e.loop || trail === "now" ? { strokeDasharray: "5 4" } : {}),
       },
       // A plain colour: the marker id is built from it, so no var(). Lines meeting at a join end in its dot.
-      markerEnd: plainJoins.has(e.target) ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
+      markerEnd: plainJoins.has(e.target) || e.target.startsWith("end:") ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
       // A taken line over the others where they share a stretch (a join, the way into a loop's body).
       zIndex: trail ? 1 : 0,
     };
@@ -1924,7 +1980,11 @@ export function FlowCanvas() {
             ? focus.set((node.data as JoinNodeData).parentId)
             : undefined
       }
-      onNodeMouseLeave={() => focus.set(null)}
+      // Off a node, the pointer is still in the frame around it (see onPaneMouseMove).
+      onNodeMouseLeave={(event) => {
+        const at = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        focus.set((at && frameAt(layout.frames, at.x, at.y)?.id) ?? null);
+      }}
     >
       <Background gap={24} size={1.2} color="var(--color-slate-200)" />
       <BranchLight layout={layout} />
