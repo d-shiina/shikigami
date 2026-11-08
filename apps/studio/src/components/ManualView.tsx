@@ -24,7 +24,7 @@ import {
   type Rect,
   type Scene,
 } from "../lib/manual";
-import { burnShot, manualHtml, sceneMarks, scenesOf } from "../lib/manualExport";
+import { burnShot, manualHtml, type SceneMark, sceneMarks, scenesOf } from "../lib/manualExport";
 import { describeWhen } from "../lib/schedule";
 import { CALL } from "../lib/stepTypes";
 import { isActive } from "../store";
@@ -495,7 +495,7 @@ function MaskBoxes({ boxes, crop, k }: { boxes: MaskBox[]; crop: Rect; k: number
   );
 }
 
-function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: { number: number; rect: Rect }[]; ctx: Ctx }) {
+function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: SceneMark[]; ctx: Ctx }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -524,14 +524,21 @@ function ShotFrame({ shot, marks, ctx }: { shot: ManualShot; marks: { number: nu
             style={{ width: shot.width * k, height: shot.height * k, left: -crop.x * k, top: -crop.y * k }}
           />
           <MaskBoxes boxes={mask?.boxes ?? []} crop={crop} k={k} />
-          {marks.map((m) => (
+          {marks.map((m, i) => (
             <span
-              key={m.number}
-              className="absolute rounded-[4px] border-[2.5px] border-primary shadow-[0_0_0_3px_rgb(10_111_168/0.2)]"
+              key={m.number ?? `wait-${i}`}
+              title={m.number === null ? t.manual.waitsHere : undefined}
+              className={`absolute rounded-[4px] border-[2.5px] ${
+                m.number === null ? "border-dashed border-slate-600" : "border-primary shadow-[0_0_0_3px_rgb(10_111_168/0.2)]"
+              }`}
               style={{ left: (m.rect.x - crop.x) * k - 3, top: (m.rect.y - crop.y) * k - 3, width: m.rect.width * k + 6, height: m.rect.height * k + 6 }}
             >
-              <i className="absolute top-1/2 -left-[30px] -mt-[10.5px] grid h-[21px] w-[21px] place-items-center rounded-full bg-primary text-[12px] font-bold text-on-primary not-italic shadow-[0_0_0_2px_white]">
-                {m.number}
+              <i
+                className={`absolute top-1/2 -left-[30px] -mt-[10.5px] grid h-[21px] w-[21px] place-items-center rounded-full text-[12px] font-bold not-italic shadow-[0_0_0_2px_white] ${
+                  m.number === null ? "bg-slate-600 text-white" : "bg-primary text-on-primary"
+                }`}
+              >
+                {m.number ?? <Clock size={12} />}
               </i>
             </span>
           ))}

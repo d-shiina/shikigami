@@ -2058,6 +2058,12 @@ export type RunEventEnvelope1 =
        * The page's or window's title, secrets masked.
        */
       title?: string | null;
+      /**
+       * Equal for two pictures of the same view (the same address
+       * scrolled to the same place): their marks share one picture.
+       * An opaque digest.
+       */
+      view?: string | null;
     }
   | {
       type: "paused";

@@ -182,6 +182,11 @@ pub enum RunEvent {
         /// The page's or window's title, secrets masked.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
+        /// Equal for two pictures of the same view (the same address
+        /// scrolled to the same place): their marks share one picture.
+        /// An opaque digest.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        view: Option<String>,
     },
     /// An interactive run stopped before `stepId` (breakpoint, step
     /// command, pause request) or after it failed (`reason: "error"`, with

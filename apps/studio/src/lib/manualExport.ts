@@ -18,10 +18,16 @@ export type ExportOptions = {
 };
 
 /** The numbered marks a scene puts on its picture. */
-export function sceneMarks(scene: Scene): { number: number; rect: Rect }[] {
+/** A place marked on a picture: a numbered operation, or (number null) what the flow waits for. */
+export type SceneMark = { number: number | null; rect: Rect };
+
+export function sceneMarks(scene: Scene): SceneMark[] {
   const shot = scene.shot;
   if (!shot) return [];
-  return scene.steps.flatMap((s) => (s.mark ? [{ number: s.number, rect: s.mark }] : []));
+  return [
+    ...scene.steps.flatMap((s) => (s.mark ? [{ number: s.number, rect: s.mark }] : [])),
+    ...scene.waits.flatMap((w) => (w.mark ? [{ number: null, rect: w.mark }] : [])),
+  ];
 }
 
 const esc = (text: string) =>
@@ -48,7 +54,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export async function burnShot(
   src: string,
   shot: ManualShot,
-  marks: { number: number; rect: Rect }[],
+  marks: SceneMark[],
   mask: Mask | undefined,
   blurFields: boolean,
 ): Promise<string> {
@@ -78,36 +84,54 @@ export async function burnShot(
     ctx.fillRect(x, y, w, h);
     ctx.restore();
   };
+  // Blurs redraw from the picture, so they go first: a black box drawn
+  // before an overlapping blur would come back uncovered.
   if (blurFields) for (const r of shot.regions ?? []) blur(r);
+  for (const box of mask?.boxes ?? []) if (box.kind !== "black") blur(box);
   for (const box of mask?.boxes ?? []) {
-    if (box.kind === "black") {
-      const [x, y, w, h] = draw(box);
-      ctx.fillStyle = "#16181b";
-      ctx.fillRect(x, y, w, h);
-    } else blur(box);
+    if (box.kind !== "black") continue;
+    const [x, y, w, h] = draw(box);
+    ctx.fillStyle = "#16181b";
+    ctx.fillRect(x, y, w, h);
   }
   const line = Math.max(2, Math.round(2.5 * k));
   for (const m of marks) {
     const [x, y, w, h] = draw(m.rect);
-    ctx.strokeStyle = "#0a6fa8";
+    const wait = m.number === null;
+    const colour = wait ? "#475569" : "#0a6fa8";
+    ctx.strokeStyle = colour;
     ctx.lineWidth = line;
+    ctx.setLineDash(wait ? [6 * k, 4 * k] : []);
     ctx.strokeRect(x - 3 * k, y - 3 * k, w + 6 * k, h + 6 * k);
+    ctx.setLineDash([]);
     const r = 11 * k;
     const cx = Math.max(r, x - 3 * k - r - 4 * k);
     const cy = y + h / 2;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#0a6fa8";
+    ctx.fillStyle = colour;
     ctx.fill();
     ctx.lineWidth = 2 * k;
     ctx.strokeStyle = "#ffffff";
     ctx.stroke();
+    if (wait) {
+      // A small clock: what the flow waits to appear (or to go).
+      ctx.lineWidth = 1.6 * k;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 6 * k, 0, Math.PI * 2);
+      ctx.moveTo(cx, cy - 3.5 * k);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + 2.8 * k, cy + 1.6 * k);
+      ctx.stroke();
+      continue;
+    }
     ctx.fillStyle = "#ffffff";
     ctx.font = `700 ${Math.round(12 * k)}px Inter, "Noto Sans JP", sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(String(m.number), cx, cy + 0.5);
   }
+
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 

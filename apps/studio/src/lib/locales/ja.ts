@@ -1448,6 +1448,7 @@ export const ja = {
     when: (cond: string) => `${cond} のとき`,
     whenNot: (cond: string) => `${cond} でないとき`,
     otherwise: "そうでないとき",
+    waitsHere: "フローはここが出るのを待ってから次へ進みます",
     noneOfThese: "どれにも当てはまらないとき",
     tryFirst: "まず行うこと",
     onFailure: "失敗したとき",

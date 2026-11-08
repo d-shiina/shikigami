@@ -106,6 +106,13 @@ describe("the 手順書 of a flow", () => {
     expect(bare.missing).toBeGreaterThan(0);
   });
 
+  it("starts a new picture when the view changed under the same title", () => {
+    const moved: ManualManifest = { ...manifest, shots: manifest.shots.map((s, i) => ({ ...s, view: `v${i}` })) };
+    const split = scenes(find(buildManual(flow, defs, moved).chapters[0]?.items ?? [], "branch")[0]?.items ?? []);
+    expect(split.map((s) => s.shot?.file ?? null)).toEqual(["001.jpg", "003.jpg"]);
+    expect(split[1]?.steps.at(-1)?.mark?.y).toBe(363);
+  });
+
   it("leaves out screens the person hid", () => {
     const hidden = buildManual(flow, defs, manifest, new Map(), { [user]: { hidden: true, boxes: [], width: 0, height: 0 } });
     const [scene] = scenes(find(hidden.chapters[0]?.items ?? [], "branch")[0]?.items ?? []);

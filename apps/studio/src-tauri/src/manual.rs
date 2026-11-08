@@ -85,6 +85,8 @@ pub struct Shot {
     regions: Vec<ScreenRect>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    view: Option<String>,
 }
 
 /// What `manual.json` says about the run the pictures are from.
@@ -157,6 +159,7 @@ impl Collector {
                 mark,
                 regions,
                 title,
+                view,
             } => self.shots.push(Shot {
                 key: key(&event.call_path, step_id),
                 step_id: step_id.clone(),
@@ -167,6 +170,7 @@ impl Collector {
                 mark: *mark,
                 regions: regions.clone(),
                 title: title.clone(),
+                view: view.clone(),
             }),
             RunEvent::StepFinished {
                 step_id,
@@ -424,6 +428,7 @@ mod tests {
                 }),
                 regions: vec![],
                 title: Some("ログイン".into()),
+                view: None,
             },
         ));
         collector.on_event(&envelope(1, vec![], finished("stp_b", true)));

@@ -195,6 +195,14 @@ impl Executor {
             .map(str::trim)
             .filter(|t| !t.is_empty())
             .map(|t| self.emitter.mask(t));
+        // Only compared, never shown: kept as a digest so the address
+        // (which may hold a customer number) is not written down.
+        let view = report.get("view").and_then(Value::as_str).map(|v| {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            v.hash(&mut h);
+            format!("{:016x}", h.finish())
+        });
         self.emitter.emit(RunEvent::ScreenCaptured {
             step_id: step.id.clone(),
             file,
@@ -203,6 +211,7 @@ impl Executor {
             mark: report.get("mark").and_then(rect),
             regions,
             title,
+            view,
         });
     }
 }

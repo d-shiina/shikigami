@@ -299,6 +299,13 @@
                 "string",
                 "null"
               ]
+            },
+            "view": {
+              "description": "Equal for two pictures of the same view (the same address\nscrolled to the same place): their marks share one picture.\nAn opaque digest.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [

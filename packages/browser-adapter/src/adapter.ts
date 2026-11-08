@@ -948,7 +948,10 @@ export class Adapter {
       timeout: 4_000,
     });
     const title = await page.title().catch(() => "");
-    return { path, width: viewport.width, height: viewport.height, mark, regions, title };
+    // Steps on the same address scrolled to the same place share one picture.
+    const scroll = await page.evaluate(() => [window.scrollX, window.scrollY]).catch(() => [0, 0]);
+    const view = `${page.url()} @${scroll.join(",")}`;
+    return { path, width: viewport.width, height: viewport.height, mark, regions, title, view };
   }
 
   /** True when `target` is (or becomes, within `waitMs`) visible; never throws for a missing element. */

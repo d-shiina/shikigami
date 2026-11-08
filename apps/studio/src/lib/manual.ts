@@ -26,6 +26,8 @@ export type ManualShot = {
   mark?: Rect;
   regions?: Rect[];
   title?: string;
+  /** Equal for pictures of the same view (address and scroll place). */
+  view?: string;
 };
 
 export type ManualManifest = {
@@ -67,7 +69,7 @@ export type Scene = {
   app: "browser" | "desktop";
   steps: ManualStep[];
   /** Waits and checks on the screen: said in place, not numbered. `at` is the step they come before. */
-  waits: { at: number; text: string }[];
+  waits: { at: number; text: string; mark: Rect | null }[];
 };
 
 export type ManualItem =
@@ -227,7 +229,12 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
         prev.app === app &&
         (shot === null ||
           prev.shot === null ||
-          (prev.shot.title === shot.title && prev.shot.width === shot.width && prev.shot.height === shot.height));
+          // Marks are drawn on the scene's one picture: only pictures of
+          // the same view (same address, same scroll place) share it.
+          (prev.shot.title === shot.title &&
+            prev.shot.width === shot.width &&
+            prev.shot.height === shot.height &&
+            prev.shot.view === shot.view));
       if (!shot && !wait && (count(ctx, key) ?? 1) > 0) ctx.missing.n += 1;
       if (entry) entry.mark = shot?.mark ?? null;
       if (sameScreen && prev?.kind === "scene") {
@@ -236,9 +243,9 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
           prev.title = shot.title ?? null;
         }
         if (entry) prev.steps.push(entry);
-        else prev.waits.push({ at: prev.steps.length, text: label(step, ctx) });
+        else prev.waits.push({ at: prev.steps.length, text: label(step, ctx), mark: shot?.mark ?? null });
       } else {
-        out.push({ kind: "scene", shot, title: shot?.title ?? null, app, steps: entry ? [entry] : [], waits: entry ? [] : [{ at: 0, text: label(step, ctx) }] });
+        out.push({ kind: "scene", shot, title: shot?.title ?? null, app, steps: entry ? [entry] : [], waits: entry ? [] : [{ at: 0, text: label(step, ctx), mark: shot?.mark ?? null }] });
       }
       continue;
     }

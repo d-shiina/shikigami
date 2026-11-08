@@ -1449,6 +1449,7 @@ export const en: Dict = {
     when: (cond: string) => `When ${cond}`,
     whenNot: (cond: string) => `When not ${cond}`,
     otherwise: "Otherwise",
+    waitsHere: "The flow waits for this before going on",
     noneOfThese: "When none of these",
     tryFirst: "First",
     onFailure: "If it fails",
