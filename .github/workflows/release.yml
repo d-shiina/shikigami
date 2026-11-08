@@ -20,6 +20,7 @@ on:
       - apps/studio/src-tauri/Cargo.toml
       - apps/studio/src-tauri/tauri.conf.json
       - apps/studio/src-tauri/tauri.release.conf.json
+      - apps/studio/src-tauri/windows/**
       - scripts/release-notes.mjs
 
 permissions:
