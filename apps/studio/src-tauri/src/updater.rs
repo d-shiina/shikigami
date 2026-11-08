@@ -379,7 +379,7 @@ mod tests {
         write(&dir.path().join(CLI_EXE), "v1");
         park(&dir.path().join(CLI_EXE), "0.1.0")?;
         assert!(!dir.path().join(CLI_EXE).exists());
-        assert_eq!(read(&dir.path().join("shikigami-0.1.0.exe.old")), "v1");
+        assert_eq!(read(&dir.path().join("spellsheet-0.1.0.exe.old")), "v1");
         Ok(())
     }
 
@@ -395,20 +395,20 @@ mod tests {
     fn startup_after_a_finished_update_deletes_old_copies() -> io::Result<()> {
         let dir = tempdir();
         write(&dir.path().join(CLI_EXE), "v2");
-        write(&dir.path().join("shikigami-0.1.0.exe.old"), "v1");
+        write(&dir.path().join("spellsheet-0.1.0.exe.old"), "v1");
         restore_parked_exes(dir.path(), "0.2.0");
         assert_eq!(read(&dir.path().join(CLI_EXE)), "v2");
-        assert!(!dir.path().join("shikigami-0.1.0.exe.old").exists());
+        assert!(!dir.path().join("spellsheet-0.1.0.exe.old").exists());
         Ok(())
     }
 
     #[test]
     fn startup_after_a_cancelled_update_restores_the_cli() -> io::Result<()> {
         let dir = tempdir();
-        write(&dir.path().join("shikigami-0.1.0.exe.old"), "v1");
+        write(&dir.path().join("spellsheet-0.1.0.exe.old"), "v1");
         restore_parked_exes(dir.path(), "0.1.0");
         assert_eq!(read(&dir.path().join(CLI_EXE)), "v1");
-        assert!(!dir.path().join("shikigami-0.1.0.exe.old").exists());
+        assert!(!dir.path().join("spellsheet-0.1.0.exe.old").exists());
         Ok(())
     }
 
