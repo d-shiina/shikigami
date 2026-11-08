@@ -8,10 +8,24 @@ import { t } from "../lib/i18n";
 import { missingInputs } from "../lib/runInputs";
 import { FieldRow } from "../runner/FieldRow";
 import { runnerApi } from "../runner/api";
-import { collect, initialValues, type Values } from "../runner/form";
+import { collect, type Field, initialValues, type Values } from "../runner/form";
 
 /** What was entered last, by flow, for this session (never secrets). */
 const remembered = new Map<string, Values>();
+
+/** What was remembered, as the fields show it: a choice by its value, since the flow's choices may have changed. */
+function restore(fields: Field[], saved: Values | undefined): Values {
+  const out: Values = {};
+  for (const f of fields) {
+    const v = saved?.[f.name];
+    if (v === undefined) continue;
+    if (f.kind === "select") {
+      const at = (f.choices ?? []).findIndex((c) => JSON.stringify(c) === v);
+      if (at >= 0) out[f.name] = String(at);
+    } else out[f.name] = v;
+  }
+  return out;
+}
 
 export function RunInputsDialog() {
   const ask = useStudio((s) => s.askInputs);
@@ -27,7 +41,7 @@ function Ask() {
   const cancel = useStudio((s) => s.cancelInputs);
   const setVariable = useStudio((s) => s.setVariable);
   const fields = useMemo(() => missingInputs(flow, ask.options.startAt ? ask.options.startValues : undefined), [flow, ask]);
-  const [values, setValues] = useState<Values>(() => ({ ...initialValues(fields), ...remembered.get(flow.id) }));
+  const [values, setValues] = useState<Values>(() => ({ ...initialValues(fields), ...restore(fields, remembered.get(flow.id)) }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [keep, setKeep] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -43,7 +57,7 @@ function Ask() {
     const result = collect(fields, values);
     setErrors(result.errors);
     if (Object.keys(result.errors).length > 0) return;
-    remembered.set(flow.id, Object.fromEntries(fields.filter((f) => f.kind !== "password").map((f) => [f.name, values[f.name] ?? f.initial])));
+    remembered.set(flow.id, Object.fromEntries(fields.filter((f) => f.kind !== "password").map((f) => [f.name, f.kind === "select" ? JSON.stringify(result.inputs[f.name]) : (values[f.name] ?? f.initial)])));
     setBusy(true);
     if (keep) {
       for (const f of fields) {
