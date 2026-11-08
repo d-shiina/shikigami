@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, CASE_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
+import { ancestorsOf, CASE_H, decideWidth, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -373,5 +373,18 @@ describe("layoutFlow", () => {
     const named = frame([{ id: "r", type: "control.repeat", name: "受注データを一件ずつ取り込んで登録する", params: { count: 3 }, blocks: { body: [log("a")] } }], "r");
     expect(named.width).toBeGreaterThan(short.width);
     expect(named.width).toBeLessThanOrEqual(520);
+  });
+
+  it("sizes a loop's decision to its question, and joins its side lines at its points", () => {
+    expect(decideWidth("まだ回数が残っている？")).toBeGreaterThan(decideWidth("ok？"));
+    expect(decideWidth("x".repeat(200))).toBeLessThan(NODE_W);
+    const layout = layoutFlow([{ id: "r", type: "control.repeat", params: { count: 3 }, blocks: { body: [log("a")] } }], defs);
+    const decide = layout.nodes.find((n) => n.id === "join:r:decide")!;
+    const width = (decide.data as { width?: number }).width!;
+    expect(width).toBe(decideWidth("まだ回数が残っている？"));
+    const head = layout.nodes.find((n) => n.id === "r")!;
+    const lineX = head.position.x + (head.data as StepNodeData).head!.lineX;
+    expect(decide.position.x + width / 2).toBe(lineX);
+    for (const e of layout.edges.filter((e) => e.fromDecide || e.intoDecide)) expect(e.half).toBe(width / 2);
   });
 });

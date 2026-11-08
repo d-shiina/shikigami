@@ -29,7 +29,7 @@ import {
   type FrameKind,
   HEAD_H,
   DECIDE_H,
-  DECIDE_W,
+  DECIDE_POINT,
   ancestorsOf,
   JOIN_SIZE,
   type JoinNodeData,
@@ -257,6 +257,7 @@ type BlockEdgeData = {
   railX?: number;
   /** A wait's line back: the answer it takes, on the line beside its decision. */
   answer?: string;
+  half?: number;
   /** From the head of a frame into one of its columns. */
   split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
@@ -315,7 +316,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
     // A loop's line back, up the left of its frame: from the end of its body
     // into the side of its decision, or (a wait) from the side of its decision
     // back into the line that enters its block.
-    const half = DECIDE_W / 2;
+    const half = edge.half ?? 0;
     const start = edge.fromDecide
       ? `M ${sourceX - half} ${sourceY - DECIDE_H / 2} H ${detourX + r} Q ${detourX} ${sourceY - DECIDE_H / 2} ${detourX} ${sourceY - DECIDE_H / 2 - r}`
       : `M ${sourceX} ${sourceY} V ${sourceY + 14 - r} Q ${sourceX} ${sourceY + 14} ${sourceX - r} ${sourceY + 14} H ${detourX + r} Q ${detourX} ${sourceY + 14} ${detourX} ${sourceY + 14 - r}`;
@@ -347,7 +348,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
   if (edge.railX !== undefined) {
     // A loop's "いいえ": out of the right of its decision, down the right of
     // its frame, and into where the frame is left, on its bottom edge.
-    const x0 = sourceX + DECIDE_W / 2;
+    const x0 = sourceX + (edge.half ?? 0);
     const y0 = sourceY - DECIDE_H / 2;
     const rail = edge.railX;
     const lowY = targetY - 14;
@@ -953,14 +954,23 @@ function CaseTab({ data }: { data: StepNodeProps["data"] }) {
 function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
   if (data.question) {
     // A loop's decision: where it asks whether to go round again.
+    // A hexagon, the shape of a yes/no question, with the question inside;
+    // its lines go in and out at its points.
+    const w = data.width ?? 160;
+    const h = DECIDE_H;
+    const p = DECIDE_POINT;
     return (
-      <div
-        style={{ width: DECIDE_W, height: DECIDE_H }}
-        title={data.question}
-        className="flex items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-sheet px-3 text-[11.5px] text-ink"
-      >
-        <span className="h-[8px] w-[8px] shrink-0 rotate-45 border-[1.5px] border-slate-500" aria-hidden="true" />
-        <span className="truncate">{data.question}</span>
+      <div style={{ width: w, height: h }} title={data.question} className="relative flex items-center justify-center px-[22px]">
+        <svg className="absolute inset-0 overflow-visible" width={w} height={h} aria-hidden="true">
+          <polygon
+            points={`0.75,${h / 2} ${p},0.75 ${w - p},0.75 ${w - 0.75},${h / 2} ${w - p},${h - 0.75} ${p},${h - 0.75}`}
+            fill="var(--color-sheet)"
+            stroke="var(--color-slate-400)"
+            strokeWidth={1.25}
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="relative truncate text-[12px] font-medium text-ink">{data.question}</span>
         <FlowHandles />
       </div>
     );
@@ -1493,6 +1503,7 @@ export function FlowCanvas() {
         intoDecide: e.intoDecide,
         railX: e.railX,
         answer: e.answer,
+        half: e.half,
         split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,

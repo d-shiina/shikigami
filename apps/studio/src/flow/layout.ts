@@ -58,15 +58,20 @@ export const JOIN_SIZE = 8;
  */
 export const LOOP_LINE_X = 14;
 /**
- * Where a loop decides whether to go round again: a small "◇ 次の 1 件がある？"
- * on its line. A loop that checks first (for each, repeat, while) has it at
+ * Where a loop decides whether to go round again: a hexagon on its line with
+ * the question inside ("次の 1 件がある？"), as wide as the question. A loop that checks first (for each, repeat, while) has it at
  * the top of its body: "はい" runs the body, whose line comes back into it,
  * and "いいえ" runs down the right of the frame (LOOP_LINE_X in) and out.
  * A wait checks after its check block, so it has it at the bottom: "いいえ"
  * goes back up the left to the top of the block, "はい" goes on out.
  */
-export const DECIDE_W = 220;
 export const DECIDE_H = 28;
+/** The pointed ends of a decision: how far each runs in from its side. */
+export const DECIDE_POINT = 12;
+/** How wide a decision is: as wide as its question, with room for its pointed ends. */
+export function decideWidth(question: string): number {
+  return Math.ceil(Math.min(Math.max(textWidth(question, 12) + 2 * DECIDE_POINT + 2 * 10, 96), NODE_W - 20));
+}
 /** Between the head (or the end of a wait's block) and the decision. */
 const DECIDE_GAP = 28;
 /** Under a loop's body: its line back turns, then (a little lower, apart from it) the "いいえ" line into the frame's edge. */
@@ -132,8 +137,12 @@ export type JoinNodeData = {
   shown: boolean;
   /** Not marked, but a single line passes through it (across the frame's edge). */
   through?: boolean;
-  /** A loop's decision (see DECIDE_W): what it asks. */
+  /** A loop's decision (see DECIDE_H): what it asks. */
   question?: string;
+  /** A loop's decision: how wide it is (see decideWidth). */
+  width?: number;
+  /** A loop's decision that comes after its block (a wait's), not before. */
+  after?: boolean;
 };
 
 export type SlotNodeData = {
@@ -171,6 +180,8 @@ export type LayoutEdge = {
   railX?: number;
   /** A wait's line back: the answer it takes ("いいえ"), on the line beside its decision; its label says what happens. */
   answer?: string;
+  /** For a line into or out of the side of a loop's decision: half its width. */
+  half?: number;
   /** From the head of a frame down into one of its columns: turns just under the head. */
   split?: boolean;
   /** Not drawn: from a loop's head to where its line leaves, so a run's trail carries on past the loop. */
@@ -382,7 +393,7 @@ class Builder {
     label?: string,
     hidden?: boolean,
     split?: boolean,
-    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer">,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer" | "half">,
   ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
@@ -559,7 +570,7 @@ class Builder {
     return { entry: id, exits: [join] };
   }
 
-  /** A loop's body, its decision (see DECIDE_W), its line back and its way out on the frame's bottom edge. */
+  /** A loop's body, its decision (see DECIDE_H), its line back and its way out on the frame's bottom edge. */
   private loop(
     step: Step,
     id: string,
@@ -576,6 +587,8 @@ class Builder {
     const decide = `join:${id}:decide`;
     const asks = loopQuestion(step);
     const { yes, no } = asks;
+    const width = decideWidth(asks.question);
+    const half = width / 2;
     const after = CHECKS_AFTER.has(step.type);
     const bodyY = after ? y + headH + GAP_Y : y + headH + DECIDE_GAP + DECIDE_H + GAP_Y;
     const decideY = after ? bodyY + size.h + DECIDE_GAP : y + headH + DECIDE_GAP;
@@ -583,8 +596,8 @@ class Builder {
     this.nodes.push({
       id: decide,
       type: "join",
-      position: { x: cx - DECIDE_W / 2, y: decideY },
-      data: { kind: "join", parentId: id, shown: false, question: asks.question },
+      position: { x: cx - half, y: decideY },
+      data: { kind: "join", parentId: id, shown: false, question: asks.question, width, after },
     });
     this.depth += 1;
     const placed = this.list(lane.steps, bodyY, cx - size.w / 2, size.w, id, lane.name, lane.label, lane.start, lane.tail);
@@ -594,15 +607,15 @@ class Builder {
       // A wait: its block, then the decision; "いいえ" back up to the block, "はい" on out.
       this.edge(id, placed.entry, undefined, undefined, true);
       for (const e of placed.exits) this.edge(e, decide);
-      this.edge(decide, placed.entry, loopBackLabel(step), undefined, undefined, { ...back, fromDecide: true, answer: no });
+      this.edge(decide, placed.entry, loopBackLabel(step), undefined, undefined, { ...back, fromDecide: true, answer: no, half });
       this.edge(decide, join, yes);
     } else {
       // Decide first: "はい" into the body, its end back into the decision, "いいえ" down the right and out.
       this.edge(id, decide);
       this.edge(decide, placed.entry, yes, undefined, true);
       // An empty body has nothing to run again.
-      if (lane.steps.length > 0) for (const e of placed.exits) this.edge(e, decide, loopBackLabel(step), undefined, undefined, { ...back, intoDecide: true });
-      this.edge(decide, join, no, undefined, undefined, { fromDecide: true, railX: right - LOOP_LINE_X });
+      if (lane.steps.length > 0) for (const e of placed.exits) this.edge(e, decide, loopBackLabel(step), undefined, undefined, { ...back, intoDecide: true, half });
+      this.edge(decide, join, no, undefined, undefined, { fromDecide: true, railX: right - LOOP_LINE_X, half });
     }
     this.exitLabels.set(join, loopExitLabel(step));
     return { entry: id, exits: [join] };
