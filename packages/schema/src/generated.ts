@@ -2099,6 +2099,19 @@ export type RunEventEnvelope1 =
       message: string;
     }
   | {
+      type: "loopRound";
+      stepId: StepId;
+      round: number;
+      total?: number | null;
+    }
+  | {
+      type: "loopEnded";
+      stepId: StepId;
+      rounds: number;
+      total?: number | null;
+      leftEarly?: boolean;
+    }
+  | {
       type: "screenCaptured";
       stepId: StepId;
       file: string;

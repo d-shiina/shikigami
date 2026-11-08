@@ -21,7 +21,7 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { ChevronDown, ChevronRight, Plus, StickyNote } from "lucide-react";
+import { ChevronDown, ChevronRight, CornerDownLeft, Plus, StickyNote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useStudio } from "../context";
@@ -31,6 +31,7 @@ import {
   HEAD_H,
   DECIDE_H,
   DECIDE_POINT,
+  FOOT_H,
   ancestorsOf,
   frameAt,
   JOIN_SIZE,
@@ -50,7 +51,7 @@ import {
   type TerminalNodeData,
   WRITE_ROOM,
 } from "../flow/layout";
-import { headSummary } from "../lib/keywords";
+import { headSummary, type LoopOutcome, loopEndLabel, loopRoundsText } from "../lib/keywords";
 import { listToText } from "../lib/listText";
 import { nodeIcon } from "../lib/nodeIcons";
 import { isUnset, PERSON_CODES, todosByStep } from "../lib/todos";
@@ -89,7 +90,7 @@ import { openImageValue } from "./ImageViewer";
 import { previewSource } from "../lib/preview";
 import { makeGlider } from "../lib/glide";
 import { keepSame } from "../lib/keepSame";
-import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
+import { callKey, diveChain, isActive, loopKey, type LoopRun, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { type Box, type Point, roundedPath, routeLink } from "../lib/linkRoute";
 import { CATEGORY_COLOR } from "./CommandPalette";
@@ -286,6 +287,8 @@ type BlockEdgeData = {
   intoDecide?: boolean;
   /** A loop's "いいえ": the x it runs down at. */
   railX?: number;
+  /** A loop's "いいえ": when it leaves ("すべて終わったら"), beside the line into the foot. */
+  exit?: string;
   /** A wait's line back: the answer it takes, on the line beside its decision. */
   answer?: string;
   half?: number;
@@ -428,7 +431,7 @@ function FrameLight({ layout }: { layout: Layout }) {
   );
 }
 
-function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
+function BlockEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
   const r = 4;
@@ -513,7 +516,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
   }
   if (edge.railX !== undefined) {
     // A loop's "いいえ": out of the right of its decision, down the right of
-    // its frame, and into where the frame is left, on its bottom edge.
+    // its frame, and into its foot (「繰り返し終了」), where the line goes on.
     const x0 = sourceX + (edge.half ?? 0);
     const y0 = sourceY - DECIDE_H / 2;
     const rail = edge.railX;
@@ -526,17 +529,19 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
     return (
       <>
         <BaseEdge id={id} path={path} style={style} />
-        {label && (
-          // On the line, like the "はい" going down: the two answers read alike.
-          <EdgeLabelRenderer>
+        <EdgeLabelRenderer>
+          {/* The answer on the line just where it leaves the decision, as the "はい" going down. */}
+          {label && <AnswerLabel x={x0 + 8} y={y0} text={label} from="left" />}
+          {/* When it leaves, beside the line where it turns into the foot (as 「次の 1 件へ」 on the line back). */}
+          {edge.exit && (
             <span
-              style={{ transform: `translate(${x0 + 12}px, ${y0 - 9}px)` }}
-              className="pointer-events-none absolute top-0 left-0 rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
+              style={{ transform: `translate(${rail - 8}px, ${lowY - 20}px) translateX(-100%)` }}
+              className="pointer-events-none absolute top-0 left-0 text-[11px] leading-4 whitespace-nowrap text-slate-500"
             >
-              {label}
+              {edge.exit}
             </span>
-          </EdgeLabelRenderer>
-        )}
+          )}
+        </EdgeLabelRenderer>
       </>
     );
   }
@@ -550,11 +555,18 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
   const offset = centerY === undefined ? 20 : Math.max(0, Math.min(12, centerY - sourceY - 1));
   const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, centerY, offset, borderRadius: 4 });
   const straight = Math.abs(sourceX - targetX) <= 1;
+  // An answer out of a decision ("はい", "いいえ"): on the line just after it leaves, not down by the next step.
+  const answer = label && source.endsWith(":decide");
   return (
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
       <EdgeLabelRenderer>
-        {label ? (
+        {answer ? (
+          <>
+            <AnswerLabel x={targetX} y={(straight || centerY === undefined ? sourceY : centerY) + 18} text={label} />
+            <InsertButton edgeId={id} data={edge} x={targetX} y={straight ? (sourceY + targetY) / 2 + 6 : targetY - 8} />
+          </>
+        ) : label ? (
           // The "+" sits after the label; a spacer as wide on the other side keeps the label centred on the line.
           <div
             style={{ transform: `translate(-50%, -100%) translate(${targetX}px, ${targetY - 10}px)` }}
@@ -574,6 +586,23 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
         )}
       </EdgeLabelRenderer>
     </>
+  );
+}
+
+/**
+ * The answer a line out of a decision takes ("はい", "いいえ"), on the line
+ * just where it leaves the decision, the way a flowchart labels it. Above
+ * every line, a run's coloured one too, so the line never crosses it.
+ */
+function AnswerLabel({ x, y, text, from = "center" }: { x: number; y: number; text: React.ReactNode; from?: "center" | "left" }) {
+  // Centred on the point, or (on a line going right) starting at it; above the lines, a run's too (see index.css).
+  return (
+    <span
+      style={{ transform: `translate(${x}px, ${y}px) translate(${from === "center" ? "-50%" : "0"}, -50%)` }}
+      className="pointer-events-none absolute top-0 left-0 flow-answer rounded-md border px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
+    >
+      {text}
+    </span>
   );
 }
 
@@ -970,8 +999,13 @@ function StepNode({ data }: StepNodeProps) {
       )}
       <FlowHandles x={head?.lineX} />
       {/* A break, continue or fail: no line goes on from it, so say where the flow goes instead. */}
-      {!head && TERMINAL_NOTE[data.step.type] && !data.step.disabled && !data.runState && (
-        <span className="pointer-events-none absolute top-full left-1/2 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-500">
+      {/* Still there once a run went through it, in the colour of the way it took. */}
+      {!head && TERMINAL_NOTE[data.step.type] && !data.step.disabled && (!data.runState || data.runState === "succeeded") && (
+        <span
+          className={`pointer-events-none absolute top-full left-1/2 mt-1.5 -translate-x-1/2 text-[11px] whitespace-nowrap ${
+            data.runState ? "font-medium text-moegi-600" : "text-slate-500"
+          }`}
+        >
           {TERMINAL_NOTE[data.step.type]!()}
         </span>
       )}
@@ -1144,7 +1178,8 @@ function CaseTab({ data }: { data: StepNodeProps["data"] }) {
 }
 
 /** Where the columns of a frame meet again, on its bottom edge (a dot). A single column's line passes through; a loop's only lets its line out. */
-function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
+function JoinNode({ data }: NodeProps<Node<JoinData>>) {
+  if (data.foot) return <LoopFoot data={data} />;
   if (data.question) {
     // A loop's decision: where it asks whether to go round again.
     // A hexagon, the shape of a yes/no question, with the question inside;
@@ -1173,6 +1208,66 @@ function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
       {/* A single line across the frame's edge: drawn through, so it does not break off there. */}
       {data.through && <span className="absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 bg-[var(--flow-edge)]" />}
       <FlowHandles />
+    </div>
+  );
+}
+
+/** A join with what the run did there: a loop's foot shows how far the loop got. */
+type JoinData = JoinNodeData & {
+  rounds?: { run: LoopRun | undefined; state: StepRunState | undefined; stopped: boolean };
+  /** A loop's foot: its loop is picked (the whole frame is). */
+  selected?: boolean;
+  /** A loop's foot: the run's line through it. */
+  trail?: LineTrail;
+};
+
+/** How a loop's rounds went: from its last round and how its step ended. */
+function loopOutcome(run: LoopRun, state: StepRunState | undefined, stopped: boolean): LoopOutcome {
+  if (run.ended) return run.leftEarly ? "left" : "done";
+  if (state === "failed") return "failed";
+  return stopped ? "stopped" : "running";
+}
+
+const OUTCOME_STYLE: Record<LoopOutcome, string> = {
+  running: "text-accent-600",
+  done: "text-moegi-600",
+  left: "text-moegi-600",
+  failed: "text-shu-600",
+  stopped: "text-slate-500",
+};
+
+/**
+ * A loop's foot (see FOOT_H): the band across the bottom of its frame that
+ * says 「繰り返し終了」. Its "いいえ" comes down into it, and so does each
+ * break inside the loop (pointing at one marks the foot); the line passes
+ * through it on to the next step. A run leaves how far the loop got on it.
+ */
+function LoopFoot({ data }: { data: JoinData }) {
+  const foot = data.foot!;
+  const pointed = useFocus();
+  const marked = pointed !== null && foot.breaks.includes(pointed);
+  const rounds = data.rounds;
+  const how = rounds?.run ? loopOutcome(rounds.run, rounds.state, rounds.stopped) : null;
+  return (
+    <div
+      style={{ width: foot.width, height: FOOT_H }}
+      className={`flow-foot relative flex items-center gap-1.5 rounded-b-lg border px-3 text-[12px] transition-colors ${
+        data.selected ? "flow-foot-selected" : marked ? "flow-foot-marked" : ""
+      }`}
+    >
+      <CornerDownLeft size={13} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+      <span className="font-medium whitespace-nowrap text-slate-600">{loopEndLabel()}</span>
+      {/* The line runs through the band on to the next step. */}
+      <span
+        style={{ left: foot.lineX - 1, ...(data.trail ? { background: TRAIL_STROKE[data.trail], width: 2.5 } : {}) }}
+        className="flow-foot-line absolute inset-y-0 w-[1.5px] -translate-x-1/2"
+      />
+      {rounds?.run && how && (
+        <span className={`ml-auto font-medium whitespace-nowrap tabular-nums ${OUTCOME_STYLE[how]}`}>
+          {loopRoundsText(foot.type, rounds.run.round, rounds.run.total, how)}
+        </span>
+      )}
+      <FlowHandles x={foot.lineX} />
     </div>
   );
 }
@@ -1687,6 +1782,7 @@ export function FlowCanvas() {
   const todoList = useTodos();
   const todos = useMemo(() => (inside ? new Map<string, string[]>() : todosByStep(todoList)), [todoList, inside]);
   const states = inside ? (run?.inner[callKey(path)] ?? NO_STATES) : (run?.steps ?? NO_STATES);
+  const isActiveRun = isActive(run);
   // What the flow takes in (shown on its start) and gives back (on its end).
   const terminalVars = useMemo(() => {
     const changes = run && !inside ? run.changes : [];
@@ -1736,7 +1832,16 @@ export function FlowCanvas() {
     zIndex: -1,
   }));
   const nodes: Node[] = layout.nodes.map((n) => {
-    if (n.data.kind === "join") return { ...n, draggable: false, selectable: false, focusable: false };
+    if (n.data.kind === "join") {
+      // A loop's foot shows how far the loop got in the run.
+      const foot = !n.data.foot
+        ? {}
+        : {
+            selected: !inside && picked.has(n.data.parentId),
+            ...(run ? { rounds: { run: run.loops?.[loopKey(path, n.data.parentId)], state: states[n.data.parentId], stopped: !isActiveRun } } : {}),
+          };
+      return { ...n, data: { ...n.data, ...foot } satisfies JoinData, draggable: false, selectable: false, focusable: false };
+    }
     if (n.data.kind === "terminal") {
       const data: TerminalData = { ...n.data, vars: n.data.end ? terminalVars.outputs : terminalVars.inputs };
       // Placed by its top centre: it is as wide as what it says.
@@ -1834,10 +1939,26 @@ export function FlowCanvas() {
     return out;
   }, [states, layout.nodes]);
   const taken = trailLines(layout.edges, trailStates, tails, continues);
+  // A loop a break ended never answered "いいえ": it came out through the break.
+  if (run) {
+    for (const e of layout.edges) {
+      if (e.railX === undefined || !e.owner) continue;
+      const loop = run.loops?.[loopKey(path, e.owner)];
+      if (loop?.ended && loop.leftEarly) taken.delete(e.id);
+    }
+  }
   // The line runs on through a hidden 「＋ ノード追加」 at a block's end, in the colour of the way out of it.
   for (const node of nodes) {
     const data = node.data as TailData;
     if (data.kind !== "slot" || !data.tail) continue;
+    const out = layout.edges.find((e) => e.source === node.id);
+    const trail = out && taken.get(out.id);
+    if (trail) node.data = { ...data, trail };
+  }
+  // A loop's foot: the line through it in the colour of the way on from it.
+  for (const node of nodes) {
+    const data = node.data as JoinData;
+    if (data.kind !== "join" || !data.foot) continue;
     const out = layout.edges.find((e) => e.source === node.id);
     const trail = out && taken.get(out.id);
     if (trail) node.data = { ...data, trail };
@@ -1856,6 +1977,7 @@ export function FlowCanvas() {
         fromDecide: e.fromDecide,
         intoDecide: e.intoDecide,
         railX: e.railX,
+        exit: e.exit,
         answer: e.answer,
         half: e.half,
         failure: e.failure,

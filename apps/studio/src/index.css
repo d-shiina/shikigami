@@ -258,6 +258,31 @@ textarea,
 .flow-frame-loop {
   background-color: color-mix(in srgb, var(--color-slate-100) 55%, transparent);
 }
+/* Labels on the lines (はい／いいえ, 「失敗したとき」, …) sit over every line, a run's coloured ones too (zIndex 1). */
+.react-flow__edgelabel-renderer {
+  z-index: 2;
+}
+/* The answer a line takes out of a decision (はい／いいえ): in the decision's yellow, so it reads as the hexagon's answer. */
+.flow-answer {
+  border-color: var(--flow-decide-line);
+  background-color: var(--flow-decide-fill);
+}
+/* A loop's foot: the bottom edge of its frame, a band like its head, that says where the loop ends. */
+.flow-foot {
+  border-color: var(--color-slate-300);
+  background-color: var(--color-sheet);
+}
+.flow-foot-line {
+  background-color: var(--flow-edge);
+}
+/* Pointing at a break inside the loop: this is where it goes. */
+.flow-foot.flow-foot-marked {
+  border-color: var(--color-slate-500);
+  background-color: color-mix(in srgb, var(--color-slate-100) 80%, var(--color-sheet));
+}
+.flow-foot.flow-foot-selected {
+  border-color: var(--color-primary);
+}
 /* A call holds a flow of its own: two sheets peek out from under it. */
 .flow-call-stack {
   box-shadow:

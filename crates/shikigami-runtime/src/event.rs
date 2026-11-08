@@ -162,6 +162,27 @@ pub enum RunEvent {
     /// A step waits for a person (e.g. to log in or approve MFA on the
     /// screen). Studio shows `message` until the step finishes.
     HumanActionRequired { step_id: StepId, message: String },
+    /// A loop (`forEach`, `repeat`, `while`) starts a round: `round` counts
+    /// from 1, `total` is how many it will run at most when known (the
+    /// items of a `forEach`, the count of a `repeat`). Studio shows how far
+    /// a loop got on its frame, during the run and after it.
+    LoopRound {
+        step_id: StepId,
+        round: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total: Option<u64>,
+    },
+    /// A loop is done with its rounds (sent before its `stepFinished`,
+    /// not when a round fails): `rounds` it ran, out of `total` when
+    /// known, and whether a `control.break` ended it (`leftEarly`).
+    LoopEnded {
+        step_id: StepId,
+        rounds: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total: Option<u64>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        left_early: bool,
+    },
     /// A picture of the screen a browser or desktop step works on, kept
     /// for the flow's 手順書 (runs given `RunOptions::screens_dir`). Taken
     /// the first time each step runs: before it acts, or after it for

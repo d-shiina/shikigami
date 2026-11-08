@@ -193,6 +193,23 @@ describe("studio store", () => {
     expect(store.getState().human).toBeNull();
   });
 
+  it("keeps how far each loop got, in the open flow and in a called one", () => {
+    const store = createStudioStore(fakeApi({}));
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 1, type: "loopRound", stepId: "each", round: 3, total: 12 });
+    expect(store.getState().run?.loops["|each"]).toEqual({ round: 3, total: 12, ended: false, leftEarly: false });
+    store.getState().onRunEvent({ ...base, seq: 2, type: "loopEnded", stepId: "each", rounds: 7, total: 12, leftEarly: true });
+    store.getState().onRunEvent({ ...base, seq: 3, callPath: ["call"], type: "loopRound", stepId: "w", round: 2 });
+    expect(store.getState().run?.loops).toEqual({
+      "|each": { round: 7, total: 12, ended: true, leftEarly: true },
+      "call|w": { round: 2, total: null, ended: false, leftEarly: false },
+    });
+    // Started again (the next pass of a loop around it): the last pass's count does not carry over.
+    store.getState().onRunEvent({ ...base, seq: 4, type: "stepStarted", stepId: "each", stepType: "control.forEach", attempt: 1 });
+    expect(store.getState().run?.loops["|each"]).toBeUndefined();
+  });
+
   it("shows a stop in progress and ends a run whose last event never came", async () => {
     const stopRun = vi.fn(async () => {});
     const store = createStudioStore(fakeApi({ stopRun }));
