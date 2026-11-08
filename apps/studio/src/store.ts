@@ -2,6 +2,7 @@
 // store only mirrors what Core returns (flow, validation, undo state).
 import { unsetParams } from "./lib/nodeRows";
 import { valuesBefore } from "./lib/startAt";
+import { missingInputs } from "./lib/runInputs";
 import type {
   ApprovalRequest,
   DebugCommand,
@@ -78,6 +79,17 @@ export type Place = "library" | "flows" | "review" | "runs" | "secrets" | "exten
 
 /** Tabs of the panel under the chart: what happened, and what is wrong. */
 export type BottomTab = "log" | "issues" | "tests";
+
+/** How Studio starts a run (`startRun`). */
+export interface RunOptions {
+  /** Pause before the first step. */
+  step?: boolean;
+  stopAt?: string;
+  startAt?: string;
+  startValues?: Record<string, unknown>;
+  /** Values for the flow's inputs; leaving one out uses its default. */
+  inputs?: Record<string, unknown>;
+}
 
 export type StepRunState = "running" | "succeeded" | "failed" | "skipped" | "paused";
 
@@ -320,6 +332,8 @@ export type StudioState = {
   editing: string | null;
   /** 「ここまで実行」: the run pauses before this node, runs it, and pauses again after. */
   trying: string | null;
+  /** A run waiting for values of inputs with no default (「実行に必要な入力」). */
+  askInputs: { flowId: string; options: RunOptions } | null;
   /** The last 「ノードの単体実行」 (only that node ran), until another node is run alone. */
   stepTest: StepTest | null;
   /** Results of nodes run alone, by flow and variable: the next node run alone reads them. */
@@ -454,8 +468,15 @@ export type StudioState = {
   /** Moves neighbouring steps into a new flow; returns true when done. */
   extract(stepIds: string[], name: string): Promise<boolean>;
   onExternalChange(flowId: string): Promise<void>;
-  /** `step`: pause before the first step. */
-  startRun(options?: { step?: boolean; stopAt?: string; startAt?: string; startValues?: Record<string, unknown> }): Promise<void>;
+  /**
+   * `step`: pause before the first step. Without `inputs`, an input with no
+   * default is asked for first (`askInputs`) instead of failing the run.
+   */
+  startRun(options?: RunOptions): Promise<void>;
+  /** Runs what `askInputs` held with the values the person entered. */
+  answerInputs(inputs: Record<string, unknown>): Promise<void>;
+  /** Closes the ask without running. */
+  cancelInputs(): void;
   openEditor(stepId: string): void;
   closeEditor(): void;
   /** 「ここまで実行」: runs the flow up to and through `stepId`, then pauses, so its result can be looked at. */
@@ -984,6 +1005,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       reveal: null,
       editing: null,
       trying: null,
+      askInputs: null,
       stepTest: null,
       tested: {},
       followRun: true,
@@ -1600,7 +1622,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         if (get().run && isActive(get().run)) return;
         set({ trying: stepId });
         await get().startRun({ stopAt: stepId });
-        if (!get().run) set({ trying: null });
+        if (!get().run && !get().askInputs) set({ trying: null });
       },
 
       async runFrom(stepId) {
@@ -1612,9 +1634,14 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       async startRun(options) {
         const flow = get().flow;
         if (!flow) return;
+        if (!options?.inputs && missingInputs(flow, options?.startAt ? options.startValues : undefined).length > 0) {
+          set({ askInputs: { flowId: flow.id, options: options ?? {} } });
+          return;
+        }
+        set({ askInputs: null });
         try {
           const breakpoints = [...new Set([...runBreakpoints(get()), ...(options?.stopAt ? [options.stopAt] : [])])];
-          const runId = await api.run(flow.id, undefined, {
+          const runId = await api.run(flow.id, options?.inputs, {
             breakpoints,
             step: options?.step ?? false,
             ...(options?.startAt ? { startAt: options.startAt, startValues: options.startValues ?? {} } : {}),
@@ -1636,6 +1663,16 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         }
       },
 
+
+      async answerInputs(inputs) {
+        const ask = get().askInputs;
+        if (!ask || get().flow?.id !== ask.flowId) return set({ askInputs: null, trying: null });
+        await get().startRun({ ...ask.options, inputs });
+      },
+
+      cancelInputs() {
+        set({ askInputs: null, trying: null });
+      },
       async stopRun() {
         const run = get().run;
         if (!run) return;

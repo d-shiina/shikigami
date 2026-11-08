@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { Flow, StepTypeDef } from "@shikigami/schema";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StudioContext } from "../../context";
 import type { Api } from "../../lib/api";
@@ -88,8 +88,10 @@ describe("the node opened full size", () => {
     expect(alone.title).toContain("price");
     // The form is here, not in the right pane.
     expect(screen.getAllByRole("textbox").length).toBeGreaterThan(0);
-    // 「ここまで実行」 runs the flow, the node alone does not.
+    // 「ここまで実行」 runs the flow (asking first for `price`, which has no default), the node alone does not.
     fireEvent.click(screen.getByRole("button", { name: "ここまで実行" }));
+    await waitFor(() => expect(store.getState().askInputs).toMatchObject({ options: { stopAt: "s1" } }));
+    await store.getState().answerInputs({ price: 10 });
     expect(run).toHaveBeenCalled();
     expect(testStep).not.toHaveBeenCalled();
   });

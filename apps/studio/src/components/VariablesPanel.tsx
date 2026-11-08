@@ -8,6 +8,8 @@ import { TYPE_COLOR } from "../lib/nodeRows";
 import { valueText } from "../lib/runValues";
 import { findStep, type VariableChange } from "../store";
 import { VarIcon } from "./VarIcon";
+import { askedAtRun } from "../lib/runInputs";
+import { AskedAtRunTag } from "./AskedAtRunTag";
 
 const TYPES = Object.keys(t.varType) as VarType[];
 const DIRECTIONS = Object.keys(t.direction) as VarDirection[];
@@ -88,6 +90,10 @@ function VariableRow({ variable }: { variable: VariableDef }) {
   const update = (patch: Partial<VariableDef>) => setVariable({ ...variable, ...patch });
   const color = TYPE_COLOR[type] ?? TYPE_COLOR.any;
   const direction = variable.direction ?? "local";
+  // No default yet: say the run asks for it, in the field itself.
+  const asked = askedAtRun(variable) && draft === "";
+  const field = asked ? cell.replace("border-slate-200", "border-accent-500/60 placeholder:text-accent-600") : cell;
+  const placeholder = asked ? t.vars.askedAtRun : t.values.none;
 
   return (
     // One box per variable: what it is on top, its starting value below, both always in view.
@@ -125,21 +131,29 @@ function VariableRow({ variable }: { variable: VariableDef }) {
         <span className="text-[11px] text-slate-500">{t.defaultValue}</span>
         {variable.secret ? (
           // A default would be stored in plain text in the flow.
-          <span className="text-[11px] text-slate-400">—</span>
+          askedAtRun(variable) ? (
+            <span>
+              <AskedAtRunTag />
+            </span>
+          ) : (
+            <span className="text-[11px] text-slate-400">—</span>
+          )
         ) : (
           multiline ? (
             <textarea
-              className={`${cell} max-h-48 resize-y font-mono leading-snug`}
+              className={`${field} max-h-48 resize-y font-mono leading-snug`}
               rows={Math.min(8, draft.split("\n").length)}
-              placeholder={t.values.none}
+              placeholder={placeholder}
+              title={asked ? t.vars.askedAtRunTitle : undefined}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={() => draft !== initial && update({ default: parseDefault(draft, type) })}
             />
           ) : (
             <input
-              className={`${cell} font-mono`}
-              placeholder={t.values.none}
+              className={`${field} font-mono`}
+              placeholder={placeholder}
+              title={asked ? t.vars.askedAtRunTitle : undefined}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={() => draft !== initial && update({ default: parseDefault(draft, type) })}

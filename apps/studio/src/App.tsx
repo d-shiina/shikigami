@@ -25,6 +25,7 @@ import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
 import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
+import { RunInputsDialog } from "./components/RunInputsDialog";
 import { RunsPage } from "./components/RunsPage";
 import { SecretsPage } from "./components/SecretsPage";
 import { ExtensionsPage } from "./components/ExtensionsPage";
@@ -441,6 +442,7 @@ function Shell() {
       <HistoryDialog />
       <AiPasteDialog />
       <SecretAskDialog />
+      <RunInputsDialog />
       <ApprovalDialog />
       <PickRequestCard />
       <ContextMenu />

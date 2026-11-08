@@ -19,6 +19,8 @@ import { VarIcon } from "./VarIcon";
 import { HoverPreview } from "./HoverPreview";
 import { previewSource } from "../lib/preview";
 import { defaultText, parseDefault } from "./VariablesPanel";
+import { askedAtRun } from "../lib/runInputs";
+import { AskedAtRunTag } from "./AskedAtRunTag";
 
 function StepChips({ ids, steps, defs, onOpen }: { ids: string[]; steps: Step[]; defs: ReadonlyMap<string, StepTypeDef>; onOpen: (id: string) => void }) {
   if (ids.length === 0) return <span className="text-slate-300">—</span>;
@@ -58,6 +60,9 @@ const quiet =
   "w-full rounded-md border border-transparent bg-transparent px-1.5 py-0.5 hover:border-slate-200 focus:border-primary focus:bg-sheet focus:outline-none";
 
 /** The starting value, typed in place. Enter or leaving the cell keeps it; Esc puts it back. */
+/** An empty cell the run will ask for: an orange edge and words, like the tag. */
+const ASKED = "border-accent-500/50 bg-accent-500/5 placeholder:font-sans placeholder:font-semibold placeholder:text-accent-600";
+
 export function InitialCell({ variable, onSet }: { variable: VariableDef; onSet: (v: VariableDef) => void }) {
   const type = variable.type ?? "any";
   const initial = defaultText(variable);
@@ -69,6 +74,7 @@ export function InitialCell({ variable, onSet }: { variable: VariableDef; onSet:
     setDraft(initial);
     el.blur();
   };
+  if (variable.secret && askedAtRun(variable)) return <AskedAtRunTag />;
   if (variable.secret)
     return (
       <span className="px-1.5 text-[11px] text-slate-400" title={t.vars.table.secretTitle}>
@@ -82,10 +88,12 @@ export function InitialCell({ variable, onSet }: { variable: VariableDef; onSet:
     }
     if (draft !== initial) onSet({ ...variable, default: parseDefault(draft, type) });
   };
+  // No default yet: the run asks for it, said in the cell itself.
+  const asked = askedAtRun(variable) && draft === "";
   const common = {
     value: draft,
-    placeholder: t.values.none,
-    title: t.vars.table.editInitial,
+    placeholder: asked ? t.vars.askedAtRun : t.values.none,
+    title: asked ? `${t.vars.askedAtRunTitle}\n${t.vars.table.editInitial}` : t.vars.table.editInitial,
     "aria-label": `${variable.name} ${t.vars.table.columns.initial}`,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
     onBlur: commit,
@@ -96,14 +104,14 @@ export function InitialCell({ variable, onSet }: { variable: VariableDef; onSet:
       <textarea
         {...common}
         rows={Math.min(4, draft.split("\n").length)}
-        className={`${quiet} block resize-y font-mono text-[12px] leading-snug text-ink placeholder:text-slate-300`}
+        className={`${asked ? quiet.replace("border-transparent ", "") : quiet} block resize-y font-mono text-[12px] leading-snug text-ink ${asked ? ASKED : "placeholder:text-slate-300"}`}
         onKeyDown={(e) => e.key === "Escape" && cancel(e.currentTarget)}
       />
     );
   return (
     <input
       {...common}
-      className={`${quiet} font-mono text-[12px] text-ink placeholder:text-slate-300`}
+      className={`${asked ? quiet.replace("border-transparent ", "") : quiet} font-mono text-[12px] text-ink ${asked ? ASKED : "placeholder:text-slate-300"}`}
       onKeyDown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
         if (e.key === "Escape") cancel(e.currentTarget);

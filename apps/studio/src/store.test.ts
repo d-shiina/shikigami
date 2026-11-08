@@ -510,6 +510,35 @@ describe("studio store", () => {
     expect(debugRun).toHaveBeenCalledWith("run_1", { action: "setBreakpoints", stepIds: ["s2", "s3"] });
   });
 
+  it("asks for inputs with no default before it runs, and runs with the values entered", async () => {
+    const run = vi.fn(async () => "run_1");
+    const withInputs: Flow = {
+      ...flow(1),
+      variables: [
+        { name: "company", type: "string", direction: "input" },
+        { name: "dept", type: "string", direction: "input", default: "営業" },
+      ],
+    };
+    const store = createStudioStore(fakeApi({ run, getFlow: vi.fn(async () => withInputs) }));
+    await store.getState().open("scn_a");
+    await store.getState().runTo("s1");
+    expect(run).not.toHaveBeenCalled();
+    expect(store.getState().askInputs).toEqual({ flowId: "scn_a", options: { stopAt: "s1" } });
+    expect(store.getState().trying).toBe("s1");
+    await store.getState().answerInputs({ company: "株式会社まるちゃ" });
+    expect(run).toHaveBeenCalledWith("scn_a", { company: "株式会社まるちゃ" }, { breakpoints: ["s1"], step: false });
+    expect(store.getState().askInputs).toBeNull();
+    // 「ここから実行」 starts with the earlier run's values: nothing to ask.
+    run.mockClear();
+    await store.getState().startRun({ startAt: "s1", startValues: { company: "前回" } });
+    expect(run).toHaveBeenCalledTimes(1);
+    // Closing the ask runs nothing.
+    await store.getState().startRun();
+    store.getState().cancelInputs();
+    expect(store.getState().askInputs).toBeNull();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("shows steps inside a call apart from the caller's", () => {
     const store = createStudioStore(fakeApi());
     const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };

@@ -1740,6 +1740,11 @@ export const en: Dict = {
     more: (n: number) => `…${n} more`,
     zero: "(0 items)",
   },
+  runInputs: {
+    title: "Inputs for this run",
+    lead: "These inputs have no default. Enter their values to run",
+    keep: "Save these values as defaults",
+  },
   vars: {
     groups: {
       input: { title: "Inputs", hint: "Passed in when it runs" },
@@ -1768,6 +1773,8 @@ export const en: Dict = {
       openStep: "Open this node on the flow chart",
       empty: "No variables yet",
     },
+    askedAtRun: "Asked at run",
+    askedAtRunTitle: "No default: the value is entered when the flow runs",
     details: "Type, direction and secrecy",
   },
   askCopied: "Copied the request for the AI. Paste it into your AI. Once you have reviewed the fix, resume from here.",
