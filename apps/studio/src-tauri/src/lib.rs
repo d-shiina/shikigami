@@ -1,4 +1,4 @@
-//! SpellSheet Writer backend.
+//! SpellSheet Studio backend.
 //!
 //! Every command is a thin wrapper over `FlowService` (editing) or
 //! `Runtime` (execution). Studio owns no flow logic of its own, so what
@@ -8,6 +8,7 @@ mod agent;
 mod commands;
 mod debug;
 mod extensions;
+mod instance;
 mod manual;
 mod picker;
 mod runner;
@@ -77,20 +78,11 @@ pub fn run() {
         tests: Mutex::new(None),
     };
 
-    let result = tauri::Builder::default()
-        // One SpellSheet per person: starting it again (the Runner shortcut
-        // while Writer is open, or Writer while only Runner is) opens that
-        // window in the one already running.
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if args.iter().any(|a| a == "--tray") {
-                return;
-            }
-            if args.iter().any(|a| a == "--runner") {
-                runner::show_runner_later(app);
-            } else {
-                tray::show_studio_later(app);
-            }
-        }))
+    let mut builder = tauri::Builder::default();
+    if let Some(single) = instance::plugin() {
+        builder = builder.plugin(single);
+    }
+    let result = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .manage(updater::PendingUpdate::default())

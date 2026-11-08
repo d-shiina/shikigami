@@ -9,6 +9,9 @@ import { useStudio } from "../context";
 import { t } from "../lib/i18n";
 import { plainLine } from "../lib/markdown";
 import { Markdown } from "./Markdown";
+import { headline, summarize, purpose } from "../lib/review";
+import { useReviewView } from "../lib/reviewView";
+import { useInbox } from "./ReviewDesk";
 
 const toolLabel = (name: string) => (t.agent.tools as Record<string, string>)[name] ?? name;
 const chatTitle = (c: Chat) => c.title || t.agent.untitled;
@@ -116,6 +119,7 @@ export function AgentPane({ width }: { width: number }) {
         {items.map((item) => (
           <Item key={item.id} item={item} />
         ))}
+        {!busy && items.at(-1)?.role === "ai" && <ReportCard flowId={chat.flowId} />}
         <LoginBox name={info?.name ?? "AI"} />
         <div ref={end} />
       </div>
@@ -177,6 +181,44 @@ export function AgentPane({ width }: { width: number }) {
         </div>
       </div>
     </aside>
+  );
+}
+
+/**
+ * After the AI's turn, when its edits wait for review: the way to the report.
+ * It is not opened by itself, so watching the AI build is never cut short.
+ */
+function ReportCard({ flowId }: { flowId: string | null }) {
+  const item = useInbox().find((i) => i.flowId === flowId && !i.waiting);
+  const place = useStudio((s) => s.place);
+  const openFlow = useStudio((s) => s.open);
+  const setPlace = useStudio((s) => s.setPlace);
+  const shownId = useStudio((s) => s.flow?.id);
+  const view = useReviewView((s) => s.view);
+  const setView = useReviewView((s) => s.setView);
+  if (!item) return null;
+  // Already on the report it would open.
+  if (place === "review" && shownId === item.flowId && view === "report") return null;
+  const oldestFirst = [...item.entries].reverse();
+  const summary = summarize(oldestFirst);
+  return (
+    <div className="rounded-lg border border-brand-500/60 bg-sheet px-3 py-2.5">
+      <div className="text-[12.5px] font-bold">{t.agent.reportReady}</div>
+      <div className="mt-0.5 text-[11.5px] leading-relaxed text-slate-500">
+        {purpose(oldestFirst, summary)} ・ {headline(summary)}
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          setView("report");
+          setPlace("review");
+          if (shownId !== item.flowId) void openFlow(item.flowId);
+        }}
+        className="mt-2 h-7 rounded-lg bg-primary px-3 text-[12px] font-semibold text-on-primary hover:bg-primary-hover"
+      >
+        {t.agent.openReport}
+      </button>
+    </div>
   );
 }
 

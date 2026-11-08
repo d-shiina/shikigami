@@ -584,3 +584,79 @@ export function cropOf(width: number, height: number, marks: Rect[]): Rect {
 /** Whether boxes drawn on a picture of another size may no longer fit. */
 export const maskStale = (mask: Mask | undefined, shot: ManualShot): boolean =>
   !!mask && mask.boxes.length > 0 && (mask.width !== shot.width || mask.height !== shot.height);
+
+/** A container (branch, loop, group) said as a heading on the page. */
+export type Container = Extract<ManualItem, { kind: "branch" | "loop" | "group" }>;
+export type Leaf = Exclude<ManualItem, Container>;
+
+/** One thing on a page, at its depth inside branches and loops. */
+export type PageBlock =
+  | { kind: "item"; item: Leaf; depth: number }
+  /** `continued`: the container started on an earlier page. */
+  | { kind: "label"; item: Container; depth: number; continued: boolean };
+
+/** One sheet of the 手順書. */
+export type Page =
+  | { kind: "cover"; number: number }
+  | {
+      kind: "body";
+      number: number;
+      chapter: Chapter;
+      /** The chapter starts on this page (its heading is drawn). */
+      first: boolean;
+      blocks: PageBlock[];
+      /** For the list of pages: the screen on it, else the chapter. */
+      title: string;
+      shot: ManualShot | null;
+    };
+
+const isContainer = (item: ManualItem): item is Container => item.kind === "branch" || item.kind === "loop" || item.kind === "group";
+
+/**
+ * The 手順書 as sheets: a cover (what the flow does, contents), then each
+ * chapter from a new sheet, and a new sheet for each screen with a picture
+ * so the picture can be large. A branch or loop that goes on over a sheet
+ * is named again at the top of the next one.
+ */
+/** `pictures: false` keeps each chapter on one run of pages (the words-only export). */
+export function pagesOf(doc: ManualDoc, pictures = true): Page[] {
+  const pages: Page[] = [{ kind: "cover", number: 1 }];
+  for (const chapter of doc.chapters) {
+    const flat: { block: PageBlock; open: { item: Container; depth: number }[] }[] = [];
+    const walk = (items: ManualItem[], depth: number, open: { item: Container; depth: number }[]) => {
+      for (const item of items) {
+        if (isContainer(item)) {
+          flat.push({ block: { kind: "label", item, depth, continued: false }, open });
+          walk(item.items, depth + 1, [...open, { item, depth }]);
+        } else {
+          flat.push({ block: { kind: "item", item, depth }, open });
+        }
+      }
+    };
+    walk(chapter.items, 0, []);
+    const start = (first: boolean, open: { item: Container; depth: number }[]) => {
+      const page: Extract<Page, { kind: "body" }> = {
+        kind: "body",
+        number: pages.length + 1,
+        chapter,
+        first,
+        blocks: open.map((o) => ({ kind: "label", item: o.item, depth: o.depth, continued: true })),
+        title: chapter.title,
+        shot: null,
+      };
+      pages.push(page);
+      return page;
+    };
+    let current = start(true, []);
+    for (const { block, open } of flat) {
+      const shot = pictures && block.kind === "item" && block.item.kind === "scene" ? block.item.shot : null;
+      if (shot && current.shot) current = start(false, open);
+      current.blocks.push(block);
+      if (shot && !current.shot && block.kind === "item" && block.item.kind === "scene") {
+        current.shot = shot;
+        current.title = block.item.title ?? chapter.title;
+      }
+    }
+  }
+  return pages;
+}

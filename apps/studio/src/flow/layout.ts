@@ -88,6 +88,13 @@ export function decideWidth(question: string): number {
 const DECIDE_GAP = 28;
 /** Under a loop's body: its line back turns, then (a little lower, apart from it) the "いいえ" line into the frame's edge. */
 const LOOP_BOTTOM = 54;
+/**
+ * A loop's foot: the frame's bottom edge is a band, as tall as FOOT_H, that
+ * says 「繰り返し終了」. Every way out of the loop meets there: its "いいえ"
+ * (all done) and each break inside it. The line passes through it on to
+ * the next step, and a run leaves how many rounds it made on it.
+ */
+export const FOOT_H = 30;
 /** Under a wait's decision: its "はい" line down to the frame's edge. */
 const WAIT_BOTTOM = 60;
 const LOOP_FRAME = { left: READ_ROOM + 12 + 24, right: WRITE_ROOM + 12 + 24 };
@@ -161,6 +168,18 @@ export type JoinNodeData = {
   failTo?: string;
   /** A wait's way out: taken only once the wait itself succeeded, not each time its check ran. */
   met?: boolean;
+  /** A loop's foot (see FOOT_H): the band across its frame's bottom, where every way out of it meets. */
+  foot?: FootData;
+};
+
+/** A loop's foot: as wide as its frame, its line passing through at `lineX`. */
+export type FootData = {
+  width: number;
+  lineX: number;
+  /** The loop's type: what the band calls its end. */
+  type: string;
+  /** Breaks inside it (not inside a loop within it): they come out here too. */
+  breaks: string[];
 };
 
 export type SlotNodeData = {
@@ -209,6 +228,8 @@ export type LayoutEdge = {
   railX?: number;
   /** A wait's line back: the answer it takes ("いいえ"), on the line beside its decision; its label says what happens. */
   answer?: string;
+  /** For a loop's "いいえ": when it leaves ("すべて終わったら"), beside the line where it runs into the foot. */
+  exit?: string;
   /** For a line into or out of the side of a loop's decision: half its width. */
   half?: number;
   /** Into a try's "失敗したとき": its label is shown in the colour of errors, so the way a failure takes stands out. */
@@ -428,7 +449,7 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
     ? own.h + (asksUnderHead(step) ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
     : CHECKS_AFTER.has(step.type)
       ? own.h + GAP_Y + inner + DECIDE_GAP + DECIDE_H + WAIT_BOTTOM
-      : own.h + DECIDE_GAP + DECIDE_H + GAP_Y + inner + LOOP_BOTTOM;
+      : own.h + DECIDE_GAP + DECIDE_H + GAP_Y + inner + LOOP_BOTTOM + FOOT_H;
   const room = (circling ? 32 : BLOCK_ROOM) * 2;
   // The frame is drawn wider than this by its sides (less the room counted here).
   const side = circling ? LOOP_FRAME : BLOCK_FRAME;
@@ -456,7 +477,7 @@ class Builder {
     label?: string,
     hidden?: boolean,
     split?: boolean,
-    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer" | "half" | "failure" | "bracket" | "owner" | "alt">,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "exit" | "answer" | "half" | "failure" | "bracket" | "owner" | "alt">,
   ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
@@ -596,7 +617,7 @@ class Builder {
     // Where the frame is left, on its bottom edge: a loop's only lets its line
     // out (its body goes round instead), a frame's columns meet there (a dot),
     // and a single column's line passes through it.
-    const joinY = isLoop ? y + height - JOIN_SIZE : y + height - JOIN_SIZE / 2;
+    const joinY = isLoop ? y + height - (CHECKS_AFTER.has(step.type) ? JOIN_SIZE : FOOT_H) : y + height - JOIN_SIZE / 2;
     const join = `join:${id}`;
     if (isLoop) return this.loop(step, id, y, cx, left, right, own.h, columns[0]!, sizes[0] ?? SLOT, joinY);
     // An if or a switch asks its question in a decision under its head, and its columns leave from there.
@@ -697,8 +718,13 @@ class Builder {
     const after = CHECKS_AFTER.has(step.type);
     const bodyY = after ? y + headH + GAP_Y : y + headH + DECIDE_GAP + DECIDE_H + GAP_Y;
     const decideY = after ? bodyY + size.h + DECIDE_GAP : y + headH + DECIDE_GAP;
-    const leave: JoinNodeData = { kind: "join", parentId: id, shown: false, ...(after ? { met: true } : {}) };
-    this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: joinY }, data: leave });
+    if (after) {
+      this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: joinY }, data: { kind: "join", parentId: id, shown: false, met: true } });
+    } else {
+      // The foot, across the frame's bottom: where the loop ends, however it ends.
+      const foot: FootData = { width: right - left, lineX: cx - left, type: step.type, breaks: breaksIn(lane.steps) };
+      this.nodes.push({ id: join, type: "join", position: { x: left, y: joinY }, data: { kind: "join", parentId: id, shown: false, foot } });
+    }
     this.nodes.push({
       id: decide,
       type: "join",
@@ -721,11 +747,24 @@ class Builder {
       this.edge(decide, placed.entry, yes, undefined, true);
       // An empty body has nothing to run again.
       if (lane.steps.length > 0) for (const e of placed.exits) this.edge(e, decide, loopBackLabel(step), undefined, undefined, { ...back, intoDecide: true, half });
-      this.edge(decide, join, no, undefined, undefined, { fromDecide: true, railX: right - LOOP_LINE_X, half });
+      // A break comes out at the foot too: not drawn (it says where it goes), but a run that takes it passes the foot.
+      for (const b of breaksIn(lane.steps)) this.edge(b, join, undefined, true);
+      // "いいえ": all done. It says so beside the line, inside the frame, where it reaches the foot.
+      this.edge(decide, join, no, undefined, undefined, { fromDecide: true, railX: right - LOOP_LINE_X, half, exit: loopExitLabel(step), owner: id });
+      return { entry: id, exits: [join] };
     }
     this.exitLabels.set(join, loopExitLabel(step));
     return { entry: id, exits: [join] };
   }
+}
+
+/** The breaks in a loop's body that leave it: not those inside a loop in it, which leave that one. */
+function breaksIn(steps: readonly Step[]): string[] {
+  return steps.flatMap((s) => {
+    if (s.type === BREAK) return s.disabled || !s.id ? [] : [s.id];
+    if (LOOP_TYPES.has(s.type)) return [];
+    return Object.values(s.blocks ?? {}).flatMap((b) => breaksIn(b));
+  });
 }
 
 export function layoutFlow(steps: Step[], defs: Defs, extra: Extra = NO_EXTRA, collapsed: Collapsed = NONE): Layout {

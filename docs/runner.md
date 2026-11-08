@@ -44,3 +44,5 @@ While it runs, the window lists the flow's top-level nodes and ticks them off, w
 While SpellSheet runs, its icon sits in the task tray (the notification area). Click it to open Runner; right-click for Open Runner, Open Writer and Quit.
 
 Started with `--runner`, closing Runner leaves SpellSheet in the tray, so it stays at hand all day; Quit in the tray menu ends it. `--tray` starts with the tray icon only, for a shortcut in the Startup folder (`shell:startup`). Started without either, SpellSheet ends when its last window closes, as before.
+
+SpellSheet runs once per Windows sign-in. Starting it again while it runs (Writer or Runner in the Start menu, a shortcut) opens no second copy: the running one comes to the front, showing Writer, or Runner when started with `--runner` ("SpellSheet Runner" in the Start menu; `--tray` shows nothing new). The development build (`pnpm studio:dev`) is not limited, so it runs beside an installed SpellSheet.

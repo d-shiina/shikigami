@@ -237,6 +237,12 @@ export type RunState = {
   inner: Record<string, Record<string, StepRunState>>;
   /** The step each call path started last (a control step stays running while its blocks run). */
   innerLatest: Record<string, string>;
+  /**
+   * How far each loop got (`loopRound` / `loopEnded`), by `loopKey`: the
+   * frame shows it, during the run and after. A loop inside another one
+   * shows its latest pass.
+   */
+  loops: Record<string, LoopRun>;
   /** The flow revision it runs (a resume can move it to a newer one). */
   revision: number | null;
   /** The person cleared the marks it left on the chart. */
@@ -244,6 +250,12 @@ export type RunState = {
   /** Stop was pressed and the run has not ended yet. */
   stopping: boolean;
 };
+
+/** How far a loop got in a run: its round now (from 1), out of how many when known, and how it ended. */
+export type LoopRun = { round: number; total: number | null; ended: boolean; leftEarly: boolean };
+
+/** Key of a loop in `RunState.loops`: the calls it ran inside and its step. */
+export const loopKey = (path: string[], stepId: string): string => `${path.join("/")}|${stepId}`;
 
 /** The `flow.call` steps a run event happened inside (outermost first). */
 const callPathOf = (env: RunEventEnvelope): string[] => (env as { callPath?: string[] }).callPath ?? [];
@@ -345,6 +357,8 @@ export type StudioState = {
   /** Frames (a loop, if, group, …) folded to their head on the chart, per flow (this PC only). */
   folded: Record<string, string[]>;
   outlineOpen: boolean;
+  /** The 手順書 is open for editing (its outline), not read as sheets: the right pane may show. */
+  manualEditing: boolean;
   /**
    * The right pane kept open by hand. Without it the pane opens only while a
    * node or part is selected, so the chart (or the 変数 table) has the room.
@@ -423,6 +437,7 @@ export type StudioState = {
   /** Moves to the previous / next step the AI changed (review desk). */
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
+  setManualEditing(on: boolean): void;
   setOutlineOpen(open: boolean): void;
   /** Keeps the right pane open (the flow's settings when nothing is selected), or closes it. */
   setInspectorOpen(open: boolean): void;
@@ -734,6 +749,7 @@ const newRun = (runId: string, flowId: string | null = null): RunState => ({
   starts: [],
   inner: {},
   innerLatest: {},
+  loops: {},
   revision: null,
   trailHidden: false,
   stopping: false,
@@ -1012,6 +1028,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       breakpoints: loadBreakpoints(),
       folded: loadFolded(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
+      manualEditing: false,
       inspectorOpen: loadFlag(INSPECTOR_KEY, false),
       paletteOpen: false,
       searchOpen: false,
@@ -1280,6 +1297,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
 
       setFollowRun(on) {
         set({ followRun: on });
+      },
+
+      setManualEditing(on) {
+        set({ manualEditing: on });
       },
 
       setOutlineOpen(open) {
@@ -1825,6 +1846,25 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
             else if (diveChain(s.flow, s.called, path).length === path.length) dive = path;
           }
           const moved = dive !== s.dive ? { dive, selection: null } : {};
+          // How far each loop got, in the open flow or a called one.
+          // A loop starting again (another pass of a loop around it, a retry) starts with nothing to show.
+          if (env.type === "stepStarted" && run.loops[loopKey(path, env.stepId)]) {
+            const { [loopKey(path, env.stepId)]: _, ...rest } = run.loops;
+            run.loops = rest;
+          }
+          if (env.type === "loopRound" || env.type === "loopEnded") {
+            const ended = env.type === "loopEnded";
+            run.loops = {
+              ...run.loops,
+              [loopKey(path, env.stepId)]: {
+                round: ended ? env.rounds : env.round,
+                total: env.total ?? null,
+                ended,
+                leftEarly: ended && env.leftEarly === true,
+              },
+            };
+            return { run, ...moved };
+          }
           // A value changed while paused (by the person) shows at the pause.
           const edited = asVariableChange(env);
           if (edited && run.pause && edited.iteration == null && callKey(path) === callKey(run.pause.callPath)) {

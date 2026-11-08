@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ShikigamiApi",
-  "description": "Bundle of the IPC/API payload types used by Studio and MCP tools.",
+  "description": "Bundle of the IPC/API payload types used by Writer and MCP tools.",
   "type": "object",
   "properties": {
     "flow": {
@@ -142,7 +142,7 @@
   "$defs": {
     "Flow": {
       "title": "Flow",
-      "description": "A flow: the unit that AI clients, Studio and the Runtime share.",
+      "description": "A flow: the unit that AI clients, Writer and the Runtime share.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -175,7 +175,7 @@
           }
         },
         "revision": {
-          "description": "Monotonic revision, incremented by every committed edit. Used for\noptimistic concurrency between Studio, MCP clients and the CLI.",
+          "description": "Monotonic revision, incremented by every committed edit. Used for\noptimistic concurrency between Writer, MCP clients and the CLI.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0,
@@ -342,7 +342,7 @@
           "$ref": "#/$defs/PartApp"
         },
         "target": {
-          "description": "The target, exactly as the nodes of `app` take it. Left out (null)\nwhen the author could not see the screen (an AI in a chat window):\na person picks it in Studio, and until then the nodes that use the\npart do not validate (`PART_NOT_PICKED`)."
+          "description": "The target, exactly as the nodes of `app` take it. Left out (null)\nwhen the author could not see the screen (an AI in a chat window):\na person picks it in Writer, and until then the nodes that use the\npart do not validate (`PART_NOT_PICKED`)."
         }
       },
       "additionalProperties": false,
@@ -433,7 +433,7 @@
           ]
         },
         "meta": {
-          "description": "Free-form metadata (Studio layout hints, AI provenance such as the UI\nelement a selector was derived from). Never interpreted by the Runtime.",
+          "description": "Free-form metadata (Writer layout hints, AI provenance such as the UI\nelement a selector was derived from). Never interpreted by the Runtime.",
           "type": "object",
           "additionalProperties": true
         }
@@ -1088,7 +1088,7 @@
           ]
         },
         "hint": {
-          "description": "How to fix it, written for AI clients (and shown to humans in Studio).",
+          "description": "How to fix it, written for AI clients (and shown to humans in Writer).",
           "type": [
             "string",
             "null"
@@ -1347,7 +1347,7 @@
       ]
     },
     "PluginInfo": {
-      "description": "A plugin (an extension, in Studio) that provides step types, as\ninstalled on this PC, with what Studio shows about it.",
+      "description": "A plugin (an extension, in Writer) that provides step types, as\ninstalled on this PC, with what Writer shows about it.",
       "type": "object",
       "properties": {
         "name": {
@@ -1375,14 +1375,14 @@
           "type": "string"
         },
         "credentials": {
-          "description": "The registered secrets it takes, by kind, so Studio offers the\nright ones (and a form of that kind) for its secret params.",
+          "description": "The registered secrets it takes, by kind, so Writer offers the\nright ones (and a form of that kind) for its secret params.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/PluginCredential"
           }
         },
         "summary": {
-          "description": "What this step does, in one sentence for people (Studio shows it\nunder the node's name; `description` is written for AI clients).",
+          "description": "What this step does, in one sentence for people (Writer shows it\nunder the node's name; `description` is written for AI clients).",
           "type": "string"
         },
         "external": {
@@ -1431,7 +1431,7 @@
       ]
     },
     "SecretKind": {
-      "description": "What a secret holds, so Studio can name its fields and the AI can tell\na login from an API key. Every kind is stored, referenced (`{ \"secret\",\n\"field\" }`), site-checked and masked the same way: the kind only changes\nhow the fields are called and which ones a person fills in.",
+      "description": "What a secret holds, so Writer can name its fields and the AI can tell\na login from an API key. Every kind is stored, referenced (`{ \"secret\",\n\"field\" }`), site-checked and masked the same way: the kind only changes\nhow the fields are called and which ones a person fills in.",
       "oneOf": [
         {
           "description": "A user name and password typed into a site or app (and an MFA key).",
@@ -1582,7 +1582,7 @@
           ]
         },
         {
-          "description": "An AI in a chat window without MCP (Microsoft Copilot, ...): a\nperson pasted its answer into Studio. Reviewed like an MCP edit.",
+          "description": "An AI in a chat window without MCP (Microsoft Copilot, ...): a\nperson pasted its answer into Writer. Reviewed like an MCP edit.",
           "type": "string",
           "const": "chat"
         }
@@ -2468,7 +2468,7 @@
           ]
         },
         {
-          "description": "The screen when an interactive run in Studio paused on an error.",
+          "description": "The screen when an interactive run in Writer paused on an error.",
           "type": "string",
           "const": "runPause"
         }
@@ -2603,7 +2603,7 @@
       ]
     },
     "NewReview": {
-      "description": "Input for a review (Studio).",
+      "description": "Input for a review (Writer).",
       "type": "object",
       "properties": {
         "revision": {
@@ -2634,7 +2634,7 @@
       ]
     },
     "ObservationContent": {
-      "description": "An observation with the contents of its files, for Studio.",
+      "description": "An observation with the contents of its files, for Writer.",
       "type": "object",
       "properties": {
         "id": {
@@ -2908,7 +2908,7 @@
       "additionalProperties": false
     },
     "AiPolicy": {
-      "description": "What an AI client (MCP) may do. Studio and the CLI are people and are not\nasked.",
+      "description": "What an AI client (MCP) may do. Writer and the CLI are people and are not\nasked.",
       "type": "object",
       "properties": {
         "runFlow": {
@@ -2967,7 +2967,7 @@
           ]
         },
         {
-          "description": "A person approves (or refuses) the exact request in Studio first.",
+          "description": "A person approves (or refuses) the exact request in Writer first.",
           "type": "string",
           "const": "ask"
         }
@@ -2989,7 +2989,7 @@
           ]
         },
         "unattended": {
-          "description": "`false`: `spellsheet run` (scheduled, unattended) refuses it; it only\nruns from Studio. Default `true`.",
+          "description": "`false`: `spellsheet run` (scheduled, unattended) refuses it; it only\nruns from Writer. Default `true`.",
           "type": [
             "boolean",
             "null"
@@ -3028,7 +3028,7 @@
           ]
         },
         "manualScreens": {
-          "description": "When the flow is run from Studio, keep a picture of the screen at\neach browser or desktop step (the first time it runs) for the\nflow's 手順書. The pictures stay on this PC. On unless `false`.",
+          "description": "When the flow is run from Writer, keep a picture of the screen at\neach browser or desktop step (the first time it runs) for the\nflow's 手順書. The pictures stay on this PC. On unless `false`.",
           "type": [
             "boolean",
             "null"
@@ -3319,7 +3319,7 @@
       ]
     },
     "ConfigFile": {
-      "description": "A settings file (`config/*.json`) kept out of the flow: values a\nperson changes without touching the flow (a cut-off day, a recipient, a\nfolder). Studio edits it as a form; `config.read` turns it into\n`{ \"締め日\": 25, … }`.",
+      "description": "A settings file (`config/*.json`) kept out of the flow: values a\nperson changes without touching the flow (a cut-off day, a recipient, a\nfolder). Writer edits it as a form; `config.read` turns it into\n`{ \"締め日\": 25, … }`.",
       "type": "object",
       "properties": {
         "format": {
