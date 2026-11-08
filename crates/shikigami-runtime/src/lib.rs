@@ -12,6 +12,7 @@ pub mod adapter;
 pub mod audit;
 pub mod builtin;
 pub mod debug;
+pub mod drafts;
 pub mod event;
 mod exec;
 pub mod handler;

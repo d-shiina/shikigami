@@ -113,6 +113,23 @@ describe("the 手順書 of a flow", () => {
     expect(split[1]?.steps.at(-1)?.mark?.y).toBe(363);
   });
 
+  it("shows the screen a node met when it was tried alone, until a run takes one", () => {
+    const pass = idOf("パスワードを入力");
+    const drafts = { [flow.id ?? ""]: { [pass]: { file: "drafts/f/abc.jpg", width: 1100, height: 620, title: "ログイン", source: "ai" as const, takenAt: 1 } } };
+    const before = buildManual(flow, defs, null, new Map(), {}, drafts);
+    const [scene] = scenes(find(before.chapters[0]?.items ?? [], "branch")[0]?.items ?? []);
+    expect(scene?.shot?.draft).toBe("ai");
+    expect(scene?.shot?.key).toBe(pass);
+    expect(before.drafts).toBe(1);
+    // A run's own picture wins.
+    const after = buildManual(flow, defs, manifest, new Map(), {}, drafts);
+    const [first] = scenes(find(after.chapters[0]?.items ?? [], "branch")[0]?.items ?? []);
+    expect(first?.shot?.file).toBe("001.jpg");
+    // Hidden by the person: left out too.
+    const hidden = buildManual(flow, defs, null, new Map(), { [pass]: { hidden: true, boxes: [], width: 0, height: 0 } }, drafts);
+    expect(hidden.drafts).toBe(0);
+  });
+
   it("leaves out screens the person hid", () => {
     const hidden = buildManual(flow, defs, manifest, new Map(), { [user]: { hidden: true, boxes: [], width: 0, height: 0 } });
     const [scene] = scenes(find(hidden.chapters[0]?.items ?? [], "branch")[0]?.items ?? []);

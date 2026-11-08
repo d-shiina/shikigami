@@ -28,7 +28,13 @@ export type ManualShot = {
   title?: string;
   /** Equal for pictures of the same view (address and scroll place). */
   view?: string;
+  /** 「作るときの画面」: taken when the node was tried alone, by a person or the AI. */
+  draft?: "studio" | "ai";
 };
+
+/** A picture from a node tried alone (src-tauri `drafts`), by flow then node ID. */
+export type DraftShot = Omit<ManualShot, "key" | "stepId" | "draft"> & { source: "studio" | "ai"; takenAt: number };
+export type Drafts = Readonly<Record<string, Readonly<Record<string, DraftShot>>>>;
 
 export type ManualManifest = {
   runId: string;
@@ -99,6 +105,8 @@ export type ManualDoc = {
   chapters: Chapter[];
   /** Screens with a picture, across the chapters. */
   pictures: number;
+  /** Of those, 「作るときの画面」 (no run of the whole flow took them). */
+  drafts: number;
   /** Screen operations that have no picture yet (not run since, or skipped). */
   missing: number;
 };
@@ -157,6 +165,10 @@ type Ctx = {
   shots: ReadonlyMap<string, ManualShot>;
   counts: Record<string, number> | null;
   subflows: ReadonlyMap<string, Flow>;
+  /** The flow whose nodes are being read (a sub-flow inside its call). */
+  flowId: string;
+  drafts: Drafts;
+  hidden: ReadonlySet<string>;
   words: Map<string, string>;
   /** Numbers operations within the chapter being built. */
   next: { n: number };
@@ -219,7 +231,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
     const key = keyOf(callPath, step.id);
     const moment = screenMoment(step.type);
     if (moment) {
-      const shot = ctx.shots.get(key) ?? null;
+      const shot = ctx.shots.get(key) ?? draftShot(ctx, step.id, key);
       const app = step.type.startsWith("desktop.") ? "desktop" : "browser";
       const wait = WAITS.has(step.type);
       const entry = wait ? null : manualStep(step, callPath, ctx);
@@ -320,7 +332,7 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
       case CALL: {
         const called = ctx.subflows.get(String((step.params as Record<string, unknown> | undefined)?.flow ?? ""));
         if (called && ctx.depth < 4) {
-          const inner = { ...ctx, depth: ctx.depth + 1, words: new Map([...ctx.words, ...varWords(called.variables ?? [])]) };
+          const inner = { ...ctx, flowId: called.id, depth: ctx.depth + 1, words: new Map([...ctx.words, ...varWords(called.variables ?? [])]) };
           out.push({ kind: "group", label: label(step, ctx), items: items(called.steps ?? [], [...callPath, step.id], inner) });
         } else {
           out.push({ kind: "action", step: manualStep(step, callPath, ctx) });
@@ -332,6 +344,14 @@ function items(steps: Step[], callPath: string[], ctx: Ctx): ManualItem[] {
     }
   }
   return out;
+}
+
+/** The picture taken when the node was tried alone, when the run has none. */
+function draftShot(ctx: Ctx, stepId: string, key: string): ManualShot | null {
+  const d = ctx.drafts[ctx.flowId]?.[stepId];
+  if (!d || ctx.hidden.has(key)) return null;
+  const { source, takenAt: _, ...shot } = d;
+  return { ...shot, key, stepId, draft: source };
 }
 
 /** Nodes that are only quiet work: folded into the chapter beside them. */
@@ -463,6 +483,7 @@ export function buildManual(
   manifest: ManualManifest | null,
   subflows: ReadonlyMap<string, Flow> = new Map(),
   masks: Readonly<Record<string, Mask>> = {},
+  drafts: Drafts = {},
 ): ManualDoc {
   const shots = new Map((manifest?.shots ?? []).filter((s) => !masks[s.key]?.hidden).map((s) => [s.key, s] as const));
   // A picture the person left out still counts as taken.
@@ -473,6 +494,9 @@ export function buildManual(
     shots,
     counts: manifest?.counts ?? null,
     subflows,
+    flowId: flow.id ?? "",
+    drafts,
+    hidden: new Set(Object.entries(masks).flatMap(([k, m]) => (m.hidden ? [k] : []))),
     words: varWords(flow.variables ?? []),
     missing,
     depth: 0,
@@ -512,12 +536,17 @@ export function buildManual(
     outputs: vars.filter((v) => v.direction === "output" || v.direction === "inOut").map(varText),
     chapters,
     pictures,
+    drafts: chapters.reduce((n, c) => n + countPictures(c.items, true), 0),
     missing: Math.max(0, missing.n - hidden.size),
   };
 }
 
-function countPictures(list: ManualItem[]): number {
-  return list.reduce((n, item) => n + (item.kind === "scene" && item.shot ? 1 : 0) + ("items" in item ? countPictures(item.items) : 0), 0);
+function countPictures(list: ManualItem[], drafts = false): number {
+  return list.reduce(
+    (n, item) =>
+      n + (item.kind === "scene" && item.shot && (!drafts || item.shot.draft) ? 1 : 0) + ("items" in item ? countPictures(item.items, drafts) : 0),
+    0,
+  );
 }
 
 /**
