@@ -259,6 +259,11 @@ textarea,
 .react-flow__edgelabel-renderer {
   z-index: 2;
 }
+/* The answer a line takes out of a decision (はい／いいえ): in the decision's yellow, so it reads as the hexagon's answer. */
+.flow-answer {
+  border-color: var(--flow-decide-line);
+  background-color: var(--flow-decide-fill);
+}
 /* A loop's foot: the bottom edge of its frame, a band like its head, that says where the loop ends. */
 .flow-foot {
   border-color: var(--color-slate-300);

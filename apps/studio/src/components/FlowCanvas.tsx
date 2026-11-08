@@ -599,7 +599,7 @@ function AnswerLabel({ x, y, text, from = "center" }: { x: number; y: number; te
   return (
     <span
       style={{ transform: `translate(${x}px, ${y}px) translate(${from === "center" ? "-50%" : "0"}, -50%)` }}
-      className="pointer-events-none absolute top-0 left-0 rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
+      className="pointer-events-none absolute top-0 left-0 flow-answer rounded-md border px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
     >
       {text}
     </span>
