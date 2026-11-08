@@ -144,6 +144,23 @@ export function loopBackLabel(step: Step): string {
   return ja ? "次の回へ" : "Next round";
 }
 
+/** What a loop asks each time round (on its decision), and its two answers. */
+export function loopQuestion(step: Step): { question: string; yes: string; no: string } {
+  const ja = locale === "ja";
+  const p = (step.params ?? {}) as Record<string, unknown>;
+  const answers = ja ? { yes: "はい", no: "いいえ" } : { yes: "Yes", no: "No" };
+  switch (step.type) {
+    case "control.forEach":
+      return { question: ja ? "次の 1 件がある？" : "Another item?", ...answers };
+    case "control.repeat":
+      return { question: ja ? "まだ回数が残っている？" : "Rounds left?", ...answers };
+    default: {
+      const condition = plainExpr(p.condition);
+      return { question: condition ? `${condition}${ja ? "？" : "?"}` : ja ? "条件を満たす？" : "Condition holds?", ...answers };
+    }
+  }
+}
+
 /** On the line out of a loop's frame: when it leaves. */
 export function loopExitLabel(step: Step): string {
   const ja = locale === "ja";

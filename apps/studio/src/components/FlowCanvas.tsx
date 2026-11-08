@@ -28,6 +28,8 @@ import {
   CASE_H,
   type FrameKind,
   HEAD_H,
+  DECIDE_H,
+  DECIDE_W,
   ancestorsOf,
   JOIN_SIZE,
   type JoinNodeData,
@@ -249,6 +251,10 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
 type BlockEdgeData = {
   /** A loop's line back: the x it runs up at. */
   detourX?: number;
+  fromDecide?: boolean;
+  intoDecide?: boolean;
+  /** A loop's "いいえ": the x it runs down at. */
+  railX?: number;
   /** From the head of a frame into one of its columns. */
   split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
@@ -291,26 +297,58 @@ function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: Bl
 function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
+  const r = 4;
+  const sideLabel = (x: number, y: number) =>
+    label && (
+      <EdgeLabelRenderer>
+        <span
+          style={{ transform: `translate(${x}px, ${y}px)` }}
+          className="pointer-events-none absolute top-0 left-0 text-[11px] leading-4 whitespace-nowrap text-slate-500"
+        >
+          {label}
+        </span>
+      </EdgeLabelRenderer>
+    );
   if (detourX !== undefined) {
-    // A loop's line back: out of the end of its body, along to the left of its
-    // frame, up, and back into the line that enters the body's first node.
-    const r = 4;
-    const outY = sourceY + 14;
-    const mergeY = targetY - 28;
+    // A loop's line back, up the left of its frame: from the end of its body
+    // into the side of its decision, or (a wait) from the side of its decision
+    // back into the line that enters its block.
+    const half = DECIDE_W / 2;
+    const start = edge.fromDecide
+      ? `M ${sourceX - half} ${sourceY - DECIDE_H / 2} H ${detourX + r} Q ${detourX} ${sourceY - DECIDE_H / 2} ${detourX} ${sourceY - DECIDE_H / 2 - r}`
+      : `M ${sourceX} ${sourceY} V ${sourceY + 14 - r} Q ${sourceX} ${sourceY + 14} ${sourceX - r} ${sourceY + 14} H ${detourX + r} Q ${detourX} ${sourceY + 14} ${detourX} ${sourceY + 14 - r}`;
+    const turnY = edge.fromDecide ? sourceY - DECIDE_H / 2 : sourceY + 14;
+    const end = edge.intoDecide
+      ? `V ${targetY + DECIDE_H / 2 + r} Q ${detourX} ${targetY + DECIDE_H / 2} ${detourX + r} ${targetY + DECIDE_H / 2} H ${targetX - half}`
+      : `V ${targetY - 28 + r} Q ${detourX} ${targetY - 28} ${detourX + r} ${targetY - 28} H ${targetX - r} Q ${targetX} ${targetY - 28} ${targetX} ${targetY - 28 + r} V ${targetY}`;
+    return (
+      <>
+        <BaseEdge id={id} path={`${start} ${end}`} style={style} markerEnd={markerEnd} />
+        {sideLabel(detourX + 8, turnY - 20)}
+      </>
+    );
+  }
+  if (edge.railX !== undefined) {
+    // A loop's "いいえ": out of the right of its decision, down the right of
+    // its frame, and into where the frame is left, on its bottom edge.
+    const x0 = sourceX + DECIDE_W / 2;
+    const y0 = sourceY - DECIDE_H / 2;
+    const rail = edge.railX;
+    const lowY = targetY - 14;
     const path = [
-      `M ${sourceX} ${sourceY} V ${outY - r} Q ${sourceX} ${outY} ${sourceX - r} ${outY}`,
-      `H ${detourX + r} Q ${detourX} ${outY} ${detourX} ${outY - r}`,
-      `V ${mergeY + r} Q ${detourX} ${mergeY} ${detourX + r} ${mergeY}`,
-      `H ${targetX - r} Q ${targetX} ${mergeY} ${targetX} ${mergeY + r} V ${targetY}`,
+      `M ${x0} ${y0} H ${rail - r} Q ${rail} ${y0} ${rail} ${y0 + r}`,
+      `V ${lowY - r} Q ${rail} ${lowY} ${rail - r} ${lowY}`,
+      `H ${targetX + r} Q ${targetX} ${lowY} ${targetX} ${lowY + r} V ${targetY}`,
     ].join(" ");
     return (
       <>
-        <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+        <BaseEdge id={id} path={path} style={style} />
         {label && (
+          // On the line, like the "はい" going down: the two answers read alike.
           <EdgeLabelRenderer>
             <span
-              style={{ transform: `translate(${detourX + 8}px, ${outY - 20}px)` }}
-              className="pointer-events-none absolute top-0 left-0 text-[11px] leading-4 whitespace-nowrap text-slate-500"
+              style={{ transform: `translate(${x0 + 12}px, ${y0 - 9}px)` }}
+              className="pointer-events-none absolute top-0 left-0 rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap text-ink"
             >
               {label}
             </span>
@@ -897,6 +935,20 @@ function CaseTab({ data }: { data: StepNodeProps["data"] }) {
 
 /** Where the columns of a frame meet again, on its bottom edge (a dot). A single column's line passes through; a loop's only lets its line out. */
 function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
+  if (data.question) {
+    // A loop's decision: where it asks whether to go round again.
+    return (
+      <div
+        style={{ width: DECIDE_W, height: DECIDE_H }}
+        title={data.question}
+        className="flex items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-sheet px-3 text-[11.5px] text-ink"
+      >
+        <span className="h-[8px] w-[8px] shrink-0 rotate-45 border-[1.5px] border-slate-500" aria-hidden="true" />
+        <span className="truncate">{data.question}</span>
+        <FlowHandles />
+      </div>
+    );
+  }
   return (
     <div style={{ width: JOIN_SIZE, height: JOIN_SIZE }} className={`relative ${data.shown ? "rounded-full bg-[var(--flow-edge)]" : ""}`}>
       {/* A single line across the frame's edge: drawn through, so it does not break off there. */}
@@ -1270,7 +1322,7 @@ export function FlowCanvas() {
   });
   // Points a run only passes through: the "+" at the end of a block, where a frame's columns meet.
   const tails = useMemo(
-    () => new Set(layout.nodes.filter((n) => (n.data.kind === "slot" && n.data.tail) || n.data.kind === "join").map((n) => n.id)),
+    () => new Set(layout.nodes.filter((n) => (n.data.kind === "slot" && n.data.tail) || (n.data.kind === "join" && !n.data.question)).map((n) => n.id)),
     [layout],
   );
   // Steps whose failure the run goes on past (onError: continue, their own or the flow's).
@@ -1399,7 +1451,19 @@ export function FlowCanvas() {
     }));
 
   // The lines the run took stay coloured after it ends, as the way it went.
-  const taken = trailLines(layout.edges, states, tails, continues);
+  // A loop's decision runs as long as its loop does.
+  const trailStates = useMemo(() => {
+    const out: Record<string, StepRunState> = { ...states };
+    for (const n of layout.nodes) {
+      if (n.data.kind !== "join" || !n.data.question) continue;
+      const state = states[n.data.parentId];
+      if (state) out[n.id] = state;
+    }
+    return out;
+  }, [states, layout.nodes]);
+  const taken = trailLines(layout.edges, trailStates, tails, continues);
+  // Lines into a join end in it (or pass through); a loop's decision takes an arrow like a node.
+  const plainJoins = new Set(layout.nodes.filter((n) => n.data.kind === "join" && !n.data.question).map((n) => n.id));
   const edges: Edge[] = layout.edges.map((e) => {
     const trail = taken.get(e.id);
     return {
@@ -1409,6 +1473,9 @@ export function FlowCanvas() {
       type: "block",
       data: {
         detourX: e.detourX,
+        fromDecide: e.fromDecide,
+        intoDecide: e.intoDecide,
+        railX: e.railX,
         split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,
@@ -1421,7 +1488,7 @@ export function FlowCanvas() {
         ...(e.loop || trail === "now" ? { strokeDasharray: "5 4" } : {}),
       },
       // A plain colour: the marker id is built from it, so no var(). Lines meeting at a join end in its dot.
-      markerEnd: e.target.startsWith("join:") ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
+      markerEnd: plainJoins.has(e.target) ? undefined : { type: MarkerType.ArrowClosed, color: (trail ? TRAIL_MARKER[theme][trail] : undefined) ?? (theme === "dark" ? "#5a5e66" : "#a3a8b0") },
       // A taken line over the others where they share a stretch (a join, the way into a loop's body).
       zIndex: trail ? 1 : 0,
     };

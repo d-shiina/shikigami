@@ -7,7 +7,7 @@
 // from the end of its body back to where its body starts, inside its frame.
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
-import { laneLabel, loopBackLabel, loopExitLabel } from "../lib/keywords";
+import { laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
 import { nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
@@ -56,15 +56,31 @@ export const JOIN_SIZE = 8;
  * frame, and the line on to the next step leaves from the frame's bottom edge.
  */
 export const LOOP_LINE_X = 14;
-/** Under a loop's body: room for its line back to turn, then the frame's edge. */
-const LOOP_BOTTOM = 36;
-const LOOP_FRAME = { left: READ_ROOM + 12 + 24, right: WRITE_ROOM + 12 };
+/**
+ * Where a loop decides whether to go round again: a small "◇ 次の 1 件がある？"
+ * on its line. A loop that checks first (for each, repeat, while) has it at
+ * the top of its body: "はい" runs the body, whose line comes back into it,
+ * and "いいえ" runs down the right of the frame (LOOP_LINE_X in) and out.
+ * A wait checks after its check block, so it has it at the bottom: "いいえ"
+ * goes back up the left to the top of the block, "はい" goes on out.
+ */
+export const DECIDE_W = 220;
+export const DECIDE_H = 28;
+/** Between the head (or the end of a wait's block) and the decision. */
+const DECIDE_GAP = 28;
+/** Under a loop's body: its line back turns, then (a little lower, apart from it) the "いいえ" line into the frame's edge. */
+const LOOP_BOTTOM = 54;
+/** Under a wait's decision: its "はい" line down to the frame's edge. */
+const WAIT_BOTTOM = 60;
+const LOOP_FRAME = { left: READ_ROOM + 12 + 24, right: WRITE_ROOM + 12 + 24 };
 const WAIT_UNTIL = "wait.until";
 /**
  * Steps that go round: the loops, and a wait that runs its check again until
  * its condition holds. Each draws a line back to the start of its body.
  */
 const CIRCLING: ReadonlySet<string> = new Set([...LOOP_TYPES, WAIT_UNTIL]);
+/** Loops that decide after their block has run, not before. */
+const CHECKS_AFTER: ReadonlySet<string> = new Set([WAIT_UNTIL]);
 /** Steps the flow does not go on from: out of a loop, round to its next pass, or stopped with an error. */
 const TERMINAL: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
 /** A break, continue or fail that runs: a disabled one is skipped, and the flow goes on past it. */
@@ -115,6 +131,8 @@ export type JoinNodeData = {
   shown: boolean;
   /** Not marked, but a single line passes through it (across the frame's edge). */
   through?: boolean;
+  /** A loop's decision (see DECIDE_W): what it asks. */
+  question?: string;
 };
 
 export type SlotNodeData = {
@@ -144,6 +162,12 @@ export type LayoutEdge = {
   loop?: boolean;
   /** For a loop's line back: the x it runs up at. */
   detourX?: number;
+  /** A loop's line leaves its decision from the side (back up a wait's left, or "いいえ" down a loop's right). */
+  fromDecide?: boolean;
+  /** A loop's line back ends in the left side of its decision. */
+  intoDecide?: boolean;
+  /** For a loop's "いいえ": the x it runs down at, on the right of the frame. */
+  railX?: number;
   /** From the head of a frame down into one of its columns: turns just under the head. */
   split?: boolean;
   /** Not drawn: from a loop's head to where its line leaves, so a run's trail carries on past the loop. */
@@ -300,7 +324,11 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
     inner += JOIN_GAP + JOIN_SIZE + GAP_Y + m.h;
   }
   const circling = CIRCLING.has(step.type);
-  const h = own.h + GAP_Y + inner + (circling ? LOOP_BOTTOM : JOIN_GAP + JOIN_SIZE / 2);
+  const h = !circling
+    ? own.h + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
+    : CHECKS_AFTER.has(step.type)
+      ? own.h + GAP_Y + inner + DECIDE_GAP + DECIDE_H + WAIT_BOTTOM
+      : own.h + DECIDE_GAP + DECIDE_H + GAP_Y + inner + LOOP_BOTTOM;
   const room = (circling ? 32 : BLOCK_ROOM) * 2;
   return { w: Math.max(own.w, w + room), h };
 }
@@ -319,7 +347,14 @@ class Builder {
     private collapsed: Collapsed,
   ) {}
 
-  edge(source: string, target: string, label?: string, hidden?: boolean, split?: boolean, back?: { detourX: number }) {
+  edge(
+    source: string,
+    target: string,
+    label?: string,
+    hidden?: boolean,
+    split?: boolean,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX">,
+  ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
     this.edges.push({
@@ -327,7 +362,7 @@ class Builder {
       source,
       target,
       label,
-      ...(back ? { loop: true, detourX: back.detourX } : {}),
+      ...more,
       ...(hidden ? { hidden } : {}),
       ...(split ? { split } : {}),
     });
@@ -451,6 +486,7 @@ class Builder {
     // and a single column's line passes through it.
     const joinY = isLoop ? y + height - JOIN_SIZE : y + height - JOIN_SIZE / 2;
     const join = `join:${id}`;
+    if (isLoop) return this.loop(step, id, y, cx, left, right, own.h, columns[0]!, sizes[0] ?? SLOT, joinY);
     const bodyY = y + own.h + GAP_Y;
     const columnsH = Math.max(...sizes.map((m) => m.h));
     // A try's columns meet before its "finally", which runs after them.
@@ -459,7 +495,7 @@ class Builder {
       id: join,
       type: "join",
       position: { x: cx - JOIN_SIZE / 2, y: joinY },
-      data: { kind: "join", parentId: id, shown: !isLoop && !after && columns.length > 1, through: !isLoop && (after !== null || columns.length === 1) },
+      data: { kind: "join", parentId: id, shown: !after && columns.length > 1, through: after !== null || columns.length === 1 },
     });
     if (after) {
       this.nodes.push({
@@ -475,12 +511,7 @@ class Builder {
       const size = sizes[i] ?? SLOT;
       const placed = this.list(lane.steps, bodyY, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
       this.edge(id, placed.entry, lane.label || undefined, undefined, true);
-      if (!isLoop) {
-        for (const e of placed.exits) this.edge(e, meet);
-      } else if (lane.steps.length > 0) {
-        // Back to where the body starts; an empty body has nothing to run again.
-        for (const e of placed.exits) this.edge(e, placed.entry, loopBackLabel(step), undefined, undefined, { detourX: left + LOOP_LINE_X });
-      }
+      for (const e of placed.exits) this.edge(e, meet);
       laneX += size.w + GAP_X;
     });
     if (after && afterSize) {
@@ -490,11 +521,55 @@ class Builder {
       for (const e of placed.exits) this.edge(e, join);
     }
     this.depth -= 1;
-    // A loop leaves from the bottom of its frame once it is done: no line through its body.
-    if (isLoop) {
-      this.edge(id, join, undefined, true);
-      this.exitLabels.set(join, loopExitLabel(step));
+    return { entry: id, exits: [join] };
+  }
+
+  /** A loop's body, its decision (see DECIDE_W), its line back and its way out on the frame's bottom edge. */
+  private loop(
+    step: Step,
+    id: string,
+    y: number,
+    cx: number,
+    left: number,
+    right: number,
+    headH: number,
+    lane: Lane,
+    size: Size,
+    joinY: number,
+  ): { entry: string; exits: string[] } {
+    const join = `join:${id}`;
+    const decide = `join:${id}:decide`;
+    const asks = loopQuestion(step);
+    const { yes, no } = asks;
+    const after = CHECKS_AFTER.has(step.type);
+    const bodyY = after ? y + headH + GAP_Y : y + headH + DECIDE_GAP + DECIDE_H + GAP_Y;
+    const decideY = after ? bodyY + size.h + DECIDE_GAP : y + headH + DECIDE_GAP;
+    this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: joinY }, data: { kind: "join", parentId: id, shown: false } });
+    this.nodes.push({
+      id: decide,
+      type: "join",
+      position: { x: cx - DECIDE_W / 2, y: decideY },
+      data: { kind: "join", parentId: id, shown: false, question: asks.question },
+    });
+    this.depth += 1;
+    const placed = this.list(lane.steps, bodyY, cx - size.w / 2, size.w, id, lane.name, lane.label, lane.start, lane.tail);
+    this.depth -= 1;
+    const back = { loop: true, detourX: left + LOOP_LINE_X };
+    if (after) {
+      // A wait: its block, then the decision; "いいえ" back up to the block, "はい" on out.
+      this.edge(id, placed.entry, undefined, undefined, true);
+      for (const e of placed.exits) this.edge(e, decide);
+      this.edge(decide, placed.entry, `${no}：${loopBackLabel(step)}`, undefined, undefined, { ...back, fromDecide: true });
+      this.edge(decide, join, yes);
+    } else {
+      // Decide first: "はい" into the body, its end back into the decision, "いいえ" down the right and out.
+      this.edge(id, decide);
+      this.edge(decide, placed.entry, yes, undefined, true);
+      // An empty body has nothing to run again.
+      if (lane.steps.length > 0) for (const e of placed.exits) this.edge(e, decide, loopBackLabel(step), undefined, undefined, { ...back, intoDecide: true });
+      this.edge(decide, join, no, undefined, undefined, { fromDecide: true, railX: right - LOOP_LINE_X });
     }
+    this.exitLabels.set(join, loopExitLabel(step));
     return { entry: id, exits: [join] };
   }
 }
