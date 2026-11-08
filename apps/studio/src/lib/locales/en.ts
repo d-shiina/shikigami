@@ -837,7 +837,7 @@ export const en: Dict = {
     addFinallyTitle: "Add a node that runs at the end, failed or not",
     foldFrame: "Fold",
     unfoldFrame: "Unfold",
-    breakNote: "Leaves the loop here",
+    breakNote: "Leaves here for the end of the loop",
     continueNote: "Goes on to the next round here",
     failNote: "The flow stops here with an error",
     inside: (n: number) => `${n} node${n === 1 ? "" : "s"} inside`,

@@ -184,6 +184,34 @@ export function loopExitLabel(step: Step): string {
   return ja ? "回数を終えたら" : "After the last round";
 }
 
+/** On a loop's foot: where it ends, however it ends (all done, or a break). */
+export function loopEndLabel(): string {
+  return locale === "ja" ? "繰り返し終了" : "End of loop";
+}
+
+/** How a loop's rounds went in a run, for its foot. */
+export type LoopOutcome = "running" | "done" | "left" | "failed" | "stopped";
+
+/**
+ * How far a loop got, on its foot: 「12 件中 12 件」 when it went round
+ * them all, 「12 件中 7 件目で抜けた」 after a break, 「3 / 12 件目」 while it runs.
+ */
+export function loopRoundsText(type: string, round: number, total: number | null, how: LoopOutcome): string {
+  const ja = locale === "ja";
+  const unit = type === "control.forEach" ? (ja ? "件" : "items") : ja ? "回" : "rounds";
+  const of = total === null ? "" : ja ? `${total} ${unit}中 ` : ` of ${total}`;
+  if (!ja) {
+    if (how === "running") return total === null ? `Round ${round}` : `${round} / ${total}`;
+    if (how === "done") return total === null ? `${round} ${unit}` : `${round}${of}`;
+    const at = `at ${round}${of}`;
+    return how === "left" ? `Left ${at}` : how === "failed" ? `Error ${at}` : `Stopped ${at}`;
+  }
+  if (how === "running") return total === null ? `${round} ${unit}目` : `${round} / ${total} ${unit}目`;
+  if (how === "done") return `${of}${round} ${unit}`;
+  const at = `${of}${round} ${unit}目で`;
+  return how === "left" ? `${at}抜けた` : how === "failed" ? `${at}エラー` : `${at}中止`;
+}
+
 /** What the head of a frame says after its name: the condition of an if, the value a switch compares, what a loop walks over. */
 export function headSummary(step: Step): string {
   const p = (step.params ?? {}) as Record<string, unknown>;

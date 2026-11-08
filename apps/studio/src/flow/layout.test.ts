@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, frameAt, CASE_H, decideWidth, END_ID, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, START_ID, type StepNodeData, TAIL_W, TERMINAL_H } from "./layout";
+import { ancestorsOf, frameAt, CASE_H, decideWidth, END_ID, FOOT_H, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, START_ID, type StepNodeData, TAIL_W, TERMINAL_H } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -192,14 +192,15 @@ describe("layoutFlow", () => {
     expect(back.detourX).toBe(frame.x + LOOP_LINE_X);
     // "いいえ" runs down the right of the frame to where it is left.
     const no = layout.edges.find((e) => e.source === "join:loop:decide" && e.target === "join:loop")!;
-    expect([no.label, no.railX]).toEqual(["いいえ", frame.x + frame.width - LOOP_LINE_X]);
-    // The line out starts on the frame's bottom edge.
+    // It says when it leaves inside the frame, beside the line, not on the line out of the frame.
+    expect([no.label, no.railX, no.exit]).toEqual(["いいえ", frame.x + frame.width - LOOP_LINE_X, "回数を終えたら"]);
+    // The line out leaves through the foot, the band across the frame's bottom (「繰り返し終了」).
     const join = layout.nodes.find((n) => n.id === "join:loop")!;
-    expect(join.position.y + 8).toBe(frame.y + frame.height);
+    expect(join.position).toEqual({ x: frame.x, y: frame.y + frame.height - FOOT_H });
+    expect(join.data).toMatchObject({ shown: false, foot: { width: frame.width, type: "control.repeat", breaks: [] } });
     const tail = layout.nodes.find((n) => n.id === "end:loop:body")!;
-    expect(tail.position.y + 24 + 14).toBeLessThan(frame.y + frame.height);
-    expect(layout.edges.find((e) => e.source === "join:loop" && e.target === "after")?.label).toBe("回数を終えたら");
-    expect(layout.nodes.find((n) => n.id === "join:loop")?.data).toMatchObject({ shown: false });
+    expect(tail.position.y + 24 + 14).toBeLessThan(join.position.y);
+    expect(layout.edges.find((e) => e.source === "join:loop" && e.target === "after")?.label).toBeUndefined();
   });
 
   it("puts each parallel branch in its own lane and joins them", () => {
@@ -248,7 +249,8 @@ describe("layoutFlow", () => {
       ].sort(),
     );
     const after = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }, log("x")], defs);
-    expect(after.edges.find((e) => e.source === "join:loop")?.label).toBe("すべて終わったら");
+    expect(after.edges.find((e) => e.source === "join:loop:decide" && e.target === "join:loop")?.exit).toBe("すべて終わったら");
+    expect(after.edges.find((e) => e.source === "join:loop")?.label).toBeUndefined();
   });
 
   it("frames a loop with everything inside it, apart from what comes after", () => {
@@ -288,7 +290,7 @@ describe("layoutFlow", () => {
     // It is left from the bottom of the frame, after everything in it.
     const exit = layout.nodes.find((n) => n.id === "join:outer")!;
     expect(exit.position.y).toBeGreaterThan(inner.bottom);
-    expect(exit.position.y + 8).toBe(outer.bottom);
+    expect(exit.position.y + FOOT_H).toBe(outer.bottom);
   });
 
   it("frames branches too, and keeps side-by-side frames apart", () => {
@@ -374,7 +376,16 @@ describe("layoutFlow", () => {
       [{ id: "loop", type: "control.repeat", blocks: { body: [{ id: "if", type: "control.if", blocks: { then: [{ id: "brk", type: "control.break" }], else: [log("e")] } }] } }],
       defs,
     );
-    expect(layout.edges.some((e) => e.source === "brk")).toBe(false);
+    // A break draws no line, but a run that takes it comes out at the loop's foot.
+    expect(layout.edges.filter((e) => e.source === "brk").map((e) => [e.target, e.hidden])).toEqual([["join:loop", true]]);
+    expect(layout.nodes.find((n) => n.id === "join:loop")?.data).toMatchObject({ foot: { breaks: ["brk"] } });
+    // A break in a loop inside the loop leaves that one, not this one.
+    const nested = layoutFlow(
+      [{ id: "out", type: "control.forEach", params: { items: "rows" }, blocks: { body: [{ id: "in", type: "control.while", params: { condition: "true" }, blocks: { body: [{ id: "b", type: "control.break" }] } }] } }],
+      defs,
+    );
+    expect(nested.nodes.find((n) => n.id === "join:out")?.data).toMatchObject({ foot: { breaks: [] } });
+    expect(nested.nodes.find((n) => n.id === "join:in")?.data).toMatchObject({ foot: { breaks: ["b"] } });
     expect(layout.nodes.some((n) => n.id === "end:if:then")).toBe(false);
     expect(layout.nodes.some((n) => n.id === "end:if:else")).toBe(true);    // A disabled one is skipped when it runs: the flow goes on past it.
     const off = layoutFlow(
