@@ -17,7 +17,7 @@ import { Monogram } from "./FlowsPage";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
 import { Promises, usePromises } from "./Promises";
 import { promiseCounts } from "../lib/promises";
-import { stepLabel, t, useKeptState } from "../lib/i18n";
+import { stepLabel, t } from "../lib/i18n";
 import { useReviewView } from "../lib/reviewView";
 
 export type InboxItem = {
@@ -157,6 +157,9 @@ type Marks = {
   /** What the send-back form starts with, when an answer opened it. */
   sendBackWith: string | undefined;
   setSendBackWith(text: string | undefined): void;
+  /** The send-back form is open. Kept here so it survives switching between the report and the chart. */
+  sending: boolean;
+  setSending(on: boolean): void;
   see(key: string): void;
   answer(key: string, value: "ok" | "no" | null): void;
 };
@@ -165,6 +168,8 @@ const useMarks = create<Marks>((set) => ({
   answers: {},
   sendBackWith: undefined,
   setSendBackWith: (text) => set({ sendBackWith: text }),
+  sending: false,
+  setSending: (on) => set(on ? { sending: true } : { sending: false, sendBackWith: undefined }),
   see: (key) => set((m) => (m.seen[key] ? m : { seen: { ...m.seen, [key]: true } })),
   answer: (key, value) =>
     set((m) => {
@@ -285,14 +290,12 @@ function Reviewed() {
  */
 export function ReviewReport() {
   const r = useReview();
-  usePollEvidence(r.flowId);
   const answer = useMarks((m) => m.answer);
   const answers = useMarks((m) => m.answers);
   const see = useMarks((m) => m.see);
   const seenMarks = useMarks((m) => m.seen);
-  const sendBackWith = useMarks((m) => m.sendBackWith);
   const setSendBackWith = useMarks((m) => m.setSendBackWith);
-  const [sending, setSending] = useKeptState("review.sending", false);
+  const setSending = useMarks((m) => m.setSending);
   const [runsOpen, setRunsOpen] = useState<boolean | null>(null);
   const { flow, oldestFirst, summary, newest, oldest, defs, markKey } = r;
   const cards = useMemo(
@@ -445,47 +448,36 @@ export function ReviewReport() {
           )}
         </article>
       </div>
-      <div className="shrink-0 border-t border-slate-200 bg-sheet shadow-raised">
-        <div className="mx-auto max-w-[940px] px-6">
-          <ReviewActions
-            unanswered={r.unanswered}
-            broken={r.broken}
-            sending={sending}
-            setSending={(on) => {
-              setSending(on);
-              if (!on) setSendBackWith(undefined);
-            }}
-            initialReason={sendBackWith}
-          />
-        </div>
-      </div>
     </div>
   );
 }
 
-/** The verdict kept under the chart, procedure or variables opened from the report, with the way back to it. */
-export function ReviewBar() {
+/**
+ * The verdict at the bottom of the review desk, under the report and under the
+ * chart, procedure or variables opened from it (with the way back). One
+ * component in one place, so a send-back being written survives switching.
+ */
+export function ReviewFoot({ report }: { report: boolean }) {
   const r = useReview();
   usePollEvidence(r.flowId);
   const setView = useReviewView((s) => s.setView);
   const sendBackWith = useMarks((m) => m.sendBackWith);
-  const setSendBackWith = useMarks((m) => m.setSendBackWith);
-  const [sending, setSending] = useKeptState("review.sending", false);
+  const sending = useMarks((m) => m.sending);
+  const setSending = useMarks((m) => m.setSending);
   if (!r.newest) return null;
   return (
-    <div className="shrink-0 border-t border-slate-200 bg-sheet px-4">
-      <ReviewActions
-        compact
-        unanswered={r.unanswered}
-        broken={r.broken}
-        sending={sending}
-        setSending={(on) => {
-          setSending(on);
-          if (!on) setSendBackWith(undefined);
-        }}
-        initialReason={sendBackWith}
-        onBack={() => setView("report")}
-      />
+    <div className={`shrink-0 border-t border-slate-200 bg-sheet ${report ? "shadow-raised" : ""}`}>
+      <div className={report ? "mx-auto max-w-[940px] px-6" : "px-4"}>
+        <ReviewActions
+          compact={!report}
+          unanswered={r.unanswered}
+          broken={r.broken}
+          sending={sending}
+          setSending={setSending}
+          initialReason={sendBackWith}
+          onBack={report ? undefined : () => setView("report")}
+        />
+      </div>
     </div>
   );
 }
@@ -575,7 +567,6 @@ function ChangeCardView({
   onSee: () => void;
 }) {
   const goTo = useStudio((s) => s.goTo);
-  const setView = useReviewView((s) => s.setView);
   const [open, setOpen] = useState(false);
   const read = (step: Step | null) => (step ? sentence(step, defs.get(step.type)) : null);
   const before = read(card.before);
@@ -587,7 +578,7 @@ function ChangeCardView({
   const tag = KIND_TAG[card.kind];
   const show = () => {
     onSee();
-    setView("flow");
+    // Going to a node leaves the report for the chart (the review desk follows `reveal`).
     if (card.after) goTo(card.stepId);
   };
   const side = (label: string, body: React.ReactNode) => (

@@ -1,6 +1,6 @@
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { ReactFlowProvider } from "@xyflow/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { setPartLookup } from "./lib/sentence";
 import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
 import { AgentButton } from "./components/AgentButton";
@@ -21,7 +21,7 @@ import { FileSheet } from "./components/FileSheet";
 import { NodeEditor } from "./components/NodeEditor";
 import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
 import { FileDragLayer } from "./components/FileDrag";
-import { ReviewBar, ReviewInbox, ReviewRail, ReviewReport } from "./components/ReviewDesk";
+import { ReviewFoot, ReviewInbox, ReviewRail, ReviewReport } from "./components/ReviewDesk";
 import { useReviewView } from "./lib/reviewView";
 import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
@@ -300,13 +300,22 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   const view = useReviewView((s) => s.view);
   const setView = useReviewView((s) => s.setView);
   const reading = view === "report" ? "flow" : view;
+  // A link to a node (a change, an effect, a promise's error step, a log line) or a followed run
+  // reveals it on the chart: from the report, that means switching to the chart to show it.
+  const revealed = useStudio((s) => s.reveal?.seq ?? 0);
+  const lastRevealed = useRef(revealed);
+  useEffect(() => {
+    if (revealed === lastRevealed.current) return;
+    lastRevealed.current = revealed;
+    if (useReviewView.getState().view === "report") setView("flow");
+  }, [revealed, setView]);
   return (
     <Editor
       view={reading}
       onView={setView}
       list={<InboxSlot room={fit.inbox} width={sizes.inbox} grip={grip} />}
       report={view === "report" && hasFlow ? <ReviewReport /> : undefined}
-      foot={view !== "report" && hasFlow ? <ReviewBar /> : undefined}
+      foot={hasFlow ? <ReviewFoot report={view === "report"} /> : undefined}
       rightWidth={sizes.right}
       grip={grip}
       right={fit.right && hasFlow && view !== "report" ? <Inspector /> : null}
