@@ -1623,15 +1623,29 @@ impl Executor {
                     Some(other) => Map::from_iter([("cause".to_owned(), other)]),
                     None => Map::new(),
                 };
-                // A nested call already said where inside it failed.
-                details.entry("subFlow").or_insert_with(|| {
-                    serde_json::json!({
-                        "flowId": callee.id,
-                        "flowName": callee.name,
-                        "stepId": error.step_id,
-                        "stepType": error.step_type,
-                    })
-                });
+                // A nested call already said where inside it failed; its call
+                // step joins `callPath`, the calls from this callee down to
+                // that flow (one flow can be called from several places).
+                match details.get_mut("subFlow").and_then(Value::as_object_mut) {
+                    Some(sub) => {
+                        let mut path = vec![serde_json::json!(error.step_id)];
+                        if let Some(Value::Array(rest)) = sub.remove("callPath") {
+                            path.extend(rest);
+                        }
+                        sub.insert("callPath".to_owned(), Value::Array(path));
+                    }
+                    None => {
+                        details.insert(
+                            "subFlow".to_owned(),
+                            serde_json::json!({
+                                "flowId": callee.id,
+                                "flowName": callee.name,
+                                "stepId": error.step_id,
+                                "stepType": error.step_type,
+                            }),
+                        );
+                    }
+                }
                 error.details = Some(Value::Object(details));
                 error.step_id = Some(step.id.clone());
                 error.step_type = Some(step.step_type.clone());

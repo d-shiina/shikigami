@@ -15,6 +15,7 @@ pub mod debug;
 pub mod event;
 mod exec;
 pub mod handler;
+pub mod names;
 pub mod node;
 pub mod record;
 mod runlog;
@@ -272,12 +273,12 @@ impl Runtime {
             current_step: None,
             steps_executed: 0,
         }));
+        let names = names::StepNames::new(
+            std::iter::once(&flow).chain(library.values().map(|s| &**s)),
+            &self.registry,
+        );
         let log = match (&options.project_dir, options.full_run) {
-            (Some(dir), true) => runlog::RunLog::create(
-                dir,
-                std::iter::once(&flow).chain(library.values().map(|s| &**s)),
-                &self.registry,
-            ),
+            (Some(dir), true) => runlog::RunLog::create(dir, names.clone()),
             _ => None,
         };
         let emitter = Emitter::new(run_id.clone(), tx, snapshot.clone(), log);
@@ -456,7 +457,11 @@ impl Runtime {
             if let Some(error) = error.as_mut() {
                 executor.capture_failure(&flow, error).await;
             }
-            let error = error.map(|e| emitter.mask_error(e));
+            let error = error.map(|e| {
+                let mut e = emitter.mask_error(e);
+                names.label(&flow.id, &mut e);
+                e
+            });
 
             let outputs: Map<String, Value> = flow
                 .variables

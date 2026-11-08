@@ -2176,6 +2176,12 @@ export interface RunError {
   stepId?: StepId | null;
   stepType?: string | null;
   /**
+   * The node as people know it: its name, else its type's label. Set on
+   * the run's final error (report, notifications), so the place can be
+   * told without the flow at hand; `stepId` stays the key to the node.
+   */
+  stepLabel?: string | null;
+  /**
    * Adapter-specific evidence: UI element snapshot, screenshot path,
    * expected vs. actual state, etc.
    */

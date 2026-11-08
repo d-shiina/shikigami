@@ -1359,6 +1359,14 @@ function FollowInside({ path }: { path: string }) {
   useEffect(() => {
     if (running) bring.current(running);
   }, [running]);
+  // A log line or a failure that leads to a node in here (`goToPlace`).
+  const reveal = useStudio((s) => (s.reveal?.inside === path ? s.reveal : null));
+  useEffect(() => {
+    if (!reveal) return;
+    // After the entered flow has been laid out.
+    const timer = setTimeout(() => bring.current(reveal.stepId), 120);
+    return () => clearTimeout(timer);
+  }, [reveal]);
   // Where a run paused in here, once the pause panel has taken its room.
   const paused = useStudio((s) => (s.run?.status === "paused" && s.run.pause && callKey(s.run.pause.callPath) === path ? s.run.pause : undefined));
   useEffect(() => {
@@ -1374,7 +1382,7 @@ function Follow() {
   const latest = useBringIntoView();
   const bring = useRef(latest);
   bring.current = latest;
-  const reveal = useStudio((s) => s.reveal);
+  const reveal = useStudio((s) => (s.reveal?.inside ? null : s.reveal));
   const running = useStudio((s) => (s.run?.status === "running" && s.followRun ? s.run.starts.at(-1)?.stepId : undefined));
   // Only a new request moves the view, not a resize or re-measure.
   useEffect(() => {
