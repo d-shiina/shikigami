@@ -7,7 +7,7 @@ The installed Studio updates itself the way VS Code does. It checks for a new ve
 - Distribution: this repository's GitHub Releases (`latest.json` and the installers)
 - Checked at: `https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
 - Tamper protection: installers are signed with a dedicated signing key, and Studio verifies them with the public key embedded at release time before replacing itself
-- Installer: NSIS (per user, no administrator rights). An MSI is also on Releases, but automatic updates use the NSIS one
+- Installer: NSIS (per user, no administrator rights).
 - Development builds (`pnpm studio:dev`) do not check
 
 ## The CLI (MCP server) is updated too

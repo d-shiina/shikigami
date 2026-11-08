@@ -7,7 +7,7 @@
 - 配布先：このリポジトリの GitHub Releases（`latest.json` とインストーラー）
 - 確認先：`https://github.com/d-shiina/shikigami/releases/latest/download/latest.json`
 - 改ざん防止：インストーラーは専用の署名鍵で署名し、Studio はリリース時に埋め込んだ公開鍵で検証してから入れ替える
-- インストーラー：NSIS（ユーザー単位、管理者権限不要）。MSI も Releases に置くが、自動更新は NSIS 版で行う
+- インストーラー：NSIS（ユーザー単位、管理者権限不要）
 - 開発版（`pnpm studio:dev`）は確認しない
 
 ## CLI（MCP サーバー）も一緒に更新される

@@ -918,7 +918,7 @@ impl ShikigamiMcp {
         self.finish("list_runs", &peer, p.flow_id.as_deref(), outcome)
     }
 
-    /// Secrets the user registered in Shikigami Studio: names, the sites each may be typed into, and
+    /// Secrets the user registered in SpellSheet Studio: names, the sites each may be typed into, and
     /// which fields are set (username, password, totp). Values are never returned. Use a name in
     /// browser.fill: value { "secret": "<name>", "field": "password" }.
     #[tool(annotations(read_only_hint = true, open_world_hint = false))]
@@ -941,7 +941,7 @@ impl ShikigamiMcp {
     /// fitting secret, or a step failed with SECRET_NOT_FOUND / SECRET_FIELD_EMPTY / SECRET_SITE_*).
     /// Studio shows the user a registration form with the name and site filled in; the user types
     /// the values there and you never see them. Also tell the user in chat to enter it in
-    /// Shikigami Studio. status: `registered` (use it: browser.fill value { "secret": name,
+    /// SpellSheet Studio. status: `registered` (use it: browser.fill value { "secret": name,
     /// "field": "password" }), `waiting` (call again with waitMs, or list_secrets later) or
     /// `dismissed` (the user declined: ask how they want to log in).
     #[tool(annotations(

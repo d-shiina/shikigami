@@ -12,7 +12,7 @@ Each tutorial takes one piece of office work from start to finish: ask the AI fo
 
 ## Before you start
 
-- Install and start SpellSheet Studio (named Shikigami Studio in the Start menu for now) ([Getting started in the README](../../README.md#getting-started))
+- Install and start SpellSheet Studio ([Getting started in the README](../../README.md#getting-started))
 - Open the AI pane with "Claude Code" at the top left of Studio (Ctrl+J) and sign in
 - The sample files are in `examples/tutorials/`. The finished flows (`*.shikigami.json`) are there too. To look at one without the AI, press "Open finished" under "Samples" on Studio's Flows page (the sample files come with it), or open the bundle with "Import from file"
 

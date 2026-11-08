@@ -1,7 +1,7 @@
 {
   "name": "shikigami",
   "version": "0.1.0",
-  "description": "ShikigamiRPA: build, edit and run desktop automation flows shared with Shikigami Studio.",
+  "description": "ShikigamiRPA: build, edit and run desktop automation flows shared with SpellSheet Studio.",
   "author": { "name": "Shikigami" },
   "repository": "https://github.com/d-shiina/shikigami",
   "keywords": ["rpa", "automation", "windows", "mcp"]

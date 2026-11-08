@@ -1,4 +1,4 @@
-//! Shikigami Studio backend.
+//! SpellSheet Studio backend.
 //!
 //! Every command is a thin wrapper over `FlowService` (editing) or
 //! `Runtime` (execution). Studio owns no flow logic of its own, so what

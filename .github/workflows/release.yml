@@ -1,6 +1,6 @@
 name: Release
 
-# Builds the signed Windows installers (NSIS and MSI, with the CLI/MCP server,
+# Builds the signed Windows installer (NSIS, with the CLI/MCP server,
 # Node.js, the browser adapter and the PaddleOCR models inside) and publishes
 # them as a GitHub Release with latest.json; installed Studios pick the update
 # up on their next launch. See docs/release.md.
@@ -20,6 +20,7 @@ on:
       - apps/studio/src-tauri/Cargo.toml
       - apps/studio/src-tauri/tauri.conf.json
       - apps/studio/src-tauri/tauri.release.conf.json
+      - apps/studio/src-tauri/windows/**
       - scripts/release-notes.mjs
 
 permissions:
@@ -191,6 +192,5 @@ jobs:
           name: installers-${{ steps.version.outputs.version }}
           path: |
             target/release/bundle/nsis/*.exe
-            target/release/bundle/msi/*.msi
           if-no-files-found: error
           retention-days: 14

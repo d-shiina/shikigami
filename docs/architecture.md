@@ -504,7 +504,7 @@ Running several things at once is meant to be a feature of the product. There ar
 
 - **Reason**: business RPA in Japan targets almost entirely Windows business apps and browsers. Narrowing the target lets us use Windows features freely (Credential Manager / DPAPI, unattended runs through Task Scheduler, an inspector built on UI Automation) and lowers the cost of testing, distribution and support.
 - **Alternative**: also target macOS / Linux and abstract desktop operations behind a common OS interface.
-- **Trade-off**: no answer for demand on other OSes. Core / Runtime / the MCP server being OS-independent is not "for a future port" but for reasons a Windows-only product still needs: running without a GUI, isolating UIA on its dedicated thread, and fast tests. Linux CI is used only to run core tests quickly and cheaply, not as a product target. Distribution is NSIS / MSI only.
+- **Trade-off**: no answer for demand on other OSes. Core / Runtime / the MCP server being OS-independent is not "for a future port" but for reasons a Windows-only product still needs: running without a GUI, isolating UIA on its dedicated thread, and fast tests. Linux CI is used only to run core tests quickly and cheaply, not as a product target. Distribution is the NSIS installer only.
 
 ## 12. MVP acceptance criteria
 
@@ -521,7 +521,7 @@ The first product milestone: **create a web flow from an MCP client in natural l
 | A7 | `spellsheet run <id>` (no AI, no GUI) does the same web work successfully, exit code 0 | Automated E2E |
 | A8 | On failure, the failing node ID, error code, screenshot and UI information are saved and available from MCP's `get_run_logs` | Automated E2E |
 | A9 | Secret variable values never appear in logs or record files | Automated |
-| A10 | On **a real Windows 11 machine**, A1–A9 E2E pass with Studio / CLI / MCP server installed from the installer (NSIS / MSI) | Manual E2E (required) + CI (build and test on windows-latest) |
+| A10 | On **a real Windows 11 machine**, A1–A9 E2E pass with Studio / CLI / MCP server installed from the installer (NSIS) | Manual E2E (required) + CI (build and test on windows-latest) |
 
 ## 13. Implementation status and limits
 

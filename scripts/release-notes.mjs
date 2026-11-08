@@ -27,7 +27,7 @@ const footer = [
   "",
   "---",
   "",
-  "Install: download `Shikigami Studio_" + version + "_x64-setup.exe` below (per user, no administrator rights).",
+  "Install: download `SpellSheet Studio_" + version + "_x64-setup.exe` below (per user, no administrator rights).",
   "Installed copies of Studio update themselves on their next launch.",
 ];
 
