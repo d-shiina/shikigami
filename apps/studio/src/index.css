@@ -325,3 +325,8 @@ textarea,
     animation: none !important;
   }
 }
+/* The step of a frame is picked: the whole frame is marked, its head being its top edge. */
+.flow-frame.flow-frame-selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
