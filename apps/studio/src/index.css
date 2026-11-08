@@ -167,6 +167,9 @@
   --cat-file: #4a596c;
   --cat-other: #637387;
   --flow-edge: #a3a8b0;
+  /* A loop's decision: yellow, the colour a yes/no question has on a flowchart. */
+  --flow-decide-fill: #fff6d1;
+  --flow-decide-line: #d4a514;
 }
 
 :root[data-theme="dark"] {
@@ -180,6 +183,8 @@
   --cat-file: #a3acb5;
   --cat-other: #8e98a2;
   --flow-edge: #5a5e66;
+  --flow-decide-fill: #2e2810;
+  --flow-decide-line: #b8941f;
 }
 
 /* React Flow's dark mode brings its own greys; keep the app's navy. */

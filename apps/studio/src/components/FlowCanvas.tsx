@@ -964,8 +964,8 @@ function JoinNode({ data }: NodeProps<Node<JoinNodeData>>) {
         <svg className="absolute inset-0 overflow-visible" width={w} height={h} aria-hidden="true">
           <polygon
             points={`0.75,${h / 2} ${p},0.75 ${w - p},0.75 ${w - 0.75},${h / 2} ${w - p},${h - 0.75} ${p},${h - 0.75}`}
-            fill="var(--color-sheet)"
-            stroke="var(--color-slate-400)"
+            fill="var(--flow-decide-fill)"
+            stroke="var(--flow-decide-line)"
             strokeWidth={1.25}
             strokeLinejoin="round"
           />
