@@ -19,9 +19,9 @@ use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BeginPaint, BitBlt, CLEARTYPE_QUALITY,
     CLIP_DEFAULT_PRECIS, CreateCompatibleBitmap, CreateCompatibleDC, CreateDIBSection, CreateFontW,
     CreateSolidBrush, DEFAULT_CHARSET, DIB_RGB_COLORS, DT_CENTER, DT_END_ELLIPSIS, DT_NOPREFIX,
-    DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject, DrawTextW, EndPaint, FF_DONTCARE,
-    FW_SEMIBOLD, FillRect, HBITMAP, HDC, HGDIOBJ, InvalidateRect, OUT_DEFAULT_PRECIS, PAINTSTRUCT,
-    SRCCOPY, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
+    DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject, EndPaint, FF_DONTCARE, FW_SEMIBOLD,
+    FillRect, HBITMAP, HDC, HGDIOBJ, InvalidateRect, OUT_DEFAULT_PRECIS, PAINTSTRUCT, SRCCOPY,
+    SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::{
@@ -455,12 +455,11 @@ unsafe fn banner(hwnd: HWND, dc: HDC, area: RECT, message: &[u16]) {
         let old = SelectObject(dc, HGDIOBJ(font.0));
         let _ = SetBkMode(dc, TRANSPARENT);
         let _ = SetTextColor(dc, BANNER_TEXT);
-        let mut text = message.to_vec();
         rect.left += 12;
         rect.right -= 12;
-        DrawTextW(
+        crate::overlay::draw_text(
             dc,
-            &mut text,
+            message,
             &mut rect,
             DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX,
         );
