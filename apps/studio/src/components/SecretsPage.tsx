@@ -209,11 +209,9 @@ function SecretForm({
       </SettingsGroup>
 
       <SettingsGroup title={t.secretPage.values} description={t.secretPage.safety}>
-        {draft.kind !== "apiKey" && (
-          <SettingsRow label={t.secretPage.store} hint={t.secretStoreHints[draft.store]}>
-            <Choice value={draft.store} options={t.secretStores} label={t.secretPage.store} onChange={(store) => edit({ store })} />
-          </SettingsRow>
-        )}
+        <SettingsRow label={t.secretPage.store} hint={t.secretStoreHints[draft.store]}>
+          <Choice value={draft.store} options={t.secretStores} label={t.secretPage.store} onChange={(store) => edit({ store })} />
+        </SettingsRow>
         {fromWindows && (
           <SettingsRow
             label={t.secretWindowsTarget}
@@ -669,8 +667,9 @@ export function SecretsPage() {
                   ＋ {t.secretPage.add}
                 </button>
               </div>
-              <div className="border-y border-slate-200">
-                <table className="w-full table-fixed border-collapse text-left">
+              {/* Narrow panes (the AI pane open, a small window) scroll the table sideways rather than squeeze the names. */}
+              <div className="overflow-x-auto border-y border-slate-200">
+                <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
                   <colgroup>
                     <col />
                     <col className="w-[150px]" />

@@ -123,9 +123,22 @@ impl Flow {
                 _ => {}
             }
         }
+        // Steps that name a secret as plain text: `oauth.signIn` signs in
+        // with it, and `browser.open` reuses the login saved under its name
+        // (shikigami-browser; the names are written out here because core
+        // does not depend on it).
+        const NAMED: [(&str, &str); 2] = [("oauth.signIn", "secret"), ("browser.open", "session")];
         let mut names = std::collections::BTreeSet::new();
         for step in self.walk() {
             step.params.values().for_each(|v| visit(v, &mut names));
+            for (step_type, key) in NAMED {
+                if step.step_type == step_type
+                    && let Some(Value::String(name)) = step.params.get(key)
+                    && !name.contains("{{")
+                {
+                    names.insert(name.clone());
+                }
+            }
         }
         names.into_iter().collect()
     }
