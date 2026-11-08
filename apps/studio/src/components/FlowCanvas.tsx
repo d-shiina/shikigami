@@ -78,7 +78,8 @@ import {
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence, typeTitle } from "../lib/sentence";
 import { AppTag } from "./AppTag";
-import { HoverPreview } from "./HoverPreview";
+import { HALF, HoverPreview } from "./HoverPreview";
+import { openImageValue } from "./ImageViewer";
 import { previewSource } from "../lib/preview";
 import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
@@ -557,11 +558,13 @@ const MAX_RUNS = 5;
 function ValuePopover({ name, color, values, side, anchor }: { name: string; color: string; values: VariableChange[]; side: "in" | "out"; anchor: DOMRect }) {
   const below = anchor.top < window.innerHeight / 2;
   const many = values.length > 1;
+  // Kept inside the window: a picture makes the popover wide.
+  const left = Math.min(Math.max(anchor.left + anchor.width / 2, HALF + 8), Math.max(HALF + 8, window.innerWidth - HALF - 8));
   return createPortal(
     <div
       // Above the chip, or below it when there is no room up top.
-      style={{ left: anchor.left + anchor.width / 2, top: below ? anchor.bottom + 6 : anchor.top - 6 }}
-      className={`pointer-events-none fixed z-50 max-w-[480px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lifted`}
+      style={{ left, top: below ? anchor.bottom + 6 : anchor.top - 6 }}
+      className={`pointer-events-none fixed z-50 max-w-[min(600px,calc(100vw-16px))] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lifted`}
     >
       <div className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
@@ -601,9 +604,18 @@ function VarChip({ name, label, color, values, side, owner }: { name: string; la
   const focused = useFocus() === varFocus(name);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const variableMenu = useVariableMenu();
+  const flowId = useStudio((s) => s.flow?.id);
   const last = values.at(-1);
   return (
     <span
+      // The popover does not take the pointer; pressing the chip opens its picture large.
+      onClick={(e) => {
+        if (!last || last.secret || last.truncated) return;
+        if (openImageValue(last.value, flowId)) {
+          e.stopPropagation();
+          setAnchor(null);
+        }
+      }}
       onContextMenu={menuFor(() => {
         setAnchor(null);
         return variableMenu(name);
