@@ -29,7 +29,7 @@ flows/<フローの ID>/
 |---|---|
 | `$schema` | エディターの補完用に `https://shikigami.dev/schemas/test-case.schema.json`（任意。中身は [schemas/test-case.schema.json](../../schemas/test-case.schema.json)） |
 | `description` | ケースの説明（任意） |
-| `inputs` | 入力変数の値。書かなかった入力は既定値のまま（`shikigami run -i` と同じ） |
+| `inputs` | 入力変数の値。書かなかった入力は既定値のまま（`spellsheet run -i` と同じ） |
 | `expect.status` | 終わり方：`succeeded`（既定）・`failed`・`cancelled` |
 | `expect.outputs` | 確かめる出力変数と値 |
 | `expect.errorCode` | `failed` のとき、エラーの種類（例 `ELEMENT_NOT_FOUND`、`FILE_NOT_FOUND`） |
@@ -71,10 +71,10 @@ AI が保存したケースは、その変更の**約束**として扱います�
 ## コマンドで流す
 
 ```bash
-shikigami test <フローの ID>                 # 公開版で全部のケース
-shikigami test <フローの ID> --draft         # 作業中の内容で
-shikigami test <フローの ID> --case 3支店の合計  # 1 ケースだけ（繰り返し指定できます）
-shikigami test examples/tutorials/sales-csv/flow.json   # ファイルのフローも
+spellsheet test <フローの ID>                 # 公開版で全部のケース
+spellsheet test <フローの ID> --draft         # 作業中の内容で
+spellsheet test <フローの ID> --case 3支店の合計  # 1 ケースだけ（繰り返し指定できます）
+spellsheet test examples/tutorials/sales-csv/flow.json   # ファイルのフローも
 ```
 
 ```text

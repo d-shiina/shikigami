@@ -817,7 +817,7 @@ impl Vault {
                     "SECRET_KEY_MISSING",
                     "the key of this workspace's secrets is not on this PC / Windows user",
                 )
-                .with_hint("Secrets are tied to the Windows user that registered them. Ask the user to reset the secrets in Studio (シークレット) or with `shikigami secret reset`, then register them again.")
+                .with_hint("Secrets are tied to the Windows user that registered them. Ask the user to reset the secrets in Studio (シークレット) or with `spellsheet secret reset`, then register them again.")
             });
         }
         if !create {

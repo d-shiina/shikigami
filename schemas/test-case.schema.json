@@ -19,7 +19,7 @@
       ]
     },
     "inputs": {
-      "description": "Values of the flow's input variables, as `shikigami run -i` takes them.",
+      "description": "Values of the flow's input variables, as `spellsheet run -i` takes them.",
       "type": "object",
       "additionalProperties": true,
       "default": {}

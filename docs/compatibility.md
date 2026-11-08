@@ -104,7 +104,7 @@ Exit codes:
 
 ## 8. Snapshots and CI
 
-`pnpm schema:generate` (`shikigami schema export`) writes these "contract snapshots" to `schemas/contract/` along with the JSON Schema. They hold shapes only, no descriptions.
+`pnpm schema:generate` (`spellsheet schema export`) writes these "contract snapshots" to `schemas/contract/` along with the JSON Schema. They hold shapes only, no descriptions.
 
 | File | Contents |
 |---|---|

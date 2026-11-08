@@ -62,7 +62,7 @@ Press "Run" (F5). The run log ends with:
 Next month, replace the CSVs and run it. To use another folder, change the `folder` input:
 
 ```bash
-shikigami run scn_tutorial_sales_csv -i folder=C:\share\sales\2026-11
+spellsheet run scn_tutorial_sales_csv -i folder=C:\share\sales\2026-11
 ```
 
 ## 6. Keep tests
@@ -70,7 +70,7 @@ shikigami run scn_tutorial_sales_csv -i folder=C:\share\sales\2026-11
 So that you can check the result stays the same after a change, keep test cases in `tests/` (see `examples/tutorials/sales-csv/tests/`).
 
 ```bash
-shikigami test scn_tutorial_sales_csv --draft
+spellsheet test scn_tutorial_sales_csv --draft
 ```
 
 See [Testing flows](../testing.md) for how to write them.

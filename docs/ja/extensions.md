@@ -29,8 +29,8 @@
 GitHub のリポジトリを指定すると、最新のリリースに添付された最初の `.zip` を使います（添付がなければリリースのソースの zip）。
 
 ```powershell
-shikigami plugin install https://github.com/<owner>/<repo>        # 中身を表示するだけ
-shikigami plugin install https://github.com/<owner>/<repo> --yes  # インストールする
+spellsheet plugin install https://github.com/<owner>/<repo>        # 中身を表示するだけ
+spellsheet plugin install https://github.com/<owner>/<repo> --yes  # インストールする
 ```
 
 インストールの前に、拡張機能の名前・発行元・追加されるノード・**外部へ送るデータ**・必要なシークレット・起動するプログラムを表示します。拡張機能はこの PC でプログラムとして動くため、発行元を信頼できるものだけをインストールしてください。
@@ -40,11 +40,11 @@ shikigami plugin install https://github.com/<owner>/<repo> --yes  # インスト
 ### 一覧・有効と無効・更新・削除
 
 ```powershell
-shikigami plugin list              # 読み込んだもの・無効のもの・読み込めなかったものと理由
-shikigami plugin disable azureocr  # 無効（フォルダーは残し、ノードを読み込まない）
-shikigami plugin enable azureocr
-shikigami plugin update azureocr   # インストールした入手先から新しい版を取得（--yes で更新）
-shikigami plugin remove azureocr
+spellsheet plugin list              # 読み込んだもの・無効のもの・読み込めなかったものと理由
+spellsheet plugin disable azureocr  # 無効（フォルダーは残し、ノードを読み込まない）
+spellsheet plugin enable azureocr
+spellsheet plugin update azureocr   # インストールした入手先から新しい版を取得（--yes で更新）
+spellsheet plugin remove azureocr
 ```
 
 無効にした拡張機能のノードを使うフローは、インストールされていないときと同じく、実行前の検証で `PLUGIN_NOT_INSTALLED` になります（フローの中身はそのまま残ります）。フローは使っている拡張機能と版を `requires`（`{ "plugin:azureocr": "^0.1.0" }`）に記録するので、別の PC で足りない拡張機能が分かります。
@@ -54,8 +54,8 @@ shikigami plugin remove azureocr
 組織やコミュニティで使う拡張機能の一覧を、JSON の索引ファイル 1 つで配れます。サーバーは不要で、Git リポジトリに置いたファイルの raw URL などで構いません。
 
 ```powershell
-shikigami plugin registry --set https://example.com/shikigami-extensions.json
-shikigami plugin registry          # 一覧を表示
+spellsheet plugin registry --set https://example.com/shikigami-extensions.json
+spellsheet plugin registry          # 一覧を表示
 ```
 
 ```json
@@ -209,9 +209,9 @@ azureocr/
 ### 確かめる
 
 ```powershell
-shikigami plugin check examples\plugins\azure-ocr   # マニフェスト・スキーマ・記述例の検査
+spellsheet plugin check examples\plugins\azure-ocr   # マニフェスト・スキーマ・記述例の検査
 $env:SPELLSHEET_PLUGINS = "$PWD\examples\plugins"     # インストールせずに読み込む（開発用）
-shikigami step-types                                  # azureocr.readDocument が出る
+spellsheet step-types                                  # azureocr.readDocument が出る
 node --test examples\plugins\azure-ocr\test.mjs      # Azure の代わりのサーバーで動作を確認
 ```
 

@@ -1,5 +1,5 @@
 //! Installing, listing, turning off and removing plugins: what Studio's
-//! 拡張機能 screen and `shikigami plugin install` do (docs/extensions.md).
+//! 拡張機能 screen and `spellsheet plugin install` do (docs/extensions.md).
 //!
 //! Installed plugins live in one folder each under [`install_root`]
 //! (`%LOCALAPPDATA%\SpellSheet\plugins\<name>\`). A plugin comes from a zip

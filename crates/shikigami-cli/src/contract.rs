@@ -1,6 +1,6 @@
 //! Contract snapshots: what AI clients, scripts and flows rely on.
 //!
-//! `shikigami schema export` writes these next to the JSON Schemas
+//! `spellsheet schema export` writes these next to the JSON Schemas
 //! (`schemas/contract/`). They hold shapes only (names, params, flags,
 //! schemas), no prose, so a diff in them is a change to a public contract:
 //! docs/compatibility.md says which changes are allowed and CI asks for a

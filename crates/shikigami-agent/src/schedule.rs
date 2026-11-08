@@ -179,7 +179,7 @@ fn invalid(path: &Path, message: impl std::fmt::Display) -> CoreError {
         code: "SCHEDULE_INVALID",
         message: format!("{}: {message}", path.display()),
         hint: Some(
-            "Fix the schedule (see docs/schedules.md) or check it with `shikigami schedule list`."
+            "Fix the schedule (see docs/schedules.md) or check it with `spellsheet schedule list`."
                 .into(),
         ),
     }

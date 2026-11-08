@@ -28,7 +28,7 @@ const MAIL_PAGES: usize = 20;
 use shikigami_core::calendar::Calendar;
 
 /// A run the agent is asked for. Agent runs are unattended: they execute
-/// the published version, as `shikigami run <id>` does.
+/// the published version, as `spellsheet run <id>` does.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RunRequest {
@@ -70,7 +70,7 @@ pub struct ScheduleStatus {
     pub problem: Option<String>,
 }
 
-/// What `shikigami agent status` shows.
+/// What `spellsheet agent status` shows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentStatus {
@@ -216,7 +216,7 @@ impl Agent {
     }
 
     /// Starts the published version of a flow. Fails like
-    /// `shikigami run` does (`NOT_PUBLISHED`, `UNATTENDED_NOT_ALLOWED`, …).
+    /// `spellsheet run` does (`NOT_PUBLISHED`, `UNATTENDED_NOT_ALLOWED`, …).
     pub fn start(
         self: &Arc<Self>,
         request: RunRequest,

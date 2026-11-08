@@ -118,7 +118,7 @@ pub struct FlowPolicy {
     /// (and `ai.testStep` for calls of it) when it is stricter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ai_run: Option<Decision>,
-    /// `false`: `shikigami run` (scheduled, unattended) refuses it; it only
+    /// `false`: `spellsheet run` (scheduled, unattended) refuses it; it only
     /// runs from Studio. Default `true`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unattended: Option<bool>,
@@ -153,7 +153,7 @@ pub struct Policy {
     /// docs/design/remote-runs.md). Off unless enabled here.
     #[serde(default, skip_serializing_if = "RemotePolicy::is_default")]
     pub remote: RemotePolicy,
-    /// Who hears about unattended runs (the agent's and `shikigami run`).
+    /// Who hears about unattended runs (the agent's and `spellsheet run`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notify: Vec<NotifyRule>,
     /// Nodes that use the mouse and keyboard when the screen is locked.
@@ -387,7 +387,7 @@ impl Policy {
             code: "POLICY_INVALID",
             message: format!("{}: {message}", path.display()),
             hint: Some(
-                "Fix policy.json (see docs/policy.md) or check it with `shikigami policy check`."
+                "Fix policy.json (see docs/policy.md) or check it with `spellsheet policy check`."
                     .into(),
             ),
         };
@@ -465,7 +465,7 @@ impl Policy {
         self.flows.get(id)
     }
 
-    /// May `shikigami run` start this flow without a person?
+    /// May `spellsheet run` start this flow without a person?
     pub fn allows_unattended(&self, flow_id: &str) -> bool {
         self.flow(flow_id)
             .and_then(|s| s.unattended)

@@ -60,7 +60,7 @@ Press "Run" (F5):
 Replace the order list, and run with the new month:
 
 ```bash
-shikigami run scn_tutorial_invoices -i month=2026年11月
+spellsheet run scn_tutorial_invoices -i month=2026年11月
 ```
 
 ## Next

@@ -11,16 +11,16 @@ SpellSheet は、決まった時刻やきっかけでフローを自分で始め
 Studio では左の「自動実行」で、エージェントが実行中か・実行中のフローを確認でき、「エージェントを開始」で起動できます（`agent install` と同じく、サインインのたびに起動するよう登録します）。スケジュールの追加・編集・有効と無効の切り替えも同じ画面です。フローのインスペクターの「スケジュール」には、そのフローのスケジュールが出ます。
 
 ```powershell
-shikigami agent install     # Windows にサインインするたびに起動する（今も起動する）
-shikigami agent status      # 動いているか、何を実行中か、次はいつか
-shikigami agent stop
-shikigami agent run         # このウィンドウで動かす（Ctrl+C で止める）
-shikigami agent uninstall
+spellsheet agent install     # Windows にサインインするたびに起動する（今も起動する）
+spellsheet agent status      # 動いているか、何を実行中か、次はいつか
+spellsheet agent stop
+spellsheet agent run         # このウィンドウで動かす（Ctrl+C で止める）
+spellsheet agent uninstall
 ```
 
-`agent install` は自分のユーザーのタスク スケジューラーに `Shikigami\Agent`（ログオン時）を登録します。エージェントはサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースのエージェントは 2 つ目を起動できません。
+`agent install` は自分のユーザーのタスク スケジューラーに `SpellSheet\Agent`（ログオン時）を登録します（名前を変える前の `Shikigami\Agent` があれば置き換えます）。エージェントはサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースのエージェントは 2 つ目を起動できません。
 
-- エージェントが始める実行は**無人実行**です。`shikigami run <id>` と同じく公開版を動かし、`policy.json` の `flows.<id>.unattended: false` なら動かしません。公開していないフローは `NOT_PUBLISHED` で失敗します。
+- エージェントが始める実行は**無人実行**です。`spellsheet run <id>` と同じく公開版を動かし、`policy.json` の `flows.<id>.unattended: false` なら動かしません。公開していないフローは `NOT_PUBLISHED` で失敗します。
 - ほかの実行と同じく記録に残り、`origin.trigger` は `"schedule"`、`origin.requestedBy` はスケジュールの名前、`origin.jobId` はその ID です。
 - マウスとキーボードは Studio・CLI・MCP サーバーと共有し、使うノードはプロセスをまたいで順番に動きます。画面ロック中は `DESKTOP_UNAVAILABLE` で止まります（ブラウザやファイルの処理は動きます）。これらのノードがあるフローの実行中は、画面が消えたりスリープしたりしないようにします。ロックは止めません（パスワード付きのスクリーンセーバー、ポリシーで決まった時間でのロック、Win+L では止まります）。デスクトップのフローの予定の時刻には、PC をサインインしたまま・ロックしないで置いてください。Studio の「自動実行」では、マウス・キーボードを使うフローの予定に、この PC が操作のないまま何分でロックされるかを出します。
 - ほかのプロセスとは、自分のユーザーだけが書き込める名前付きパイプ（`\\.\pipe\shikigami-agent-…`）でやり取りします。
@@ -29,8 +29,8 @@ shikigami agent uninstall
 
 マウス・キーボードを使うノードは、画面がロックされていると動けません（Windows がロック中の画面への入力を許さないため）。ロックしないように置けない PC では、次のようにします（考え方は [design/locked-runs.md](../design/locked-runs.md)）。
 
-- `shikigami session status`：いま画面が使えるか、リモートデスクトップか、操作がないと何分でロックされるか。
-- **リモートデスクトップで見に行く VM・PC**：窓を閉じて切断するとロックされます。かわりに Studio の「自動実行」の「画面を残して切断」か、`shikigami session release` で切断すると、ロックしないまま切断でき、デスクトップのフローが動き続けます（`tscon` を使い、管理者の確認が出ることがあります）。PC にモニターがつながっていれば、前にいる人に画面が見えます。
+- `spellsheet session status`：いま画面が使えるか、リモートデスクトップか、操作がないと何分でロックされるか。
+- **リモートデスクトップで見に行く VM・PC**：窓を閉じて切断するとロックされます。かわりに Studio の「自動実行」の「画面を残して切断」か、`spellsheet session release` で切断すると、ロックしないまま切断でき、デスクトップのフローが動き続けます（`tscon` を使い、管理者の確認が出ることがあります）。PC にモニターがつながっていれば、前にいる人に画面が見えます。
 - **リモートデスクトップの窓を最小化すると描画が止まる**：つなぎに行く側の PC で、`reg add "HKCU\Software\Microsoft\Terminal Server Client" /v RemoteDesktop_SuppressWhenMinimized /t REG_DWORD /d 2 /f` を一度実行すると、最小化しても止まりません。
 
 ## スケジュール
@@ -38,20 +38,20 @@ shikigami agent uninstall
 スケジュールは、それを動かす PC のものです（ワークスペースの PC ごとの領域、実行記録の隣の `schedules.json`）。共有フォルダーのワークスペースを複数の PC で使っても、スケジュールを作った PC だけが動かします。
 
 ```powershell
-shikigami schedule add scn_01a1… --name "毎朝の受注取り込み" --daily 08:00 --days mon,tue,wed,thu,fri
-shikigami schedule add scn_01a1… --monthly 25@09:00          # -1@18:00 で月末
-shikigami schedule add scn_01a1… --monthly 25@09:00 --on-holiday before   # 休日なら前の営業日
-shikigami schedule add scn_01a1… --monthly 3@09:00 --business-day        # 第 3 営業日（-1 で最終営業日）
-shikigami schedule add scn_01a1… --daily 08:00 --days mon,tue,wed,thu,fri --skip-holidays
-shikigami schedule add scn_01a1… --every 30 --from 09:00 --to 18:00
-shikigami schedule add scn_01a1… --once 2026-11-07T08:00
-shikigami schedule add scn_01a1… --file-added input --pattern "*.xlsx" --file-input file
-shikigami schedule add scn_01a1… --mail-received 受信トレイ --subject-contains 請求書 --mail-input mail
-shikigami schedule list
-shikigami schedule disable sch_…   # enable / remove
+spellsheet schedule add scn_01a1… --name "毎朝の受注取り込み" --daily 08:00 --days mon,tue,wed,thu,fri
+spellsheet schedule add scn_01a1… --monthly 25@09:00          # -1@18:00 で月末
+spellsheet schedule add scn_01a1… --monthly 25@09:00 --on-holiday before   # 休日なら前の営業日
+spellsheet schedule add scn_01a1… --monthly 3@09:00 --business-day        # 第 3 営業日（-1 で最終営業日）
+spellsheet schedule add scn_01a1… --daily 08:00 --days mon,tue,wed,thu,fri --skip-holidays
+spellsheet schedule add scn_01a1… --every 30 --from 09:00 --to 18:00
+spellsheet schedule add scn_01a1… --once 2026-11-07T08:00
+spellsheet schedule add scn_01a1… --file-added input --pattern "*.xlsx" --file-input file
+spellsheet schedule add scn_01a1… --mail-received 受信トレイ --subject-contains 請求書 --mail-input mail
+spellsheet schedule list
+spellsheet schedule disable sch_…   # enable / remove
 ```
 
-`-i 名前=値` で入力変数を渡せます（`shikigami run` と同じ）。
+`-i 名前=値` で入力変数を渡せます（`spellsheet run` と同じ）。
 
 | `when.kind` | 項目 | 動くとき |
 |---|---|---|
@@ -100,7 +100,7 @@ shikigami schedule disable sch_…   # enable / remove
 
 ## 通知
 
-`policy.json` の `notify` で、無人実行の終わりを知らせます。対象はエージェントが始める実行と `shikigami run`（タスク スケジューラー・バッチファイル）です。Studio の実行と AI の試し実行は人が見ているので知らせません。フローの `catch` でメールを送る必要はありません。
+`policy.json` の `notify` で、無人実行の終わりを知らせます。対象はエージェントが始める実行と `spellsheet run`（タスク スケジューラー・バッチファイル）です。Studio の実行と AI の試し実行は人が見ているので知らせません。フローの `catch` でメールを送る必要はありません。
 
 ```json
 "notify": [

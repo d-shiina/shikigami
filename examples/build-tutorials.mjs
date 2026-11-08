@@ -6,7 +6,7 @@
 // The folder (flow.json and the files under input/ config/ templates/ tests/) is
 // the source of truth. In Studio, "Import from file" on the Flows page
 // opens a bundle as a flow with its folder; the CLI runs it directly
-// (`shikigami run examples/tutorials/<name>.shikigami.json`). Re-run this
+// (`spellsheet run examples/tutorials/<name>.shikigami.json`). Re-run this
 // after editing a tutorial's folder.
 
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";

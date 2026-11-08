@@ -13,20 +13,20 @@
 
 | 動かし方 | 動く内容 |
 |---|---|
-| `shikigami run <id>`（タスクスケジューラー・バッチなどの無人実行） | **公開版**。呼び出すサブフローも、それぞれの公開版 |
-| `shikigami run <id> --draft` | 作業中の内容（明示したときだけ） |
-| `shikigami run <file>` | ファイルに書かれた内容（バンドルを含む） |
+| `spellsheet run <id>`（タスクスケジューラー・バッチなどの無人実行） | **公開版**。呼び出すサブフローも、それぞれの公開版 |
+| `spellsheet run <id> --draft` | 作業中の内容（明示したときだけ） |
+| `spellsheet run <file>` | ファイルに書かれた内容（バンドルを含む） |
 | Studio の「実行」 | 作業中の内容（目の前で試す） |
 | MCP `run_flow` | 作業中の内容（AI の試し実行）。`published: true` で公開版 |
 | MCP `test_step` | その 1 ステップだけ |
 
-公開版がないフローを `shikigami run <id>` すると `NOT_PUBLISHED`、呼び出し先に公開版がないと `SUBFLOW_NOT_PUBLISHED` で止まります。作業中の内容に黙って切り替えることはありません。実行レポートの `version` に動いた版の番号が残ります。
+公開版がないフローを `spellsheet run <id>` すると `NOT_PUBLISHED`、呼び出し先に公開版がないと `SUBFLOW_NOT_PUBLISHED` で止まります。作業中の内容に黙って切り替えることはありません。実行レポートの `version` に動いた版の番号が残ります。
 
 ### 公開のしかた
 
 - **Studio のレビュー台**：AI の変更を見て「✓ 確認して公開」。承認（レビューの記録）と公開を 1 回の操作で行います。現在の内容と同じ版がなければ版を作ってから公開します。
 - **Studio の「版」タブ**：「現在の内容を公開」、または過去の版の「この版を公開」（前の版に戻すときも、作業中の内容を変えずに公開版だけを戻せます）。「公開をやめる」で無人実行を止めます。
-- **CLI**：`shikigami version publish <id> [番号] [--name 名前] [--note メモ]`、`shikigami version unpublish <id>`。`shikigami version list <id>` は公開中の版に `published` を付けます。
+- **CLI**：`spellsheet version publish <id> [番号] [--name 名前] [--note メモ]`、`spellsheet version unpublish <id>`。`spellsheet version list <id>` は公開中の版に `published` を付けます。
 
 公開できるのは人だけです（Studio・CLI）。AI クライアントが Core の公開を呼ぶと `PUBLISH_NOT_ALLOWED` になり、MCP には公開するツール自体がありません。AI は「レビュー台で確認して公開してください」と人に頼みます。
 
@@ -45,7 +45,7 @@
 
 ## 2. `policy.json`
 
-ワークスペースのフォルダ直下に置きます（共有部分）。ファイルがなければ下の既定値です。Studio の設定「実行の許可」で編集できます。CLI は `shikigami policy show`（今効いている内容）、`shikigami policy check`（書き間違いの確認）、`shikigami policy init`（既定値で作る）。
+ワークスペースのフォルダ直下に置きます（共有部分）。ファイルがなければ下の既定値です。Studio の設定「実行の許可」で編集できます。CLI は `spellsheet policy show`（今効いている内容）、`spellsheet policy check`（書き間違いの確認）、`spellsheet policy init`（既定値で作る）。
 
 ```json
 {
@@ -71,15 +71,15 @@
 | `ai.testStep` | 同上 | AI の `test_step`。ブロックの中のステップと、`flow.call` の呼び出し先を含めたいちばん高い危険度 |
 | `ai.deleteFlow` | ask | AI の `delete_flow` |
 | `flows.<id>.aiRun` | なし | このフロー（と、これを呼ぶ実行・試行）だけ厳しくする。全体の規則より緩くはならない |
-| `flows.<id>.unattended` | true | false なら `shikigami run` で動かさない。これを呼ぶフローも動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
+| `flows.<id>.unattended` | true | false なら `spellsheet run` で動かさない。これを呼ぶフローも動かさない（`UNATTENDED_NOT_ALLOWED`）。Studio からは動かせる |
 | `records.keepDays` | なし（残す） | 各 PC が、この日数より古い実行記録（`runs/<run-id>/`）と MCP の呼び出し（`audit/mcp.jsonl`）を消す（[audit.md](audit.md)）。実行が終わったときに適用し、実行中のものは消さない |
 | `records.keepRuns` | なし（残す） | 各 PC が残す実行記録の数（新しいものから） |
 | `records.failureScreenshots` | `true` | フロー全体の実行がブラウザ・デスクトップのノードで失敗したとき、そのページ・ウィンドウの画面をフローのフォルダーの実行ログの隣に保存する（`logs/<時刻>_failed.png`、ログと一緒に消える）。エラーの `details.screenshot` にその場所が入る。画面に個人情報が出るなどで残したくないときは `false` |
-| `remote.enabled` | false | 管理サーバーからジョブを受けるか（[remote.md](remote.md)）。PC の登録（`shikigami agent enroll`）も要る |
+| `remote.enabled` | false | 管理サーバーからジョブを受けるか（[remote.md](remote.md)）。PC の登録（`spellsheet agent enroll`）も要る |
 | `remote.manager` | なし | 管理サーバーの URL。`https://`（`http://` は `localhost` だけ） |
 | `remote.flows` | 空（なし） | 管理サーバーが始めてよいフローの ID。`"*"` ですべて。`flows.<id>.unattended: false` のものはここで許しても動かない |
 | `remote.acceptBundles` | false | このワークスペースの公開版だけでなく、管理サーバーがバンドルで送るフローも動かすか。枠の予約で、バンドルを送ることはまだできない |
-| `notify` | 空 | 無人実行（エージェントのスケジュールと `shikigami run`）の終わりを知らせる先：`{ "webhook", "on", "format", "flows" }` の並び。[schedules.md](schedules.md#通知) |
+| `notify` | 空 | 無人実行（エージェントのスケジュールと `spellsheet run`）の終わりを知らせる先：`{ "webhook", "on", "format", "flows" }` の並び。[schedules.md](schedules.md#通知) |
 | `desktop.waitUnlockedMinutes` | なし（すぐ止まる） | 画面ロック中、マウス・キーボードを使うノードは、だれかがロックを解くまでこの分数まで待ち、それでも解かれなければ `DESKTOP_UNAVAILABLE` で止まります。待ち始めたことを実行のログに一度書きます。人のいる PC 向けです（[schedules.md](schedules.md)） |
 
 `allow`＝承認なしで許可、`ask`＝承認が必要（人が Studio で承認してから実行）、`deny`＝禁止。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
@@ -98,7 +98,7 @@ Runtime が、テンプレートを展開した後の params をステップの�
 
 `ask` の操作を AI が呼ぶと、MCP サーバーは実行せずに承認の依頼を作り、`APPROVAL_REQUIRED`（`details.approvalId`）を返します。
 
-1. Studio の上部に「✋ AI が承認を求めています：ステップを 1 つ試す（file.delete・危険な操作）」が出ます。「内容」で実際に動く内容（ステップ・入力・リビジョン。シークレットの値は伏せ字）、AI の理由（`approvalReason`）を見て「許可する」か「断る」。CLI でも `shikigami approval list` / `approve <id>` / `deny <id>`。
+1. Studio の上部に「✋ AI が承認を求めています：ステップを 1 つ試す（file.delete・危険な操作）」が出ます。「内容」で実際に動く内容（ステップ・入力・リビジョン。シークレットの値は伏せ字）、AI の理由（`approvalReason`）を見て「許可する」か「断る」。CLI でも `spellsheet approval list` / `approve <id>` / `deny <id>`。
 2. AI は同じ呼び出しに `approvalId` を付けて呼び直します（`approvalWaitMs` で答えを待てます。最初の呼び出しに付けてもよい）。
 3. 許可した内容とまったく同じ操作が **1 回だけ** 動きます。内容が違えば（呼び出し先のフローが後から変わった場合も）`APPROVAL_MISMATCH`、使用済みは `APPROVAL_USED`、断られたら `APPROVAL_DENIED`、`deny` の操作は `POLICY_DENIED`。
 

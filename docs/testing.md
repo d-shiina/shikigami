@@ -29,7 +29,7 @@ flows/<flow id>/
 |---|---|
 | `$schema` | For editor completion (optional; the schema is [schemas/test-case.schema.json](../schemas/test-case.schema.json)) |
 | `description` | What the case is about (optional) |
-| `inputs` | Values of input variables. Inputs left out keep their default (as with `shikigami run -i`) |
+| `inputs` | Values of input variables. Inputs left out keep their default (as with `spellsheet run -i`) |
 | `expect.status` | How the run ends: `succeeded` (default), `failed`, `cancelled` |
 | `expect.outputs` | Output variables to check, with their values |
 | `expect.errorCode` | With `failed`: the error's code (e.g. `ELEMENT_NOT_FOUND`, `FILE_NOT_FOUND`) |
@@ -71,10 +71,10 @@ The cases an AI saves are its **promises** for a change. Studio's review lists t
 ## From the command line
 
 ```bash
-shikigami test <flow id>                   # all cases, published version
-shikigami test <flow id> --draft           # the working content
-shikigami test <flow id> --case 3支店の合計  # one case (repeatable)
-shikigami test examples/tutorials/sales-csv/flow.json   # a flow file too
+spellsheet test <flow id>                   # all cases, published version
+spellsheet test <flow id> --draft           # the working content
+spellsheet test <flow id> --case 3支店の合計  # one case (repeatable)
+spellsheet test examples/tutorials/sales-csv/flow.json   # a flow file too
 ```
 
 ```text

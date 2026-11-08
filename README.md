@@ -6,7 +6,7 @@
 
 English | [日本語](README.ja.md)
 
-> The product is now called **SpellSheet** (formerly Shikigami: a spell written on a sheet). The settings and data folders now use the new name too (`%APPDATA%\SpellSheet`, `%LOCALAPPDATA%\SpellSheet`): an update moves the old `Shikigami` folders there by itself, and `SHIKIGAMI_HOME` / `SHIKIGAMI_PLUGINS` still work. The repository, the `shikigami` command and the installer keep the old name for now.
+> The product is now called **SpellSheet** (formerly Shikigami: a spell written on a sheet). The settings and data folders now use the new name too (`%APPDATA%\SpellSheet`, `%LOCALAPPDATA%\SpellSheet`): an update moves the old `Shikigami` folders there by itself, and `SHIKIGAMI_HOME` / `SHIKIGAMI_PLUGINS` still work. The command is now `spellsheet` (`shikigami` still works as the same program). The repository and the installer keep the old name for now.
 
 MCP-native desktop RPA where AI and humans build, edit, and run the same automation flows.
 
@@ -39,9 +39,9 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/policy.md](docs/policy.md) | Unattended runs use only an approved, published version; allowed sites and apps; approving AI operations (`policy.json`) |
 | [docs/expressions.md](docs/expressions.md) | Functions available in flow expressions |
 | [docs/browser.md](docs/browser.md), [docs/desktop.md](docs/desktop.md), [docs/office.md](docs/office.md), [docs/files.md](docs/files.md), [docs/system.md](docs/system.md), [docs/pdf.md](docs/pdf.md), [docs/database.md](docs/database.md) | Built-in nodes: browser, Windows apps, Excel / Word / mail, files, HTTP / programs / clipboard / dialogs, PDF, databases |
-| [docs/testing.md](docs/testing.md) | Test cases: inputs and expected outputs kept with a flow, run with `shikigami test` |
+| [docs/testing.md](docs/testing.md) | Test cases: inputs and expected outputs kept with a flow, run with `spellsheet test` |
 | [docs/schedules.md](docs/schedules.md) | Schedules and file triggers; the agent that runs them on each PC |
-| [docs/audit.md](docs/audit.md) | One audit trail: who changed, published and ran which flow (`shikigami audit`), and how long it is kept |
+| [docs/audit.md](docs/audit.md) | One audit trail: who changed, published and ran which flow (`spellsheet audit`), and how long it is kept |
 | [docs/remote.md](docs/remote.md) | Management server: enroll PCs, hand jobs to whichever is free, protocol v1 and a reference server |
 | [docs/secrets.md](docs/secrets.md) | Logins: secrets the AI refers to by name only |
 | [docs/oauth.md](docs/oauth.md) | Web APIs that need an OAuth sign-in (Box and others), with any fixed redirect URL |
@@ -60,7 +60,7 @@ The design notes under `docs/design/` and `docs/research.md` are in Japanese. Ja
 ```text
 crates/shikigami-core      Flow Core (the only source of truth for flow data)
 crates/shikigami-runtime   RPA Runtime (runs without AI or GUI)
-crates/shikigami-cli       CLI (the `shikigami` command; `shikigami mcp` is the MCP server)
+crates/shikigami-cli       CLI (the `shikigami` command; `spellsheet mcp` is the MCP server)
 crates/shikigami-mcp       MCP server (rmcp)
 apps/studio                SpellSheet Studio (Tauri 2 + React + React Flow)
 packages/schema            TypeScript types generated from Rust
@@ -118,14 +118,14 @@ The workspace (where flows, history and run records are stored) defaults to `%AP
 ### CLI examples
 
 ```sh
-shikigami flow import examples/invoice-summary.json
-shikigami flow list
+spellsheet flow import examples/invoice-summary.json
+spellsheet flow list
 echo '[{"op":"addStep","step":{"type":"log.message","params":{"message":"hello"}}}]' \
-  | shikigami flow edit scn_example_invoice_summary -
-shikigami flow undo scn_example_invoice_summary
-shikigami run scn_example_invoice_summary --draft --json   # try the work in progress
-shikigami version publish scn_example_invoice_summary       # a person reviews and publishes
-shikigami run scn_example_invoice_summary --json           # unattended runs use only the published version
+  | spellsheet flow edit scn_example_invoice_summary -
+spellsheet flow undo scn_example_invoice_summary
+spellsheet run scn_example_invoice_summary --draft --json   # try the work in progress
+spellsheet version publish scn_example_invoice_summary       # a person reviews and publishes
+spellsheet run scn_example_invoice_summary --json           # unattended runs use only the published version
 ```
 
 Edits made with the CLI while Studio is open show up in Studio immediately.
@@ -140,7 +140,7 @@ In Claude Code, install the plugin (the `shikigami` command must be on PATH):
 
 If you installed Studio, register the `shikigami.exe` in Studio's folder so the MCP server is updated together with Studio (copy the command from the version menu at the bottom right of Studio; see [docs/release.md](docs/release.md)).
 
-To register only the MCP server: `claude mcp add shikigami -- shikigami mcp`. When developing from the repository without `shikigami` on PATH, register the built executable by its absolute path (`cargo build -p shikigami-cli` updates it):
+To register only the MCP server: `claude mcp add shikigami -- spellsheet mcp`. When developing from the repository without `shikigami` on PATH, register the built executable by its absolute path (`cargo build -p shikigami-cli` updates it):
 
 ```powershell
 claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shikigami.exe mcp

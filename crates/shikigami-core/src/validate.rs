@@ -543,7 +543,7 @@ impl Cx<'_> {
             );
             self.error("PLUGIN_NOT_INSTALLED", message, format!("{path}/type"), id);
             self.hint(format!(
-                "Ask the user to install (or turn on) the '{namespace}' extension ({range}) in Studio (拡張機能), or run `shikigami plugin install <zip | URL | GitHub repository>`, then restart; `shikigami plugin list` shows what is installed and turned off. The step is kept as it is until then."
+                "Ask the user to install (or turn on) the '{namespace}' extension ({range}) in Studio (拡張機能), or run `spellsheet plugin install <zip | URL | GitHub repository>`, then restart; `spellsheet plugin list` shows what is installed and turned off. The step is kept as it is until then."
             ));
             for (name, children) in &step.blocks {
                 self.steps(children, &format!("{path}/blocks/{name}"), loop_depth);

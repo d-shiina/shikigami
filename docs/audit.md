@@ -2,12 +2,12 @@
 
 Japanese: [ja/audit.md](ja/audit.md)
 
-`shikigami audit` shows, in one list, who changed, published and ran which flow on this PC, whether it was a person in Studio, the CLI, an AI over MCP, a schedule or a management server.
+`spellsheet audit` shows, in one list, who changed, published and ran which flow on this PC, whether it was a person in Studio, the CLI, an AI over MCP, a schedule or a management server.
 
 ```powershell
-shikigami audit                              # everything, oldest first
-shikigami audit --since 2026-11-01           # from that day on (or an RFC 3339 time)
-shikigami audit --flow scn_01a1… --json      # one flow, one JSON object per line
+spellsheet audit                              # everything, oldest first
+spellsheet audit --since 2026-11-01           # from that day on (or an RFC 3339 time)
+spellsheet audit --flow scn_01a1… --json      # one flow, one JSON object per line
 ```
 
 ```text

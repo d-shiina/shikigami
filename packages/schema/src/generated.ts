@@ -1485,7 +1485,7 @@ export interface ObservationLink {
   revision: number;
 }
 /**
- * The published version of a flow (what `shikigami run <id>` and
+ * The published version of a flow (what `spellsheet run <id>` and
  * other unattended runs execute).
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -1579,7 +1579,7 @@ export interface Policy {
   records?: RecordsPolicy;
   remote?: RemotePolicy;
   /**
-   * Who hears about unattended runs (the agent's and `shikigami run`).
+   * Who hears about unattended runs (the agent's and `spellsheet run`).
    */
   notify?: NotifyRule[];
   desktop?: DesktopPolicy;
@@ -1645,7 +1645,7 @@ export interface FlowPolicy {
    */
   aiRun?: Decision | null;
   /**
-   * `false`: `shikigami run` (scheduled, unattended) refuses it; it only
+   * `false`: `spellsheet run` (scheduled, unattended) refuses it; it only
    * runs from Studio. Default `true`.
    */
   unattended?: boolean | null;
@@ -1848,7 +1848,7 @@ export interface TestCase {
    */
   description?: string | null;
   /**
-   * Values of the flow's input variables, as `shikigami run -i` takes them.
+   * Values of the flow's input variables, as `spellsheet run -i` takes them.
    */
   inputs?: {
     [k: string]: unknown;

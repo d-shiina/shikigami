@@ -1929,7 +1929,7 @@ export const en: Dict = {
     release: "Disconnect, keep the screen",
     releaseConfirm: "Disconnect now",
     releaseWarn: "If a monitor is plugged into the PC, people in front of it can see the screen. Windows may ask for an administrator.",
-    releaseFailed: "Could not disconnect. It needs an administrator (`shikigami session release` in a terminal opened as administrator also works).",
+    releaseFailed: "Could not disconnect. It needs an administrator (`spellsheet session release` in a terminal opened as administrator also works).",
     locksScreen: (minutes: number, byPolicy: boolean) =>
       `This flow uses the mouse and keyboard. This PC locks after ${minutes} min without input (${byPolicy ? "a policy of your company" : "a password-protected screen saver"}), and the flow stops while it is locked. Unlock it before the time, or run it on a PC that does not lock.`,
     problem: (text: string) => `Cannot read the schedules file: ${text}`,

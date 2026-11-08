@@ -2,13 +2,13 @@
 
 [English](../mcp.md) | 日本語
 
-`shikigami mcp` は AI クライアント（Claude Code / Codex / Cursor など）に SpellSheet のフロー編集・検証・実行を MCP ツールとして提供します。Studio と同じ Flow Core を使うため、AI の変更は Studio に即座に反映され、Studio から Undo できます。GUI がなくても単独で動きます。
+`spellsheet mcp` は AI クライアント（Claude Code / Codex / Cursor など）に SpellSheet のフロー編集・検証・実行を MCP ツールとして提供します。Studio と同じ Flow Core を使うため、AI の変更は Studio に即座に反映され、Studio から Undo できます。GUI がなくても単独で動きます。
 
 ![MCP からの編集が Studio に反映された様子](../assets/studio-mcp-edit.png)
 
 ## 接続方法
 
-トランスポートは **stdio** です。AI クライアントが `shikigami mcp` を子プロセスとして起動します。ネットワークのポートは開きません。`shikigami` コマンドに PATH が通っている必要があります（インストーラーで導入される想定。開発中は `cargo build -p shikigami-cli` の `target/debug/shikigami`）。
+トランスポートは **stdio** です。AI クライアントが `spellsheet mcp` を子プロセスとして起動します。ネットワークのポートは開きません。`shikigami` コマンドに PATH が通っている必要があります（インストーラーで導入される想定。開発中は `cargo build -p shikigami-cli` の `target/debug/shikigami`）。
 
 ### Claude Code
 
@@ -23,7 +23,7 @@
 MCP サーバーだけを登録する場合：
 
 ```sh
-claude mcp add shikigami -- shikigami mcp
+claude mcp add shikigami -- spellsheet mcp
 ```
 
 ### Codex
@@ -103,7 +103,7 @@ args = ["mcp"]
 
 ワークスペースの `policy.json` が `ask` にしている操作（既定では危険度 `dangerous` のステップを含む `run_flow` と `test_step`、それに `delete_flow`）は、すぐには実行されません。
 
-1. ツールは `APPROVAL_REQUIRED` を返し、`details.approvalId` に依頼の ID が入ります。Studio に承認の依頼が出ます（CLI では `shikigami approval list`）。
+1. ツールは `APPROVAL_REQUIRED` を返し、`details.approvalId` に依頼の ID が入ります。Studio に承認の依頼が出ます（CLI では `spellsheet approval list`）。
 2. AI は人に何をしたいかを伝え、人が Studio で「許可する」と、同じ呼び出しに `approvalId` を付けて呼び直したときに 1 回だけ実行されます。`approvalWaitMs` で答えを待て、`approvalReason` は依頼と一緒に人に見せる理由です。
 3. 内容が違うと `APPROVAL_MISMATCH`、使用済みは `APPROVAL_USED`、断られると `APPROVAL_DENIED`、`deny` の操作は `POLICY_DENIED`。許可するサイト・アプリの外は `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED`。
 
@@ -123,7 +123,7 @@ args = ["mcp"]
 
 - **確認済み**：rmcp のクライアントを使った自動 E2E（作成 → 追加 → 検証 → 実行 → ログ取得 → 別プロセスからの参照 → Undo/Redo、リビジョン競合、実行の停止、権限による公開ツールの制限、全ツールのスキーマ）。Claude Code CLI 2.1 から `claude mcp add` で登録し、接続（ヘルスチェック）が成功することを確認。Studio を開いたまま MCP で編集すると Studio に反映され、Studio の「元に戻す」が履歴に Studio として記録されることを確認。
 - **未確認**：Claude Code に実際にツールを使わせてフローを作らせる対話の確認、Codex / Cursor からの接続、Windows 実機での動作。
-- MCP サーバーから開始した実行はサーバープロセス（＝ AI クライアントのセッション）が終わると止まります。長時間・無人の実行は `shikigami run` を使います。
+- MCP サーバーから開始した実行はサーバープロセス（＝ AI クライアントのセッション）が終わると止まります。長時間・無人の実行は `spellsheet run` を使います。
 - ツール権限のクライアント別設定は未実装です（`--allow` によるサーバー単位の制限と、ワークスペース全体の `policy.json`）。
 - 監査ログは JSONL です。SQLite への索引化は未実装です。
 - Streamable HTTP トランスポートは未実装です（stdio のみ）。

@@ -60,7 +60,7 @@ AI はまずひな形の差し込み名を読んでから組みます。見本�
 月が変わったら、受注一覧を差し替えて、入力 `month` を変えて実行します。
 
 ```bash
-shikigami run scn_tutorial_invoices -i month=2026年11月
+spellsheet run scn_tutorial_invoices -i month=2026年11月
 ```
 
 ## 次は

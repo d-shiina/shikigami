@@ -297,7 +297,7 @@ pub enum RunTrigger {
     Studio,
     /// An AI client's `run_flow` / `test_step`.
     Mcp,
-    /// `shikigami run` (a person, a batch file or Task Scheduler).
+    /// `spellsheet run` (a person, a batch file or Task Scheduler).
     Cli,
     /// A schedule of the agent.
     Schedule,

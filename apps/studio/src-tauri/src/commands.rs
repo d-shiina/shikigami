@@ -91,7 +91,7 @@ pub fn create_version(
         .create_version(&id, input, expected_revision, studio())?)
 }
 
-/// The version unattended runs execute (`shikigami run <id>`), if any.
+/// The version unattended runs execute (`spellsheet run <id>`), if any.
 #[tauri::command]
 pub fn published_state(
     state: State<'_, AppState>,

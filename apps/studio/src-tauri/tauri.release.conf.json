@@ -3,6 +3,7 @@
   "bundle": {
     "createUpdaterArtifacts": true,
     "externalBin": [
+      "binaries/spellsheet",
       "binaries/shikigami"
     ],
     "resources": {

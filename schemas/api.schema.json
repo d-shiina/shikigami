@@ -2722,7 +2722,7 @@
       ]
     },
     "PublishedState": {
-      "description": "The published version of a flow (what `shikigami run <id>` and\nother unattended runs execute).",
+      "description": "The published version of a flow (what `spellsheet run <id>` and\nother unattended runs execute).",
       "type": "object",
       "properties": {
         "version": {
@@ -2887,7 +2887,7 @@
           "$ref": "#/$defs/RemotePolicy"
         },
         "notify": {
-          "description": "Who hears about unattended runs (the agent's and `shikigami run`).",
+          "description": "Who hears about unattended runs (the agent's and `spellsheet run`).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/NotifyRule"
@@ -2982,7 +2982,7 @@
           ]
         },
         "unattended": {
-          "description": "`false`: `shikigami run` (scheduled, unattended) refuses it; it only\nruns from Studio. Default `true`.",
+          "description": "`false`: `spellsheet run` (scheduled, unattended) refuses it; it only\nruns from Studio. Default `true`.",
           "type": [
             "boolean",
             "null"
@@ -3396,7 +3396,7 @@
           ]
         },
         "inputs": {
-          "description": "Values of the flow's input variables, as `shikigami run -i` takes them.",
+          "description": "Values of the flow's input variables, as `spellsheet run -i` takes them.",
           "type": "object",
           "additionalProperties": true,
           "default": {}

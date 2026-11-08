@@ -26,7 +26,7 @@ flowchart LR
   end
 
   subgraph local[The user's PC]
-    MCP["shikigami mcp<br/>(Rust, stdio)"]
+    MCP["spellsheet mcp<br/>(Rust, stdio)"]
     STUDIO["SpellSheet Studio<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
@@ -57,10 +57,10 @@ flowchart LR
 | Process | Started by | Role |
 |---|---|---|
 | `shikigami-studio` | The user | GUI. Embeds Core/Runtime as libraries |
-| `shikigami mcp` | The AI client (stdio child process) | Provides the MCP tools. Runs on its own, without a GUI. A subcommand of the CLI executable (so there is one thing to distribute) |
+| `spellsheet mcp` | The AI client (stdio child process) | Provides the MCP tools. Runs on its own, without a GUI. A subcommand of the CLI executable (so there is one thing to distribute) |
 | `shikigami` (CLI) | The user / a scheduler | Headless runs and management |
-| `shikigami agent` | Windows sign-in (one per PC, user and workspace) | Runs schedules and jobs from the management server one at a time ([remote.md](remote.md), [schedules.md](schedules.md)) |
-| `shikigami manager` | An administrator (a server) | The management server: hands queued jobs to free agents, over signed HTTP ([remote.md](remote.md)) |
+| `spellsheet agent` | Windows sign-in (one per PC, user and workspace) | Runs schedules and jobs from the management server one at a time ([remote.md](remote.md), [schedules.md](schedules.md)) |
+| `spellsheet manager` | An administrator (a server) | The management server: hands queued jobs to free agents, over signed HTTP ([remote.md](remote.md)) |
 | `browser-adapter` (Node) | The Runtime | Playwright operations. Started only when needed |
 
 Studio and the MCP server are **separate processes sharing the same workspace**. They stay in sync with §7's "optimistic concurrency with the files as the source of truth, plus change notifications".
@@ -70,7 +70,7 @@ Studio and the MCP server are **separate processes sharing the same workspace**.
 ```mermaid
 sequenceDiagram
   participant AI as AI client
-  participant M as shikigami mcp
+  participant M as spellsheet mcp
   participant C as Flow Core
   participant A as Adapter
   participant S as Studio
@@ -98,11 +98,11 @@ shikigami/
 │  ├─ shikigami-core/         Flow Core (model, expressions, validation, EditOp, history, storage, schema output)
 │  ├─ shikigami-runtime/      RPA Runtime (interpreter, handler interface, run records)
 │  ├─ shikigami-cli/          CLI (the `shikigami` binary)
-│  ├─ shikigami-mcp/          MCP server (rmcp, started with `shikigami mcp`)
+│  ├─ shikigami-mcp/          MCP server (rmcp, started with `spellsheet mcp`)
 │  ├─ shikigami-adapters/ every built-in adapter plus installed plugins, in one list (all Runtimes are built from it)
 │  ├─ shikigami-secrets/  the workspace vault (encrypted file, key in Windows Credential Manager)
-│  ├─ shikigami-agent/    `shikigami agent`: the one process per PC that runs schedules and remote jobs
-│  ├─ shikigami-manager/  `shikigami manager`: the management server agents take jobs from
+│  ├─ shikigami-agent/    `spellsheet agent`: the one process per PC that runs schedules and remote jobs
+│  ├─ shikigami-manager/  `spellsheet manager`: the management server agents take jobs from
 │  ├─ shikigami-browser/  browser.* (client of the Node sidecar)
 │  ├─ shikigami-desktop/  desktop.* (UI Automation)
 │  ├─ shikigami-excel/    excel.* (reads and writes xlsx directly; macros through COM)
@@ -135,7 +135,7 @@ shikigami/
 | `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
 | `shikigami-adapters` | runtime, every adapter crate, plugins | `all()` / `load()` (the adapters of this build and PC), `runtime()`, `table_columns()` |
 | `shikigami-secrets` | core | `Vault` (a `SecretProvider`) |
-| `shikigami-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `shikigami flow/run/validate/step-types/schema/mcp/agent/manager` |
+| `shikigami-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `spellsheet flow/run/validate/step-types/schema/mcp/agent/manager` |
 | `shikigami-studio` | core, runtime, adapters, secrets, agent, tauri, notify | Tauri commands (§7.1) |
 | `shikigami-mcp` | core, runtime, secrets, rmcp | `ShikigamiMcp` (MCP tools, §6), `serve_stdio` |
 | `shikigami-agent` | core, runtime, secrets | `Agent` (schedules, the job queue, the remote protocol) |
@@ -351,7 +351,7 @@ In a shared workspace, `history/` and `runs/` are kept on each PC ([design/shari
   shikigami.db                SQLite (Phase 2 on)
 ```
 
-`events.jsonl` also records variable assignments as `variableChanged`, so after a run you can trace which value went into which variable, and when and in which node it changed (MCP: `get_run_logs(runId, variable)`, CLI: `shikigami run --vars`).
+`events.jsonl` also records variable assignments as `variableChanged`, so after a run you can trace which value went into which variable, and when and in which node it changed (MCP: `get_run_logs(runId, variable)`, CLI: `spellsheet run --vars`).
 
 ```json
 { "seq": 7, "at": "…", "runId": "run_…", "type": "variableChanged",
@@ -428,7 +428,7 @@ CREATE TABLE proposals (                  -- AI repair proposals (applied after 
 | Credentials | People register them by name in Studio / the CLI. Values are encrypted with AES-256-GCM in the workspace; the key is one entry per workspace in Windows Credential Manager. Flows and AI get only the name. Input to unregistered sites is refused. Sign-in states (sessions) are encrypted with the same key ([secrets.md](secrets.md)) | **Done** |
 | Prompt injection | Results such as `inspect_ui` and page text are returned as structured data clearly labeled "untrusted data", and SKILL / tool descriptions say not to treat them as instructions. UI tools do not change flows; saving is a separate operation. Dangerous operations need human approval | P2 |
 | Audit | Every MCP tool call, approval and run in `audit_log` (flow changes are journaled since P1) | P2 |
-| Run permissions | Unattended runs (`shikigami run <id>`) execute only the version a person approved and published. Per flow, "may run from AI" (`flows.<id>.aiRun`) and "may run unattended" (`unattended`) | **Done** |
+| Run permissions | Unattended runs (`spellsheet run <id>`) execute only the version a person approved and published. Per flow, "may run from AI" (`flows.<id>.aiRun`) and "may run unattended" (`unattended`) | **Done** |
 | Allowed folders for file operations | Limit where `file.*` nodes may work to allowed folders | Not yet |
 
 ## 10.5 Parallel execution
@@ -512,13 +512,13 @@ The first product milestone: **create a web flow from an MCP client in natural l
 
 | # | Criterion | How it is checked |
 |---|---|---|
-| A1 | Claude Code / Codex connect to `shikigami mcp` over stdio and get the tool list | Manual E2E (settings for each client in the docs) |
+| A1 | Claude Code / Codex connect to `spellsheet mcp` over stdio and get the tool list | Manual E2E (settings for each client in the docs) |
 | A2 | The AI gets elements with `navigate_browser` → `inspect_ui` and can `click_element` / `type_text` with Role/Label Targets | Automated E2E (a local test web app) + manual |
 | A3 | The AI saves a flow with `create_flow` / `add_step` and `validate_flow` returns 0 errors | Automated E2E |
 | A4 | With Studio running, AI changes show up on screen within 1 second | Automated (file watching test) + manual |
 | A5 | Studio can edit, add, delete and move nodes, with Undo/Redo, and MCP's `get_flow` returns the result immediately | Automated (Core tests) + manual |
 | A6 | Nothing is lost when Studio and the AI edit at the same time (conflicts are detected and reloaded) | Automated (Core tests) |
-| A7 | `shikigami run <id>` (no AI, no GUI) does the same web work successfully, exit code 0 | Automated E2E |
+| A7 | `spellsheet run <id>` (no AI, no GUI) does the same web work successfully, exit code 0 | Automated E2E |
 | A8 | On failure, the failing node ID, error code, screenshot and UI information are saved and available from MCP's `get_run_logs` | Automated E2E |
 | A9 | Secret variable values never appear in logs or record files | Automated |
 | A10 | On **a real Windows 11 machine**, A1–A9 E2E pass with Studio / CLI / MCP server installed from the installer (NSIS / MSI) | Manual E2E (required) + CI (build and test on windows-latest) |
@@ -532,7 +532,7 @@ The first product milestone: **create a web flow from an MCP client in natural l
 - Runtime: every kind of control flow, variables and inputs/outputs, template expansion, timeouts, retries (exponential backoff), cancellation, `onError`, secret masking, run events and records (JSONL), live state (snapshots)
 - CLI: `flow list/show/create/import/edit/undo/redo/delete/history`, `run` (inputs, JSON output, Ctrl+C cancels), `validate`, `step-types`, `schema export`
 - Studio (Tauri 2 + React): flow list, create, duplicate, delete; flowchart (automatic layout from the tree); add, delete and move nodes; property forms generated from schemas; variable editing; validation results; Undo/Redo (Ctrl+Z / Ctrl+Y); run, stop, run log and node state highlighting; **live updates from outside changes (MCP / CLI)**; automatic reload on conflict; Japanese / English UI
-- MCP server (Phase 2): `shikigami mcp` (stdio), 20 tools for flows, nodes, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
+- MCP server (Phase 2): `spellsheet mcp` (stdio), 20 tools for flows, nodes, validation, history, Undo/Redo, runs and logs; structured results and error codes; tool annotations; permission classes limited with `--allow`; audit log (`audit/mcp.jsonl`); client names in the change history. Automated E2E with the rmcp client, and connection from Claude Code CLI confirmed ([mcp.md](mcp.md))
 - Desktop apps (Phase 4): 11 `desktop.*` types (dedicated UI Automation MTA thread, automatic waiting, separating mouse-free operations from those taking `desktop.input`, per-app exclusion, secrets typed only into apps registered with `app:`) and MCP's `inspect_ui` ([desktop.md](desktop.md))
 - Excel (8 `excel.*` types): reads and writes xlsx / xlsm directly without Excel (read a table row by row, append rows, read and write cells / ranges, list / add sheets). Automatic exclusion by workbook path, saving through a temporary file, `FILE_IN_USE` when writing a workbook open in Excel ([office.md](office.md))
 - Claude Code plugin: `plugins/shikigami` (MCP settings + skill `shikigami-flows`) and the marketplace definition. Passes `claude plugin validate`

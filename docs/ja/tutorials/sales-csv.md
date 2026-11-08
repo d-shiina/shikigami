@@ -62,7 +62,7 @@ AI は CSV を読み、ノードを足しながら試し実行を繰り返しま
 来月は CSV を入れ替えて実行するだけです。フォルダーを変えたいときは、実行するときに入力 `folder` を変えます。
 
 ```bash
-shikigami run scn_tutorial_sales_csv -i folder=C:\共有\売上\2026-11
+spellsheet run scn_tutorial_sales_csv -i folder=C:\共有\売上\2026-11
 ```
 
 ## 6. テストを残す
@@ -70,7 +70,7 @@ shikigami run scn_tutorial_sales_csv -i folder=C:\共有\売上\2026-11
 直したあとも同じ結果になるか確かめられるよう、`tests/` にテストケースを置いておきます（見本は `examples/tutorials/sales-csv/tests/`）。
 
 ```bash
-shikigami test scn_tutorial_sales_csv --draft
+spellsheet test scn_tutorial_sales_csv --draft
 ```
 
 書き方は [フローのテスト](../testing.md) を参照してください。

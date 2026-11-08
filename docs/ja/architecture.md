@@ -26,7 +26,7 @@ flowchart LR
   end
 
   subgraph local[ユーザーのPC]
-    MCP["shikigami mcp<br/>(Rust, stdio)"]
+    MCP["spellsheet mcp<br/>(Rust, stdio)"]
     STUDIO["SpellSheet Studio<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
@@ -57,10 +57,10 @@ flowchart LR
 | プロセス | 起動者 | 役割 |
 |---|---|---|
 | `shikigami-studio` | ユーザー | GUI。Core/Runtime をライブラリとして内包 |
-| `shikigami mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作。CLI と同じ実行ファイルのサブコマンド（配布物を 1 つにするため） |
+| `spellsheet mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作。CLI と同じ実行ファイルのサブコマンド（配布物を 1 つにするため） |
 | `shikigami` (CLI) | ユーザー / スケジューラー | ヘッドレス実行・管理 |
-| `shikigami agent` | Windows のサインイン（PC・ユーザー・ワークスペースごとに 1 つ） | スケジュールと管理サーバーのジョブを 1 件ずつ実行（[remote.md](remote.md)、[schedules.md](schedules.md)） |
-| `shikigami manager` | 管理者（サーバー） | 管理サーバー。並んだジョブを空いたエージェントに渡す（署名付き HTTP、[remote.md](remote.md)） |
+| `spellsheet agent` | Windows のサインイン（PC・ユーザー・ワークスペースごとに 1 つ） | スケジュールと管理サーバーのジョブを 1 件ずつ実行（[remote.md](remote.md)、[schedules.md](schedules.md)） |
+| `spellsheet manager` | 管理者（サーバー） | 管理サーバー。並んだジョブを空いたエージェントに渡す（署名付き HTTP、[remote.md](remote.md)） |
 | `browser-adapter` (Node) | Runtime | Playwright 操作。必要時のみ起動 |
 
 Studio と MCP サーバーは **別プロセスで同じワークスペースを共有** する。同期は §7 の「ファイルを正とした楽観的並行制御＋変更通知」で行う。
@@ -70,7 +70,7 @@ Studio と MCP サーバーは **別プロセスで同じワークスペース�
 ```mermaid
 sequenceDiagram
   participant AI as AIクライアント
-  participant M as shikigami mcp
+  participant M as spellsheet mcp
   participant C as Flow Core
   participant A as Adapter
   participant S as Studio
@@ -98,11 +98,11 @@ shikigami/
 │  ├─ shikigami-core/         Flow Core（モデル・式・検証・EditOp・履歴・保存・Schema出力）
 │  ├─ shikigami-runtime/      RPA Runtime（インタプリタ・Handler IF・実行記録）
 │  ├─ shikigami-cli/          CLI（`shikigami` バイナリ）
-│  ├─ shikigami-mcp/          MCP サーバー（rmcp、`shikigami mcp` で起動）
+│  ├─ shikigami-mcp/          MCP サーバー（rmcp、`spellsheet mcp` で起動）
 │  ├─ shikigami-adapters/ 組込アダプターすべてとインストール済みプラグインの一覧（どの Runtime もここから作る）
 │  ├─ shikigami-secrets/  ワークスペースの金庫（暗号化ファイル、鍵は Windows の資格情報マネージャー）
-│  ├─ shikigami-agent/    `shikigami agent`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
-│  ├─ shikigami-manager/  `shikigami manager`：エージェントがジョブを取りに行く管理サーバー
+│  ├─ shikigami-agent/    `spellsheet agent`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
+│  ├─ shikigami-manager/  `spellsheet manager`：エージェントがジョブを取りに行く管理サーバー
 │  ├─ shikigami-browser/  browser.*（Node サイドカーのクライアント）
 │  ├─ shikigami-desktop/  desktop.*（UI Automation）
 │  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き、マクロは COM）
@@ -133,7 +133,7 @@ shikigami/
 |---|---|---|
 | `shikigami-core` | serde, schemars, jsonschema, uuid, time, tempfile | `Flow`, `Step`, `EditOp`, `FlowService`, `FileStore`, `Validator`, `StepRegistry`, `expr` |
 | `shikigami-runtime` | core, tokio, tokio-util | `Runtime`, `RuntimeBuilder::register`, `ActionHandler`, `RunHandle`, `RunEvent`, `record::*` |
-| `shikigami-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `shikigami flow/run/validate/step-types/schema/mcp` |
+| `shikigami-cli` | core, runtime, adapters, mcp, secrets, agent, manager, clap | `spellsheet flow/run/validate/step-types/schema/mcp` |
 | `shikigami-studio` | core, runtime, adapters, secrets, agent, tauri, notify | Tauri コマンド（§7.1） |
 | `shikigami-mcp` | core, runtime, secrets, rmcp | `ShikigamiMcp`（MCP ツール、§6）, `serve_stdio` |
 | `shikigami-adapters` | runtime, 各アダプターのクレート, plugins | `all()` / `load()`（このビルドと PC のアダプター）, `runtime()`, `table_columns()` |
@@ -351,7 +351,7 @@ Runtime::builder()
   shikigami.db                SQLite（Phase 2〜）
 ```
 
-`events.jsonl` には変数の代入も `variableChanged` として残るので、実行後に「どの変数に何が渡され、いつ・どのノードで変わったか」を追える（MCP は `get_run_logs(runId, variable)`、CLI は `shikigami run --vars`）。
+`events.jsonl` には変数の代入も `variableChanged` として残るので、実行後に「どの変数に何が渡され、いつ・どのノードで変わったか」を追える（MCP は `get_run_logs(runId, variable)`、CLI は `spellsheet run --vars`）。
 
 ```json
 { "seq": 7, "at": "…", "runId": "run_…", "type": "variableChanged",
@@ -428,7 +428,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 | 認証情報 | 人が Studio / CLI で名前を付けて登録。値は AES-256-GCM でワークスペースに暗号化保存し、鍵は Windows 資格情報マネージャーにワークスペースごと 1 件。フローと AI には名前だけ。登録サイト以外への入力を拒否。ログイン状態（セッション）も同じ鍵で暗号化（[secrets.md](secrets.md)） | **済** |
 | プロンプトインジェクション | `inspect_ui` / ページテキスト等の取得結果は「信頼できないデータ」として明示ラベル付きの構造化データで返し、指示として扱わないよう SKILL/ツール説明で明記。UI 操作ツールはフローを変更せず、フロー保存は別操作。危険操作は人間承認 | P2 |
 | 監査 | 全 MCP ツール呼び出し・承認・実行を `audit_log` に記録（フロー変更は P1 からジャーナル記録済み） | P2 |
-| 実行権限 | 無人実行（`shikigami run <id>`）は人が承認・公開した版だけを動かす。フロー単位で「AI からの実行」（`flows.<id>.aiRun`）と「無人実行」（`unattended`）を設定 | **済** |
+| 実行権限 | 無人実行（`spellsheet run <id>`）は人が承認・公開した版だけを動かす。フロー単位で「AI からの実行」（`flows.<id>.aiRun`）と「無人実行」（`unattended`）を設定 | **済** |
 | ファイル操作の許可フォルダ | `file.*` の操作先を許可したフォルダに限る | 未 |
 
 ## 10.5 並行実行
@@ -512,13 +512,13 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 
 | # | 基準 | 確認方法 |
 |---|---|---|
-| A1 | Claude Code / Codex から `shikigami mcp` に stdio 接続し、ツール一覧が取得できる | 手動 E2E（各クライアントの設定例を docs に記載） |
+| A1 | Claude Code / Codex から `spellsheet mcp` に stdio 接続し、ツール一覧が取得できる | 手動 E2E（各クライアントの設定例を docs に記載） |
 | A2 | AI が `navigate_browser` → `inspect_ui` で要素を取得し、Role/Label ベースの Target で `click_element` / `type_text` できる | 自動 E2E（ローカルのテスト用 Web アプリ）＋手動 |
 | A3 | AI が `create_flow` / `add_step` でフローを保存し、`validate_flow` がエラー 0 を返す | 自動 E2E |
 | A4 | Studio を起動していれば、AI の変更が 1 秒以内に画面へ反映される | 自動（ファイル監視テスト）＋手動 |
 | A5 | Studio でノードを編集・追加・削除・移動でき、Undo/Redo できる。その結果を MCP の `get_flow` で即座に取得できる | 自動（Core テスト）＋手動 |
 | A6 | Studio と AI が同時に編集しても内容が失われない（競合時は検出して再読込） | 自動（Core テスト） |
-| A7 | `shikigami run <id>`（AI なし・GUI なし）で同じ Web 操作が成功し、終了コード 0 | 自動 E2E |
+| A7 | `spellsheet run <id>`（AI なし・GUI なし）で同じ Web 操作が成功し、終了コード 0 | 自動 E2E |
 | A8 | 失敗時、失敗ノード ID・エラーコード・スクリーンショット・UI 情報が保存され、MCP の `get_run_logs` で取得できる | 自動 E2E |
 | A9 | 機密変数の値がログ・記録ファイルに出力されない | 自動 |
 | A10 | **Windows 11 実機** で、インストーラー（NSIS / MSI）から導入した Studio / CLI / MCP サーバーにより A1〜A9 の E2E が通る | 手動 E2E（必須）＋ CI（windows-latest でのビルド・テスト） |
@@ -532,7 +532,7 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 - Runtime：制御フロー全種、変数・入出力、テンプレート展開、タイムアウト、リトライ（指数バックオフ）、キャンセル、`onError`、機密値マスク、実行イベント・実行記録（JSONL）、ライブ状態（スナップショット）
 - CLI：`flow list/show/create/import/edit/undo/redo/delete/history`、`run`（入力指定・JSON 出力・Ctrl+C でキャンセル）、`validate`、`step-types`、`schema export`
 - Studio（Tauri 2 + React）：フロー一覧・作成・複製・削除、フローチャート表示（木から自動レイアウト）、ノード追加・削除・上下移動、スキーマから生成するプロパティフォーム、変数編集、検証結果表示、Undo/Redo（Ctrl+Z / Ctrl+Y）、実行・停止・実行ログ・ノード状態のハイライト、**外部（MCP / CLI）変更のリアルタイム反映**、競合時の自動再読込
-- MCP サーバー（Phase 2）：`shikigami mcp`（stdio）、フロー・ノード・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
+- MCP サーバー（Phase 2）：`spellsheet mcp`（stdio）、フロー・ノード・検証・履歴・Undo/Redo・実行・ログの 20 ツール、構造化結果とエラーコード、ツール注釈、`--allow` による権限区分の制限、監査ログ（`audit/mcp.jsonl`）、変更履歴へのクライアント名記録。rmcp クライアントによる自動 E2E と、Claude Code CLI からの接続確認済み（[mcp.md](mcp.md)）
 - デスクトップアプリ操作（Phase 4）：`desktop.*` 11 種（UI Automation の専用 MTA スレッド、自動待ち、マウスなし操作と `desktop.input` を取る操作の区別、アプリ単位の排他、`app:` で登録したアプリにだけ入力するシークレット）と MCP の `inspect_ui`（[desktop.md](desktop.md)）
 - Excel（`excel.*` 8 種）：xlsx / xlsm を Excel なしで直接読み書き（表を行ごとに読む・行を追加・セル / 範囲の読み書き・シート一覧 / 追加）。ブックのパスで自動排他、一時ファイル経由の保存、Excel で開いているブックへの書き込みは `FILE_IN_USE`（[office.md](office.md)）
 - Claude Code プラグイン：`plugins/shikigami`（MCP 設定＋スキル `shikigami-flows`）とマーケットプレイス定義。`claude plugin validate` 合格

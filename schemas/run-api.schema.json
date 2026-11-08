@@ -484,7 +484,7 @@
           "const": "mcp"
         },
         {
-          "description": "`shikigami run` (a person, a batch file or Task Scheduler).",
+          "description": "`spellsheet run` (a person, a batch file or Task Scheduler).",
           "type": "string",
           "const": "cli"
         },

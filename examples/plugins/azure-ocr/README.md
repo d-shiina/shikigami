@@ -5,8 +5,8 @@
 使い方と作り方は [docs/ja/extensions.md](../../../docs/ja/extensions.md) にあります。
 
 ```powershell
-shikigami plugin check examples\plugins\azure-ocr
-shikigami plugin install examples\plugins\azure-ocr --yes
+spellsheet plugin check examples\plugins\azure-ocr
+spellsheet plugin install examples\plugins\azure-ocr --yes
 node --test examples\plugins\azure-ocr\test.mjs   # Azure の代わりのサーバーで動作を確認
 ```
 

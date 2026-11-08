@@ -1,6 +1,6 @@
 //! The 拡張機能 place: extensions (node plugins) installed on this PC, and
 //! installing, updating, turning off and removing them. A thin layer over
-//! `shikigami_plugins::install` (the same as `shikigami plugin …`).
+//! `shikigami_plugins::install` (the same as `spellsheet plugin …`).
 //!
 //! Installing is two steps, as the screen shows them: `stage_extension`
 //! downloads and checks it and returns what it is (its nodes, what they
