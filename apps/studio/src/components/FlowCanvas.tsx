@@ -31,6 +31,7 @@ import {
   DECIDE_H,
   DECIDE_POINT,
   ancestorsOf,
+  frameAt,
   JOIN_SIZE,
   type JoinNodeData,
   type Layout,
@@ -359,6 +360,20 @@ function BranchLight({ layout }: { layout: Layout }) {
   ];
   if (selectors.length === 0) return null;
   return <style>{`${selectors.join(",")}{opacity:.28;transition:opacity .25s}`}</style>;
+}
+
+/**
+ * The frame of the step pointed at (at its head or anywhere inside it) shows it as one
+ * piece: its edge and its head's darken together, as the head alone does on hover.
+ */
+function FrameLight({ layout }: { layout: Layout }) {
+  const pointed = useFocus();
+  if (!pointed || !layout.frames.some((f) => f.id === pointed)) return null;
+  const id = CSS.escape(pointed);
+  const frame = CSS.escape(`frame:${pointed}`);
+  return (
+    <style>{`.react-flow__node[data-id="${frame}"] .flow-frame:not(.flow-frame-selected),.react-flow__node[data-id="${id}"] .flow-head-plain{border-color:var(--color-slate-400)}`}</style>
+  );
 }
 
 function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
@@ -867,11 +882,13 @@ function StepNode({ data }: StepNodeProps) {
         data.diff
           ? DIFF_STYLE[data.diff].border
           : data.selected
-            ? "border-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_16%,transparent)]"
+            ? head && !head.collapsed
+              ? "border-primary"
+              : "border-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_16%,transparent)]"
             : data.byAi
               ? "border-brand-500"
               : head
-                ? "border-slate-300 hover:border-slate-400"
+                ? "flow-head-plain border-slate-300 hover:border-slate-400"
                 : "border-slate-200 hover:border-slate-300"
       } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
     >
@@ -1171,7 +1188,7 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
   );
 }
 
-type FrameData = { kind: FrameKind; type: string; width: number; height: number };
+type FrameData = { kind: FrameKind; type: string; width: number; height: number; selected: boolean };
 
 /**
  * The frame of a loop (if, try, …) around everything in its blocks, so the
@@ -1180,10 +1197,13 @@ type FrameData = { kind: FrameKind; type: string; width: number; height: number 
  * frames inside it tint deeper; the others are only a hairline.
  */
 function FrameNode({ data }: NodeProps<Node<FrameData>>) {
+  // Its head is its top edge: picking the step marks the whole frame, not just the head.
   return (
     <div
       style={{ width: data.width, height: data.height }}
-      className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""}`}
+      className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""} ${
+        data.selected ? "flow-frame-selected" : ""
+      }`}
     />
   );
 }
@@ -1519,7 +1539,7 @@ export function FlowCanvas() {
     id: `frame:${f.id}`,
     type: "frame",
     position: { x: f.x, y: f.y },
-    data: { kind: f.kind, type: f.type, width: f.width, height: f.height } satisfies FrameData,
+    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, selected: !inside && picked.has(f.id) } satisfies FrameData,
     draggable: false,
     selectable: false,
     focusable: false,
@@ -1635,7 +1655,8 @@ export function FlowCanvas() {
         hovered: hoveredEdge === e.id,
         hover: setHoveredEdge,
       } satisfies BlockEdgeData,
-      animated: e.loop || trail === "now",
+      // A loop's line back runs only while its loop is pointed at (see BlockEdge), never on its own.
+      animated: trail === "now",
       style: {
         stroke: trail ? TRAIL_STROKE[trail] : "var(--flow-edge)",
         strokeWidth: trail ? 2.5 : 1.5,
@@ -1704,6 +1725,15 @@ export function FlowCanvas() {
         }
       }}
       onPaneClick={() => select(null)}
+      // Pointing anywhere inside a frame points at its step, as its head does: a branch
+      // lights its ways out and a loop sends its line round wherever in it the pointer is.
+      onPaneMouseMove={(event) => {
+        const at = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        const frame = at ? frameAt(layout.frames, at.x, at.y) : null;
+        if (frame) focus.set(frame.id);
+        else if (layout.frames.some((f) => f.id === focus.get())) focus.set(null);
+      }}
+      onPaneMouseLeave={() => layout.frames.some((f) => f.id === focus.get()) && focus.set(null)}
       // Shift+drag draws a box (plain drag still moves the view): the nodes in it become the selection.
       selectionKeyCode="Shift"
       onSelectionStart={(event) => {
@@ -1770,6 +1800,7 @@ export function FlowCanvas() {
     >
       <Background gap={24} size={1.2} color="var(--color-slate-200)" />
       <BranchLight layout={layout} />
+      <FrameLight layout={layout} />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
       {inside && (
         <Panel position="top-center">

@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, CASE_H, decideWidth, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
+import { ancestorsOf, frameAt, CASE_H, decideWidth, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -414,5 +414,22 @@ describe("layoutFlow", () => {
     // "失敗したとき" starts lower than "実行", so the line can come across into it.
     expect(pos("b").y).toBeGreaterThan(pos("a").y);
     expect(layout.nodes.find((n) => n.id === "join:t:fail")?.data).toMatchObject({ failTo: "b" });
+  });
+});
+
+describe("frameAt", () => {
+  it("finds the innermost frame around a point, at any depth", () => {
+    const steps: Step[] = [
+      { id: "g", type: "control.group", blocks: { body: [log("a"), { id: "if", type: "control.if", blocks: { then: [log("b")], else: [log("c")] } }] } },
+    ];
+    const { frames } = layoutFlow(steps, defs);
+    const group = frames.find((f) => f.id === "g")!;
+    const inner = frames.find((f) => f.id === "if")!;
+    expect(inner.depth).toBeGreaterThan(group.depth);
+    // Inside the if (below its head): the if, not the group around it.
+    expect(frameAt(frames, inner.x + 4, inner.y + inner.height - 4)?.id).toBe("if");
+    // Inside the group but outside the if: the group.
+    expect(frameAt(frames, group.x + 4, group.y + HEAD_H + 4)?.id).toBe("g");
+    expect(frameAt(frames, group.x - 10, group.y)).toBeNull();
   });
 });
