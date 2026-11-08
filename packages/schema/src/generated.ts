@@ -214,6 +214,22 @@ export type Evidence1 =
       verdict: ReviewVerdict;
       reason?: string;
       steps?: StepNote[];
+    }
+  | {
+      kind: "testCase";
+      name: string;
+      /**
+       * The case's `description` when it was saved: the promise in words.
+       */
+      description?: string | null;
+      /**
+       * It replaced a case of the same name.
+       */
+      replaced?: boolean;
+    }
+  | {
+      kind: "testCases";
+      results: CaseOutcome[];
     };
 /**
  * Identifier of a single flow execution.
@@ -1359,6 +1375,37 @@ export interface StepNote {
   note: string;
 }
 /**
+ * How one test case went in a `testCases` record.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "CaseOutcome".
+ */
+export interface CaseOutcome {
+  name: string;
+  passed: boolean;
+  runId: string;
+  /**
+   * How the run ended (`succeeded`, `failed`, `cancelled`).
+   */
+  status: string;
+  mismatches?: Mismatch[];
+}
+/**
+ * One difference between what the case expects and what the run did.
+ * `actual` is `null` when the run had no such value.
+ *
+ * This interface was referenced by `ShikigamiApi`'s JSON-Schema
+ * via the `definition` "Mismatch".
+ */
+export interface Mismatch {
+  /**
+   * `status`, `outputs.total`, `outputs.rows[2].金額`, `errorCode`, `errorStep`.
+   */
+  at: string;
+  expected: unknown;
+  actual: unknown;
+}
+/**
  * One change in a review timeline (a journal entry without its ops).
  *
  * This interface was referenced by `ShikigamiApi`'s JSON-Schema
@@ -2283,21 +2330,6 @@ export interface CaseResult {
   error?: RunError | null;
   mismatches: Mismatch[];
   durationMs: number;
-}
-/**
- * One difference between what the case expects and what the run did.
- * `actual` is `null` when the run had no such value.
- *
- * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
- * via the `definition` "Mismatch".
- */
-export interface Mismatch {
-  /**
-   * `status`, `outputs.total`, `outputs.rows[2].金額`, `errorCode`, `errorStep`.
-   */
-  at: string;
-  expected: unknown;
-  actual: unknown;
 }
 /**
  * Who asked for a run, from where, and on which PC. Recorded in
