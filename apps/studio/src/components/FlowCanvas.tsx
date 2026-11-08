@@ -260,6 +260,11 @@ type BlockEdgeData = {
   half?: number;
   /** Into a try's "失敗したとき". */
   failure?: boolean;
+  /** The loop or branch it belongs to, and its place among a branch's ways out (see LayoutEdge). */
+  owner?: string;
+  alt?: { i: number; n: number };
+  /** The step picked in the chart: pointing at or picking a loop or branch moves its lines. */
+  selectedId?: string | null;
   /** Into a try's "失敗したとき": where its failures come from (see FAIL_X). */
   bracket?: { x: number; ticks: { x: number; y: number }[] };
   /** From the head of a frame into one of its columns. */
@@ -301,10 +306,32 @@ function InsertButton({ edgeId, data, x, y, inline }: { edgeId: string; data: Bl
   return button;
 }
 
+/** Nothing on the chart moves for someone who asked for less motion. */
+const reducedMotion = (): boolean => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+/** Which of a branch's n ways out is lit now, while `on`: each in turn, as only one of them is taken. */
+const ALT_MS = 900;
+function useTurn(n: number, on: boolean): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on || reducedMotion()) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), ALT_MS / 3);
+    return () => window.clearInterval(timer);
+  }, [on]);
+  if (!on || reducedMotion()) return null;
+  return Math.floor(now / ALT_MS) % Math.max(n, 1);
+}
+
 function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
   const r = 4;
+  // Pointing at (or picking) a loop sends its line back round; a branch lights its ways out in turn.
+  const pointed = useFocus();
+  const active = !!edge.owner && (pointed === edge.owner || edge.selectedId === edge.owner);
+  const turn = useTurn(edge.alt?.n ?? 1, active && !!edge.alt);
+  const lit = edge.alt !== undefined && turn === edge.alt.i;
   const sideLabel = (x: number, y: number) =>
     label && (
       <EdgeLabelRenderer>
@@ -330,7 +357,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
       : `V ${targetY - 28 + r} Q ${detourX} ${targetY - 28} ${detourX + r} ${targetY - 28} H ${targetX - r} Q ${targetX} ${targetY - 28} ${targetX} ${targetY - 28 + r} V ${targetY}`;
     return (
       <>
-        <BaseEdge id={id} path={`${start} ${end}`} style={style} markerEnd={markerEnd} />
+        <BaseEdge id={id} path={`${start} ${end}`} style={active ? { ...style, animation: "flow-round 0.7s linear infinite" } : style} markerEnd={markerEnd} />
         {edge.fromDecide && !edge.intoDecide
           ? // A wait: its answer on the line beside the decision, and what it does
             // over the line back in at the top, clear of the steps in between.
@@ -422,7 +449,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
   const straight = Math.abs(sourceX - targetX) <= 1;
   return (
     <>
-      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+      <BaseEdge id={id} path={path} style={lit ? { ...style, stroke: "var(--color-primary)", strokeWidth: 2 } : style} markerEnd={markerEnd} />
       <EdgeLabelRenderer>
         {label ? (
           // The "+" sits after the label; a spacer as wide on the other side keeps the label centred on the line.
@@ -431,7 +458,11 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
             className="pointer-events-none absolute flex items-center"
           >
             {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
-            <span className="max-w-[300px] truncate rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium text-ink">{label}</span>
+            <span
+              className={`max-w-[300px] truncate rounded-md border bg-sheet px-2 text-[11.5px] leading-[18px] font-medium transition-colors ${lit ? "border-primary text-primary" : "border-slate-200 text-ink"}`}
+            >
+              {label}
+            </span>
             <InsertButton edgeId={id} data={edge} inline />
           </div>
         ) : (
@@ -1552,6 +1583,9 @@ export function FlowCanvas() {
         half: e.half,
         failure: e.failure,
         bracket: e.bracket,
+        owner: e.owner,
+        alt: e.alt,
+        selectedId,
         split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,
@@ -1681,7 +1715,13 @@ export function FlowCanvas() {
       zoomOnDoubleClick={false}
       // Dragging the view during a run means the person wants to look elsewhere.
       onMoveStart={(event) => event && run?.status === "running" && setFollowRun(false)}
-      onNodeMouseEnter={(_, node) => node.type === "step" && focus.set(node.id)}
+      onNodeMouseEnter={(_, node) =>
+        node.type === "step"
+          ? focus.set(node.id)
+          : (node.data as JoinNodeData).question
+            ? focus.set((node.data as JoinNodeData).parentId)
+            : undefined
+      }
       onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="var(--color-slate-200)" />

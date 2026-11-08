@@ -313,3 +313,15 @@ textarea,
   background-size: 12px 12px;
   background-position: 0 0, 0 6px, 6px -6px, -6px 0;
 }
+
+/* A loop's line back, while its loop is pointed at: the dashes run round the way the flow goes. */
+@keyframes flow-round {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge-path {
+    animation: none !important;
+  }
+}

@@ -188,6 +188,10 @@ export type LayoutEdge = {
   half?: number;
   /** Into a try's "失敗したとき": its label is shown in the colour of errors, so the way a failure takes stands out. */
   failure?: boolean;
+  /** The loop or branch this line goes round in or out of: pointing at it moves the line (see BlockEdge). */
+  owner?: string;
+  /** One of the ways out of a branch's decision: its place among them, which light in turn (only one is taken). */
+  alt?: { i: number; n: number };
   /** Into a try's "失敗したとき": the line its ticks join, and where each tick leaves a step of "実行" (see CATCH_DROP). */
   bracket?: { x: number; ticks: { x: number; y: number }[] };
   /** From the head of a frame down into one of its columns: turns just under the head. */
@@ -415,7 +419,7 @@ class Builder {
     label?: string,
     hidden?: boolean,
     split?: boolean,
-    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer" | "half" | "failure" | "bracket">,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer" | "half" | "failure" | "bracket" | "owner" | "alt">,
   ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
@@ -612,7 +616,7 @@ class Builder {
         this.nodes.push({ id: fail, type: "join", position: { x: right + FAIL_X - JOIN_SIZE / 2, y: top - JOIN_SIZE / 2 }, data: { kind: "join", parentId: id, shown: false, failTo: placed.entry } });
         this.edge(fail, placed.entry, lane.label || undefined, undefined, undefined, { failure: true, bracket: { x: right + FAIL_X, ticks } });
       } else {
-        this.edge(from, placed.entry, lane.label || undefined, undefined, true);
+        this.edge(from, placed.entry, lane.label || undefined, undefined, true, asks ? { owner: id, alt: { i, n: columns.length } } : undefined);
       }
       for (const e of placed.exits) this.edge(e, meet);
       laneX += size.w + GAP_X;
@@ -659,7 +663,7 @@ class Builder {
     this.depth += 1;
     const placed = this.list(lane.steps, bodyY, cx - size.w / 2, size.w, id, lane.name, lane.label, lane.start, lane.tail);
     this.depth -= 1;
-    const back = { loop: true, detourX: left + LOOP_LINE_X };
+    const back = { loop: true, detourX: left + LOOP_LINE_X, owner: id };
     if (after) {
       // A wait: its block, then the decision; "いいえ" back up to the block, "はい" on out.
       this.edge(id, placed.entry, undefined, undefined, true);
