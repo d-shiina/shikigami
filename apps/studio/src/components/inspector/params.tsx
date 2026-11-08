@@ -685,7 +685,9 @@ export function ObjectFields({
   const filled = (k: string) => current[k] !== undefined;
   // Decided once when the form opens, so an item never vanishes while typing.
   const [inUse] = useState(() => (foldEmpty && keys.some(filled) ? new Set(keys.filter(filled)) : null));
-  const rare = keys.filter((k) => RARE.has(k) || (inUse !== null && !inUse.has(k)));
+  // A field in use stays out whatever happens; one filled since (a new target
+  // picked on screen) comes out too, so the form never hides what the node uses.
+  const rare = keys.filter((k) => RARE.has(k) || (inUse !== null && !inUse.has(k) && !filled(k)));
   const [more, setMore] = useState(() => keys.some((k) => RARE.has(k) && filled(k)));
   const set = (key: string, v: unknown) => {
     const next = { ...current };
@@ -810,6 +812,9 @@ function RoleField({ value, onChange }: { value: string; onChange: (role: string
 }
 const OTHER_ROLE = "\u0000other";
 
+/** The prefix of the choices in 「＋ 設定を追加」 that are the node's own settings (saveAs, timeoutMs…), not params. */
+export const STEP_KEY = "step:";
+
 export function ParamsEditor({
   step,
   def,
@@ -887,7 +892,8 @@ export function ParamsEditor({
     </button>
   );
 
-  const add = (key: string) => (key in props ? setAdded((prev) => new Set(prev).add(key)) : onMore?.(key));
+  // The node's other settings come as `step:<key>`, so a param of the same name (a plugin's `description`) is not mixed up with them.
+  const add = (key: string) => (key.startsWith(STEP_KEY) ? onMore?.(key.slice(STEP_KEY.length)) : setAdded((prev) => new Set(prev).add(key)));
   const rest = (
     <>
       {after}

@@ -18,7 +18,7 @@ import { Sentence } from "../StoryView";
 import { ActorMark, usePendingReview } from "../Timeline";
 import { VarIcon } from "../VarIcon";
 import { inputClass, CommitInput, Row, AddRow, Section } from "./fields";
-import { ParamsEditor } from "./params";
+import { ParamsEditor, STEP_KEY } from "./params";
 import { CallEditor } from "./CallEditor";
 import { FlowInspector } from "./FlowInspector";
 
@@ -306,8 +306,8 @@ function EditorForm({
     { key: "description", label: t.memo, group: t.memo, set: Boolean(step.description) },
   ].filter((r) => !r.hide);
   const shown = (key: string) => (others.find((r) => r.key === key)?.set ?? false) || added.has(key);
-  const more = others.filter((r) => !shown(r.key)).map(({ key, label, group }) => ({ key, label, group }));
-  const add = (key: string) => setAdded((prev) => new Set(prev).add(key));
+  const more = others.filter((r) => !shown(r.key)).map(({ key, label, group }) => ({ key: `${STEP_KEY}${key}`, label, group }));
+  const add = (key: string) => setAdded((prev) => new Set(prev).add(key.startsWith(STEP_KEY) ? key.slice(STEP_KEY.length) : key));
   const drop = (key: string, patch: StepPatch) => {
     setAdded((prev) => {
       const next = new Set(prev);

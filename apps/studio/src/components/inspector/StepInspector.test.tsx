@@ -159,7 +159,8 @@ describe("the settings of the node opened full size", () => {
       description: "",
       paramsSchema: {
         type: "object",
-        properties: { to: { type: "string", description: "宛先のメールアドレス" }, subject: { type: "string" }, cc: { type: "string" } },
+        // A param named like a node setting (a plugin may have one) stays a param.
+        properties: { to: { type: "string", description: "宛先のメールアドレス" }, subject: { type: "string" }, cc: { type: "string" }, description: { type: "string" } },
         required: ["to", "subject"],
       },
       blocks: [],
@@ -191,7 +192,7 @@ describe("the settings of the node opened full size", () => {
     expect(menus).toHaveLength(1);
     const options = [...menus[0]!.querySelectorAll("option")].map((o) => o.textContent);
     expect(options).toEqual(expect.arrayContaining(["結果を保存する変数", "待ち時間（ミリ秒）", "メモ"]));
-    fireEvent.change(menus[0]!, { target: { value: "description" } });
+    fireEvent.change(menus[0]!, { target: { value: "step:description" } });
     expect(screen.getByPlaceholderText(/このノードで何をするか/)).toBeTruthy();
   });
 });
