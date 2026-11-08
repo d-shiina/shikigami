@@ -191,10 +191,10 @@ function block(b: PageBlock, pictures: Pictures): string {
   return `<div class="blk${b.depth > 0 ? " in" : ""}" style="margin-left:${b.depth * 18}px">${inner}</div>`;
 }
 
-const STYLE = `
+const style = (madeWith: string) => `
 @page{size:A4;margin:0}
 *{box-sizing:border-box}
-body{margin:0;background:#e6e8ec;color:#1b1d22;font-family:"Segoe UI","Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.7}
+body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#e6e8ec;color:#1b1d22;font-family:"Segoe UI","Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.7}
 .sheet{position:relative;width:210mm;min-height:297mm;margin:24px auto;background:#fff;padding:15mm 16mm 20mm;box-shadow:0 1px 2px rgba(20,30,50,.08),0 8px 24px rgba(20,30,50,.08);break-after:page}
 .sheet>header{display:flex;justify-content:space-between;gap:16px;border-bottom:1.5px solid #1b1d22;padding-bottom:5px;margin-bottom:18px;font-size:12px;color:#50555e}
 .sheet>header b{color:#1b1d22}
@@ -222,7 +222,7 @@ h2 .n{width:28px;height:28px;font-size:14px}
 .scene{margin:0 0 18px}
 .cap{font-size:12.5px;font-weight:600;margin:0 0 6px}
 .shot{border:1px solid #c9ced6;line-height:0}
-.shot img{width:100%;display:block}
+.shot img{width:100%;max-height:150mm;object-fit:contain;object-position:left top;display:block}
 .steps{list-style:none;margin:8px 0 12px;padding:0;border-top:1px solid #e1e4e8}
 .steps li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #e1e4e8;break-inside:avoid}
 .steps .t{flex:1}
@@ -241,7 +241,10 @@ h2 .n{width:28px;height:28px;font-size:14px}
 .quiet{color:#50555e;font-size:13px;margin:0 0 12px}
 .quiet b{color:#3a3e45}
 .privacy{color:#8a8f98;font-size:11.5px;margin-top:28px}
-@media print{body{background:#fff}.sheet{margin:0;box-shadow:none}}
+/* On paper the printer numbers the pages: a sheet with many steps may run onto a second page, and the count stays right. */
+@media print{
+@page{size:A4;margin:12mm 0 14mm;@bottom-left{content:${JSON.stringify(madeWith)};margin-left:16mm;font-size:8pt;color:#8a8f98}@bottom-right{content:counter(page) " / " counter(pages);margin-right:16mm;font-size:8pt;color:#8a8f98}}
+body{background:#fff}.sheet{width:auto;min-height:0;margin:0;padding:0 16mm;box-shadow:none}.sheet>footer,.toc .pg{display:none}}
 `;
 
 /** One HTML file of `doc`: the same A4 sheets ManualView shows. `pictures` holds each scene's burned picture. */
@@ -288,7 +291,7 @@ ${foot(page.number)}</section>`;
   });
   return `<!doctype html>
 <html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(doc.title)}</title><style>${STYLE}</style></head>
+<title>${esc(doc.title)}</title><style>${style(t.manual.madeWith)}</style></head>
 <body>
 ${sheets.join("\n")}
 </body></html>`;

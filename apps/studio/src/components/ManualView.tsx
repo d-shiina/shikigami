@@ -363,7 +363,9 @@ function PageList({ pages, active, ctx }: { pages: Page[]; active: number; ctx: 
       <h4 className="mb-2 ml-2 text-[12px] font-medium text-slate-500">{t.manual.pages}</h4>
       {pages.map((page) => {
         const shot = page.kind === "body" ? page.shot : null;
-        const url = shot ? ctx.urls[shot.file] : undefined;
+        // A picture with hidden parts stays out of the thumbnail: at this size the boxes would not hide anything reliably.
+        const masked = shot ? (ctx.masks[shot.key]?.boxes.length ?? 0) > 0 : false;
+        const url = shot && !masked ? ctx.urls[shot.file] : undefined;
         return (
           <button
             key={page.number}
