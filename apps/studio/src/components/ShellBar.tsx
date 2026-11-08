@@ -3,7 +3,7 @@
 // (Ctrl+P), and the AI's chat (Ctrl+J). They sit on the window's ground, in
 // the bar along its top, as Windows apps carry their name and VS Code its
 // command center with Copilot beside it.
-import { AppWindow, Blocks, CalendarClock, Check, ChevronDown, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, Moon, Play, Plus, Search, Settings2, Sparkles, Workflow } from "lucide-react";
+import { AppWindow, Blocks, CalendarClock, Check, ChevronDown, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, Moon, Play, Plus, Settings2, Sparkles, Workflow } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { activity, anyBusy, useAgent, useAgentApi } from "../agent";
@@ -156,7 +156,7 @@ export function AiButton() {
       aria-label={t.shell.aiChat}
       title={`${t.shell.aiChat}：${name}（Ctrl+J）`}
       className={`flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[12.5px] ${
-        open ? "border-brand-300 bg-brand-50 font-medium text-brand-700" : "border-slate-200 bg-sheet text-slate-700 hover:border-slate-300 hover:text-ink"
+        open ? "border-brand-300 bg-brand-100 font-medium text-brand-700" : "border-brand-100 bg-brand-50 font-medium text-brand-700 hover:border-brand-300"
       }`}
     >
       <Sparkles size={14} strokeWidth={1.75} className={open ? "text-brand-600" : "text-brand-500"} aria-hidden="true" />
@@ -197,7 +197,7 @@ export function SearchBar({ onToggleSidebar }: { onToggleSidebar: () => void }) 
         aria-label={t.shell.search}
         className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-sheet/80 px-2.5 text-[12.5px] text-slate-400 hover:border-slate-300 hover:bg-sheet hover:text-slate-500"
       >
-        <Search size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+        <Sparkles size={14} strokeWidth={1.75} className="shrink-0 text-brand-500" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-left">{t.shell.searchPlaceholder}</span>
         <span className={KBD}>Ctrl P</span>
       </button>
@@ -268,11 +268,14 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
     return out;
   }, [query, summaries, flow, open, setPlace, startRun, run, agent, onToggleSidebar]);
   // Something typed puts the AI first only when nothing else matches it.
+  // The AI comes first: SpellSheet is built by asking it, so what is typed goes to it on Enter,
+  // unless it names a flow, place or action exactly (then that opens).
+  const exact = commands.some((c) => c.group !== "ai" && c.label.toLowerCase() === query.trim().toLowerCase());
   const ordered = useMemo(() => {
     const ai = commands.filter((c) => c.group === "ai");
     const rest = commands.filter((c) => c.group !== "ai");
-    return rest.length > 0 ? [...rest, ...ai] : ai;
-  }, [commands]);
+    return exact ? [...rest, ...ai] : [...ai, ...rest];
+  }, [commands, exact]);
   useEffect(() => setAt(0), [query]);
   useEffect(() => {
     list.current?.querySelector(`[data-at="${at}"]`)?.scrollIntoView({ block: "nearest" });
@@ -283,10 +286,11 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
     c.run();
   };
   const groups: [Command["group"], string][] = [
+    ...(exact ? [] : [["ai", t.shell.askAi] as [Command["group"], string]]),
     ["flows", t.shell.groupFlows],
     ["places", t.shell.groupPlaces],
     ["commands", t.shell.groupCommands],
-    ["ai", t.shell.askAi],
+    ...(exact ? [["ai", t.shell.askAi] as [Command["group"], string]] : []),
   ];
   let index = -1;
   // Out of the top bar: its centring transform would hold a fixed layer inside it.
@@ -299,7 +303,7 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
         className="absolute top-1.5 left-1/2 flex max-h-[min(560px,80vh)] w-[min(640px,calc(100vw-32px))] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-slate-200 bg-sheet shadow-dialog"
       >
         <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-slate-200 px-4">
-          <Search size={16} strokeWidth={1.75} className="text-slate-400" aria-hidden="true" />
+          <Sparkles size={16} strokeWidth={1.75} className="text-brand-500" aria-hidden="true" />
           <input
             autoFocus
             value={query}
