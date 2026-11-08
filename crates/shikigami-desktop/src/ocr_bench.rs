@@ -35,12 +35,26 @@ pub struct Sample {
     pub truth: Vec<Truth>,
 }
 
-fn fixtures() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ocr-bench")
+fn fixtures(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
 }
 
+/// The screens of the benchmark.
 pub fn samples() -> Vec<Sample> {
-    let dir = fixtures();
+    samples_in("ocr-bench")
+}
+
+/// The handwriting of the benchmark (`tests/fixtures/ocr-hand`): a slip and
+/// a memo written in handwriting-style fonts (`tests/ocr-bench/make-hand.mjs`),
+/// scanned and photographed, and real handwriting (`daiki-styles`).
+pub fn hand_samples() -> Vec<Sample> {
+    samples_in("ocr-hand")
+}
+
+fn samples_in(name: &str) -> Vec<Sample> {
+    let dir = fixtures(name);
     let truth: Value =
         serde_json::from_str(&std::fs::read_to_string(dir.join("truth.json")).unwrap()).unwrap();
     let mut out = Vec::new();
@@ -220,10 +234,18 @@ impl Report {
             ("ダーク", has("-dark")),
             (
                 "そのまま",
-                Box::new(|n: &str| !n.contains("-cleartype") && !n.contains("-remote")),
+                Box::new(|n: &str| {
+                    !n.contains("-cleartype")
+                        && !n.contains("-remote")
+                        && !n.starts_with("hand-")
+                        && !n.starts_with("daiki-")
+                }),
             ),
             ("ClearType", has("-cleartype")),
             ("リモート画面", has("-remote")),
+            ("手書き風（スキャン）", has("-scan")),
+            ("手書き風（写真）", has("-photo")),
+            ("本物の手書き", has("daiki-")),
         ]
     }
 
@@ -403,6 +425,29 @@ mod tests {
         report.annotate("PaddleOCR small");
     }
 
+    /// Handwriting with PaddleOCR, small (the default) and medium
+    /// ("高精度", where its models are installed).
+    #[test]
+    #[ignore = "minutes in a debug build; run with --ignored"]
+    fn ocr_bench_handwriting_paddle() {
+        let samples = hand_samples();
+        for (accurate, title) in [
+            (false, "手書き PaddleOCR small"),
+            (true, "手書き PaddleOCR medium（高精度）"),
+        ] {
+            let engine = match crate::paddle::engine_for(accurate) {
+                Ok(engine) => engine,
+                Err(reason) => {
+                    eprintln!("skipped {title}: {reason}");
+                    continue;
+                }
+            };
+            let report = run(&samples, |image| engine.recognize(image).unwrap());
+            report.print(title);
+            report.annotate(title);
+        }
+    }
+
     /// The same benchmark with Windows OCR, where its Japanese pack is
     /// installed (Add-WindowsCapability -Online -Name
     /// "Language.OCR~~~ja-JP~0.0.1.0").
@@ -420,5 +465,11 @@ mod tests {
         });
         report.print("Windows OCR");
         report.annotate("Windows OCR");
+        let hand = hand_samples();
+        let report = run(&hand, |image| {
+            crate::capture::recognize(image, Some("ja")).unwrap()
+        });
+        report.print("手書き Windows OCR");
+        report.annotate("手書き Windows OCR");
     }
 }
