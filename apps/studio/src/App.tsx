@@ -642,6 +642,9 @@ export function App() {
         if (store.getState().flow) store.getState().setPaletteOpen(!store.getState().paletteOpen);
         return;
       }
+      // On the review's report the chart is not shown: arrows, Home/End and the rest scroll and
+      // act on the paper, never on nodes nobody sees.
+      if (store.getState().place === "review" && useReviewView.getState().view === "report") return;
       // Nodes: copy, cut, paste and duplicate. Text selected on the page keeps
       // the window's own copy.
       const letter = e.key.toLowerCase();
