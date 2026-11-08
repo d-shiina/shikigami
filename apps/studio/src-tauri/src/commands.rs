@@ -791,6 +791,14 @@ pub async fn run_flow(
     let version = state.service.matching_version(&flow).ok().flatten();
     let subflows = state.service.subflows(&flow)?;
     let project_dir = Some(state.service.project_dir(&id)?);
+    // A run of the whole flow keeps the pictures for its 手順書.
+    let run_id = RunId::generate();
+    let screens_dir = debug
+        .start_at
+        .is_none()
+        .then(|| crate::manual::screens_dir(state.service.store().local_root(), &id, &run_id))
+        .flatten();
+    let manual = screens_dir.clone().map(crate::manual::Collector::new);
     let handle = state
         .runtime
         .start(
@@ -799,7 +807,8 @@ pub async fn run_flow(
                 project_dir,
                 full_run: true,
                 inputs: inputs.unwrap_or_default(),
-                run_id: None,
+                run_id: Some(run_id),
+                screens_dir,
                 version,
                 debug: Some(DebugOptions {
                     pause_on_error: true,
@@ -818,7 +827,7 @@ pub async fn run_flow(
             message: e.message,
             details: e.details,
         })?;
-    track_run(app, &state, id, handle, RUN_EVENT)
+    track_run(app, &state, id, handle, RUN_EVENT, manual)
 }
 
 /// A test case with its name (`tests/<name>.json`).
@@ -1106,6 +1115,7 @@ pub(crate) fn track_run(
     id: FlowId,
     handle: shikigami_runtime::RunHandle,
     event_name: &'static str,
+    mut manual: Option<crate::manual::Collector>,
 ) -> CmdResult<RunId> {
     let run_id = handle.run_id.clone();
     let mut recorder = RunRecorder::create(state.service.store().local_root(), &run_id)
@@ -1131,6 +1141,9 @@ pub(crate) fn track_run(
             .wait_with(|event: &RunEventEnvelope| {
                 if let Err(e) = recorder.write_event(event) {
                     tracing::warn!(error = %e, "failed to record run event");
+                }
+                if let Some(manual) = manual.as_mut() {
+                    manual.on_event(event);
                 }
                 if let Err(e) = emit_app.emit(event_name, event) {
                     tracing::warn!(error = %e, "failed to emit run event");
@@ -1158,6 +1171,9 @@ pub(crate) fn track_run(
             Ok(report) => {
                 if let Err(e) = recorder.finish(&report) {
                     tracing::warn!(error = %e, "failed to write run report");
+                }
+                if let Some(manual) = manual.take() {
+                    manual.finish(&report);
                 }
             }
             Err(e) => tracing::error!(error = %e, "run task failed"),

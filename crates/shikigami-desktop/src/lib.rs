@@ -969,6 +969,9 @@ impl DesktopStep {
     async fn screenshot(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
         let target = target(&input.params, Allow::Picture)?;
         let path = string(&input.params, "path")?;
+        if input.params.get("report") == Some(&Value::Bool(true)) {
+            return self.manual_shot(&target, path).await;
+        }
         let picture = self.picture(&target, input, deadline).await?;
         let write = || -> std::io::Result<()> {
             if let Some(dir) = std::path::Path::new(&path).parent()
@@ -982,6 +985,36 @@ impl DesktopStep {
             StepError::permanent("WRITE_FAILED", format!("cannot write {path}: {e}"))
         })?;
         Ok(Value::String(path))
+    }
+}
+
+impl DesktopStep {
+    /// A picture for the 手順書 (the Runtime's `report: true`): the whole
+    /// window, with where the target's element is in it (`mark`).
+    async fn manual_shot(&self, target: &Target, path: String) -> Result<Value, StepError> {
+        let capture = self.backend.capture(target.window_part()).await?;
+        if let Some(dir) = std::path::Path::new(&path).parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(&path, capture.image.to_png()).map_err(|e| {
+            StepError::permanent("WRITE_FAILED", format!("cannot write {path}: {e}"))
+        })?;
+        let mark = capture
+            .element
+            .filter(|_| target.element.is_some())
+            .map(|r| json!({ "x": r.x, "y": r.y, "width": r.width, "height": r.height }));
+        let title = target
+            .window
+            .title
+            .clone()
+            .or(target.window.process.clone());
+        Ok(json!({
+            "path": path,
+            "width": capture.image.width,
+            "height": capture.image.height,
+            "mark": mark,
+            "title": title,
+        }))
     }
 }
 

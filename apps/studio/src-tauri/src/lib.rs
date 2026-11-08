@@ -8,6 +8,7 @@ mod agent;
 mod commands;
 mod debug;
 mod extensions;
+mod manual;
 mod picker;
 mod runner;
 mod schedules;
@@ -165,6 +166,10 @@ pub fn run() {
             commands::read_clipboard_text,
             commands::cancel_pick_request,
             commands::export_flow,
+            manual::get_manual,
+            manual::manual_image,
+            manual::save_manual_masks,
+            manual::save_manual_export,
             commands::import_flow,
             commands::list_flows,
             commands::project_files,

@@ -177,6 +177,8 @@ impl RunLog {
                     .unwrap_or_default();
                 format!("  [{level}] {message}")
             }
+            // Pictures for the 手順書 are not part of the readable log.
+            RunEvent::ScreenCaptured { .. } => return None,
             RunEvent::HumanActionRequired { step_id, message } => {
                 format!("  WAITING {}: {message}", self.name(step_id))
             }
