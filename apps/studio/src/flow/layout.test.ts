@@ -1,6 +1,6 @@
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, frameAt, CASE_H, decideWidth, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, type StepNodeData } from "./layout";
+import { ancestorsOf, frameAt, CASE_H, decideWidth, END_ID, HEAD_H, layoutFlow, LOOP_LINE_X, NODE_W, START_ID, type StepNodeData, TERMINAL_H } from "./layout";
 
 const def = (type: string, blocks: string[] = []): StepTypeDef => ({
   type,
@@ -95,10 +95,10 @@ describe("layoutFlow", () => {
   it("folds a frame to its head, saying how much is inside", () => {
     const steps: Step[] = [{ id: "g", type: "control.group", blocks: { body: [log("x"), { id: "l", type: "control.repeat", blocks: { body: [log("y")] } }] } }, log("after")];
     const layout = layoutFlow(steps, defs, undefined, new Set(["g"]));
-    expect(layout.nodes.map((n) => n.id)).toEqual(["g", "after", "slot:end"]);
+    expect(layout.nodes.map((n) => n.id)).toEqual([START_ID, "g", "after", "end:root:", END_ID]);
     expect(layout.frames).toEqual([]);
-    expect((layout.nodes[0]!.data as StepNodeData).head).toMatchObject({ collapsed: true, count: 3, width: NODE_W });
-    expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual(["g>after"]);
+    expect((layout.nodes[1]!.data as StepNodeData).head).toMatchObject({ collapsed: true, count: 3, width: NODE_W });
+    expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual(["g>after", "after>end:root:", `${START_ID}>g`, `end:root:>${END_ID}`]);
   });
 
   it("finds the steps around a step, outermost first", () => {
@@ -120,17 +120,39 @@ describe("layoutFlow", () => {
     expect((withIt.nodes.find((n) => n.id === "t")!.data as StepNodeData).head?.addFinally).toBeUndefined();
   });
 
-  it("renders an empty flow as a single slot", () => {
+  it("renders an empty flow as a single slot between its start and its end", () => {
     const layout = layoutFlow([], defs);
-    expect(layout.nodes).toHaveLength(1);
-    expect(layout.nodes[0]?.type).toBe("slot");
+    expect(layout.nodes.map((n) => n.type)).toEqual(["terminal", "slot", "terminal"]);
+    expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual([`${START_ID}>slot:root:`, `slot:root:>${END_ID}`]);
+  });
+
+  it("starts the flow at a start over its first node and ends it at an end under the \"+\" after its last", () => {
+    const layout = layoutFlow([log("a"), log("b")], defs);
+    const node = (id: string) => layout.nodes.find((n) => n.id === id)!;
+    expect(node(START_ID).data).toEqual({ kind: "terminal", end: false });
+    expect(node(END_ID).data).toEqual({ kind: "terminal", end: true });
+    // Placed by their top centre, on the line through the nodes.
+    expect(node(START_ID).position).toEqual({ x: node("a").position.x + NODE_W / 2, y: 0 });
+    expect(node(END_ID).position.x).toBe(node("a").position.x + NODE_W / 2);
+    expect(node("a").position.y).toBeGreaterThan(TERMINAL_H);
+    expect(node(END_ID).position.y).toBeGreaterThan(node("end:root:").position.y);
+    expect(layout.height).toBe(node(END_ID).position.y + TERMINAL_H);
+    // The "+" at the end of the flow is the same as at the end of a block.
+    expect(node("end:root:").data).toEqual({ kind: "slot", parentId: null, block: null, label: "", tail: true });
+    expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual(["a>b", "b>end:root:", `${START_ID}>a`, `end:root:>${END_ID}`]);
+  });
+
+  it("draws no line into the end from a step the flow stops at", () => {
+    const layout = layoutFlow([log("a"), { id: "x", type: "control.fail", params: { message: "no" } }], defs);
+    expect(layout.nodes.some((n) => n.id === "end:root:")).toBe(false);
+    expect(layout.edges.filter((e) => e.target === END_ID)).toEqual([]);
   });
 
   it("chains sequential steps top to bottom", () => {
     const layout = layoutFlow([log("a"), log("b"), log("c")], defs);
     const ys = layout.nodes.map((n) => n.position.y);
     expect(ys).toEqual([...ys].sort((p, q) => p - q));
-    expect(layout.edges.map((e) => `${e.source}>${e.target}`)).toEqual(["a>b", "b>c"]);
+    expect(layout.edges.map((e) => `${e.source}>${e.target}`).filter((e) => !e.includes("root") && !e.includes("flow:"))).toEqual(["a>b", "b>c"]);
   });
 
   it("lays out branches side by side and merges them", () => {
@@ -216,9 +238,15 @@ describe("layoutFlow", () => {
   it("draws no line back up an empty loop", () => {
     const layout = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }], defs);
     expect(layout.edges.map((e) => `${e.source}->${e.target}`).sort()).toEqual(
-      ["join:loop:decide->join:loop", "join:loop:decide->slot:loop:body", "loop->join:loop:decide"].sort(),
+      [
+        "join:loop:decide->join:loop",
+        "join:loop:decide->slot:loop:body",
+        "loop->join:loop:decide",
+        `${START_ID}->loop`,
+        "join:loop->end:root:",
+        `end:root:->${END_ID}`,
+      ].sort(),
     );
-    // Into the "+" at the flow's end there is no line, so nothing says when it leaves.
     const after = layoutFlow([{ id: "loop", type: "control.forEach", params: { items: "rows" }, blocks: { body: [] } }, log("x")], defs);
     expect(after.edges.find((e) => e.source === "join:loop")?.label).toBe("すべて終わったら");
   });
@@ -294,7 +322,7 @@ describe("layoutFlow", () => {
       log("after"),
     ];
     const layout = layoutFlow(steps, defs);
-    const tails = layout.nodes.filter((n) => n.data.kind === "slot" && n.data.tail);
+    const tails = layout.nodes.filter((n) => n.data.kind === "slot" && n.data.tail && n.id !== "end:root:");
     // Each branch, the loop's body after the if; not a parallel's branches (that would add a branch), not the flow itself.
     expect(tails.map((n) => n.id).sort()).toEqual(["end:if:else", "end:if:then", "end:loop:body"]);
     for (const n of tails) expect(n.data).toMatchObject({ kind: "slot", parentId: n.id.split(":")[1], block: n.id.split(":")[2] });
