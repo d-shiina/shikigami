@@ -1604,7 +1604,8 @@ export function FlowCanvas() {
       const state = n.data.question && !n.data.after ? states[n.data.parentId] : n.data.failTo ? states[n.data.failTo] : undefined;
       if (state) out[n.id] = state;
       // A wait goes out only when its condition was met: when the wait succeeded, not each time its check ran.
-      if (n.data.met && states[n.data.parentId] === "succeeded") out[n.id] = "succeeded";
+      // Its decision was reached then too, even with nothing in its check to say so.
+      if (n.data.met && states[n.data.parentId] === "succeeded") out[n.id] = out[`${n.id}:decide`] = "succeeded";
     }
     return out;
   }, [states, layout.nodes]);
