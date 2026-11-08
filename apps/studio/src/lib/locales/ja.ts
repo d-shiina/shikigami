@@ -1464,6 +1464,17 @@ export const ja = {
     imageData: "画像のデータ",
     text: (n: number) => `${n.toLocaleString("ja-JP")} 文字`,
     size: (w: number, h: number) => `${w} × ${h}`,
+    enlarge: "クリックで拡大",
+  },
+  viewer: {
+    fit: "画面に合わせる",
+    fitHint: "窓に収まる大きさで表示（0）",
+    actual: "等倍",
+    actualHint: "1 ピクセルを 1 ピクセルで表示（1）",
+    zoomIn: "拡大（+）",
+    zoomOut: "縮小（-）",
+    close: "閉じる（Esc）",
+    help: "ホイールで拡大・縮小、ドラッグで移動、ダブルクリックで等倍と切り替え",
   },
   ocr: {
     engine: "読み取りエンジン",

@@ -3,7 +3,6 @@
 // ask the AI to fix it, retry, skip, step, or end the run. Also tells about
 // a run that ended in failure instead of letting it end quietly.
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { flowBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
@@ -14,6 +13,7 @@ import { diveChain, findStep, isActive } from "../store";
 import { usePendingReview } from "./Timeline";
 import { shortText } from "./ValueView";
 import { HoverPreview } from "./HoverPreview";
+import { openImage } from "./ImageViewer";
 import { stepLabel as typeName, t } from "../lib/i18n";
 
 const MAX_VARS = 14;
@@ -145,28 +145,15 @@ function Variables({ values, secrets }: { values: Record<string, unknown>; secre
 }
 
 function Screenshot({ src, title }: { src: string; title: string }) {
-  const [open, setOpen] = useState(false);
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title={t.pause.screenshotTitle}
-        className="shrink-0 overflow-hidden rounded-lg border border-slate-300 hover:border-brand-500"
-      >
-        <img src={src} alt={title} className="h-[92px] w-auto max-w-[180px] object-cover object-top" />
-      </button>
-      {open &&
-        createPortal(
-          <div className="fixed inset-0 z-50 grid place-items-center bg-ink/50 p-6" onClick={() => setOpen(false)}>
-            <figure lang="ja" className="max-h-full overflow-auto rounded-lg bg-sheet p-2 shadow-dialog">
-              <figcaption className="px-1 pb-2 text-[13px] font-bold">{title}</figcaption>
-              <img src={src} alt={title} className="max-w-[min(1200px,90vw)]" />
-            </figure>
-          </div>,
-          document.body,
-        )}
-    </>
+    <button
+      type="button"
+      onClick={() => openImage({ src, title })}
+      title={t.pause.screenshotTitle}
+      className="shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-slate-300 hover:border-brand-500"
+    >
+      <img src={src} alt={title} className="h-[92px] w-auto max-w-[180px] object-cover object-top" />
+    </button>
   );
 }
 
