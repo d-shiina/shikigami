@@ -205,6 +205,9 @@ describe("studio store", () => {
       "|each": { round: 7, total: 12, ended: true, leftEarly: true },
       "call|w": { round: 2, total: null, ended: false, leftEarly: false },
     });
+    // Started again (the next pass of a loop around it): the last pass's count does not carry over.
+    store.getState().onRunEvent({ ...base, seq: 4, type: "stepStarted", stepId: "each", stepType: "control.forEach", attempt: 1 });
+    expect(store.getState().run?.loops["|each"]).toBeUndefined();
   });
 
   it("shows a stop in progress and ends a run whose last event never came", async () => {

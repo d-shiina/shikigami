@@ -1839,6 +1839,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           }
           const moved = dive !== s.dive ? { dive, selection: null } : {};
           // How far each loop got, in the open flow or a called one.
+          // A loop starting again (another pass of a loop around it, a retry) starts with nothing to show.
+          if (env.type === "stepStarted" && run.loops[loopKey(path, env.stepId)]) {
+            const { [loopKey(path, env.stepId)]: _, ...rest } = run.loops;
+            run.loops = rest;
+          }
           if (env.type === "loopRound" || env.type === "loopEnded") {
             const ended = env.type === "loopEnded";
             run.loops = {
