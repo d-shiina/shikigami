@@ -2,9 +2,9 @@
 
 English | [日本語](ja/adapters.md)
 
-The apps Shikigami can drive grow by "adapter". Today there are browsers (`browser.*`, [browser.md](browser.md)), Windows desktop apps (`desktop.*`, [desktop.md](desktop.md)), files and folders (`file.*`, [files.md](files.md)), Excel workbooks, Word documents and mail (`excel.*` / `word.*` / `mail.*`, [office.md](office.md)), web APIs, programs, the clipboard and dialogs (`http.*` / `process.*` / `clipboard.*` / `dialog.*`, [system.md](system.md)), PDFs (`pdf.*`, [pdf.md](pdf.md)), and databases through ODBC (`db.*`, [database.md](database.md)).
+The apps SpellSheet can drive grow by "adapter". Today there are browsers (`browser.*`, [browser.md](browser.md)), Windows desktop apps (`desktop.*`, [desktop.md](desktop.md)), files and folders (`file.*`, [files.md](files.md)), Excel workbooks, Word documents and mail (`excel.*` / `word.*` / `mail.*`, [office.md](office.md)), web APIs, programs, the clipboard and dialogs (`http.*` / `process.*` / `clipboard.*` / `dialog.*`, [system.md](system.md)), PDFs (`pdf.*`, [pdf.md](pdf.md)), and databases through ODBC (`db.*`, [database.md](database.md)).
 
-To add nodes without rebuilding Shikigami (in-house systems, a particular SaaS…), write a **plugin** instead of a built-in adapter: a folder with a manifest (`shikigami-plugin.json`) and a program, in any language. How it works: [design/plugins.md](design/plugins.md) (Japanese); example: `examples/plugins/hello`.
+To add nodes without rebuilding SpellSheet (in-house systems, a particular SaaS…), write a **plugin** instead of a built-in adapter: a folder with a manifest (`shikigami-plugin.json`) and a program, in any language. How it works: [design/plugins.md](design/plugins.md) (Japanese); example: `examples/plugins/hello`.
 
 Adapters are made per thing being operated, not per app technology (Win32 / WPF / SAP GUI / Java…). Desktop apps are written with one set of `desktop.*` nodes, and the adapter decides from the target window which technology to look inside it with (`crates/shikigami-desktop/src/engine.rs`). That keeps the number of ways the AI has to learn small.
 

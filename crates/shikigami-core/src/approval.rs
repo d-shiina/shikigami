@@ -264,7 +264,7 @@ impl ApprovalStore {
             return Err(CoreError::Rejected {
                 code: "APPROVAL_NOT_ALLOWED",
                 message: "only a person can answer an approval request".into(),
-                hint: Some("The user answers it in Shikigami Studio.".into()),
+                hint: Some("The user answers it in SpellSheet Studio.".into()),
             });
         }
         let mut request = self.get(id)?;

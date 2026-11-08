@@ -2,7 +2,7 @@
 
 English | [日本語](ja/compatibility.md)
 
-The promises Shikigami makes to the outside, and the rules for changing them. Flows are used for a long time, and AI clients and scripts are built on the MCP tools and the CLI. Breaking what is listed here makes flows silently stop working on users' machines.
+The promises SpellSheet makes to the outside, and the rules for changing them. Flows are used for a long time, and AI clients and scripts are built on the MCP tools and the CLI. Breaking what is listed here makes flows silently stop working on users' machines.
 
 ## 1. Scope
 
@@ -42,9 +42,9 @@ Either way it goes under "Breaking changes" in [CHANGELOG.md](../CHANGELOG.md). 
 
 ## 3. The flow file format
 
-- `schemaVersion` is the version of the file's shape. **It goes up by 1 every time the shape changes.** Flows reject unknown fields (to catch typos), so it goes up even when only an optional field is added. An older Shikigami then stops with a clear "saved by a newer version, please update" (`UNSUPPORTED_SCHEMA_VERSION`)
+- `schemaVersion` is the version of the file's shape. **It goes up by 1 every time the shape changes.** Flows reject unknown fields (to catch typos), so it goes up even when only an optional field is added. An older SpellSheet then stops with a clear "saved by a newer version, please update" (`UNSUPPORTED_SCHEMA_VERSION`)
 - When it goes up, add a "previous version → current version" function to `MIGRATIONS` in `crates/shikigami-core/src/migrate.rs`. Loading converts from old versions one node at a time, so each function only needs to know the version just before it. A gap makes the tests fail
-- Breaking changes to built-in node params are migrated here too (rewriting every node with `for_each_step`). Built-in nodes ship with Shikigami itself, so nodes carry no versions of their own. Having flows write versions would add to what AI has to write and where it can go wrong ([design/ai-authoring.md](design/ai-authoring.md), Japanese)
+- Breaking changes to built-in node params are migrated here too (rewriting every node with `for_each_step`). Built-in nodes ship with SpellSheet itself, so nodes carry no versions of their own. Having flows write versions would add to what AI has to write and where it can go wrong ([design/ai-authoring.md](design/ai-authoring.md), Japanese)
 - Files, named versions, flows inside bundles and subflows all go through the same migration (`migrate::from_value` / `migrate::deserialize`)
 - A migrated flow is written in the new version the next time it is saved. Reading alone never rewrites the file
 - Future versions are not loaded (silently dropping fields would lose them on save)

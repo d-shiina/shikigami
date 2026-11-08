@@ -29,7 +29,7 @@ use shikigami_runtime::{
 use shikigami_secrets::{SecretInput, Vault};
 
 #[derive(Parser)]
-#[command(name = "shikigami", version, about = "Shikigami RPA command line")]
+#[command(name = "shikigami", version, about = "SpellSheet RPA command line")]
 struct Cli {
     /// Workspace directory (default: $SHIKIGAMI_HOME or the platform data dir).
     #[arg(long, global = true)]

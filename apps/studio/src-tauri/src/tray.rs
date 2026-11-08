@@ -29,7 +29,7 @@ pub struct TrayLabels {
 impl Default for TrayLabels {
     fn default() -> Self {
         Self {
-            tooltip: "Shikigami".into(),
+            tooltip: "SpellSheet".into(),
             open_runner: "実行画面を開く".into(),
             open_studio: "Studio を開く".into(),
             quit: "終了".into(),

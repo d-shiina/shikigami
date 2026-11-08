@@ -1338,7 +1338,7 @@ fn generic_hint(code: &str) -> Option<&'static str> {
         "EMPTY_NAME" => "Give the flow a short descriptive name.",
         "INVALID_FLOW_ID" => "Omit `id` when creating a flow; Core assigns one.",
         "UNSUPPORTED_SCHEMA_VERSION" => {
-            "Omit schemaVersion (Core writes the current one). A file from a newer Shikigami needs that newer version to open."
+            "Omit schemaVersion (Core writes the current one). A file from a newer SpellSheet needs that newer version to open."
         }
         "EXPR_SYNTAX" => {
             "Check quotes and brackets. Strings use '...', comparisons ==, !=, <, >, logic &&, ||, !, join text with +, call functions as name(x) (not x.name()). In template params wrap expressions in {{ }}. Examples: total > 1000 && status == '済', name + '様', len(items) == 0, upper(trim(code))."

@@ -7,7 +7,7 @@ import { stepHelpJa } from "./stepHelp.ja";
 import { transformsJa } from "./transforms.ja";
 
 export const ja = {
-  appName: "Shikigami Studio",
+  appName: "SpellSheet Studio",
   secrets: "シークレット",
   secretsIntro:
     "ログインに使う ID・パスワードや Web API のキーを、名前を付けて登録します。フローと AI には名前だけが渡り、値は登録したサイトにだけ入力・送信されます。",
@@ -16,7 +16,7 @@ export const ja = {
   secretPassword: "パスワード",
   secretPasswordKeep: "変更しないときは空のまま",
   secretStore: "値の保存先",
-  secretStores: { vault: "Shikigami", windows: "Windows の資格情報マネージャー" },
+  secretStores: { vault: "SpellSheet", windows: "Windows の資格情報マネージャー" },
   secretStoreHints: {
     vault: "暗号化してこのワークスペースに保存します",
     windows: "使うたびに資格情報マネージャーの「汎用資格情報」から読みます。そちらでパスワードを変えると、次の実行から新しいものを使います",
@@ -373,7 +373,7 @@ export const ja = {
   updateCheck: "もう一度確認",
   updatesDisabled: "開発版のため自動更新は行いません。",
   mcpSetup: "MCP サーバーの登録",
-  mcpSetupHint: (name: string) => `${name} の外から Shikigami を使うときに、一度だけ実行するコマンド。更新しても同じパスのまま使えます`,
+  mcpSetupHint: (name: string) => `${name} の外から SpellSheet を使うときに、一度だけ実行するコマンド。更新しても同じパスのまま使えます`,
   appVersion: "バージョン",
   copy: "コピー",
   copied: "コピーしました",
@@ -869,11 +869,11 @@ export const ja = {
       "a ? b : c はない。空のときの既定値は coalesce(値, '既定')、条件で処理を分けるときは control.if ノード",
     ],
     returnLead:
-      "Shikigami に取り込もうとしたところ、次の問題がありました。この問題だけを直し、answer オブジェクト全体（format・summary・checks・flow）を 1 つの ```json コードブロックでもう一度返してください。",
+      "SpellSheet に取り込もうとしたところ、次の問題がありました。この問題だけを直し、answer オブジェクト全体（format・summary・checks・flow）を 1 つの ```json コードブロックでもう一度返してください。",
     returnLeadFlow:
-      "Shikigami で検証したところ、次の問題がありました。下の今のフローでこの問題だけを直し、answer オブジェクト全体を 1 つの ```json コードブロックで返してください。ノードの id と、部品の target はそのまま残してください。",
+      "SpellSheet で検証したところ、次の問題がありました。下の今のフローでこの問題だけを直し、answer オブジェクト全体を 1 つの ```json コードブロックで返してください。ノードの id と、部品の target はそのまま残してください。",
     handOff:
-      "これは Shikigami の今のフローです。このあとの依頼に合わせて直し、answer オブジェクト全体を 1 つの ```json コードブロックで返してください。ノードの id と、部品の target（人が画面から選んだもの）はそのまま残してください。",
+      "これは SpellSheet の今のフローです。このあとの依頼に合わせて直し、answer オブジェクト全体を 1 つの ```json コードブロックで返してください。ノードの id と、部品の target（人が画面から選んだもの）はそのまま残してください。",
     runBlocked: "対応が必要なところが済むと実行できます",
     request: "依頼：",
   },
@@ -882,7 +882,7 @@ export const ja = {
     menu: "AI の答えを貼り付け…",
     copyFlow: "AI に渡す用にコピー",
     copyFlowHint: "今のフローと答え方の説明をコピーします。AI のチャットに貼り付け、続けて依頼を書いてください",
-    lead: "Microsoft Copilot など、Shikigami と直接つながらない AI のチャットにフローの作成を依頼し、その答えを取り込みます。",
+    lead: "Microsoft Copilot など、SpellSheet と直接つながらない AI のチャットにフローの作成を依頼し、その答えを取り込みます。",
     step1: "AI に仕様書を渡す",
     step1Lead:
       "仕様書の 2 つのファイルを保存して AI に渡します。Copilot Studio のエージェントなら、指示に shikigami-ai-instructions.md の中身を貼り、ナレッジに shikigami-ai-reference.md を追加します。",
@@ -1321,13 +1321,13 @@ export const ja = {
     } as Record<string, { name: string; uses: string }>,
   },
   tray: {
-    tooltip: "Shikigami",
+    tooltip: "SpellSheet",
     openRunner: "実行画面を開く",
     openStudio: "Studio を開く",
     quit: "終了",
   },
   runner: {
-    title: "Shikigami 実行",
+    title: "SpellSheet 実行",
     open: "実行画面",
     openTitle: "公開版のフローを選んで実行する画面を開きます",
     search: "検索",

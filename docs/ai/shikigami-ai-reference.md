@@ -1,6 +1,6 @@
-# Shikigami flow reference
+# SpellSheet flow reference
 
-Everything an AI needs to write a Shikigami flow without tools. Read shikigami-ai-instructions.md first: it says how to answer.
+Everything an AI needs to write a SpellSheet flow without tools. Read shikigami-ai-instructions.md first: it says how to answer.
 
 ## The flow
 

@@ -2,7 +2,7 @@
 
 [English](../desktop.md) | 日本語
 
-Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GUI など）をフローから操作します。ノードはアプリの作り（Win32 / WinForms / WPF / UWP / SAP / Java）で分けず、**`desktop.*` の 1 セットだけ** です。どの技術でアプリの中を見るかは、Shikigami が対象のウィンドウを見て決めます。フローの実行に AI は関わりません。
+Windows のアプリ（業務システム、メモ帳、Excel の画面、SAP GUI など）をフローから操作します。ノードはアプリの作り（Win32 / WinForms / WPF / UWP / SAP / Java）で分けず、**`desktop.*` の 1 セットだけ** です。どの技術でアプリの中を見るかは、SpellSheet が対象のウィンドウを見て決めます。フローの実行に AI は関わりません。
 
 ## 対象の書き方
 
@@ -177,7 +177,7 @@ Citrix やリモートデスクトップの中、独自に描画する画面で�
 
 Java のアプリ（Swing・AWT と、それで作られた多くの社内システム）は、UI Automation には枠しか見えません。Java Access Bridge が有効なら、同じ `desktop.*` のノードがその仕組みを通して動きます。
 
-- **Java Access Bridge を有効にする**（PC・ユーザーごとに一度）：アプリが使う Java の `bin` フォルダーで `jabswitch -enable` を実行し、アプリを起動し直します。Shikigami は `WindowsAccessBridge-64.dll` を Windows、アプリの `java.exe` のフォルダー、`JAVA_HOME\bin` の順に探します
+- **Java Access Bridge を有効にする**（PC・ユーザーごとに一度）：アプリが使う Java の `bin` フォルダーで `jabswitch -enable` を実行し、アプリを起動し直します。SpellSheet は `WindowsAccessBridge-64.dll` を Windows、アプリの `java.exe` のフォルダー、`JAVA_HOME\bin` の順に探します
 - `inspect_ui` は Java の部品をほかのアプリと同じ役割（`textbox`・`button`・`checkbox`・`combobox`・`table`・`menuitem` など）で一覧にします。Java の部品には id がないので、`role` ＋ `name`（同じ名前が並ぶときは `nth`）で指定します
 - 各ノードの動き：`desktop.click` は部品の動作（押す・切り替え・選ぶ）を実行。`desktop.setValue` / `desktop.getValue` は入力欄の書き込みと読み取り（パスワード欄は書き込みだけ）。`desktop.select` は一覧やコンボボックスの項目を選ぶ。`desktop.selectMenu` はメニューバーをたどる。`desktop.getTable` は `JTable` を列見出しつきで全部読む。`desktop.type`・`desktop.press`・マウスのノードは、その部品にフォーカスを移すか、画面上の位置を使う
 - 無効なときに部品を指定した対象は `JAVA_BRIDGE_OFF`（有効にする手順つき）で止まります。ウィンドウそのもの・OCR・画像は UI Automation で動きます
@@ -188,7 +188,7 @@ Java のアプリ（Swing・AWT と、それで作られた多くの社内シス
 - UI Automation は **ウィンドウを持たない専用スレッド** で、マルチスレッドアパートメント（MTA）に参加して呼びます（Microsoft の推奨。Studio 自身の画面が対象でも固まらない）。ノードはこのスレッドに要求を送るだけで、部品への参照はスレッドの外に出しません。毎回 `target` から探し直します
 - 接続 2 秒・処理 10 秒の UI Automation のタイムアウトを設定し、応答しないアプリで止まり続けないようにします（`APP_NOT_RESPONDING`）。クリックなどの操作中のタイムアウトは「操作が済んだかもしれない」ので、二重に押さないよう再試行しません
 - 昔ながらの Win32 のボタンはクリックを投げるだけにして、押した先でダイアログが開いても待たされないようにしています
-- 管理者として動いているアプリは、通常の権限の Shikigami から操作できません（Windows の制限）。`ELEVATION_REQUIRED` で知らせます
+- 管理者として動いているアプリは、通常の権限の SpellSheet から操作できません（Windows の制限）。`ELEVATION_REQUIRED` で知らせます
 - 実行キューで待っている間にノードが時間切れ・停止になった要求は、実行せずに捨てます（停止後や再試行で二重にクリック・入力しないため）
 - マウス・キーボードを使う前にウィンドウを前面に出します。画面ロック中・サインイン画面や昇格の確認が入力を持っているとき・リモートセッションが切断または最小化されているときは、そうしたノードは始める前に `DESKTOP_UNAVAILABLE` で止めます（マウス・キーボードを使わないノードは動きます）。それ以外で Windows が許さなかったときは `FOREGROUND_DENIED` / `INPUT_BLOCKED` で止めます。マウス・キーボードは Studio・CLI・MCP サーバーをまたいで一度に一つのノードだけが使います
 - 座標は高 DPI でもずれないよう、スレッドを Per-Monitor DPI 対応にしています

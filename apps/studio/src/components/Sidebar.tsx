@@ -98,7 +98,7 @@ function MiniItem({ icon: Icon, label, on, onClick, count, tone, dot, busy, titl
 function Workspace() {
   const workspace = useStudio((s) => s.workspace);
   const setPlace = useStudio((s) => s.setPlace);
-  const name = workspace ? (workspace.root.split(/[\\/]/).filter(Boolean).at(-1) ?? workspace.root) : "Shikigami";
+  const name = workspace ? (workspace.root.split(/[\\/]/).filter(Boolean).at(-1) ?? workspace.root) : "SpellSheet";
   return (
     <button
       type="button"

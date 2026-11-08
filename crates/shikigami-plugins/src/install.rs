@@ -319,7 +319,7 @@ pub async fn stage_update(root: &Path, name: &str, taken: &[&str]) -> Result<Sta
         InstallError::new(
             "PLUGIN_SOURCE_UNKNOWN",
             format!(
-                "'{name}' was not installed by Shikigami, so there is nowhere to update it from"
+                "'{name}' was not installed by SpellSheet, so there is nowhere to update it from"
             ),
         )
     })?;

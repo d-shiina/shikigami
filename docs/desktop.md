@@ -2,7 +2,7 @@
 
 English | [日本語](ja/desktop.md)
 
-Flows drive Windows apps (business systems, Notepad, the Excel window, SAP GUI…). Nodes are not split by app technology (Win32 / WinForms / WPF / UWP / SAP / Java): there is **only one set, `desktop.*`**. Shikigami looks at the target window and decides which technology to look inside it with. No AI is involved in running a flow.
+Flows drive Windows apps (business systems, Notepad, the Excel window, SAP GUI…). Nodes are not split by app technology (Win32 / WinForms / WPF / UWP / SAP / Java): there is **only one set, `desktop.*`**. SpellSheet looks at the target window and decides which technology to look inside it with. No AI is involved in running a flow.
 
 ## Writing a target
 
@@ -17,7 +17,7 @@ Flows drive Windows apps (business systems, Notepad, the Excel window, SAP GUI�
 - In apps that show no elements (Citrix, remote desktops, custom-drawn screens), `image` (a picture) or `ocr` (a text) point at a place on the screen (see "Screens without elements" below)
 - `point` (coordinates from the window's top-left) is a last resort, for `desktop.mouseClick` only
 
-When several elements match, Shikigami does not pick "one of them": it fails with `ELEMENT_AMBIGUOUS` and the candidates, so a run never presses a different element each time.
+When several elements match, SpellSheet does not pick "one of them": it fails with `ELEMENT_AMBIGUOUS` and the candidates, so a run never presses a different element each time.
 
 When the same name repeats on a screen (a "Search" button for both the billing and the shipping address) or a text box has no name, two fields point at it without counting (`nth`), which survives controls being added or moved:
 
@@ -175,7 +175,7 @@ When the target window belongs to SAP GUI for Windows and SAP GUI Scripting is e
 
 Java apps (Swing, AWT, and apps built on them, such as many in-house systems) show only their frame to UI Automation. When the Java Access Bridge is on, the same `desktop.*` nodes act through it instead.
 
-- **Switch the bridge on** (once per PC and user): run `jabswitch -enable` from the `bin` folder of the Java the app uses, then restart the app. Shikigami loads `WindowsAccessBridge-64.dll` from Windows, from the folder of the app's `java.exe`, or from `JAVA_HOME\bin`
+- **Switch the bridge on** (once per PC and user): run `jabswitch -enable` from the `bin` folder of the Java the app uses, then restart the app. SpellSheet loads `WindowsAccessBridge-64.dll` from Windows, from the folder of the app's `java.exe`, or from `JAVA_HOME\bin`
 - `inspect_ui` lists Java components with the same roles as other apps (`textbox`, `button`, `checkbox`, `combobox`, `table`, `menuitem`…). Java components have no id: target them with `role` + `name` (and `nth` when names repeat)
 - What each node does there: `desktop.click` runs the component's action (press, toggle, select); `desktop.setValue` / `desktop.getValue` write and read text fields (password fields can only be written); `desktop.select` picks a list or combo box entry; `desktop.selectMenu` walks the menu bar; `desktop.getTable` reads a `JTable` whole with its column headers; `desktop.type`, `desktop.press` and the mouse nodes focus the component or use its place on the screen
 - When the bridge is off, targets with an element stop with `JAVA_BRIDGE_OFF` (with the steps to switch it on); the window itself, OCR and images still work through UI Automation
@@ -186,7 +186,7 @@ Java apps (Swing, AWT, and apps built on them, such as many in-house systems) sh
 - UI Automation is called from a **dedicated thread without windows** that joins the multithreaded apartment (MTA), as Microsoft recommends (so it does not freeze even when Studio's own window is the target). Nodes only send requests to that thread and element references never leave it; each node finds its `target` again
 - UI Automation timeouts are set to 2 s for connecting and 10 s for calls, so an unresponsive app does not hang the run (`APP_NOT_RESPONDING`). A timeout during an action such as a click means "it may have happened", so it is not retried, to avoid pressing twice
 - Classic Win32 buttons are clicked by posting the click, so a dialog opened by the button does not block
-- Apps running as administrator cannot be driven from Shikigami running with normal rights (a Windows restriction). This is reported as `ELEVATION_REQUIRED`
+- Apps running as administrator cannot be driven from SpellSheet running with normal rights (a Windows restriction). This is reported as `ELEVATION_REQUIRED`
 - Requests whose node timed out or was stopped while waiting in the queue are dropped without running (no double clicks or typing after a stop or retry)
 - Before using the mouse or keyboard the window is brought to the front. While the screen is locked, the sign-in screen or an elevation prompt has the input, or a remote session is disconnected or minimized, such nodes stop with `DESKTOP_UNAVAILABLE` before they start (nodes without the mouse and keyboard still run). When Windows refuses for another reason the node stops with `FOREGROUND_DENIED` / `INPUT_BLOCKED`. The mouse and keyboard go to one node at a time across Studio, the CLI and the MCP server
 - The thread is Per-Monitor DPI aware so coordinates stay right on high-DPI screens

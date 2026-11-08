@@ -386,8 +386,8 @@ function overlay({ hostId, picked, candidate, armed, message, lang, banner }: Ov
   // Already waiting here (a frame armed twice while it loaded).
   if (document.getElementById(hostId)) return;
   const words = lang !== "en"
-    ? { title: "Shikigami：クリックして教えてください", unsure: "わからない", hint: "Esc でやめる", frame: "ここは選べません" }
-    : { title: "Shikigami: click to show it", unsure: "Not sure", hint: "Esc to cancel", frame: "Cannot pick here" };
+    ? { title: "SpellSheet：クリックして教えてください", unsure: "わからない", hint: "Esc でやめる", frame: "ここは選べません" }
+    : { title: "SpellSheet: click to show it", unsure: "Not sure", hint: "Esc to cancel", frame: "Cannot pick here" };
   const host = document.createElement("div");
   host.id = hostId;
   host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none";

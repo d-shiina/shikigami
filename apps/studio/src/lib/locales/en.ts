@@ -7,7 +7,7 @@ import { stepHelpEn } from "./stepHelp.en";
 import { transformsEn } from "./transforms.en";
 
 export const en: Dict = {
-  appName: "Shikigami Studio",
+  appName: "SpellSheet Studio",
   secrets: "Secrets",
   secretsIntro:
     "Register login IDs and passwords, and web API keys, under a name. Flows and the AI only ever see the name; the values are typed into or sent to only the sites you allow.",
@@ -16,7 +16,7 @@ export const en: Dict = {
   secretPassword: "Password",
   secretPasswordKeep: "Leave empty to keep the current one",
   secretStore: "Where the values are kept",
-  secretStores: { vault: "Shikigami", windows: "Windows Credential Manager" },
+  secretStores: { vault: "SpellSheet", windows: "Windows Credential Manager" },
   secretStoreHints: {
     vault: "Encrypted in this workspace",
     windows: "Read from a generic credential of Credential Manager each time it is used. A password changed there is used from the next run",
@@ -374,7 +374,7 @@ export const en: Dict = {
   updateCheck: "Check again",
   updatesDisabled: "Development build: no automatic updates.",
   mcpSetup: "MCP server registration",
-  mcpSetupHint: (name: string) => `Run once to use Shikigami from ${name} outside Studio. The path stays the same across updates`,
+  mcpSetupHint: (name: string) => `Run once to use SpellSheet from ${name} outside Studio. The path stays the same across updates`,
   appVersion: "Version",
   copy: "Copy",
   copied: "Copied",
@@ -870,11 +870,11 @@ export const en: Dict = {
       "There is no a ? b : c. For a default use coalesce(value, 'default'); to do different things by a condition use a control.if node",
     ],
     returnLead:
-      "Shikigami could not take in your answer because of the problems below. Fix only these and answer again with the whole answer object (format, summary, checks, flow) in one ```json code block.",
+      "SpellSheet could not take in your answer because of the problems below. Fix only these and answer again with the whole answer object (format, summary, checks, flow) in one ```json code block.",
     returnLeadFlow:
-      "Shikigami found the problems below. Fix only these in the current flow below and answer with the whole answer object in one ```json code block. Keep the node ids and the parts' targets as they are.",
+      "SpellSheet found the problems below. Fix only these in the current flow below and answer with the whole answer object in one ```json code block. Keep the node ids and the parts' targets as they are.",
     handOff:
-      "This is my current Shikigami flow. Change it as I ask below and answer with the whole answer object in one ```json code block. Keep the node ids and the parts' targets (picked on the screen by a person) as they are.",
+      "This is my current SpellSheet flow. Change it as I ask below and answer with the whole answer object in one ```json code block. Keep the node ids and the parts' targets (picked on the screen by a person) as they are.",
     runBlocked: "Finish the to-dos to run",
     request: "Request:",
   },
@@ -883,7 +883,7 @@ export const en: Dict = {
     menu: "Paste an AI answer…",
     copyFlow: "Copy for an AI",
     copyFlowHint: "Copies the current flow and how to answer. Paste it into the AI chat and write your request after it",
-    lead: "Ask an AI chat that is not connected to Shikigami, such as Microsoft Copilot, to write a flow, and take its answer in.",
+    lead: "Ask an AI chat that is not connected to SpellSheet, such as Microsoft Copilot, to write a flow, and take its answer in.",
     step1: "Give the AI the guide",
     step1Lead:
       "Save the two guide files and give them to the AI. For a Copilot Studio agent, paste shikigami-ai-instructions.md into the instructions and add shikigami-ai-reference.md as knowledge.",
@@ -1322,13 +1322,13 @@ export const en: Dict = {
     } as Record<string, { name: string; uses: string }>,
   },
   tray: {
-    tooltip: "Shikigami",
+    tooltip: "SpellSheet",
     openRunner: "Open the run window",
     openStudio: "Open Studio",
     quit: "Quit",
   },
   runner: {
-    title: "Shikigami Run",
+    title: "SpellSheet Run",
     open: "Run window",
     openTitle: "Open the window that only picks a published flow and runs it (for the people who use them)",
     search: "Search",

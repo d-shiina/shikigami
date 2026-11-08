@@ -2,7 +2,7 @@
 
 [English](../extensions.md) | 日本語
 
-拡張機能は、Shikigami に後からノードを追加する仕組みです。クラウド型 AI-OCR、社内システム、業務 SaaS の API など、使う人が限られる連携を、本体を作り直さずに追加できます。VS Code の拡張機能と同じく、入れたものだけがパレットに並び、要らなくなれば無効にしたり削除したりできます。
+拡張機能は、SpellSheet に後からノードを追加する仕組みです。クラウド型 AI-OCR、社内システム、業務 SaaS の API など、使う人が限られる連携を、本体を作り直さずに追加できます。VS Code の拡張機能と同じく、入れたものだけがパレットに並び、要らなくなれば無効にしたり削除したりできます。
 
 - 拡張機能は **別のプログラム** として動きます（Node.js・Python・.NET・PowerShell など、標準入出力が使えれば言語は自由）。不具合があっても Studio や実行は落ちず、そのノードがエラーになるだけです。
 - 追加したノードは組込のノードと同じく、パレットに並び、設定欄は拡張機能が宣言した内容から作られ、検証・再試行・タイムアウト・シークレットの伏せ字も同じように扱われます。
@@ -66,7 +66,7 @@ shikigami plugin registry          # 一覧を表示
       "label": "Azure AI-OCR",
       "description": "Azure AI Document Intelligence で画像・PDF を読み取ります",
       "version": "0.1.0",
-      "publisher": "Shikigami 見本",
+      "publisher": "SpellSheet 見本",
       "homepage": "https://github.com/<owner>/<repo>",
       "source": "https://github.com/<owner>/<repo>"
     }
@@ -121,7 +121,7 @@ azureocr/
   "version": "0.1.0",
   "label": "Azure AI-OCR",
   "description": "Azure AI Document Intelligence で画像・PDF を読み取ります",
-  "publisher": "Shikigami 見本",
+  "publisher": "SpellSheet 見本",
   "homepage": "https://github.com/<owner>/<repo>",
   "tag": "AI-OCR",
   "icon": "scan-text",
@@ -143,7 +143,7 @@ azureocr/
 | `publisher` / `homepage` | - | 発行元と説明のページ（https） |
 | `tag` | - | ノード名の前に出す「どこで」の札（例 `AI-OCR` →「［AI-OCR］AI-OCR の読み取り」）。省略時は `label` |
 | `icon` | - | ノードのアイコン。[Lucide](https://lucide.dev/icons) の名前（`scan-text`・`file-search`・`cloud` など）。知らない名前はパズルのアイコン |
-| `command.program` / `args` | ○ / - | 起動するプログラム。`./bin/x.exe` のように区切りを含むと拡張機能のフォルダーからの相対、`node` は Shikigami に同梱の Node.js を使います（利用者の PC に Node.js がなくても動く） |
+| `command.program` / `args` | ○ / - | 起動するプログラム。`./bin/x.exe` のように区切りを含むと拡張機能のフォルダーからの相対、`node` は SpellSheet に同梱の Node.js を使います（利用者の PC に Node.js がなくても動く） |
 | `credentials` | - | 受け取るシークレットの種類：`kind`（`login` / `apiKey` / `oauth`）・`label`（登録するもの）・`description`・`params`（受け取る `secretParams`） |
 | `inspect` | - | `true` なら AI の単体実行のあとに `inspect` を呼び、アプリの状態を AI に返す |
 | `steps` | ○ | ノードの宣言（下の表） |
@@ -203,7 +203,7 @@ azureocr/
 - エラーの `data.code` がノードのエラーコード、`retryable` が再試行してよいか、`details.hint` が直し方（人にも AI にも見える）
 - 実行の終わりに `closeRun`（`{ "runId" }`）が来ます。後片付けがなければ `null` を返す
 - 呼び出しは同時に複数来ることがあります（並列実行）。順番に処理したいときは `resources` に `{ "kind": "plugin" }`
-- 標準出力は応答だけ。ログは標準エラーへ（Shikigami のログに入り、シークレットの値は伏せ字になる）
+- 標準出力は応答だけ。ログは標準エラーへ（SpellSheet のログに入り、シークレットの値は伏せ字になる）
 - 標準入力が閉じたら終了する
 
 ### 確かめる

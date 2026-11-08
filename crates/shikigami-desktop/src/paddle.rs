@@ -772,11 +772,11 @@ pub fn unavailable(reason: &str) -> StepError {
             format!("PaddleOCR's accurate models are not available: {reason}"),
         )
         .with_details(json!({
-            "hint": "Reinstall Shikigami (the installer includes them), run `pnpm studio:bundle-ocr` in a development checkout, or leave out accurate."
+            "hint": "Reinstall SpellSheet (the installer includes them), run `pnpm studio:bundle-ocr` in a development checkout, or leave out accurate."
         }));
     }
     StepError::permanent("OCR_ENGINE_MISSING", format!("PaddleOCR is not available: {reason}"))
         .with_details(json!({
-            "hint": "Reinstall Shikigami (the installer includes the OCR models), run `pnpm studio:bundle-ocr` in a development checkout, or leave out engine to use Windows OCR."
+            "hint": "Reinstall SpellSheet (the installer includes the OCR models), run `pnpm studio:bundle-ocr` in a development checkout, or leave out engine to use Windows OCR."
         }))
 }

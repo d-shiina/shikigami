@@ -2,7 +2,7 @@
 
 English | [日本語](ja/runner.md)
 
-Studio is for the people who make flows. The people who only run them get a small window of their own, **Shikigami Run**: pick a published flow, fill in its inputs, press Run, and see what came out.
+Studio is for the people who make flows. The people who only run them get a small window of their own, **SpellSheet Run**: pick a published flow, fill in its inputs, press Run, and see what came out.
 
 - Open it from Studio's sidebar ("Run window"), from the tray icon, or start Studio with `--runner` to open only this window (a shortcut for people who never edit)
 - Only published flows are listed, and a run always uses the published version. Flows are published in Studio's To review ([policy.md](policy.md))
@@ -41,6 +41,6 @@ While it runs, the window lists the flow's top-level nodes and ticks them off, w
 
 ## The tray icon
 
-While Shikigami runs, its icon sits in the task tray (the notification area). Click it to open the run window; right-click for Open the run window, Open Studio and Quit.
+While SpellSheet runs, its icon sits in the task tray (the notification area). Click it to open the run window; right-click for Open the run window, Open Studio and Quit.
 
-Started with `--runner`, closing the run window leaves Shikigami in the tray, so it stays at hand all day; Quit in the tray menu ends it. `--tray` starts with the tray icon only, for a shortcut in the Startup folder (`shell:startup`). Started without either, Shikigami ends when its last window closes, as before.
+Started with `--runner`, closing the run window leaves SpellSheet in the tray, so it stays at hand all day; Quit in the tray menu ends it. `--tray` starts with the tray icon only, for a shortcut in the Startup folder (`shell:startup`). Started without either, SpellSheet ends when its last window closes, as before.

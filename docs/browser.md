@@ -2,7 +2,7 @@
 
 English | [日本語](ja/browser.md)
 
-Shikigami flows drive web pages. The Rust Runtime starts the Node.js + Playwright browser adapter (`packages/browser-adapter`) as a child process and talks to it with newline-delimited JSON-RPC 2.0 over stdio. No AI is involved in running a flow.
+SpellSheet flows drive web pages. The Rust Runtime starts the Node.js + Playwright browser adapter (`packages/browser-adapter`) as a child process and talks to it with newline-delimited JSON-RPC 2.0 over stdio. No AI is involved in running a flow.
 
 ## Requirements
 

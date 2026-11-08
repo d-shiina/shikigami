@@ -1,4 +1,4 @@
-# Shikigamiアーキテクチャ設計
+# SpellSheetアーキテクチャ設計
 
 [English](../architecture.md) | 日本語
 
@@ -27,7 +27,7 @@ flowchart LR
 
   subgraph local[ユーザーのPC]
     MCP["shikigami mcp<br/>(Rust, stdio)"]
-    STUDIO["Shikigami Studio<br/>(Tauri 2 + React)"]
+    STUDIO["SpellSheet Studio<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
     subgraph libs[共有ライブラリ（Rust）]
@@ -548,6 +548,6 @@ CREATE TABLE proposals (                  -- AI 修復案（承認後に適用�
 - Undo/Redo はフロー単位で **全クライアント共通の 1 本のスタック**（AI の変更を Studio から戻せる反面、ユーザーごとの Undo ではない）。
 - 変数スコープはフラット（ループ変数もフロー全体で 1 つ）。多くの RPA 製品と同じ挙動。
 - 実行を取り消しても `control.try` の `finally` は実行する（最長 60 秒。もう一度取り消すとすぐ打ち切る）。実行は `cancelled` で終わる。後片付けに応答しないアダプターも実行を終わらせない（1 つあたり最長 15 秒）。
-- 実行の途中再開（プロセス再起動後のレジューム）は未対応。プロセスが先に終わった実行（クラッシュ・シャットダウン・強制終了）は、次にどれかの Shikigami が実行を始めたときに `failed`・`RUN_INTERRUPTED` で閉じる。もう一度実行する。
+- 実行の途中再開（プロセス再起動後のレジューム）は未対応。プロセスが先に終わった実行（クラッシュ・シャットダウン・強制終了）は、次にどれかの SpellSheet が実行を始めたときに `failed`・`RUN_INTERRUPTED` で閉じる。もう一度実行する。
 - Studio のフローチャートは表示用の自動レイアウトで、ノード位置は保存しない。
 - 開発中の確認として Linux 上で Studio を Xvfb 起動し、編集・実行・外部変更の反映を確認済み（Linux は製品対象外）。**Windows 実機での Studio 起動は未確認**（CI でビルドとテストのみ確認）。

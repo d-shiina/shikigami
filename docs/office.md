@@ -57,7 +57,7 @@ Crate `crates/shikigami-excel`. Reads and writes `.xlsx` / `.xlsm` directly (`.x
 | Empty | `null` | `null` (clears the value, keeps the formatting) |
 
 - Dates are recognized by the cell's number format (`yyyy/mm/dd`, `ggge年m月d日`…). When writing a date to a cell without a date format, `yyyy/mm/dd` is applied
-- Results of formulas you write are calculated the next time the workbook is opened in Excel (Shikigami does not calculate). If you need the result right away, use `excel.recalculate`
+- Results of formulas you write are calculated the next time the workbook is opened in Excel (SpellSheet does not calculate). If you need the result right away, use `excel.recalculate`
 
 ### Locking and saving
 

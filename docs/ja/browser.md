@@ -2,7 +2,7 @@
 
 [English](../browser.md) | 日本語
 
-Shikigami のフローから Web ページを操作します。Rust の Runtime が Node.js + Playwright のブラウザアダプター（`packages/browser-adapter`）を子プロセスとして起動し、改行区切りの JSON-RPC 2.0（stdio）で指示します。フローの実行に AI は関わりません。
+SpellSheet のフローから Web ページを操作します。Rust の Runtime が Node.js + Playwright のブラウザアダプター（`packages/browser-adapter`）を子プロセスとして起動し、改行区切りの JSON-RPC 2.0（stdio）で指示します。フローの実行に AI は関わりません。
 
 ## 必要なもの
 

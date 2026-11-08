@@ -206,7 +206,7 @@ fn run(
         let hwnd = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             class.lpszClassName,
-            w!("Shikigami"),
+            w!("SpellSheet"),
             WS_POPUP,
             screen.left,
             screen.top,
