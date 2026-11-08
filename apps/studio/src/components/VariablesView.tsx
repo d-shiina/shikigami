@@ -7,7 +7,7 @@ import { menuFor } from "../lib/contextMenu";
 import { useVariableMenu } from "./menus";
 import type { Step, StepTypeDef, VarDirection, VariableDef, VarType } from "@shikigami/schema";
 import { Lock, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { varFocus, focus } from "../lib/focus";
 import { stepLabel, t } from "../lib/i18n";
@@ -182,6 +182,12 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const all = useMemo(() => (flow ? variableUsage(flow.steps ?? [], flow.variables) : []), [flow]);
+  // Picks belong to the flow they were made in: another flow's variable of the same name is not picked.
+  const flowId = flow?.id;
+  useEffect(() => {
+    setSelected(new Set());
+    setConfirmDelete(false);
+  }, [flowId]);
   if (!flow) return null;
   const open = (id: string) => {
     onView("flow");
@@ -361,8 +367,9 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
               {pickedDefs.some((v) => !v.secret) && (
                 <button
                   type="button"
-                  onClick={() => {
-                    for (const v of pickedDefs) if (!v.secret) void setVariable({ ...v, secret: true, default: undefined });
+                  onClick={async () => {
+                    // One after another: each edit is made on the revision the one before it left.
+                    for (const v of pickedDefs) if (!v.secret) await setVariable({ ...v, secret: true, default: undefined });
                     clear();
                   }}
                   className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-slate-700 hover:bg-slate-200 hover:text-ink"
