@@ -146,8 +146,10 @@ function RecentFlows() {
     writeIds(PINS_KEY, next);
   };
   const name = new Map(summaries.map((f) => [f.id, f.name] as const));
-  const rest = recent.filter((id) => !pins.includes(id) && name.has(id)).slice(0, Math.max(0, RECENT_MAX - pins.length));
-  const rows = [...pins.filter((id) => name.has(id)), ...rest];
+  // Pins of flows gone from this workspace (deleted, or another workspace) take no room.
+  const shownPins = pins.filter((id) => name.has(id));
+  const rest = recent.filter((id) => !pins.includes(id) && name.has(id)).slice(0, Math.max(0, RECENT_MAX - shownPins.length));
+  const rows = [...shownPins, ...rest];
   if (rows.length === 0) return null;
   const running = run && (run.status === "running" || run.status === "paused") ? run.flowId : null;
   return (
@@ -161,7 +163,11 @@ function RecentFlows() {
           <div key={id} className={`group flex h-8 items-center rounded-lg ${on ? "bg-slate-200/70" : "hover:bg-slate-100"}`}>
             <button
               type="button"
-              onClick={() => (flow?.id === id ? setPlace("flows") : void open(id))}
+              onClick={() => {
+                // To the editor from any place, as the library opens flows.
+                setPlace("flows");
+                if (flow?.id !== id) void open(id);
+              }}
               aria-current={on ? "page" : undefined}
               title={name.get(id)}
               className={`flex h-full min-w-0 flex-1 items-center gap-2 pr-1 pl-2 text-left text-[13px] ${on ? "font-semibold text-ink" : "text-slate-600 group-hover:text-ink"}`}

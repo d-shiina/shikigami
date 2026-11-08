@@ -10,7 +10,7 @@ import { activity, anyBusy, useAgent, useAgentApi } from "../agent";
 import { useStudio } from "../context";
 import { type Locale, setLocale, t, useLocale } from "../lib/i18n";
 import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
-import type { Place } from "../store";
+import { isActive, type Place } from "../store";
 import { runnerApi } from "../runner/api";
 import { useAppVersion, useUpdate } from "./AppMenu";
 
@@ -223,6 +223,7 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
   const open = useStudio((s) => s.open);
   const setPlace = useStudio((s) => s.setPlace);
   const startRun = useStudio((s) => s.startRun);
+  const run = useStudio((s) => s.run);
   const agent = useAgentApi();
   const list = useRef<HTMLDivElement>(null);
   const commands = useMemo<Command[]>(() => {
@@ -244,11 +245,20 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
           setTimeout(() => document.querySelector<HTMLTextAreaElement>("[data-agent-input]")?.focus(), 50);
         },
       });
-    for (const f of summaries) if (hit(f.name)) out.push({ id: `flow:${f.id}`, group: "flows", icon: Workflow, label: f.name, note: flow?.id === f.id ? "●" : undefined, run: () => void open(f.id) });
+    for (const f of summaries) {
+      if (!hit(f.name)) continue;
+      // To the editor from any place, as the library opens flows.
+      const go = () => {
+        setPlace("flows");
+        void open(f.id);
+      };
+      out.push({ id: `flow:${f.id}`, group: "flows", icon: Workflow, label: f.name, note: flow?.id === f.id ? "●" : undefined, run: go });
+    }
     for (const [place, icon, label] of PLACES) if (hit(label())) out.push({ id: `place:${place}`, group: "places", icon, label: label(), run: () => setPlace(place) });
     const actions: Command[] = [
       { id: "new", group: "commands", icon: Plus, label: t.shell.newFlowCommand, run: () => setPlace("library") },
-      ...(flow ? [{ id: "run", group: "commands" as const, icon: Play, label: t.shell.runCommand, hint: "F5", run: () => void startRun() }] : []),
+      // Not while a run of it is under way: that would start a second copy (the bar's Run and F5 hold back too).
+      ...(flow && !isActive(run) ? [{ id: "run", group: "commands" as const, icon: Play, label: t.shell.runCommand, hint: "F5", run: () => void startRun() }] : []),
       { id: "ai-toggle", group: "commands", icon: MessageSquareText, label: t.shell.toggleAi, hint: "Ctrl+J", run: () => agent.getState().setOpen(!agent.getState().open) },
       { id: "sidebar", group: "commands", icon: LayoutList, label: t.shell.toggleSidebar, hint: "Ctrl+B", run: onToggleSidebar },
       { id: "theme", group: "commands", icon: Moon, label: t.shell.themeCommand(document.documentElement.dataset.theme === "dark" ? t.bar.themeLight : t.bar.themeDark), run: () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark") },
@@ -256,7 +266,7 @@ function CommandDialog({ onClose, onToggleSidebar }: { onClose: () => void; onTo
     ];
     for (const c of actions) if (hit(c.label)) out.push(c);
     return out;
-  }, [query, summaries, flow, open, setPlace, startRun, agent, onToggleSidebar]);
+  }, [query, summaries, flow, open, setPlace, startRun, run, agent, onToggleSidebar]);
   // Something typed puts the AI first only when nothing else matches it.
   const ordered = useMemo(() => {
     const ai = commands.filter((c) => c.group === "ai");
