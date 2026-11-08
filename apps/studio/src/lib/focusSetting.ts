@@ -6,7 +6,7 @@ export function focusFirstSetting(): void {
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       const pane = document.querySelector("[data-node-settings]");
-      const field = pane?.querySelector<HTMLElement>("input:not([type=checkbox]):not([aria-label]), textarea, select:not([aria-label])");
+      const field = pane?.querySelector<HTMLElement>("input:not([type=checkbox]), textarea, select:not([data-add-setting])");
       field?.focus();
     }),
   );

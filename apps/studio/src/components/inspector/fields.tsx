@@ -231,6 +231,7 @@ export function AddRow({ choices, onAdd }: { choices: AddChoice[]; onAdd: (key: 
         className="w-full cursor-pointer rounded-lg border border-dashed border-slate-300 bg-transparent px-2 py-1 text-[11px] text-slate-500 hover:border-brand-500 hover:text-brand-600 focus:outline-none"
         value=""
         aria-label={t.props.addSetting}
+        data-add-setting
         onChange={(e) => e.target.value && onAdd(e.target.value)}
       >
         <option value="">{t.props.addSetting}</option>
