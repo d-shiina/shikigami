@@ -35,7 +35,7 @@ shikigami plugin install https://github.com/<owner>/<repo> --yes  # installs it
 
 Before installing, SpellSheet shows the extension's name, publisher, nodes, **the data they send outside**, the secrets they take and the program it starts. An extension runs as a program on this PC: install only what you trust.
 
-Extensions are installed into `%LOCALAPPDATA%\Shikigami\plugins\<name>\`, never into the workspace (a program placed in a shared workspace must not start on everyone's PC). Restart Studio and AI clients after installing, updating or turning one off.
+Extensions are installed into `%LOCALAPPDATA%\SpellSheet\plugins\<name>\`, never into the workspace (a program placed in a shared workspace must not start on everyone's PC). Restart Studio and AI clients after installing, updating or turning one off.
 
 ### Listing, turning off, updating, removing
 
@@ -74,7 +74,7 @@ shikigami plugin registry          # show the list
 }
 ```
 
-`source` is where to install from (a GitHub repository or a zip URL). The index URL is kept in the user's config file (`extensions.registry` in `%APPDATA%\Shikigami\config.json`).
+`source` is where to install from (a GitHub repository or a zip URL). The index URL is kept in the user's config file (`extensions.registry` in `%APPDATA%\SpellSheet\config.json`).
 
 ### Data sent outside, and what may run
 
@@ -135,12 +135,12 @@ One JSON-RPC 2.0 message per line on stdin, answers on stdout. `method` is the n
 
 ```powershell
 shikigami plugin check examples\plugins\azure-ocr   # manifest, schemas, examples
-$env:SHIKIGAMI_PLUGINS = "$PWD\examples\plugins"     # load without installing (development)
+$env:SPELLSHEET_PLUGINS = "$PWD\examples\plugins"     # load without installing (development)
 shikigami step-types                                  # lists azureocr.readDocument
 node --test examples\plugins\azure-ocr\test.mjs      # against a stand-in for Azure
 ```
 
-Extensions loaded from `SHIKIGAMI_PLUGINS` are listed, but cannot be turned off, updated or removed (your working folder is left alone).
+Extensions loaded from `SPELLSHEET_PLUGINS` are listed, but cannot be turned off, updated or removed (your working folder is left alone).
 
 ## Sample: Azure AI-OCR
 

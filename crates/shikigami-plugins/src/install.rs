@@ -2,7 +2,7 @@
 //! 拡張機能 screen and `shikigami plugin install` do (docs/extensions.md).
 //!
 //! Installed plugins live in one folder each under [`install_root`]
-//! (`%LOCALAPPDATA%\Shikigami\plugins\<name>\`). A plugin comes from a zip
+//! (`%LOCALAPPDATA%\SpellSheet\plugins\<name>\`). A plugin comes from a zip
 //! file or folder on this PC, a zip URL, or a GitHub repository's latest
 //! release. It is first *staged*: downloaded, unpacked and checked in a
 //! folder of its own, so a person can see what it is (its nodes, what it
@@ -34,9 +34,10 @@ const MAX_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_ENTRIES: usize = 50_000;
 
 /// The folder plugins are installed into:
-/// `%LOCALAPPDATA%\Shikigami\plugins`.
+/// `%LOCALAPPDATA%\SpellSheet\plugins`.
 pub fn install_root() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|d| d.join("Shikigami").join("plugins"))
+    dirs::data_local_dir()?;
+    Some(shikigami_core::paths::local_dir().join("plugins"))
 }
 
 /// Why an install, update or removal did not happen.

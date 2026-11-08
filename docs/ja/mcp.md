@@ -52,7 +52,7 @@ args = ["mcp"]
 
 | オプション | 既定 | 説明 |
 |---|---|---|
-| `--workspace <DIR>` | `%APPDATA%\Shikigami\workspace`（`SHIKIGAMI_HOME` で変更可） | 対象ワークスペース。Studio と同じ場所を指定すると相互に反映される |
+| `--workspace <DIR>` | `%APPDATA%\SpellSheet\workspace`（`SPELLSHEET_HOME` で変更可） | 対象ワークスペース。Studio と同じ場所を指定すると相互に反映される |
 | `--allow read,write,run` | 3 つすべて | 公開するツールの権限区分。例：閲覧だけ許すなら `--allow read` |
 
 ## ツール

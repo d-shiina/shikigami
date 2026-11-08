@@ -48,25 +48,50 @@ pub fn platform_key_store(secrets_dir: PathBuf) -> Box<dyn KeyStore> {
     }
 }
 
+/// The Credential Manager entry's name. Builds before the new product name
+/// kept the key under "Shikigami"; [`CredentialManager`] copies it over.
+#[cfg(windows)]
+const KEY_SERVICE: &str = "SpellSheet";
+#[cfg(windows)]
+const LEGACY_KEY_SERVICE: &str = "Shikigami";
+
 #[cfg(windows)]
 pub struct CredentialManager;
 
 #[cfg(windows)]
 impl CredentialManager {
     fn entry(vault_id: &str) -> Result<keyring::Entry, SecretError> {
-        keyring::Entry::new("Shikigami", &format!("vault {vault_id}"))
+        Self::entry_of(KEY_SERVICE, vault_id)
+    }
+
+    fn entry_of(service: &str, vault_id: &str) -> Result<keyring::Entry, SecretError> {
+        keyring::Entry::new(service, &format!("vault {vault_id}"))
             .map_err(|e| key_error(format!("Windows Credential Manager: {e}")))
+    }
+
+    fn read(entry: &keyring::Entry) -> Result<Option<Key>, SecretError> {
+        match entry.get_password() {
+            Ok(text) => decode(&text).map(Some),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(key_error(format!("Windows Credential Manager: {e}"))),
+        }
     }
 }
 
 #[cfg(windows)]
 impl KeyStore for CredentialManager {
     fn load(&self, vault_id: &str) -> Result<Option<Key>, SecretError> {
-        match Self::entry(vault_id)?.get_password() {
-            Ok(text) => decode(&text).map(Some),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(key_error(format!("Windows Credential Manager: {e}"))),
+        if let Some(key) = Self::read(&Self::entry(vault_id)?)? {
+            return Ok(Some(key));
         }
+        let Some(key) = Self::read(&Self::entry_of(LEGACY_KEY_SERVICE, vault_id)?)? else {
+            return Ok(None);
+        };
+        // Copied, not moved: an older build on this PC still finds it.
+        if let Err(e) = self.store(vault_id, &key) {
+            tracing::warn!(error = %e.message, "cannot copy the vault key to its new name");
+        }
+        Ok(Some(key))
     }
 
     fn store(&self, vault_id: &str, key: &Key) -> Result<(), SecretError> {
@@ -76,10 +101,13 @@ impl KeyStore for CredentialManager {
     }
 
     fn remove(&self, vault_id: &str) -> Result<(), SecretError> {
-        match Self::entry(vault_id)?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(key_error(format!("Windows Credential Manager: {e}"))),
+        for service in [KEY_SERVICE, LEGACY_KEY_SERVICE] {
+            match Self::entry_of(service, vault_id)?.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => {}
+                Err(e) => return Err(key_error(format!("Windows Credential Manager: {e}"))),
+            }
         }
+        Ok(())
     }
 
     fn describe(&self) -> String {

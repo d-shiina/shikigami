@@ -31,7 +31,7 @@ use shikigami_secrets::{SecretInput, Vault};
 #[derive(Parser)]
 #[command(name = "shikigami", version, about = "SpellSheet RPA command line")]
 struct Cli {
-    /// Workspace directory (default: $SHIKIGAMI_HOME or the platform data dir).
+    /// Workspace directory (default: $SPELLSHEET_HOME or the platform data dir).
     #[arg(long, global = true)]
     workspace: Option<PathBuf>,
     #[command(subcommand)]
@@ -643,8 +643,8 @@ fn real_main() -> Result<ExitCode> {
             config.workspace = Some(dir.clone());
             config.save()?;
             println!("default workspace: {}", dir.display());
-            if std::env::var_os("SHIKIGAMI_HOME").is_some() {
-                eprintln!("note: SHIKIGAMI_HOME is set and takes precedence");
+            if let Some(name) = shikigami_core::paths::env_var_name("HOME") {
+                eprintln!("note: {name} is set and takes precedence");
             }
         }
         Command::Secret(cmd) => {

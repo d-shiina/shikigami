@@ -1613,7 +1613,7 @@ export const ja = {
     enabled: "有効",
     disabled: "無効",
     dev: "開発用",
-    devTitle: "環境変数 SHIKIGAMI_PLUGINS のフォルダーから読み込んでいます。無効化・更新・削除はできません",
+    devTitle: "環境変数 SPELLSHEET_PLUGINS のフォルダーから読み込んでいます。無効化・更新・削除はできません",
     loadError: "読み込みエラー",
     checkUpdate: "更新の確認",
     uninstall: "アンインストール",

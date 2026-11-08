@@ -41,6 +41,15 @@ pub trait WindowsCredentials: Send + Sync {
     fn list(&self) -> Result<Vec<WindowsCredentialInfo>, SecretError>;
 }
 
+/// SpellSheet's own vault keys ("vault <id>.SpellSheet", and
+/// "….Shikigami" from builds before the new name): not logins to pick.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_own_entry(target: &str) -> bool {
+    ["SpellSheet", "Shikigami"]
+        .iter()
+        .any(|name| target.starts_with(name) || target.ends_with(&format!(".{name}")))
+}
+
 #[cfg(not(windows))]
 fn unavailable() -> SecretError {
     SecretError::new(
@@ -188,7 +197,7 @@ impl WindowsCredentials for CredentialManager {
                 let target = pwstr(c.TargetName);
                 // Windows' and other programs' own entries are noise to
                 // the person picking a login.
-                if target.is_empty() || target.starts_with("Shikigami") {
+                if target.is_empty() || is_own_entry(&target) {
                     continue;
                 }
                 list.push(WindowsCredentialInfo {
@@ -260,5 +269,15 @@ impl<T: WindowsCredentials + ?Sized> WindowsCredentials for std::sync::Arc<T> {
 
     fn list(&self) -> Result<Vec<WindowsCredentialInfo>, SecretError> {
         (**self).list()
+    }
+}
+
+#[cfg(test)]
+mod own_entry_tests {
+    #[test]
+    fn own_vault_keys_are_not_offered() {
+        assert!(super::is_own_entry("vault 0a1b.SpellSheet"));
+        assert!(super::is_own_entry("vault 0a1b.Shikigami"));
+        assert!(!super::is_own_entry("git:https://github.com"));
     }
 }

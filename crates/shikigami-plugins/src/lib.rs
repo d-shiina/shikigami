@@ -148,11 +148,11 @@ impl Plugin {
     }
 }
 
-/// Where plugins are looked for: each folder in `SHIKIGAMI_PLUGINS`, then
-/// `%LOCALAPPDATA%\Shikigami\plugins`. Never the workspace: a shared
+/// Where plugins are looked for: each folder in `SPELLSHEET_PLUGINS` (or
+/// the old `SHIKIGAMI_PLUGINS`), then `%LOCALAPPDATA%\SpellSheet\plugins`. Never the workspace: a shared
 /// workspace must not start programs on everyone's PC.
 pub fn default_dirs() -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = std::env::var_os("SHIKIGAMI_PLUGINS")
+    let mut dirs: Vec<PathBuf> = shikigami_core::paths::env_var("PLUGINS")
         .map(|value| std::env::split_paths(&value).collect())
         .unwrap_or_default();
     dirs.extend(install::install_root());

@@ -56,10 +56,10 @@ pub fn workspace_info(state: State<'_, AppState>) -> WorkspaceInfo {
 /// and restarts Studio on it. `shared` marks a new folder for several people.
 #[tauri::command]
 pub fn set_workspace(app: AppHandle, path: String, shared: bool) -> CmdResult<()> {
-    if std::env::var_os("SHIKIGAMI_HOME").is_some() {
+    if let Some(name) = shikigami_core::paths::env_var_name("HOME") {
         return Err(err(
             "WORKSPACE_OVERRIDDEN",
-            "SHIKIGAMI_HOME が設定されているため、保存先はその値に固定されています",
+            format!("{name} が設定されているため、保存先はその値に固定されています"),
         ));
     }
     let dir = std::path::absolute(path.trim())

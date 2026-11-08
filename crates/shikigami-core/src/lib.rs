@@ -14,6 +14,7 @@ pub mod ids;
 pub mod migrate;
 pub mod model;
 pub mod ops;
+pub mod paths;
 pub mod pick;
 pub mod policy;
 pub mod project;

@@ -52,7 +52,7 @@ args = ["mcp"]
 
 | Option | Default | Description |
 |---|---|---|
-| `--workspace <DIR>` | `%APPDATA%\Shikigami\workspace` (change with `SHIKIGAMI_HOME`) | The workspace. Point it at the same place as Studio and changes show up in both |
+| `--workspace <DIR>` | `%APPDATA%\SpellSheet\workspace` (change with `SPELLSHEET_HOME`) | The workspace. Point it at the same place as Studio and changes show up in both |
 | `--allow read,write,run` | All three | Which tool classes to expose. For read-only access: `--allow read` |
 
 ## Tools

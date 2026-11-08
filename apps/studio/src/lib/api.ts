@@ -235,7 +235,7 @@ export type ExtensionSummary = {
 export type InstalledExtension = ExtensionSummary & {
   dir: string;
   enabled: boolean;
-  /** Installed by Shikigami (else a developer's SHIKIGAMI_PLUGINS folder: listed only). */
+  /** Installed by Shikigami (else a developer's SPELLSHEET_PLUGINS folder: listed only). */
   managed: boolean;
   source?: { source: ExtensionSource; installedAt: string };
   /** Why it cannot be loaded. */
