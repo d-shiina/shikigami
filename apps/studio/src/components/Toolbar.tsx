@@ -2,6 +2,7 @@ import { FolderOutput, PanelRight, Search } from "lucide-react";
 import { useStudio } from "../context";
 import { useProjectMaybe } from "../project";
 import { t } from "../lib/i18n";
+import type { ReviewView } from "../lib/reviewView";
 import { authorIssues, unsetIssues } from "../lib/todos";
 import { useTodos, useUnsetCount } from "../lib/useTodos";
 import { RecordButton } from "./RecordButton";
@@ -35,9 +36,14 @@ const CheckIcon = () => (
 
 export type View = "story" | "flow" | "variables";
 
-/** Flow chart, procedure or variables: three ways to read the same flow. */
-function ViewSwitch({ view, onChange }: { view: View; onChange: (view: View) => void }) {
-  const options: [View, string][] = [
+/**
+ * Flow chart, procedure or variables: three ways to read the same flow. On
+ * the review desk the AI's report comes first, as one more way to read it.
+ */
+function ViewSwitch({ view, onChange }: { view: ReviewView; onChange: (view: ReviewView) => void }) {
+  const place = useStudio((s) => s.place);
+  const options: [ReviewView, string][] = [
+    ...(place === "review" ? [["report", t.desk.reportView] as [ReviewView, string]] : []),
     ["flow", t.viewFlow],
     ["story", t.viewStory],
     ["variables", t.vars.table.view],
@@ -186,7 +192,7 @@ export function FlowTitle() {
  * What to do with the open flow, at the right of the title bar: how to
  * show it, then running it, the one filled button, at the very end.
  */
-export function FlowActions({ view, onView }: { view: View; onView: (view: View) => void }) {
+export function FlowActions({ view, onView }: { view: ReviewView; onView: (view: ReviewView) => void }) {
   const flow = useStudio((s) => s.flow);
   const validation = useStudio((s) => s.validation);
   const run = useStudio((s) => s.run);
@@ -316,12 +322,12 @@ export function CanvasDock() {
  * flow's settings open with nothing picked, or closes the pane for the room.
  * The 変数 table edits in place and has no pane, so it has no button.
  */
-function PaneToggle({ view }: { view: View }) {
+function PaneToggle({ view }: { view: ReviewView }) {
   const place = useStudio((s) => s.place);
   const open = useStudio((s) => s.inspectorOpen || s.selection?.kind === "step" || s.selection?.kind === "part");
   const setInspectorOpen = useStudio((s) => s.setInspectorOpen);
   const showFlowProps = useStudio((s) => s.showFlowProps);
-  if (place !== "flows" || view === "variables") return null;
+  if ((place !== "flows" && place !== "review") || view === "variables" || view === "report") return null;
   return (
     <button
       type="button"

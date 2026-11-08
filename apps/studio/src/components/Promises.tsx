@@ -85,11 +85,15 @@ export function Promises({
     );
   }
   return (
-    <div className="space-y-2">
-      {fresh.length > 0 && <p className="text-[11.5px] leading-relaxed text-slate-500">{t.promises.lead}</p>}
-      {fresh.map((p) => (
-        <PromiseRow key={p.name} promise={p} answer={answers[p.name]} onAnswer={(v) => onAnswer(p.name, v)} onWrong={() => onWrong(p)} />
-      ))}
+    <div className="space-y-3">
+      {fresh.length > 0 && (
+        <div>
+          <PromiseHead answering />
+          {fresh.map((p) => (
+            <PromiseRow key={p.name} promise={p} answer={answers[p.name]} onAnswer={(v) => onAnswer(p.name, v)} onWrong={() => onWrong(p)} />
+          ))}
+        </div>
+      )}
       {fresh.length === 0 && (
         <div className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-[12px] leading-relaxed text-slate-600">
           <p>{t.promises.none}</p>
@@ -105,7 +109,8 @@ export function Promises({
             {olderBroken > 0 && <span className="font-semibold text-shu-600">{t.promises.olderBroken(olderBroken)}</span>}
           </button>
           {showOlder && (
-            <div className="mt-1.5 space-y-1.5">
+            <div className="mt-1.5">
+              <PromiseHead answering={false} />
               {older.map((p) => (
                 <PromiseRow key={p.name} promise={p} />
               ))}
@@ -136,7 +141,23 @@ const KEPT_STYLE = {
   unchecked: "bg-slate-100 text-slate-600",
 };
 
-/** One promise: what should hold, with which input and result, and whether the flow keeps it. */
+/** The columns of the promises table on a wide sheet; on a narrow one each promise stacks. */
+const ROW = "grid gap-x-4 gap-y-1 @min-[720px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(9.5em,1fr)_auto]";
+
+/** The heads of the promises table, shown only when its rows are laid out as a table. */
+function PromiseHead({ answering }: { answering: boolean }) {
+  return (
+    <div className={`${ROW} hidden border-b border-slate-200 px-1 pb-1.5 text-[11.5px] font-semibold text-slate-500 @min-[720px]:grid`}>
+      <span>{t.promises.colPromise}</span>
+      <span>{t.promises.colGiven}</span>
+      <span>{t.promises.colThen}</span>
+      <span>{t.promises.colKept}</span>
+      <span>{answering ? t.promises.isRight : ""}</span>
+    </div>
+  );
+}
+
+/** One promise: what should hold, with which input and result, whether the flow keeps it, and whether it is the right promise. */
 function PromiseRow({
   promise,
   answer,
@@ -155,76 +176,76 @@ function PromiseRow({
   const word = { kept: t.promises.kept, broken: t.promises.broken, unchecked: t.promises.unchecked }[state];
   const errorStep = promise.testCase.expect?.errorStep;
   const chip = (on: boolean, tone: string) =>
-    `rounded-md border px-2 text-[11px] leading-5 ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
+    `rounded-md border px-2.5 text-[12px] leading-6 whitespace-nowrap ${on ? `${tone} font-semibold` : "border-slate-200 text-slate-600 hover:border-slate-400"}`;
+  const label = (text: string) => <span className="mr-1.5 text-[11px] text-slate-500 @min-[720px]:hidden">{text}</span>;
   return (
-    <div className={`rounded-lg border bg-sheet px-2.5 py-2 ${state === "broken" ? "border-shu-500/50" : "border-slate-200"}`}>
-      <div className="flex items-start gap-1.5">
-        <p className="min-w-0 flex-1 text-[13px] leading-snug font-semibold whitespace-pre-wrap">{promise.text}</p>
+    <div className={`${ROW} border-b border-slate-100 px-1 py-2.5 text-[12.5px] leading-relaxed ${state === "broken" ? "bg-shu-50/40" : ""}`}>
+      <div className="min-w-0">
+        <span className="font-semibold whitespace-pre-wrap">{promise.text}</span>
         {promise.fresh && (
-          <span className="mt-px shrink-0 rounded-md bg-brand-50 px-1.5 text-[10px] leading-4 font-bold text-brand-600">
+          <span className="ml-1.5 rounded-md bg-brand-50 px-1.5 align-[1px] text-[10px] leading-4 font-bold whitespace-nowrap text-brand-600">
             {promise.replaced ? t.promises.replaced : t.promises.fresh}
           </span>
         )}
       </div>
-      <div className="mt-1 grid grid-cols-[2.6em_1fr] gap-x-1.5 text-[12px] leading-relaxed text-slate-600">
-        {terms.given && (
-          <>
-            <span className="text-[10.5px] text-slate-500">{t.promises.given}</span>
-            <span className="min-w-0 break-all">{terms.given}</span>
-          </>
-        )}
-        <span className="text-[10.5px] text-slate-500">{t.promises.then}</span>
-        <span className="min-w-0 break-all">
-          {terms.then}
-          {errorStep && (
-            <button type="button" onClick={() => goTo(errorStep)} className="ml-1 text-[11px] text-brand-600 hover:underline">
-              ›
-            </button>
-          )}
-        </span>
+      <div className="min-w-0 break-all text-slate-600">
+        {label(t.promises.given)}
+        {terms.given ?? "—"}
       </div>
-      {kept && !kept.passed && kept.mismatches.length > 0 && (
-        <ul className="mt-1 space-y-0.5 rounded-md bg-shu-50/60 px-2 py-1 text-[11.5px] text-shu-600">
-          {kept.mismatches.map((m) => {
-            const d = mismatchText(m);
-            return (
-              <li key={m.at}>
-                {d.where}：{t.tests.expected} {d.expected} ／ {t.tests.actual} {d.actual}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-        <span className={`rounded-md px-1.5 text-[10.5px] leading-[18px] font-bold ${KEPT_STYLE[state]}`}>
+      <div className="min-w-0 break-all text-slate-600">
+        {label(t.promises.then)}
+        {terms.then}
+        {errorStep && (
+          <button type="button" onClick={() => goTo(errorStep)} className="ml-1 text-[11px] text-brand-600 hover:underline">
+            ›
+          </button>
+        )}
+      </div>
+      <div className="min-w-0">
+        <span className={`rounded-md px-1.5 text-[11px] leading-[20px] font-bold whitespace-nowrap ${KEPT_STYLE[state]}`}>
           {state === "kept" ? "✓ " : state === "broken" ? "× " : ""}
           {word}
         </span>
+        {kept && !kept.passed && kept.mismatches.length > 0 && (
+          <ul className="mt-1 space-y-0.5 text-[11.5px] text-shu-600">
+            {kept.mismatches.map((m) => {
+              const d = mismatchText(m);
+              return (
+                <li key={m.at}>
+                  {d.where}：{t.tests.expected} {d.expected} ／ {t.tests.actual} {d.actual}
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {kept && (
-          <span className="text-[10.5px] text-slate-500">
+          <div className="mt-0.5 text-[11px] text-slate-500">
             {kept.by === "ai" ? t.promises.byAi : t.promises.byYou}
             {kept.stale && <span className="ml-1 text-amber-700">・{t.promises.stale}</span>}
-          </span>
+          </div>
         )}
       </div>
-      {onAnswer && (
-        <div className="mt-1.5 flex items-center gap-1.5 border-t border-dashed border-slate-200 pt-1.5">
-          <span className="mr-auto text-[11.5px] text-slate-600">{t.promises.isRight}</span>
-          <button type="button" onClick={() => onAnswer(answer === "ok" ? null : "ok")} className={chip(answer === "ok", "border-moegi-500 text-moegi-500")}>
-            {t.promises.right}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (answer !== "no") onWrong?.();
-              onAnswer(answer === "no" ? null : "no");
-            }}
-            className={chip(answer === "no", "border-shu-500 text-shu-600")}
-          >
-            {t.promises.wrong}
-          </button>
-        </div>
-      )}
+      <div className="flex items-start gap-1.5">
+        {onAnswer && (
+          <>
+            <span className="mr-auto self-center text-[11.5px] text-slate-600 @min-[720px]:hidden">{t.promises.isRight}</span>
+            <button type="button" onClick={() => onAnswer(answer === "ok" ? null : "ok")} className={chip(answer === "ok", "border-moegi-500 text-moegi-500")}>
+              {answer === "ok" ? "✓ " : ""}
+              {t.promises.right}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (answer !== "no") onWrong?.();
+                onAnswer(answer === "no" ? null : "no");
+              }}
+              className={chip(answer === "no", "border-shu-500 text-shu-600")}
+            >
+              {t.promises.wrong}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

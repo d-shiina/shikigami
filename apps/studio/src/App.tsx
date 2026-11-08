@@ -21,7 +21,8 @@ import { FileSheet } from "./components/FileSheet";
 import { NodeEditor } from "./components/NodeEditor";
 import { ProjectButton, ProjectPanel } from "./components/ProjectPanel";
 import { FileDragLayer } from "./components/FileDrag";
-import { ReviewInbox, ReviewPanel, ReviewRail } from "./components/ReviewDesk";
+import { ReviewBar, ReviewInbox, ReviewRail, ReviewReport } from "./components/ReviewDesk";
+import { useReviewView } from "./lib/reviewView";
 import { Resizer } from "./components/Resizer";
 import { RunPausePanel } from "./components/RunPausePanel";
 import { SecretAskDialog } from "./components/SecretAskDialog";
@@ -162,6 +163,8 @@ function Editor({
   view,
   onView,
   list,
+  report,
+  foot,
   right,
   rightWidth,
   grip,
@@ -169,6 +172,10 @@ function Editor({
   view: View;
   onView: (view: View) => void;
   list?: React.ReactNode;
+  /** Shown instead of the flow (the review desk's report). */
+  report?: React.ReactNode;
+  /** Kept under the flow, above what the run did (the review desk's verdict). */
+  foot?: React.ReactNode;
   right: React.ReactNode | null;
   rightWidth: number;
   grip: Grip;
@@ -184,7 +191,9 @@ function Editor({
       <div className="min-h-0">{list}</div>
       <main className="flex min-h-0 min-w-0 flex-col">
         <div className="@container relative min-h-0 flex-1">
-          {view === "story" ? (
+          {report ? (
+            report
+          ) : view === "story" ? (
             <ManualView onView={onView} />
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
@@ -208,15 +217,16 @@ function Editor({
               )}
             </ReactFlowProvider>
           )}
-          {view !== "variables" && hasFlow && <FlowSearch />}
+          {!report && view !== "variables" && hasFlow && <FlowSearch />}
           <FileSheet />
           {/* Clear of the zoom controls in the bottom-left corner. The 手順書 shows it only while editing. */}
-          {view === "flow" && (
+          {!report && view === "flow" && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
               <CanvasDock />
             </div>
           )}
         </div>
+        {foot}
         <RunPausePanel />
         <BottomPanel />
       </main>
@@ -280,26 +290,26 @@ function FlowsPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
   return <Editor view={view} onView={onView} right={fit.right ? <Inspector /> : null} rightWidth={sizes.right} grip={grip} />;
 }
 
-/** The review desk: what waits, the chart with the AI's changes marked, and the verdict on the right. */
-function ReviewPlace({ view, onView, fit, sizes, grip }: PlaceProps) {
+/**
+ * The review desk: what waits, and the open flow's AI change as a report on
+ * one sheet of paper. The chart, procedure and variables are one switch away,
+ * with the verdict kept under them.
+ */
+function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
   const hasFlow = useStudio((s) => s.flow !== null);
+  const view = useReviewView((s) => s.view);
+  const setView = useReviewView((s) => s.setView);
+  const reading = view === "report" ? "flow" : view;
   return (
     <Editor
-      view={view}
-      onView={onView}
+      view={reading}
+      onView={setView}
       list={<InboxSlot room={fit.inbox} width={sizes.inbox} grip={grip} />}
+      report={view === "report" && hasFlow ? <ReviewReport /> : undefined}
+      foot={view !== "report" && hasFlow ? <ReviewBar /> : undefined}
       rightWidth={sizes.right}
       grip={grip}
-      right={
-        !fit.right || !hasFlow ? null : (
-          <aside className="flex h-full min-h-0 flex-col border-l border-slate-200 bg-sheet">
-            <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 text-[12px] font-semibold">{t.reviewTab}</div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <ReviewPanel />
-            </div>
-          </aside>
-        )
-      }
+      right={fit.right && hasFlow && view !== "report" ? <Inspector /> : null}
     />
   );
 }
@@ -322,10 +332,13 @@ function Shell() {
   const editing = place === "flows" || place === "review";
   // The right pane takes room only while it has something to say: the node or part picked on the
   // chart, or the flow's settings kept open by hand. The 変数 table edits in place, so it never has
-  // one. The review desk's verdict always stays.
+  // one.
   const inspectorOpen = useStudio((s) => s.inspectorOpen);
   const picked = useStudio((s) => s.selection?.kind === "step" || s.selection?.kind === "part");
-  const rightOpen = place === "review" || (view !== "variables" && (inspectorOpen || picked));
+  // On the review desk the report fills the editor; the chart opened from it works as in the editor.
+  const reviewView = useReviewView((s) => s.view);
+  const shownView = place === "review" ? reviewView : view;
+  const rightOpen = shownView !== "report" && shownView !== "variables" && (inspectorOpen || picked);
   const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);
