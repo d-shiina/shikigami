@@ -11,6 +11,11 @@
 ; shortcuts under the new name, and removes the old entry from
 ; "Apps & features". Settings and flows are not here: they are in
 ; %APPDATA% / %LOCALAPPDATA%\SpellSheet (moved by the app itself).
+;
+; An old install made with the MSI (per machine, in Program Files) is removed
+; by its own uninstaller first, as Tauri does for an MSI of the same name (it
+; looks only for the current name). Studio then lives in this per-user
+; install; the release no longer ships an MSI.
 
 !define LEGACY_PRODUCTNAME "Shikigami Studio"
 !define LEGACY_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${LEGACY_PRODUCTNAME}"
@@ -26,6 +31,25 @@ Var LegacyInstallDir
     StrCpy $LegacyInstallDir $0
     StrCpy $INSTDIR $0
     SetOutPath $INSTDIR
+  ${Else}
+    ; An MSI keeps its uninstall entry under a GUID in HKLM.
+    StrCpy $1 0
+    ${Do}
+      EnumRegKey $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall" $1
+      ${If} $0 == ""
+        ${Break}
+      ${EndIf}
+      IntOp $1 $1 + 1
+      ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$0" "DisplayName"
+      ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$0" "Publisher"
+      ${If} "$R0$R1" == "${LEGACY_PRODUCTNAME}${MANUFACTURER}"
+        ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$0" "UninstallString"
+        ${If} $R0 != ""
+          ExecWait '$R0'
+        ${EndIf}
+        ${Break}
+      ${EndIf}
+    ${Loop}
   ${EndIf}
 !macroend
 

@@ -26,14 +26,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
     "windows": {
       "nsis": {
         "installerHooks": "windows/installer-hooks.nsh"
-      },
-      "wix": {
-        "upgradeCode": "ed7d4ee2-120e-5229-a162-338b4a5b3f1d"
       }
     }
   },
