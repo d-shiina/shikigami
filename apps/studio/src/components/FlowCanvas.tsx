@@ -85,6 +85,7 @@ import { HoverPreview } from "./HoverPreview";
 import { previewSource } from "../lib/preview";
 import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
+import { type Box, type Point, roundedPath, routeLink } from "../lib/linkRoute";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { ChangeView, changeText } from "./ValueView";
 import { StepTools } from "./StepTools";
@@ -245,7 +246,26 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
   const focused = hovered ?? data.selectedId;
   const lit = focused !== null && (focused === data.from || focused === data.to || focused === varFocus(data.variable));
   if (!lit) return null;
-  const [path] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+  return <RoutedLink id={id} from={{ x: sourceX, y: sourceY }} to={{ x: targetX, y: targetY }} data={data} sourcePosition={sourcePosition} targetPosition={targetPosition} />;
+}
+
+/** A lit variable's line, round the nodes on the chart rather than behind them (see routeLink). */
+function RoutedLink({ id, from, to, data, sourcePosition, targetPosition }: { id: string; from: Point; to: Point; data: LinkEdgeData; sourcePosition: Position; targetPosition: Position }) {
+  const lookup = useStore((s) => s.nodeLookup);
+  const boxes: Box[] = [];
+  let toTop: number | undefined;
+  for (const n of lookup.values()) {
+    if (n.type === "frame" || n.type === "join") continue;
+    const box = { ...n.internals.positionAbsolute, width: n.measured.width ?? 0, height: n.measured.height ?? 0 };
+    if (box.width === 0 || box.height === 0) continue;
+    if (n.id === data.to) toTop = box.y;
+    boxes.push(box);
+  }
+  // Before the nodes are measured: the plain curve.
+  const path =
+    toTop === undefined
+      ? getBezierPath({ sourceX: from.x, sourceY: from.y, targetX: to.x, targetY: to.y, sourcePosition, targetPosition })[0]
+      : roundedPath(routeLink(from, to, toTop, boxes));
   return <BaseEdge id={id} path={path} style={{ stroke: data.color, strokeWidth: 1.5 }} />;
 }
 
