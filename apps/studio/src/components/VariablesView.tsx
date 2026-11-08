@@ -6,7 +6,7 @@
 import { menuFor } from "../lib/contextMenu";
 import { useVariableMenu } from "./menus";
 import type { Step, StepTypeDef, VarDirection, VariableDef, VarType } from "@shikigami/schema";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { varFocus, focus } from "../lib/focus";
 import { stepLabel, t } from "../lib/i18n";
@@ -58,17 +58,30 @@ const quiet =
   "w-full rounded-md border border-transparent bg-transparent px-1.5 py-0.5 hover:border-slate-200 focus:border-primary focus:bg-sheet focus:outline-none";
 
 /** The starting value, typed in place. Enter or leaving the cell keeps it; Esc puts it back. */
-function InitialCell({ variable, onSet }: { variable: VariableDef; onSet: (v: VariableDef) => void }) {
+export function InitialCell({ variable, onSet }: { variable: VariableDef; onSet: (v: VariableDef) => void }) {
   const type = variable.type ?? "any";
   const initial = defaultText(variable);
   const [draft, setDraft] = useState(initial);
+  // Esc leaves the cell without keeping what was typed: the blur it causes must not save.
+  const cancelled = useRef(false);
+  const cancel = (el: HTMLElement) => {
+    cancelled.current = true;
+    setDraft(initial);
+    el.blur();
+  };
   if (variable.secret)
     return (
       <span className="px-1.5 text-[11px] text-slate-400" title={t.vars.table.secretTitle}>
         {t.secret}
       </span>
     );
-  const commit = () => draft !== initial && onSet({ ...variable, default: parseDefault(draft, type) });
+  const commit = () => {
+    if (cancelled.current) {
+      cancelled.current = false;
+      return;
+    }
+    if (draft !== initial) onSet({ ...variable, default: parseDefault(draft, type) });
+  };
   const common = {
     value: draft,
     placeholder: t.values.none,
@@ -84,12 +97,7 @@ function InitialCell({ variable, onSet }: { variable: VariableDef; onSet: (v: Va
         {...common}
         rows={Math.min(4, draft.split("\n").length)}
         className={`${quiet} block resize-y font-mono text-[12px] leading-snug text-ink placeholder:text-slate-300`}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            setDraft(initial);
-            e.currentTarget.blur();
-          }
-        }}
+        onKeyDown={(e) => e.key === "Escape" && cancel(e.currentTarget)}
       />
     );
   return (
@@ -98,11 +106,7 @@ function InitialCell({ variable, onSet }: { variable: VariableDef; onSet: (v: Va
       className={`${quiet} font-mono text-[12px] text-ink placeholder:text-slate-300`}
       onKeyDown={(e) => {
         if (e.key === "Enter") e.currentTarget.blur();
-        if (e.key === "Escape") {
-          setDraft(initial);
-          // The draft is put back before the blur, so nothing is kept.
-          requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
-        }
+        if (e.key === "Escape") cancel(e.currentTarget);
       }}
     />
   );
@@ -250,8 +254,9 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                       </td>
                       <td className="px-3 py-1.5">
                         {u.def ? (
-                          // Keyed on the value, so a change made elsewhere (the AI, undo) shows here.
-                          <InitialCell key={JSON.stringify(u.def.default) ?? ""} variable={u.def} onSet={(v) => void setVariable(v)} />
+                          // Keyed on the type and value, so a change made elsewhere (the AI, undo) or a new type,
+                          // which writes the value differently, shows here.
+                          <InitialCell key={`${u.type}:${JSON.stringify(u.def.default) ?? ""}`} variable={u.def} onSet={(v) => void setVariable(v)} />
                         ) : (
                           <span className="px-1.5 text-slate-300">—</span>
                         )}

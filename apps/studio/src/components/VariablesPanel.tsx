@@ -230,7 +230,7 @@ export function VariablesPanel() {
             ) : (
               <ul className="space-y-2">
                 {members.map((v) => (
-                  <VariableRow key={`${v.name}:${JSON.stringify(v.default)}`} variable={v} />
+                  <VariableRow key={`${v.name}:${v.type}:${JSON.stringify(v.default)}`} variable={v} />
                 ))}
               </ul>
             )}
