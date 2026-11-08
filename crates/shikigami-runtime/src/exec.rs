@@ -1108,6 +1108,7 @@ impl Executor {
                     .and_then(Value::as_u64)
                     .unwrap_or(DEFAULT_MAX_ITERATIONS);
                 let mut iterations = 0u64;
+                let mut left_early = false;
                 loop {
                     self.check_cancel()?;
                     if !expr::truthy(&condition.eval(&self.vars).map_err(expr_error)?) {
@@ -1124,10 +1125,13 @@ impl Executor {
                         }
                         .into());
                     }
+                    self.loop_round(step, iterations, None);
                     if let Proceed::Break = self.sub_block(step, "body").await? {
+                        left_early = true;
                         break;
                     }
                 }
+                self.loop_ended(step, iterations, None, left_early);
                 Ok(Proceed::Next)
             }
             control::REPEAT => {
@@ -1143,15 +1147,22 @@ impl Executor {
                     .and_then(Value::as_str)
                     .map(str::to_owned);
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                for i in 0..(count as u64) {
+                let total = count as u64;
+                let mut rounds = 0;
+                let mut left_early = false;
+                for i in 0..total {
                     self.check_cancel()?;
                     if let Some(name) = &index_var {
                         self.set_var(name, Value::from(i), Some(&step.id));
                     }
+                    rounds = i + 1;
+                    self.loop_round(step, rounds, Some(total));
                     if let Proceed::Break = self.sub_block(step, "body").await? {
+                        left_early = true;
                         break;
                     }
                 }
+                self.loop_ended(step, rounds, Some(total), left_early);
                 Ok(Proceed::Next)
             }
             control::FOR_EACH => self.for_each(step).await,
@@ -1423,6 +1434,9 @@ impl Executor {
             Some(source) => Some(Expr::parse(source).map_err(expr_error)?),
             None => None,
         };
+        let total = items.len() as u64;
+        let mut rounds = 0;
+        let mut left_early = false;
         let results = if step.params.contains_key("concurrency") {
             let concurrency = self.eval_number(step, "concurrency")?;
             if !(1.0..=64.0).contains(&concurrency) || concurrency.fract() != 0.0 {
@@ -1432,27 +1446,52 @@ impl Executor {
                 )
                 .into());
             }
-            self.for_each_isolated(step, items, collect, concurrency as usize)
-                .await?
+            let results = self
+                .for_each_isolated(step, items, collect, concurrency as usize)
+                .await?;
+            rounds = total;
+            results
         } else {
             let mut results = Vec::with_capacity(items.len());
             for (index, item) in items.into_iter().enumerate() {
                 self.check_cancel()?;
                 self.bind_item(step, index, item);
+                rounds = index as u64 + 1;
+                self.loop_round(step, rounds, Some(total));
                 let proceed = self.sub_block(step, "body").await?;
                 if let Some(collect) = &collect {
                     results.push(collect.eval(&self.vars).map_err(expr_error)?);
                 }
                 if let Proceed::Break = proceed {
+                    left_early = true;
                     break;
                 }
             }
             results
         };
+        self.loop_ended(step, rounds, Some(total), left_early);
         if let Some(name) = &step.save_as {
             self.set_var(name, Value::Array(results), Some(&step.id));
         }
         Ok(Proceed::Next)
+    }
+
+    /// Tells Studio a loop starts its `round`-th round (see `RunEvent::LoopRound`).
+    fn loop_round(&self, step: &Step, round: u64, total: Option<u64>) {
+        self.emitter.emit(RunEvent::LoopRound {
+            step_id: step.id.clone(),
+            round,
+            total,
+        });
+    }
+
+    fn loop_ended(&self, step: &Step, rounds: u64, total: Option<u64>, left_early: bool) {
+        self.emitter.emit(RunEvent::LoopEnded {
+            step_id: step.id.clone(),
+            rounds,
+            total,
+            left_early,
+        });
     }
 
     fn bind_item(&mut self, step: &Step, index: usize, item: Value) {
@@ -1480,6 +1519,7 @@ impl Executor {
         let mut results = vec![Value::Null; items.len()];
         let mut first_error: Option<Interrupt> = None;
         let mut set = JoinSet::new();
+        let total = items.len() as u64;
         let mut items = items.into_iter().enumerate();
 
         loop {
@@ -1489,6 +1529,8 @@ impl Executor {
                 let Some((index, item)) = items.next() else {
                     break;
                 };
+                // Rounds counted as they start, several at once.
+                self.loop_round(step, index as u64 + 1, Some(total));
                 let mut executor = self.fork(group.child_token());
                 executor.iteration = Some(index);
                 executor.bind_item(step, index, item);
