@@ -9,8 +9,9 @@ import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { StudioContext } from "../context";
 import { t } from "../lib/i18n";
-import { baseName, type FilePreview, isImagePath, loadPreview, type Picture, type PreviewSource, previewSource, shrink, sizeText } from "../lib/preview";
+import { baseName, type FilePreview, isImagePath, loadFullPicture, loadPreview, type Picture, type PreviewSource, previewSource, shrink, sizeText } from "../lib/preview";
 import type { StudioState } from "../store";
+import { openImage } from "./ImageViewer";
 
 /** How long the pointer rests before the popover opens. */
 export const HOVER_DELAY = 300;
@@ -55,10 +56,33 @@ function Head({ icon, name, note, tone }: { icon: ReactNode; name: string; note?
   );
 }
 
-function PictureView({ picture, alt }: { picture: Picture; alt: string }) {
+/**
+ * Where a picture is drawn: in a popover (large enough to read a screen's
+ * text, within the window), or across a panel such as the node's result.
+ */
+export type PictureSize = "popover" | "panel";
+
+const PICTURE_BOX: Record<PictureSize, string> = {
+  popover: "max-h-[min(400px,50vh)] max-w-[min(560px,calc(100vw-64px))]",
+  panel: "max-h-[360px] max-w-full",
+};
+
+/** A picture, opened large in the viewer when pressed. */
+function PictureView({ picture, alt, size, bytes, load }: { picture: Picture; alt: string; size: PictureSize; bytes?: number; load?: () => Promise<string | null> }) {
   return (
-    <div className="preview-checker mt-1.5 flex items-center justify-center overflow-hidden rounded-md border border-slate-200">
-      <img src={picture.src} alt={alt} className="block max-h-[200px] max-w-[280px] object-contain" draggable={false} />
+    <div className="mt-1.5">
+      <button
+        type="button"
+        title={t.preview.enlarge}
+        onClick={(e) => {
+          e.stopPropagation();
+          openImage({ src: picture.src, title: alt, width: picture.width, height: picture.height, bytes, load });
+        }}
+        className={`preview-checker flex cursor-zoom-in items-center justify-center overflow-hidden rounded-md border border-slate-200 hover:border-brand-500 ${size === "panel" ? "w-full" : ""}`}
+      >
+        <img src={picture.src} alt={alt} className={`block object-contain ${PICTURE_BOX[size]}`} draggable={false} />
+      </button>
+      <div className="mt-0.5 text-right text-[10.5px] text-slate-500">{t.preview.enlarge}</div>
     </div>
   );
 }
@@ -103,7 +127,7 @@ const TextBlock = ({ text, more }: { text: string; more?: boolean }) => (
 );
 
 /** What a value shows in its popover (also drawn inside other popovers, such as a variable's values). */
-export function PreviewBody({ source, head = true, flowId: given }: { source: PreviewSource; head?: boolean; flowId?: string }) {
+export function PreviewBody({ source, head = true, flowId: given, size = "popover" }: { source: PreviewSource; head?: boolean; flowId?: string; size?: PictureSize }) {
   const open = useFlowId();
   const flowId = given ?? open;
   const state = useLoaded(source, flowId);
@@ -120,7 +144,7 @@ export function PreviewBody({ source, head = true, flowId: given }: { source: Pr
     return (
       <div>
         {head && <Head icon={<ImageIcon size={12} />} name={t.preview.imageData} note={pic?.width ? t.preview.size(pic.width, pic.height ?? 0) : undefined} />}
-        {pic ? <PictureView picture={pic} alt={t.preview.imageData} /> : <div className="mt-1 text-[11px] text-slate-400">{t.preview.loading}</div>}
+        {pic ? <PictureView picture={pic} alt={t.preview.imageData} size={size} load={async () => source.src} /> : <div className="mt-1 text-[11px] text-slate-400">{t.preview.loading}</div>}
       </div>
     );
   }
@@ -141,7 +165,7 @@ export function PreviewBody({ source, head = true, flowId: given }: { source: Pr
       return (
         <div>
           {head && <Head icon={<ImageIcon size={12} />} name={name} note={note} />}
-          {pic && <PictureView picture={pic} alt={name} />}
+          {pic && <PictureView picture={pic} alt={name} size={size} bytes={preview.bytes} load={() => loadFullPicture(flowId, source.path)} />}
         </div>
       );
     }
@@ -179,7 +203,7 @@ export function PreviewBody({ source, head = true, flowId: given }: { source: Pr
 }
 
 /** Half the popover's widest, to keep it on screen. */
-const HALF = 230;
+export const HALF = 300;
 
 function Popover({ anchor, children, box, onEnter, onLeave }: { anchor: DOMRect; children: ReactNode; box: RefObject<HTMLDivElement | null>; onEnter: () => void; onLeave: () => void }) {
   const below = anchor.top < window.innerHeight / 2;
@@ -196,7 +220,7 @@ function Popover({ anchor, children, box, onEnter, onLeave }: { anchor: DOMRect;
       onDoubleClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.stopPropagation()}
       style={{ left, top: below ? anchor.bottom + 4 : anchor.top - 4 }}
-      className={`fixed z-50 max-w-[460px] min-w-[120px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-2 shadow-lifted`}
+      className={`fixed z-50 max-w-[min(600px,calc(100vw-16px))] min-w-[120px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-2 shadow-lifted`}
     >
       {children}
     </div>,

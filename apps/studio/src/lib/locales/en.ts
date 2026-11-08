@@ -1474,6 +1474,17 @@ export const en: Dict = {
     imageData: "Picture data",
     text: (n: number) => `${n.toLocaleString("en-US")} characters`,
     size: (w: number, h: number) => `${w} × ${h}`,
+    enlarge: "Click to enlarge",
+  },
+  viewer: {
+    fit: "Fit",
+    fitHint: "Show it fitted to the window (0)",
+    actual: "Actual size",
+    actualHint: "Show one image pixel per screen pixel (1)",
+    zoomIn: "Zoom in (+)",
+    zoomOut: "Zoom out (-)",
+    close: "Close (Esc)",
+    help: "Wheel to zoom, drag to move, double-click to switch between fit and actual size",
   },
   ocr: {
     engine: "OCR engine",

@@ -258,7 +258,7 @@ function access(column: string): string {
 
 /** A node's value: OCR results as lines to check, anything else as a table. */
 function Output({ stepType, value }: { stepType?: string; value: unknown }) {
-  return isOcrOutput(stepType, value) ? <OcrResult value={value} /> : <ValueView value={value} />;
+  return isOcrOutput(stepType, value) ? <OcrResult value={value} /> : <ValueView value={value} size="panel" />;
 }
 
 /** The node's result: its run alone, or else what the last run did there. */
