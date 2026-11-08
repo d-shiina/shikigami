@@ -203,7 +203,8 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
     // A chip that would keep nothing is left out (but never the one in use).
     .filter((c) => c.value === "all" || c.count > 0 || c.value === filter);
   // Only declared variables can be picked: a node's own result is not one to delete or make secret.
-  const picked = new Set([...selected].filter((name) => all.some((u) => u.name === name && u.def)));
+  // Only the rows in view count: a search or a chip must not leave hidden rows picked for a bulk action.
+  const picked = new Set([...selected].filter((name) => rows.some((u) => u.name === name && u.def)));
   const pickedDefs = flow.variables?.filter((v) => picked.has(v.name)) ?? [];
   const clear = () => {
     setSelected(new Set());

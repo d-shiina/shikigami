@@ -15,13 +15,14 @@ export type Column<T> = {
   /** Sortable when given: the value the column sorts by. */
   sortValue?: (row: T) => string | number;
   /** Hidden when the page is narrower than this (container width, px). */
-  hideBelow?: 720 | 860 | 1000;
+  hideBelow?: 600 | 720 | 860 | 1000;
   cell: (row: T) => ReactNode;
 };
 
 export type Sort = { column: string; descending: boolean };
 
 const HIDE: Record<NonNullable<Column<unknown>["hideBelow"]>, string> = {
+  600: "hidden @min-[600px]:table-cell",
   720: "hidden @min-[720px]:table-cell",
   860: "hidden @min-[860px]:table-cell",
   1000: "hidden @min-[1000px]:table-cell",
