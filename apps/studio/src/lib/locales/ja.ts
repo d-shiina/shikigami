@@ -206,6 +206,7 @@ export const ja = {
     status: { running: "実行中", pending: "実行中", paused: "一時停止中", succeeded: "完了しました", failed: "エラーで中断しました", cancelled: "中止しました" } as Record<string, string>,
     flowLog: "「ログ出力」ノードが書いた行",
     systemLog: "SpellSheet が書いた行",
+    stopped: "途中で止まりました",
     skipped: "実行しませんでした",
     expand: "開く",
     collapse: "たたむ",

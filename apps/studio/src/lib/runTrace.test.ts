@@ -1,6 +1,6 @@
 import type { RunEventEnvelope } from "@shikigami/schema";
 import { describe, expect, it } from "vitest";
-import { emptyTrace, type RunTrace, sinceText, spanText, type TraceLine, traceEvent, traceRows, withError } from "./runTrace";
+import { emptyTrace, enclosing, type RunTrace, sinceText, spanText, type TraceLine, traceEvent, traceRows, withError } from "./runTrace";
 
 let seq = 0;
 const at = (ms: number) => new Date(Date.UTC(2026, 10, 8, 8, 30, 0) + ms).toISOString();
@@ -8,7 +8,7 @@ const started = (stepId: string, stepType: string, ms: number, callPath: string[
   ({ runId: "r", seq: seq++, at: at(ms), callPath, type: "stepStarted", stepId, stepType, attempt }) as RunEventEnvelope;
 const finished = (stepId: string, stepType: string, ms: number, durationMs: number, outcome: "succeeded" | "failed" = "succeeded", callPath: string[] = [], willRetry = false) =>
   ({ runId: "r", seq: seq++, at: at(ms), callPath, type: "stepFinished", stepId, stepType, outcome, durationMs, willRetry }) as RunEventEnvelope;
-const play = (events: RunEventEnvelope[]): RunTrace => events.reduce(traceEvent, emptyTrace());
+const play = (events: RunEventEnvelope[]): RunTrace => events.reduce((t, e) => traceEvent(t, e), emptyTrace());
 const all = () => true;
 
 describe("runTrace", () => {
@@ -49,7 +49,7 @@ describe("runTrace", () => {
     let trace = play([started("click", "browser.click", 0), finished("click", "browser.click", 5000, 5000, "failed", [], true)]);
     trace = withError(trace, "click", [], "見つかりません");
     expect(trace.nodes[0]).toMatchObject({ retrying: true, error: "見つかりません" });
-    trace = [started("click", "browser.click", 5500, [], 2), finished("click", "browser.click", 6400, 900)].reduce(traceEvent, trace);
+    trace = [started("click", "browser.click", 5500, [], 2), finished("click", "browser.click", 6400, 900)].reduce((t, e) => traceEvent(t, e), trace);
     expect(trace.nodes).toHaveLength(1);
     expect(trace.nodes[0]).toMatchObject({ attempt: 2, outcome: "succeeded", retrying: false, durationMs: 6400 });
     expect(trace.nodes[0]!.error).toBeUndefined();
@@ -67,6 +67,53 @@ describe("runTrace", () => {
     ]);
     const par = trace.nodes.find((n) => n.stepId === "par")!;
     expect(trace.nodes.filter((n) => n.stepId !== "par").map((n) => n.parent)).toEqual([par.key, par.key]);
+  });
+
+  it("puts a parallel branch's nodes in their own frame, by the flow", () => {
+    seq = 0;
+    const steps = [
+      {
+        id: "par",
+        type: "control.parallel",
+        blocks: {
+          a: [{ id: "ga", type: "control.group", blocks: { body: [{ id: "a1", type: "browser.click" }, { id: "a2", type: "browser.click" }] } }],
+          b: [{ id: "gb", type: "control.group", blocks: { body: [{ id: "b1", type: "excel.readRows" }] } }],
+        },
+      },
+    ] as never;
+    const parentOf = (stepId: string, callPath: string[]) => {
+      const inside = enclosing(steps, stepId);
+      return inside === undefined ? undefined : inside === null ? null : { stepId: inside, callPath };
+    };
+    const trace = [
+      started("par", "control.parallel", 0),
+      started("ga", "control.group", 1),
+      started("a1", "browser.click", 2),
+      finished("a1", "browser.click", 3, 1),
+      started("gb", "control.group", 4),
+      started("a2", "browser.click", 5),
+      started("b1", "excel.readRows", 6),
+    ].reduce((t, e) => traceEvent(t, e, parentOf), emptyTrace());
+    const parent = (id: string) => trace.nodes.find((n) => trace.nodes.find((m) => m.stepId === id)!.parent === n.key)?.stepId;
+    expect(parent("gb")).toBe("par");
+    expect(parent("a2")).toBe("ga");
+    expect(parent("b1")).toBe("gb");
+  });
+
+  it("ends the nodes a stopped run left running", () => {
+    seq = 0;
+    const trace = [
+      started("loop", "control.forEach", 0),
+      started("click", "browser.click", 10),
+      { runId: "r", seq: seq++, at: at(900), type: "runFinished", status: "cancelled", durationMs: 900 } as RunEventEnvelope,
+    ].reduce((t, e) => traceEvent(t, e), emptyTrace());
+    expect(trace.open).toEqual([]);
+    expect(trace.nodes.map((n) => [n.outcome, n.stopped, n.durationMs])).toEqual([
+      ["skipped", true, 900],
+      ["skipped", true, 890],
+    ]);
+    const round = traceRows(trace.nodes, [], all).find((r) => r.kind === "round");
+    expect(round).toMatchObject({ outcome: "skipped" });
   });
 
   it("filters to the flow's own lines or to the problems, with the rows leading to them", () => {

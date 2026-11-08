@@ -3,7 +3,7 @@
 // took and how it ended. A control node (a loop, a branch, a frame) and a
 // sub-flow call hold the rows of the nodes run inside them, and a loop
 // splits them into its rounds. Log lines hang under the node that wrote them.
-import type { RunEventEnvelope, StepOutcome } from "@shikigami/schema";
+import type { RunEventEnvelope, Step, StepOutcome } from "@shikigami/schema";
 
 /** One run of one node (a retry continues the same run). */
 export type TraceNode = {
@@ -26,7 +26,27 @@ export type TraceNode = {
   retrying?: boolean;
   /** Why it failed, in words (set by the store). */
   error?: string;
+  /** The run ended (stopped, or a parallel branch given up) before this node did. */
+  stopped?: boolean;
 };
+
+/** Where a node sits in its flow: the node it is inside, or null at the top. */
+export type Place = { stepId: string; callPath: string[] };
+
+/**
+ * The node `stepId` is directly inside in `steps`: null at the top level,
+ * undefined when it is not there.
+ */
+export function enclosing(steps: Step[], stepId: string, parent: string | null = null): string | null | undefined {
+  for (const step of steps) {
+    if (step.id === stepId) return parent;
+    for (const children of Object.values(step.blocks ?? {})) {
+      const found = enclosing(children, stepId, step.id);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
 
 export type RunTrace = {
   nodes: TraceNode[];
@@ -69,7 +89,12 @@ export function findNode(trace: RunTrace, stepId: string, callPath: string[]): T
  * The trace after one run event. Only `stepStarted` and `stepFinished`
  * change it; the error words are put on by the caller (`withError`).
  */
-export function traceEvent(trace: RunTrace, env: RunEventEnvelope): RunTrace {
+export function traceEvent(
+  trace: RunTrace,
+  env: RunEventEnvelope,
+  /** The node a step is written inside (from the flows), when known: undefined when not. */
+  parentOf?: (stepId: string, callPath: string[]) => Place | null | undefined,
+): RunTrace {
   const callPath = env.callPath ?? [];
   if (env.type === "stepStarted") {
     // A retry runs the same node again: it stays one row.
@@ -78,10 +103,15 @@ export function traceEvent(trace: RunTrace, env: RunEventEnvelope): RunTrace {
       const node: TraceNode = { ...again, attempt: env.attempt, retrying: false, outcome: undefined, endedAt: undefined, durationMs: undefined, error: undefined };
       return { nodes: trace.nodes.map((n) => (n.key === again.key ? node : n)), open: [...trace.open, again.key] };
     }
-    // Inside the newest open node that holds others (parallel branches can
-    // interleave, so a plain node that has not ended is never a parent).
+    // Inside the node it is written in, by the flow: parallel branches run
+    // at once, so the newest open node may be another branch's.
     let parent: number | null = null;
-    for (let i = trace.open.length - 1; i >= 0; i--) {
+    const place = parentOf?.(env.stepId, callPath);
+    const where = place === null ? null : place ? findOpen(trace, place.stepId, place.callPath) : undefined;
+    if (where !== undefined) parent = where;
+    // Not known from the flow (an old revision, a flow not loaded): the newest
+    // open node that holds others (a plain node that has not ended never is).
+    else for (let i = trace.open.length - 1; i >= 0; i--) {
       const open = trace.nodes.find((n) => n.key === trace.open[i]);
       if (open && holdsNodes(open.stepType)) {
         parent = open.key;
@@ -104,8 +134,27 @@ export function traceEvent(trace: RunTrace, env: RunEventEnvelope): RunTrace {
     };
     return { nodes: trace.nodes.map((n) => (n.key === node.key ? done : n)), open: trace.open.filter((k) => k !== node.key) };
   }
-  if (env.type === "runFinished") return { ...trace, open: [] };
+  if (env.type === "runFinished") {
+    // Nodes that never ended (the run was stopped, or a parallel branch was
+    // given up when another failed) end with it.
+    const left = new Set(trace.open);
+    const nodes = trace.nodes.map((n) =>
+      left.has(n.key) || n.retrying
+        ? { ...n, endedAt: env.at, durationMs: Math.max(0, Date.parse(env.at) - Date.parse(n.startedAt) || 0), outcome: n.outcome ?? ("skipped" as const), retrying: false, stopped: n.outcome === undefined }
+        : n,
+    );
+    return { nodes, open: [] };
+  }
   return trace;
+}
+
+/** The newest open run of `stepId` in that call (null when none is open). */
+function findOpen(trace: RunTrace, stepId: string, callPath: string[]): number | null | undefined {
+  for (let i = trace.open.length - 1; i >= 0; i--) {
+    const node = trace.nodes.find((n) => n.key === trace.open[i]);
+    if (node && node.stepId === stepId && sameCall(node.callPath, callPath)) return node.key;
+  }
+  return undefined;
 }
 
 /** Puts the words of a failure on the run of `stepId` that just ended. */
@@ -252,6 +301,7 @@ export function traceRows(
         if (onlyProblems && !round.some((i) => (i.line ? keepLine(i.line) : keeps(i.node!.key)))) return;
         const running = runs.some((n) => n.outcome === undefined);
         const failed = runs.some((n) => n.outcome === "failed" && !n.retrying);
+        const stopped = runs.some((n) => n.stopped);
         const last = runs.at(-1);
         rows.push({
           kind: "round",
@@ -260,7 +310,7 @@ export function traceRows(
           depth: depth + 1,
           startedAt: runs[0]?.startedAt ?? round[0]!.line!.at,
           endedAt: running ? undefined : (last?.endedAt ?? undefined),
-          outcome: running ? undefined : failed ? "failed" : "succeeded",
+          outcome: running ? undefined : failed ? "failed" : stopped ? "skipped" : "succeeded",
           children: round.length,
           problems: p,
         });

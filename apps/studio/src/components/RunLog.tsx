@@ -94,8 +94,9 @@ function useNames(): Names {
   }, [flow, called, stepTypes, here]);
 }
 
-function StateIcon({ node }: { node: Pick<TraceNode, "outcome" | "retrying"> & { paused?: boolean } }) {
+function StateIcon({ node }: { node: Pick<TraceNode, "outcome" | "retrying" | "stopped"> & { paused?: boolean } }) {
   const cls = "shrink-0";
+  if (node.stopped) return <CircleMinus size={14} className={`${cls} text-slate-400`} aria-label={t.runLog.stopped} />;
   if (node.paused) return <CirclePause size={14} className={`${cls} text-mizu-500`} aria-label={t.runLog.status.paused} />;
   if (node.retrying) return <RotateCw size={13} className={`${cls} text-accent-500`} aria-hidden="true" />;
   switch (node.outcome) {

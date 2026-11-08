@@ -207,6 +207,7 @@ export const en: Dict = {
     status: { running: "Running", pending: "Running", paused: "Paused", succeeded: "Completed", failed: "Stopped by an error", cancelled: "Stopped" } as Record<string, string>,
     flowLog: "Written by a Log node",
     systemLog: "Written by SpellSheet",
+    stopped: "Stopped before it ended",
     skipped: "Not run",
     expand: "Expand",
     collapse: "Collapse",

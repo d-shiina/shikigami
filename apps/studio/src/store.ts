@@ -47,7 +47,7 @@ import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
 import { registerExtensions } from "./lib/extensions";
 import { boxRange, copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
 import { errorLine } from "./lib/errorText";
-import { emptyTrace, findNode, type RunTrace, traceEvent, withError } from "./lib/runTrace";
+import { emptyTrace, enclosing, findNode, type RunTrace, traceEvent, withError } from "./lib/runTrace";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
 import { ancestorsOf } from "./flow/layout";
@@ -1732,7 +1732,17 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const run: RunState =
             s.run && s.run.runId === env.runId ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs } : newRun(env.runId);
           const path = callPathOf(env);
-          run.trace = traceEvent(run.trace ?? emptyTrace(), env);
+          run.trace = traceEvent(run.trace ?? emptyTrace(), env, (stepId, callPath) => {
+            // Only the open flow's run is laid out on its flows.
+            if (run.flowId && run.flowId !== s.flow?.id) return undefined;
+            const chain = diveChain(s.flow, s.called, callPath);
+            const owner = callPath.length === 0 ? s.flow : chain.length === callPath.length ? chain.at(-1)!.flow : null;
+            const inside = owner ? enclosing(owner.steps ?? [], stepId) : undefined;
+            if (inside === undefined) return undefined;
+            if (inside !== null) return { stepId: inside, callPath };
+            // At the top of a called flow: inside the call.
+            return callPath.length > 0 ? { stepId: callPath.at(-1)!, callPath: callPath.slice(0, -1) } : null;
+          });
           const push = (level: LogLevel, msg: string, stepId?: string | null, callPath?: string[], extra: Partial<LogEntry> = {}) => {
             // The node run it is about; a line of the run itself sits in the node running now.
             const node = stepId ? findNode(run.trace, stepId, callPath ?? [])?.key : run.trace.open.at(-1);
