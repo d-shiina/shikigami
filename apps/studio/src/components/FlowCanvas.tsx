@@ -1463,7 +1463,7 @@ export function FlowCanvas() {
     () =>
       new Set(
         layout.nodes
-          .filter((n) => (n.data.kind === "slot" && n.data.tail) || (n.data.kind === "join" && (!n.data.question || n.data.after)))
+          .filter((n) => (n.data.kind === "slot" && n.data.tail) || (n.data.kind === "join" && !n.data.met && (!n.data.question || n.data.after)))
           .map((n) => n.id),
       ),
     [layout],
@@ -1602,6 +1602,8 @@ export function FlowCanvas() {
       // A try's way into "失敗したとき" was taken when that block ran.
       const state = n.data.question && !n.data.after ? states[n.data.parentId] : n.data.failTo ? states[n.data.failTo] : undefined;
       if (state) out[n.id] = state;
+      // A wait goes out only when its condition was met: when the wait succeeded, not each time its check ran.
+      if (n.data.met && states[n.data.parentId] === "succeeded") out[n.id] = "succeeded";
     }
     return out;
   }, [states, layout.nodes]);

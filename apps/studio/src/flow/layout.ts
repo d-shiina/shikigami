@@ -147,6 +147,8 @@ export type JoinNodeData = {
   after?: boolean;
   /** Where a try's "実行" fails from (see CATCH_DROP): the first step of its "失敗したとき", which runs when it does. */
   failTo?: string;
+  /** A wait's way out: taken only once the wait itself succeeded, not each time its check ran. */
+  met?: boolean;
 };
 
 export type SlotNodeData = {
@@ -667,7 +669,8 @@ class Builder {
     const after = CHECKS_AFTER.has(step.type);
     const bodyY = after ? y + headH + GAP_Y : y + headH + DECIDE_GAP + DECIDE_H + GAP_Y;
     const decideY = after ? bodyY + size.h + DECIDE_GAP : y + headH + DECIDE_GAP;
-    this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: joinY }, data: { kind: "join", parentId: id, shown: false } });
+    const leave: JoinNodeData = { kind: "join", parentId: id, shown: false, ...(after ? { met: true } : {}) };
+    this.nodes.push({ id: join, type: "join", position: { x: cx - JOIN_SIZE / 2, y: joinY }, data: leave });
     this.nodes.push({
       id: decide,
       type: "join",
