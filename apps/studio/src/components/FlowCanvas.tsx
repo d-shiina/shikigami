@@ -1524,6 +1524,7 @@ export function FlowCanvas() {
   const run = useStudio(trailOf);
   const breakpoints = useStudio((s) => (flow ? s.breakpoints[flow.id] : undefined)) ?? NO_BREAKPOINTS;
   const select = useStudio((s) => s.select);
+  const showFlowProps = useStudio((s) => s.showFlowProps);
   const addStep = useStudio((s) => s.addStep);
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   const stepMenu = useStepMenu();
@@ -1890,7 +1891,7 @@ export function FlowCanvas() {
       onNodeClick={(event, node) => {
         if (inside || node.type === "frame" || node.type === "join") return;
         // The start or end: the flow's own settings (its variables, what it takes and returns).
-        if (node.type === "terminal") return select(null);
+        if (node.type === "terminal") return showFlowProps();
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") {
           const id = data.step.id ?? node.id;
