@@ -192,7 +192,7 @@ SpellSheet Studio, and flows run later without you.\n\
 - Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
 - Text, numbers, dates, lists and JSON are handled with expression functions, not extra steps: list_step_types returns them under `functions` (signature + example), e.g. variable.set expression \"trim(replace(name, '　', ' '))\", \"sum(map(filter(rows, r => r.status == '済'), r => num(r.amount)))\", \"formatDate(today(), 'yyyyMMdd')\". Join text with + or a template.\n\
 - To branch one value three or more ways (VBA Select Case), use control.switch, not nested control.if: `cases` holds only control.case steps (values [\"A\", \"B\"], or condition \"score >= 80\" for ranges), the first match runs, `default` runs when none does.\n\
-- Name nodes and describe flows in the user's business words (\"注文番号を入力\", not \"browser.fill #3\"): Studio's 手順書 (the illustrated manual made from a run) uses them as its headings.\n\
+- Name nodes and describe flows in the user's business words (\"注文番号を入力\", not \"browser.fill #3\"): Studio's 手順書 (the illustrated manual made from a run) uses them as its headings. Pass flowId to test_step: the screen a tried step meets is the person's first picture of that node in the 手順書, before any run.\n\
 - Fix validation issues by following each issue's hint; get_step_schema returns copyable examples.\n\
 - Versions: when the user says a flow works or is ready, offer create_version with a short name. diff_versions shows what changed since the latest version; restore_version is one undoable edit. Never restore without the user asking.\n\
 - Unattended runs (shikigami run, schedules) execute only the published version, never your latest edits. Only a person publishes: when the flow is ready, ask the user to review it in Studio's レビュー台 and press 確認して公開. get_flow `published` shows the version in force and whether the working content matches it. run_flow runs the working content (your test); pass published: true only when the user asks to run the published one.\n\
@@ -2009,6 +2009,19 @@ impl ShikigamiMcp {
             self.show_target(&step.step_type, target, context.as_ref())
                 .await;
         }
+        // What the step met on screen becomes the node's picture in the
+        // flow's 手順書 (「作るときの画面」) until the flow is run.
+        let mut draft = flow_id.and_then(|id| {
+            let id = FlowId::new(id);
+            let parts = self.svc().get(&id).ok().map(|f| f.parts);
+            shikigami_runtime::drafts::DraftCapture::new(
+                self.svc().store().local_root(),
+                &id,
+                &step,
+                parts.as_ref(),
+                shikigami_runtime::drafts::DraftSource::Ai,
+            )
+        });
         let no_inputs = serde_json::Map::new();
         let single = shikigami_runtime::single::flow_for(
             step,
@@ -2028,6 +2041,7 @@ impl ShikigamiMcp {
                     keep_adapter_state: true,
                     subflows,
                     project_dir,
+                    screens_dir: draft.as_ref().map(|d| d.screens_dir()),
                     origin: RunOrigin::new(RunTrigger::Mcp),
                     ..RunOptions::default()
                 },
@@ -2038,9 +2052,16 @@ impl ShikigamiMcp {
                 details: e.details,
             })?;
         let report = handle
-            .wait()
-            .await
-            .map_err(|e| err("INTERNAL", e.message))?;
+            .wait_with(|event| {
+                if let Some(draft) = draft.as_mut() {
+                    draft.on_event(&event.event);
+                }
+            })
+            .await;
+        if let Some(draft) = draft {
+            draft.finish();
+        }
+        let report = report.map_err(|e| err("INTERNAL", e.message))?;
 
         let output = single.result(&report.outputs);
         let mut result = json!({ "status": report.status, "output": output });

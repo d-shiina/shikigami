@@ -39,6 +39,15 @@ SpellSheet の手順書は、人が録らなくても、Studio で一度実行�
 - 画面は `<作業フォルダー>/manuals/<フロー>/` に置く。実行の途中は `next-<実行>/` に撮り、実行が完了したときだけ `current/` と入れ替える。失敗・中止した実行の画面は消す。手順書は最後に完了した実行の画面で作る。
 - `policy.json` の `records.manualScreens: false` で撮らない。
 
+## 作るときの画面
+
+実行する前に、AI が作ったフローを読んで確かめたい（Daiki）。そのために、ノードを 1 つだけ試したときの画面も手順書に使う。
+
+- 撮るとき：Studio の「ノードの単体実行」と、AI の `test_step`（`flowId` を渡したとき）。撮り方は実行のときと同じ（`screens_dir` を渡し、入力した欄は塗る）。`records.manualScreens: false` なら撮らない。
+- 置き場所：`<作業フォルダー>/manuals/<フロー>/drafts/`。ノードの ID ではなく、種類と設定の要約（`drafts::fingerprint`。部品 `{ "part": … }` はその対象に置き換える）で覚える。AI はフローに入れる前にノードを試すため。設定を変えたノードには古い画面を出さない。同じノードは新しい画面で上書きし、フローごとに 300 枚まで。
+- 見せ方：実行の画面がないノードにだけ使い、画面の見出しに「作るときの画面」と添える（AI が試したか単体実行かは指したときに出る）。実行の画面がまだ 1 枚もないときは、上に「画面は作るときに試したときのもの。実行すると置き換わる」と出す。書き出しにも同じ印が付く。
+- MCP なしの AI が作ったフローは、作った時点では画面がない。人が単体実行かステップ実行（フロー全体の実行なので本物の画面になる）をすれば、実行の前に画面付きで読める。
+
 ## 個人情報（personal-data.md）
 
 - 撮るとき：パスワード欄、シークレットを入れた欄、フローが入力した欄は、撮った画面の上で灰色に塗る（アダプターが覚えている欄。ブラウザは `fill` した欄、デスクトップは `setValue`・`type` で要素を指定した欄。画像の場所を押して打った文字は場所が分からないので塗れない）。
@@ -52,7 +61,7 @@ SpellSheet の手順書は、人が録らなくても、Studio で一度実行�
 
 ## 実装
 
-- ランタイム：`crates/shikigami-runtime/src/screens.rs`（撮る時と引数）、`RunOptions.screens_dir`、`RunEvent::ScreenCaptured`。
+- ランタイム：`crates/shikigami-runtime/src/screens.rs`（撮る時と引数）、`drafts.rs`（作るときの画面）、`RunOptions.screens_dir`、`RunEvent::ScreenCaptured`。
 - アダプター：`packages/browser-adapter/src/adapter.ts` の `manualShot`、`crates/shikigami-desktop` の `manual_shot`。
 - Studio（Rust）：`apps/studio/src-tauri/src/manual.rs`（集めて入れ替える、`get_manual`・`manual_image`・`save_manual_masks`・`save_manual_export`）。
 - Studio（画面）：`lib/manual.ts`（フローと撮った画面から章・画面・手順を作る）、`lib/manualExport.ts`（焼き込みと HTML）、`components/ManualView.tsx`。

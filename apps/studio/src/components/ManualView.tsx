@@ -13,6 +13,7 @@ import {
   buildManual,
   type Chapter,
   cropOf,
+  type Drafts,
   type ManualDoc,
   type ManualItem,
   type ManualManifest,
@@ -112,10 +113,13 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const startRun = useStudio((s) => s.startRun);
   const goToPlace = useStudio((s) => s.goToPlace);
   const running = useStudio((s) => isActive(s.run));
+  const testing = useStudio((s) => s.stepTest?.running ?? false);
+  const revision = useStudio((s) => s.flow?.revision);
   const agent = useAgentApi();
   const [editing, setEditing] = useState(false);
   const [manifest, setManifest] = useState<ManualManifest | null>(null);
   const [masks, setMasks] = useState<Record<string, Mask>>({});
+  const [drafts, setDrafts] = useState<Drafts>({});
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
   const [masking, setMasking] = useState<ManualShot | null>(null);
   const [whole, setWhole] = useState<ManualShot | null>(null);
@@ -124,9 +128,10 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const flowId = flow?.id;
 
-  // Read again when the flow changes and when a run of it ends.
+  // Read again when the flow changes (a changed node loses its old
+  // picture), when a run of it ends and when a node tried alone ends.
   useEffect(() => {
-    if (!flowId || running) return;
+    if (!flowId || running || testing) return;
     let live = true;
     void manualApi
       .get(flowId)
@@ -134,6 +139,7 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
         if (!live) return;
         setManifest(m.manifest ?? null);
         setMasks(m.masks ?? {});
+        setDrafts(m.drafts ?? {});
       })
       .catch(() => {});
     void api
@@ -143,10 +149,10 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
     return () => {
       live = false;
     };
-  }, [flowId, running]);
+  }, [flowId, running, testing, revision]);
 
   const { urls, want } = usePictures(flowId, manifest?.runId);
-  const doc = useMemo(() => (flow ? buildManual(flow, defs, manifest, subflows, masks) : null), [flow, defs, manifest, subflows, masks]);
+  const doc = useMemo(() => (flow ? buildManual(flow, defs, manifest, subflows, masks, drafts) : null), [flow, defs, manifest, subflows, masks, drafts]);
 
   if (!flow || !doc) return <StoryView />;
   if (editing) {
@@ -203,6 +209,11 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
               <span className="h-2 w-2 rounded-full bg-moegi-500" />
               <span>{made}</span>
             </>
+          ) : doc.drafts > 0 ? (
+            <>
+              <span className="h-2 w-2 rounded-full bg-slate-400" />
+              <span>{t.manual.draftsOnly}</span>
+            </>
           ) : (
             <span>{t.manual.noRun}</span>
           )}
@@ -214,12 +225,13 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
         </div>
         {doc.description && <p className="mb-4 text-[15px] leading-[1.85] text-slate-600">{doc.description}</p>}
         <Facts doc={doc} when={when} />
-        {doc.missing > 0 && manifest && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.missing(doc.missing)}</p>}
+        {doc.missing > 0 && (manifest || doc.drafts > 0) && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.missing(doc.missing)}</p>}
+        {made && doc.drafts > 0 && <p className="mt-3 text-[12.5px] text-slate-500">{t.manual.someDrafts(doc.drafts)}</p>}
         <Toc chapters={doc.chapters} />
         {doc.chapters.map((c) => (
           <ChapterSection key={c.number} chapter={c} ctx={ctx} />
         ))}
-        {manifest && <p className="mt-10 text-right text-[11.5px] text-slate-400">{t.manual.privacy}</p>}
+        {doc.pictures > 0 && <p className="mt-10 text-right text-[11.5px] text-slate-400">{t.manual.privacy}</p>}
       </article>
       {masking && (
         <MaskEditor
@@ -450,6 +462,11 @@ function SceneCard({ scene, ctx }: { scene: Scene; ctx: Ctx }) {
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[12.5px] text-slate-500">
         <Camera size={13} />
         <b className="font-semibold text-ink">{t.manual.screenOf(scene.title, scene.app === "desktop")}</b>
+        {shot?.draft && (
+          <span title={shot.draft === "ai" ? t.manual.draftByAi : t.manual.draftByStudio} className="rounded-[4px] border border-slate-300 px-1.5 text-[11.5px] text-slate-500">
+            {t.manual.draft}
+          </span>
+        )}
         {shot && maskStale(mask, shot) && <span className="text-accent-600">{t.manual.maskStale}</span>}
         {shot && (
           <button

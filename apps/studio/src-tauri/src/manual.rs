@@ -17,7 +17,8 @@ use std::path::{Path, PathBuf};
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use shikigami_core::{ErrorPayload, FlowId, RunId, StepId};
+use shikigami_core::{ErrorPayload, Flow, FlowId, RunId, Step, StepId};
+use shikigami_runtime::drafts::{self, DraftShot};
 use shikigami_runtime::{RunEvent, RunEventEnvelope, RunReport, RunStatus, ScreenRect};
 use tauri::State;
 
@@ -247,6 +248,47 @@ pub struct Manual {
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest: Option<Manifest>,
     masks: BTreeMap<String, Mask>,
+    /// 「作るときの画面」: pictures from nodes tried alone, by flow ID
+    /// (the flow and the sub-flows it calls), then node ID. Only nodes
+    /// whose params are still the ones tried.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    drafts: BTreeMap<String, BTreeMap<String, DraftShot>>,
+}
+
+/// Where draft pictures are named in [`image`]: `drafts/<flow id>/<file>`.
+const DRAFT_PREFIX: &str = "drafts/";
+
+/// The kept pictures that still match the nodes of `flow`.
+fn drafts_of(local_root: &Path, flow: &Flow) -> BTreeMap<String, DraftShot> {
+    let index = drafts::read(local_root, &flow.id);
+    let mut out = BTreeMap::new();
+    if index.is_empty() {
+        return out;
+    }
+    fn walk(
+        steps: &[Step],
+        flow: &Flow,
+        index: &BTreeMap<String, DraftShot>,
+        out: &mut BTreeMap<String, DraftShot>,
+    ) {
+        for step in steps {
+            let print = drafts::fingerprint(
+                &step.step_type,
+                &serde_json::Value::Object(step.params.clone()),
+                Some(&flow.parts),
+            );
+            if let Some(shot) = index.get(&print) {
+                let mut shot = shot.clone();
+                shot.file = format!("{DRAFT_PREFIX}{}/{}", flow.id.as_str(), shot.file);
+                out.insert(step.id.as_str().to_owned(), shot);
+            }
+            for block in step.blocks.values() {
+                walk(block, flow, index, out);
+            }
+        }
+    }
+    walk(&flow.steps, flow, &index, &mut out);
+    out
 }
 
 fn read_masks(dir: &Path) -> BTreeMap<String, Mask> {
@@ -256,20 +298,34 @@ fn read_masks(dir: &Path) -> BTreeMap<String, Mask> {
         .unwrap_or_default()
 }
 
-fn load(local_root: &Path, flow: &FlowId) -> CmdResult<Manual> {
+fn load(local_root: &Path, flow: &FlowId, flows: &[&Flow]) -> CmdResult<Manual> {
     let dir = flow_dir(local_root, flow)?;
     let manifest = std::fs::read(dir.join(CURRENT).join(MANIFEST))
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+    let drafts = flows
+        .iter()
+        .map(|f| (f.id.as_str().to_owned(), drafts_of(local_root, f)))
+        .filter(|(_, d)| !d.is_empty())
+        .collect();
     Ok(Manual {
         manifest,
         masks: read_masks(&dir),
+        drafts,
     })
 }
 
 #[tauri::command]
 pub fn get_manual(state: State<'_, AppState>, id: FlowId) -> CmdResult<Manual> {
-    load(state.service.store().local_root(), &id)
+    let local_root = state.service.store().local_root();
+    let Ok(flow) = state.service.get(&id) else {
+        return load(local_root, &id, &[]);
+    };
+    let subflows = state.service.subflows(&flow).unwrap_or_default();
+    let flows: Vec<&Flow> = std::iter::once(&flow)
+        .chain(subflows.iter().map(|s| &s.flow))
+        .collect();
+    load(local_root, &id, &flows)
 }
 
 /// A picture of the current 手順書 as a data URL.
@@ -284,10 +340,18 @@ fn image(local_root: &Path, flow: &FlowId, file: &str) -> CmdResult<String> {
         Some("png") => "image/png",
         _ => return Err(err("INVALID_PARAMS", "not a picture of the manual")),
     };
-    if file.contains(['/', '\\']) || file.starts_with('.') {
-        return Err(err("INVALID_PARAMS", "not a picture of the manual"));
-    }
-    let path = flow_dir(local_root, flow)?.join(CURRENT).join(file);
+    let path = if let Some(rest) = file.strip_prefix(DRAFT_PREFIX) {
+        let (owner, name) = rest
+            .split_once('/')
+            .ok_or_else(|| err("INVALID_PARAMS", "not a picture of the manual"))?;
+        drafts::picture_path(local_root, &FlowId::new(owner), name)
+            .ok_or_else(|| err("INVALID_PARAMS", "not a picture of the manual"))?
+    } else {
+        if file.contains(['/', '\\']) || file.starts_with('.') {
+            return Err(err("INVALID_PARAMS", "not a picture of the manual"));
+        }
+        flow_dir(local_root, flow)?.join(CURRENT).join(file)
+    };
     let bytes = std::fs::read(&path).map_err(|e| err("NOT_FOUND", e.to_string()))?;
     Ok(format!(
         "data:{mime};base64,{}",
@@ -437,7 +501,7 @@ mod tests {
         collector.finish(&report(RunStatus::Succeeded));
 
         assert!(!dir.exists());
-        let manual = load(root.path(), &flow).unwrap();
+        let manual = load(root.path(), &flow, &[]).unwrap();
         let manifest = manual.manifest.unwrap();
         assert_eq!(manifest.shots[0].key, "stp_call/stp_a");
         assert_eq!(manifest.counts["stp_b"], 2);
@@ -457,7 +521,7 @@ mod tests {
         std::fs::create_dir_all(&dir2).unwrap();
         Collector::new(dir2.clone()).finish(&report(RunStatus::Failed));
         assert!(!dir2.exists());
-        assert!(load(root.path(), &flow).unwrap().manifest.is_some());
+        assert!(load(root.path(), &flow, &[]).unwrap().manifest.is_some());
     }
 
     #[test]
@@ -472,5 +536,66 @@ mod tests {
     #[test]
     fn flow_ids_cannot_leave_the_folder() {
         assert!(flow_dir(Path::new("/x"), &FlowId::new("../y")).is_err());
+    }
+
+    #[test]
+    fn pictures_of_nodes_tried_alone_follow_the_nodes_that_still_do_the_same() {
+        let root = tempfile::tempdir().unwrap();
+        let mut flow: Flow = serde_json::from_value(json!({
+            "schemaVersion": 1,
+            "id": "flw_a",
+            "name": "a",
+            "steps": [
+                { "id": "stp_login", "type": "browser.click", "params": { "target": { "part": "login" } } },
+                { "id": "stp_group", "type": "control.group", "blocks": { "body": [
+                    { "id": "stp_save", "type": "browser.click", "params": { "target": { "role": "button", "name": "保存" } } }
+                ] } }
+            ],
+            "parts": { "login": { "label": "ログイン", "app": "browser", "target": { "role": "button", "name": "ログイン" } } }
+        }))
+        .unwrap();
+        // The AI tried both before they were in the flow, with plain targets.
+        for (name, id) in [("ログイン", "stp_x"), ("保存", "stp_y")] {
+            let tried: Step = serde_json::from_value(json!({ "id": id, "type": "browser.click", "params": { "target": { "role": "button", "name": name } } })).unwrap();
+            let mut capture = drafts::DraftCapture::new(
+                root.path(),
+                &flow.id,
+                &tried,
+                None,
+                drafts::DraftSource::Ai,
+            )
+            .unwrap();
+            std::fs::create_dir_all(capture.screens_dir()).unwrap();
+            std::fs::write(capture.screens_dir().join("001.jpg"), b"jpeg").unwrap();
+            capture.on_event(&RunEvent::ScreenCaptured {
+                step_id: StepId::new(id),
+                file: "001.jpg".into(),
+                width: 800,
+                height: 600,
+                mark: None,
+                regions: vec![],
+                title: None,
+                view: None,
+            });
+            capture.finish();
+        }
+        let found = drafts_of(root.path(), &flow);
+        assert_eq!(
+            found.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["stp_login", "stp_save"]
+        );
+        let file = &found["stp_login"].file;
+        assert!(file.starts_with("drafts/flw_a/"));
+        assert!(
+            image(root.path(), &flow.id, file)
+                .unwrap()
+                .starts_with("data:image/jpeg;base64,")
+        );
+        assert!(image(root.path(), &flow.id, "drafts/flw_a/../current/x.jpg").is_err());
+        // Changed since: no longer its picture.
+        flow.steps[0]
+            .params
+            .insert("target".into(), json!({ "role": "button", "name": "送信" }));
+        assert!(!drafts_of(root.path(), &flow).contains_key("stp_login"));
     }
 }

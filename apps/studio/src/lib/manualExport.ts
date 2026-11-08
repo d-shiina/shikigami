@@ -147,7 +147,8 @@ function items(list: ManualItem[], pictures: Pictures): string {
       switch (item.kind) {
         case "scene": {
           const src = pictures.get(item);
-          const cap = esc(t.manual.screenOf(item.title, item.app === "desktop"));
+          const cap =
+            esc(t.manual.screenOf(item.title, item.app === "desktop")) + (src && item.shot?.draft ? ` <span class="draft">${esc(t.manual.draft)}</span>` : "");
           return `<section class="scene"><div class="cap">${cap}</div><div class="body${src ? "" : " words"}">${
             src ? `<div class="shot"><img src="${src}" alt=""></div>` : ""
           }<ol class="steps">${[...item.steps, null].map((s, i) => item.waits.filter((w) => w.at === i).map((w) => `<li class="wait">⏱ ${esc(w.text)}</li>`).join("") + (s ? step(s) : "")).join("")}</ol></div></section>`;
@@ -178,6 +179,7 @@ body{margin:0;background:#eceef1;color:#1b1d22;font-family:"Segoe UI","Yu Gothic
 article{max-width:940px;margin:24px auto;background:#fff;border:1px solid #e1e4e8;border-radius:8px;padding:36px 44px 40px}
 h1{font-size:24px;margin:0 0 4px}
 .made{color:#50555e;font-size:12.5px;margin:0 0 18px}
+.draft{border:1px solid #c9ced6;border-radius:4px;padding:0 5px;font-size:11px;font-weight:400;color:#50555e}
 .lead{font-size:15px;color:#3a3e45;margin:0 0 16px}
 dl{display:grid;grid-template-columns:120px 1fr;margin:0;border-top:1px solid #e1e4e8}
 dt,dd{margin:0;padding:8px 0;border-bottom:1px solid #e1e4e8}
@@ -238,7 +240,7 @@ export function manualHtml(doc: ManualDoc, pictures: Pictures, options: ExportOp
 <title>${esc(doc.title)}</title><style>${STYLE}</style></head>
 <body><article>
 <h1>${esc(doc.title)}</h1>
-${options.made ? `<p class="made">${esc(options.made)}</p>` : ""}
+${options.made ? `<p class="made">${esc(options.made)}</p>` : doc.drafts > 0 && !options.noPictures ? `<p class="made">${esc(t.manual.draftsOnly)}</p>` : ""}
 ${doc.description ? `<p class="lead">${esc(doc.description)}</p>` : ""}
 <dl>${dl}</dl>
 <ol class="toc">${toc}</ol>

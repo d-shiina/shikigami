@@ -1041,6 +1041,15 @@ pub async fn test_step(
         .cloned()
         .ok_or_else(|| err("STEP_NOT_FOUND", format!("no step {step_id}")))?;
     let inputs = values.unwrap_or_default();
+    // The screen it met is the node's picture in the 手順書 until a run
+    // of the whole flow takes one.
+    let mut draft = shikigami_runtime::drafts::DraftCapture::new(
+        state.service.store().local_root(),
+        &id,
+        &step,
+        Some(&flow.parts),
+        shikigami_runtime::drafts::DraftSource::Studio,
+    );
     let single = shikigami_runtime::single::flow_for(
         step,
         state.runtime.registry(),
@@ -1061,6 +1070,7 @@ pub async fn test_step(
                 run_id: Some(RunId::new(STUDIO_BROWSER)),
                 keep_adapter_state: true,
                 subflows,
+                screens_dir: draft.as_ref().map(|d| d.screens_dir()),
                 project_dir: Some(state.service.project_dir(&id)?),
                 origin: RunOrigin::new(RunTrigger::Studio),
                 ..RunOptions::default()
@@ -1087,6 +1097,9 @@ pub async fn test_step(
     let mut logs = Vec::new();
     let report = handle
         .wait_with(|event: &RunEventEnvelope| {
+            if let Some(draft) = draft.as_mut() {
+                draft.on_event(&event.event);
+            }
             if let RunEvent::Log { level, message, .. } = &event.event {
                 logs.push(StepTestLog {
                     level: *level,
@@ -1095,6 +1108,9 @@ pub async fn test_step(
             }
         })
         .await;
+    if let Some(draft) = draft {
+        draft.finish();
+    }
     if let Ok(mut runs) = state.runs.lock() {
         runs.remove(&run_id);
     }
