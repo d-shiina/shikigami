@@ -37,6 +37,14 @@ fn env_var_in(name: &str, get: impl Fn(&str) -> Option<OsString>) -> Option<(Str
         .find_map(|n| get(&n).map(|value| (n, value)))
 }
 
+/// Moves every old folder that can be moved now (once per process). Called
+/// before any path into them is resolved.
+pub fn migrate() {
+    config_dir();
+    data_dir();
+    local_dir();
+}
+
 /// Roaming settings: `%APPDATA%\SpellSheet` (config.json).
 pub fn config_dir() -> PathBuf {
     app_dir(dirs::config_dir())
@@ -79,6 +87,8 @@ pub fn move_legacy(base: &Path) -> PathBuf {
             tracing::info!(from = %old.display(), to = %new.display(), "moved the folder to the new name");
             new
         }
+        // Another process starting at the same time moved it first.
+        Err(_) if new.is_dir() => new,
         Err(e) => {
             tracing::warn!(error = %e, folder = %old.display(), "cannot move the folder to the new name yet; using it as it is");
             old
@@ -91,6 +101,9 @@ pub fn move_legacy(base: &Path) -> PathBuf {
 /// `SHIKIGAMI_HOME`) that has since moved: the same place under the new
 /// folder. Other paths, and paths that still exist, come back unchanged.
 pub fn upgrade_legacy(path: &Path) -> PathBuf {
+    // Move first: a path into the old folder must not be kept (and opened)
+    // only for the folder to move from under it a moment later.
+    migrate();
     if path.exists() {
         return path.to_path_buf();
     }

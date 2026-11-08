@@ -310,6 +310,7 @@ impl FileStore {
     /// else `workspace` in the user config, else the platform data dir
     /// (e.g. `%APPDATA%\SpellSheet\workspace`).
     pub fn default_root() -> PathBuf {
+        crate::paths::migrate();
         if let Some(home) = crate::paths::env_var("HOME") {
             return crate::paths::upgrade_legacy(Path::new(&home));
         }
