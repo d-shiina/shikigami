@@ -1817,7 +1817,7 @@ export const en: Dict = {
     enabled: "On",
     disabled: "Off",
     dev: "Development",
-    devTitle: "Loaded from a SHIKIGAMI_PLUGINS folder; it cannot be turned off, updated or removed here",
+    devTitle: "Loaded from a SPELLSHEET_PLUGINS folder; it cannot be turned off, updated or removed here",
     loadError: "Load error",
     checkUpdate: "Check for update",
     uninstall: "Uninstall",

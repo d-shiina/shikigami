@@ -1254,10 +1254,7 @@ fn tail(s: &str, max: usize) -> String {
 
 /// Per-PC working folder for the agent, outside the (maybe shared) workspace.
 fn agent_dir() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Shikigami")
-        .join("agent")
+    shikigami_core::paths::local_dir().join("agent")
 }
 
 fn exe(name: &str) -> String {

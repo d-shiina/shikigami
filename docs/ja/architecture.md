@@ -338,7 +338,7 @@ Runtime::builder()
 共有ワークスペースでは `history/`・`runs/` を各 PC 側に置く（[design/sharing-versioning.md](../design/sharing-versioning.md)）。
 
 ```text
-<workspace>/            既定: SHIKIGAMI_HOME > config.json の workspace > %APPDATA%\Shikigami\workspace
+<workspace>/            既定: SPELLSHEET_HOME > config.json の workspace > %APPDATA%\SpellSheet\workspace
   workspace.json        任意。{"shared": true} なら共有ワークスペース
   flows/<id>.json   フロー（正）
   versions/<id>/<n>.json  名前付きの版（不変のスナップショット）

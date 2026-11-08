@@ -6,7 +6,7 @@
 
 [English](README.md) | 日本語
 
-> 製品名は Shikigami から **SpellSheet** に変わりました（式＝spell、紙＝sheet）。リポジトリ名・コマンド `shikigami`・インストーラーのファイル名・設定やデータのフォルダー（`%APPDATA%\Shikigami` など）は、今使っている環境がそのまま動くよう、当面は旧名のままです。
+> 製品名は Shikigami から **SpellSheet** に変わりました（式＝spell、紙＝sheet）。設定やデータのフォルダーも新しい名前（`%APPDATA%\SpellSheet`・`%LOCALAPPDATA%\SpellSheet`）になり、更新すると古い `Shikigami` のフォルダーは自動でそこへ移ります。環境変数 `SHIKIGAMI_HOME`・`SHIKIGAMI_PLUGINS` もそのまま使えます。リポジトリ名・コマンド `shikigami`・インストーラーは、当面は旧名のままです。
 
 AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したフローは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
 
@@ -101,7 +101,7 @@ pnpm studio:dev
 pnpm schema:generate
 ```
 
-ワークスペース（フロー・履歴・実行記録の保存先）は既定で `%APPDATA%\Shikigami\workspace` です。環境変数 `SHIKIGAMI_HOME` または CLI の `--workspace` で変更できます。
+ワークスペース（フロー・履歴・実行記録の保存先）は既定で `%APPDATA%\SpellSheet\workspace` です。環境変数 `SPELLSHEET_HOME`（旧名の `SHIKIGAMI_HOME` も使えます）または CLI の `--workspace` で変更できます。
 
 ### CLI の例
 

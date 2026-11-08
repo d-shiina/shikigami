@@ -21,7 +21,7 @@
 //!
 //! For a private workspace the local root is the workspace root itself. For a
 //! shared workspace (several people on OneDrive or a file server) it is a
-//! per-PC directory under `%LOCALAPPDATA%\Shikigami\local\`, so one
+//! per-PC directory under `%LOCALAPPDATA%\SpellSheet\local\`, so one
 //! person's undo stacks and run logs never sync to (or conflict with) others.
 //!
 //! Studio, the MCP server and the CLI are separate processes that may share a
@@ -168,12 +168,12 @@ pub struct WorkspaceInfo {
 }
 
 /// User-level settings shared by Studio, the CLI and the MCP server
-/// (`%APPDATA%\Shikigami\config.json`).
+/// (`%APPDATA%\SpellSheet\config.json`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserConfig {
     /// Default workspace folder when neither `--workspace` nor
-    /// `SHIKIGAMI_HOME` is given.
+    /// `SPELLSHEET_HOME` is given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<PathBuf>,
     /// Settings written by newer builds or other features are kept as-is.
@@ -183,10 +183,7 @@ pub struct UserConfig {
 
 impl UserConfig {
     pub fn path() -> PathBuf {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("Shikigami")
-            .join("config.json")
+        crate::paths::config_dir().join("config.json")
     }
 
     pub fn load() -> Self {
@@ -226,7 +223,9 @@ impl Drop for WorkspaceLock {
 impl FileStore {
     /// Opens (and creates if needed) a workspace directory.
     pub fn open(root: impl Into<PathBuf>) -> CoreResult<Self> {
-        let root = root.into();
+        // A path saved before the folders took the new name (a scheduled
+        // task's or an AI client's `--workspace`) still finds its flows.
+        let root = crate::paths::upgrade_legacy(&root.into());
         let manifest = read_manifest(&root)?;
         let local = if manifest.shared {
             local_root_for(&root)
@@ -307,19 +306,18 @@ impl FileStore {
         write_atomic(&root.join(MANIFEST_FILE), &json)
     }
 
-    /// Default workspace: `$SHIKIGAMI_HOME`, else `workspace` in the user
-    /// config, else the platform data dir (e.g. `%APPDATA%\Shikigami\workspace`).
+    /// Default workspace: `$SPELLSHEET_HOME` (or the old `$SHIKIGAMI_HOME`),
+    /// else `workspace` in the user config, else the platform data dir
+    /// (e.g. `%APPDATA%\SpellSheet\workspace`).
     pub fn default_root() -> PathBuf {
-        if let Some(home) = std::env::var_os("SHIKIGAMI_HOME") {
-            return PathBuf::from(home);
+        crate::paths::migrate();
+        if let Some(home) = crate::paths::env_var("HOME") {
+            return crate::paths::upgrade_legacy(Path::new(&home));
         }
         if let Some(workspace) = UserConfig::load().workspace {
-            return workspace;
+            return crate::paths::upgrade_legacy(&workspace);
         }
-        dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("Shikigami")
-            .join("workspace")
+        crate::paths::data_dir().join("workspace")
     }
 
     pub fn root(&self) -> &Path {
@@ -793,8 +791,26 @@ fn read_manifest(root: &Path) -> CoreResult<WorkspaceManifest> {
     }
 }
 
-/// `%LOCALAPPDATA%\Shikigami\local\<hash of the workspace path>`.
+/// `%LOCALAPPDATA%\SpellSheet\local\<hash of the workspace path>`.
 fn local_root_for(root: &Path) -> PathBuf {
+    let local = local_root_named(root);
+    // A workspace that moved with the folders' new name keeps its undo
+    // history, run records and audit logs from before.
+    if !local.exists()
+        && let Some(old_root) = crate::paths::legacy_of(root)
+    {
+        let old = local_root_named(&old_root);
+        if old.is_dir()
+            && let Err(e) = fs::rename(&old, &local)
+        {
+            tracing::warn!(error = %e, folder = %old.display(), "cannot move the per-PC folder of the workspace");
+            return old;
+        }
+    }
+    local
+}
+
+fn local_root_named(root: &Path) -> PathBuf {
     let absolute = std::path::absolute(root).unwrap_or_else(|_| root.to_path_buf());
     // Windows paths are case-insensitive; one folder must map to one directory.
     let key = absolute.to_string_lossy().to_lowercase();
@@ -809,9 +825,7 @@ fn local_root_for(root: &Path) -> PathBuf {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Shikigami")
+    crate::paths::local_dir()
         .join("local")
         .join(format!("{}-{hash:016x}", sanitize_file_name(&name)))
 }

@@ -279,11 +279,11 @@ fn fit_to_screen(app: &tauri::App) {
     }
 }
 
-/// Where Studio writes its panics: `%LOCALAPPDATA%\Shikigami\logs\studio-crash.log`.
+/// Where Studio writes its panics: `%LOCALAPPDATA%\SpellSheet\logs\studio-crash.log`.
 fn crash_log_path() -> Option<std::path::PathBuf> {
+    dirs::data_local_dir()?;
     Some(
-        dirs::data_local_dir()?
-            .join("Shikigami")
+        shikigami_core::paths::local_dir()
             .join("logs")
             .join("studio-crash.log"),
     )

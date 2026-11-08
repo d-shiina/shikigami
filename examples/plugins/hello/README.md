@@ -5,11 +5,11 @@
 - `shikigami-plugin.json`：ステップ型の宣言（params の JSON Schema、記述例、排他する資源）
 - `main.mjs`：標準入出力で JSON-RPC を受けて処理する本体
 
-試すには、このフォルダを `%LOCALAPPDATA%\Shikigami\plugins\hello` にコピーするか、環境変数 `SHIKIGAMI_PLUGINS` にこのフォルダを指定します。
+試すには、このフォルダを `%LOCALAPPDATA%\SpellSheet\plugins\hello` にコピーするか、環境変数 `SPELLSHEET_PLUGINS` にこのフォルダを指定します。
 
 ```powershell
 shikigami plugin check examples\plugins\hello
-$env:SHIKIGAMI_PLUGINS = "$PWD\examples\plugins"
+$env:SPELLSHEET_PLUGINS = "$PWD\examples\plugins"
 shikigami plugin list
 shikigami step-types   # hello.greet と hello.appendLine が出る
 ```

@@ -35,7 +35,7 @@ shikigami plugin install https://github.com/<owner>/<repo> --yes  # インスト
 
 インストールの前に、拡張機能の名前・発行元・追加されるノード・**外部へ送るデータ**・必要なシークレット・起動するプログラムを表示します。拡張機能はこの PC でプログラムとして動くため、発行元を信頼できるものだけをインストールしてください。
 
-インストール先は `%LOCALAPPDATA%\Shikigami\plugins\<名前>\` です。ワークスペースのフォルダーには置きません（共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動かないようにするため）。インストール・更新・無効化のあとは、Studio と AI クライアントを再起動すると反映されます。
+インストール先は `%LOCALAPPDATA%\SpellSheet\plugins\<名前>\` です。ワークスペースのフォルダーには置きません（共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動かないようにするため）。インストール・更新・無効化のあとは、Studio と AI クライアントを再起動すると反映されます。
 
 ### 一覧・有効と無効・更新・削除
 
@@ -74,7 +74,7 @@ shikigami plugin registry          # 一覧を表示
 }
 ```
 
-`source` はインストールの入手先（GitHub のリポジトリか zip の URL）です。索引の URL はユーザーの設定ファイル（`%APPDATA%\Shikigami\config.json` の `extensions.registry`）に保存します。
+`source` はインストールの入手先（GitHub のリポジトリか zip の URL）です。索引の URL はユーザーの設定ファイル（`%APPDATA%\SpellSheet\config.json` の `extensions.registry`）に保存します。
 
 ### 外部へ送るデータと実行の許可
 
@@ -210,12 +210,12 @@ azureocr/
 
 ```powershell
 shikigami plugin check examples\plugins\azure-ocr   # マニフェスト・スキーマ・記述例の検査
-$env:SHIKIGAMI_PLUGINS = "$PWD\examples\plugins"     # インストールせずに読み込む（開発用）
+$env:SPELLSHEET_PLUGINS = "$PWD\examples\plugins"     # インストールせずに読み込む（開発用）
 shikigami step-types                                  # azureocr.readDocument が出る
 node --test examples\plugins\azure-ocr\test.mjs      # Azure の代わりのサーバーで動作を確認
 ```
 
-`SHIKIGAMI_PLUGINS` で読み込んだ拡張機能は一覧に出ますが、無効化・更新・削除はできません（開発中のフォルダーを壊さないため）。
+`SPELLSHEET_PLUGINS` で読み込んだ拡張機能は一覧に出ますが、無効化・更新・削除はできません（開発中のフォルダーを壊さないため）。
 
 ## 見本：Azure AI-OCR
 

@@ -6,7 +6,7 @@
 
 English | [日本語](README.ja.md)
 
-> The product is now called **SpellSheet** (formerly Shikigami: a spell written on a sheet). The repository, the `shikigami` command, the installer file name and the settings and data folders (such as `%APPDATA%\Shikigami`) keep the old name for now, so existing installs keep working.
+> The product is now called **SpellSheet** (formerly Shikigami: a spell written on a sheet). The settings and data folders now use the new name too (`%APPDATA%\SpellSheet`, `%LOCALAPPDATA%\SpellSheet`): an update moves the old `Shikigami` folders there by itself, and `SHIKIGAMI_HOME` / `SHIKIGAMI_PLUGINS` still work. The repository, the `shikigami` command and the installer keep the old name for now.
 
 MCP-native desktop RPA where AI and humans build, edit, and run the same automation flows.
 
@@ -113,7 +113,7 @@ pnpm studio:dev
 pnpm schema:generate
 ```
 
-The workspace (where flows, history and run records are stored) defaults to `%APPDATA%\Shikigami\workspace`. Change it with the `SHIKIGAMI_HOME` environment variable or the CLI's `--workspace`.
+The workspace (where flows, history and run records are stored) defaults to `%APPDATA%\SpellSheet\workspace`. Change it with the `SPELLSHEET_HOME` environment variable (the old `SHIKIGAMI_HOME` still works) or the CLI's `--workspace`.
 
 ### CLI examples
 
