@@ -309,6 +309,14 @@ function ReviewPlace({ fit, sizes, grip }: PlaceProps) {
     lastRevealed.current = revealed;
     if (useReviewView.getState().view === "report") setView("flow");
   }, [revealed, setView]);
+  // Ctrl+F searches the flow: from the report, that means switching to the chart where it shows.
+  const searched = useStudio((s) => s.searchAsked);
+  const lastSearched = useRef(searched);
+  useEffect(() => {
+    if (searched === lastSearched.current) return;
+    lastSearched.current = searched;
+    if (useReviewView.getState().view === "report") setView("flow");
+  }, [searched, setView]);
   return (
     <Editor
       view={reading}

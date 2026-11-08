@@ -154,9 +154,9 @@ const EVIDENCE_POLL_MS = 5000;
 type Marks = {
   seen: Record<string, true>;
   answers: Record<string, "ok" | "no">;
-  /** What the send-back form starts with, when an answer opened it. */
-  sendBackWith: string | undefined;
-  setSendBackWith(text: string | undefined): void;
+  /** What the send-back form starts with, when an answer opened it, and on which flow. */
+  sendBackWith: { flowId: string; text: string } | undefined;
+  setSendBackWith(value: { flowId: string; text: string } | undefined): void;
   /**
    * The flow whose send-back form is open. Kept here so it survives switching between the
    * report and the chart, and tied to the flow so it never opens on another one.
@@ -170,7 +170,7 @@ const useMarks = create<Marks>((set) => ({
   seen: {},
   answers: {},
   sendBackWith: undefined,
-  setSendBackWith: (text) => set({ sendBackWith: text }),
+  setSendBackWith: (value) => set({ sendBackWith: value }),
   sending: null,
   setSending: (flowId) => set(flowId ? { sending: flowId } : { sending: null, sendBackWith: undefined }),
   see: (key) => set((m) => (m.seen[key] ? m : { seen: { ...m.seen, [key]: true } })),
@@ -328,8 +328,9 @@ export function ReviewReport() {
   const runs = r.evidence.filter((e): e is TestRun => e.kind === "testRun");
   const observed = r.evidence.filter((e): e is Observed => e.kind === "observation");
   const sendBackWithText = (text: string) => {
-    setSendBackWith(text);
-    setSending(r.flowId ?? null);
+    if (!r.flowId) return;
+    setSendBackWith({ flowId: r.flowId, text });
+    setSending(r.flowId);
   };
   const changedIds = cards.filter((c) => c.kind !== "removed" && !c.movedOnly).map((c) => c.stepId);
   const showRuns = runsOpen ?? r.freshPromises.length === 0;
@@ -464,7 +465,7 @@ export function ReviewFoot({ report }: { report: boolean }) {
   const r = useReview();
   usePollEvidence(r.flowId);
   const setView = useReviewView((s) => s.setView);
-  const sendBackWith = useMarks((m) => m.sendBackWith);
+  const sendBackWith = useMarks((m) => (m.sendBackWith && m.sendBackWith.flowId === r.flowId ? m.sendBackWith.text : undefined));
   const sending = useMarks((m) => m.sending !== null && m.sending === r.flowId);
   const setSending = useMarks((m) => m.setSending);
   if (!r.newest) return null;
