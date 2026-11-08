@@ -145,7 +145,7 @@ export function DataTable<T>({
                   <button
                     type="button"
                     onClick={() => setSort(active ? { column: c.id, descending: !sort.descending } : { column: c.id, descending: false })}
-                    className={`group/sort -mx-1.5 flex h-8 items-center gap-1 rounded-md px-1.5 hover:bg-slate-100 hover:text-ink ${active ? "text-ink" : ""} ${c.align === "right" ? "ml-auto" : ""}`}
+                    className={`group/sort -mx-1.5 flex h-8 items-center gap-1 rounded-md whitespace-nowrap px-1.5 hover:bg-slate-100 hover:text-ink ${active ? "text-ink" : ""} ${c.align === "right" ? "ml-auto" : ""}`}
                   >
                     {c.header}
                     <Icon
