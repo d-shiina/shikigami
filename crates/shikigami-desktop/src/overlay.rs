@@ -1,6 +1,9 @@
 //! What the picker and the recorder draw on screen and the input they take:
 //! a frame around an element (four thin topmost windows, so the mouse is
-//! almost never on them), a banner at the top of the screen, and low-level
+//! almost never on them), while picking a tag beside each frame saying what
+//! it is (the window: how it will be found; the part: its name) and a small
+//! banner (how to stop) at the bottom of the screen, while recording a
+//! banner at the top of the screen, and low-level
 //! mouse and keyboard hooks. Picking takes the click meant for picking (the
 //! app never gets it) and Esc. Recording holds back each click and command
 //! key until the recorder has looked at the screen, then the recorder sends
@@ -23,13 +26,16 @@ use shikigami_runtime::StepError;
 use crate::backend::MouseButton;
 use crate::hover;
 use crate::keys::{self, Held};
-use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{
+    COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM,
+};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW, CreateSolidBrush,
-    DEFAULT_CHARSET, DT_CENTER, DT_END_ELLIPSIS, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER,
-    DeleteObject, DrawTextW, EndPaint, FF_DONTCARE, FW_NORMAL, FW_SEMIBOLD, HGDIOBJ,
-    InvalidateRect, OUT_DEFAULT_PRECIS, PAINTSTRUCT, SelectObject, SetBkMode, SetTextColor,
-    TRANSPARENT,
+    DEFAULT_CHARSET, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER,
+    DeleteObject, DrawTextW, EndPaint, FF_DONTCARE, FW_NORMAL, FW_SEMIBOLD, GetDC, GetMonitorInfoW,
+    GetTextExtentPoint32W, HFONT, HGDIOBJ, InvalidateRect, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+    MonitorFromPoint, MonitorFromRect, OUT_DEFAULT_PRECIS, PAINTSTRUCT, ReleaseDC, SelectObject,
+    SetBkMode, SetTextColor, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::SystemInformation::GetTickCount64;
@@ -42,10 +48,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-    GetClientRect, GetMessageW, GetSystemMetrics, HHOOK, HWND_TOPMOST, KBDLLHOOKSTRUCT, KillTimer,
-    LLKHF_EXTENDED, LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG, MSLLHOOKSTRUCT,
-    PostThreadMessageW, RegisterClassW, SM_CXSCREEN, SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SetLayeredWindowAttributes, SetTimer, SetWindowPos,
+    GetClientRect, GetCursorPos, GetMessageW, GetSystemMetrics, HHOOK, HWND_TOPMOST,
+    KBDLLHOOKSTRUCT, KillTimer, LLKHF_EXTENDED, LLKHF_INJECTED, LLMHF_INJECTED, LWA_ALPHA, MSG,
+    MSLLHOOKSTRUCT, PostThreadMessageW, RegisterClassW, SM_CXSCREEN, SW_HIDE, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetLayeredWindowAttributes, SetTimer, SetWindowPos,
     SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL,
     WH_MOUSE_LL, WM_APP, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_PAINT,
     WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WNDCLASSW, WS_EX_LAYERED,
@@ -66,6 +72,15 @@ const THICKNESS: i32 = 3;
 /// frame (outside the part) still shows when the part is the whole window.
 const WINDOW_FRAME: COLORREF = COLORREF(0x0000_8CF5);
 const WINDOW_THICKNESS: i32 = 4;
+/// The tags' text (white) on the frame's colour.
+const TAG_TEXT: COLORREF = COLORREF(0x00FF_FFFF);
+/// The picker's banner (how to stop), and the tags, in 96-DPI pixels.
+const PICK_BANNER_SIZE: (i32, i32) = (360, 34);
+const TAG_HEIGHT: i32 = 24;
+const TAG_PADDING: i32 = 10;
+const TAG_FONT: i32 = 13;
+/// The longest tag, in 96-DPI pixels (longer text ends in …).
+const TAG_MAX_WIDTH: i32 = 560;
 
 /// What the user did while recording, in order. Times are the system's
 /// tick count in milliseconds (`MSLLHOOKSTRUCT::time`).
@@ -132,12 +147,19 @@ static BANNER_AT: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
 static BUSY: AtomicBool = AtomicBool::new(false);
 /// The banner's two lines.
 static BANNER: Mutex<(String, String)> = Mutex::new((String::new(), String::new()));
+/// The tags' text: the window's, then the part's.
+static TAGS: Mutex<[String; 2]> = Mutex::new([String::new(), String::new()]);
+const WINDOW_TAG: usize = 0;
+const PART_TAG: usize = 1;
 
 enum Cmd {
     Frame(Option<RECT>),
     Window(Option<RECT>),
+    /// A tag (`WINDOW_TAG` / `PART_TAG`) beside a rectangle on screen.
+    Tag(usize, Option<(RECT, String)>),
+    /// Where the mouse is, for the picker's banner to keep out of its way.
+    Mouse(POINT),
     Title(String),
-    Detail(String),
     Close,
 }
 
@@ -264,6 +286,21 @@ impl Overlay {
         self.send(Cmd::Window(rect));
     }
 
+    /// Names the window on a tag at its frame (`None` hides it).
+    pub fn window_tag(&self, tag: Option<(RECT, String)>) {
+        self.send(Cmd::Tag(WINDOW_TAG, tag));
+    }
+
+    /// Names the part on a tag beside its frame (`None` hides it).
+    pub fn part_tag(&self, tag: Option<(RECT, String)>) {
+        self.send(Cmd::Tag(PART_TAG, tag));
+    }
+
+    /// Where the mouse is now (the picker's banner moves out of its way).
+    pub fn mouse(&self, at: POINT) {
+        self.send(Cmd::Mouse(at));
+    }
+
     /// The banner's first line.
     pub fn title(&self, text: String) {
         self.send(Cmd::Title(text));
@@ -302,11 +339,6 @@ impl Overlay {
         beat();
     }
 
-    /// The banner's second line (what is under the mouse).
-    pub fn detail(&self, text: String) {
-        self.send(Cmd::Detail(text));
-    }
-
     /// The click or Esc, once.
     pub fn take_input(&self) -> Option<Input> {
         INPUT.lock().ok().and_then(|mut input| input.take())
@@ -332,6 +364,8 @@ struct Classes {
     frame: PCWSTR,
     window: PCWSTR,
     banner: PCWSTR,
+    window_tag: PCWSTR,
+    part_tag: PCWSTR,
 }
 
 // SAFETY: the class names are static strings.
@@ -365,9 +399,25 @@ fn classes(instance: HINSTANCE) -> Result<&'static Classes, String> {
                     hbrBackground: CreateSolidBrush(BANNER_BG),
                     ..WNDCLASSW::default()
                 };
+                let window_tag = WNDCLASSW {
+                    lpfnWndProc: Some(window_tag_proc),
+                    hInstance: instance,
+                    lpszClassName: w!("ShikigamiPickWindowTag"),
+                    hbrBackground: CreateSolidBrush(WINDOW_FRAME),
+                    ..WNDCLASSW::default()
+                };
+                let part_tag = WNDCLASSW {
+                    lpfnWndProc: Some(part_tag_proc),
+                    hInstance: instance,
+                    lpszClassName: w!("ShikigamiPickPartTag"),
+                    hbrBackground: CreateSolidBrush(FRAME),
+                    ..WNDCLASSW::default()
+                };
                 if RegisterClassW(&frame) == 0
                     || RegisterClassW(&window) == 0
                     || RegisterClassW(&banner) == 0
+                    || RegisterClassW(&window_tag) == 0
+                    || RegisterClassW(&part_tag) == 0
                 {
                     return Err("cannot register the overlay's window classes".into());
                 }
@@ -375,6 +425,8 @@ fn classes(instance: HINSTANCE) -> Result<&'static Classes, String> {
                     frame: frame.lpszClassName,
                     window: window.lpszClassName,
                     banner: banner.lpszClassName,
+                    window_tag: window_tag.lpszClassName,
+                    part_tag: part_tag.lpszClassName,
                 })
             }
         })
@@ -441,6 +493,18 @@ fn run(
             Vec::new()
         };
         let edges: Vec<HWND> = (0..4).filter_map(|_| window(classes.frame)).collect();
+        // The tags last, above both frames.
+        let tags: Vec<HWND> = if picking {
+            [classes.window_tag, classes.part_tag]
+                .into_iter()
+                .filter_map(window)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        if let Ok(mut texts) = TAGS.lock() {
+            *texts = [String::new(), String::new()];
+        }
         let banner = if hooked { window(classes.banner) } else { None };
         let mut hooks: Vec<HHOOK> = Vec::new();
         if hooked {
@@ -468,7 +532,13 @@ fn run(
                 RECORDING.store(true, Ordering::SeqCst);
             }
         }
-        if let Some(banner) = banner {
+        if let Some(banner) = banner
+            && picking
+        {
+            let mut at = POINT::default();
+            let _ = GetCursorPos(&mut at);
+            place_pick_banner(banner, at);
+        } else if let Some(banner) = banner {
             let scale = GetDpiForWindow(banner).max(96) as i32;
             let width = 640 * scale / 96;
             let height = 64 * scale / 96;
@@ -548,17 +618,21 @@ fn run(
                             let _ = ShowWindow(*edge, SW_HIDE);
                         }
                     }
+                    Ok(Cmd::Tag(which, tag)) => {
+                        if let Some(hwnd) = tags.get(which) {
+                            place_tag(*hwnd, which, tag);
+                        }
+                    }
+                    Ok(Cmd::Mouse(at)) => {
+                        if let Some(banner) = banner
+                            && picking
+                        {
+                            place_pick_banner(banner, at);
+                        }
+                    }
                     Ok(Cmd::Title(text)) => {
                         if let Ok(mut lines) = BANNER.lock() {
                             lines.0 = text;
-                        }
-                        if let Some(banner) = banner {
-                            let _ = InvalidateRect(Some(banner), None, true);
-                        }
-                    }
-                    Ok(Cmd::Detail(text)) => {
-                        if let Ok(mut lines) = BANNER.lock() {
-                            lines.1 = text;
                         }
                         if let Some(banner) = banner {
                             let _ = InvalidateRect(Some(banner), None, true);
@@ -582,9 +656,145 @@ fn run(
         for hook in hooks {
             let _ = UnhookWindowsHookEx(hook);
         }
-        for hwnd in edges.into_iter().chain(window_edges).chain(banner) {
+        for hwnd in edges
+            .into_iter()
+            .chain(window_edges)
+            .chain(tags)
+            .chain(banner)
+        {
             let _ = DestroyWindow(hwnd);
         }
+    }
+}
+
+/// The screen (whole, and without the taskbar) of the monitor at `at`.
+fn monitor_at(monitor: windows::Win32::Graphics::Gdi::HMONITOR) -> Option<(RECT, RECT)> {
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..MONITORINFO::default()
+    };
+    // SAFETY: plain Win32 call with a local struct.
+    unsafe { GetMonitorInfoW(monitor, &mut info) }
+        .as_bool()
+        .then_some((info.rcMonitor, info.rcWork))
+}
+
+fn rect_tuple(rect: RECT) -> hover::Rect {
+    (rect.left, rect.top, rect.right, rect.bottom)
+}
+
+/// Puts the picker's small banner at the bottom of the screen the mouse is
+/// on, or at the top while the mouse is near that spot.
+fn place_pick_banner(banner: HWND, mouse: POINT) {
+    // SAFETY: moving a window this thread owns.
+    unsafe {
+        let Some((_, work)) = monitor_at(MonitorFromPoint(mouse, MONITOR_DEFAULTTONEAREST)) else {
+            return;
+        };
+        let scale = GetDpiForWindow(banner).max(96) as i32;
+        let size = (
+            PICK_BANNER_SIZE.0 * scale / 96,
+            PICK_BANNER_SIZE.1 * scale / 96,
+        );
+        let (x, y) =
+            hover::pick_banner_at(rect_tuple(work), size, (mouse.x, mouse.y), 16 * scale / 96);
+        let mut now = RECT::default();
+        let _ = windows::Win32::UI::WindowsAndMessaging::GetWindowRect(banner, &mut now);
+        if (now.left, now.top, now.right - now.left) == (x, y, size.0) {
+            return;
+        }
+        let _ = SetWindowPos(
+            banner,
+            Some(HWND_TOPMOST),
+            x,
+            y,
+            size.0,
+            size.1,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+        if let Ok(mut at) = BANNER_AT.lock() {
+            *at = (x, y, x + size.0, y + size.1);
+        }
+    }
+}
+
+/// The tags' font at `scale` (DPI).
+fn tag_font(scale: i32) -> HFONT {
+    // SAFETY: plain GDI call; the caller deletes the font.
+    unsafe {
+        CreateFontW(
+            -TAG_FONT * scale / 96,
+            0,
+            0,
+            0,
+            FW_SEMIBOLD.0 as i32,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY,
+            FF_DONTCARE.0 as u32,
+            w!("Yu Gothic UI"),
+        )
+    }
+}
+
+/// Shows tag `which` (window or part) with its text beside `anchor`, or
+/// hides it.
+fn place_tag(hwnd: HWND, which: usize, tag: Option<(RECT, String)>) {
+    // SAFETY: Win32 calls on a window this thread owns.
+    unsafe {
+        let Some((anchor, text)) = tag.filter(|(_, text)| !text.trim().is_empty()) else {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+            return;
+        };
+        if let Ok(mut texts) = TAGS.lock() {
+            texts[which].clone_from(&text);
+        }
+        let scale = GetDpiForWindow(hwnd).max(96) as i32;
+        // The text's width in the tag's font.
+        let mut extent = SIZE::default();
+        let dc = GetDC(Some(hwnd));
+        if !dc.is_invalid() {
+            let font = tag_font(scale);
+            let old = SelectObject(dc, HGDIOBJ(font.0));
+            let buffer = wide(&text);
+            if !buffer.is_empty() {
+                let _ = GetTextExtentPoint32W(dc, &buffer, &mut extent);
+            }
+            SelectObject(dc, old);
+            let _ = DeleteObject(HGDIOBJ(font.0));
+            ReleaseDC(Some(hwnd), dc);
+        }
+        let width = (extent.cx + 2 * TAG_PADDING * scale / 96).min(TAG_MAX_WIDTH * scale / 96);
+        let size = (width.max(1), TAG_HEIGHT * scale / 96);
+        let Some((screen, work)) = monitor_at(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST))
+        else {
+            let _ = ShowWindow(hwnd, SW_HIDE);
+            return;
+        };
+        let (x, y) = if which == WINDOW_TAG {
+            hover::window_tag_at(
+                rect_tuple(anchor),
+                size,
+                rect_tuple(screen),
+                WINDOW_THICKNESS,
+            )
+        } else {
+            hover::part_tag_at(rect_tuple(anchor), size, rect_tuple(work), 4 * scale / 96)
+        };
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            x,
+            y,
+            size.0,
+            size.1,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+        let _ = InvalidateRect(Some(hwnd), None, true);
     }
 }
 
@@ -658,6 +868,67 @@ unsafe extern "system" fn frame_proc(
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
 }
 
+unsafe extern "system" fn window_tag_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    // SAFETY: the arguments Windows gave this window procedure.
+    guarded(
+        "tag",
+        || unsafe { paint_tag(hwnd, WINDOW_TAG, msg, wparam, lparam) },
+        || unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    )
+}
+
+unsafe extern "system" fn part_tag_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    // SAFETY: the arguments Windows gave this window procedure.
+    guarded(
+        "tag",
+        || unsafe { paint_tag(hwnd, PART_TAG, msg, wparam, lparam) },
+        || unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    )
+}
+
+unsafe fn paint_tag(hwnd: HWND, which: usize, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if msg != WM_PAINT {
+        // SAFETY: the default handling of our own window's messages.
+        return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
+    }
+    // SAFETY: painting our own window inside WM_PAINT.
+    unsafe {
+        let mut ps = PAINTSTRUCT::default();
+        let hdc = BeginPaint(hwnd, &mut ps);
+        let scale = GetDpiForWindow(hwnd).max(96) as i32;
+        let text = TAGS.lock().map(|t| t[which].clone()).unwrap_or_default();
+        let mut client = RECT::default();
+        let _ = GetClientRect(hwnd, &mut client);
+        let _ = SetBkMode(hdc, TRANSPARENT);
+        let font = tag_font(scale);
+        let old = SelectObject(hdc, HGDIOBJ(font.0));
+        let _ = SetTextColor(hdc, TAG_TEXT);
+        let pad = TAG_PADDING * scale / 96;
+        let mut line = RECT {
+            left: client.left + pad,
+            top: client.top,
+            right: client.right - pad / 2,
+            bottom: client.bottom,
+        };
+        let flags = DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX;
+        draw_text(hdc, &wide(&text), &mut line, flags);
+        SelectObject(hdc, old);
+        let _ = DeleteObject(HGDIOBJ(font.0));
+        let _ = EndPaint(hwnd, &ps);
+    }
+    LRESULT(0)
+}
+
 unsafe extern "system" fn banner_proc(
     hwnd: HWND,
     msg: u32,
@@ -729,8 +1000,21 @@ unsafe fn paint_banner(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> 
         let half = (client.bottom - client.top) / 2;
         let _ = SetBkMode(hdc, TRANSPARENT);
         let flags = DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX;
+        // One line (the picker's banner): in the middle of it.
+        let single = second.is_empty();
+        let half = if single {
+            client.bottom - client.top
+        } else {
+            half
+        };
         for (text, size, weight, color, top) in [
-            (first, 15, FW_SEMIBOLD.0, BANNER_TEXT, client.top + 4),
+            (
+                first,
+                if single { 13 } else { 15 },
+                FW_SEMIBOLD.0,
+                BANNER_TEXT,
+                client.top + if single { 0 } else { 4 },
+            ),
             (second, 13, FW_NORMAL.0, BANNER_DIM, client.top + half - 2),
         ] {
             let f = font(size, weight);
