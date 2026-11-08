@@ -71,6 +71,8 @@ export function Brand({ compact = false }: { compact?: boolean }) {
   const update = useUpdate();
   const { choice } = useTheme();
   const { locale } = useLocale();
+  const [product, ...rest] = t.appName.split(" ");
+  const screen = rest.join(" ");
   const close = (then: () => void) => () => {
     setOpen(false);
     then();
@@ -89,7 +91,12 @@ export function Brand({ compact = false }: { compact?: boolean }) {
         <img src="/mark.png" alt="" className="h-[18px] w-[18px] shrink-0" draggable={false} />
         {!compact && (
           <>
-            <span className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink">SpellSheet</span>
+            {/* The app's name from the strings (t.appName), so a rename of this screen follows by itself:
+                the product in ink, which screen of it in grey ("SpellSheet" + "Studio"). */}
+            <span className="text-[13.5px] tracking-[-0.01em] whitespace-nowrap">
+              <span className="font-semibold text-ink">{product}</span>
+              {screen && <span className="ml-1 font-medium text-slate-500">{screen}</span>}
+            </span>
             <ChevronDown size={13} strokeWidth={2} className="text-slate-400" aria-hidden="true" />
           </>
         )}
@@ -100,7 +107,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
           <div className="flex items-center gap-2.5 px-2 py-2">
             <img src="/mark.png" alt="" className="h-7 w-7" draggable={false} />
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-ink">SpellSheet Studio</div>
+              <div className="text-[13px] font-semibold text-ink">{t.appName}</div>
               <div className="text-[11px] text-slate-500">{version ? t.shell.version(version) : ""}</div>
             </div>
           </div>
