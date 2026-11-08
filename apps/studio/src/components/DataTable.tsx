@@ -3,7 +3,7 @@
 // picked with their check boxes for a bulk action, and columns that matter
 // less give way on narrow panes instead of squeezing the names.
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search, X } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type HTMLAttributes, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../lib/i18n";
 
 export type Column<T> = {
@@ -61,6 +61,7 @@ export function DataTable<T>({
   storageKey,
   empty,
   rowActions,
+  rowProps,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -76,6 +77,8 @@ export function DataTable<T>({
   empty?: ReactNode;
   /** Buttons at the end of a row, shown on hover and focus. */
   rowActions?: (row: T) => ReactNode;
+  /** More attributes and handlers for a row (hover, context menu, data-*). */
+  rowProps?: (row: T) => Omit<HTMLAttributes<HTMLTableRowElement>, "className" | "onClick" | "onKeyDown">;
 }) {
   const [sort, setSortState] = useState<Sort | null>(() => {
     try {
@@ -173,6 +176,7 @@ export function DataTable<T>({
             const on = picking ? selected.has(key) : false;
             return (
               <tr
+                {...rowProps?.(row)}
                 key={key}
                 tabIndex={0}
                 aria-selected={picking ? on : undefined}
