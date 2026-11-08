@@ -487,6 +487,7 @@ function useColumns(usedBy: Map<string, FlowRef[]>): Column<SecretInfo>[] {
       id: "kind",
       header: t.secretPage.kind,
       width: "w-[150px]",
+      hideBelow: 600,
       sortValue: (s) => SECRET_KINDS.indexOf(s.kind ?? "login"),
       cell: (s) => (
         <>
@@ -672,8 +673,9 @@ export function SecretsPage() {
       count: secrets.filter(keep(value)).length,
     }))
     .filter((c) => c.value === "all" || c.value === kind || (c.count ?? 0) > 0);
-  // Picked rows the list no longer has (deleted, or another filter) drop out.
-  const picked = new Set([...selected].filter((name) => secrets.some((s) => s.name === name)));
+  // Picked rows the list no longer shows (deleted, filtered or searched out) drop out,
+  // so a bulk delete only ever touches rows on screen.
+  const picked = new Set([...selected].filter((name) => rows.some((s) => s.name === name)));
   const deletePicked = async () => {
     for (const name of picked) await removeSecret(name);
     setSelected(new Set());
