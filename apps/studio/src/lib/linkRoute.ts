@@ -116,8 +116,8 @@ function shortest(xs: number[], ys: number[], a: Point, b: Point, boxes: readonl
     const cell = (state - d) / 2;
     const i = cell % W;
     const j = (cell - i) / W;
-    // It comes into the reader across (from the left).
-    if (i === bx && j === by && d === 0) {
+    // At the point left of the reader, from any side: the last piece goes across into it.
+    if (i === bx && j === by) {
       const points: Point[] = [];
       for (let s = state; s !== -1; s = prev[s]!) {
         const c = (s - (s % 2)) / 2;

@@ -62,10 +62,16 @@ describe("routeLink", () => {
     for (const b of boxes) expect(crosses(points.slice(1, -1), b)).toBe(false);
   });
 
+  it("comes down into a reader that is the leftmost thing on the chart (a wide end)", () => {
+    const boxes: Box[] = [node(0), { x: -40, y: 156, width: 400, height: 38 }, { x: -100, y: 400, width: 500, height: 30 }];
+    const points = routeLink({ x: 290, y: 80 }, { x: -100, y: 415 }, 400, boxes);
+    expect(points.at(-1)).toEqual({ x: -100, y: 415 });
+    for (const b of boxes) expect(crosses(points.slice(1, -1), b)).toBe(false);
+  });
+
   it("goes up to a reader above the writer", () => {
     const points = routeLink({ x: 290, y: 2 * 156 + 80 }, { x: 0, y: 60 }, 0, column);
     for (const n of column) expect(crosses(points.slice(1, -1), n)).toBe(false);
-    expect(points[2]!.y).toBeLessThan(0);
   });
 });
 
