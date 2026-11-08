@@ -348,10 +348,10 @@ export function DataTable<T>({
   return (
     <div className="rounded-lg border border-slate-200 bg-sheet [overflow:clip]">
       <table className="w-full table-fixed border-separate border-spacing-0 text-left [&_tbody_tr:last-child>td]:border-b-0">
-        <thead className="text-[12px] text-slate-600">
+        <thead className="text-[12px] text-slate-500">
           <tr>
             {picking && (
-              <th className="sticky top-0 z-10 h-9 w-10 border-b border-slate-200 bg-slate-50 pr-1 pl-3 font-normal">
+              <th className="sticky top-0 z-10 h-9 w-10 border-b border-slate-200 bg-sheet pr-1 pl-3 font-normal">
                 <Check
                   checked={keys.length > 0 && pickedHere === keys.length}
                   mixed={pickedHere > 0 && pickedHere < keys.length}
@@ -374,13 +374,13 @@ export function DataTable<T>({
                   aria-sort={active ? (v.sort!.descending ? "descending" : "ascending") : undefined}
                   // Widths sit on the header cells, not a colgroup: a column hidden on a narrow pane then gives its width back.
                   style={px(c) ? { width: px(c) } : undefined}
-                  className={`sticky top-0 z-10 h-9 border-b border-slate-200 bg-slate-50 px-3 py-0 font-medium ${c.hideBelow ? HIDE[c.hideBelow] : ""} ${c.align === "right" ? "text-right" : ""}`}
+                  className={`sticky top-0 z-10 h-9 border-b border-slate-200 bg-sheet px-3 py-0 font-medium ${c.hideBelow ? HIDE[c.hideBelow] : ""} ${c.align === "right" ? "text-right" : ""}`}
                 >
                   {c.sortValue ? (
                     <button
                       type="button"
                       onClick={() => v.setSort(active ? { column: c.id, descending: !v.sort!.descending } : { column: c.id, descending: false })}
-                      className={`group/sort -mx-1.5 inline-flex h-7 max-w-full items-center gap-1 rounded-md px-1.5 whitespace-nowrap hover:bg-slate-200/60 hover:text-ink ${active ? "text-ink" : ""}`}
+                      className={`group/sort -mx-1.5 inline-flex h-7 max-w-full items-center gap-1 rounded-md px-1.5 whitespace-nowrap hover:bg-slate-100 hover:text-ink ${active ? "text-ink" : ""}`}
                     >
                       <span className="truncate">{c.header}</span>
                       <Icon
@@ -404,7 +404,7 @@ export function DataTable<T>({
                 </th>
               );
             })}
-            {rowActions && <th style={{ width: actionsWidth }} className="sticky top-0 z-10 h-9 border-b border-slate-200 bg-slate-50" />}
+            {rowActions && <th style={{ width: actionsWidth }} className="sticky top-0 z-10 h-9 border-b border-slate-200 bg-sheet" />}
           </tr>
         </thead>
         <tbody>
@@ -453,7 +453,7 @@ export function DataTable<T>({
           )}
         </tbody>
       </table>
-      <div className="flex h-9 items-center gap-3 border-t border-slate-200 bg-slate-50 px-3 text-[12px] text-slate-600">
+      <div className="flex h-9 items-center gap-3 border-t border-slate-100 px-3 text-[12px] text-slate-500">
         <span className="tabular-nums">{count}</span>
         {picking && pickedHere > 0 && <span className="tabular-nums">{t.table.selected(pickedHere)}</span>}
         <span className="flex-1" />
