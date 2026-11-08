@@ -93,6 +93,7 @@ export const ja = {
     edit: "編集",
     delete: "削除",
     confirmDelete: "削除する",
+    confirmDeleteMany: (n: number) => `${n} 件を削除する`,
     emptyTitle: "シークレットはまだありません",
     emptyLead: "ログインの ID・パスワードや Web API のキーを、名前を付けて登録します。フローと AI はその名前だけで使えます。",
     emptyPoints: [
@@ -1524,6 +1525,12 @@ export const ja = {
     no: "いいえ",
     items: (n: number) => `${n} 件`,
     numberLocale: "ja-JP",
+  },
+  table: {
+    selectAll: "すべて選択",
+    select: "選択",
+    selected: (n: number) => `${n} 件を選択中`,
+    clear: "選択を解除",
   },
   list: {
     noTag: "タグなし",

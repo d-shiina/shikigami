@@ -94,6 +94,7 @@ export const en: Dict = {
     edit: "Edit",
     delete: "Delete",
     confirmDelete: "Delete",
+    confirmDeleteMany: (n: number) => `Delete ${n}`,
     emptyTitle: "No secrets yet",
     emptyLead: "Register login IDs, passwords and web API keys under a name. Flows and the AI use them by that name alone.",
     emptyPoints: [
@@ -1525,6 +1526,12 @@ export const en: Dict = {
     no: "No",
     items: (n: number) => `${n} item${n === 1 ? "" : "s"}`,
     numberLocale: "en-US",
+  },
+  table: {
+    selectAll: "Select all",
+    select: "Select",
+    selected: (n: number) => `${n} selected`,
+    clear: "Clear selection",
   },
   list: {
     noTag: "Untagged",
