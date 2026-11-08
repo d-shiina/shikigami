@@ -8,6 +8,7 @@ mod agent;
 mod commands;
 mod debug;
 mod extensions;
+mod instance;
 mod manual;
 mod picker;
 mod runner;
@@ -77,7 +78,11 @@ pub fn run() {
         tests: Mutex::new(None),
     };
 
-    let result = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    if let Some(single) = instance::plugin() {
+        builder = builder.plugin(single);
+    }
+    let result = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .manage(updater::PendingUpdate::default())

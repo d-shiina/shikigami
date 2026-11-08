@@ -60,10 +60,11 @@ function compare(a: string | number, b: string | number): number {
   return typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), "ja");
 }
 
-/** `w-[120px]` → 120: the column's starting width, which a drag then changes. */
-function widthOf(cls: string | undefined): number | undefined {
-  const m = cls?.match(/w-\[(\d+)px\]/);
-  return m ? Number(m[1]) : undefined;
+/** `w-[120px]` → 120, `w-[22%]` → "22%": the column's starting width, which a drag then changes. */
+function widthOf(cls: string | undefined): number | string | undefined {
+  const m = cls?.match(/w-\[(\d+(?:\.\d+)?)(px|%)\]/);
+  if (!m) return undefined;
+  return m[2] === "px" ? Number(m[1]) : `${m[1]}%`;
 }
 
 function readSaved(key: string | undefined): Saved {
@@ -118,6 +119,11 @@ export function useTableView<T>(columns: Column<T>[], { storageKey, initialSort 
       }),
     widths: saved.widths ?? {},
     setWidth: (id: string, px: number) => update((s) => ({ ...s, widths: { ...s.widths, [id]: Math.max(MIN_WIDTH, Math.round(px)) } })),
+    resetWidth: (id: string) =>
+      update((s) => {
+        const { [id]: _, ...widths } = s.widths ?? {};
+        return { ...s, widths };
+      }),
     resetWidths: () => update((s) => ({ ...s, widths: {} })),
     density: saved.density ?? "comfortable",
     setDensity: (density: Density) => update((s) => ({ ...s, density })),
@@ -340,7 +346,7 @@ export function DataTable<T>({
   const count = total !== undefined && total !== rows.length ? t.table.shownOf(rows.length, total) : t.list.count(rows.length);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-sheet shadow-sheet [overflow:clip]">
+    <div className="rounded-lg border border-slate-200 bg-sheet [overflow:clip]">
       <table className="w-full table-fixed border-separate border-spacing-0 text-left [&_tbody_tr:last-child>td]:border-b-0">
         <thead className="text-[12px] text-slate-600">
           <tr>
@@ -392,7 +398,7 @@ export function DataTable<T>({
                       th={() => heads.current[c.id] ?? null}
                       label={t.table.resize}
                       onResize={(px) => v.setWidth(c.id, px)}
-                      onReset={() => v.setWidth(c.id, widthOf(c.width) ?? 120)}
+                      onReset={() => v.resetWidth(c.id)}
                     />
                   )}
                 </th>

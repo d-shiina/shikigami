@@ -87,6 +87,8 @@ import { AppTag } from "./AppTag";
 import { HALF, HoverPreview } from "./HoverPreview";
 import { openImageValue } from "./ImageViewer";
 import { previewSource } from "../lib/preview";
+import { makeGlider } from "../lib/glide";
+import { keepSame } from "../lib/keepSame";
 import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { type Box, type Point, roundedPath, routeLink } from "../lib/linkRoute";
@@ -1355,6 +1357,9 @@ function useBringIntoView() {
   // So does the project panel, with the outline beside it.
   const covered = outlineW + useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
   const flow = useStudio((s) => s.flow);
+  // One glide for the chart: a step that comes while it is on its way only moves where it goes.
+  const glider = useMemo(() => makeGlider(() => rf.getViewport(), (view) => void rf.setViewport(view)), [rf]);
+  useEffect(() => () => glider.stop(), [glider]);
   return useCallback(
     function bring(id: string, again = true) {
       // Inside a folded frame: the head of the outermost folded one shows where it is.
@@ -1368,7 +1373,8 @@ function useBringIntoView() {
       const { x, y } = node.internals.positionAbsolute;
       const w = node.measured.width ?? NODE_W;
       const h = node.measured.height ?? 80;
-      const view = rf.getViewport();
+      // Judged from where a glide on its way ends up, so the next step there does not move it again.
+      const view = glider.target() ?? rf.getViewport();
       const margin = 48;
       const left = x * view.zoom + view.x;
       const top = y * view.zoom + view.y;
@@ -1381,9 +1387,15 @@ function useBringIntoView() {
       if (inside && view.zoom >= MIN_READABLE_ZOOM) return;
       const zoom = Math.max(view.zoom, MIN_READABLE_ZOOM);
       // Centre in the part of the canvas the outline, the tools and the dock leave free.
-      void rf.setCenter(x + w / 2 + (TOOLS_W - covered) / 2 / zoom, y + h / 2 + DOCK_H / 2 / zoom, { zoom, duration: 250 });
+      const cx = x + w / 2 + (TOOLS_W - covered) / 2 / zoom;
+      const cy = y + h / 2 + DOCK_H / 2 / zoom;
+      const to = { x: width / 2 - cx * zoom, y: height / 2 - cy * zoom, zoom };
+      if (reducedMotion()) {
+        glider.stop();
+        void rf.setViewport(to);
+      } else glider.to(to);
     },
-    [rf, width, height, covered, flow],
+    [rf, width, height, covered, flow, glider],
   );
 }
 
@@ -1691,6 +1703,27 @@ export function FlowCanvas() {
     };
   }, [flow, run, inside]);
 
+  // What a step shows of the run changes only when it starts again or sets a value: before
+  // the values it read are all in (events come in order). The same object till then, so the
+  // other steps are not redrawn for each event of the run.
+  const runKept = useRef(new Map<string, { key: string; values: RunValues }>());
+  const runCounts = useMemo(() => {
+    const starts = new Map<string, number>();
+    const own = new Map<string, number>();
+    for (const start of run?.starts ?? []) starts.set(start.stepId, (starts.get(start.stepId) ?? 0) + 1);
+    for (const change of run?.changes ?? []) if (change.stepId) own.set(change.stepId, (own.get(change.stepId) ?? 0) + 1);
+    return { starts, own };
+  }, [run?.starts, run?.changes]);
+  const runValuesOf = (id: string): RunValues => {
+    if (!run) return NO_RUN;
+    const key = `${run.runId}:${runCounts.starts.get(id) ?? 0}:${runCounts.own.get(id) ?? 0}`;
+    const kept = runKept.current.get(id);
+    if (kept?.key === key) return kept.values;
+    const values = { changes: run.changes, starts: run.starts };
+    runKept.current.set(id, { key, values });
+    return values;
+  };
+
   // Frames first and beneath the lines, outer ones before the ones inside them.
   const frames: Node[] = layout.frames.map((f) => ({
     id: `frame:${f.id}`,
@@ -1733,7 +1766,7 @@ export function FlowCanvas() {
           note: !inside && reviewing ? notes.get(id) : undefined,
           vars,
           // Values are recorded for the open flow's variables only.
-          run: run && !inside ? { changes: run.changes, starts: run.starts } : NO_RUN,
+          run: inside ? NO_RUN : runValuesOf(id),
           defs,
           call: calls.has(id) ? { ...calls.get(id)!, states: run?.inner[calls.get(id)!.key] ?? NO_STATES } : undefined,
         },
@@ -1848,6 +1881,11 @@ export function FlowCanvas() {
     };
   });
   edges.push(...linkEdges);
+  // Only what changed is redrawn (see keepSame).
+  const keptNodes = useRef(new Map<string, Node>());
+  const keptEdges = useRef(new Map<string, Edge>());
+  const chartNodes = keepSame(keptNodes.current, [...frames, ...nodes]);
+  const chartEdges = keepSame(keptEdges.current, edges);
 
   if (!flow || !root) {
     return <div className="canvas-bg flex h-full flex-col items-center justify-center gap-3 text-slate-400">
@@ -1861,8 +1899,8 @@ export function FlowCanvas() {
       key={`${root.id}/${callKey(path)}`}
       className={`canvas-bg ${fileDrop.over ? "outline-2 -outline-offset-8 outline-dashed outline-brand-500" : ""}`}
       colorMode={theme}
-      nodes={[...frames, ...nodes]}
-      edges={edges}
+      nodes={chartNodes}
+      edges={chartEdges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       nodesConnectable={false}
