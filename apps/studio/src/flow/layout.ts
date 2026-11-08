@@ -9,7 +9,7 @@ import type { Step, StepTypeDef } from "@shikigami/schema";
 import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
 import { branchQuestion, headSummary, laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
 import { typeTitle } from "../lib/sentence";
-import { nodeHeight } from "../lib/nodeRows";
+import { NODE_HEAD_H, nodeHeight } from "../lib/nodeRows";
 
 export const NODE_W = 290;
 export const SLOT_H = 40;
@@ -145,6 +145,8 @@ export type JoinNodeData = {
   width?: number;
   /** A loop's decision that comes after its block (a wait's), not before. */
   after?: boolean;
+  /** Where a try's "実行" fails from (see CATCH_DROP): the first step of its "失敗したとき", which runs when it does. */
+  failTo?: string;
 };
 
 export type SlotNodeData = {
@@ -186,6 +188,8 @@ export type LayoutEdge = {
   half?: number;
   /** Into a try's "失敗したとき": its label is shown in the colour of errors, so the way a failure takes stands out. */
   failure?: boolean;
+  /** Into a try's "失敗したとき": the line its ticks join, and where each tick leaves a step of "実行" (see CATCH_DROP). */
+  bracket?: { x: number; ticks: { x: number; y: number }[] };
   /** From the head of a frame down into one of its columns: turns just under the head. */
   split?: boolean;
   /** Not drawn: from a loop's head to where its line leaves, so a run's trail carries on past the loop. */
@@ -228,6 +232,16 @@ function frameKind(type: string): FrameKind {
 const FAN_OUT_BLOCKS: Record<string, string> = { [PARALLEL]: "branches", [SWITCH]: "cases" };
 /** Steps that are one branch of the step around them: framed by it, not on their own. */
 const UNFRAMED = new Set([CASE]);
+/**
+ * A try's "失敗したとき" is not a choice made at its head: any step of its
+ * "実行" can fail and jump there. So its column starts CATCH_DROP lower, and
+ * its line comes from the side of "実行": a short dashed tick off each of its
+ * steps into a line down their right (FAIL_X past the column), and from the
+ * top of that across into "失敗したとき".
+ */
+const CATCH_DROP = 44;
+export const FAIL_X = 16;
+const catches = (step: Step, lane: Lane): boolean => step.type === TRY && lane.name === "catch";
 /** Blocks shown only once they have nodes: the head of their step offers to add the first. */
 const OPTIONAL_BLOCKS: Record<string, string> = { [TRY]: "finally" };
 
@@ -356,7 +370,10 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
   const own = nodeSize(step, defs, extra);
   if (ls.length === 0) return own;
   const { columns, after } = frameParts(step, ls);
-  const ms = columns.map((l) => measureList(l.steps, defs, extra, collapsed, l.tail));
+  const ms = columns.map((l) => {
+    const m = measureList(l.steps, defs, extra, collapsed, l.tail);
+    return catches(step, l) ? { w: m.w, h: m.h + CATCH_DROP } : m;
+  });
   let w = ms.reduce((acc, m) => acc + m.w, 0) + GAP_X * (ms.length - 1);
   let inner = Math.max(...ms.map((m) => m.h));
   if (UNFRAMED.has(step.type)) return { w: Math.max(own.w, w), h: inner };
@@ -398,7 +415,7 @@ class Builder {
     label?: string,
     hidden?: boolean,
     split?: boolean,
-    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer" | "half" | "failure">,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer" | "half" | "failure" | "bracket">,
   ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
@@ -508,7 +525,10 @@ class Builder {
     }
 
     const { columns, after } = frameParts(step, ls);
-    const sizes = columns.map((l) => measureList(l.steps, this.defs, this.extra, this.collapsed, l.tail));
+    const sizes = columns.map((l) => {
+      const m = measureList(l.steps, this.defs, this.extra, this.collapsed, l.tail);
+      return catches(step, l) ? { w: m.w, h: m.h + CATCH_DROP } : m;
+    });
     const afterSize = after ? measureList(after.steps, this.defs, this.extra, this.collapsed, after.tail) : null;
     const isLoop = CIRCLING.has(step.type);
     const total = sizes.reduce((a, m) => a + m.w, 0) + GAP_X * (columns.length - 1);
@@ -567,10 +587,33 @@ class Builder {
     }
 
     this.depth += 1;
+    // Where a try's "実行" is drawn: its steps' right edges, for the line its failures take.
+    let attempt: { right: number; ticks: { x: number; y: number }[] } | null = null;
     columns.forEach((lane, i) => {
       const size = sizes[i] ?? SLOT;
-      const placed = this.list(lane.steps, bodyY, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
-      this.edge(from, placed.entry, lane.label || undefined, undefined, true, step.type === TRY && lane.name === "catch" ? { failure: true } : undefined);
+      const fails = catches(step, lane);
+      const before = this.nodes.length;
+      const placed = this.list(lane.steps, bodyY + (fails ? CATCH_DROP : 0), laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
+      if (step.type === TRY && lane.name === "try") {
+        // A tick off the side of each step in it (or its "+" when it is empty), at the height of the step's head.
+        const ticks = this.nodes.slice(before).flatMap((n) => {
+          if (n.data.kind === "join" || n.data.parentId !== id || n.data.block !== lane.name) return [];
+          if (n.data.kind === "slot" && n.data.tail) return [];
+          const w = n.data.kind === "step" && n.data.head ? n.data.head.width : n.data.kind === "slot" ? SLOT.w : NODE_W;
+          const h = n.data.kind === "slot" ? SLOT_H : n.data.kind === "step" && n.data.head ? HEAD_H : NODE_HEAD_H;
+          return [{ x: n.position.x + w, y: n.position.y + h / 2 }];
+        });
+        attempt = { right: laneX + size.w, ticks };
+      }
+      if (fails && attempt) {
+        const { right, ticks } = attempt as { right: number; ticks: { x: number; y: number }[] };
+        const fail = `join:${id}:fail`;
+        const top = ticks[0]?.y ?? bodyY;
+        this.nodes.push({ id: fail, type: "join", position: { x: right + FAIL_X - JOIN_SIZE / 2, y: top - JOIN_SIZE / 2 }, data: { kind: "join", parentId: id, shown: false, failTo: placed.entry } });
+        this.edge(fail, placed.entry, lane.label || undefined, undefined, undefined, { failure: true, bracket: { x: right + FAIL_X, ticks } });
+      } else {
+        this.edge(from, placed.entry, lane.label || undefined, undefined, true);
+      }
       for (const e of placed.exits) this.edge(e, meet);
       laneX += size.w + GAP_X;
     });

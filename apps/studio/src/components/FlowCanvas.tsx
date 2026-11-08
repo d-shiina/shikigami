@@ -260,6 +260,8 @@ type BlockEdgeData = {
   half?: number;
   /** Into a try's "失敗したとき". */
   failure?: boolean;
+  /** Into a try's "失敗したとき": where its failures come from (see FAIL_X). */
+  bracket?: { x: number; ticks: { x: number; y: number }[] };
   /** From the head of a frame into one of its columns. */
   split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
@@ -347,6 +349,38 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
       </>
     );
   }
+  if (edge.bracket) {
+    // A try's way into "失敗したとき": from the side of each step of "実行"
+    // (any of them can fail), down their right, and from the top across into it.
+    const { x: bx, ticks } = edge.bracket;
+    const top = ticks[0]?.y ?? sourceY;
+    const bottom = ticks.at(-1)?.y ?? top;
+    const parts = [
+      ...ticks.map((t) => `M ${t.x} ${t.y} H ${bx}`),
+      bottom > top ? `M ${bx} ${bottom} V ${top}` : "",
+      `M ${bx} ${top} H ${targetX - r} Q ${targetX} ${top} ${targetX} ${top + r} V ${targetY}`,
+    ];
+    const failStyle = { ...style, strokeDasharray: "5 4" };
+    return (
+      <>
+        <BaseEdge id={id} path={parts.filter(Boolean).join(" ")} style={failStyle} markerEnd={markerEnd} />
+        {label && (
+          <EdgeLabelRenderer>
+            <div
+              style={{ transform: `translate(-50%, -100%) translate(${targetX}px, ${targetY - 10}px)` }}
+              className="pointer-events-none absolute flex items-center"
+            >
+              {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
+              <span className="max-w-[300px] truncate rounded-md border border-[color-mix(in_srgb,var(--color-shu-500)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-shu-500)_7%,var(--color-sheet))] px-2 text-[11.5px] leading-[18px] font-medium text-shu-600">
+                {label}
+              </span>
+              <InsertButton edgeId={id} data={edge} inline />
+            </div>
+          </EdgeLabelRenderer>
+        )}
+      </>
+    );
+  }
   if (edge.railX !== undefined) {
     // A loop's "いいえ": out of the right of its decision, down the right of
     // its frame, and into where the frame is left, on its bottom edge.
@@ -397,15 +431,7 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
             className="pointer-events-none absolute flex items-center"
           >
             {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
-            <span
-              className={`max-w-[300px] truncate rounded-md border px-2 text-[11.5px] leading-[18px] font-medium ${
-                edge.failure
-                  ? "border-[color-mix(in_srgb,var(--color-shu-500)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-shu-500)_7%,var(--color-sheet))] text-shu-600"
-                  : "border-slate-200 bg-sheet text-ink"
-              }`}
-            >
-              {label}
-            </span>
+            <span className="max-w-[300px] truncate rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium text-ink">{label}</span>
             <InsertButton edgeId={id} data={edge} inline />
           </div>
         ) : (
@@ -1500,8 +1526,9 @@ export function FlowCanvas() {
   const trailStates = useMemo(() => {
     const out: Record<string, StepRunState> = { ...states };
     for (const n of layout.nodes) {
-      if (n.data.kind !== "join" || !n.data.question) continue;
-      const state = states[n.data.parentId];
+      if (n.data.kind !== "join") continue;
+      // A try's way into "失敗したとき" was taken when that block ran.
+      const state = n.data.question ? states[n.data.parentId] : n.data.failTo ? states[n.data.failTo] : undefined;
       if (state) out[n.id] = state;
     }
     return out;
@@ -1524,6 +1551,7 @@ export function FlowCanvas() {
         answer: e.answer,
         half: e.half,
         failure: e.failure,
+        bracket: e.bracket,
         split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,

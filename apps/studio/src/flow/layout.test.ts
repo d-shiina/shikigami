@@ -400,9 +400,19 @@ describe("layoutFlow", () => {
     expect(a.position.y).toBeGreaterThan(decide.position.y);
   });
 
-  it("marks the way into a try's \"失敗したとき\" as the way a failure takes", () => {
-    const layout = layoutFlow([{ id: "t", type: "control.try", blocks: { try: [log("a")], catch: [log("b")] } }], defs);
-    expect(layout.edges.find((e) => e.target === "b")?.failure).toBe(true);
-    expect(layout.edges.find((e) => e.target === "a")?.failure).toBeUndefined();
+  it("reaches a try's \"失敗したとき\" from the side of its \"実行\", not from its head", () => {
+    const layout = layoutFlow([{ id: "t", type: "control.try", blocks: { try: [log("a"), log("c")], catch: [log("b")] } }], defs);
+    // Not a choice at the head: the head goes into "実行" only, and "失敗したとき" is reached from its steps' side.
+    expect(layout.edges.filter((e) => e.source === "t").map((e) => e.target)).toEqual(["a"]);
+    const into = layout.edges.find((e) => e.target === "b")!;
+    expect(into).toMatchObject({ source: "join:t:fail", failure: true });
+    const pos = (id: string) => layout.nodes.find((n) => n.id === id)!.position;
+    expect(into.bracket!.ticks.map((t) => t.y)).toEqual([pos("a").y + 19, pos("c").y + 19]);
+    expect(into.bracket!.ticks.every((t) => t.x === pos("a").x + NODE_W)).toBe(true);
+    expect(into.bracket!.x).toBeGreaterThan(pos("a").x + NODE_W);
+    expect(into.bracket!.x).toBeLessThan(pos("b").x);
+    // "失敗したとき" starts lower than "実行", so the line can come across into it.
+    expect(pos("b").y).toBeGreaterThan(pos("a").y);
+    expect(layout.nodes.find((n) => n.id === "join:t:fail")?.data).toMatchObject({ failTo: "b" });
   });
 });
