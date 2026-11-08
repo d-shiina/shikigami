@@ -319,7 +319,13 @@ function Shell() {
   const [width, measure] = useWidth();
   const hasFlow = useStudio((s) => s.flow !== null);
   const editing = place === "flows" || place === "review";
-  const shown = { agent: agentOpen, right: editing && hasFlow, inbox: place === "review" };
+  // The right pane takes room only while it has something to say: the node or part picked on the
+  // chart, or the flow's settings kept open by hand. The 変数 table edits in place, so it never has
+  // one. The review desk's verdict always stays.
+  const inspectorOpen = useStudio((s) => s.inspectorOpen);
+  const picked = useStudio((s) => s.selection?.kind === "step" || s.selection?.kind === "part");
+  const rightOpen = place === "review" || (view !== "variables" && (inspectorOpen || picked));
+  const shown = { agent: agentOpen, right: editing && hasFlow && rightOpen, inbox: place === "review" };
   const [sizes, setSizes] = useSizes();
   const fit = fitPanels(width, { ...shown, sidebar: sidebar === "open" }, sizes);
   // Whether the sidebar would fit if it were shown, whatever the person chose.

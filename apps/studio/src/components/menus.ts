@@ -30,6 +30,7 @@ import {
   Undo2,
   UnfoldVertical,
   Variable,
+  Lock,
 } from "lucide-react";
 import { useAgentApi } from "../agent";
 import { useStudioApi } from "../context";
@@ -180,14 +181,22 @@ export function usePaneMenu() {
 /** Right-click on a variable (chip on the chart, row of the table). */
 export function useVariableMenu() {
   const store = useStudioApi();
-  return (name: string, options: { writer?: string; onOpenWriter?: (id: string) => void } = {}): MenuSpec[] => {
+  return (name: string, options: { writer?: string; onOpenWriter?: (id: string) => void; inTable?: boolean } = {}): MenuSpec[] => {
     const s = store.getState();
-    const declared = s.flow?.variables?.some((v) => v.name === name) ?? false;
-    const { writer, onOpenWriter } = options;
+    const variable = s.flow?.variables?.find((v) => v.name === name);
+    const declared = variable !== undefined;
+    const { writer, onOpenWriter, inTable } = options;
     return [
       { label: t.menu.copyName, icon: Copy, run: () => copyText(name) },
-      // Variables are edited in the flow's inspector: shown when nothing is selected.
-      declared && { label: t.menu.variableSettings, icon: Variable, run: () => store.getState().select(null) },
+      // On the chart, variables are edited in the flow's settings; the 変数 table edits them in place.
+      declared && !inTable && { label: t.menu.variableSettings, icon: Variable, run: () => store.getState().showFlowProps() },
+      // In the table, secrecy is the one setting without a column of its own.
+      declared &&
+        inTable && {
+          label: variable.secret ? t.vars.table.unmakeSecret : t.vars.table.makeSecret,
+          icon: Lock,
+          run: () => void store.getState().setVariable(variable.secret ? { ...variable, secret: false } : { ...variable, secret: true, default: undefined }),
+        },
       writer && onOpenWriter && { label: t.menu.openWriter, icon: LogIn, run: () => onOpenWriter(writer) },
       "-",
       declared && { label: t.menu.removeVariable, icon: Trash2, danger: true, run: () => void store.getState().removeVariable(name) },
