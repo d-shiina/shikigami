@@ -1265,14 +1265,21 @@ fn exe(name: &str) -> String {
     }
 }
 
-/// The `shikigami` CLI next to Studio (installed, or `target/<profile>` in
-/// development), else on PATH.
+/// The CLI next to Studio (`spellsheet.exe` installed, `shikigami.exe` in
+/// `target/<profile>` in development and in builds before the rename),
+/// else on PATH.
 pub(crate) fn cli_path() -> Option<PathBuf> {
-    std::env::current_exe()
+    let dir = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join(exe("shikigami"))))
-        .filter(|p| p.is_file())
-        .or_else(|| find_on_path(&[&exe("shikigami")]))
+        .and_then(|p| p.parent().map(Path::to_path_buf));
+    ["spellsheet", "shikigami"]
+        .into_iter()
+        .find_map(|name| {
+            dir.as_ref()
+                .map(|d| d.join(exe(name)))
+                .filter(|p| p.is_file())
+        })
+        .or_else(|| find_on_path(&[&exe("spellsheet"), &exe("shikigami")]))
 }
 
 /// In development `tauri dev` rebuilds only Studio, so after a pull the

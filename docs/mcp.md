@@ -2,13 +2,13 @@
 
 English | [日本語](ja/mcp.md)
 
-`shikigami mcp` gives AI clients (Claude Code, Codex, Cursor and others) SpellSheet's flow editing, validation and execution as MCP tools. It uses the same Flow Core as Studio, so AI edits show up in Studio immediately and can be undone there. It also runs on its own, without a GUI.
+`spellsheet mcp` gives AI clients (Claude Code, Codex, Cursor and others) SpellSheet's flow editing, validation and execution as MCP tools. It uses the same Flow Core as Studio, so AI edits show up in Studio immediately and can be undone there. It also runs on its own, without a GUI.
 
 ![An MCP edit showing up in Studio](assets/studio-mcp-edit.png)
 
 ## Connecting
 
-The transport is **stdio**: the AI client starts `shikigami mcp` as a child process. No network port is opened. The `shikigami` command must be on PATH (the installer puts it there; during development it is `target/debug/shikigami` from `cargo build -p shikigami-cli`).
+The transport is **stdio**: the AI client starts `spellsheet mcp` as a child process. No network port is opened. The `shikigami` command must be on PATH (the installer puts it there; during development it is `target/debug/shikigami` from `cargo build -p shikigami-cli`).
 
 ### Claude Code
 
@@ -23,7 +23,7 @@ The plugin is recommended: it bundles the MCP settings and a skill that teaches 
 To register only the MCP server:
 
 ```sh
-claude mcp add shikigami -- shikigami mcp
+claude mcp add shikigami -- spellsheet mcp
 ```
 
 ### Codex
@@ -103,7 +103,7 @@ args = ["mcp"]
 
 Operations that the workspace's `policy.json` sets to `ask` (by default `run_flow` and `test_step` with a node of risk `dangerous`, and `delete_flow`) do not run straight away.
 
-1. The tool returns `APPROVAL_REQUIRED` with the request's ID in `details.approvalId`. Studio shows the request (on the CLI, `shikigami approval list`).
+1. The tool returns `APPROVAL_REQUIRED` with the request's ID in `details.approvalId`. Studio shows the request (on the CLI, `spellsheet approval list`).
 2. The AI tells the person what it wants to do. Once the person clicks "Approve" in Studio, calling the same tool again with `approvalId` runs it, once. `approvalWaitMs` waits for the answer; `approvalReason` is shown to the person with the request.
 3. Different content gives `APPROVAL_MISMATCH`, a used approval `APPROVAL_USED`, a refusal `APPROVAL_DENIED`, and a `deny` operation `POLICY_DENIED`. Sites and apps outside the allowed ones give `SITE_NOT_ALLOWED` / `APP_NOT_ALLOWED`.
 
@@ -123,7 +123,7 @@ The flow changes themselves (EditOps and their inverses) are recorded with the c
 
 - **Verified**: automated E2E with the rmcp client (create → add → validate → run → read logs → read from another process → Undo/Redo, revision conflicts, stopping a run, tools limited by `--allow`, the schemas of every tool). Registered with `claude mcp add` from Claude Code CLI 2.1 and the connection (health check) succeeds. Editing over MCP with Studio open shows up in Studio, and Studio's Undo is recorded in the history as Studio.
 - **Not yet verified**: a conversation where Claude Code actually builds a flow with the tools, connecting from Codex / Cursor, and running on real Windows machines.
-- Runs started from the MCP server stop when the server process (= the AI client's session) ends. Use `shikigami run` for long or unattended runs.
+- Runs started from the MCP server stop when the server process (= the AI client's session) ends. Use `spellsheet run` for long or unattended runs.
 - Per-client tool permissions are not implemented (there is the server-wide `--allow` and the workspace-wide `policy.json`).
 - The audit log is JSONL. Indexing it in SQLite is not implemented.
 - The Streamable HTTP transport is not implemented (stdio only).

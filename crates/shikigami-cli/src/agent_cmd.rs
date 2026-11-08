@@ -1,4 +1,4 @@
-//! `shikigami agent …` and `shikigami schedule …`.
+//! `spellsheet agent …` and `spellsheet schedule …`.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -17,7 +17,7 @@ use shikigami_secrets::Vault;
 #[derive(Subcommand)]
 pub enum AgentCmd {
     /// Run the agent in this window until stopped (Ctrl+C or `agent stop`).
-    /// It starts scheduled runs and file triggers (`shikigami schedule`).
+    /// It starts scheduled runs and file triggers (`spellsheet schedule`).
     Run,
     /// Whether the agent runs, what it is running and what comes next.
     Status {
@@ -58,7 +58,7 @@ pub enum ManagerCmd {
     },
 }
 
-/// `shikigami manager …`.
+/// `spellsheet manager …`.
 pub fn manager_cmd(cmd: &ManagerCmd) -> Result<ExitCode> {
     match cmd {
         ManagerCmd::Serve { listen, data } => {
@@ -300,7 +300,7 @@ pub fn agent_cmd(
             })
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::AddrInUse {
-                    anyhow::anyhow!("{e} (see `shikigami agent status`)")
+                    anyhow::anyhow!("{e} (see `spellsheet agent status`)")
                 } else {
                     e.into()
                 }
@@ -312,7 +312,7 @@ pub fn agent_cmd(
                     println!("{}", serde_json::json!({ "running": false }));
                 } else {
                     println!(
-                        "the agent is not running (start it with `shikigami agent run`, or `agent install`)"
+                        "the agent is not running (start it with `spellsheet agent run`, or `agent install`)"
                     );
                 }
                 return Ok(ExitCode::from(1));
@@ -403,7 +403,11 @@ pub fn agent_cmd(
     Ok(ExitCode::SUCCESS)
 }
 
-const TASK_NAME: &str = r"Shikigami\Agent";
+const TASK_NAME: &str = r"SpellSheet\Agent";
+
+/// The task's name before the product was renamed: replaced by `install`,
+/// removed by `uninstall`.
+const LEGACY_TASK_NAME: &str = r"Shikigami\Agent";
 
 #[cfg(windows)]
 fn install(workspace: &Path) -> Result<()> {
@@ -413,6 +417,8 @@ fn install(workspace: &Path) -> Result<()> {
         exe.display(),
         workspace.display()
     );
+    // Two tasks would start two agents for the same workspace.
+    remove_legacy_task();
     let status = std::process::Command::new("schtasks")
         .args([
             "/Create", "/F", "/SC", "ONLOGON", "/RL", "LIMITED", "/TN", TASK_NAME, "/TR",
@@ -433,26 +439,47 @@ fn install(workspace: &Path) -> Result<()> {
 
 #[cfg(windows)]
 fn uninstall() -> Result<()> {
+    let legacy = remove_legacy_task();
     let status = std::process::Command::new("schtasks")
         .args(["/Delete", "/F", "/TN", TASK_NAME])
+        .stderr(std::process::Stdio::null())
         .status()?;
-    if !status.success() {
+    if status.success() {
+        println!("removed the task {TASK_NAME}");
+    } else if !legacy {
         bail!("schtasks could not delete the task {TASK_NAME}");
     }
-    println!("removed the task {TASK_NAME}");
     Ok(())
+}
+
+/// Deletes the task an install before the rename made, if there is one.
+/// Whether there was.
+#[cfg(windows)]
+fn remove_legacy_task() -> bool {
+    let removed = std::process::Command::new("schtasks")
+        .args(["/Delete", "/F", "/TN", LEGACY_TASK_NAME])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    if removed {
+        println!("removed the task {LEGACY_TASK_NAME} (the name before SpellSheet)");
+    }
+    removed
 }
 
 #[cfg(not(windows))]
 fn install(_workspace: &Path) -> Result<()> {
     bail!(
-        "`agent install` registers a Windows Task Scheduler task ({TASK_NAME}); on this system start `shikigami agent run` yourself"
+        "`agent install` registers a Windows Task Scheduler task ({TASK_NAME}); on this system start `spellsheet agent run` yourself"
     )
 }
 
 #[cfg(not(windows))]
 fn uninstall() -> Result<()> {
-    bail!("`agent uninstall` removes a Windows Task Scheduler task ({TASK_NAME})")
+    bail!(
+        "`agent uninstall` removes a Windows Task Scheduler task ({TASK_NAME}, or {LEGACY_TASK_NAME} from before the rename)"
+    )
 }
 
 pub fn schedule_cmd(
@@ -522,14 +549,14 @@ pub fn schedule_cmd(
             }
             if ask(&local_root, &Request::Status)?.is_none() {
                 eprintln!(
-                    "note: the agent is not running; start it with `shikigami agent install` (or `agent run`)"
+                    "note: the agent is not running; start it with `spellsheet agent install` (or `agent run`)"
                 );
             }
         }
         ScheduleCmd::Remove { id } | ScheduleCmd::Enable { id } | ScheduleCmd::Disable { id } => {
             let mut schedules = load()?;
             let Some(index) = schedules.schedules.iter().position(|s| &s.id == id) else {
-                bail!("no schedule {id} (see `shikigami schedule list`)");
+                bail!("no schedule {id} (see `spellsheet schedule list`)");
             };
             match cmd {
                 ScheduleCmd::Remove { .. } => {

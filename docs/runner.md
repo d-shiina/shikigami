@@ -27,7 +27,7 @@ The form is made from the flow's input variables (`direction` `input` or `inOut`
 | `choices: [...]` | A list to pick from (`type` `string` or `number`) |
 | `default` | Fills the field in. Without a default the field must be filled in; with one, an empty field leaves the default |
 
-`format` and `choices` are optional marks for the run window (flow format 6). Runs and `shikigami run` do not check them, and validation keeps them sensible: `format` only on `string` variables, a `date` / `month` default in that shape, each choice once and of the variable's type, and a `default` among the choices.
+`format` and `choices` are optional marks for the run window (flow format 6). Runs and `spellsheet run` do not check them, and validation keeps them sensible: `format` only on `string` variables, a `date` / `month` default in that shape, each choice once and of the variable's type, and a `default` among the choices.
 
 ```json
 { "name": "book", "type": "string", "direction": "input", "format": "file", "description": "Sales workbook" },

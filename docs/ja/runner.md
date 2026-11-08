@@ -27,7 +27,7 @@ Studio はフローを作る人の道具です。動かすだけの人には、�
 | `choices: [...]` | 選択肢から選ぶ一覧（`type` は `string` か `number`） |
 | `default` | 欄の最初の値。初期値がない欄は必ず埋めます。初期値があれば、空のままで初期値が使われます |
 
-`format` と `choices` は実行画面のための任意の印です（フロー形式 6）。実行や `shikigami run` では確かめません。検査では、`format` は `string` の変数だけ、`date` / `month` の初期値はその形、選択肢は変数の型で重複なし、`default` は選択肢のどれか、を確かめます。
+`format` と `choices` は実行画面のための任意の印です（フロー形式 6）。実行や `spellsheet run` では確かめません。検査では、`format` は `string` の変数だけ、`date` / `month` の初期値はその形、選択肢は変数の型で重複なし、`default` は選択肢のどれか、を確かめます。
 
 ```json
 { "name": "book", "type": "string", "direction": "input", "format": "file", "description": "売上のブック" },

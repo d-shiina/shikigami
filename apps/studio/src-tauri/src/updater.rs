@@ -30,11 +30,15 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 pub(crate) const UPDATE_EVENT: &str = "update-progress";
 
-const CLI_EXE: &str = "shikigami.exe";
+const CLI_EXE: &str = "spellsheet.exe";
+
+/// The same CLI under the product's old name, still installed for MCP
+/// clients and scheduled tasks set up before the rename.
+const LEGACY_CLI_EXE: &str = "shikigami.exe";
 
 /// Executables that may be running while the installer replaces them,
 /// relative to the install folder.
-const PARKED_EXES: [&str; 2] = [CLI_EXE, "node/node.exe"];
+const PARKED_EXES: [&str; 3] = [CLI_EXE, LEGACY_CLI_EXE, "node/node.exe"];
 
 type CmdResult<T> = Result<T, ErrorPayload>;
 
@@ -279,7 +283,7 @@ fn lock<T>(slot: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// `shikigami.exe` -> `shikigami-<version>.exe.old` in the same folder.
+/// `spellsheet.exe` -> `spellsheet-<version>.exe.old` in the same folder.
 fn parked_path(exe: &Path, version: &str) -> PathBuf {
     exe.with_file_name(format!("{}-{version}.exe.old", exe_stem(exe)))
 }

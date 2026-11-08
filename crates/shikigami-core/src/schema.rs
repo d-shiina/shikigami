@@ -1,6 +1,6 @@
 //! JSON Schema export.
 //!
-//! `shikigami schema export` writes these to `schemas/`, and
+//! `spellsheet schema export` writes these to `schemas/`, and
 //! `packages/schema` turns them into TypeScript types, so Rust, TypeScript
 //! and AI clients all share one contract. A test fails when the committed
 //! files drift from the Rust types.

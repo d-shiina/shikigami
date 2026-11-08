@@ -188,7 +188,7 @@ impl Runtime {
 
     /// Binds the runtime to a workspace: its secrets (the vault opened at
     /// `root`) and its `policy.json`. Every process that runs flows of a
-    /// workspace (Studio, the MCP server, `shikigami run`, `shikigami
+    /// workspace (Studio, the MCP server, `spellsheet run`, `shikigami
     /// agent`) builds its runtime with this one call, so something a
     /// workspace run needs is added here once, not in each of them.
     pub fn for_workspace(self, root: &std::path::Path, secrets: Arc<dyn SecretProvider>) -> Self {

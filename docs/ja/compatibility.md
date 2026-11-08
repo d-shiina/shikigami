@@ -104,7 +104,7 @@ SpellSheet の外に出ていく「約束」と、それをどう変えてよい
 
 ## 8. スナップショットと CI
 
-`pnpm schema:generate`（`shikigami schema export`）が、JSON Schema と一緒に次の「契約のスナップショット」を `schemas/contract/` に書きます。説明文は含まず、形だけです。
+`pnpm schema:generate`（`spellsheet schema export`）が、JSON Schema と一緒に次の「契約のスナップショット」を `schemas/contract/` に書きます。説明文は含まず、形だけです。
 
 | ファイル | 中身 |
 |---|---|

@@ -6,7 +6,7 @@
 
 [English](README.md) | 日本語
 
-> 製品名は Shikigami から **SpellSheet** に変わりました（式＝spell、紙＝sheet）。設定やデータのフォルダーも新しい名前（`%APPDATA%\SpellSheet`・`%LOCALAPPDATA%\SpellSheet`）になり、更新すると古い `Shikigami` のフォルダーは自動でそこへ移ります。環境変数 `SHIKIGAMI_HOME`・`SHIKIGAMI_PLUGINS` もそのまま使えます。リポジトリ名・コマンド `shikigami`・インストーラーは、当面は旧名のままです。
+> 製品名は Shikigami から **SpellSheet** に変わりました（式＝spell、紙＝sheet）。設定やデータのフォルダーも新しい名前（`%APPDATA%\SpellSheet`・`%LOCALAPPDATA%\SpellSheet`）になり、更新すると古い `Shikigami` のフォルダーは自動でそこへ移ります。環境変数 `SHIKIGAMI_HOME`・`SHIKIGAMI_PLUGINS` もそのまま使えます。コマンドは `spellsheet` になりました（今までの `shikigami` も同じものとして使えます）。リポジトリ名とインストーラーは、当面は旧名のままです。
 
 AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したフローは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
 
@@ -34,7 +34,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 | [docs/runner.md](docs/ja/runner.md) | 動かすだけの人の実行画面：公開されたフロー、入力変数から作るフォーム、結果とファイル |
 | [docs/policy.md](docs/ja/policy.md) | 無人実行は承認・公開した版だけ、許可するサイト・アプリ、AI の操作の承認（`policy.json`） |
 | [docs/schedules.md](docs/ja/schedules.md) | スケジュールとファイルのきっかけ、それを PC ごとに動かすエージェント |
-| [docs/audit.md](docs/ja/audit.md) | 監査の記録：誰がどのフローを変更・公開・実行したか（`shikigami audit`）と保存期間 |
+| [docs/audit.md](docs/ja/audit.md) | 監査の記録：誰がどのフローを変更・公開・実行したか（`spellsheet audit`）と保存期間 |
 | [docs/remote.md](docs/ja/remote.md) | 管理サーバー：PC の登録、空いた PC へのジョブの振り分け、プロトコル v1 と参考実装のサーバー |
 | [docs/oauth.md](docs/ja/oauth.md) | OAuth でサインインする Web API（Box など）。リダイレクト URL は固定のどんな URL でもよい |
 | [docs/ja/extensions.md](docs/ja/extensions.md) | 拡張機能：クラウド型 AI-OCR・社内システム・SaaS の API などのノードを後から追加（zip・URL・GitHub から導入） |
@@ -48,7 +48,7 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 ```text
 crates/shikigami-core      Flow Core（唯一の正規データ層）
 crates/shikigami-runtime   RPA Runtime（AI・GUI なしで実行）
-crates/shikigami-cli       CLI（shikigami コマンド。`shikigami mcp` で MCP サーバー）
+crates/shikigami-cli       CLI（spellsheet コマンド。`spellsheet mcp` で MCP サーバー）
 crates/shikigami-mcp       MCP サーバー（rmcp）
 apps/studio                SpellSheet Studio（Tauri 2 + React + React Flow）
 packages/schema            Rust から生成した TypeScript 型
@@ -106,14 +106,14 @@ pnpm schema:generate
 ### CLI の例
 
 ```sh
-shikigami flow import examples/invoice-summary.json
-shikigami flow list
+spellsheet flow import examples/invoice-summary.json
+spellsheet flow list
 echo '[{"op":"addStep","step":{"type":"log.message","params":{"message":"hello"}}}]' \
-  | shikigami flow edit scn_example_invoice_summary -
-shikigami flow undo scn_example_invoice_summary
-shikigami run scn_example_invoice_summary --draft --json   # 作業中の内容を試す
-shikigami version publish scn_example_invoice_summary       # 人が確認して公開
-shikigami run scn_example_invoice_summary --json           # 無人実行は公開版だけを動かす
+  | spellsheet flow edit scn_example_invoice_summary -
+spellsheet flow undo scn_example_invoice_summary
+spellsheet run scn_example_invoice_summary --draft --json   # 作業中の内容を試す
+spellsheet version publish scn_example_invoice_summary       # 人が確認して公開
+spellsheet run scn_example_invoice_summary --json           # 無人実行は公開版だけを動かす
 ```
 
 Studio を開いたまま CLI でフローを編集すると、変更が Studio に即座に反映されます。
@@ -128,7 +128,7 @@ Claude Code ならプラグインを入れるだけです（`shikigami` コマ�
 
 Studio をインストールしている場合は、Studio と同じフォルダーにある `shikigami.exe` を登録すると Studio の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Studio 右下のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/ja/release.md)）。
 
-MCP サーバーだけを登録する場合は `claude mcp add shikigami -- shikigami mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p shikigami-cli` で更新されます）。
+MCP サーバーだけを登録する場合は `claude mcp add shikigami -- spellsheet mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p shikigami-cli` で更新されます）。
 
 ```powershell
 claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shikigami.exe mcp

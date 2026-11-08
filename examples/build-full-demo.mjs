@@ -6,7 +6,7 @@
 // The folder (flow.json, subflows/shipping.json and the files under
 // input/ config/ templates/) and the demo site in examples/web are the source
 // of truth; the bundle is a single self-contained file that
-// `shikigami run examples/full-demo.shikigami.json` unpacks and runs. Re-run
+// `spellsheet run examples/full-demo.shikigami.json` unpacks and runs. Re-run
 // this after editing anything in the folder or the site.
 
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";

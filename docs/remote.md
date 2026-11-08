@@ -4,12 +4,12 @@ English | [日本語](ja/remote.md)
 
 A management server hands jobs to the agents of many PCs: "run this flow on whichever PC is free", and see how it went. The PCs only ever connect **out** (HTTPS); no port is opened on them, so they work behind proxies and firewalls. The design notes are in [design/remote-runs.md](design/remote-runs.md) (Japanese).
 
-SpellSheet comes with a small **reference server** (`shikigami manager serve`) that speaks the protocol below. It keeps its state in one JSON file and has an admin API but no web pages: it is for trying things out, tests and small teams on a LAN. A full management tool can be built on the same protocol.
+SpellSheet comes with a small **reference server** (`spellsheet manager serve`) that speaks the protocol below. It keeps its state in one JSON file and has an admin API but no web pages: it is for trying things out, tests and small teams on a LAN. A full management tool can be built on the same protocol.
 
 ## How it works
 
 1. On the server you make a **one-time enrollment code**.
-2. On the PC, `shikigami agent enroll <server URL> <code>`. The agent makes its own Ed25519 key pair, sends only the public key, and keeps the private key in Windows Credential Manager. From then on every request it makes is signed.
+2. On the PC, `spellsheet agent enroll <server URL> <code>`. The agent makes its own Ed25519 key pair, sends only the public key, and keeps the private key in Windows Credential Manager. From then on every request it makes is signed.
 3. In the workspace's `policy.json`, the PC says what the server may do:
 
    ```json
@@ -20,22 +20,22 @@ SpellSheet comes with a small **reference server** (`shikigami manager serve`) t
    }
    ```
 
-4. The agent (`shikigami agent install`, or **Start the agent** in Studio's Automation) asks the server for work **only while it has nothing running**, offering the flows `remote.flows` allows that have a published version here. The server hands it a job that fits, if there is one.
+4. The agent (`spellsheet agent install`, or **Start the agent** in Studio's Automation) asks the server for work **only while it has nothing running**, offering the flows `remote.flows` allows that have a published version here. The server hands it a job that fits, if there is one.
 5. The agent runs the job like any unattended run: the **published version**, `policy.json`'s sites, apps and `unattended` rules, secrets from this PC's vault. The record's `origin` says `trigger: "remote"`, `requestedBy` (who asked on the server) and `jobId`. Events go to the server every 2 seconds and the report at the end; a run started while the server is unreachable still finishes and is reported when it is back.
 6. A job cancelled on the server is cancelled on the PC at its next check-in (`finally` still runs).
 
 The PC has the last word. Whatever the server asks, it cannot run a flow `policy.json` does not allow (`REMOTE_NOT_ALLOWED`), an unpublished one (`NOT_PUBLISHED`), or another version than the one the job names (`VERSION_MISMATCH`); those jobs come back to the server as **rejected**. Secrets never leave the PC: a job carries input values, not passwords.
 
 ```powershell
-shikigami agent enroll https://manager.example.co.jp 3f9a1c0d2b7e4a55
-shikigami agent status        # shows the server, the worker ID and any problem
-shikigami agent unenroll
+spellsheet agent enroll https://manager.example.co.jp 3f9a1c0d2b7e4a55
+spellsheet agent status        # shows the server, the worker ID and any problem
+spellsheet agent unenroll
 ```
 
 ## The reference server
 
 ```powershell
-shikigami manager serve --listen 127.0.0.1:8740 --data C:\shikigami-manager
+spellsheet manager serve --listen 127.0.0.1:8740 --data C:\shikigami-manager
 ```
 
 `--data` holds `state.json` (workers, jobs and their logs) and `admin-token`, made on first start. It listens on plain HTTP: anything beyond the PC itself goes through a reverse proxy with HTTPS (the agent refuses `http://` except for `localhost`).

@@ -29,7 +29,7 @@ use shikigami_runtime::{
 use shikigami_secrets::{SecretInput, Vault};
 
 #[derive(Parser)]
-#[command(name = "shikigami", version, about = "SpellSheet RPA command line")]
+#[command(name = "spellsheet", version, about = "SpellSheet RPA command line")]
 struct Cli {
     /// Workspace directory (default: $SPELLSHEET_HOME or the platform data dir).
     #[arg(long, global = true)]
@@ -278,7 +278,7 @@ enum VersionCmd {
         id: String,
         number: u32,
     },
-    /// Make a version the one `shikigami run <id>` (unattended) executes.
+    /// Make a version the one `spellsheet run <id>` (unattended) executes.
     /// Without NUMBER the current content is published, saved as a new
     /// version first unless one matches it.
     Publish {
@@ -441,7 +441,7 @@ fn builtin_names() -> Vec<String> {
         .collect()
 }
 
-/// `shikigami plugin install / update / remove / enable / disable / registry`.
+/// `spellsheet plugin install / update / remove / enable / disable / registry`.
 fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
     use shikigami_plugins::install::{self, Source};
     let Some(root) = install::install_root() else {
@@ -512,7 +512,7 @@ fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
             }
             let Some(url) = install::registry_url() else {
                 eprintln!(
-                    "no registry is set (shikigami plugin registry --set https://…/index.json)"
+                    "no registry is set (spellsheet plugin registry --set https://…/index.json)"
                 );
                 return Ok(ExitCode::SUCCESS);
             };
@@ -1002,7 +1002,7 @@ fn secret_cmd(vault: &Vault, cmd: &SecretCmd) -> Result<()> {
                 );
             }
             let count = vault.reset()?;
-            println!("deleted {count} secret(s); register them again with `shikigami secret set`");
+            println!("deleted {count} secret(s); register them again with `spellsheet secret set`");
         }
     }
     Ok(())
@@ -1224,7 +1224,7 @@ fn version_cmd(svc: &FlowService, cmd: &VersionCmd) -> shikigami_core::CoreResul
         VersionCmd::Unpublish { id, note } => {
             svc.unpublish(&FlowId::new(id.as_str()), note.clone(), actor())?;
             println!(
-                "unpublished {id}: `shikigami run {id}` now refuses until a version is published"
+                "unpublished {id}: `spellsheet run {id}` now refuses until a version is published"
             );
         }
     }
@@ -1277,7 +1277,7 @@ fn core_err(e: shikigami_core::CoreError) -> anyhow::Error {
     }
 }
 
-/// What `shikigami run` executes, with the version recorded in the report.
+/// What `spellsheet run` executes, with the version recorded in the report.
 /// A file runs as written. A workspace flow runs its published version
 /// (and the published versions of what it calls) unless `draft`; the
 /// policy can keep a flow from running unattended at all.
@@ -1840,7 +1840,7 @@ fn session_cmd(cmd: &SessionCmd) -> Result<ExitCode> {
             }
             if remote {
                 println!(
-                    "remote desktop: yes (closing the window locks it; `shikigami session release` does not)"
+                    "remote desktop: yes (closing the window locks it; `spellsheet session release` does not)"
                 );
             }
             match lock {

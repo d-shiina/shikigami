@@ -51,15 +51,15 @@ Add a generic credential in Control Panel → Credential Manager → Windows Cre
 ### CLI
 
 ```powershell
-shikigami secret set "Order system" --username tanaka --site https://orders.example.com   # asks for the password without echo
-shikigami secret set "Order system" --totp JBSWY3DPEHPK3PXP                                 # only the fields to change
-shikigami secret set "Orders API" --kind api-key --site https://api.example.com          # asks for the key without echo
-shikigami secret set "Order system" --windows-credential company/orders --site https://orders.example.com   # read from Credential Manager
-shikigami secret windows-credentials       # generic credentials to pick from (addresses and user names)
-shikigami secret list
-shikigami secret remove "Order system"
-shikigami secret logout "Order system"     # removes only the saved sign-in state (below)
-shikigami secret reset --yes               # removes everything to register again (after copying from another PC)
+spellsheet secret set "Order system" --username tanaka --site https://orders.example.com   # asks for the password without echo
+spellsheet secret set "Order system" --totp JBSWY3DPEHPK3PXP                                 # only the fields to change
+spellsheet secret set "Orders API" --kind api-key --site https://api.example.com          # asks for the key without echo
+spellsheet secret set "Order system" --windows-credential company/orders --site https://orders.example.com   # read from Credential Manager
+spellsheet secret windows-credentials       # generic credentials to pick from (addresses and user names)
+spellsheet secret list
+spellsheet secret remove "Order system"
+spellsheet secret logout "Order system"     # removes only the saved sign-in state (below)
+spellsheet secret reset --yes               # removes everything to register again (after copying from another PC)
 ```
 
 From scripts, use `--password-stdin` (the first line of standard input).
@@ -72,7 +72,7 @@ From scripts, use `--password-stdin` (the first line of standard input).
 ```
 
 - Values are encrypted with AES-256-GCM. The key is **a single entry per workspace in Windows Credential Manager** ("vault <ID>.SpellSheet"); registering more secrets adds no entries there.
-- The key is protected by the DPAPI of the Windows user who registered it. Copying the workspace folder to another PC or user does not make the values readable (`SECRET_KEY_MISSING`). In that case, use "Reset and register again" in Studio's 🔑 Secrets (or `shikigami secret reset --yes`) to remove the unreadable secrets, sign-in states and key, then register again.
+- The key is protected by the DPAPI of the Windows user who registered it. Copying the workspace folder to another PC or user does not make the values readable (`SECRET_KEY_MISSING`). In that case, use "Reset and register again" in Studio's 🔑 Secrets (or `spellsheet secret reset --yes`) to remove the unreadable secrets, sign-in states and key, then register again.
 - Updates are serialized with `secrets/.lock`, so Studio, the CLI and the MCP server never overwrite each other's changes to the same workspace.
 - Off Windows (development, CI) the key is kept in `secrets/<id>.key` (readable by the owner only). That is no protection, so it is not for production.
 
@@ -149,6 +149,6 @@ When a flow run in Studio stops on `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `
 | `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | The desktop app (`app:xxx.exe`) is not registered, or the input went to another app |
 | `WINDOWS_CREDENTIAL_NOT_FOUND` | Credential Manager has no generic credential with that address. Add it there, or fix the secret's address |
 | `WINDOWS_CREDENTIAL_UNREADABLE` | The password of the generic credential is not text |
-| `SECRET_KEY_MISSING` | No key for this PC / Windows user. Reset in Studio or with `shikigami secret reset --yes` and register again |
+| `SECRET_KEY_MISSING` | No key for this PC / Windows user. Reset in Studio or with `spellsheet secret reset --yes` and register again |
 | `SECRETS_UNAVAILABLE` | Run on a Runtime without secrets (run from Studio, the CLI or MCP) |
 | `HUMAN_REQUIRED` / `HUMAN_TIMEOUT` | A person is needed but there is no window / they did not finish in time |

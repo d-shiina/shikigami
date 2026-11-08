@@ -51,15 +51,15 @@ OAuth アプリは一覧に、アクセストークンの有効期限・最後�
 ### CLI
 
 ```powershell
-shikigami secret set 受注システム --username tanaka --site https://orders.example.com   # パスワードは伏せ字で聞かれる
-shikigami secret set 受注システム --totp JBSWY3DPEHPK3PXP                                 # 変えたい項目だけ
-shikigami secret set 受注API --kind api-key --site https://api.example.com               # キーは伏せ字で聞かれる
-shikigami secret set 受注システム --windows-credential 会社/受注 --site https://orders.example.com   # 資格情報マネージャーから読む
-shikigami secret windows-credentials       # 選べる汎用資格情報（アドレスとユーザー名）
-shikigami secret list
-shikigami secret remove 受注システム
-shikigami secret logout 受注システム        # 保存したログイン状態（下記）だけ消す
-shikigami secret reset --yes               # すべて消して登録し直す（別の PC からコピーしたとき）
+spellsheet secret set 受注システム --username tanaka --site https://orders.example.com   # パスワードは伏せ字で聞かれる
+spellsheet secret set 受注システム --totp JBSWY3DPEHPK3PXP                                 # 変えたい項目だけ
+spellsheet secret set 受注API --kind api-key --site https://api.example.com               # キーは伏せ字で聞かれる
+spellsheet secret set 受注システム --windows-credential 会社/受注 --site https://orders.example.com   # 資格情報マネージャーから読む
+spellsheet secret windows-credentials       # 選べる汎用資格情報（アドレスとユーザー名）
+spellsheet secret list
+spellsheet secret remove 受注システム
+spellsheet secret logout 受注システム        # 保存したログイン状態（下記）だけ消す
+spellsheet secret reset --yes               # すべて消して登録し直す（別の PC からコピーしたとき）
 ```
 
 スクリプトから渡すときは `--password-stdin`（標準入力の 1 行目）。
@@ -72,7 +72,7 @@ shikigami secret reset --yes               # すべて消して登録し直す�
 ```
 
 - 値は AES-256-GCM で暗号化します。鍵は **Windows 資格情報マネージャーにワークスペースごと 1 件だけ**（「vault <ID>.SpellSheet」）置きます。シークレットを何件登録しても資格情報マネージャーの項目は増えません。
-- 鍵は登録した Windows ユーザーの DPAPI で守られます。ワークスペースのフォルダーを別の PC や別のユーザーにコピーしても値は読めません（`SECRET_KEY_MISSING`）。そのときは Studio の「🔑 シークレット」に出る「リセットして登録し直す」（または `shikigami secret reset --yes`）で、読めなくなったシークレット・ログイン状態・鍵を消してから登録し直します。
+- 鍵は登録した Windows ユーザーの DPAPI で守られます。ワークスペースのフォルダーを別の PC や別のユーザーにコピーしても値は読めません（`SECRET_KEY_MISSING`）。そのときは Studio の「🔑 シークレット」に出る「リセットして登録し直す」（または `spellsheet secret reset --yes`）で、読めなくなったシークレット・ログイン状態・鍵を消してから登録し直します。
 - Studio・CLI・MCP サーバーが同じワークスペースを同時に更新しても上書きし合わないよう、更新は `secrets/.lock` で 1 つずつ行います。
 - Windows 以外（開発・CI）では鍵を `secrets/<id>.key`（所有者だけ読める）に置きます。保護にはならないので本番では使いません。
 
@@ -149,6 +149,6 @@ Studio で実行したフローが `SECRET_NOT_FOUND` / `SECRET_FIELD_EMPTY` / `
 | `SECRET_APP_NOT_SET` / `SECRET_APP_MISMATCH` | デスクトップアプリ（`app:xxx.exe`）が未登録、または別のアプリに入力しようとした |
 | `WINDOWS_CREDENTIAL_NOT_FOUND` | 資格情報マネージャーに、そのアドレスの汎用資格情報がない。資格情報マネージャーで追加するか、シークレットのアドレスを直す |
 | `WINDOWS_CREDENTIAL_UNREADABLE` | 汎用資格情報のパスワードが文字として読めない |
-| `SECRET_KEY_MISSING` | この PC / Windows ユーザーに鍵がない。Studio か `shikigami secret reset --yes` でリセットして登録し直す |
+| `SECRET_KEY_MISSING` | この PC / Windows ユーザーに鍵がない。Studio か `spellsheet secret reset --yes` でリセットして登録し直す |
 | `SECRETS_UNAVAILABLE` | シークレットのない Runtime で実行した（Studio・CLI・MCP から実行する） |
 | `HUMAN_REQUIRED` / `HUMAN_TIMEOUT` | 人の操作が必要だが画面がない／時間内に終わらなかった |

@@ -113,7 +113,7 @@ pub struct PublishRecord {
     pub note: String,
 }
 
-/// The published version of a flow (what `shikigami run <id>` and
+/// The published version of a flow (what `spellsheet run <id>` and
 /// other unattended runs execute).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]

@@ -1013,7 +1013,7 @@ impl FlowService {
     /// the published versions of every flow it calls. Fails with
     /// `NOT_PUBLISHED` / `SUBFLOW_NOT_PUBLISHED` rather than falling
     /// back to working content nobody approved.
-    /// What an unattended run of `id` (`shikigami run`, a schedule, a
+    /// What an unattended run of `id` (`spellsheet run`, a schedule, a
     /// management server) executes: the published versions, once the
     /// workspace policy allows the flow and everything it calls to run
     /// unattended (`UNATTENDED_NOT_ALLOWED` otherwise).
@@ -1048,7 +1048,7 @@ impl FlowService {
                 code: "NOT_PUBLISHED",
                 message: format!("flow {id} has no published version"),
                 hint: Some(
-                    "Unattended runs execute the published version only. A person approves and publishes it in Studio (レビュー台 → 確認して公開) or with `shikigami version publish <id>`; `shikigami run <id> --draft` runs the working content instead."
+                    "Unattended runs execute the published version only. A person approves and publishes it in Studio (レビュー台 → 確認して公開) or with `spellsheet version publish <id>`; `spellsheet run <id> --draft` runs the working content instead."
                         .into(),
                 ),
             });

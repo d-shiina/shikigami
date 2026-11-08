@@ -8,8 +8,8 @@
 試すには、このフォルダを `%LOCALAPPDATA%\SpellSheet\plugins\hello` にコピーするか、環境変数 `SPELLSHEET_PLUGINS` にこのフォルダを指定します。
 
 ```powershell
-shikigami plugin check examples\plugins\hello
+spellsheet plugin check examples\plugins\hello
 $env:SPELLSHEET_PLUGINS = "$PWD\examples\plugins"
-shikigami plugin list
-shikigami step-types   # hello.greet と hello.appendLine が出る
+spellsheet plugin list
+spellsheet step-types   # hello.greet と hello.appendLine が出る
 ```

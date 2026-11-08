@@ -2,12 +2,12 @@
 
 英語版：[../audit.md](../audit.md)
 
-`shikigami audit` は、この PC で誰がどのフローを変更・公開・実行したかを 1 つの一覧で表示します。Studio の人、CLI、MCP 経由の AI、スケジュール、管理サーバーのどれからの操作かも分かります。
+`spellsheet audit` は、この PC で誰がどのフローを変更・公開・実行したかを 1 つの一覧で表示します。Studio の人、CLI、MCP 経由の AI、スケジュール、管理サーバーのどれからの操作かも分かります。
 
 ```powershell
-shikigami audit                              # すべて（古い順）
-shikigami audit --since 2026-11-01           # その日から（RFC 3339 の時刻も可）
-shikigami audit --flow scn_01a1… --json      # 1 つのフローだけ、1 行に 1 つの JSON
+spellsheet audit                              # すべて（古い順）
+spellsheet audit --since 2026-11-01           # その日から（RFC 3339 の時刻も可）
+spellsheet audit --flow scn_01a1… --json      # 1 つのフローだけ、1 行に 1 つの JSON
 ```
 
 ```text

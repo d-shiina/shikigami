@@ -111,7 +111,7 @@ impl Plugin {
             cwd: Some(dir.to_path_buf()),
             unavailable: None,
             setup_hint: format!(
-                "Check that `{}` can be started (installed, on PATH) and that the plugin folder {} is complete; `shikigami plugin check` tests the manifest.",
+                "Check that `{}` can be started (installed, on PATH) and that the plugin folder {} is complete; `spellsheet plugin check` tests the manifest.",
                 manifest.command.program,
                 dir.display()
             ),
@@ -136,7 +136,7 @@ impl Plugin {
         &self.defs
     }
 
-    /// Name, version, folder and step types, for `shikigami plugin list`.
+    /// Name, version, folder and step types, for `spellsheet plugin list`.
     pub fn summary(&self) -> Value {
         json!({
             "name": self.manifest.name,

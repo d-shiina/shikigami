@@ -33,7 +33,7 @@ pnpm demo:full
 Studio で動かす（ワークスペースに取り込むとプロジェクトフォルダーとして展開されます）:
 
 ```bash
-shikigami flow import examples/full-demo.shikigami.json
+spellsheet flow import examples/full-demo.shikigami.json
 ```
 
 入力 `siteUrl` を空のまま実行すると、同梱のデモサイト（`input/web/`）をファイル
@@ -46,7 +46,7 @@ shikigami flow import examples/full-demo.shikigami.json
 CLI から直接:
 
 ```bash
-shikigami run examples/full-demo.shikigami.json
+spellsheet run examples/full-demo.shikigami.json
 # ソースから: cargo run -p shikigami-cli -- run examples/full-demo.shikigami.json
 ```
 

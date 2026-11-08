@@ -29,8 +29,8 @@ An extension's nodes are listed in the palette under the extension's name, with 
 For a GitHub repository, the first `.zip` attached to the latest release is used (the release's source zip when none is attached).
 
 ```powershell
-shikigami plugin install https://github.com/<owner>/<repo>        # only shows what it is
-shikigami plugin install https://github.com/<owner>/<repo> --yes  # installs it
+spellsheet plugin install https://github.com/<owner>/<repo>        # only shows what it is
+spellsheet plugin install https://github.com/<owner>/<repo> --yes  # installs it
 ```
 
 Before installing, SpellSheet shows the extension's name, publisher, nodes, **the data they send outside**, the secrets they take and the program it starts. An extension runs as a program on this PC: install only what you trust.
@@ -40,11 +40,11 @@ Extensions are installed into `%LOCALAPPDATA%\SpellSheet\plugins\<name>\`, never
 ### Listing, turning off, updating, removing
 
 ```powershell
-shikigami plugin list              # loaded, turned off, and not loadable (with reasons)
-shikigami plugin disable azureocr  # kept, but its nodes are not loaded
-shikigami plugin enable azureocr
-shikigami plugin update azureocr   # fetch the new version from where it was installed from (--yes to update)
-shikigami plugin remove azureocr
+spellsheet plugin list              # loaded, turned off, and not loadable (with reasons)
+spellsheet plugin disable azureocr  # kept, but its nodes are not loaded
+spellsheet plugin enable azureocr
+spellsheet plugin update azureocr   # fetch the new version from where it was installed from (--yes to update)
+spellsheet plugin remove azureocr
 ```
 
 A flow using a node of a turned-off extension fails validation with `PLUGIN_NOT_INSTALLED`, as if it were not installed (the flow itself is kept). Flows record the extensions and versions they use in `requires` (`{ "plugin:azureocr": "^0.1.0" }`), so another PC knows what is missing.
@@ -54,8 +54,8 @@ A flow using a node of a turned-off extension fails validation with `PLUGIN_NOT_
 A list of extensions for your organisation or community is one JSON index file. No server is needed: the raw URL of a file in a Git repository is enough.
 
 ```powershell
-shikigami plugin registry --set https://example.com/shikigami-extensions.json
-shikigami plugin registry          # show the list
+spellsheet plugin registry --set https://example.com/shikigami-extensions.json
+spellsheet plugin registry          # show the list
 ```
 
 ```json
@@ -134,9 +134,9 @@ One JSON-RPC 2.0 message per line on stdin, answers on stdout. `method` is the n
 ### Checking
 
 ```powershell
-shikigami plugin check examples\plugins\azure-ocr   # manifest, schemas, examples
+spellsheet plugin check examples\plugins\azure-ocr   # manifest, schemas, examples
 $env:SPELLSHEET_PLUGINS = "$PWD\examples\plugins"     # load without installing (development)
-shikigami step-types                                  # lists azureocr.readDocument
+spellsheet step-types                                  # lists azureocr.readDocument
 node --test examples\plugins\azure-ocr\test.mjs      # against a stand-in for Azure
 ```
 

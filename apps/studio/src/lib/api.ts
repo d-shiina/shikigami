@@ -294,7 +294,7 @@ export const api = {
     call<FlowDiff>("diff_versions", { id, from, to }),
   restoreVersion: (id: string, number: number, expectedRevision: number) =>
     call<EditOutcome>("restore_version", { id, number, expectedRevision }),
-  /** The version unattended runs (`shikigami run <id>`) execute; null when none is published. */
+  /** The version unattended runs (`spellsheet run <id>`) execute; null when none is published. */
   publishedState: (id: string) => call<PublishedState | null>("published_state", { id }),
   publishFlow: (id: string, input: PublishInput) => call<PublishedState>("publish_flow", { id, input }),
   /** The review desk's 「残して本番に使う」: approves `revision` and publishes it in one step. */

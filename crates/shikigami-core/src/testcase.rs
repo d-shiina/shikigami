@@ -42,7 +42,7 @@ pub struct TestCase {
     /// What the case is about, in the author's words.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Values of the flow's input variables, as `shikigami run -i` takes them.
+    /// Values of the flow's input variables, as `spellsheet run -i` takes them.
     #[serde(default)]
     pub inputs: Map<String, Value>,
     #[serde(default)]

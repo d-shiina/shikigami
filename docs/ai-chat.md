@@ -18,7 +18,7 @@ The guide is two files, made from the nodes installed on your PC:
 Save them from Studio (Flows › **Paste an AI answer** › **Save the guide**; they go to `Downloads\SpellSheet AI 仕様書`) or with the command line:
 
 ```
-shikigami ai-guide --dir <folder>
+spellsheet ai-guide --dir <folder>
 ```
 
 A copy for the built-in nodes is in [docs/ai/](ai/), for people who have not installed SpellSheet yet. Node plugins are only in the files you save on your PC.
