@@ -1,4 +1,4 @@
-import { FolderOutput, Search } from "lucide-react";
+import { FolderOutput, PanelRight, Search } from "lucide-react";
 import { useStudio } from "../context";
 import { useProjectMaybe } from "../project";
 import { t } from "../lib/i18n";
@@ -266,6 +266,7 @@ export function FlowActions({ view, onView }: { view: View; onView: (view: View)
           </button>
         </>
       )}
+      <PaneToggle view={view} />
     </div>
   );
 }
@@ -306,5 +307,31 @@ export function CanvasDock() {
         ↷
       </DockButton>
     </div>
+  );
+}
+
+/**
+ * Shows or closes the right pane, at the right end of the bar as Linear and VS
+ * Code keep theirs. Picking a node opens the pane by itself; this keeps the
+ * flow's settings open with nothing picked, or closes the pane for the room.
+ * The 変数 table edits in place and has no pane, so it has no button.
+ */
+function PaneToggle({ view }: { view: View }) {
+  const place = useStudio((s) => s.place);
+  const open = useStudio((s) => s.inspectorOpen || s.selection?.kind === "step" || s.selection?.kind === "part");
+  const setInspectorOpen = useStudio((s) => s.setInspectorOpen);
+  const showFlowProps = useStudio((s) => s.showFlowProps);
+  if (place !== "flows" || view === "variables") return null;
+  return (
+    <button
+      type="button"
+      onClick={() => (open ? setInspectorOpen(false) : showFlowProps())}
+      aria-pressed={open}
+      title={open ? t.shell.paneHide : t.shell.paneShow}
+      aria-label={open ? t.shell.paneHide : t.shell.paneShow}
+      className={`grid h-7 w-7 place-items-center rounded-md ${open ? "bg-slate-100 text-ink" : "text-slate-500 hover:bg-slate-100 hover:text-ink"}`}
+    >
+      <PanelRight size={16} strokeWidth={1.75} aria-hidden="true" />
+    </button>
   );
 }
