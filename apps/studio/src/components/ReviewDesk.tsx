@@ -15,6 +15,8 @@ import { approvedUpTo, groupRevertBlocker, pendingIn } from "../store";
 import { FeedbackBox, Observations, type Observed, type Review, SendBackForm, Section, TestRuns, type TestRun } from "./Evidence";
 import { Monogram } from "./FlowsPage";
 import { ActorMark, Lines, usePendingReview } from "./Timeline";
+import { Promises, usePromises } from "./Promises";
+import { promiseCounts } from "../lib/promises";
 import { stepLabel, t, useKeptState } from "../lib/i18n";
 
 export type InboxItem = {
@@ -170,6 +172,7 @@ export function ReviewPanel() {
   const see = useMarks((m) => m.see);
   const seenMarks = useMarks((m) => m.seen);
   const answers = useMarks((m) => m.answers);
+  const answer = useMarks((m) => m.answer);
   const [sendBackWith, setSendBackWith] = useState<string | undefined>(undefined);
   const [sending, setSending] = useKeptState("review.sending", false);
   const flowId = flow?.id;
@@ -194,6 +197,13 @@ export function ReviewPanel() {
   const oldest = oldestFirst[0];
   const since = (oldest?.revision ?? 1) - 1;
   const evidence = useMemo(() => (timeline?.evidence ?? []).filter((e) => e.revision > since), [timeline, since]);
+  // An AI often writes and runs its test cases just before the edit, at the revision before it.
+  const testEvidence = useMemo(
+    () => (timeline?.evidence ?? []).filter((e) => (e.kind === "testCase" || e.kind === "testCases") && e.revision >= since),
+    [timeline, since],
+  );
+  const promises = usePromises(flowId, testEvidence, flow?.revision ?? 0);
+  const [details, setDetails] = useState<boolean | null>(null);
   const runs = evidence.filter((e): e is TestRun => e.kind === "testRun");
   const observed = evidence.filter((e): e is Observed => e.kind === "observation");
   const feedback = timeline?.openFeedback?.kind === "review" ? timeline.openFeedback : null;
@@ -238,7 +248,16 @@ export function ReviewPanel() {
   }
   const title = purpose(oldestFirst, summary);
   const seen = cards.filter((c) => seenMarks[`${markKey}:${c.stepId}`]).length;
-  const unanswered = checks.filter((q) => !answers[`${markKey}:${q}`]).length;
+  const freshPromises = promises.filter((p) => p.fresh);
+  const unanswered =
+    checks.filter((q) => !answers[`${markKey}:${q}`]).length + freshPromises.filter((p) => !answers[`${markKey}:promise:${p.name}`]).length;
+  const broken = promiseCounts(promises).broken;
+  const showDetails = details ?? freshPromises.length === 0;
+  const sendBackWithText = (text: string) => {
+    setSendBackWith(text);
+    setSending(true);
+  };
+  let n = 0;
   const changedIds = cards.filter((c) => c.kind !== "removed" && !c.movedOnly).map((c) => c.stepId);
   return (
     <div className="flex h-full flex-col">
@@ -254,60 +273,89 @@ export function ReviewPanel() {
         </div>
         {feedback && <FeedbackBox feedback={feedback} fixedAfter={newest.revision > feedback.revision} />}
 
-        <Numbered n={1} title={t.desk.whatChanges} aside={cards.length > 0 ? t.desk.seen(seen, cards.length) : undefined}>
-          <div className="space-y-2">
-            {cards.map((card) => (
-              <ChangeCardView
-                key={card.stepId}
-                card={card}
-                said={card.said.map((text) => dropLine(text, title)).filter(Boolean)}
-                defs={defs}
-                lines={oldestFirst.flatMap((e) => describe(e, flow, defs)).filter((l) => l.stepId === card.stepId && l.diffs.length > 0)}
-                seen={Boolean(seenMarks[`${markKey}:${card.stepId}`])}
-                current={card.stepId === selected}
-                onSee={() => see(`${markKey}:${card.stepId}`)}
-              />
-            ))}
-          </div>
-          {others.length > 0 && (
-            <div className="mt-2">
-              <div className="mb-1 text-[11px] font-bold text-slate-500">{t.desk.otherChanges}</div>
-              <Lines lines={others} detailed />
-            </div>
-          )}
-          {cards.length > 1 && <ChangeStepper />}
-        </Numbered>
-
-        <Numbered n={2} title={t.desk.effects}>
-          <EffectList effects={effects} />
-        </Numbered>
-
-        <Numbered n={3} title={t.desk.testResult} aside={runs.at(-1) ? relativeTime(runs.at(-1)!.finishedAt) : undefined}>
-          <TestResult runs={runs} revision={flow?.revision ?? 0} changedIds={changedIds} />
-          {observed.length > 0 && (
-            <div className="mt-3">
-              <Section title={t.desk.screens}>
-                <Observations items={observed} />
-              </Section>
-            </div>
-          )}
-        </Numbered>
-
-        {checks.length > 0 && (
-          <Numbered n={4} title={t.desk.checks} aside={t.desk.checksFrom(checks.length)}>
-            <Checks
-              checks={checks}
-              markKey={markKey}
-              onNo={(q) => {
-                setSendBackWith(t.desk.checkNote(q));
-                setSending(true);
-              }}
+        {flowId && (
+          <Numbered n={++n} title={t.promises.title} aside={freshPromises.length > 0 ? t.promises.fromAi(freshPromises.length) : undefined}>
+            <Promises
+              flowId={flowId}
+              revision={flow?.revision ?? 0}
+              promises={promises}
+              answers={Object.fromEntries(
+                freshPromises.flatMap((p) => {
+                  const a = answers[`${markKey}:promise:${p.name}`];
+                  return a ? [[p.name, a]] : [];
+                }),
+              )}
+              onAnswer={(name, value) => answer(`${markKey}:promise:${name}`, value)}
+              onWrong={(p) => sendBackWithText(t.promises.wrongNote(p.text))}
+              onAsk={() => sendBackWithText(t.promises.askReason)}
             />
           </Numbered>
         )}
+
+        {checks.length > 0 && (
+          <Numbered n={++n} title={t.desk.checks} aside={t.desk.checksFrom(checks.length)}>
+            <Checks checks={checks} markKey={markKey} onNo={(q) => sendBackWithText(t.desk.checkNote(q))} />
+          </Numbered>
+        )}
+
+        <Numbered n={++n} title={t.desk.effects}>
+          <EffectList effects={effects} />
+        </Numbered>
+
+        <section>
+          <button
+            type="button"
+            onClick={() => setDetails(!showDetails)}
+            className="flex w-full items-center gap-1.5 border-t border-slate-200 pt-3 text-left text-[12px] font-bold text-slate-600 hover:text-ink"
+          >
+            <span className="w-3 text-slate-400">{showDetails ? "▾" : "▸"}</span>
+            {t.desk.moreDetails}
+            {!showDetails && cards.length > 0 && <span className="ml-auto text-[11px] font-normal text-slate-500">{t.desk.seen(seen, cards.length)}</span>}
+          </button>
+          {showDetails && (
+            <div className="mt-3 space-y-5">
+              <Numbered title={t.desk.whatChanges} aside={cards.length > 0 ? t.desk.seen(seen, cards.length) : undefined}>
+                <div className="space-y-2">
+                  {cards.map((card) => (
+                    <ChangeCardView
+                      key={card.stepId}
+                      card={card}
+                      said={card.said.map((text) => dropLine(text, title)).filter(Boolean)}
+                      defs={defs}
+                      lines={oldestFirst.flatMap((e) => describe(e, flow, defs)).filter((l) => l.stepId === card.stepId && l.diffs.length > 0)}
+                      seen={Boolean(seenMarks[`${markKey}:${card.stepId}`])}
+                      current={card.stepId === selected}
+                      onSee={() => see(`${markKey}:${card.stepId}`)}
+                    />
+                  ))}
+                </div>
+                {others.length > 0 && (
+                  <div className="mt-2">
+                    <div className="mb-1 text-[11px] font-bold text-slate-500">{t.desk.otherChanges}</div>
+                    <Lines lines={others} detailed />
+                  </div>
+                )}
+                {cards.length > 1 && <ChangeStepper />}
+              </Numbered>
+
+              <Numbered title={t.desk.testResult} aside={runs.at(-1) ? relativeTime(runs.at(-1)!.finishedAt) : undefined}>
+                <TestResult runs={runs} revision={flow?.revision ?? 0} changedIds={changedIds} />
+                {observed.length > 0 && (
+                  <div className="mt-3">
+                    <Section title={t.desk.screens}>
+                      <Observations items={observed} />
+                    </Section>
+                  </div>
+                )}
+              </Numbered>
+
+            </div>
+          )}
+        </section>
       </div>
       <ReviewActions
         unanswered={unanswered}
+        broken={broken}
         sending={sending}
         setSending={(on) => {
           setSending(on);
@@ -319,11 +367,11 @@ export function ReviewPanel() {
   );
 }
 
-function Numbered({ n, title, aside, children }: { n: number; title: string; aside?: string; children: React.ReactNode }) {
+function Numbered({ n, title, aside, children }: { n?: number; title: string; aside?: string; children: React.ReactNode }) {
   return (
     <section>
       <div className="mb-2 flex items-center gap-1.5 text-[12px] font-bold">
-        <span className="grid h-[18px] w-[18px] place-items-center rounded-md bg-ink text-[11px] text-paper">{n}</span>
+        {n !== undefined && <span className="grid h-[18px] w-[18px] place-items-center rounded-md bg-ink text-[11px] text-paper">{n}</span>}
         {title}
         {aside && <span className="ml-auto text-[11px] font-normal text-slate-500">{aside}</span>}
       </div>
@@ -681,11 +729,13 @@ function ChangeStepper() {
 /** Mark as reviewed, send back to the AI with a reason, or undo everything the AI changed here — each with what it does. */
 export function ReviewActions({
   unanswered = 0,
+  broken = 0,
   sending,
   setSending,
   initialReason,
 }: {
   unanswered?: number;
+  broken?: number;
   sending: boolean;
   setSending: (on: boolean) => void;
   initialReason?: string;
@@ -710,6 +760,7 @@ export function ReviewActions({
   const hover = (key: typeof hint) => ({ onMouseEnter: () => setHint(key), onFocus: () => setHint(key), onMouseLeave: () => setHint("keep"), onBlur: () => setHint("keep") });
   return (
     <div className="space-y-2 border-t border-slate-200 bg-sheet px-4 py-3">
+      {broken > 0 && <p className="rounded-lg bg-shu-50 px-2.5 py-1.5 text-[12px] text-shu-600">{t.promises.brokenNote(broken)}</p>}
       <div className="flex items-start gap-2">
         <p className="min-h-[2lh] flex-1 text-[11.5px] leading-relaxed text-slate-500">{means}</p>
         {/* A new flow has nothing to go back to; it is deleted from the library instead. */}

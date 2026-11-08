@@ -2394,6 +2394,54 @@
             "kind",
             "verdict"
           ]
+        },
+        {
+          "description": "An AI saved (or replaced) the test case `name` (`tests/<name>.json`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "testCase"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "description": "The case's `description` when it was saved: the promise in words.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "replaced": {
+              "description": "It replaced a case of the same name.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ]
+        },
+        {
+          "description": "An AI ran test cases over MCP against `revision`.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "testCases"
+            },
+            "results": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CaseOutcome"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "results"
+          ]
         }
       ]
     },
@@ -2449,6 +2497,54 @@
       "required": [
         "stepId",
         "note"
+      ]
+    },
+    "CaseOutcome": {
+      "description": "How one test case went in a `testCases` record.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "description": "How the run ended (`succeeded`, `failed`, `cancelled`).",
+          "type": "string"
+        },
+        "mismatches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mismatch"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "passed",
+        "runId",
+        "status"
+      ]
+    },
+    "Mismatch": {
+      "description": "One difference between what the case expects and what the run did.\n`actual` is `null` when the run had no such value.",
+      "type": "object",
+      "properties": {
+        "at": {
+          "description": "`status`, `outputs.total`, `outputs.rows[2].金額`, `errorCode`, `errorStep`.",
+          "type": "string"
+        },
+        "expected": true,
+        "actual": true
+      },
+      "required": [
+        "at",
+        "expected",
+        "actual"
       ]
     },
     "ChangeRecord": {

@@ -10,9 +10,10 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use shikigami_core::approval::Redeem;
 use shikigami_core::{
-    Actor, ActorKind, AiAction, ApprovalId, ApprovalStore, ChangeNote, Decision, EditOp,
-    ErrorPayload, FlowId, FlowService, NewApproval, NewFlow, NewObservation, NewVersion,
-    ObservationId, ObservationSource, PickRequestStore, Policy, RiskLevel, RunId, StepId, TestRun,
+    Actor, ActorKind, AiAction, ApprovalId, ApprovalStore, CaseOutcome, ChangeNote, Decision,
+    EditOp, ErrorPayload, EvidenceDetail, FlowId, FlowService, NewApproval, NewFlow,
+    NewObservation, NewVersion, ObservationId, ObservationSource, PickRequestStore, Policy,
+    RiskLevel, RunId, StepId, TestRun,
 };
 use shikigami_runtime::record::{self, RunRecorder};
 use shikigami_runtime::{
@@ -187,7 +188,8 @@ SpellSheet Studio, and flows run later without you.\n\
 - Pass expectedRevision from your last read. REVISION_CONFLICT means the human changed the flow: re-read it and redo your change, never overwrite blindly.\n\
 - After editing, call validate_flow and fix every error, then run_flow (waitMs) and inspect get_run_logs; its variableChanged events show each value a variable took and the step that set it.\n\
 - A human reviews your changes in Studio. On every edit pass `summary` in plain words, no step types or expressions (first line: what the flow now does differently, as a short title; then why and what you checked; Japanese is fine), `checks` for anything only the human can decide (your assumptions about the business, one question each; omit when nothing is uncertain), and `observations`: the observationId values that inspect_page, inspect_ui and test_step returned for the screens the change is based on. Your run_flow results are recorded against the revision they ran.\n\
-- When a flow works, keep what it should give as test cases (save_test_case: inputs and the outputs to expect) and, after each later change, run_tests to check nothing that worked broke. Fix the flow, not the case, unless the user says the expected result changed.\n\
+- The human judges your change by its promises, not by reading steps: for each behaviour you add or change, save_test_case one case whose `description` is the promise in the business's words (what should happen with which data, e.g. 「返品の行は合計に入れない」「3 支店分で 73,050 円になる」; no variable names or step types), with sample inputs (a test folder or file, not the real input/) and the outputs to expect, then run_tests until they pass. Studio shows these promises first with their results; the human says whether each promise is right. What a case cannot check (which screen, which button, wording of a mail) goes in `checks`.\n\
+- When a flow works, keep what it should give as test cases and, after each later change, run_tests to check nothing that worked broke. Fix the flow, not the case, unless the user says the expected result changed.\n\
 - When get_flow returns `feedback`, the human sent the flow back: read its reason and step notes (get_review shows the whole review), fix exactly that, and say in `summary` how you addressed it.\n\
 - Params listed in a step type's expressionParams take a bare expression (no {{ }}), e.g. condition: \"count > 3\". Every other string param is a template: \"合計 {{ total }} 円\"; a string that is exactly one {{ expr }} keeps the value's type.\n\
 - Text, numbers, dates, lists and JSON are handled with expression functions, not extra steps: list_step_types returns them under `functions` (signature + example), e.g. variable.set expression \"trim(replace(name, '　', ' '))\", \"sum(map(filter(rows, r => r.status == '済'), r => num(r.amount)))\", \"formatDate(today(), 'yyyyMMdd')\". Join text with + or a template.\n\
@@ -1407,8 +1409,9 @@ impl ShikigamiMcp {
         self.finish("extract_subflow", &peer, Some(&p.flow_id), outcome)
     }
 
-    /// Save a test case of a flow (`tests/<name>.json` in its folder): inputs to run it
-    /// with and what should come out (`expect.status`, `expect.outputs` (a subset),
+    /// Save a test case of a flow (`tests/<name>.json` in its folder): a promise of what
+    /// the flow does, in `description` (business words; Studio shows it to the person
+    /// reviewing your change), inputs to run it with and what should come out (`expect.status`, `expect.outputs` (a subset),
     /// `expect.errorCode`, `expect.errorStep`). Run the cases with run_tests. Read
     /// existing ones with list_project_files / read_project_file (`tests/`).
     #[tool(annotations(
@@ -1458,7 +1461,21 @@ impl ShikigamiMcp {
                     ),
                 ));
             }
+            let replaced = shikigami_core::testcase::exists(&dir, &p.name)?;
             let path = shikigami_core::testcase::save(&dir, &p.name, &p.case)?;
+            // The review shows the cases an AI wrote as its promises.
+            if let Err(e) = self.svc().record_test_evidence(
+                &id,
+                flow.revision,
+                EvidenceDetail::TestCase {
+                    name: p.name.clone(),
+                    description: p.case.description.clone(),
+                    replaced,
+                },
+                actor(&peer),
+            ) {
+                tracing::warn!(error = %e, "failed to record test case");
+            }
             let relative = path
                 .strip_prefix(&dir)
                 .unwrap_or(&path)
@@ -2384,6 +2401,24 @@ impl ShikigamiMcp {
             }
         }
         let failed = results.iter().filter(|r| !r.passed).count();
+        let outcomes = results
+            .iter()
+            .map(|r| CaseOutcome {
+                name: r.name.clone(),
+                passed: r.passed,
+                run_id: r.run_id.clone(),
+                status: to_value(&r.status).as_str().unwrap_or_default().to_owned(),
+                mismatches: r.mismatches.clone(),
+            })
+            .collect();
+        if let Err(e) = self.svc().record_test_evidence(
+            &flow.id,
+            flow.revision,
+            EvidenceDetail::TestCases { results: outcomes },
+            actor(peer),
+        ) {
+            tracing::warn!(error = %e, "failed to record test results");
+        }
         Ok(json!({
             "flowId": flow.id,
             "passed": results.len() - failed,
