@@ -127,6 +127,7 @@ impl RunLog {
                 step_id,
                 step_type,
                 attempt,
+                ..
             } => {
                 let retry = if *attempt > 1 {
                     format!(" attempt {attempt}")

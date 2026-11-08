@@ -988,10 +988,18 @@ impl Executor {
         let is_control = is_control_type(&step.step_type);
         let started = Instant::now();
         if is_control {
+            // Of the control steps only a wait and a call give up after a time.
+            let limit_ms = match step.step_type.as_str() {
+                control::WAIT_UNTIL => Some(step.timeout_ms.unwrap_or(self.default_timeout_ms)),
+                flow::CALL => step.timeout_ms.filter(|_| self.debug.is_none()),
+                _ => None,
+            };
             self.emitter.emit(RunEvent::StepStarted {
                 step_id: step.id.clone(),
                 step_type: step.step_type.clone(),
                 attempt: 1,
+                wait_ms: None,
+                limit_ms,
             });
         }
 
@@ -1817,6 +1825,14 @@ impl Executor {
             .or_else(|| self.default_timeouts.get(&step.step_type).copied())
             .unwrap_or(self.default_timeout_ms);
 
+        // A delay ends when its time is up (or at the timeout before that).
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let wait_ms = (step.step_type == builtin::FLOW_DELAY)
+            .then(|| params.get("ms").and_then(Value::as_f64))
+            .flatten()
+            .filter(|ms| *ms >= 0.0)
+            .map(|ms| (ms as u64).min(timeout_ms));
+
         self.capture_screen(step, &params, Moment::Before).await;
         let mut attempt = 1;
         loop {
@@ -1825,6 +1841,8 @@ impl Executor {
                 step_id: step.id.clone(),
                 step_type: step.step_type.clone(),
                 attempt,
+                wait_ms,
+                limit_ms: Some(timeout_ms),
             });
             let started = Instant::now();
             let attempt_cancel = self.cancel.child_token();
@@ -2088,6 +2106,8 @@ impl Executor {
             step_id: step.id.clone(),
             step_type: step.step_type.clone(),
             attempt: 1,
+            wait_ms: None,
+            limit_ms: None,
         });
         let result = (|| {
             let name = param_str(step, "name")?.to_owned();

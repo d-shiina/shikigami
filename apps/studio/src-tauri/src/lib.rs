@@ -206,6 +206,7 @@ pub fn run() {
             commands::submit_review,
             commands::get_observation,
             commands::run_record,
+            commands::step_times,
             commands::run_flow,
             commands::test_step,
             commands::list_test_cases,

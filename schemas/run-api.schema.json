@@ -104,6 +104,24 @@
               "type": "integer",
               "format": "uint32",
               "minimum": 0
+            },
+            "waitMs": {
+              "description": "How long the step waits on purpose (`flow.delay`), in ms: it\nends then, so Studio can show how much of it is left.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "limitMs": {
+              "description": "The longest this attempt may take before it fails with a\ntimeout (the step's `timeoutMs` or the default), in ms.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             }
           },
           "required": [

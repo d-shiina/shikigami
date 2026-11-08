@@ -243,6 +243,8 @@ export type RunState = {
    * shows its latest pass.
    */
   loops: Record<string, LoopRun>;
+  /** When each step's latest attempt began and what it waits for, by `clockKey`: the clock on a running node. */
+  clocks: Record<string, StepClock>;
   /** The flow revision it runs (a resume can move it to a newer one). */
   revision: number | null;
   /** The person cleared the marks it left on the chart. */
@@ -256,6 +258,15 @@ export type LoopRun = { round: number; total: number | null; ended: boolean; lef
 
 /** Key of a loop in `RunState.loops`: the calls it ran inside and its step. */
 export const loopKey = (path: string[], stepId: string): string => `${path.join("/")}|${stepId}`;
+
+/**
+ * A running step's clock: when its attempt began (ms since the epoch), how
+ * long it waits on purpose (a delay) and when it gives up (its timeout).
+ */
+export type StepClock = { since: number; waitMs: number | null; limitMs: number | null };
+
+/** Key of a step in `RunState.clocks`: the calls it ran inside and its step. */
+export const clockKey = (path: string[], stepId: string): string => `${path.join("/")}|${stepId}`;
 
 /** The `flow.call` steps a run event happened inside (outermost first). */
 const callPathOf = (env: RunEventEnvelope): string[] => (env as { callPath?: string[] }).callPath ?? [];
@@ -352,6 +363,8 @@ export type StudioState = {
   tested: Record<string, Record<string, unknown>>;
   /** While running, keep the running step in view. */
   followRun: boolean;
+  /** How long each step of a flow usually takes (ms), from its latest runs: a running node's progress. */
+  stepTimes: { flowId: string; times: Record<string, number> } | null;
   /** Steps to pause before, per flow (this PC only). */
   breakpoints: Record<string, string[]>;
   /** Frames (a loop, if, group, …) folded to their head on the chart, per flow (this PC only). */
@@ -750,6 +763,7 @@ const newRun = (runId: string, flowId: string | null = null): RunState => ({
   inner: {},
   innerLatest: {},
   loops: {},
+  clocks: {},
   revision: null,
   trailHidden: false,
   stopping: false,
@@ -1025,6 +1039,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       stepTest: null,
       tested: {},
       followRun: true,
+      stepTimes: null,
       breakpoints: loadBreakpoints(),
       folded: loadFolded(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
@@ -1662,6 +1677,14 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ askInputs: null });
         try {
           const breakpoints = [...new Set([...runBreakpoints(get()), ...(options?.stopAt ? [options.stopAt] : [])])];
+          // From the runs before this one (a run counts once it has ended).
+          if (get().stepTimes?.flowId !== flow.id) set({ stepTimes: null });
+          void Promise.resolve()
+            .then(() => api.stepTimes(flow.id))
+            .then(
+              (times) => set({ stepTimes: { flowId: flow.id, times } }),
+              () => undefined,
+            );
           const runId = await api.run(flow.id, options?.inputs, {
             breakpoints,
             step: options?.step ?? false,
@@ -1869,6 +1892,13 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           const edited = asVariableChange(env);
           if (edited && run.pause && edited.iteration == null && callKey(path) === callKey(run.pause.callPath)) {
             run.pause = { ...run.pause, variables: { ...run.pause.variables, [edited.variable]: edited.value } };
+          }
+          if (env.type === "stepStarted") {
+            const since = Date.parse(env.at);
+            run.clocks = {
+              ...run.clocks,
+              [clockKey(path, env.stepId)]: { since: Number.isNaN(since) ? Date.now() : since, waitMs: env.waitMs ?? null, limitMs: env.limitMs ?? null },
+            };
           }
           if (path.length > 0 && env.type !== "paused" && env.type !== "resumed") {
             // Inside a called flow: its steps and variables are not the

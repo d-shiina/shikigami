@@ -355,6 +355,8 @@ export const api = {
   getObservation: (id: string) => call<ObservationContent>("get_observation", { id }),
   /** A finished run's report and events (runs/<id>/), for what an AI test run did. */
   runRecord: (runId: string) => call<RunRecord>("run_record", { runId }),
+  /** How long each step of a flow usually takes (ms, by step id), from its latest finished runs. */
+  stepTimes: (id: string) => call<Record<string, number>>("step_times", { id }),
   /** Studio runs pause on unhandled errors and at `debug.breakpoints`; `debug.step` pauses before the first step. */
   run: (
     id: string,

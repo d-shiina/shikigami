@@ -90,7 +90,7 @@ import { openImageValue } from "./ImageViewer";
 import { previewSource } from "../lib/preview";
 import { makeGlider } from "../lib/glide";
 import { keepSame } from "../lib/keepSame";
-import { callKey, diveChain, isActive, loopKey, type LoopRun, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
+import { clockKey, callKey, diveChain, isActive, loopKey, type LoopRun, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
 import { type Box, type Point, roundedPath, routeLink } from "../lib/linkRoute";
 import { CATEGORY_COLOR } from "./CommandPalette";
@@ -99,6 +99,7 @@ import { StepTools } from "./StepTools";
 import { menuFor } from "../lib/contextMenu";
 import { usePaneMenu, useSlotMenu, useStepMenu, useVariableMenu } from "./menus";
 import { valuesSeenBy, writesFrom } from "../lib/runValues";
+import { type ClockView, clockView, wholeSpan } from "../lib/runClock";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
@@ -121,7 +122,7 @@ type CallView = {
 };
 
 type StepNodeProps = NodeProps<
-  Node<StepNodeData & { runState?: StepRunState; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; primary: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
+  Node<StepNodeData & { runState?: StepRunState; clock?: string; readOnly: boolean; breakpoint: boolean; owner: string; pausedHere: boolean; issueCount: number; unsetCount: number; todos: string[]; selected: boolean; primary: boolean; byAi: boolean; reviews: HistoryEntry[]; vars: Map<string, string | undefined>; run: RunValues; diff?: StepDiff; note?: string; call?: CallView; defs: Map<string, StepTypeDef> }>
 >;
 
 /** Lines an unfolded call lists before the rest fold into "…ほか n". */
@@ -986,7 +987,9 @@ function StepNode({ data }: StepNodeProps) {
                 ? "flow-head-plain border-slate-300 hover:border-slate-400"
                 : "border-slate-200 hover:border-slate-300"
       } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
+      data-run={data.runState}
     >
+      {!head && data.clock && <RunBar clock={data.clock} stepId={data.step.id ?? ""} />}
       {(latest || (data.primary && !data.readOnly)) && (
         // Beside the step's head: the flow line runs through the top and bottom
         // centres, and variable chips sit beside the rows below the head.
@@ -1264,6 +1267,15 @@ function LoopFoot({ data }: { data: JoinData }) {
         style={{ left: foot.lineX - 1, ...(data.trail ? { background: TRAIL_STROKE[data.trail], width: 2.5 } : {}) }}
         className="flow-foot-line absolute inset-y-0 w-[1.5px] -translate-x-1/2"
       />
+      {/* While it runs over a list of known length, how far it got: the one loop whose progress is certain. */}
+      {how === "running" && rounds?.run?.total ? (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-lg bg-accent-500/15">
+          <span
+            style={{ width: `${Math.min(100, (rounds.run.round / rounds.run.total) * 100)}%` }}
+            className="block h-full bg-accent-500 motion-safe:transition-[width] motion-safe:duration-300"
+          />
+        </span>
+      ) : null}
       {rounds?.run && how && (
         <span className={`ml-auto font-medium whitespace-nowrap tabular-nums ${OUTCOME_STYLE[how]}`}>
           {loopRoundsText(foot.type, rounds.run.round, rounds.run.total, how)}
@@ -1292,10 +1304,109 @@ function StatusMark({ kind, text, title }: { kind: "done" | "running" | "paused"
   );
 }
 
+/** Now, again every second while `on`: what a running node's clock reads. */
+function useNow(on: boolean): number {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!on) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [on]);
+  return now;
+}
+
+/** A running step's clock as the node shows it now; null while the run is paused or it has only just begun. */
+function useClockView(key: string | undefined, stepId: string, frame: boolean): { view: ClockView; since: number } | null {
+  const clock = useStudio((s) => (key && s.run?.status === "running" ? s.run.clocks[key] : undefined));
+  // How long it took before is known for the open flow's own steps.
+  const usual = useStudio((s) => (key?.startsWith("|") && s.stepTimes && s.stepTimes.flowId === s.run?.flowId ? s.stepTimes.times[stepId] : undefined));
+  const now = useNow(!!clock);
+  if (!clock) return null;
+  const view = clockView(clock, usual, now, frame);
+  return view ? { view, since: clock.since } : null;
+}
+
+const CLOCK_UNITS = () => ({ sec: t.runLog.sec, min: t.runLog.min });
+
+/** What a running node's clock says: time left, against the usual time, or against its timeout. */
+function clockText(view: ClockView): string {
+  const units = CLOCK_UNITS();
+  const took = wholeSpan(view.elapsed, units);
+  const total = view.total === null ? "" : wholeSpan(view.total, units);
+  return {
+    // Rounded up: it never says 0 秒 while it still waits.
+    wait: t.flow.clockLeft(wholeSpan(Math.ceil(Math.max(0, (view.total ?? 0) - view.elapsed) / 1000) * 1000, units)),
+    usual: t.flow.clockUsual(took, total),
+    long: t.flow.clockLong(took, total),
+    limit: t.flow.clockLimit(took, total),
+    plain: took,
+  }[view.kind];
+}
+
+/** The mark in a running frame's head and, once it takes a while, how long it has run and when it gives up. */
+function RunClock({ clock, stepId, frame }: { clock?: string; stepId: string; frame: boolean }) {
+  const shown = useClockView(clock, stepId, frame);
+  if (!shown) return <StatusMark kind="running" />;
+  const { view } = shown;
+  const text = clockText(view);
+  return (
+    <span
+      title={t.flow.clockTitle[view.kind]}
+      className={`flex shrink-0 items-center gap-1 text-[11.5px] whitespace-nowrap tabular-nums ${view.kind === "long" ? "text-amber-700" : "text-slate-500"}`}
+    >
+      <span className="h-[10px] w-[10px] shrink-0 animate-pulse rounded-full bg-accent-500" />
+      {text}
+    </span>
+  );
+}
+
+/**
+ * Along the bottom of a running node, how far it got: drawn only when
+ * that is known (a delay, or how long the step took before). It grows by
+ * itself (a CSS animation), so the node is not drawn again for it.
+ */
+function RunBar({ clock, stepId }: { clock: string; stepId: string }) {
+  const shown = useClockView(clock, stepId, false);
+  if (!shown) return null;
+  const { view } = shown;
+  const bar = view.bar;
+  return (
+    <>
+      {bar && (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-lg bg-accent-500/15">
+          {/* A new attempt or pass starts the bar again. */}
+          <RunBarFill key={`${shown.since}:${bar.total}`} elapsed={bar.elapsed} total={bar.total} long={view.kind === "long"} />
+        </span>
+      )}
+      {/* Under the node's right corner, clear of the line out of its centre, so its head keeps its name. */}
+      <span
+        title={t.flow.clockTitle[view.kind]}
+        className={`pointer-events-none absolute top-full right-1 mt-1 text-[11px] leading-4 whitespace-nowrap tabular-nums ${
+          view.kind === "long" ? "font-medium text-amber-700" : "text-slate-500"
+        }`}
+      >
+        {clockText(view)}
+      </span>
+    </>
+  );
+}
+
+function RunBarFill({ elapsed, total, long }: { elapsed: number; total: number; long: boolean }) {
+  // Where the bar was when it appeared: the animation goes on from there.
+  const [from] = useState(elapsed);
+  return (
+    <span
+      className={`run-bar block h-full bg-accent-500 ${long ? "opacity-50" : ""}`}
+      style={{ animationDuration: `${total}ms`, animationDelay: `-${from}ms`, ["--run-bar-steps" as string]: Math.max(1, Math.round(total / 1000)) }}
+    />
+  );
+}
+
 /** The right end of a node's head: how it ran, what is left to do, who changed it. */
 function NodeStatus({ data }: { data: StepNodeProps["data"] }) {
   const marks: React.ReactNode[] = [];
-  if (data.runState === "running") marks.push(<StatusMark key="run" kind="running" />);
+  if (data.runState === "running") marks.push(data.head ? <RunClock key="run" clock={data.clock} stepId={data.step.id ?? ""} frame /> : <StatusMark key="run" kind="running" />);
   if (data.runState === "succeeded") marks.push(<StatusMark key="run" kind="done" title={t.flow.ranOk} />);
   if (data.runState === "paused") marks.push(<StatusMark key="run" kind="paused" />);
   if (data.runState === "failed") marks.push(<StatusMark key="run" kind="error" text={t.flow.ranFailed} />);
@@ -1881,6 +1992,8 @@ export function FlowCanvas() {
         data: {
           ...n.data,
           runState: states[id],
+          // Only a running node keeps time: the others stay as they were.
+          clock: states[id] === "running" ? clockKey(path, id) : undefined,
           readOnly: inside,
           breakpoint: breakpoints.includes(id),
           owner: flow?.id ?? "",

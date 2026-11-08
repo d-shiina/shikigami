@@ -367,6 +367,26 @@ textarea,
     animation: none !important;
   }
 }
+/* How far a running node got (RunBar): it grows by itself, one step a second when motion is reduced. */
+@keyframes run-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.run-bar {
+  transform-origin: left;
+  animation-name: run-bar;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-bar {
+    animation-timing-function: steps(var(--run-bar-steps), end);
+  }
+}
 /* The step of a frame is picked: the whole frame is marked, its head being its top edge. */
 .flow-frame.flow-frame-selected {
   border-color: var(--color-primary);

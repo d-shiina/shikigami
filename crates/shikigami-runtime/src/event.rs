@@ -114,6 +114,14 @@ pub enum RunEvent {
         step_id: StepId,
         step_type: String,
         attempt: u32,
+        /// How long the step waits on purpose (`flow.delay`), in ms: it
+        /// ends then, so Studio can show how much of it is left.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wait_ms: Option<u64>,
+        /// The longest this attempt may take before it fails with a
+        /// timeout (the step's `timeoutMs` or the default), in ms.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit_ms: Option<u64>,
     },
     StepFinished {
         step_id: StepId,
