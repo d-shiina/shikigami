@@ -1,19 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
+import type { TraceFilter } from "../lib/runTrace";
 import { type BottomTab, isActive, runBreakpoints, trailOf } from "../store";
 import { PERSON_CODES } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { IssuesPanel } from "./IssuesPanel";
 import { Resizer } from "./Resizer";
+import { RunLog, RunLogBar } from "./RunLog";
 import { TestsPanel } from "./TestsPanel";
-
-const LEVEL_STYLE = {
-  debug: "text-slate-400",
-  info: "text-slate-700",
-  warn: "text-amber-700",
-  error: "text-shu-600",
-} as const;
 
 /**
  * The panel under the chart: what a run did (log), what is wrong with the
@@ -50,6 +45,7 @@ export function BottomPanel() {
   // A part to pick is a to-do, counted once, not also as an error.
   const issueCount = useStudio((s) => s.validation?.issues.filter((i) => !PERSON_CODES.has(i.code)).length ?? 0) + todos;
   const [height, setHeight] = useState(readHeight);
+  const [filter, setFilter] = useState<TraceFilter>("all");
   if (!tab) return null;
   const resize = (next: number) => {
     setHeight(next);
@@ -75,31 +71,26 @@ export function BottomPanel() {
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`relative flex h-full items-center gap-1 px-2 text-xs font-medium ${tab === key ? "text-ink" : "text-slate-500 hover:text-ink"}`}
+            className={`relative flex h-full shrink-0 items-center gap-1 px-2 text-xs font-medium whitespace-nowrap ${tab === key ? "text-ink" : "text-slate-500 hover:text-ink"}`}
           >
             {label}
             {count > 0 && <span className="rounded-md bg-slate-200 px-1.5 text-[10px] text-slate-600">{count}</span>}
             {tab === key && <span className="absolute inset-x-2 bottom-[-1px] h-[2px] bg-ink" />}
           </button>
         ))}
-        {tab === "log" && run && (
-          <span className="ml-2 truncate text-xs text-slate-500">
-            <span title={run.runId}>{t.status[run.status]}</span>
-          </span>
-        )}
-        <span className="flex-1" />
+        {tab === "log" && run ? <RunLogBar filter={filter} onFilter={setFilter} /> : <span className="flex-1" />}
         {tab === "log" && trail && (
-          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={hideTrail}>
+          <button type="button" className="shrink-0 rounded-md px-2 text-xs leading-6 whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={hideTrail}>
             {t.clearTrail}
           </button>
         )}
         {tab === "log" && breakpointCount > 0 && (
-          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clearBreakpoints}>
+          <button type="button" className="shrink-0 rounded-md px-2 text-xs leading-6 whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clearBreakpoints}>
             {t.clearBreakpoints(breakpointCount)}
           </button>
         )}
         {tab === "log" && run && (
-          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clear}>
+          <button type="button" className="shrink-0 rounded-md px-2 text-xs leading-6 whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clear}>
             {t.clearLog}
           </button>
         )}
@@ -107,35 +98,13 @@ export function BottomPanel() {
           ✕
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">{tab === "log" ? <RunLog /> : tab === "tests" ? <TestsPanel /> : <IssuesPanel />}</div>
-    </section>
-  );
-}
-
-function RunLog() {
-  const run = useStudio((s) => s.run);
-  const goTo = useStudio((s) => s.goTo);
-  const end = useRef<HTMLDivElement>(null);
-  const count = run?.logs.length ?? 0;
-  useEffect(() => {
-    // Braces matter: WebView2 returns a Promise here, which React would call as a cleanup.
-    end.current?.scrollIntoView({ block: "end" });
-  }, [count]);
-
-  return (
-    <div className="px-3 py-1 font-mono text-xs">
-      {run?.logs.map((entry) => (
-        <div key={`${entry.seq}-${entry.message}`} className={`flex gap-2 ${LEVEL_STYLE[entry.level]}`}>
-          <span className="shrink-0 text-slate-400">{entry.at.slice(11, 19)}</span>
-          <span className="whitespace-pre-wrap">{entry.message}</span>
-          {entry.stepId && (
-            <button type="button" className="ml-auto shrink-0 text-slate-400 hover:text-brand-600" onClick={() => entry.stepId && goTo(entry.stepId)}>
-              {entry.stepId.slice(0, 12)}
-            </button>
-          )}
+      {tab === "log" ? (
+        <div className="min-h-0 flex-1">
+          <RunLog filter={filter} />
         </div>
-      ))}
-      <div ref={end} />
-    </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">{tab === "tests" ? <TestsPanel /> : <IssuesPanel />}</div>
+      )}
+    </section>
   );
 }

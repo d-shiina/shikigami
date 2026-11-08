@@ -250,6 +250,11 @@ pub struct RecordsPolicy {
     /// screen beside the run's log (`logs/<time>_failed.png`). On unless `false`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure_screenshots: Option<bool>,
+    /// When the flow is run from Studio, keep a picture of the screen at
+    /// each browser or desktop step (the first time it runs) for the
+    /// flow's 手順書. The pictures stay on this PC. On unless `false`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_screens: Option<bool>,
 }
 
 impl RecordsPolicy {

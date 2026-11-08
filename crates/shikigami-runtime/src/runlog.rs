@@ -10,17 +10,17 @@
 //! [`LOGS_KEPT`] are kept. The complete record AI clients read stays in the
 //! run record (`runs/<run-id>/events.jsonl`); this file is for people.
 
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use shikigami_core::project::{LOGS_FOLDER, LOGS_KEPT};
-use shikigami_core::{Flow, StepId, StepRegistry, expr};
+use shikigami_core::{StepId, expr};
 use time::{OffsetDateTime, UtcOffset};
 
 use crate::event::{RunEvent, RunEventEnvelope, RunStatus};
+use crate::names::StepNames;
 
 const RUNNING: &str = "running";
 
@@ -30,17 +30,13 @@ pub(crate) struct RunLog {
     file: BufWriter<File>,
     offset: UtcOffset,
     /// What each step is called in the log: its name, else its type's label.
-    names: HashMap<StepId, String>,
+    names: StepNames,
 }
 
 impl RunLog {
     /// Starts `logs/<stamp>_running.log`. `None` (and a warning) when the
     /// folder cannot be written: a run never fails for its log.
-    pub(crate) fn create<'a>(
-        project_dir: &Path,
-        flows: impl IntoIterator<Item = &'a Flow>,
-        registry: &StepRegistry,
-    ) -> Option<Self> {
+    pub(crate) fn create(project_dir: &Path, names: StepNames) -> Option<Self> {
         let dir = project_dir.join(LOGS_FOLDER);
         let offset = UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC);
         let now = OffsetDateTime::now_utc().to_offset(offset);
@@ -86,19 +82,6 @@ impl RunLog {
                 return None;
             }
         };
-        let mut names = HashMap::new();
-        for flow in flows {
-            for step in flow.walk() {
-                let name = if step.name.trim().is_empty() {
-                    registry
-                        .get(&step.step_type)
-                        .map_or_else(|| step.step_type.clone(), |d| d.label.clone())
-                } else {
-                    step.name.clone()
-                };
-                names.insert(step.id.clone(), name);
-            }
-        }
         Some(Self {
             dir,
             stamp,
@@ -109,7 +92,7 @@ impl RunLog {
     }
 
     fn name(&self, id: &StepId) -> &str {
-        self.names.get(id).map_or("", String::as_str)
+        self.names.step(id)
     }
 
     /// Writes the line for one event (already masked by the emitter).
@@ -194,6 +177,8 @@ impl RunLog {
                     .unwrap_or_default();
                 format!("  [{level}] {message}")
             }
+            // Pictures for the 手順書 are not part of the readable log.
+            RunEvent::ScreenCaptured { .. } => return None,
             RunEvent::HumanActionRequired { step_id, message } => {
                 format!("  WAITING {}: {message}", self.name(step_id))
             }

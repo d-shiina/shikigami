@@ -63,7 +63,7 @@ describe("explainError", () => {
   });
 
   it("puts the code first in the run log", () => {
-    expect(errorLine({ code: "CLIPBOARD_BUSY", message: "busy" })).toBe("CLIPBOARD_BUSY: クリップボードをほかのアプリが使っています");
+    expect(errorLine({ code: "CLIPBOARD_BUSY", message: "busy" })).toBe("クリップボードをほかのアプリが使っています");
   });
 });
 

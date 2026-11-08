@@ -162,7 +162,7 @@ pub async fn runner_run(
             message: e.message,
             details: e.details,
         })?;
-    track_run(app, &state, id, handle, RUNNER_EVENT)
+    track_run(app, &state, id, handle, RUNNER_EVENT, None)
 }
 
 /// The file or folder picker of a `format: file` / `folder` input. `start`

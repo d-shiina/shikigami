@@ -71,6 +71,8 @@ interface Session {
   secrets: Set<string>;
   /** Fields that received a secret: blacked out in screenshots. */
   secretFields: Locator[];
+  /** Fields the run typed into: covered in pictures for the 手順書. */
+  filledFields: Locator[];
 }
 
 /** A registered secret resolved by the Runtime for browser.fill. */
@@ -83,6 +85,8 @@ interface SecretInfo {
 
 const MASK = "***";
 const PASSWORD_FIELDS = 'input[type="password"]';
+/** Typed fields remembered per context for the 手順書's pictures. */
+const MAX_FILLED_FIELDS = 200;
 /** Pause between keys for `typing: true` (fast enough, slow enough for key handlers). */
 const TYPING_DELAY_MS = 30;
 
@@ -303,7 +307,7 @@ export class Adapter {
       const context = await (await this.browser(headless)).newContext({ locale: "ja-JP", storageState });
       context.setDefaultTimeout(this.timeout);
       const page = await context.newPage();
-      const created: Session = { context, page, headless, history: [page], answered: [], secrets: new Set(), secretFields: [] };
+      const created: Session = { context, page, headless, history: [page], answered: [], secrets: new Set(), secretFields: [], filledFields: [] };
       context.on("page", (p) => this.watchTab(created, p));
       this.watchTab(created, page);
       session = created;
@@ -460,7 +464,7 @@ export class Adapter {
       const context = browser.contexts()[0] ?? (await browser.newContext());
       const pages = context.pages();
       const page = pages.find((p) => !p.url().startsWith("devtools://")) ?? (await context.newPage());
-      const created: Session = { context, page, headless: false, history: [page], answered: [], secrets: new Set(), secretFields: [], attached: browser };
+      const created: Session = { context, page, headless: false, history: [page], answered: [], secrets: new Set(), secretFields: [], filledFields: [], attached: browser };
       for (const p of pages) this.watchTab(created, p);
       context.on("page", (p) => this.watchTab(created, p));
       session = created;
@@ -739,6 +743,7 @@ export class Adapter {
     const typing = params.typing === true;
     if (!secret) {
       await this.type(locator, value, typing, this.limit(params));
+      if (value && session.filledFields.length < MAX_FILLED_FIELDS) session.filledFields.push(locator);
       return null;
     }
     // Never type a secret into a page it was not registered for (a
@@ -888,6 +893,7 @@ export class Adapter {
     const path = String(params.path ?? "");
     if (!path) throw new AdapterError("INVALID_PARAMS", "path is required");
     const session = this.session(params);
+    if (params.report === true) return await this.manualShot(session, path, params);
     // Password fields and fields that received a secret are blacked out.
     const mask = [session.page.locator(PASSWORD_FIELDS), ...session.secretFields];
     await session.page.screenshot({
@@ -898,6 +904,54 @@ export class Adapter {
       timeout: this.limit(params),
     });
     return path;
+  }
+
+  /**
+   * A picture for the 手順書 (the Runtime's `report: true`): the visible part
+   * of the page as JPEG, with where `mark` is (scrolled into view first) and
+   * where input fields and table cells are, for the 手順書 to blur. Fields
+   * the run typed into, secrets and password fields are covered. Never waits long
+   * for `mark`: a missing element just leaves the mark out.
+   */
+  private async manualShot(session: Session, path: string, params: Params): Promise<unknown> {
+    const page = session.page;
+    let mark: { x: number; y: number; width: number; height: number } | null = null;
+    if (params.mark && typeof params.mark === "object") {
+      const element = locate(page, params.mark as Target).first();
+      await element.scrollIntoViewIfNeeded({ timeout: 800 }).catch(() => {});
+      mark = await element.boundingBox({ timeout: 800 }).catch(() => null);
+    }
+    const viewport = page.viewportSize() ?? (await page.evaluate(() => ({ width: innerWidth, height: innerHeight })));
+    const regions = await page
+      .evaluate((max) => {
+        const out: { x: number; y: number; width: number; height: number }[] = [];
+        const fields = document.querySelectorAll(
+          "input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=image]), textarea, select, [contenteditable=''], [contenteditable=true], td",
+        );
+        for (const el of fields) {
+          if (out.length >= max) break;
+          const r = el.getBoundingClientRect();
+          if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) continue;
+          out.push({ x: r.left, y: r.top, width: r.width, height: r.height });
+        }
+        return out;
+      }, 400)
+      .catch(() => []);
+    // Password fields, secrets and what the run typed are covered in one
+    // soft grey: the 手順書 says in words what goes in them.
+    await page.screenshot({
+      path,
+      type: "jpeg",
+      quality: 75,
+      mask: [page.locator(PASSWORD_FIELDS), ...session.secretFields, ...session.filledFields],
+      maskColor: "#d5d8dd",
+      timeout: 4_000,
+    });
+    const title = await page.title().catch(() => "");
+    // Steps on the same address scrolled to the same place share one picture.
+    const scroll = await page.evaluate(() => [window.scrollX, window.scrollY]).catch(() => [0, 0]);
+    const view = `${page.url()} @${scroll.join(",")}`;
+    return { path, width: viewport.width, height: viewport.height, mark, regions, title, view };
   }
 
   /** True when `target` is (or becomes, within `waitMs`) visible; never throws for a missing element. */

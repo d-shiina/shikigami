@@ -61,6 +61,27 @@ fn trigger_text(report: &RunReport) -> String {
     }
 }
 
+/// Where the run failed, in the names people see in Studio: the node, and
+/// the node inside the called flow when it failed in there. The step ID is
+/// only a fallback (an error without a label); the JSON format carries it.
+fn place(error: &shikigami_runtime::RunError) -> Option<String> {
+    let node = error
+        .step_label
+        .clone()
+        .or_else(|| error.step_id.as_ref().map(ToString::to_string))?;
+    let inner = error.details.as_ref().and_then(|d| d.get("subFlow"));
+    let flow = inner
+        .and_then(|s| s.get("flowName"))
+        .and_then(Value::as_str);
+    let step = inner
+        .and_then(|s| s.get("stepLabel"))
+        .and_then(Value::as_str);
+    Some(match (flow, step) {
+        (Some(flow), Some(step)) => format!("「{node}」→ サブフロー「{flow}」の「{step}」"),
+        _ => format!("「{node}」"),
+    })
+}
+
 /// Name / value lines shown in every format.
 fn facts(report: &RunReport) -> Vec<(&'static str, String)> {
     let local = |t: time::OffsetDateTime| {
@@ -79,8 +100,8 @@ fn facts(report: &RunReport) -> Vec<(&'static str, String)> {
     let mut out = vec![("フロー", report.flow_name.clone())];
     if let Some(error) = &report.error {
         out.push(("エラー", format!("{}: {}", error.code, error.message)));
-        if let Some(step) = &error.step_id {
-            out.push(("ノード", step.to_string()));
+        if let Some(place) = place(error) {
+            out.push(("ノード", place));
         }
     }
     let how = trigger_text(report);
@@ -140,7 +161,7 @@ pub fn message(report: &RunReport, format: NotifyFormat) -> Value {
             "status": report.status,
             "version": report.version,
             "error": report.error.as_ref().map(|e| json!({
-                "code": e.code, "message": e.message, "stepId": e.step_id,
+                "code": e.code, "message": e.message, "stepId": e.step_id, "stepLabel": e.step_label,
             })),
             "startedAt": report.started_at.format(&time::format_description::well_known::Rfc3339).ok(),
             "finishedAt": report.finished_at.format(&time::format_description::well_known::Rfc3339).ok(),
@@ -204,7 +225,10 @@ mod tests {
             "runId": "run_1", "flowId": "scn_a", "flowName": "受注取り込み",
             "revision": 1, "version": 2, "status": status,
             "startedAt": "2026-11-06T00:00:00Z", "finishedAt": "2026-11-06T00:01:00Z",
-            "error": { "code": "ELEMENT_NOT_FOUND", "message": "no button", "stepId": "s3" },
+            "error": {
+                "code": "ELEMENT_NOT_FOUND", "message": "no button", "stepId": "s3", "stepLabel": "出荷",
+                "details": { "subFlow": { "flowId": "scn_s", "flowName": "出荷の入力", "stepId": "t1", "stepLabel": "送信ボタン" } }
+            },
             "outputs": { "secretish": "x" },
             "origin": { "trigger": "schedule", "requestedBy": "毎朝", "machine": "PC-01" }
         }))
@@ -240,11 +264,18 @@ mod tests {
         assert!(slack.contains("ELEMENT_NOT_FOUND: no button"));
         assert!(slack.contains("スケジュール（毎朝）"));
         assert!(slack.contains("PC: PC-01"));
+        // Where, in the names Studio shows; never the internal step ID.
+        assert!(
+            slack.contains("ノード: 「出荷」→ サブフロー「出荷の入力」の「送信ボタン」"),
+            "{slack}"
+        );
+        assert!(!slack.contains("s3"));
         let teams = message(&r, NotifyFormat::Teams);
         assert_eq!(teams["attachments"][0]["content"]["type"], "AdaptiveCard");
         let json = message(&r, NotifyFormat::Json);
         assert_eq!(json["status"], "failed");
         assert_eq!(json["error"]["stepId"], "s3");
+        assert_eq!(json["error"]["stepLabel"], "出荷");
         for m in [slack, teams.to_string(), json.to_string()] {
             assert!(!m.contains("secretish"));
         }

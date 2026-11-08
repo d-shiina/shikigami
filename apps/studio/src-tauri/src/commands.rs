@@ -791,6 +791,14 @@ pub async fn run_flow(
     let version = state.service.matching_version(&flow).ok().flatten();
     let subflows = state.service.subflows(&flow)?;
     let project_dir = Some(state.service.project_dir(&id)?);
+    // A run of the whole flow keeps the pictures for its 手順書.
+    let run_id = RunId::generate();
+    let screens_dir = debug
+        .start_at
+        .is_none()
+        .then(|| crate::manual::screens_dir(state.service.store().local_root(), &id, &run_id))
+        .flatten();
+    let manual = screens_dir.clone().map(crate::manual::Collector::new);
     let handle = state
         .runtime
         .start(
@@ -799,7 +807,8 @@ pub async fn run_flow(
                 project_dir,
                 full_run: true,
                 inputs: inputs.unwrap_or_default(),
-                run_id: None,
+                run_id: Some(run_id),
+                screens_dir,
                 version,
                 debug: Some(DebugOptions {
                     pause_on_error: true,
@@ -818,7 +827,7 @@ pub async fn run_flow(
             message: e.message,
             details: e.details,
         })?;
-    track_run(app, &state, id, handle, RUN_EVENT)
+    track_run(app, &state, id, handle, RUN_EVENT, manual)
 }
 
 /// A test case with its name (`tests/<name>.json`).
@@ -1032,6 +1041,15 @@ pub async fn test_step(
         .cloned()
         .ok_or_else(|| err("STEP_NOT_FOUND", format!("no step {step_id}")))?;
     let inputs = values.unwrap_or_default();
+    // The screen it met is the node's picture in the 手順書 until a run
+    // of the whole flow takes one.
+    let mut draft = shikigami_runtime::drafts::DraftCapture::new(
+        state.service.store().local_root(),
+        &id,
+        &step,
+        Some(&flow.parts),
+        shikigami_runtime::drafts::DraftSource::Studio,
+    );
     let single = shikigami_runtime::single::flow_for(
         step,
         state.runtime.registry(),
@@ -1052,6 +1070,7 @@ pub async fn test_step(
                 run_id: Some(RunId::new(STUDIO_BROWSER)),
                 keep_adapter_state: true,
                 subflows,
+                screens_dir: draft.as_ref().map(|d| d.screens_dir()),
                 project_dir: Some(state.service.project_dir(&id)?),
                 origin: RunOrigin::new(RunTrigger::Studio),
                 ..RunOptions::default()
@@ -1078,6 +1097,9 @@ pub async fn test_step(
     let mut logs = Vec::new();
     let report = handle
         .wait_with(|event: &RunEventEnvelope| {
+            if let Some(draft) = draft.as_mut() {
+                draft.on_event(&event.event);
+            }
             if let RunEvent::Log { level, message, .. } = &event.event {
                 logs.push(StepTestLog {
                     level: *level,
@@ -1086,6 +1108,9 @@ pub async fn test_step(
             }
         })
         .await;
+    if let Some(draft) = draft {
+        draft.finish();
+    }
     if let Ok(mut runs) = state.runs.lock() {
         runs.remove(&run_id);
     }
@@ -1106,6 +1131,7 @@ pub(crate) fn track_run(
     id: FlowId,
     handle: shikigami_runtime::RunHandle,
     event_name: &'static str,
+    mut manual: Option<crate::manual::Collector>,
 ) -> CmdResult<RunId> {
     let run_id = handle.run_id.clone();
     let mut recorder = RunRecorder::create(state.service.store().local_root(), &run_id)
@@ -1131,6 +1157,9 @@ pub(crate) fn track_run(
             .wait_with(|event: &RunEventEnvelope| {
                 if let Err(e) = recorder.write_event(event) {
                     tracing::warn!(error = %e, "failed to record run event");
+                }
+                if let Some(manual) = manual.as_mut() {
+                    manual.on_event(event);
                 }
                 if let Err(e) = emit_app.emit(event_name, event) {
                     tracing::warn!(error = %e, "failed to emit run event");
@@ -1158,6 +1187,9 @@ pub(crate) fn track_run(
             Ok(report) => {
                 if let Err(e) = recorder.finish(&report) {
                     tracing::warn!(error = %e, "failed to write run report");
+                }
+                if let Some(manual) = manual.take() {
+                    manual.finish(&report);
                 }
             }
             Err(e) => tracing::error!(error = %e, "run task failed"),

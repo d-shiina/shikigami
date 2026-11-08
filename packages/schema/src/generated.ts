@@ -1620,6 +1620,12 @@ export interface RecordsPolicy {
    * screen beside the run's log (`logs/<time>_failed.png`). On unless `false`.
    */
   failureScreenshots?: boolean | null;
+  /**
+   * When the flow is run from Studio, keep a picture of the screen at
+   * each browser or desktop step (the first time it runs) for the
+   * flow's 手順書. The pictures stay on this PC. On unless `false`.
+   */
+  manualScreens?: boolean | null;
 }
 /**
  * Runs asked for by a management server (see
@@ -1891,6 +1897,12 @@ export interface RecordsPolicy1 {
    * screen beside the run's log (`logs/<time>_failed.png`). On unless `false`.
    */
   failureScreenshots?: boolean | null;
+  /**
+   * When the flow is run from Studio, keep a picture of the screen at
+   * each browser or desktop step (the first time it runs) for the
+   * flow's 手順書. The pictures stay on this PC. On unless `false`.
+   */
+  manualScreens?: boolean | null;
 }
 /**
  * Runs a management server may ask this PC for. Everything is closed by
@@ -2035,6 +2047,25 @@ export type RunEventEnvelope1 =
       message: string;
     }
   | {
+      type: "screenCaptured";
+      stepId: StepId;
+      file: string;
+      width: number;
+      height: number;
+      mark?: ScreenRect | null;
+      regions?: ScreenRect[];
+      /**
+       * The page's or window's title, secrets masked.
+       */
+      title?: string | null;
+      /**
+       * Equal for two pictures of the same view (the same address
+       * scrolled to the same place): their marks share one picture.
+       * An opaque digest.
+       */
+      view?: string | null;
+    }
+  | {
       type: "paused";
       stepId: StepId;
       stepType: string;
@@ -2176,12 +2207,30 @@ export interface RunError {
   stepId?: StepId | null;
   stepType?: string | null;
   /**
+   * The node as people know it: its name, else its type's label. Set on
+   * the run's final error (report, notifications), so the place can be
+   * told without the flow at hand; `stepId` stays the key to the node.
+   */
+  stepLabel?: string | null;
+  /**
    * Adapter-specific evidence: UI element snapshot, screenshot path,
    * expected vs. actual state, etc.
    */
   details?: {
     [k: string]: unknown;
   };
+}
+/**
+ * A rectangle in a picture's pixels, from its top-left corner.
+ *
+ * This interface was referenced by `ShikigamiRunApi`'s JSON-Schema
+ * via the `definition` "ScreenRect".
+ */
+export interface ScreenRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 /**
  * Final result of a run.

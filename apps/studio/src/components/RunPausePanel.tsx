@@ -3,17 +3,17 @@
 // ask the AI to fix it, retry, skip, step, or end the run. Also tells about
 // a run that ended in failure instead of letting it end quietly.
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { flowBusy, useAgent } from "../agent";
 import { useStudio } from "../context";
 import { clipboardAi } from "../lib/askAi";
 import { explainError } from "../lib/errorText";
 import { fixRequest } from "../lib/fixRequest";
 import { plain, sentence } from "../lib/sentence";
-import { diveChain, findStep, isActive } from "../store";
+import { diveChain, errorPlace, findStep, isActive } from "../store";
 import { usePendingReview } from "./Timeline";
 import { shortText } from "./ValueView";
 import { HoverPreview } from "./HoverPreview";
+import { openImage } from "./ImageViewer";
 import { stepLabel as typeName, t } from "../lib/i18n";
 
 const MAX_VARS = 14;
@@ -145,28 +145,15 @@ function Variables({ values, secrets }: { values: Record<string, unknown>; secre
 }
 
 function Screenshot({ src, title }: { src: string; title: string }) {
-  const [open, setOpen] = useState(false);
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title={t.pause.screenshotTitle}
-        className="shrink-0 overflow-hidden rounded-lg border border-slate-300 hover:border-brand-500"
-      >
-        <img src={src} alt={title} className="h-[92px] w-auto max-w-[180px] object-cover object-top" />
-      </button>
-      {open &&
-        createPortal(
-          <div className="fixed inset-0 z-50 grid place-items-center bg-ink/50 p-6" onClick={() => setOpen(false)}>
-            <figure lang="ja" className="max-h-full overflow-auto rounded-lg bg-sheet p-2 shadow-dialog">
-              <figcaption className="px-1 pb-2 text-[13px] font-bold">{title}</figcaption>
-              <img src={src} alt={title} className="max-w-[min(1200px,90vw)]" />
-            </figure>
-          </div>,
-          document.body,
-        )}
-    </>
+    <button
+      type="button"
+      onClick={() => openImage({ src, title })}
+      title={t.pause.screenshotTitle}
+      className="shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-slate-300 hover:border-brand-500"
+    >
+      <img src={src} alt={title} className="h-[92px] w-auto max-w-[180px] object-cover object-top" />
+    </button>
   );
 }
 
@@ -174,13 +161,11 @@ export function RunPausePanel() {
   const run = useStudio((s) => s.run);
   const flow = useStudio((s) => s.flow);
   const called = useStudio((s) => s.called);
-  const leaveCalls = useStudio((s) => s.leaveCalls);
-  const enterCall = useStudio((s) => s.enterCall);
   const stepTypes = useStudio((s) => s.stepTypes);
   const debug = useStudio((s) => s.debug);
   const startRun = useStudio((s) => s.startRun);
   const dismissFailure = useStudio((s) => s.dismissFailure);
-  const goTo = useStudio((s) => s.goTo);
+  const goToPlace = useStudio((s) => s.goToPlace);
   const setReviewing = useStudio((s) => s.setReviewing);
   const reviewing = useStudio((s) => s.reviewing);
   const pending = usePendingReview();
@@ -196,18 +181,18 @@ export function RunPausePanel() {
   const failure = !isActive(run) ? run.failure : null;
   if (!pause && !failure) return null;
 
-  const stepId = pause?.stepId ?? failure?.stepId ?? null;
+  // A run that failed inside a called flow ended at the call step; the node
+  // in there is where it went wrong.
+  const failedAt = !pause && failure?.stepId ? errorPlace(flow, called, failure.stepId, failure.details) : null;
+  const stepId = pause?.stepId ?? failedAt?.stepId ?? null;
   // Paused inside a call: the step and its fix belong to the called flow.
-  const inCall = pause?.callPath ?? [];
+  const inCall = pause?.callPath ?? failedAt?.path ?? [];
   const owner = inCall.length > 0 ? (diveChain(flow, called, inCall).at(-1)?.flow ?? flow) : flow;
   const step = stepId ? findStep(owner.steps ?? [], stepId) : null;
   // The paused values are the owner's (a called flow has its own variables).
   const secretNames = new Set((owner.variables ?? []).filter((v) => v.secret).map((v) => v.name));
   const show = () => {
-    if (!stepId) return;
-    if (inCall.length === 0) return goTo(stepId);
-    leaveCalls(0);
-    for (const id of inCall) enterCall(id);
+    if (stepId) goToPlace({ path: inCall, stepId });
   };
   const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
   const stepLabel = step ? step.name || plain(sentence(step, def)) : stepId ? t.evidence.goneStep : null;
@@ -261,6 +246,7 @@ export function RunPausePanel() {
             className="min-w-0 truncate text-[14px] font-bold hover:text-brand-600 hover:underline"
             title={t.pause.showStep}
           >
+            {inCall.length > 0 && owner !== flow && <span className="mr-1.5 font-semibold text-slate-500">{owner.name} ›</span>}
             {kind && <span className="mr-1.5 text-[12px] font-semibold text-slate-500">{kind}</span>}
             {stepLabel}
             {pause && !onError && <span className="ml-1.5 text-[12px] font-normal text-slate-500">{t.pause.before}</span>}

@@ -4,7 +4,7 @@
 import type { VariableChange } from "../store";
 import { locale, t } from "../lib/i18n";
 import { previewSource } from "../lib/preview";
-import { HoverPreview, PreviewBody } from "./HoverPreview";
+import { HoverPreview, type PictureSize, PreviewBody } from "./HoverPreview";
 
 const MAX_ROWS = 8;
 const MAX_COLS = 6;
@@ -40,7 +40,7 @@ function More({ count }: { count: number }) {
   return count > 0 ? <div className="mt-0.5 text-[10px] text-slate-400">{t.values.more(count)}</div> : null;
 }
 
-export function ValueView({ value }: { value: unknown }) {
+export function ValueView({ value, size = "popover" }: { value: unknown; size?: PictureSize }) {
   if (Array.isArray(value) && value.length > 0 && value.every(isRecord)) {
     const cols = [...new Set(value.flatMap((r) => Object.keys(r)))].slice(0, MAX_COLS);
     return (
@@ -108,12 +108,12 @@ export function ValueView({ value }: { value: unknown }) {
     );
   }
   const source = previewSource(value);
-  if (source?.kind === "imageData") return <PreviewBody source={source} />;
+  if (source?.kind === "imageData") return <PreviewBody source={source} size={size} />;
   return (
     <div>
       <div className={`text-[13px] font-semibold ${typeof value === "number" ? "tabular-nums" : ""} ${source ? "break-all" : ""}`}>{shortText(value)}</div>
       {/* A path to a picture or a table shows what is in it. */}
-      {source && <PreviewBody source={source} head={false} />}
+      {source && <PreviewBody source={source} head={false} size={size} />}
     </div>
   );
 }

@@ -64,6 +64,7 @@ impl From<StepError> for RunError {
             message: e.message,
             step_id: None,
             step_type: None,
+            step_label: None,
             details: e.details,
         }
     }

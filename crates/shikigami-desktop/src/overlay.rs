@@ -619,6 +619,35 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().collect()
 }
 
+/// `DrawTextW` of `text`, made safe for what it does with the buffer.
+///
+/// An empty line (the banner's second line before the mouse is over
+/// anything) is not drawn at all: an empty `Vec` points at no memory (a
+/// dangling address), and DrawTextW with `DT_END_ELLIPSIS` read from it and
+/// crashed Studio inside USER32 (0xc0000005, then 0xc000041d: the banner's
+/// first paint, as soon as the picker started). Other text is copied into a
+/// buffer with spare room and a NUL after it, so a read just past the end
+/// stays inside the buffer.
+///
+/// SAFETY: `hdc` is a device context being painted.
+pub(crate) unsafe fn draw_text(
+    hdc: windows::Win32::Graphics::Gdi::HDC,
+    text: &[u16],
+    rect: &mut RECT,
+    flags: windows::Win32::Graphics::Gdi::DRAW_TEXT_FORMAT,
+) {
+    if text.is_empty() {
+        return;
+    }
+    let mut buffer = Vec::with_capacity(text.len() + 8);
+    buffer.extend_from_slice(text);
+    buffer.resize(text.len() + 8, 0);
+    // SAFETY: the caller's; the slice is valid for its length and more.
+    unsafe {
+        DrawTextW(hdc, &mut buffer[..text.len()], rect, flags);
+    }
+}
+
 unsafe extern "system" fn frame_proc(
     hwnd: HWND,
     msg: u32,
@@ -713,8 +742,7 @@ unsafe fn paint_banner(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> 
                 right: client.right - 12,
                 bottom: top + half,
             };
-            let mut text = wide(&text);
-            DrawTextW(hdc, &mut text, &mut line, flags);
+            draw_text(hdc, &wide(&text), &mut line, flags);
             SelectObject(hdc, old);
             let _ = DeleteObject(HGDIOBJ(f.0));
         }
@@ -940,4 +968,32 @@ unsafe fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     }
     // SAFETY: passing the event on, as every hook must.
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::Graphics::Gdi::{CreateCompatibleDC, DeleteDC};
+
+    /// The banner's lines, empty or not, draw without touching memory they
+    /// do not own (the picker crashed Studio on its first paint).
+    #[test]
+    fn banner_lines_draw_empty_and_long() {
+        // SAFETY: a memory DC made and released here.
+        unsafe {
+            let dc = CreateCompatibleDC(None);
+            let flags = DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX;
+            let long = "［請求書 - Excel］ button「保存」".repeat(40);
+            for text in ["", "a", long.as_str()] {
+                let mut rect = RECT {
+                    left: 0,
+                    top: 0,
+                    right: 120,
+                    bottom: 20,
+                };
+                draw_text(dc, &wide(text), &mut rect, flags);
+            }
+            let _ = DeleteDC(dc);
+        }
+    }
 }

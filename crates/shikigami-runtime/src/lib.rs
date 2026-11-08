@@ -12,12 +12,15 @@ pub mod adapter;
 pub mod audit;
 pub mod builtin;
 pub mod debug;
+pub mod drafts;
 pub mod event;
 mod exec;
 pub mod handler;
+pub mod names;
 pub mod node;
 pub mod record;
 mod runlog;
+mod screens;
 pub mod sidecar;
 pub mod single;
 pub mod start;
@@ -45,7 +48,7 @@ pub use adapter::Adapter;
 pub use debug::{DebugCommand, DebugControl, DebugOptions, PauseReason, ResumeAction};
 pub use event::{
     LogLevel, RunError, RunEvent, RunEventEnvelope, RunOrigin, RunReport, RunSnapshot, RunStatus,
-    RunTrigger, StepOutcome, SubflowRef,
+    RunTrigger, ScreenRect, StepOutcome, SubflowRef,
 };
 pub use exec::{DesktopProbe, KeepAwake};
 pub use handler::{ActionHandler, ActionInput, BoxFuture, StepError};
@@ -93,6 +96,11 @@ pub struct RunOptions {
     /// start that did not run. Unknown names and secret variables are
     /// ignored.
     pub start_values: Map<String, Value>,
+    /// Keep a picture of the screen at each browser or desktop step, the
+    /// first time it runs, in this folder (`screenCaptured` events), for
+    /// the flow's 手順書. Off when the policy's `records.manualScreens` is
+    /// `false`.
+    pub screens_dir: Option<PathBuf>,
 }
 
 /// The execution engine. Cheap to clone; share one per process.
@@ -272,15 +280,20 @@ impl Runtime {
             current_step: None,
             steps_executed: 0,
         }));
+        let names = names::StepNames::new(
+            std::iter::once(&flow).chain(library.values().map(|s| &**s)),
+            &self.registry,
+        );
         let log = match (&options.project_dir, options.full_run) {
-            (Some(dir), true) => runlog::RunLog::create(
-                dir,
-                std::iter::once(&flow).chain(library.values().map(|s| &**s)),
-                &self.registry,
-            ),
+            (Some(dir), true) => runlog::RunLog::create(dir, names.clone()),
             _ => None,
         };
-        let emitter = Emitter::new(run_id.clone(), tx, snapshot.clone(), log);
+        let mut emitter = Emitter::new(run_id.clone(), tx, snapshot.clone(), log);
+        if let Some(dir) = options.screens_dir.clone()
+            && policy.records.manual_screens != Some(false)
+        {
+            emitter = emitter.with_screens(dir);
+        }
         // Folders whose `work/` the run starts empty.
         let fresh_work: Vec<PathBuf> =
             if options.full_run && options.start_at.is_none() {
@@ -456,7 +469,11 @@ impl Runtime {
             if let Some(error) = error.as_mut() {
                 executor.capture_failure(&flow, error).await;
             }
-            let error = error.map(|e| emitter.mask_error(e));
+            let error = error.map(|e| {
+                let mut e = emitter.mask_error(e);
+                names.label(&flow.id, &mut e);
+                e
+            });
 
             let outputs: Map<String, Value> = flow
                 .variables

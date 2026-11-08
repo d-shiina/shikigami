@@ -47,6 +47,7 @@ import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
 import { registerExtensions } from "./lib/extensions";
 import { boxRange, copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
 import { errorLine } from "./lib/errorText";
+import { emptyTrace, enclosing, findNode, type RunTrace, traceEvent, withError } from "./lib/runTrace";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
 import { ancestorsOf } from "./flow/layout";
@@ -54,6 +55,7 @@ import { resultName } from "./lib/resultName";
 import { summarize } from "./lib/review";
 import { setFlowNames } from "./lib/sentence";
 import { readClipboardText } from "./lib/clipboard";
+import { focusFirstSetting } from "./lib/focusSetting";
 
 export type Selection =
   | { kind: "step"; stepId: string }
@@ -101,7 +103,55 @@ export type LogEntry = {
   level: LogLevel;
   message: string;
   stepId?: string | null;
+  /** Inside a called flow: the call steps down to the flow `stepId` is in. */
+  callPath?: string[];
+  /** The node run (`RunTrace`) it belongs to; null or unset for the run itself. */
+  node?: number | null;
+  /** What the line marks in the run, drawn as its own row: start, end, pause, resume. */
+  mark?: "start" | "end" | "pause" | "resume";
+  /** A node's failure: the tree shows it on the node itself. */
+  fromStep?: boolean;
 };
+
+/** A node anywhere a run went: `stepId` in the flow the calls of `path` lead to. */
+export type StepPlace = { path: string[]; stepId: string };
+
+/**
+ * Where an error of the open flow's `stepId` happened: down inside the
+ * called flow when it failed in there. `details.subFlow` names that flow and
+ * (`callPath`) the calls below `stepId` that led to it. A record without the
+ * calls is searched on the chart, and only a single route counts: one flow
+ * called from two places could be either.
+ */
+export function errorPlace(root: Flow | null, called: Record<string, Flow>, stepId: string, details: unknown): StepPlace {
+  const sub = details && typeof details === "object" ? (details as { subFlow?: { flowId?: unknown; stepId?: unknown; callPath?: unknown } }).subFlow : undefined;
+  const flowId = typeof sub?.flowId === "string" ? sub.flowId : null;
+  const inner = typeof sub?.stepId === "string" ? sub.stepId : null;
+  const outer: StepPlace = { path: [], stepId };
+  if (!root || !flowId || !inner) return outer;
+  const leadsThere = (path: string[]) => {
+    const chain = diveChain(root, called, path);
+    const here = chain.length === path.length ? chain.at(-1)?.flow : undefined;
+    return here?.id === flowId && findStep(here.steps ?? [], inner) !== null;
+  };
+  if (Array.isArray(sub?.callPath)) {
+    const path = [stepId, ...sub.callPath.filter((id): id is string => typeof id === "string")];
+    return leadsThere(path) ? { path, stepId: inner } : outer;
+  }
+  const calls = (steps: Step[]): string[] =>
+    steps.flatMap((s) => [...(s.type === CALL && s.id ? [s.id] : []), ...Object.values(s.blocks ?? {}).flatMap(calls)]);
+  const found: string[][] = [];
+  const search = (path: string[]) => {
+    if (found.length > 1) return;
+    const chain = diveChain(root, called, path);
+    if (chain.length !== path.length) return;
+    if (leadsThere(path)) found.push(path);
+    if (path.length >= 8) return;
+    for (const id of calls(chain.at(-1)!.flow.steps ?? [])) search([...path, id]);
+  };
+  search([stepId]);
+  return found.length === 1 ? { path: found[0]!, stepId: inner } : outer;
+}
 
 /**
  * One variable write reported by the Runtime (`variableChanged`). Declared
@@ -163,6 +213,8 @@ export type RunState = {
   failure: RunError | null;
   steps: Record<string, StepRunState>;
   logs: LogEntry[];
+  /** The nodes the run went through, as the run log draws them. */
+  trace: RunTrace;
   changes: VariableChange[];
   /** When each step began, in run order (retries not counted), to tell what a step saw. */
   starts: StepStart[];
@@ -262,7 +314,8 @@ export type StudioState = {
   /** The review desk is open instead of the flow list. */
   reviewing: boolean;
   /** A step the canvas should bring into view; `seq` changes on every request. */
-  reveal: { stepId: string; seq: number } | null;
+  /** A node to bring into view; `inside` (a `callKey`) when it is in an entered call. */
+  reveal: { stepId: string; seq: number; inside?: string } | null;
   /** The node open in the full-size editor (double-click on the chart). */
   editing: string | null;
   /** 「ここまで実行」: the run pauses before this node, runs it, and pauses again after. */
@@ -344,6 +397,8 @@ export type StudioState = {
   select(selection: Selection): void;
   /** Selects a step and brings it into view. */
   goTo(stepId: string): void;
+  /** Brings up a node inside called flows too (a log line, a failure there). */
+  goToPlace(place: StepPlace): void;
   /** Moves the selection to the previous / next step in reading order. */
   stepBy(delta: number): void;
   /** Moves to the previous / next step the AI changed (review desk). */
@@ -411,8 +466,8 @@ export type StudioState = {
   clearBreakpoints(): void;
   /** Folds a frame to its head on the chart, or opens it again. */
   toggleFold(stepId: string, flowId?: string): void;
-  /** Opens the folded frames around a step of the open flow, so it can be shown. */
-  unfoldTo(stepId: string): void;
+  /** Opens the folded frames around a step of the open flow (or of `inFlow`, a called one), so it can be shown. */
+  unfoldTo(stepId: string, inFlow?: Flow): void;
   onRunEvent(event: RunEventEnvelope): void;
   onRunEvidence(evidence: RunEvidence): void;
   /** Closes the notice about a failed run. */
@@ -644,6 +699,7 @@ const newRun = (runId: string, flowId: string | null = null): RunState => ({
   failure: null,
   steps: {},
   logs: [],
+  trace: emptyTrace(),
   changes: [],
   starts: [],
   inner: {},
@@ -1158,6 +1214,16 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ selection: { kind: "step", stepId }, range: null, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1 }, dive: [] });
       },
 
+      goToPlace({ path, stepId }) {
+        const { flow, called } = get();
+        if (path.length === 0) return get().goTo(stepId);
+        // A call the chart can no longer open: show the call step instead.
+        if (diveChain(flow, called, path).length !== path.length) return get().goTo(path[0]!);
+        // Folded frames around it in the called flow open, as `goTo` does in the open flow.
+        get().unfoldTo(stepId, diveChain(flow, called, path).at(-1)!.flow);
+        set({ dive: path, selection: null, range: null, reveal: { stepId, seq: (get().reveal?.seq ?? 0) + 1, inside: callKey(path) } });
+      },
+
       stepBy(delta) {
         const { flow, stepTypes, selection } = get();
         const defs = new Map(stepTypes.map((d) => [d.type, d] as const));
@@ -1225,7 +1291,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ selection: { kind: "step", stepId: step.id } });
         // A node with settings it cannot run without opens at once, so they
         // are filled in now instead of turning up later as a problem.
-        if (unsetParams(step, get().stepTypes.find((d) => d.type === type)).length > 0) get().openEditor(step.id);
+        if (unsetParams(step, get().stepTypes.find((d) => d.type === type)).length > 0) focusFirstSetting();
       },
 
       async moveSelected(delta) {
@@ -1268,7 +1334,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         const ok = await get().applyOps(ops);
         if (!ok || !wrapper.id || !first) return;
         set({ selection: { kind: "step", stepId: wrapper.id }, range: null });
-        if (unsetParams(wrapper, get().stepTypes.find((d) => d.type === type)).length > 0) get().openEditor(wrapper.id);
+        if (unsetParams(wrapper, get().stepTypes.find((d) => d.type === type)).length > 0) focusFirstSetting();
       },
 
       setExtractOpen(open) {
@@ -1606,8 +1672,8 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
         set({ folded });
       },
 
-      unfoldTo(stepId) {
-        const flow = get().flow;
+      unfoldTo(stepId, inFlow) {
+        const flow = inFlow ?? get().flow;
         const current = flow ? get().folded[flow.id] : undefined;
         if (!flow || !current) return;
         const around = new Set(ancestorsOf(flow.steps ?? [], stepId));
@@ -1665,10 +1731,27 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           let reveal = s.reveal;
           const run: RunState =
             s.run && s.run.runId === env.runId ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs } : newRun(env.runId);
-          const push = (level: LogLevel, msg: string, stepId?: string | null) => {
-            run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId }];
-          };
           const path = callPathOf(env);
+          run.trace = traceEvent(run.trace ?? emptyTrace(), env, (stepId, callPath) => {
+            // Only the open flow's run is laid out on its flows.
+            if (run.flowId && run.flowId !== s.flow?.id) return undefined;
+            const chain = diveChain(s.flow, s.called, callPath);
+            const owner = callPath.length === 0 ? s.flow : chain.length === callPath.length ? chain.at(-1)!.flow : null;
+            const inside = owner ? enclosing(owner.steps ?? [], stepId) : undefined;
+            if (inside === undefined) return undefined;
+            if (inside !== null) return { stepId: inside, callPath };
+            // At the top of a called flow: inside the call.
+            return callPath.length > 0 ? { stepId: callPath.at(-1)!, callPath: callPath.slice(0, -1) } : null;
+          });
+          const push = (level: LogLevel, msg: string, stepId?: string | null, callPath?: string[], extra: Partial<LogEntry> = {}) => {
+            // The node run it is about; a line of the run itself sits in the node running now.
+            const node = stepId ? findNode(run.trace, stepId, callPath ?? [])?.key : run.trace.open.at(-1);
+            run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId, ...(callPath?.length ? { callPath } : {}), node: node ?? null, ...extra }];
+          };
+          if (env.type === "stepFinished" && env.error) {
+            const owner = path.length > 0 ? (diveChain(s.flow, s.called, path).at(-1)?.flow ?? null) : s.flow;
+            run.trace = withError(run.trace, env.stepId, path, errorLine(env.error, findStep(owner?.steps ?? [], env.stepId)));
+          }
           // Followed, the chart goes where the run is: into a called flow
           // when a step starts inside it, back out when one starts outside.
           let dive = s.dive;
@@ -1703,10 +1786,11 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               // A failure reaches the call step itself and is logged there.
               if (human?.stepId === call) human = null;
             }
-            if (env.type === "log") push(env.level, env.message, call);
+            // The line points at the node in there, not just at the call.
+            if (env.type === "log") push(env.level, env.message, env.stepId ?? call, env.stepId ? path : undefined);
             if (env.type === "humanActionRequired") {
               human = { stepId: call, message: env.message };
-              push("warn", `${t.waitingForYou}: ${env.message}`, call);
+              push("warn", `${t.waitingForYou}: ${env.message}`, env.stepId, path);
             }
             run.inner = { ...run.inner, [key]: states };
             return { run, human, secretFix, ...moved };
@@ -1719,7 +1803,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = "running";
               run.flowId = env.flowId;
               run.revision = env.revision;
-              push("info", `▶ ${env.flowName}${t.runMsg.atRevision(env.revision)}`);
+              push("info", `▶ ${env.flowName}${t.runMsg.atRevision(env.revision)}`, null, undefined, { mark: "start", node: null });
               break;
             case "stepStarted":
               run.steps[env.stepId] = "running";
@@ -1733,7 +1817,12 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               if (human?.stepId === env.stepId) human = null;
               run.steps[env.stepId] = env.outcome;
               if (env.error) {
-                push("error", `${errorLine(env.error, findStep(s.flow?.steps ?? [], env.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, env.stepId);
+                // A call that failed inside: the line leads to the node in there.
+                const at = errorPlace(s.flow, s.called, env.stepId, env.error.details);
+                const owner = at.path.length > 0 ? (diveChain(s.flow, s.called, at.path).at(-1)?.flow ?? null) : s.flow;
+                push("error", `${errorLine(env.error, findStep(owner?.steps ?? [], at.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, at.stepId, at.path, {
+                  fromStep: true,
+                });
                 secretFix = secretFixOf(env.error) ?? secretFix;
               }
               break;
@@ -1757,9 +1846,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.evidence = null;
               states[env.stepId] = env.reason === "error" ? "failed" : "paused";
               if (path.length > 0) run.inner = { ...run.inner, [callKey(path)]: states };
-              // The log points at what the open flow shows: the call step.
-              const at = path[0] ?? env.stepId;
-              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, at);
+              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, env.stepId, path, {
+                mark: "pause",
+                node: run.trace.open.at(-1) ?? null,
+              });
               if (path.length === 0) reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
               break;
             }
@@ -1775,7 +1865,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
                 run.inner = { ...run.inner, [key]: states };
               } else if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
               if (env.revision != null && pause?.callPath.length === 0) run.revision = env.revision;
-              push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`);
+              push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`, null, undefined, {
+                mark: "resume",
+                node: run.trace.open.at(-1) ?? null,
+              });
               break;
             }
             case "runFinished":
@@ -1784,7 +1877,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = env.status;
               run.pause = null;
               run.failure = env.status === "failed" ? (env.error ?? null) : null;
-              push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]}${t.runMsg.took(env.durationMs)}`);
+              push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]}${t.runMsg.took(env.durationMs)}`, null, undefined, { mark: "end", node: null });
               break;
           }
           return { run, human, secretFix, reveal, ...moved };
@@ -1805,7 +1898,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       clearLog() {
-        set((s) => (s.run ? { run: { ...s.run, logs: [] } } : s));
+        set((s) => (s.run ? { run: { ...s.run, logs: [], trace: emptyTrace() } } : s));
       },
 
       dismiss() {
