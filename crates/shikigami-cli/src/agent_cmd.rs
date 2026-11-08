@@ -283,7 +283,10 @@ pub fn agent_cmd(
                         ctrl_c.stop();
                     }
                 });
-                eprintln!("SpellSheet agent for {} (Ctrl+C stops)", workspace.display());
+                eprintln!(
+                    "SpellSheet agent for {} (Ctrl+C stops)",
+                    workspace.display()
+                );
                 let served = Arc::clone(&agent).serve().await;
                 stop.cancel();
                 let mut pending = match sending.lock() {
