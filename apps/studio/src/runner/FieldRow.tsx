@@ -13,6 +13,7 @@ export function FieldRow({
   onChange,
   onPick,
   autoFocus,
+  hint,
 }: {
   field: Field;
   value: string | boolean;
@@ -20,6 +21,8 @@ export function FieldRow({
   onChange: (v: string | boolean) => void;
   onPick: (kind: "file" | "folder", start: string) => Promise<string | null>;
   autoFocus?: boolean;
+  /** A line under the label (Studio shows the description there, the name being the label). */
+  hint?: string;
 }) {
   const id = `in-${field.name}`;
   if (field.kind === "checkbox") {
@@ -90,6 +93,7 @@ export function FieldRow({
       <label htmlFor={id} className="mb-1 block text-[12.5px] font-semibold">
         {field.label}
         {field.required && <span className="ml-1 text-shu-600">*</span>}
+        {hint && <span className="mt-0.5 block text-[11.5px] font-normal text-slate-500">{hint}</span>}
       </label>
       {control}
       {error ? (

@@ -71,7 +71,9 @@ function Ask() {
           {fields.map((f, i) => (
             <FieldRow
               key={f.name}
-              field={f}
+              // The author knows the variable by its name; the description is the hint.
+              field={{ ...f, label: f.name }}
+              hint={flow.variables?.find((v) => v.name === f.name)?.description?.split("\n")[0]}
               value={values[f.name] ?? f.initial}
               error={errors[f.name]}
               autoFocus={i === 0}
