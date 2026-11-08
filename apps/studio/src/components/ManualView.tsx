@@ -113,6 +113,8 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const startRun = useStudio((s) => s.startRun);
   const goToPlace = useStudio((s) => s.goToPlace);
   const running = useStudio((s) => isActive(s.run));
+  const testing = useStudio((s) => s.stepTest?.running ?? false);
+  const revision = useStudio((s) => s.flow?.revision);
   const agent = useAgentApi();
   const [editing, setEditing] = useState(false);
   const [manifest, setManifest] = useState<ManualManifest | null>(null);
@@ -126,9 +128,10 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
   const defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   const flowId = flow?.id;
 
-  // Read again when the flow changes and when a run of it ends.
+  // Read again when the flow changes (a changed node loses its old
+  // picture), when a run of it ends and when a node tried alone ends.
   useEffect(() => {
-    if (!flowId || running) return;
+    if (!flowId || running || testing) return;
     let live = true;
     void manualApi
       .get(flowId)
@@ -146,7 +149,7 @@ export function ManualView({ onView }: { onView: (view: View) => void }) {
     return () => {
       live = false;
     };
-  }, [flowId, running]);
+  }, [flowId, running, testing, revision]);
 
   const { urls, want } = usePictures(flowId, manifest?.runId);
   const doc = useMemo(() => (flow ? buildManual(flow, defs, manifest, subflows, masks, drafts) : null), [flow, defs, manifest, subflows, masks, drafts]);
