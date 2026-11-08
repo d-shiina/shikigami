@@ -507,7 +507,9 @@ pub struct TestStepParams {
     #[serde(flatten)]
     pub approval: ApprovalArgs,
     /// The flow the step is for: relative paths (input/orders.xlsx) are
-    /// resolved from its folder, as in a run.
+    /// resolved from its folder, as in a run, and the screen the step
+    /// meets is kept as that node's picture in the flow's 手順書 until the
+    /// flow is run. Give it whenever the step is for a flow.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(alias = "scenarioId")]
     pub flow_id: Option<String>,

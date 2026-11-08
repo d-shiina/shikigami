@@ -32,7 +32,7 @@ import { SettingsPage } from "./components/SettingsPage";
 import { FlowsPage } from "./components/FlowsPage";
 import { Sidebar } from "./components/Sidebar";
 import { AiActivity, StatusBar } from "./components/StatusBar";
-import { StoryView } from "./components/StoryView";
+import { ManualView } from "./components/ManualView";
 import { VariablesView } from "./components/VariablesView";
 import { TitleBar } from "./components/TitleBar";
 import { WindowControls } from "./components/WindowControls";
@@ -184,7 +184,7 @@ function Editor({
       <main className="flex min-h-0 min-w-0 flex-col">
         <div className="@container relative min-h-0 flex-1">
           {view === "story" ? (
-            <StoryView />
+            <ManualView onView={onView} />
           ) : view === "variables" ? (
             <VariablesView onView={onView} />
           ) : (
@@ -209,8 +209,8 @@ function Editor({
           )}
           {view !== "variables" && hasFlow && <FlowSearch />}
           <FileSheet />
-          {/* Clear of the zoom controls in the bottom-left corner. */}
-          {view !== "variables" && (
+          {/* Clear of the zoom controls in the bottom-left corner. The 手順書 shows it only while editing. */}
+          {view === "flow" && (
             <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-16">
               <CanvasDock />
             </div>

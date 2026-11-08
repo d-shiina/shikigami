@@ -1065,3 +1065,77 @@ fn paddle_accurate_models_read_too() {
     let texts: Vec<String> = lines.iter().map(OcrLine::text).collect();
     assert!(texts.contains(&"請求書の確認".to_owned()), "{texts:?}");
 }
+
+#[tokio::test]
+async fn studio_runs_keep_the_window_with_the_element_marked_for_the_manual() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut screen = Screen::new(noise(120, 80, 4));
+    screen.element = Some(Rect {
+        x: 10,
+        y: 20,
+        width: 30,
+        height: 15,
+    });
+    let runtime = Runtime::builder()
+        .adapter(&DesktopAdapter::with_backend(Arc::new(screen)))
+        .build();
+    let mut flow = Flow::new("manual");
+    flow.steps = vec![
+        step(
+            "desktop.setValue",
+            json!({ "target": { "window": { "title": "会計" }, "element": { "name": "氏名" } }, "value": "山田 太郎" }),
+        ),
+        step(
+            "desktop.click",
+            json!({ "target": { "window": { "title": "会計" }, "element": { "name": "登録" } } }),
+        ),
+    ];
+    for step in &mut flow.steps {
+        shikigami_core::ops::assign_missing_ids(step);
+    }
+    let screens = dir.path().join("screens");
+    let mut shots = Vec::new();
+    let report = runtime
+        .start(
+            flow,
+            RunOptions {
+                screens_dir: Some(screens.clone()),
+                ..RunOptions::default()
+            },
+        )
+        .unwrap()
+        .wait_with(|e| {
+            if let shikigami_runtime::RunEvent::ScreenCaptured {
+                file,
+                width,
+                height,
+                mark,
+                title,
+                ..
+            } = &e.event
+            {
+                shots.push((file.clone(), *width, *height, *mark, title.clone()));
+            }
+        })
+        .await
+        .unwrap();
+    assert_eq!(report.status, RunStatus::Succeeded, "{:?}", report.error);
+    assert_eq!(shots.len(), 2);
+    let (file, width, height, mark, title) = &shots[1];
+    assert_eq!((*width, *height), (120, 80));
+    let mark = mark.unwrap();
+    assert_eq!((mark.x, mark.y, mark.width, mark.height), (10, 20, 30, 15));
+    assert_eq!(title.as_deref(), Some("会計"));
+    let picture = Bitmap::from_png(&std::fs::read(screens.join(file)).unwrap()).unwrap();
+    assert_eq!((picture.width, picture.height), (120, 80));
+    // The field the flow typed a name into is painted over; the rest is kept.
+    let at = |x: usize, y: usize| picture.rgba[(y * 120 + x) * 4..][..4].to_vec();
+    assert_eq!(at(15, 25), HIDDEN_GREY.to_vec());
+    assert_eq!(at(39, 34), HIDDEN_GREY.to_vec());
+    assert_ne!(at(41, 25), HIDDEN_GREY.to_vec());
+    let before = Bitmap::from_png(&std::fs::read(screens.join(&shots[0].0)).unwrap()).unwrap();
+    assert_ne!(
+        before.rgba[(25 * 120 + 15) * 4..][..4].to_vec(),
+        HIDDEN_GREY.to_vec()
+    );
+}

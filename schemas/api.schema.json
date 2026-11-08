@@ -3019,6 +3019,13 @@
             "boolean",
             "null"
           ]
+        },
+        "manualScreens": {
+          "description": "When the flow is run from Studio, keep a picture of the screen at\neach browser or desktop step (the first time it runs) for the\nflow's 手順書. The pictures stay on this PC. On unless `false`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

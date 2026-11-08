@@ -103,7 +103,7 @@ const FRESH_MS = 10_000;
 const kept = new Map<string, { at: number; value: Promise<Loaded> }>();
 
 /** Longest side of the drawn picture, in pixels (twice the popover's, for sharp screens). */
-const THUMB = 560;
+const THUMB = 1200;
 
 /** The picture shrunk on a canvas so a large screenshot does not stay in memory whole. */
 export function shrink(src: string): Promise<Picture> {
@@ -162,4 +162,17 @@ export function loadPreview(flowId: string | undefined, path: string, sheet?: st
   kept.set(key, { at: Date.now(), value });
   while (kept.size > KEEP) kept.delete(kept.keys().next().value as string);
   return value;
+}
+
+/**
+ * The whole picture a path names, read again for the viewer (the kept
+ * preview holds only the shrunk one). Null when it is not a picture now.
+ */
+export async function loadFullPicture(flowId: string | undefined, path: string): Promise<string | null> {
+  try {
+    const preview = await reader(flowId, path);
+    return preview.kind === "image" ? `data:${preview.mime};base64,${preview.data}` : null;
+  } catch {
+    return null;
+  }
 }

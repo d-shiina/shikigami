@@ -104,7 +104,10 @@ export function explainError(error: ErrorLike, step?: Step | null): Explained {
   return { what: say(entry.what, c), todo: say(entry.todo, c), known: true };
 }
 
-/** One line for the run log: the code, then the words. */
+/**
+ * One line for the run log: the words only. The code is for AI clients
+ * and stays in the run record (no English codes on screen, wording.md).
+ */
 export function errorLine(error: ErrorLike, step?: Step | null): string {
-  return `${error.code}: ${explainError(error, step).what}`;
+  return explainError(error, step).what;
 }

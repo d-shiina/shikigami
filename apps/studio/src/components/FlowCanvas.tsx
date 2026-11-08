@@ -1,3 +1,4 @@
+import { focusFirstSetting } from "../lib/focusSetting";
 import { CASE, IF, PARALLEL, SWITCH } from "../lib/stepTypes";
 import {
   Background,
@@ -31,6 +32,7 @@ import {
   DECIDE_H,
   DECIDE_POINT,
   ancestorsOf,
+  frameAt,
   JOIN_SIZE,
   type JoinNodeData,
   type Layout,
@@ -39,8 +41,12 @@ import {
   READ_ROOM,
   type SlotNodeData,
   SLOT_H,
+  START_ID,
+  END_ID,
   type StepNodeData,
   TAIL_SIZE,
+  TERMINAL_H,
+  type TerminalNodeData,
   WRITE_ROOM,
 } from "../flow/layout";
 import { headSummary } from "../lib/keywords";
@@ -77,16 +83,18 @@ import {
 import { type OutlineItem, outline } from "../lib/outline";
 import { plain, sentence, typeTitle } from "../lib/sentence";
 import { AppTag } from "./AppTag";
-import { HoverPreview } from "./HoverPreview";
+import { HALF, HoverPreview } from "./HoverPreview";
+import { openImageValue } from "./ImageViewer";
 import { previewSource } from "../lib/preview";
 import { callKey, diveChain, selectedIds, type DiveLevel, type InsertAt, revertBlocker, type StepRunState, type StepStart, touchedSteps, trailOf, type VariableChange } from "../store";
 import { type LineTrail, trailLines } from "../lib/trail";
+import { type Box, type Point, roundedPath, routeLink } from "../lib/linkRoute";
 import { CATEGORY_COLOR } from "./CommandPalette";
 import { ChangeView, changeText } from "./ValueView";
 import { StepTools } from "./StepTools";
 import { menuFor } from "../lib/contextMenu";
 import { usePaneMenu, useSlotMenu, useStepMenu, useVariableMenu } from "./menus";
-import { valuesSeenBy } from "../lib/runValues";
+import { valuesSeenBy, writesFrom } from "../lib/runValues";
 import { type StepDiff, summarize } from "../lib/review";
 import { ActorMark, entryScope, usePendingReview } from "./Timeline";
 
@@ -241,7 +249,26 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
   const focused = hovered ?? data.selectedId;
   const lit = focused !== null && (focused === data.from || focused === data.to || focused === varFocus(data.variable));
   if (!lit) return null;
-  const [path] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+  return <RoutedLink id={id} from={{ x: sourceX, y: sourceY }} to={{ x: targetX, y: targetY }} data={data} sourcePosition={sourcePosition} targetPosition={targetPosition} />;
+}
+
+/** A lit variable's line, round the nodes on the chart rather than behind them (see routeLink). */
+function RoutedLink({ id, from, to, data, sourcePosition, targetPosition }: { id: string; from: Point; to: Point; data: LinkEdgeData; sourcePosition: Position; targetPosition: Position }) {
+  const lookup = useStore((s) => s.nodeLookup);
+  const boxes: Box[] = [];
+  let toTop: number | undefined;
+  for (const n of lookup.values()) {
+    if (n.type === "frame" || n.type === "join") continue;
+    const box = { ...n.internals.positionAbsolute, width: n.measured.width ?? 0, height: n.measured.height ?? 0 };
+    if (box.width === 0 || box.height === 0) continue;
+    if (n.id === data.to) toTop = box.y;
+    boxes.push(box);
+  }
+  // Before the nodes are measured: the plain curve.
+  const path =
+    toTop === undefined
+      ? getBezierPath({ sourceX: from.x, sourceY: from.y, targetX: to.x, targetY: to.y, sourcePosition, targetPosition })[0]
+      : roundedPath(routeLink(from, to, toTop, boxes));
   return <BaseEdge id={id} path={path} style={{ stroke: data.color, strokeWidth: 1.5 }} />;
 }
 
@@ -359,6 +386,20 @@ function BranchLight({ layout }: { layout: Layout }) {
   ];
   if (selectors.length === 0) return null;
   return <style>{`${selectors.join(",")}{opacity:.28;transition:opacity .25s}`}</style>;
+}
+
+/**
+ * The frame of the step pointed at (at its head or anywhere inside it) shows it as one
+ * piece: its edge and its head's darken together, as the head alone does on hover.
+ */
+function FrameLight({ layout }: { layout: Layout }) {
+  const pointed = useFocus();
+  if (!pointed || !layout.frames.some((f) => f.id === pointed)) return null;
+  const id = CSS.escape(pointed);
+  const frame = CSS.escape(`frame:${pointed}`);
+  return (
+    <style>{`.react-flow__node[data-id="${frame}"] .flow-frame:not(.flow-frame-selected),.react-flow__node[data-id="${id}"] .flow-head-plain{border-color:var(--color-slate-400)}`}</style>
+  );
 }
 
 function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
@@ -539,20 +580,22 @@ const MAX_RUNS = 5;
  * What this step saw (or wrote) for one variable, once per time it ran:
  * a single value for a plain step, one line per pass inside a loop.
  */
-function ValuePopover({ name, color, values, side, anchor }: { name: string; color: string; values: VariableChange[]; side: "in" | "out"; anchor: DOMRect }) {
+function ValuePopover({ name, color, values, side, anchor, what }: { name: string; color: string; values: VariableChange[]; side: "in" | "out"; anchor: DOMRect; what?: string }) {
   const below = anchor.top < window.innerHeight / 2;
   const many = values.length > 1;
+  // Kept inside the window: a picture makes the popover wide.
+  const left = Math.min(Math.max(anchor.left + anchor.width / 2, HALF + 8), Math.max(HALF + 8, window.innerWidth - HALF - 8));
   return createPortal(
     <div
       // Above the chip, or below it when there is no room up top.
-      style={{ left: anchor.left + anchor.width / 2, top: below ? anchor.bottom + 6 : anchor.top - 6 }}
-      className={`pointer-events-none fixed z-50 max-w-[480px] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lifted`}
+      style={{ left, top: below ? anchor.bottom + 6 : anchor.top - 6 }}
+      className={`pointer-events-none fixed z-50 max-w-[min(600px,calc(100vw-16px))] -translate-x-1/2 ${below ? "" : "-translate-y-full"} rounded-lg border border-slate-200 bg-sheet px-2.5 py-1.5 text-[11px] shadow-lifted`}
     >
       <div className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
         <span className="font-mono font-semibold">{name}</span>
         <span className="text-slate-400">
-          {side === "in" ? t.flow.valuesIn : t.flow.valuesOut}
+          {what ?? (side === "in" ? t.flow.valuesIn : t.flow.valuesOut)}
           {many && t.flow.runs(values.length)}
         </span>
       </div>
@@ -582,13 +625,23 @@ function ValuePopover({ name, color, values, side, anchor }: { name: string; col
  * lights every token of the same variable, draws where its value comes from,
  * and lists the values it had in the last run.
  */
-function VarChip({ name, label, color, values, side, owner }: { name: string; label?: string; color: string; values: VariableChange[]; side: "in" | "out"; owner: string }) {
+/** `what`: what its values are, when they are not a node's (the flow's start and end). */
+function VarChip({ name, label, color, values, side, owner, what }: { name: string; label?: string; color: string; values: VariableChange[]; side: "in" | "out"; owner: string; what?: string }) {
   const focused = useFocus() === varFocus(name);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const variableMenu = useVariableMenu();
+  const flowId = useStudio((s) => s.flow?.id);
   const last = values.at(-1);
   return (
     <span
+      // The popover does not take the pointer; pressing the chip opens its picture large.
+      onClick={(e) => {
+        if (!last || last.secret || last.truncated) return;
+        if (openImageValue(last.value, flowId)) {
+          e.stopPropagation();
+          setAnchor(null);
+        }
+      }}
       onContextMenu={menuFor(() => {
         setAnchor(null);
         return variableMenu(name);
@@ -609,7 +662,7 @@ function VarChip({ name, label, color, values, side, owner }: { name: string; la
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
       <span className="truncate">{side === "out" && last ? changeText(last) : (label ?? name)}</span>
-      {anchor && <ValuePopover name={name} color={color} values={values} side={side} anchor={anchor} />}
+      {anchor && <ValuePopover name={name} color={color} values={values} side={side} anchor={anchor} what={what} />}
     </span>
   );
 }
@@ -867,11 +920,13 @@ function StepNode({ data }: StepNodeProps) {
         data.diff
           ? DIFF_STYLE[data.diff].border
           : data.selected
-            ? "border-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_16%,transparent)]"
+            ? head && !head.collapsed
+              ? "border-primary"
+              : "border-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_16%,transparent)]"
             : data.byAi
               ? "border-brand-500"
               : head
-                ? "border-slate-300 hover:border-slate-400"
+                ? "flow-head-plain border-slate-300 hover:border-slate-400"
                 : "border-slate-200 hover:border-slate-300"
       } ${data.step.disabled ? "border-dashed opacity-60" : ""} ${data.runState ? RUN_STYLE[data.runState] : ""}`}
     >
@@ -1130,7 +1185,7 @@ function NodeStatus({ data }: { data: StepNodeProps["data"] }) {
 }
 
 function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>>) {
-  // An empty block, an empty flow, or the faint "+" under the last node: each adds a node there.
+  // An empty block or an empty flow, or the small "+" under the last node of a block (or the flow): each adds a node there.
   if (data.tail) {
     // The end of a block with nodes: a small "+" on the line, inside the frame.
     const title = data.label ? t.flow.addAtBlockEnd(data.label) : t.menu.addHere;
@@ -1159,19 +1214,67 @@ function SlotNode({ data }: NodeProps<Node<SlotNodeData & { selected: boolean }>
       className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed text-[13px] ${
         data.selected
           ? "border-brand-500 bg-brand-50 text-brand-600"
-          : data.end
-            ? "border-slate-300 text-slate-500 opacity-75 hover:border-slate-500 hover:bg-sheet hover:text-ink hover:opacity-100"
-            : "border-slate-400 bg-sheet/60 text-slate-600 hover:border-ink hover:bg-sheet hover:text-ink"
+          : "border-slate-400 bg-sheet/60 text-slate-600 hover:border-ink hover:bg-sheet hover:text-ink"
       }`}
     >
-      {!data.end && <FlowHandles />}
+      <FlowHandles />
       <Plus size={14} strokeWidth={2} aria-hidden="true" />
       {t.addStep}
     </div>
   );
 }
 
-type FrameData = { kind: FrameKind; type: string; width: number; height: number };
+/** The values a terminal shows: the flow's inputs on its start, its outputs on its end. */
+type TerminalVar = { name: string; color: string; values: VariableChange[] };
+type TerminalData = TerminalNodeData & { vars: TerminalVar[] };
+/** Values shown on a terminal before the rest are counted. */
+const MAX_TERMINAL_VARS = 4;
+
+/**
+ * Where the flow starts or ends: a small rounded tag on the line, not a node
+ * (nothing to select, run from or remove). The start lists the values the
+ * flow takes in and the end the values it gives back, each with a socket, so
+ * the lines of those values start and end there.
+ */
+function TerminalNode({ data }: NodeProps<Node<TerminalData>>) {
+  const shown = data.vars.slice(0, MAX_TERMINAL_VARS);
+  const more = data.vars.length - shown.length;
+  const focused = useFocus();
+  const id = data.end ? END_ID : START_ID;
+  const side = data.end ? "in" : "out";
+  return (
+    <div
+      style={{ height: TERMINAL_H }}
+      title={data.end ? t.flow.endTitle : t.flow.startTitle}
+      className="flow-terminal relative flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border border-slate-300 bg-sheet px-3.5 text-[12.5px] text-ink shadow-sm hover:border-slate-400"
+    >
+      <FlowHandles />
+      <span className="font-semibold tracking-wide">{data.end ? t.flow.end : t.flow.start}</span>
+      {shown.length > 0 && (
+        <>
+          <span className="h-3.5 w-px bg-slate-200" aria-hidden="true" />
+          <span className="text-[11.5px] text-slate-500">{data.end ? t.flow.gives : t.flow.takes}</span>
+          {shown.map((v) => (
+            <VarChip key={v.name} side={side} owner={id} name={v.name} color={v.color} values={v.values} what={data.end ? t.flow.valuesGiven : t.flow.valuesTaken} />
+          ))}
+          {more > 0 && <span className="text-[11.5px] text-slate-500">{t.flow.moreVars(more)}</span>}
+        </>
+      )}
+      {data.vars.map((v) => (
+        <Socket
+          key={v.name}
+          side={side}
+          id={data.end ? inHandle(v.name) : outHandle(v.name)}
+          color={v.color}
+          title={data.end ? t.flow.reads(v.name) : t.flow.writes(v.name)}
+          lit={focused === varFocus(v.name) || focused === id}
+        />
+      ))}
+    </div>
+  );
+}
+
+type FrameData = { kind: FrameKind; type: string; width: number; height: number; selected: boolean };
 
 /**
  * The frame of a loop (if, try, …) around everything in its blocks, so the
@@ -1180,10 +1283,13 @@ type FrameData = { kind: FrameKind; type: string; width: number; height: number 
  * frames inside it tint deeper; the others are only a hairline.
  */
 function FrameNode({ data }: NodeProps<Node<FrameData>>) {
+  // Its head is its top edge: picking the step marks the whole frame, not just the head.
   return (
     <div
       style={{ width: data.width, height: data.height }}
-      className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""}`}
+      className={`flow-frame pointer-events-none relative rounded-lg border ${data.kind === "loop" ? "flow-frame-loop" : ""} ${
+        data.selected ? "flow-frame-selected" : ""
+      }`}
     />
   );
 }
@@ -1254,6 +1360,14 @@ function FollowInside({ path }: { path: string }) {
   useEffect(() => {
     if (running) bring.current(running);
   }, [running]);
+  // A log line or a failure that leads to a node in here (`goToPlace`).
+  const reveal = useStudio((s) => (s.reveal?.inside === path ? s.reveal : null));
+  useEffect(() => {
+    if (!reveal) return;
+    // After the entered flow has been laid out.
+    const timer = setTimeout(() => bring.current(reveal.stepId), 120);
+    return () => clearTimeout(timer);
+  }, [reveal]);
   // Where a run paused in here, once the pause panel has taken its room.
   const paused = useStudio((s) => (s.run?.status === "paused" && s.run.pause && callKey(s.run.pause.callPath) === path ? s.run.pause : undefined));
   useEffect(() => {
@@ -1269,7 +1383,7 @@ function Follow() {
   const latest = useBringIntoView();
   const bring = useRef(latest);
   bring.current = latest;
-  const reveal = useStudio((s) => s.reveal);
+  const reveal = useStudio((s) => (s.reveal?.inside ? null : s.reveal));
   const running = useStudio((s) => (s.run?.status === "running" && s.followRun ? s.run.starts.at(-1)?.stepId : undefined));
   // Only a new request moves the view, not a resize or re-measure.
   useEffect(() => {
@@ -1345,7 +1459,7 @@ function DiveBar({ root, chain }: { root: Flow; chain: DiveLevel[] }) {
   );
 }
 
-const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode, join: JoinNode };
+const nodeTypes = { step: StepNode, slot: SlotNode, frame: FrameNode, join: JoinNode, terminal: TerminalNode };
 const NO_BREAKPOINTS: string[] = [];
 const NO_TODOS: string[] = [];
 const NO_STATES: Record<string, StepRunState> = {};
@@ -1355,7 +1469,6 @@ export function FlowCanvas() {
   const called = useStudio((s) => s.called);
   const dive = useStudio((s) => s.dive);
   const enterCall = useStudio((s) => s.enterCall);
-  const openEditor = useStudio((s) => s.openEditor);
   const projectW = useProjectMaybe((s) => (s.panelOpen ? PROJECT_W : 0), 0);
   // Entered calls show their flow here, read-only; edits stay with the open one.
   const chain = useMemo(() => diveChain(root, called, dive), [root, called, dive]);
@@ -1465,7 +1578,8 @@ export function FlowCanvas() {
       new Set(
         layout.nodes
           .filter((n) => (n.data.kind === "slot" && n.data.tail) || (n.data.kind === "join" && !n.data.met && (!n.data.question || n.data.after)))
-          .map((n) => n.id),
+          .map((n) => n.id)
+          .concat(END_ID),
       ),
     [layout],
   );
@@ -1513,13 +1627,28 @@ export function FlowCanvas() {
   const todoList = useTodos();
   const todos = useMemo(() => (inside ? new Map<string, string[]>() : todosByStep(todoList)), [todoList, inside]);
   const states = inside ? (run?.inner[callKey(path)] ?? NO_STATES) : (run?.steps ?? NO_STATES);
+  // What the flow takes in (shown on its start) and gives back (on its end).
+  const terminalVars = useMemo(() => {
+    const changes = run && !inside ? run.changes : [];
+    const color = (v: { type?: string }) => TYPE_COLOR[v.type ?? "any"] ?? "var(--cat-other)";
+    const all = flow?.variables ?? [];
+    const takes = (d: string | undefined) => d === "input" || d === "inOut";
+    const gives = (d: string | undefined) => d === "output" || d === "inOut";
+    return {
+      inputs: all.filter((v) => takes(v.direction)).map((v) => ({ name: v.name, color: color(v), values: writesFrom(changes, v.name, INPUT_NODE) })),
+      // What it held at the end of the run.
+      outputs: all
+        .filter((v) => gives(v.direction))
+        .map((v) => ({ name: v.name, color: color(v), values: run?.status === "running" ? [] : changes.filter((c) => c.variable === v.name).slice(-1) })),
+    };
+  }, [flow, run, inside]);
 
   // Frames first and beneath the lines, outer ones before the ones inside them.
   const frames: Node[] = layout.frames.map((f) => ({
     id: `frame:${f.id}`,
     type: "frame",
     position: { x: f.x, y: f.y },
-    data: { kind: f.kind, type: f.type, width: f.width, height: f.height } satisfies FrameData,
+    data: { kind: f.kind, type: f.type, width: f.width, height: f.height, selected: !inside && picked.has(f.id) } satisfies FrameData,
     draggable: false,
     selectable: false,
     focusable: false,
@@ -1527,6 +1656,11 @@ export function FlowCanvas() {
   }));
   const nodes: Node[] = layout.nodes.map((n) => {
     if (n.data.kind === "join") return { ...n, draggable: false, selectable: false, focusable: false };
+    if (n.data.kind === "terminal") {
+      const data: TerminalData = { ...n.data, vars: n.data.end ? terminalVars.outputs : terminalVars.inputs };
+      // Placed by its top centre: it is as wide as what it says.
+      return { ...n, data, origin: [0.5, 0] as [number, number], draggable: false, selectable: false, focusable: false };
+    }
     if (n.data.kind === "step") {
       const id = n.data.step.id ?? n.id;
       return {
@@ -1578,8 +1712,14 @@ export function FlowCanvas() {
   );
   // The head of a frame and a case's tab show no setting rows, so no sockets to link to.
   const bare = new Set(layout.nodes.flatMap((n) => (n.data.kind === "step" && (n.data.head || n.data.tab) ? [n.id] : [])));
+  // A value the flow takes in comes from its start, one it gives back goes to its end; a starting value of its own has no line.
+  const inputNames = new Set(terminalVars.inputs.map((v) => v.name));
   const linkEdges: Edge[] = links
-    .filter((l) => l.from !== INPUT_NODE && l.to !== OUTPUT_NODE && !bare.has(l.from) && !bare.has(l.to))
+    .flatMap((l) => {
+      if (l.from === INPUT_NODE && !inputNames.has(l.variable)) return [];
+      return [{ ...l, from: l.from === INPUT_NODE ? START_ID : l.from, to: l.to === OUTPUT_NODE ? END_ID : l.to }];
+    })
+    .filter((l) => !bare.has(l.from) && !bare.has(l.to))
     .map((l) => ({
       id: `link:${l.from}:${l.variable}->${l.to}:${l.toHandle}`,
       source: l.from,
@@ -1598,6 +1738,8 @@ export function FlowCanvas() {
   // A loop's decision runs as long as its loop does (a wait's only once its check is through, see `tails`).
   const trailStates = useMemo(() => {
     const out: Record<string, StepRunState> = { ...states };
+    // The run started from the start; it reached the end when a line into it was passed (see `tails`).
+    if (Object.keys(states).length > 0) out[START_ID] = "succeeded";
     for (const n of layout.nodes) {
       if (n.data.kind !== "join") continue;
       // A try's way into "失敗したとき" was taken when that block ran.
@@ -1635,7 +1777,8 @@ export function FlowCanvas() {
         hovered: hoveredEdge === e.id,
         hover: setHoveredEdge,
       } satisfies BlockEdgeData,
-      animated: e.loop || trail === "now",
+      // A loop's line back runs only while its loop is pointed at (see BlockEdge), never on its own.
+      animated: trail === "now",
       style: {
         stroke: trail ? TRAIL_STROKE[trail] : "var(--flow-edge)",
         strokeWidth: trail ? 2.5 : 1.5,
@@ -1690,6 +1833,8 @@ export function FlowCanvas() {
       proOptions={{ hideAttribution: true }}
       onNodeClick={(event, node) => {
         if (inside || node.type === "frame" || node.type === "join") return;
+        // The start or end: the flow's own settings (its variables, what it takes and returns).
+        if (node.type === "terminal") return select(null);
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind === "step") {
           const id = data.step.id ?? node.id;
@@ -1704,6 +1849,17 @@ export function FlowCanvas() {
         }
       }}
       onPaneClick={() => select(null)}
+      // Pointing anywhere inside a frame points at its step, as its head does: a branch
+      // lights its ways out and a loop sends its line round wherever in it the pointer is.
+      onPaneMouseMove={(event) => {
+        // The pane hears moves over the nodes and lines on it too: those keep their own focus.
+        if ((event.target as Element).closest(".react-flow__node, .react-flow__edge, .react-flow__edgelabel-renderer")) return;
+        const at = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        const frame = at ? frameAt(layout.frames, at.x, at.y) : null;
+        if (frame) focus.set(frame.id);
+        else if (layout.frames.some((f) => f.id === focus.get())) focus.set(null);
+      }}
+      onPaneMouseLeave={() => layout.frames.some((f) => f.id === focus.get()) && focus.set(null)}
       // Shift+drag draws a box (plain drag still moves the view): the nodes in it become the selection.
       selectionKeyCode="Shift"
       onSelectionStart={(event) => {
@@ -1731,6 +1887,7 @@ export function FlowCanvas() {
         menuFor(() => {
           const data = node.data as StepNodeData | SlotNodeData;
           if (node.type === "frame" || node.type === "join") return [];
+          if (node.type === "terminal") return paneMenu({ inside, fit: () => void flowRef.current?.fitView({ padding: 0.1, maxZoom: 1, duration: 200 }) });
           if (data.kind === "slot") return inside ? [] : slotMenu(data.parentId, data.block);
           const id = data.step.id ?? node.id;
           const call = calls.get(id);
@@ -1753,14 +1910,15 @@ export function FlowCanvas() {
         const data = node.data as StepNodeData | SlotNodeData;
         if (data.kind !== "step" || !data.step.id) return;
         if (calls.get(data.step.id)?.callee) enterCall(data.step.id);
-        else openEditor(data.step.id);
+        // The right pane already edits the selected node: a double-click puts the cursor in its first setting.
+        else focusFirstSetting();
       }}
       // Double-clicking a call enters it; zooming there would only get in the way.
       zoomOnDoubleClick={false}
       // Dragging the view during a run means the person wants to look elsewhere.
       onMoveStart={(event) => event && run?.status === "running" && setFollowRun(false)}
       onNodeMouseEnter={(_, node) =>
-        node.type === "step"
+        node.type === "step" || node.type === "terminal"
           ? focus.set(node.id)
           : (node.data as JoinNodeData).question
             ? focus.set((node.data as JoinNodeData).parentId)
@@ -1770,6 +1928,7 @@ export function FlowCanvas() {
     >
       <Background gap={24} size={1.2} color="var(--color-slate-200)" />
       <BranchLight layout={layout} />
+      <FrameLight layout={layout} />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
       {inside && (
         <Panel position="top-center">

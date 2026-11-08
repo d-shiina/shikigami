@@ -75,6 +75,7 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | `records.keepDays` | none (keep) | Each PC deletes its run records (`runs/<run-id>/`) and MCP calls (`audit/mcp.jsonl`) older than this many days ([audit.md](audit.md)). Applied when a run ends; runs still going are never deleted |
 | `records.keepRuns` | none (keep) | Each PC keeps at most this many run records, the newest |
 | `records.failureScreenshots` | `true` | When a run of the whole flow fails at a browser or desktop node, a picture of that page or window is saved beside the run's log in the flow's folder (`logs/<time>_failed.png`, removed with its log) and its path goes in the error as `details.screenshot`. `false` turns this off, e.g. when the screens show personal data |
+| `records.manualScreens` | `true` | When a whole flow is run from Studio, a picture of the page or window at each browser or desktop node is kept on this PC for the flow's 手順書 ([design/manual.md](design/manual.md)). Password fields, secrets and the fields the flow fills are hidden in the pictures. Only the pictures of the last successful run are kept. `false` turns this off |
 | `remote.enabled` | false | Take jobs from a management server ([remote.md](remote.md)). The PC must also be enrolled (`shikigami agent enroll`) |
 | `remote.manager` | none | The management server's URL. `https://` (`http://` only for `localhost`) |
 | `remote.flows` | empty (none) | Flow IDs the management server may start, or `"*"` for all. `flows.<id>.unattended: false` still refuses one |

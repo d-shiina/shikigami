@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "./lib/api";
 import { t } from "./lib/i18n";
 import { draftFor } from "./components/SecretsPage";
-import { calledIds, createStudioStore, extractChoices, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps, trailOf } from "./store";
+import { calledIds, createStudioStore, errorPlace, extractChoices, diveChain, locate, pendingReview, revertBlocker, secretFixOf, touchedSteps, trailOf } from "./store";
 
 const flow = (revision: number, steps: Flow["steps"] = []): Flow => ({
   schemaVersion: 1,
@@ -602,6 +602,65 @@ describe("studio store", () => {
     // Picking a step of the open flow (outline, palette) comes back up.
     store.getState().goTo("c1");
     expect(store.getState().dive).toEqual([]);
+  });
+
+  it("leads a failure inside only when one route leads there", async () => {
+    const flows: Record<string, Flow> = {
+      scn_a: { ...flow(1, [{ id: "c1", type: "flow.call", params: { flow: "scn_b" } }]) },
+      scn_b: { ...flow(1, [{ id: "c2", type: "flow.call", params: { flow: "scn_c" } }, { id: "c3", type: "flow.call", params: { flow: "scn_c" } }]), id: "scn_b", name: "B" },
+      scn_c: { ...flow(1, [{ id: "x", type: "log.message" }]), id: "scn_c", name: "C" },
+    };
+    const store = createStudioStore(fakeApi({ getFlow: vi.fn(async (id: string) => flows[id]!), listVersions: vi.fn(async () => []) }));
+    await store.getState().open("scn_a");
+    const { flow: root, called } = store.getState();
+    expect(errorPlace(root, called, "c1", { subFlow: { flowId: "scn_c", stepId: "x" } })).toEqual({ path: [], stepId: "c1" });
+    expect(errorPlace(root, called, "c1", { subFlow: { flowId: "scn_c", stepId: "x", callPath: ["c3"] } })).toEqual({ path: ["c1", "c3"], stepId: "x" });
+  });
+
+  it("leads log lines and failures to the node, inside called flows too", async () => {
+    const flows: Record<string, Flow> = {
+      scn_a: { ...flow(1, [{ id: "c1", type: "flow.call", params: { flow: "scn_b" } }]) },
+      scn_b: { ...flow(1, [{ id: "c2", type: "flow.call", params: { flow: "scn_c" } }]), id: "scn_b", name: "B" },
+      scn_c: { ...flow(1, [{ id: "g", type: "control.group", blocks: { body: [{ id: "x", type: "log.message", name: "送信" }] } }]), id: "scn_c", name: "C" },
+    };
+    const store = createStudioStore(fakeApi({ getFlow: vi.fn(async (id: string) => flows[id]!), listVersions: vi.fn(async () => []) }));
+    await store.getState().open("scn_a");
+    const { flow: root, called } = store.getState();
+    // details.subFlow names only the innermost flow: the calls to it are found.
+    expect(errorPlace(root, called, "c1", { subFlow: { flowId: "scn_c", stepId: "x" } })).toEqual({ path: ["c1", "c2"], stepId: "x" });
+    expect(errorPlace(root, called, "c1", { subFlow: { flowId: "scn_c", stepId: "gone" } })).toEqual({ path: [], stepId: "c1" });
+    expect(errorPlace(root, called, "c1", undefined)).toEqual({ path: [], stepId: "c1" });
+    // The calls the run reports are followed as they are.
+    expect(errorPlace(root, called, "c1", { subFlow: { flowId: "scn_c", stepId: "x", callPath: ["c2"] } })).toEqual({ path: ["c1", "c2"], stepId: "x" });
+    expect(errorPlace(root, called, "c1", { subFlow: { flowId: "scn_c", stepId: "x", callPath: ["nope"] } })).toEqual({ path: [], stepId: "c1" });
+
+    const base = { runId: "run_1", at: "2026-10-28T00:00:00Z" };
+    store.getState().onRunEvent({ ...base, seq: 0, type: "runStarted", flowId: "scn_a", flowName: "A", revision: 1 });
+    store.getState().onRunEvent({ ...base, seq: 1, type: "log", level: "info", message: "inside", stepId: "x", callPath: ["c1", "c2"] } as unknown as RunEventEnvelope);
+    store.getState().onRunEvent({
+      ...base,
+      seq: 2,
+      type: "stepFinished",
+      stepId: "c1",
+      stepType: "flow.call",
+      outcome: "failed",
+      durationMs: 1,
+      error: { code: "X", message: "no button", stepId: "c1", details: { subFlow: { flowId: "scn_c", stepId: "x" } } },
+    });
+    const logs = store.getState().run!.logs;
+    expect(logs.at(-2)).toMatchObject({ message: "inside", stepId: "x", callPath: ["c1", "c2"] });
+    expect(logs.at(-1)).toMatchObject({ level: "error", message: "no button", stepId: "x", callPath: ["c1", "c2"] });
+
+    store.getState().toggleFold("g", "scn_c");
+    store.getState().goToPlace({ path: ["c1", "c2"], stepId: "x" });
+    expect(store.getState().dive).toEqual(["c1", "c2"]);
+    // The frame around it in the called flow opens.
+    expect(store.getState().folded.scn_c).toBeUndefined();
+    expect(store.getState().reveal).toMatchObject({ stepId: "x", inside: "c1/c2" });
+    // A call the chart cannot open any more: the call step instead.
+    store.getState().goToPlace({ path: ["nope"], stepId: "x" });
+    expect(store.getState().dive).toEqual([]);
+    expect(store.getState().selection).toEqual({ kind: "step", stepId: "nope" });
   });
 
   it("finds the flows a flow calls, nested ones included", () => {

@@ -128,6 +128,7 @@ const HIGHLIGHT_MS: u64 = 2_000;
 #[derive(Clone)]
 pub struct DesktopAdapter {
     backend: Arc<dyn Backend>,
+    filled: Filled,
 }
 
 impl std::fmt::Debug for DesktopAdapter {
@@ -142,12 +143,18 @@ impl DesktopAdapter {
         let backend: Arc<dyn Backend> = Arc::new(uia::UiaBackend::new());
         #[cfg(not(windows))]
         let backend: Arc<dyn Backend> = Arc::new(backend::Unsupported);
-        Self { backend }
+        Self {
+            backend,
+            filled: Filled::default(),
+        }
     }
 
     /// An adapter over another backend (tests use a scripted one).
     pub fn with_backend(backend: Arc<dyn Backend>) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            filled: Filled::default(),
+        }
     }
 }
 
@@ -169,6 +176,7 @@ impl Adapter for DesktopAdapter {
                 DesktopStep {
                     backend: self.backend.clone(),
                     kind,
+                    filled: self.filled.clone(),
                 },
             );
         }
@@ -395,7 +403,19 @@ enum Kind {
 struct DesktopStep {
     backend: Arc<dyn Backend>,
     kind: Kind,
+    /// Fields the flow typed into, newest last, hidden in the 手順書's
+    /// pictures (they may hold personal data or a secret).
+    filled: Filled,
 }
+
+type Filled = Arc<std::sync::Mutex<Vec<Target>>>;
+
+/// How many typed-into fields are remembered for hiding.
+const MAX_FILLED: usize = 50;
+/// How many of them are looked up for one picture (each is a search).
+const MAX_HIDDEN_PER_SHOT: usize = 12;
+/// The grey filled fields are painted in (the browser uses the same).
+const HIDDEN_GREY: [u8; 4] = [0xd5, 0xd8, 0xdd, 0xff];
 
 impl ActionHandler for DesktopStep {
     fn execute<'a>(&'a self, input: ActionInput) -> BoxFuture<'a, Result<Value, StepError>> {
@@ -601,7 +621,23 @@ impl ActionHandler for DesktopStep {
                     }
                 }
             };
+            let filled = match &op {
+                Op::SetValue { target, .. } | Op::Type { target, .. }
+                    if target.element.is_some() =>
+                {
+                    Some(target.clone())
+                }
+                _ => None,
+            };
             let output = self.until_found(op, &input, deadline).await?;
+            if let Some(target) = filled {
+                let mut list = self.filled.lock().unwrap_or_else(|e| e.into_inner());
+                list.retain(|t| *t != target);
+                list.push(target);
+                if list.len() > MAX_FILLED {
+                    list.remove(0);
+                }
+            }
             Ok(output)
         })
     }
@@ -969,6 +1005,9 @@ impl DesktopStep {
     async fn screenshot(&self, input: &ActionInput, deadline: Instant) -> Result<Value, StepError> {
         let target = target(&input.params, Allow::Picture)?;
         let path = string(&input.params, "path")?;
+        if input.params.get("report") == Some(&Value::Bool(true)) {
+            return self.manual_shot(&target, path).await;
+        }
         let picture = self.picture(&target, input, deadline).await?;
         let write = || -> std::io::Result<()> {
             if let Some(dir) = std::path::Path::new(&path).parent()
@@ -982,6 +1021,55 @@ impl DesktopStep {
             StepError::permanent("WRITE_FAILED", format!("cannot write {path}: {e}"))
         })?;
         Ok(Value::String(path))
+    }
+}
+
+impl DesktopStep {
+    /// A picture for the 手順書 (the Runtime's `report: true`): the whole
+    /// window, with where the target's element is in it (`mark`).
+    async fn manual_shot(&self, target: &Target, path: String) -> Result<Value, StepError> {
+        let mut capture = self.backend.capture(target.window_part()).await?;
+        let typed_into: Vec<Target> = {
+            let list = self.filled.lock().unwrap_or_else(|e| e.into_inner());
+            list.iter()
+                .rev()
+                .filter(|t| t.window == target.window)
+                .take(MAX_HIDDEN_PER_SHOT)
+                .cloned()
+                .collect()
+        };
+        for field in typed_into {
+            // A field that is gone from this screen is simply not hidden.
+            if let Ok(backend::Capture {
+                element: Some(rect),
+                ..
+            }) = self.backend.capture(field).await
+            {
+                capture.image.fill(rect, HIDDEN_GREY);
+            }
+        }
+        if let Some(dir) = std::path::Path::new(&path).parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(&path, capture.image.to_png()).map_err(|e| {
+            StepError::permanent("WRITE_FAILED", format!("cannot write {path}: {e}"))
+        })?;
+        let mark = capture
+            .element
+            .filter(|_| target.element.is_some())
+            .map(|r| json!({ "x": r.x, "y": r.y, "width": r.width, "height": r.height }));
+        let title = target
+            .window
+            .title
+            .clone()
+            .or(target.window.process.clone());
+        Ok(json!({
+            "path": path,
+            "width": capture.image.width,
+            "height": capture.image.height,
+            "mark": mark,
+            "title": title,
+        }))
     }
 }
 
