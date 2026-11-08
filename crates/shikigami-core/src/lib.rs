@@ -47,7 +47,7 @@ pub use registry::{
     StepTypeDef,
 };
 pub use review::{
-    ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,
+    CaseOutcome, ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,
     ObservationContent, ObservationSource, ReviewTimeline, ReviewVerdict, StepNote, TestRun,
 };
 pub use service::{

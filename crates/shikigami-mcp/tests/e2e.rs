@@ -1114,6 +1114,20 @@ async fn ai_writes_test_cases_and_runs_them() {
     assert_eq!(wrong["mismatches"][0]["at"], "outputs.doubled");
     assert_eq!(wrong["mismatches"][0]["actual"], 2);
 
+    // The review shows the cases as the AI's promises, with how they went.
+    let review = h.ok("get_review", json!({ "flowId": id })).await;
+    let kinds: Vec<&str> = review["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["testCase", "testCase", "testCases"], "{review}");
+    assert_eq!(review["evidence"][0]["name"], "21");
+    let results = &review["evidence"][2]["results"];
+    assert_eq!(results[1]["passed"], false);
+    assert_eq!(results[1]["mismatches"][0]["at"], "outputs.doubled");
+
     let one = h
         .ok("run_tests", json!({ "flowId": id, "cases": ["21"] }))
         .await;

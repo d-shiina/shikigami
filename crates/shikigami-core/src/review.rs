@@ -11,7 +11,11 @@
 //!   tried a step on (test_step) and named as the basis of an edit: the UI
 //!   tree as text and, where the adapter can take one, a masked screenshot;
 //! - `review`: a human's verdict on a revision (approved / sent back, with a
-//!   reason and notes on individual steps).
+//!   reason and notes on individual steps);
+//! - `testCase` / `testCases`: a test case an AI saved over MCP — a promise,
+//!   in business words, of what the flow should do — and the results of the
+//!   test cases it ran. The review shows them first: the person judges
+//!   whether each promise is right, the cases show whether the flow keeps it.
 //!
 //! Everything lives in the per-PC part of the workspace next to the journal
 //! (`history/<flow-id>/evidence.jsonl`, `observations/<id>/`).
@@ -24,6 +28,7 @@ use time::OffsetDateTime;
 use crate::ids::{FlowId, ObservationId, RunId, StepId};
 use crate::ops::EditOp;
 use crate::store::{Actor, ChangeKind, HistoryEntry};
+use crate::testcase::Mismatch;
 
 /// Longest change summary kept (characters); longer ones are cut.
 pub const MAX_SUMMARY_CHARS: usize = 2000;
@@ -240,9 +245,41 @@ pub enum EvidenceDetail {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         steps: Vec<StepNote>,
     },
+    /// An AI saved (or replaced) the test case `name` (`tests/<name>.json`).
+    TestCase {
+        name: String,
+        /// The case's `description` when it was saved: the promise in words.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        /// It replaced a case of the same name.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        replaced: bool,
+    },
+    /// An AI ran test cases over MCP against `revision`.
+    TestCases { results: Vec<CaseOutcome> },
+}
+
+/// How one test case went in a `testCases` record.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CaseOutcome {
+    pub name: String,
+    pub passed: bool,
+    pub run_id: String,
+    /// How the run ended (`succeeded`, `failed`, `cancelled`).
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mismatches: Vec<Mismatch>,
 }
 
 impl Evidence {
+    fn is_test_case(&self) -> bool {
+        matches!(
+            self.detail,
+            EvidenceDetail::TestCase { .. } | EvidenceDetail::TestCases { .. }
+        )
+    }
+
     pub fn review_verdict(&self) -> Option<ReviewVerdict> {
         match &self.detail {
             EvidenceDetail::Review { verdict, .. } => Some(*verdict),
@@ -323,6 +360,18 @@ pub(crate) fn timeline(
         .cloned();
     let open_feedback = open_feedback(&evidence);
     let since = since.unwrap_or_else(|| last_approval.as_ref().map_or(0, |a| a.revision));
+    // An AI often saves and runs its test cases before the edit that
+    // makes them pass, at the revision that was approved: those still
+    // belong to this review when they came after the approval.
+    let evidence: Vec<Evidence> = evidence
+        .into_iter()
+        .filter(|e| {
+            e.revision > since
+                || (e.is_test_case()
+                    && e.revision == since
+                    && last_approval.as_ref().is_none_or(|a| e.at > a.at))
+        })
+        .collect();
     ReviewTimeline {
         flow_id,
         revision,
@@ -334,10 +383,7 @@ pub(crate) fn timeline(
             .filter(|e| e.revision > since)
             .map(ChangeRecord::from)
             .collect(),
-        evidence: evidence
-            .into_iter()
-            .filter(|e| e.revision > since)
-            .collect(),
+        evidence,
     }
 }
 
@@ -474,6 +520,56 @@ mod tests {
         );
         let many: Vec<String> = (0..20).map(|i| format!("q{i}")).collect();
         assert_eq!(clean_checks(&many).len(), MAX_CHECKS);
+    }
+
+    #[test]
+    fn test_cases_saved_after_the_approval_belong_to_the_next_review() {
+        use crate::store::ActorKind;
+        let at = |s: i64| OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(s);
+        let record = |revision, s, detail| Evidence {
+            revision,
+            at: at(s),
+            actor: Actor::new(ActorKind::Mcp),
+            detail,
+        };
+        let case = |name: &str| EvidenceDetail::TestCase {
+            name: name.into(),
+            description: None,
+            replaced: false,
+        };
+        let evidence = vec![
+            record(3, 10, case("前の約束")),
+            record(
+                3,
+                20,
+                EvidenceDetail::Review {
+                    verdict: ReviewVerdict::Approved,
+                    reason: String::new(),
+                    steps: Vec::new(),
+                },
+            ),
+            // Saved before the edit, so still at the approved revision.
+            record(3, 30, case("新しい約束")),
+            record(
+                4,
+                40,
+                EvidenceDetail::TestCases {
+                    results: Vec::new(),
+                },
+            ),
+        ];
+        let t = timeline(FlowId::new("f"), 4, None, &[], evidence);
+        assert_eq!(t.since_revision, 3);
+        let kinds: Vec<_> = t
+            .evidence
+            .iter()
+            .map(|e| match &e.detail {
+                EvidenceDetail::TestCase { name, .. } => name.as_str(),
+                EvidenceDetail::TestCases { .. } => "results",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(kinds, vec!["新しい約束", "results"]);
     }
 
     #[test]
