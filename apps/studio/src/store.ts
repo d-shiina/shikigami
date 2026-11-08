@@ -345,6 +345,11 @@ export type StudioState = {
   /** Frames (a loop, if, group, …) folded to their head on the chart, per flow (this PC only). */
   folded: Record<string, string[]>;
   outlineOpen: boolean;
+  /**
+   * The right pane kept open by hand. Without it the pane opens only while a
+   * node or part is selected, so the chart (or the 変数 table) has the room.
+   */
+  inspectorOpen: boolean;
   paletteOpen: boolean;
   /** The search over the chart (Ctrl+F). */
   searchOpen: boolean;
@@ -419,6 +424,10 @@ export type StudioState = {
   changeBy(delta: number): void;
   setFollowRun(on: boolean): void;
   setOutlineOpen(open: boolean): void;
+  /** Keeps the right pane open (the flow's settings when nothing is selected), or closes it. */
+  setInspectorOpen(open: boolean): void;
+  /** Opens the right pane on the flow's own settings (name, variables, run settings). */
+  showFlowProps(): void;
   /** Also keeps `reviewing` and `secretsOpen` in step. */
   setPlace(place: Place): void;
   setBottom(tab: BottomTab | null): void;
@@ -744,6 +753,7 @@ export function trailOf(s: Pick<StudioState, "run" | "flow">): RunState | null {
   return run.revision === s.flow.revision ? run : null;
 }
 const OUTLINE_KEY = "shikigami.studio.outline";
+const INSPECTOR_KEY = "shikigami.studio.inspector";
 
 function loadFlag(key: string, fallback: boolean): boolean {
   try {
@@ -1002,6 +1012,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       breakpoints: loadBreakpoints(),
       folded: loadFolded(),
       outlineOpen: loadFlag(OUTLINE_KEY, false),
+      inspectorOpen: loadFlag(INSPECTOR_KEY, false),
       paletteOpen: false,
       searchOpen: false,
       searchAsked: 0,
@@ -1274,6 +1285,17 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       setOutlineOpen(open) {
         saveFlag(OUTLINE_KEY, open);
         set({ outlineOpen: open });
+      },
+
+      setInspectorOpen(open) {
+        saveFlag(INSPECTOR_KEY, open);
+        // Closing puts the selection down too, or the pane would stay for it.
+        set(open ? { inspectorOpen: true } : { inspectorOpen: false, selection: null, range: null });
+      },
+
+      showFlowProps() {
+        saveFlag(INSPECTOR_KEY, true);
+        set({ inspectorOpen: true, selection: null, range: null, extractOpen: false, extractName: "" });
       },
 
       setPlace(place) {

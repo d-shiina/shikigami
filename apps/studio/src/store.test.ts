@@ -47,6 +47,19 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
 }
 
 describe("studio store", () => {
+  it("keeps the right pane for a picked node, or for the flow's settings only while kept open", () => {
+    const store = createStudioStore(fakeApi({}));
+    expect(store.getState().inspectorOpen).toBe(false);
+    store.getState().select({ kind: "step", stepId: "a" });
+    store.getState().setInspectorOpen(false);
+    // Closing the pane puts the node down too, or it would stay open for it.
+    expect(store.getState().selection).toBeNull();
+    store.getState().select({ kind: "step", stepId: "a" });
+    store.getState().showFlowProps();
+    expect(store.getState().selection).toBeNull();
+    expect(store.getState().inspectorOpen).toBe(true);
+  });
+
   it("moves the selection through the steps and asks the view to follow", async () => {
     const steps = [
       { id: "s1", type: "log.message" },

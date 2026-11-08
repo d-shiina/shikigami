@@ -9,7 +9,7 @@ import { valueText } from "../lib/runValues";
 import { findStep, type VariableChange } from "../store";
 import { VarIcon } from "./VarIcon";
 import { askedAtRun } from "../lib/runInputs";
-import { AskedAtRunTag } from "./VariablesView";
+import { AskedAtRunTag } from "./AskedAtRunTag";
 
 const TYPES = Object.keys(t.varType) as VarType[];
 const DIRECTIONS = Object.keys(t.direction) as VarDirection[];
@@ -17,7 +17,15 @@ const cell = "w-full rounded-lg border border-slate-200 bg-sheet px-1.5 py-0.5 t
 const row = "grid grid-cols-[64px_1fr] items-center gap-2";
 const rowLabel = "text-right text-[11px] text-slate-500";
 
-function parseDefault(text: string, type: VarType): unknown {
+/** A variable's starting value as it is typed: lists and records one entry per line. */
+export function defaultText(variable: VariableDef): string {
+  const type = variable.type ?? "any";
+  if (variable.default === undefined || variable.default === null) return "";
+  if (type === "string") return String(variable.default);
+  return JSON.stringify(variable.default, null, typeof variable.default === "object" ? 2 : undefined);
+}
+
+export function parseDefault(text: string, type: VarType): unknown {
   if (text.trim() === "") return undefined;
   if (type === "string") return text;
   try {
@@ -76,14 +84,8 @@ function VariableRow({ variable }: { variable: VariableDef }) {
   const removeVariable = useStudio((s) => s.removeVariable);
   const [open, setOpen] = useState(false);
   const type = variable.type ?? "any";
-  const defaultText =
-    variable.default === undefined || variable.default === null
-      ? ""
-      : type === "string"
-        ? String(variable.default)
-        : // Lists and records are read one entry per line, not as one long line.
-          JSON.stringify(variable.default, null, typeof variable.default === "object" ? 2 : undefined);
-  const [draft, setDraft] = useState(defaultText);
+  const initial = defaultText(variable);
+  const [draft, setDraft] = useState(initial);
   const multiline = type === "array" || type === "object" || draft.includes("\n");
   const update = (patch: Partial<VariableDef>) => setVariable({ ...variable, ...patch });
   const color = TYPE_COLOR[type] ?? TYPE_COLOR.any;
@@ -145,7 +147,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
               title={asked ? t.vars.askedAtRunTitle : undefined}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
+              onBlur={() => draft !== initial && update({ default: parseDefault(draft, type) })}
             />
           ) : (
             <input
@@ -154,7 +156,7 @@ function VariableRow({ variable }: { variable: VariableDef }) {
               title={asked ? t.vars.askedAtRunTitle : undefined}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => draft !== defaultText && update({ default: parseDefault(draft, type) })}
+              onBlur={() => draft !== initial && update({ default: parseDefault(draft, type) })}
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
             />
           )
@@ -242,7 +244,7 @@ export function VariablesPanel() {
             ) : (
               <ul className="space-y-2">
                 {members.map((v) => (
-                  <VariableRow key={`${v.name}:${JSON.stringify(v.default)}`} variable={v} />
+                  <VariableRow key={`${v.name}:${v.type}:${JSON.stringify(v.default)}`} variable={v} />
                 ))}
               </ul>
             )}
