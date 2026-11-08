@@ -1,26 +1,26 @@
-# スケジュールとエージェント
+# スケジュールと Worker
 
 [English](../schedules.md) | 日本語
 
 SpellSheet は、決まった時刻やきっかけでフローを自分で始めます。毎朝 8 時、毎月 25 日、勤務時間中の 30 分ごと、フォルダーにファイルが置かれたとき。Windows のタスク スケジューラーを設定する必要はありません。
 
-## エージェント
+## Worker
 
-**エージェント**は PC ごと（Windows のユーザーとワークスペースごと）に 1 つ動くプロセスで、スケジュールの時刻が来たら実行します。Writer も AI も要りません。
+**Worker**は PC ごと（Windows のユーザーとワークスペースごと）に 1 つ動くプロセスで、スケジュールの時刻が来たら実行します。Writer も AI も要りません。
 
-Writer では左の「自動実行」で、エージェントが実行中か・実行中のフローを確認でき、「エージェントを開始」で起動できます（`agent install` と同じく、サインインのたびに起動するよう登録します）。スケジュールの追加・編集・有効と無効の切り替えも同じ画面です。フローのインスペクターの「スケジュール」には、そのフローのスケジュールが出ます。
+Writer では左の「自動実行」で、Worker が実行中か・実行中のフローを確認でき、「自動実行を開始」で起動できます（`worker install` と同じく、サインインのたびに起動するよう登録します）。スケジュールの追加・編集・有効と無効の切り替えも同じ画面です。フローのインスペクターの「スケジュール」には、そのフローのスケジュールが出ます。
 
 ```powershell
-spellsheet agent install     # Windows にサインインするたびに起動する（今も起動する）
-spellsheet agent status      # 動いているか、何を実行中か、次はいつか
-spellsheet agent stop
-spellsheet agent run         # このウィンドウで動かす（Ctrl+C で止める）
-spellsheet agent uninstall
+spellsheet worker install     # Windows にサインインするたびに起動する（今も起動する）
+spellsheet worker status      # 動いているか、何を実行中か、次はいつか
+spellsheet worker stop
+spellsheet worker run         # このウィンドウで動かす（Ctrl+C で止める）
+spellsheet worker uninstall
 ```
 
-`agent install` は自分のユーザーのタスク スケジューラーに `SpellSheet\Agent`（ログオン時）を登録します（名前を変える前の `Shikigami\Agent` があれば置き換えます）。エージェントはサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースのエージェントは 2 つ目を起動できません。
+`worker install` は自分のユーザーのタスク スケジューラーに `SpellSheet\Worker`（ログオン時）を登録します（名前を変える前の `Shikigami\Agent` があれば置き換えます）。Worker はサインイン中のデスクトップで動くので、マウスとキーボードを使えます。同じワークスペースの Worker は 2 つ目を起動できません。
 
-- エージェントが始める実行は**無人実行**です。`spellsheet run <id>` と同じく公開版を動かし、`policy.json` の `flows.<id>.unattended: false` なら動かしません。公開していないフローは `NOT_PUBLISHED` で失敗します。
+- Worker が始める実行は**無人実行**です。`spellsheet run <id>` と同じく公開版を動かし、`policy.json` の `flows.<id>.unattended: false` なら動かしません。公開していないフローは `NOT_PUBLISHED` で失敗します。
 - ほかの実行と同じく記録に残り、`origin.trigger` は `"schedule"`、`origin.requestedBy` はスケジュールの名前、`origin.jobId` はその ID です。
 - マウスとキーボードは Writer・CLI・MCP サーバーと共有し、使うノードはプロセスをまたいで順番に動きます。画面ロック中は `DESKTOP_UNAVAILABLE` で止まります（ブラウザやファイルの処理は動きます）。これらのノードがあるフローの実行中は、画面が消えたりスリープしたりしないようにします。ロックは止めません（パスワード付きのスクリーンセーバー、ポリシーで決まった時間でのロック、Win+L では止まります）。デスクトップのフローの予定の時刻には、PC をサインインしたまま・ロックしないで置いてください。Writer の「自動実行」では、マウス・キーボードを使うフローの予定に、この PC が操作のないまま何分でロックされるかを出します。
 - ほかのプロセスとは、自分のユーザーだけが書き込める名前付きパイプ（`\\.\pipe\shikigami-agent-…`）でやり取りします。
@@ -59,16 +59,16 @@ spellsheet schedule disable sch_…   # enable / remove
 | `monthly` | `day`（1〜31、-1 は月末）、`at`、`businessDay`（任意）、`onHoliday`（任意） | 毎月。その月にない日（6 月の 31 日）は月末 |
 | `every` | `minutes`、`from` / `to`（任意）、`days`（任意）、`skipHolidays`（任意） | `from`、`from` + `minutes`、… `to` まで（なければ一日中） |
 | `once` | `at`（"2026-11-07T08:00"） | 1 回だけ |
-| `fileAdded` | `folder`（フローのフォルダーからの相対パスか絶対パス）、`pattern`（"*.xlsx"）、`input`（任意） | 名前が合う新しいファイル 1 つにつき 1 回。大きさが変わらなくなってから始め、そのフルパスを入力変数 `input` に入れる。エージェントの起動時からあるファイル、Office のロックファイル（`~$…`）、ダウンロード途中のファイルは数えない |
-| `mailReceived` | `folder`（任意、既定は受信トレイ）、`subjectContains`・`fromContains`（任意）、`minutes`（確認の間隔、既定 5）、`via`・`account`（任意、`mail.list` と同じ）、`input`（任意） | 条件に合う新しいメール 1 通につき 1 回。そのメール（`{ id, subject, from, fromAddress, receivedAt, attachments }`）を入力変数 `input` に入れる。エージェントの起動時からあるメールは数えない |
+| `fileAdded` | `folder`（フローのフォルダーからの相対パスか絶対パス）、`pattern`（"*.xlsx"）、`input`（任意） | 名前が合う新しいファイル 1 つにつき 1 回。大きさが変わらなくなってから始め、そのフルパスを入力変数 `input` に入れる。Worker の起動時からあるファイル、Office のロックファイル（`~$…`）、ダウンロード途中のファイルは数えない |
+| `mailReceived` | `folder`（任意、既定は受信トレイ）、`subjectContains`・`fromContains`（任意）、`minutes`（確認の間隔、既定 5）、`via`・`account`（任意、`mail.list` と同じ）、`input`（任意） | 条件に合う新しいメール 1 通につき 1 回。そのメール（`{ id, subject, from, fromAddress, receivedAt, attachments }`）を入力変数 `input` に入れる。Worker の起動時からあるメールは数えない |
 
 ### メールが届いたら
 
 `mailReceived` は `minutes` 分ごとに `mail.list` でフォルダーを見て、前に見たときになかったメールでフローを始めます。この PC の Outlook（クラシック版）を使うので、Outlook を起動してサインインしておきます。Outlook のない PC や業務用のメールボックスは `via: "microsoft365"` と `account`（[office.md](office.md) の「Outlook なしで Microsoft 365 のメールボックスを扱う」）で見ます。
 
 - 入力変数に入ったメールの `id` で、フローの中で添付の保存（`mail.saveAttachments`）・移動（`mail.move`）・返信（`mail.reply`）ができます。処理したメールは移動するか既読にしておくと、受信トレイで見分けやすくなります
-- 見られなかったとき（Outlook が起動していない、サインインが切れた）は `agent status` のそのスケジュールに理由を出し、次の確認でまた見ます
-- エージェントが止まっている間に届いたメールは、次に起動したときの「起動時からあるメール」になり、数えません
+- 見られなかったとき（Outlook が起動していない、サインインが切れた）は `worker status` のそのスケジュールに理由を出し、次の確認でまた見ます
+- Worker が止まっている間に届いたメールは、次に起動したときの「起動時からあるメール」になり、数えません
 
 ```json
 { "kind": "mailReceived", "folder": "受信トレイ", "subjectContains": "請求書", "minutes": 5, "input": "mail" }
@@ -92,15 +92,15 @@ spellsheet schedule disable sch_…   # enable / remove
 
 日本の祝日は SpellSheet に入っています（2020 年以降の法律の決まり。春分・秋分の日は計算で出します）。読めない `holidays.json` は推測で読まず、直るまでどのスケジュールも動きません（`HOLIDAYS_INVALID`）。
 
-時刻は PC の時刻です。ファイルが変わるとエージェントが読み直します。壊れたファイルは推測で読まず、`agent status` に問題を出し、直るまでどのスケジュールも動きません（`SCHEDULE_INVALID`）。
+時刻は PC の時刻です。ファイルが変わると Worker が読み直します。壊れたファイルは推測で読まず、`worker status` に問題を出し、直るまでどのスケジュールも動きません（`SCHEDULE_INVALID`）。
 
-- **逃した時刻は取り戻しません。** エージェントが止まっている間（PC の電源が切れていた、誰もサインインしていなかった）に過ぎた時刻は飛ばし、次の時刻に動きます。
+- **逃した時刻は取り戻しません。** Worker が止まっている間（PC の電源が切れていた、誰もサインインしていなかった）に過ぎた時刻は飛ばし、次の時刻に動きます。
 - **同時には 1 つ。** 前の実行がまだ続いているうちに次の時刻が来たら、その回は飛ばします。ファイルのきっかけは、ファイル 1 つにつき 1 回動きます。
 - 始められなかったスケジュール（公開していない、ポリシーで止められた）は、通知では失敗した実行として扱います。
 
 ## 通知
 
-`policy.json` の `notify` で、無人実行の終わりを知らせます。対象はエージェントが始める実行と `spellsheet run`（タスク スケジューラー・バッチファイル）です。Writer の実行と AI の試し実行は人が見ているので知らせません。フローの `catch` でメールを送る必要はありません。
+`policy.json` の `notify` で、無人実行の終わりを知らせます。対象は Worker が始める実行と `spellsheet run`（タスク スケジューラー・バッチファイル）です。Writer の実行と AI の試し実行は人が見ているので知らせません。フローの `catch` でメールを送る必要はありません。
 
 ```json
 "notify": [

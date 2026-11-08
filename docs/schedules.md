@@ -1,29 +1,29 @@
-# Schedules and the agent
+# Schedules and the worker
 
 English | [日本語](ja/schedules.md)
 
 SpellSheet starts flows by itself: every morning at 8, on the 25th of each month, every 30 minutes during working hours, or when a file is put in a folder. Windows Task Scheduler is not needed.
 
-## The agent
+## The worker
 
-The **agent** is one process per PC (per Windows user and workspace) that fires the schedules and runs them. It needs neither Writer nor an AI.
+The **worker** is one process per PC (per Windows user and workspace) that fires the schedules and runs them. It needs neither Writer nor an AI.
 
-In Writer, **Automation** in the sidebar shows whether the agent is running and what it is running, and **Start the agent** starts it (registered to start at every sign-in, as `agent install` does). Schedules are added, edited and switched on and off on the same page. The flow inspector's **Schedules** section lists the flow's own.
+In Writer, **Automation** in the sidebar shows whether the worker is running and what it is running, and **Turn on automation** starts it (registered to start at every sign-in, as `worker install` does). Schedules are added, edited and switched on and off on the same page. The flow inspector's **Schedules** section lists the flow's own.
 
 ```powershell
-spellsheet agent install     # start it whenever you sign in to Windows (and now)
-spellsheet agent status      # is it running, what is it running, what comes next
-spellsheet agent stop
-spellsheet agent run         # run it in this window instead (Ctrl+C stops)
-spellsheet agent uninstall
+spellsheet worker install     # start it whenever you sign in to Windows (and now)
+spellsheet worker status      # is it running, what is it running, what comes next
+spellsheet worker stop
+spellsheet worker run         # run it in this window instead (Ctrl+C stops)
+spellsheet worker uninstall
 ```
 
-`agent install` registers the Task Scheduler task `SpellSheet\Agent` for your user ("at log on"; it replaces `Shikigami\Agent` from before the rename), so the agent runs in your signed-in desktop session, where it can use the mouse and keyboard. A second agent for the same workspace refuses to start.
+`worker install` registers the Task Scheduler task `SpellSheet\Worker` for your user ("at log on"; it replaces `Shikigami\Agent` from before the rename), so the worker runs in your signed-in desktop session, where it can use the mouse and keyboard. A second worker for the same workspace refuses to start.
 
-- Runs the agent starts are **unattended runs**: they execute the published version (and `flows.<id>.unattended: false` in `policy.json` refuses them), exactly as `spellsheet run <id>`. A flow that is not published fails with `NOT_PUBLISHED`.
+- Runs the worker starts are **unattended runs**: they execute the published version (and `flows.<id>.unattended: false` in `policy.json` refuses them), exactly as `spellsheet run <id>`. A flow that is not published fails with `NOT_PUBLISHED`.
 - They are recorded like any run, with `origin.trigger: "schedule"`, `origin.requestedBy` the schedule's name and `origin.jobId` its ID.
 - The mouse and keyboard are shared with Writer, the CLI and the MCP server: nodes that use them take turns across processes. While the screen is locked they stop with `DESKTOP_UNAVAILABLE` (browser and file work still runs). While a flow with such nodes runs, the display is kept on and the PC awake, so it does not turn off or sleep. Locking is not prevented: a password-protected screen saver, an inactivity limit set by policy, or Win+L still stops them. Keep the PC signed in and unlocked when desktop flows are due. In Writer's 「自動実行」, a schedule whose flow uses the mouse and keyboard says so when this PC locks by itself after a while without input.
-- Other processes talk to the agent over a local named pipe that only your user can write to (`\\.\pipe\shikigami-agent-…`).
+- Other processes talk to the worker over a local named pipe that only your user can write to (`\\.\pipe\shikigami-agent-…`).
 
 ### Screen lock and Remote Desktop
 
@@ -59,8 +59,8 @@ spellsheet schedule disable sch_…   # enable / remove
 | `monthly` | `day` (1–31, -1 = last day), `at`, `businessDay` (optional), `onHoliday` (optional) | Every month. A day the month lacks (31 in June) is its last day |
 | `every` | `minutes`, `from` / `to` (optional), `days` (optional), `skipHolidays` (optional) | `from`, `from` + `minutes`, … up to `to` (the whole day without them) |
 | `once` | `at` ("2026-11-07T08:00") | Once |
-| `fileAdded` | `folder` (relative to the flow's folder, or a full path), `pattern` ("*.xlsx"), `input` (optional) | Once per new file whose name matches, after its size stops changing. Its full path goes into the input variable `input`. Files already there when the agent starts, Office lock files (`~$…`) and partial downloads do not count |
-| `mailReceived` | `folder` (optional, default the Inbox), `subjectContains` / `fromContains` (optional), `minutes` (how often to look, default 5), `via` / `account` (optional, as for `mail.list`), `input` (optional) | Once per new mail that matches. The mail (`{ id, subject, from, fromAddress, receivedAt, attachments }`) goes into the input variable `input`. Mails already there when the agent starts do not count |
+| `fileAdded` | `folder` (relative to the flow's folder, or a full path), `pattern` ("*.xlsx"), `input` (optional) | Once per new file whose name matches, after its size stops changing. Its full path goes into the input variable `input`. Files already there when the worker starts, Office lock files (`~$…`) and partial downloads do not count |
+| `mailReceived` | `folder` (optional, default the Inbox), `subjectContains` / `fromContains` (optional), `minutes` (how often to look, default 5), `via` / `account` (optional, as for `mail.list`), `input` (optional) | Once per new mail that matches. The mail (`{ id, subject, from, fromAddress, receivedAt, attachments }`) goes into the input variable `input`. Mails already there when the worker starts do not count |
 
 ```json
 {
@@ -83,8 +83,8 @@ spellsheet schedule disable sch_…   # enable / remove
 `mailReceived` looks at the folder with `mail.list` every `minutes` minutes and starts the flow for each mail that was not there at the last look. It uses this PC's Outlook (classic), so keep Outlook started and signed in. PCs without Outlook and shared work mailboxes are looked at with `via: "microsoft365"` and `account` ([office.md](office.md), "A Microsoft 365 mailbox without Outlook").
 
 - With the mail's `id` from the input variable, the flow can save its attachments (`mail.saveAttachments`), move it (`mail.move`) or reply (`mail.reply`). Moving handled mail or marking it read keeps the inbox easy to read
-- When it cannot look (Outlook not started, the sign-in expired), `agent status` shows why on that schedule, and it looks again next time
-- Mail that arrives while the agent is off is there when it starts, and does not count
+- When it cannot look (Outlook not started, the sign-in expired), `worker status` shows why on that schedule, and it looks again next time
+- Mail that arrives while the worker is off is there when it starts, and does not count
 
 ```json
 { "kind": "mailReceived", "folder": "Inbox", "subjectContains": "Invoice", "minutes": 5, "input": "mail" }
@@ -108,15 +108,15 @@ The company's days off and working days go in the workspace's `holidays.json` (t
 
 Japan's national holidays are built in (the law since 2020; the equinoxes are calculated). A `holidays.json` that cannot be read is not guessed at: no schedule fires until it is fixed (`HOLIDAYS_INVALID`).
 
-Times are the PC's local time. The agent reads the file again when it changes. A broken file is not guessed at: `agent status` shows the problem and no schedule fires until it is fixed (`SCHEDULE_INVALID`).
+Times are the PC's local time. The worker reads the file again when it changes. A broken file is not guessed at: `worker status` shows the problem and no schedule fires until it is fixed (`SCHEDULE_INVALID`).
 
-- **Missed times are not made up for.** A time that passes while the agent is off (the PC was off, nobody signed in) is skipped; the schedule fires at its next time.
+- **Missed times are not made up for.** A time that passes while the worker is off (the PC was off, nobody signed in) is skipped; the schedule fires at its next time.
 - **One at a time.** When a timed schedule comes round while its previous run is still going, that time is skipped. A file trigger starts one run per file.
 - A schedule that cannot start (not published, refused by the policy) counts as a failed run for notifications.
 
 ## Notifications
 
-`notify` in `policy.json` tells people how unattended runs ended: runs the agent starts and `spellsheet run` (Task Scheduler, batch files). Runs in Writer and the AI's trial runs are watched by a person and are not reported. Flows do not need to send mail in a `catch` for this.
+`notify` in `policy.json` tells people how unattended runs ended: runs the worker starts and `spellsheet run` (Task Scheduler, batch files). Runs in Writer and the AI's trial runs are watched by a person and are not reported. Flows do not need to send mail in a `catch` for this.
 
 ```json
 "notify": [

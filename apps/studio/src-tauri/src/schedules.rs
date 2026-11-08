@@ -1,7 +1,7 @@
 //! The 「自動実行」 place: this PC's schedules (`schedules.json` in the per-PC
 //! area) and the agent that fires them. Studio edits the file the agent
 //! reads (it picks changes up within a second) and talks to the agent over
-//! its local pipe, as `spellsheet schedule` and `spellsheet agent` do.
+//! its local pipe, as `spellsheet schedule` and `spellsheet worker` do.
 //! See docs/schedules.md.
 
 use std::collections::BTreeSet;
@@ -213,7 +213,7 @@ pub async fn agent_status(state: State<'_, AppState>) -> CmdResult<Option<AgentS
 }
 
 /// Starts the agent. On Windows it is registered to start at every sign-in
-/// too (`spellsheet agent install`), since schedules are meant to fire
+/// too (`spellsheet worker install`), since schedules are meant to fire
 /// without Studio; elsewhere it is started for this session.
 #[tauri::command]
 pub async fn start_agent(state: State<'_, AppState>) -> CmdResult<Option<AgentStatus>> {
@@ -232,7 +232,7 @@ pub async fn start_agent(state: State<'_, AppState>) -> CmdResult<Option<AgentSt
     command
         .arg("--workspace")
         .arg(&workspace)
-        .arg("agent")
+        .arg("worker")
         .arg(if cfg!(windows) { "install" } else { "run" })
         .stdin(std::process::Stdio::null());
     #[cfg(windows)]
@@ -263,12 +263,12 @@ pub async fn start_agent(state: State<'_, AppState>) -> CmdResult<Option<AgentSt
     }
     Err(err(
         "AGENT_START_FAILED",
-        "the agent did not answer within 5 seconds (see `spellsheet agent run` in a terminal)",
+        "the worker did not answer within 5 seconds (see `spellsheet worker run` in a terminal)",
     ))
 }
 
 /// Stops the agent; runs in progress are cancelled. Registered with
-/// `agent install`, it starts again at the next sign-in.
+/// `worker install`, it starts again at the next sign-in.
 #[tauri::command]
 pub async fn stop_agent(state: State<'_, AppState>) -> CmdResult<()> {
     match ipc::call(state.service.store().local_root(), &Request::Stop).await {

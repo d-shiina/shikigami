@@ -76,11 +76,11 @@ It sits directly in the workspace folder (the shared part). Without the file the
 | `records.keepRuns` | none (keep) | Each PC keeps at most this many run records, the newest |
 | `records.failureScreenshots` | `true` | When a run of the whole flow fails at a browser or desktop node, a picture of that page or window is saved beside the run's log in the flow's folder (`logs/<time>_failed.png`, removed with its log) and its path goes in the error as `details.screenshot`. `false` turns this off, e.g. when the screens show personal data |
 | `records.manualScreens` | `true` | When a whole flow is run from Writer, a picture of the page or window at each browser or desktop node is kept on this PC for the flow's 手順書 ([design/manual.md](design/manual.md)). Password fields, secrets and the fields the flow fills are hidden in the pictures. Only the pictures of the last successful run are kept. `false` turns this off |
-| `remote.enabled` | false | Take jobs from a management server ([remote.md](remote.md)). The PC must also be enrolled (`spellsheet agent enroll`) |
+| `remote.enabled` | false | Take jobs from a management server ([remote.md](remote.md)). The PC must also be enrolled (`spellsheet worker enroll`) |
 | `remote.manager` | none | The management server's URL. `https://` (`http://` only for `localhost`) |
 | `remote.flows` | empty (none) | Flow IDs the management server may start, or `"*"` for all. `flows.<id>.unattended: false` still refuses one |
 | `remote.acceptBundles` | false | Also run flows the server sends as bundles, not only published versions in this workspace. Reserved: the server cannot send bundles yet |
-| `notify` | empty | Where unattended runs (the agent's schedules and `spellsheet run`) are reported: a list of `{ "webhook", "on", "format", "flows" }`. See [schedules.md](schedules.md#notifications) |
+| `notify` | empty | Where unattended runs (the worker's schedules and `spellsheet run`) are reported: a list of `{ "webhook", "on", "format", "flows" }`. See [schedules.md](schedules.md#notifications) |
 | `desktop.waitUnlockedMinutes` | none (stop at once) | While the screen is locked, nodes that use the mouse and keyboard wait up to this many minutes for someone to unlock it, then stop with `DESKTOP_UNAVAILABLE`. The run log says once that it is waiting. For PCs with people at them ([schedules.md](schedules.md)) |
 
 `allow` = go ahead, `ask` = after a person approves in Writer, `deny` = never. The risk is the node type's `risk` (`safe`: variables, logs, control; `interactive`: operating screens; `dangerous`: deleting and moving files, HTTP to the outside, running programs and so on). Unregistered node types count as `dangerous`.

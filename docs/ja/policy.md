@@ -75,11 +75,11 @@
 | `records.keepDays` | なし（残す） | 各 PC が、この日数より古い実行記録（`runs/<run-id>/`）と MCP の呼び出し（`audit/mcp.jsonl`）を消す（[audit.md](audit.md)）。実行が終わったときに適用し、実行中のものは消さない |
 | `records.keepRuns` | なし（残す） | 各 PC が残す実行記録の数（新しいものから） |
 | `records.failureScreenshots` | `true` | フロー全体の実行がブラウザ・デスクトップのノードで失敗したとき、そのページ・ウィンドウの画面をフローのフォルダーの実行ログの隣に保存する（`logs/<時刻>_failed.png`、ログと一緒に消える）。エラーの `details.screenshot` にその場所が入る。画面に個人情報が出るなどで残したくないときは `false` |
-| `remote.enabled` | false | 管理サーバーからジョブを受けるか（[remote.md](remote.md)）。PC の登録（`spellsheet agent enroll`）も要る |
+| `remote.enabled` | false | 管理サーバーからジョブを受けるか（[remote.md](remote.md)）。PC の登録（`spellsheet worker enroll`）も要る |
 | `remote.manager` | なし | 管理サーバーの URL。`https://`（`http://` は `localhost` だけ） |
 | `remote.flows` | 空（なし） | 管理サーバーが始めてよいフローの ID。`"*"` ですべて。`flows.<id>.unattended: false` のものはここで許しても動かない |
 | `remote.acceptBundles` | false | このワークスペースの公開版だけでなく、管理サーバーがバンドルで送るフローも動かすか。枠の予約で、バンドルを送ることはまだできない |
-| `notify` | 空 | 無人実行（エージェントのスケジュールと `spellsheet run`）の終わりを知らせる先：`{ "webhook", "on", "format", "flows" }` の並び。[schedules.md](schedules.md#通知) |
+| `notify` | 空 | 無人実行（Worker のスケジュールと `spellsheet run`）の終わりを知らせる先：`{ "webhook", "on", "format", "flows" }` の並び。[schedules.md](schedules.md#通知) |
 | `desktop.waitUnlockedMinutes` | なし（すぐ止まる） | 画面ロック中、マウス・キーボードを使うノードは、だれかがロックを解くまでこの分数まで待ち、それでも解かれなければ `DESKTOP_UNAVAILABLE` で止まります。待ち始めたことを実行のログに一度書きます。人のいる PC 向けです（[schedules.md](schedules.md)） |
 
 `allow`＝承認なしで許可、`ask`＝承認が必要（人が Writer で承認してから実行）、`deny`＝禁止。危険度はステップ型の `risk`（`safe`：変数・ログ・制御、`interactive`：画面の操作、`dangerous`：ファイルの削除・移動、外部への HTTP、プログラムの実行など）。登録されていないステップ型は `dangerous` 扱いです。
