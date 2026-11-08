@@ -15,8 +15,18 @@ export const NODE_W = 290;
 export const SLOT_H = 40;
 /** Room above a step for the flow edge, its label and the review toolbar. */
 const GAP_Y = 56;
-/** Between the last node and the "+" under it. */
-const END_GAP = 24;
+/**
+ * The flow's start and end (see TerminalNodeData): a small rounded tag over
+ * its first node and under its last, TERMINAL_H tall. They are not steps: the
+ * line starts at one and ends at the other.
+ */
+export const TERMINAL_H = 30;
+export const START_ID = "flow:start";
+export const END_ID = "flow:end";
+/** From the start down to the first node: room for the review toolbar over it. */
+const START_GAP = 44;
+/** From the "+" at the end (or the last node) down to the end: room for the label of a line out of a loop. */
+const END_GAP = 36;
 /**
  * The small "+" at the end of a block that has nodes (a branch, a loop's
  * body, …), on the line just under its last node: it adds a node there,
@@ -90,9 +100,9 @@ export const asksUnderHead = (step: Step): boolean => step.type === IF || step.t
 /** Loops that decide after their block has run, not before. */
 const CHECKS_AFTER: ReadonlySet<string> = new Set([WAIT_UNTIL]);
 /** Steps the flow does not go on from: out of a loop, round to its next pass, or stopped with an error. */
-const TERMINAL: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
+const STOPPING: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
 /** A break, continue or fail that runs: a disabled one is skipped, and the flow goes on past it. */
-const ends = (step: Step | undefined): boolean => !!step && TERMINAL.has(step.type) && !step.disabled;
+const ends = (step: Step | undefined): boolean => !!step && STOPPING.has(step.type) && !step.disabled;
 const BLOCK_FRAME = { left: READ_ROOM + 12, right: WRITE_ROOM + 12 };
 /** Beside the blocks of a step: room for its frame to sit inside the frame of a step around it. */
 const BLOCK_ROOM = 16;
@@ -156,20 +166,26 @@ export type SlotNodeData = {
   parentId: string | null;
   block: string | null;
   label: string;
-  /** The faint "+" under the flow's last node, to keep adding at the end. */
-  end?: boolean;
-  /** The small "+" under a block's last node, to add at the end of the block (see TAIL_SIZE). */
+  /** The small "+" under a block's last node (or the flow's), to add at the end of it (see TAIL_SIZE). */
   tail?: boolean;
 };
+
+/**
+ * Where the flow starts (`start`) or ends (`end`): a tag, not a step. The
+ * start holds the values the flow takes in, the end the values it gives
+ * back, so the lines of those values have somewhere to start and end.
+ * Positioned by its top centre (it is as wide as what it says).
+ */
+export type TerminalNodeData = { kind: "terminal"; end: boolean };
 
 /** Which way out of an if or a switch a node or frame sits in: the branch's id and its column (see LayoutEdge.alt). */
 export type BranchPlace = { owner: string; i: number };
 
 export type LayoutNode = {
   id: string;
-  type: "step" | "slot" | "join";
+  type: "step" | "slot" | "join" | "terminal";
   position: { x: number; y: number };
-  data: StepNodeData | SlotNodeData | JoinNodeData;
+  data: StepNodeData | SlotNodeData | JoinNodeData | TerminalNodeData;
   /** The ways out of branches it sits in, innermost last. */
   branches?: BranchPlace[];
 };
@@ -611,7 +627,7 @@ class Builder {
       if (step.type === TRY && lane.name === "try") {
         // A tick off the side of each step in it (or its "+" when it is empty), at the height of the step's head.
         const ticks = this.nodes.slice(before).flatMap((n) => {
-          if (n.data.kind === "join" || n.data.parentId !== id || n.data.block !== lane.name) return [];
+          if (n.data.kind === "join" || n.data.kind === "terminal" || n.data.parentId !== id || n.data.block !== lane.name) return [];
           if (n.data.kind === "slot" && n.data.tail) return [];
           const w = n.data.kind === "step" && n.data.head ? n.data.head.width : n.data.kind === "slot" ? SLOT.w : NODE_W;
           const h = n.data.kind === "slot" ? SLOT_H : n.data.kind === "step" && n.data.head ? HEAD_H : NODE_HEAD_H;
@@ -702,17 +718,16 @@ class Builder {
 
 export function layoutFlow(steps: Step[], defs: Defs, extra: Extra = NO_EXTRA, collapsed: Collapsed = NONE): Layout {
   const builder = new Builder(defs, extra, collapsed);
-  const size = measureList(steps, defs, extra, collapsed);
-  builder.list(steps, 0, 0, size.w, null, null, "");
+  // A "+" at the end, on the line into the end, as at the end of a block; not after a step the flow stops at.
+  const tail = steps.length > 0 && !ends(steps.at(-1));
+  const size = measureList(steps, defs, extra, collapsed, tail);
+  const top = TERMINAL_H + START_GAP;
+  const placed = builder.list(steps, top, 0, size.w, null, null, "", 0, tail);
+  const endY = top + size.h + END_GAP;
   const { nodes, edges, frames } = builder;
-  if (steps.length === 0) return { nodes, edges, frames, width: size.w, height: size.h };
-  // Under the last node: a faint "+" to add the next one at the end.
-  const y = size.h + END_GAP;
-  nodes.push({
-    id: "slot:end",
-    type: "slot",
-    position: { x: (size.w - SLOT.w) / 2, y },
-    data: { kind: "slot", parentId: null, block: null, label: "", end: true },
-  });
-  return { nodes, edges, frames, width: size.w, height: y + SLOT.h };
+  nodes.unshift({ id: START_ID, type: "terminal", position: { x: size.w / 2, y: 0 }, data: { kind: "terminal", end: false } });
+  nodes.push({ id: END_ID, type: "terminal", position: { x: size.w / 2, y: endY }, data: { kind: "terminal", end: true } });
+  builder.edge(START_ID, placed.entry);
+  for (const e of placed.exits) builder.edge(e, END_ID);
+  return { nodes, edges, frames, width: size.w, height: endY + TERMINAL_H };
 }
