@@ -24,7 +24,6 @@ import {
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { nodeIcon } from "../lib/nodeIcons";
 import {
   FLOW_LOG,
   holdsNodes,
@@ -38,7 +37,9 @@ import {
 } from "../lib/runTrace";
 import { plain, sentence, typeTitle } from "../lib/sentence";
 import { callKey, diveChain, findStep, isActive, type RunState } from "../store";
-import { CATEGORY_COLOR } from "./CommandPalette";
+
+/** A node that took this share of the whole run or more has its time in bold. */
+const SLOW_SHARE = 0.2;
 
 /** The time now, ticking while `live`, for the rows still running. */
 function useNow(live: boolean): number {
@@ -67,7 +68,7 @@ export function treeLines(run: RunState): TraceLine[] {
     .map((l) => ({ seq: l.seq, at: l.at, level: l.level, message: l.message, node: l.node ?? null, mark: l.mark }) as TraceLine & { mark?: string });
 }
 
-type Names = (node: { stepId: string; callPath: string[] }) => { title: string; name: string; def?: StepTypeDef; known: boolean; calls?: string };
+type Names = (node: { stepId: string; callPath: string[] }) => { title: string; name: string; def?: StepTypeDef; known: boolean };
 
 /** How a node of the run is called on the chart (never its ID). */
 function useNames(): Names {
@@ -86,10 +87,7 @@ function useNames(): Names {
       const def = defs.get(step.type);
       const title = typeTitle(step, def);
       const name = step.name?.trim() || (title ? "" : plain(sentence(step, def)));
-      // A call says which flow it runs.
-      const target = step.type === "flow.call" ? (step.params as { flow?: unknown } | undefined)?.flow : undefined;
-      const calls = typeof target === "string" ? called[target]?.name : undefined;
-      return { title, name, def, known: true, calls };
+      return { title, name, def, known: true };
     };
   }, [flow, called, stepTypes, here]);
 }
@@ -117,7 +115,10 @@ function Bar({ from, to, start, end, state }: { from: number; to: number; start:
   const left = Math.min(100, Math.max(0, ((from - start) / total) * 100));
   const width = Math.max(0, Math.min(100 - left, ((to - from) / total) * 100));
   return (
-    <span className="relative hidden h-1.5 w-24 shrink-0 rounded-full bg-slate-100 @[560px]:block" aria-hidden="true">
+    <span
+      className="relative hidden h-1.5 w-24 shrink-0 rounded-full bg-slate-100 opacity-0 transition-opacity group-hover:opacity-100 motion-reduce:transition-none @[560px]:block"
+      aria-hidden="true"
+    >
       <span
         className={`absolute inset-y-0 min-w-[3px] rounded-full ${state === "running" ? "bg-accent-500" : state === "failed" ? "bg-shu-500" : state === "frame" ? "bg-slate-300" : "bg-slate-400"}`}
         style={{ left: `${left}%`, width: `${width}%` }}
@@ -184,17 +185,25 @@ function Row({
       title={title}
     >
       {selected && <span className="absolute inset-y-0 left-0 w-[2px] bg-primary" />}
-      <span className="w-12 shrink-0 pr-1 text-right text-[11px] text-slate-400 tabular-nums">{since}</span>
+      <span className="w-3 shrink-0" />
       <Guides depth={depth} />
       {children}
-      {right && <span className="ml-auto flex shrink-0 items-center gap-3 pl-3">{right}</span>}
+      <span className="ml-auto flex shrink-0 items-center gap-3 pl-3">
+        {/* When it ran: only for the row pointed at, so the list stays quiet. */}
+        {since && (
+          <span className="text-[11px] text-slate-400 tabular-nums opacity-0 transition-opacity group-hover:opacity-100 motion-reduce:transition-none" title={t.runLog.since}>
+            {since}
+          </span>
+        )}
+        {right}
+      </span>
     </div>
   );
 }
 
-function Took({ ms }: { ms: number | undefined }) {
+function Took({ ms, slow }: { ms: number | undefined; slow?: boolean }) {
   return (
-    <span className="w-16 text-right text-[11px] text-slate-500 tabular-nums" title={t.runLog.took}>
+    <span className={`w-16 text-right text-[11px] tabular-nums ${slow ? "font-semibold text-ink" : "text-slate-500"}`} title={slow ? t.runLog.slow : t.runLog.took}>
       {ms === undefined ? "" : spanText(ms, t.runLog)}
     </span>
   );
@@ -256,12 +265,9 @@ export function RunLog({ filter }: { filter: TraceFilter }) {
     const took = node.durationMs ?? (live ? end - Date.parse(node.startedAt) : undefined);
     const go = n.known ? () => goToPlace({ path: node.callPath, stepId: node.stepId }) : undefined;
     const paused = pausedAt === place && node.outcome === undefined;
-    const Icon = nodeIcon(node.stepType, n.def?.category ?? node.stepType.split(".")[0] ?? "other");
-    const color = CATEGORY_COLOR[n.def?.category ?? node.stepType.split(".")[0] ?? "other"] ?? CATEGORY_COLOR.other;
     // A 「ログ出力」 node is its words: one row, written like the flow speaks.
     const said = node.stepType === FLOW_LOG ? lines.find((l) => l.node === node.key) : undefined;
     const ownError = node.error && row.problems.errors === 0 && !node.retrying;
-    const sub = n.calls ?? "";
     const out: React.JSX.Element[] = [];
     out.push(
       <Row
@@ -292,7 +298,10 @@ export function RunLog({ filter }: { filter: TraceFilter }) {
               // What holds other nodes spans them: its colour would only repeat theirs.
               state={holdsNodes(node.stepType) ? "frame" : node.outcome === undefined ? "running" : node.outcome === "failed" && !node.retrying ? "failed" : "done"}
             />}
-            {!said && <Took ms={took} />}
+            {!said && (
+              // What took a large part of the run is where to look first.
+              <Took ms={took} slow={!holdsNodes(node.stepType) && took !== undefined && took >= 1000 && took >= (span.end - span.start) * SLOW_SHARE} />
+            )}
           </>
         }
       >
@@ -316,21 +325,19 @@ export function RunLog({ filter }: { filter: TraceFilter }) {
         ) : (
           <>
             <StateIcon node={{ ...node, paused }} />
-            <Icon size={14} strokeWidth={1.75} className="shrink-0" style={{ color }} aria-hidden="true" />
             <span className="flex min-w-0 items-baseline gap-1.5 truncate">
               <button
                 type="button"
                 disabled={!go}
-                className="truncate text-left text-[13px] font-medium text-ink enabled:group-hover:underline enabled:group-hover:decoration-slate-300 enabled:group-hover:underline-offset-2 disabled:text-slate-500"
+                className="truncate text-left text-[13px] text-ink enabled:group-hover:underline enabled:group-hover:decoration-slate-300 enabled:group-hover:underline-offset-2 disabled:text-slate-500"
                 onClick={(e) => {
                   e.stopPropagation();
                   go?.();
                 }}
               >
-                {n.title || n.name}
+                {/* The name the person gave it; the kind only when it has none. */}
+                {n.name || n.title}
               </button>
-              {n.title && n.name && <span className="truncate text-[13px] text-slate-600">{n.name}</span>}
-              {sub && <span className="truncate text-xs text-slate-500">→ {sub}</span>}
             </span>
           </>
         )}

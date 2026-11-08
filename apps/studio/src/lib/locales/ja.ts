@@ -198,6 +198,7 @@ export const ja = {
     round: (n: number, items: boolean) => (items ? `${n} 件目` : `${n} 回目`),
     retried: (n: number) => `${n} 回目で成功`,
     retrying: (n: number) => `${n} 回目を実行`,
+    slow: "実行全体の 2 割以上かかったノード",
     sec: "秒",
     min: "分",
     since: "開始からの時間",

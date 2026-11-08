@@ -199,6 +199,7 @@ export const en: Dict = {
     round: (n: number, items: boolean) => (items ? `Item ${n}` : `Round ${n}`),
     retried: (n: number) => `Succeeded on try ${n}`,
     retrying: (n: number) => `Try ${n}`,
+    slow: "Took a fifth of the run or more",
     sec: "s",
     min: "min",
     since: "Time since the start",
