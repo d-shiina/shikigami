@@ -7,7 +7,7 @@
 // from the end of its body back to where its body starts, inside its frame.
 import type { Step, StepTypeDef } from "@shikigami/schema";
 import { BREAK, CASE, CONTINUE, FAIL, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
-import { headSummary, laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
+import { branchQuestion, headSummary, laneLabel, loopBackLabel, loopExitLabel, loopQuestion } from "../lib/keywords";
 import { typeTitle } from "../lib/sentence";
 import { nodeHeight } from "../lib/nodeRows";
 
@@ -85,6 +85,8 @@ const WAIT_UNTIL = "wait.until";
  * its condition holds. Each draws a line back to the start of its body.
  */
 const CIRCLING: ReadonlySet<string> = new Set([...LOOP_TYPES, WAIT_UNTIL]);
+/** An if or a switch asks its question in a decision under its head, like a loop. */
+export const asksUnderHead = (step: Step): boolean => step.type === IF || step.type === SWITCH;
 /** Loops that decide after their block has run, not before. */
 const CHECKS_AFTER: ReadonlySet<string> = new Set([WAIT_UNTIL]);
 /** Steps the flow does not go on from: out of a loop, round to its next pass, or stopped with an error. */
@@ -182,6 +184,8 @@ export type LayoutEdge = {
   answer?: string;
   /** For a line into or out of the side of a loop's decision: half its width. */
   half?: number;
+  /** Into a try's "失敗したとき": its label is shown in the colour of errors, so the way a failure takes stands out. */
+  failure?: boolean;
   /** From the head of a frame down into one of its columns: turns just under the head. */
   split?: boolean;
   /** Not drawn: from a loop's head to where its line leaves, so a run's trail carries on past the loop. */
@@ -308,7 +312,8 @@ function textWidth(s: string, px: number): number {
 }
 function headWidth(step: Step, defs: Defs): number {
   const name = step.name ?? "";
-  const summary = headSummary(step);
+  // An if or a switch asks in the decision under its head, not in the head.
+  const summary = asksUnderHead(step) ? "" : headSummary(step);
   let w = 12 + 15 + 8 + textWidth(typeTitle(step, defs.get(step.type)), 12.5) + 8 + 22 + 12;
   if (name) w += 8 + textWidth(name, 12.5);
   if (summary) w += 8 + 12 + textWidth(summary, 11.5);
@@ -362,7 +367,7 @@ function measure(step: Step, defs: Defs, extra: Extra, collapsed: Collapsed): Si
   }
   const circling = CIRCLING.has(step.type);
   const h = !circling
-    ? own.h + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
+    ? own.h + (asksUnderHead(step) ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y + inner + JOIN_GAP + JOIN_SIZE / 2
     : CHECKS_AFTER.has(step.type)
       ? own.h + GAP_Y + inner + DECIDE_GAP + DECIDE_H + WAIT_BOTTOM
       : own.h + DECIDE_GAP + DECIDE_H + GAP_Y + inner + LOOP_BOTTOM;
@@ -393,7 +398,7 @@ class Builder {
     label?: string,
     hidden?: boolean,
     split?: boolean,
-    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer" | "half">,
+    more?: Pick<LayoutEdge, "loop" | "detourX" | "fromDecide" | "intoDecide" | "railX" | "answer" | "half" | "failure">,
   ) {
     // The line out of a loop says when it leaves; not into the join of a frame around it, where lines meet.
     if (label === undefined && !target.startsWith("join:")) label = this.exitLabels.get(source);
@@ -533,7 +538,16 @@ class Builder {
     const joinY = isLoop ? y + height - JOIN_SIZE : y + height - JOIN_SIZE / 2;
     const join = `join:${id}`;
     if (isLoop) return this.loop(step, id, y, cx, left, right, own.h, columns[0]!, sizes[0] ?? SLOT, joinY);
-    const bodyY = y + own.h + GAP_Y;
+    // An if or a switch asks its question in a decision under its head, and its columns leave from there.
+    const asks = asksUnderHead(step);
+    const from = asks ? `join:${id}:decide` : id;
+    if (asks) {
+      const question = branchQuestion(step);
+      const width = decideWidth(question);
+      this.nodes.push({ id: from, type: "join", position: { x: cx - width / 2, y: y + own.h + DECIDE_GAP }, data: { kind: "join", parentId: id, shown: false, question, width } });
+      this.edge(id, from);
+    }
+    const bodyY = y + own.h + (asks ? DECIDE_GAP + DECIDE_H : 0) + GAP_Y;
     const columnsH = Math.max(...sizes.map((m) => m.h));
     // A try's columns meet before its "finally", which runs after them.
     const meet = after ? `join:${id}:then` : join;
@@ -556,7 +570,7 @@ class Builder {
     columns.forEach((lane, i) => {
       const size = sizes[i] ?? SLOT;
       const placed = this.list(lane.steps, bodyY, laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
-      this.edge(id, placed.entry, lane.label || undefined, undefined, true);
+      this.edge(from, placed.entry, lane.label || undefined, undefined, true, step.type === TRY && lane.name === "catch" ? { failure: true } : undefined);
       for (const e of placed.exits) this.edge(e, meet);
       laneX += size.w + GAP_X;
     });

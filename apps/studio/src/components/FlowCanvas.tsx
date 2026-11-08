@@ -1,4 +1,4 @@
-import { CASE, PARALLEL, SWITCH } from "../lib/stepTypes";
+import { CASE, IF, PARALLEL, SWITCH } from "../lib/stepTypes";
 import {
   Background,
   BaseEdge,
@@ -258,6 +258,8 @@ type BlockEdgeData = {
   /** A wait's line back: the answer it takes, on the line beside its decision. */
   answer?: string;
   half?: number;
+  /** Into a try's "失敗したとき". */
+  failure?: boolean;
   /** From the head of a frame into one of its columns. */
   split?: boolean;
   /** Where a node added on this line goes (just before the step it leads to); absent where nothing can be added. */
@@ -395,7 +397,15 @@ function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosit
             className="pointer-events-none absolute flex items-center"
           >
             {edge.insert && <span className="ml-1 w-[18px] shrink-0" />}
-            <span className="max-w-[300px] truncate rounded-md border border-slate-200 bg-sheet px-2 text-[11.5px] leading-[18px] font-medium text-ink">{label}</span>
+            <span
+              className={`max-w-[300px] truncate rounded-md border px-2 text-[11.5px] leading-[18px] font-medium ${
+                edge.failure
+                  ? "border-[color-mix(in_srgb,var(--color-shu-500)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-shu-500)_7%,var(--color-sheet))] text-shu-600"
+                  : "border-slate-200 bg-sheet text-ink"
+              }`}
+            >
+              {label}
+            </span>
             <InsertButton edgeId={id} data={edge} inline />
           </div>
         ) : (
@@ -822,7 +832,14 @@ function StepNode({ data }: StepNodeProps) {
       ) : (
       <>
       <div style={{ height: NODE_HEAD_H }} className="flex items-center gap-2 px-3" title={plain(sentence(data.step, data.def))}>
-        <Icon size={15} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+        <Icon
+          size={15}
+          strokeWidth={1.75}
+          className="shrink-0 text-slate-500"
+          // In the colour of its group, as in the node palette.
+          style={{ color: CATEGORY_COLOR[category] ?? CATEGORY_COLOR.other }}
+          aria-hidden="true"
+        />
         <span className="shrink-0 text-[12.5px] font-semibold whitespace-nowrap text-ink">{title}</span>
         {data.step.name ? (
           <span className="min-w-0 truncate text-[12px] text-slate-500">{data.step.name}</span>
@@ -862,7 +879,9 @@ function FrameHead({ data, Icon, title }: { data: StepNodeProps["data"]; Icon: R
   const addStep = useStudio((s) => s.addStep);
   const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
   const id = data.step.id ?? "";
-  const summary = headSummary(data.step);
+  const branch = data.step.type === IF || data.step.type === SWITCH;
+  // An if or a switch asks in its decision under the head, unless it is folded.
+  const summary = branch && !head.collapsed ? "" : headSummary(data.step);
   const editable = !data.readOnly;
   const Fold = head.collapsed ? ChevronRight : ChevronDown;
   return (
@@ -1504,6 +1523,7 @@ export function FlowCanvas() {
         railX: e.railX,
         answer: e.answer,
         half: e.half,
+        failure: e.failure,
         split: e.split,
         insert: inside || reviewing || e.loop ? undefined : insertBefore.get(e.target),
         hovered: hoveredEdge === e.id,

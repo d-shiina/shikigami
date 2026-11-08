@@ -387,4 +387,22 @@ describe("layoutFlow", () => {
     expect(decide.position.x + width / 2).toBe(lineX);
     for (const e of layout.edges.filter((e) => e.fromDecide || e.intoDecide)) expect(e.half).toBe(width / 2);
   });
+
+  it("asks an if's question in a decision under its head, and splits its columns from there", () => {
+    const layout = layoutFlow([{ id: "i", type: "control.if", params: { condition: "{{ amount > 10000 }}" }, blocks: { then: [log("a")], else: [log("b")] } }], defs);
+    const decide = layout.nodes.find((n) => n.id === "join:i:decide")!;
+    expect(decide.data).toMatchObject({ question: "amount > 10000？" });
+    expect(layout.edges.find((e) => e.source === "i")?.target).toBe("join:i:decide");
+    expect(layout.edges.filter((e) => e.source === "join:i:decide").map((e) => [e.target, e.label])).toEqual([["a", "はい"], ["b", "いいえ"]]);
+    const head = layout.nodes.find((n) => n.id === "i")!;
+    const a = layout.nodes.find((n) => n.id === "a")!;
+    expect(decide.position.y).toBeGreaterThan(head.position.y + HEAD_H);
+    expect(a.position.y).toBeGreaterThan(decide.position.y);
+  });
+
+  it("marks the way into a try's \"失敗したとき\" as the way a failure takes", () => {
+    const layout = layoutFlow([{ id: "t", type: "control.try", blocks: { try: [log("a")], catch: [log("b")] } }], defs);
+    expect(layout.edges.find((e) => e.target === "b")?.failure).toBe(true);
+    expect(layout.edges.find((e) => e.target === "a")?.failure).toBeUndefined();
+  });
 });

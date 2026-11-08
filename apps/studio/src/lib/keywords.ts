@@ -161,6 +161,18 @@ export function loopQuestion(step: Step): { question: string; yes: string; no: s
   }
 }
 
+/** What an if or a switch asks, in the decision under its head: "amount > 10000？", "region は？". */
+export function branchQuestion(step: Step): string {
+  const ja = locale === "ja";
+  const p = (step.params ?? {}) as Record<string, unknown>;
+  if (step.type === "control.switch") {
+    const value = plainExpr(p.value);
+    return value ? (ja ? `${value} は？` : `${value}?`) : ja ? "値は？" : "Which value?";
+  }
+  const condition = plainExpr(p.condition);
+  return condition ? `${condition}${ja ? "？" : "?"}` : ja ? "条件を満たす？" : "Condition holds?";
+}
+
 /** On the line out of a loop's frame: when it leaves. */
 export function loopExitLabel(step: Step): string {
   const ja = locale === "ja";
