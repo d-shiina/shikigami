@@ -10,7 +10,7 @@
 use tauri::AppHandle;
 
 use crate::runner::show_runner_later;
-use crate::tray::show_studio_later;
+use crate::tray::{self, show_studio_later};
 
 /// What the running Studio does when it is started again with `args`.
 #[derive(Debug, PartialEq, Eq)]
@@ -36,6 +36,11 @@ fn again(args: &[String]) -> Again {
 /// Called in the running Studio with the second start's arguments, on the
 /// main thread: windows are made from another thread (tauri-apps/wry#583).
 fn started_again(app: &AppHandle, args: Vec<String>, _cwd: String) {
+    // A `--runner` or `--tray` shortcut keeps SpellSheet in the tray; that
+    // still holds when it only brought the running Studio forward.
+    if tray::wants_tray(args.iter().cloned()) {
+        tray::stay_in_tray();
+    }
     match again(&args) {
         Again::Runner => show_runner_later(app),
         Again::Studio => show_studio_later(app),
