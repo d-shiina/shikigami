@@ -33,6 +33,7 @@ import {
   ancestorsOf,
   JOIN_SIZE,
   type JoinNodeData,
+  type Layout,
   layoutFlow,
   NODE_W,
   READ_ROOM,
@@ -315,22 +316,56 @@ function useTurn(n: number, on: boolean): number | null {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!on || reducedMotion()) return;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), ALT_MS / 3);
-    return () => window.clearInterval(timer);
+    // Tick on the turn's boundary, so every line and node that lights in turn changes together.
+    let timer = 0;
+    const tick = () => {
+      setNow(Date.now());
+      timer = window.setTimeout(tick, ALT_MS - (Date.now() % ALT_MS) + 5);
+    };
+    tick();
+    return () => window.clearTimeout(timer);
   }, [on]);
   if (!on || reducedMotion()) return null;
   return Math.floor(now / ALT_MS) % Math.max(n, 1);
+}
+
+/**
+ * While an if or a switch is pointed at, the columns it does not take this turn
+ * are dimmed, in turn, so its ways out read as one or the other. Only while
+ * pointed at: a branch that is picked to edit its settings stays still.
+ * Done with a style sheet keyed on node ids, so nothing on the chart re-renders.
+ */
+function BranchLight({ layout }: { layout: Layout }) {
+  const pointed = useFocus();
+  const owners = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const e of layout.edges) if (e.owner && e.alt) out.set(e.owner, e.alt.n);
+    return out;
+  }, [layout]);
+  const owner = pointed && owners.has(pointed) ? pointed : null;
+  const turn = useTurn(owner ? owners.get(owner)! : 1, owner !== null);
+  if (owner === null || turn === null) return null;
+  const off = (places?: { owner: string; i: number }[]) => !!places?.some((p) => p.owner === owner && p.i !== turn);
+  const nodes = layout.nodes.filter((n) => off(n.branches)).map((n) => n.id);
+  const frames = layout.frames.filter((f) => off(f.branches)).map((f) => `frame:${f.id}`);
+  const dim = new Set(nodes);
+  const edges = layout.edges.filter((e) => dim.has(e.source) && dim.has(e.target)).map((e) => e.id);
+  const selectors = [
+    ...[...nodes, ...frames].map((id) => `.react-flow__node[data-id="${CSS.escape(id)}"]`),
+    ...edges.map((id) => `[data-testid="rf__edge-${CSS.escape(id)}"]`),
+  ];
+  if (selectors.length === 0) return null;
+  return <style>{`${selectors.join(",")}{opacity:.28;transition:opacity .25s}`}</style>;
 }
 
 function BlockEdge({ id, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, style, markerEnd, data }: EdgeProps) {
   const edge = (data ?? {}) as BlockEdgeData;
   const detourX = edge.detourX;
   const r = 4;
-  // Pointing at (or picking) a loop sends its line back round; a branch lights its ways out in turn.
+  // Pointing at (or picking) a loop sends its line back round; pointing at a branch lights its ways out in turn.
   const pointed = useFocus();
   const active = !!edge.owner && (pointed === edge.owner || edge.selectedId === edge.owner);
-  const turn = useTurn(edge.alt?.n ?? 1, active && !!edge.alt);
+  const turn = useTurn(edge.alt?.n ?? 1, !!edge.owner && pointed === edge.owner && !!edge.alt);
   const lit = edge.alt !== undefined && turn === edge.alt.i;
   const sideLabel = (x: number, y: number) =>
     label && (
@@ -1731,6 +1766,7 @@ export function FlowCanvas() {
       onNodeMouseLeave={() => focus.set(null)}
     >
       <Background gap={24} size={1.2} color="var(--color-slate-200)" />
+      <BranchLight layout={layout} />
       {inside ? <FollowInside path={callKey(path)} /> : <Follow />}
       {inside && (
         <Panel position="top-center">

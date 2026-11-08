@@ -160,11 +160,16 @@ export type SlotNodeData = {
   tail?: boolean;
 };
 
+/** Which way out of an if or a switch a node or frame sits in: the branch's id and its column (see LayoutEdge.alt). */
+export type BranchPlace = { owner: string; i: number };
+
 export type LayoutNode = {
   id: string;
   type: "step" | "slot" | "join";
   position: { x: number; y: number };
   data: StepNodeData | SlotNodeData | JoinNodeData;
+  /** The ways out of branches it sits in, innermost last. */
+  branches?: BranchPlace[];
 };
 
 export type LayoutEdge = {
@@ -214,6 +219,8 @@ export type LayoutFrame = {
   y: number;
   width: number;
   height: number;
+  /** The ways out of branches it sits in, innermost last. */
+  branches?: BranchPlace[];
 };
 
 export type Layout = { nodes: LayoutNode[]; edges: LayoutEdge[]; frames: LayoutFrame[]; width: number; height: number };
@@ -597,6 +604,7 @@ class Builder {
       const size = sizes[i] ?? SLOT;
       const fails = catches(step, lane);
       const before = this.nodes.length;
+      const framesBefore = this.frames.length;
       const placed = this.list(lane.steps, bodyY + (fails ? CATCH_DROP : 0), laneX, size.w, id, lane.name, lane.label, lane.start, lane.tail);
       if (step.type === TRY && lane.name === "try") {
         // A tick off the side of each step in it (or its "+" when it is empty), at the height of the step's head.
@@ -619,6 +627,12 @@ class Builder {
         this.edge(from, placed.entry, lane.label || undefined, undefined, true, asks ? { owner: id, alt: { i, n: columns.length } } : undefined);
       }
       for (const e of placed.exits) this.edge(e, meet);
+      if (asks) {
+        // Everything in this column is one way out of the branch, which lights in turn with its line.
+        const place = { owner: id, i };
+        for (const n of this.nodes.slice(before)) n.branches = [place, ...(n.branches ?? [])];
+        for (const f of this.frames.slice(framesBefore)) f.branches = [place, ...(f.branches ?? [])];
+      }
       laneX += size.w + GAP_X;
     });
     if (after && afterSize) {
