@@ -153,7 +153,7 @@ pub fn kill(params: &Value) -> Result<Value, StepError> {
         )
         .with_details(json!({
             "pids": failed,
-            "hint": "A program started by another user or as administrator can only be ended by Shikigami running as that user or as administrator.",
+            "hint": "A program started by another user or as administrator can only be ended by SpellSheet running as that user or as administrator.",
         })));
     }
     Ok(json!({ "killed": killed }))

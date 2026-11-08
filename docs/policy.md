@@ -30,7 +30,7 @@ Two rules that make "AI builds it, it runs without AI" safe to use:
 
 Only people can publish (Studio and the CLI). An AI client calling Core's publish gets `PUBLISH_NOT_ALLOWED`, and MCP has no tool to publish at all. The AI asks a person to review and publish on the review desk.
 
-Before publishing, Shikigami checks that the version validates and that every flow it calls is published (publish the called ones first).
+Before publishing, SpellSheet checks that the version validates and that every flow it calls is published (publish the called ones first).
 
 ### Record
 
@@ -116,5 +116,5 @@ Declare the params that name a site or a program in the manifest's `steps[].targ
 
 ## 5. What this cannot protect against
 
-- People's actions are trusted. Publishing, approving and editing `policy.json` are possible from Studio and the CLI. If an AI client is also allowed the PC's shell (writing files, running commands), nothing stops the AI from doing these directly. Allow the AI client only Shikigami's MCP tools ("Talk to AI" in Studio starts it that way).
+- People's actions are trusted. Publishing, approving and editing `policy.json` are possible from Studio and the CLI. If an AI client is also allowed the PC's shell (writing files, running commands), nothing stops the AI from doing these directly. Allow the AI client only SpellSheet's MCP tools ("Talk to AI" in Studio starts it that way).
 - Navigation inside the browser (links, redirects, form targets) is outside `sites`.

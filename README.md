@@ -1,23 +1,25 @@
 <p align="center">
-  <img src="docs/assets/mark.png" alt="Shikigami" width="160">
+  <img src="docs/assets/mark.png" alt="SpellSheet" width="160">
 </p>
 
-# Shikigami
+# SpellSheet
 
 English | [日本語](README.ja.md)
 
+> The product is now called **SpellSheet** (formerly Shikigami: a spell written on a sheet). The repository, the `shikigami` command, the installer file name and the settings and data folders (such as `%APPDATA%\Shikigami`) keep the old name for now, so existing installs keep working.
+
 MCP-native desktop RPA where AI and humans build, edit, and run the same automation flows.
 
-Shikigami is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same flows**. AI builds them; finished flows run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
+SpellSheet is a local-first RPA platform where AI clients (Claude Code, Codex, Cursor and others) and people create, edit, run and maintain **the same flows**. AI builds them; finished flows run without AI and without a GUI. The target OS is **Windows 10/11 (x64)**.
 
-![Shikigami Studio](docs/assets/studio-phase1.png)
+![SpellSheet Studio](docs/assets/studio-phase1.png)
 
 ## Getting started
 
 1. Download `Shikigami.Studio_<version>_x64-setup.exe` from the [latest release](https://github.com/d-shiina/shikigami/releases/latest) and run it. It installs per user, so no administrator rights are needed. Studio updates itself from then on.
-2. Start **Shikigami Studio** from the Start menu. Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
+2. Start **Shikigami Studio** from the Start menu (it keeps the old name there while the rename is in progress). Under the flows page, "Samples" opens finished flows so you can see what they look like and how they run.
 3. To have AI build flows, open the AI pane with "AI chat" at the top right of Studio (Ctrl+J), pick the AI you use — Claude Code, OpenAI Codex, Gemini CLI or GitHub Copilot — and press "Install": it goes into your user folder and the sign-in follows, with no terminal. Ask something like "make a flow that collects unshipped orders from the order system" and the AI adds nodes to the flow chart as it goes.
-4. Check the AI's changes under "To review" in the sidebar and press "Review and publish". Published flows run without AI from Studio, from the "Shikigami Run" window, or on a schedule.
+4. Check the AI's changes under "To review" in the sidebar and press "Review and publish". Published flows run without AI from Studio, from the "SpellSheet Run" window, or on a schedule.
 
 To try one task from start to finish, see the [tutorials](docs/tutorials/README.md) (about 15 minutes each, with sample files). The rest of this page is for developers.
 
@@ -46,7 +48,7 @@ Studio's UI is available in English and Japanese (JA / EN switch in the status b
 | [docs/adapters.md](docs/adapters.md) | Where each node type comes from, and node plugins |
 | [docs/release.md](docs/release.md) | Installer, updates and release signing |
 | [docs/extensions.md](docs/extensions.md) | Extensions: add nodes (cloud AI-OCR, in-house systems, SaaS APIs) after the fact; install from a zip, URL or GitHub |
-| [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add nodes for in-house systems without rebuilding Shikigami (manifest + separate process) |
+| [docs/design/plugins.md](docs/design/plugins.md) (Japanese) | Node plugins: add nodes for in-house systems without rebuilding SpellSheet (manifest + separate process) |
 | [docs/design/ui-principles.md](docs/design/ui-principles.md) (Japanese) | Studio's layout rules: where each button goes and how it looks, and why |
 | [docs/compatibility.md](docs/compatibility.md) | Compatibility policy: the flow format (`schemaVersion`, migration, `requires`) and what MCP and the CLI never break |
 | [docs/research.md](docs/research.md) (Japanese) | Versions, licenses and Windows support of the libraries used |
@@ -60,7 +62,7 @@ crates/shikigami-core      Flow Core (the only source of truth for flow data)
 crates/shikigami-runtime   RPA Runtime (runs without AI or GUI)
 crates/shikigami-cli       CLI (the `shikigami` command; `shikigami mcp` is the MCP server)
 crates/shikigami-mcp       MCP server (rmcp)
-apps/studio                Shikigami Studio (Tauri 2 + React + React Flow)
+apps/studio                SpellSheet Studio (Tauri 2 + React + React Flow)
 packages/schema            TypeScript types generated from Rust
 plugins/shikigami          Claude Code plugin (MCP settings + skill)
 schemas/                   Generated JSON Schema

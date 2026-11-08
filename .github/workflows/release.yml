@@ -170,7 +170,7 @@ jobs:
           tauriScript: pnpm tauri
           args: --config src-tauri/tauri.release.gen.json
           tagName: ${{ steps.version.outputs.tag }}
-          releaseName: Shikigami Studio ${{ steps.version.outputs.tag }}
+          releaseName: SpellSheet Studio ${{ steps.version.outputs.tag }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: ${{ steps.version.outputs.prerelease == 'true' }}

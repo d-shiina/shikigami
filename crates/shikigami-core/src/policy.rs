@@ -389,7 +389,7 @@ impl Policy {
         let policy: Self = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
         if policy.format_version > POLICY_FORMAT_VERSION {
             return Err(invalid(format!(
-                "formatVersion {} is newer than this Shikigami understands ({POLICY_FORMAT_VERSION})",
+                "formatVersion {} is newer than this SpellSheet understands ({POLICY_FORMAT_VERSION})",
                 policy.format_version
             )));
         }

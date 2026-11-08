@@ -65,7 +65,7 @@ pub fn manager_cmd(cmd: &ManagerCmd) -> Result<ExitCode> {
             let manager = shikigami_manager::Manager::open(data)
                 .with_context(|| format!("opening {}", data.display()))?;
             eprintln!(
-                "Shikigami manager on http://{listen} (data: {})",
+                "SpellSheet manager on http://{listen} (data: {})",
                 data.display()
             );
             eprintln!(
@@ -283,7 +283,7 @@ pub fn agent_cmd(
                         ctrl_c.stop();
                     }
                 });
-                eprintln!("Shikigami agent for {} (Ctrl+C stops)", workspace.display());
+                eprintln!("SpellSheet agent for {} (Ctrl+C stops)", workspace.display());
                 let served = Arc::clone(&agent).serve().await;
                 stop.cancel();
                 let mut pending = match sending.lock() {

@@ -140,15 +140,15 @@ pub fn guide(registry: &StepRegistry) -> Vec<GuideFile> {
     ]
 }
 
-const INSTRUCTIONS: &str = r#"# Shikigami flow writer
+const INSTRUCTIONS: &str = r#"# SpellSheet flow writer
 
-You help a person automate office work with Shikigami, a Windows RPA tool. You write the automation (a "flow") as JSON. The person pastes your answer into Shikigami Studio, which checks it, shows the person what is left for them to do, and later runs the flow without you. You cannot run anything and you cannot see the person's screen. The full format, every step type and every function are in shikigami-ai-reference.md: read it before you write steps, and copy its examples.
+You help a person automate office work with SpellSheet, a Windows RPA tool. You write the automation (a "flow") as JSON. The person pastes your answer into SpellSheet Studio, which checks it, shows the person what is left for them to do, and later runs the flow without you. You cannot run anything and you cannot see the person's screen. The full format, every step type and every function are in shikigami-ai-reference.md: read it before you write steps, and copy its examples.
 
 ## How to work
 
 1. Ask short questions until you know the job: which web site or Windows app, the order of the work, the files it reads and writes (names, sheets, columns), and what should happen on errors. Do not ask for passwords.
 2. Answer with exactly one ```json code block holding the answer object below, and a few plain sentences around it saying what the person must do in Studio (pick the screen parts, register the logins, put the input files).
-3. When the person pastes problems that Shikigami found, fix exactly those and answer with the whole answer object again.
+3. When the person pastes problems that SpellSheet found, fix exactly those and answer with the whole answer object again.
 4. When the person pastes their current flow, change only what they ask, keep every step "id" and every part's "target" as they are, and answer with the whole answer object.
 
 Reply in the person's language. Names, labels, summary and checks are in that language too.
@@ -248,9 +248,9 @@ fn reference(registry: &StepRegistry) -> String {
     out
 }
 
-const REFERENCE_HEAD: &str = r#"# Shikigami flow reference
+const REFERENCE_HEAD: &str = r#"# SpellSheet flow reference
 
-Everything an AI needs to write a Shikigami flow without tools. Read shikigami-ai-instructions.md first: it says how to answer.
+Everything an AI needs to write a SpellSheet flow without tools. Read shikigami-ai-instructions.md first: it says how to answer.
 
 ## The flow
 

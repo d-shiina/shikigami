@@ -127,7 +127,7 @@ pub fn sidecar_config(node: PathBuf, script: Option<PathBuf>) -> SidecarConfig {
         args,
         cwd: None,
         unavailable,
-        setup_hint: "The installer ships Node.js and the adapter; reinstall Shikigami if its node or browser-adapter folder is missing. From a source checkout, install Node.js 22.18+ and run `pnpm install`, or set SHIKIGAMI_NODE / SHIKIGAMI_BROWSER_ADAPTER.".into(),
+        setup_hint: "The installer ships Node.js and the adapter; reinstall SpellSheet if its node or browser-adapter folder is missing. From a source checkout, install Node.js 22.18+ and run `pnpm install`, or set SHIKIGAMI_NODE / SHIKIGAMI_BROWSER_ADAPTER.".into(),
     }
 }
 

@@ -235,14 +235,14 @@ pub fn export_flow(state: State<'_, AppState>, id: FlowId) -> CmdResult<String> 
 // -- an AI without MCP (Copilot, a chat window) --------------------------
 
 /// Writes the guide for an AI without MCP (instructions and reference, see
-/// `shikigami_core::chat`) into `Downloads\Shikigami AI 仕様書`, opens the
+/// `shikigami_core::chat`) into `Downloads\SpellSheet AI 仕様書`, opens the
 /// folder and returns its path.
 #[tauri::command]
 pub fn save_ai_guide(state: State<'_, AppState>) -> CmdResult<String> {
     let dir = dirs::download_dir()
         .or_else(dirs::home_dir)
         .ok_or_else(|| err("STORAGE_ERROR", "保存先フォルダが見つかりません"))?
-        .join("Shikigami AI 仕様書");
+        .join("SpellSheet AI 仕様書");
     std::fs::create_dir_all(&dir).map_err(|e| err("STORAGE_ERROR", e.to_string()))?;
     for file in shikigami_core::chat::guide(state.service.registry()) {
         std::fs::write(dir.join(&file.name), file.text)

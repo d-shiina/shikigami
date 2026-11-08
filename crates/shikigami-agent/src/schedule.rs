@@ -202,7 +202,7 @@ impl Schedules {
             return Err(invalid(
                 path,
                 format!(
-                    "formatVersion {} is newer than this Shikigami understands",
+                    "formatVersion {} is newer than this SpellSheet understands",
                     schedules.format_version
                 ),
             ));

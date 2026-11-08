@@ -4,7 +4,7 @@ English | [日本語](ja/remote.md)
 
 A management server hands jobs to the agents of many PCs: "run this flow on whichever PC is free", and see how it went. The PCs only ever connect **out** (HTTPS); no port is opened on them, so they work behind proxies and firewalls. The design notes are in [design/remote-runs.md](design/remote-runs.md) (Japanese).
 
-Shikigami comes with a small **reference server** (`shikigami manager serve`) that speaks the protocol below. It keeps its state in one JSON file and has an admin API but no web pages: it is for trying things out, tests and small teams on a LAN. A full management tool can be built on the same protocol.
+SpellSheet comes with a small **reference server** (`shikigami manager serve`) that speaks the protocol below. It keeps its state in one JSON file and has an admin API but no web pages: it is for trying things out, tests and small teams on a LAN. A full management tool can be built on the same protocol.
 
 ## How it works
 

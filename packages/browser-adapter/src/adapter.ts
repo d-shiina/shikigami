@@ -98,10 +98,10 @@ export function originOf(url: string): string {
 const SNAPSHOT_LIMIT = 4000;
 
 /** Shown in place of the redirect URL's page; drops the code from the address bar. */
-const SIGNED_IN_PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>Shikigami</title>
+const SIGNED_IN_PAGE = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>SpellSheet</title>
 <style>body{font-family:"Yu Gothic UI","Noto Sans JP",sans-serif;color:#1e2a4a;display:grid;place-items:center;height:90vh;margin:0}</style>
 <script>history.replaceState(null, "", location.pathname)</script></head>
-<body><p>サインインが終わりました。Shikigami が続きを進めます。<br>Signed in. Shikigami takes it from here.</p></body></html>`;
+<body><p>サインインが終わりました。SpellSheet が続きを進めます。<br>Signed in. SpellSheet takes it from here.</p></body></html>`;
 
 interface SavedSession {
   name: string;

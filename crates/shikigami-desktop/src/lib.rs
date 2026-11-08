@@ -936,7 +936,7 @@ impl DesktopStep {
         }
         if let Some(reason) = fallback {
             output["warning"] = json!(format!(
-                "Read with Windows OCR because PaddleOCR is not available ({reason}); Japanese is read much worse. Reinstall Shikigami, or run `pnpm studio:bundle-ocr` in a development checkout."
+                "Read with Windows OCR because PaddleOCR is not available ({reason}); Japanese is read much worse. Reinstall SpellSheet, or run `pnpm studio:bundle-ocr` in a development checkout."
             ));
         }
         Ok(output)

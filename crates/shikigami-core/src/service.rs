@@ -1768,7 +1768,7 @@ impl FlowService {
             if had_history && matches!(kind, ChangeKind::Undo | ChangeKind::Redo) {
                 self.store.save_undo(id, &undo)?;
                 return Err(CoreError::InvalidEdit(
-                    "undo history no longer matches the flow (it was changed outside Shikigami)"
+                    "undo history no longer matches the flow (it was changed outside SpellSheet)"
                         .into(),
                 ));
             }
@@ -1905,7 +1905,7 @@ fn ensure_person(actor: &Actor, what: &str) -> CoreResult<()> {
             code: "PUBLISH_NOT_ALLOWED",
             message: format!("only a person can {what}"),
             hint: Some(
-                "Ask the user to review the changes in Shikigami Studio (レビュー台) and press 確認して公開."
+                "Ask the user to review the changes in SpellSheet Studio (レビュー台) and press 確認して公開."
                     .into(),
             ),
         });

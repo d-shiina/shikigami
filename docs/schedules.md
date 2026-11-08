@@ -2,7 +2,7 @@
 
 English | [日本語](ja/schedules.md)
 
-Shikigami starts flows by itself: every morning at 8, on the 25th of each month, every 30 minutes during working hours, or when a file is put in a folder. Windows Task Scheduler is not needed.
+SpellSheet starts flows by itself: every morning at 8, on the 25th of each month, every 30 minutes during working hours, or when a file is put in a folder. Windows Task Scheduler is not needed.
 
 ## The agent
 

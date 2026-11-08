@@ -2,7 +2,7 @@
 
 English | [日本語](ja/extensions.md)
 
-Extensions add nodes to Shikigami after the fact: a cloud AI-OCR service, an in-house system, a business SaaS API — integrations only some people need, added without rebuilding Shikigami. As with VS Code extensions, only what you install shows up in the palette, and you can turn an extension off or remove it again.
+Extensions add nodes to SpellSheet after the fact: a cloud AI-OCR service, an in-house system, a business SaaS API — integrations only some people need, added without rebuilding SpellSheet. As with VS Code extensions, only what you install shows up in the palette, and you can turn an extension off or remove it again.
 
 - An extension runs as **a separate program** (Node.js, Python, .NET, PowerShell, anything with stdin/stdout). If it misbehaves, Studio and runs keep going; only its node fails.
 - Its nodes work like built-in ones: they are listed in the palette, their settings form is built from what the extension declares, and validation, retries, timeouts and secret masking apply as usual.
@@ -33,7 +33,7 @@ shikigami plugin install https://github.com/<owner>/<repo>        # only shows w
 shikigami plugin install https://github.com/<owner>/<repo> --yes  # installs it
 ```
 
-Before installing, Shikigami shows the extension's name, publisher, nodes, **the data they send outside**, the secrets they take and the program it starts. An extension runs as a program on this PC: install only what you trust.
+Before installing, SpellSheet shows the extension's name, publisher, nodes, **the data they send outside**, the secrets they take and the program it starts. An extension runs as a program on this PC: install only what you trust.
 
 Extensions are installed into `%LOCALAPPDATA%\Shikigami\plugins\<name>\`, never into the workspace (a program placed in a shared workspace must not start on everyone's PC). Restart Studio and AI clients after installing, updating or turning one off.
 
@@ -66,7 +66,7 @@ shikigami plugin registry          # show the list
       "label": "Azure AI-OCR",
       "description": "Reads images and PDFs with Azure AI Document Intelligence",
       "version": "0.1.0",
-      "publisher": "Shikigami samples",
+      "publisher": "SpellSheet samples",
       "homepage": "https://github.com/<owner>/<repo>",
       "source": "https://github.com/<owner>/<repo>"
     }
@@ -118,7 +118,7 @@ See the Japanese page for the full field table; in short:
 
 | Field | Required | Meaning |
 |---|---|---|
-| `manifestVersion`, `name`, `version`, `label`, `command` | yes | Format `1`; node type prefix (`azureocr` → `azureocr.readDocument`); semver; display name (also the palette group); the program to start (`node` is the Node.js shipped with Shikigami) |
+| `manifestVersion`, `name`, `version`, `label`, `command` | yes | Format `1`; node type prefix (`azureocr` → `azureocr.readDocument`); semver; display name (also the palette group); the program to start (`node` is the Node.js shipped with SpellSheet) |
 | `description`, `publisher`, `homepage` | - | Shown in the extension list (`homepage` must be https) |
 | `tag` | - | The "where" tag before node names (`AI-OCR`); defaults to `label` |
 | `icon` | - | A [Lucide](https://lucide.dev/icons) icon name (`scan-text`) |

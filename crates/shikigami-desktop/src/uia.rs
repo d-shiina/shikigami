@@ -248,7 +248,7 @@ fn elevation_error() -> StepError {
         "the app runs as administrator, and Windows blocks other programs from operating it",
     )
     .with_details(json!({
-        "hint": "Start the app normally (not as administrator), or run Shikigami as administrator too."
+        "hint": "Start the app normally (not as administrator), or run SpellSheet as administrator too."
     }))
 }
 
@@ -1660,7 +1660,7 @@ impl Uia {
                 if foreground_pid() != window.pid {
                     return Err(StepError::new(
                         "FOREGROUND_DENIED",
-                        "Windows did not let Shikigami bring the window to the front",
+                        "Windows did not let SpellSheet bring the window to the front",
                     )
                     .with_details(json!({
                         "hint": "Keep the screen unlocked and do not use the PC while desktop steps run."
@@ -2108,7 +2108,7 @@ impl Uia {
             if foreground_pid() != found.window.pid {
                 return Err(StepError::new(
                     "FOREGROUND_DENIED",
-                    "Windows did not let Shikigami bring the window to the front",
+                    "Windows did not let SpellSheet bring the window to the front",
                 )
                 .with_details(json!({
                     "hint": "Keep the screen unlocked and do not use the PC while desktop steps run. desktop.click and desktop.setValue work without bringing the window to the front."

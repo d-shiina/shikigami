@@ -73,7 +73,7 @@ impl Calendar {
             serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
         if file.format_version > HOLIDAYS_FORMAT_VERSION {
             return Err(invalid(format!(
-                "formatVersion {} is newer than this Shikigami understands",
+                "formatVersion {} is newer than this SpellSheet understands",
                 file.format_version
             )));
         }

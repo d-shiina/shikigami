@@ -2,7 +2,7 @@
 
 English | [日本語](ja/mcp.md)
 
-`shikigami mcp` gives AI clients (Claude Code, Codex, Cursor and others) Shikigami's flow editing, validation and execution as MCP tools. It uses the same Flow Core as Studio, so AI edits show up in Studio immediately and can be undone there. It also runs on its own, without a GUI.
+`shikigami mcp` gives AI clients (Claude Code, Codex, Cursor and others) SpellSheet's flow editing, validation and execution as MCP tools. It uses the same Flow Core as Studio, so AI edits show up in Studio immediately and can be undone there. It also runs on its own, without a GUI.
 
 ![An MCP edit showing up in Studio](assets/studio-mcp-edit.png)
 

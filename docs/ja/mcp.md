@@ -2,7 +2,7 @@
 
 [English](../mcp.md) | 日本語
 
-`shikigami mcp` は AI クライアント（Claude Code / Codex / Cursor など）に Shikigami のフロー編集・検証・実行を MCP ツールとして提供します。Studio と同じ Flow Core を使うため、AI の変更は Studio に即座に反映され、Studio から Undo できます。GUI がなくても単独で動きます。
+`shikigami mcp` は AI クライアント（Claude Code / Codex / Cursor など）に SpellSheet のフロー編集・検証・実行を MCP ツールとして提供します。Studio と同じ Flow Core を使うため、AI の変更は Studio に即座に反映され、Studio から Undo できます。GUI がなくても単独で動きます。
 
 ![MCP からの編集が Studio に反映された様子](../assets/studio-mcp-edit.png)
 

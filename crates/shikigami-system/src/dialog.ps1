@@ -282,7 +282,7 @@ $xaml = @'
           <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <Image x:Name="Mark" Width="16" Height="16" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
-        <TextBlock Grid.Column="1" Margin="8,0" VerticalAlignment="Center" FontSize="12" Foreground="@MUTED@" Text="Shikigami"/>
+        <TextBlock Grid.Column="1" Margin="8,0" VerticalAlignment="Center" FontSize="12" Foreground="@MUTED@" Text="SpellSheet"/>
         <Button x:Name="CloseButton" Grid.Column="2" Style="{StaticResource Close}"/>
       </Grid>
 
@@ -318,7 +318,7 @@ foreach ($key in $colors.Keys) { $xaml = $xaml.Replace("@$key@", $colors[$key]) 
 $window = [Windows.Markup.XamlReader]::Parse($xaml)
 
 $title = $env:SHIKIGAMI_TITLE
-$window.Title = if ($title) { "$title - Shikigami" } else { 'Shikigami' }
+$window.Title = if ($title) { "$title - SpellSheet" } else { 'SpellSheet' }
 if ($title) {
     $window.FindName('Heading').Text = $title
     $window.FindName('Heading').Visibility = 'Visible'

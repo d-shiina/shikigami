@@ -87,7 +87,7 @@ pub fn keep_awake() -> Box<dyn Send + Sync> {
     }
 
     // Shown by `powercfg /requests`.
-    let mut reason: Vec<u16> = "Shikigami: running a flow that uses the screen"
+    let mut reason: Vec<u16> = "SpellSheet: running a flow that uses the screen"
         .encode_utf16()
         .chain(std::iter::once(0))
         .collect();

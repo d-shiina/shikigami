@@ -2,7 +2,7 @@
 
 English | [日本語](ja/oauth.md)
 
-Many web APIs (Box, Google, Microsoft 365, Salesforce, …) do not take a fixed key: a person signs in once and allows the app access (the OAuth 2.0 authorization code flow), and the app gets tokens. In Shikigami that is two nodes:
+Many web APIs (Box, Google, Microsoft 365, Salesforce, …) do not take a fixed key: a person signs in once and allows the app access (the OAuth 2.0 authorization code flow), and the app gets tokens. In SpellSheet that is two nodes:
 
 | Node | What it does | Output |
 |---|---|---|
@@ -13,7 +13,7 @@ Many web APIs (Box, Google, Microsoft 365, Salesforce, …) do not take a fixed 
 
 The provider sends the browser back to the **redirect URL registered for the app**, with the code in the URL (`…?code=…&state=…`). Usually a program has to listen on that address (`http://localhost:…`), so a provider or an administrator that allows only your company's site (e.g. `https://www.example.com/`) as the redirect URL gets in the way.
 
-`oauth.signIn` does not need to listen anywhere. The sign-in runs in Shikigami's browser, which catches its own request to the redirect URL **before it leaves the PC** and shows "Signed in" instead. So:
+`oauth.signIn` does not need to listen anywhere. The sign-in runs in SpellSheet's browser, which catches its own request to the redirect URL **before it leaves the PC** and shows "Signed in" instead. So:
 
 - The redirect URL can be any fixed address registered at the provider: the company's top page, a page that does not exist, anything. It only has to match exactly.
 - The site behind the redirect URL never loads and never receives the code.

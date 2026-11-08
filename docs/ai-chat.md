@@ -2,7 +2,7 @@
 
 English | [日本語](ja/ai-chat.md)
 
-Some workplaces allow only one AI, such as Microsoft Copilot, and it cannot connect to Shikigami's MCP server. Such an AI can still write flows: it reads a guide that describes the flow format, every node and every function, answers with JSON, and you paste the answer into Studio. Studio checks it, opens it, and shows what is left for you to do.
+Some workplaces allow only one AI, such as Microsoft Copilot, and it cannot connect to SpellSheet's MCP server. Such an AI can still write flows: it reads a guide that describes the flow format, every node and every function, answers with JSON, and you paste the answer into Studio. Studio checks it, opens it, and shows what is left for you to do.
 
 The AI never runs anything and never sees your screen or your passwords. What it writes is saved as the working content; unattended runs use it only after a person reviews and publishes it ([policy.md](policy.md)).
 
@@ -15,18 +15,18 @@ The guide is two files, made from the nodes installed on your PC:
 | `shikigami-ai-instructions.md` | How to answer (under 8,000 characters) | The agent's instructions |
 | `shikigami-ai-reference.md` | The flow format, every node with its params and examples, every function | Knowledge (an attached file) |
 
-Save them from Studio (Flows › **Paste an AI answer** › **Save the guide**; they go to `Downloads\Shikigami AI 仕様書`) or with the command line:
+Save them from Studio (Flows › **Paste an AI answer** › **Save the guide**; they go to `Downloads\SpellSheet AI 仕様書`) or with the command line:
 
 ```
 shikigami ai-guide --dir <folder>
 ```
 
-A copy for the built-in nodes is in [docs/ai/](ai/), for people who have not installed Shikigami yet. Node plugins are only in the files you save on your PC.
+A copy for the built-in nodes is in [docs/ai/](ai/), for people who have not installed SpellSheet yet. Node plugins are only in the files you save on your PC.
 
 - **Microsoft Copilot Studio agent**: paste the whole of `shikigami-ai-instructions.md` into the agent's instructions and add `shikigami-ai-reference.md` as a knowledge source. Everyone who uses the agent then asks it for flows directly.
 - **A chat without agents**: attach both files at the start of the conversation (or paste the instructions and attach the reference) and ask the AI to follow them. The reference is long, so a chat that reads only part of an attachment may miss nodes; an agent with the reference as knowledge works better.
 
-Save the guide again after updating Shikigami or installing a plugin, and replace the files the AI has.
+Save the guide again after updating SpellSheet or installing a plugin, and replace the files the AI has.
 
 ## 2. Ask for a flow
 
