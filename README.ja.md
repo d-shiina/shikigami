@@ -14,8 +14,8 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 
 ## 使い始める
 
-1. [最新のリリース](https://github.com/d-shiina/shikigami/releases/latest)から `Shikigami.Studio_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Studio が自動で更新されます。
-2. スタートメニューから **Shikigami Studio**（名前の切り替え中のため、スタートメニューでは今は旧名です）を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
+1. [最新のリリース](https://github.com/d-shiina/shikigami/releases/latest)から `SpellSheet.Studio_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Studio が自動で更新されます。
+2. スタートメニューから **SpellSheet Studio** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
 3. AI にフローの作成を依頼するには、Studio 右上の「AI チャット」（Ctrl+J）で AI ペインを開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「導入する」を押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
 4. AI の変更はサイドバーの「確認待ち」で確認し、「確認して公開」を押します。公開したフローは、AI なしで Studio・実行画面「SpellSheet 実行」・スケジュールから実行できます。
 

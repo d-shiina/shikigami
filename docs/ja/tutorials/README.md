@@ -12,7 +12,7 @@
 
 ## はじめる前に
 
-- SpellSheet Studio をインストールして起動する（スタートメニューでは今は旧名の Shikigami Studio）（[README の「使い始める」](../../README.ja.md#使い始める)）
+- SpellSheet Studio をインストールして起動する（[README の「使い始める」](../../README.ja.md#使い始める)）
 - Studio の左上「Claude Code」（Ctrl+J）で AI のペインを開き、サインインを済ませる
 - 見本のファイルは `examples/tutorials/` にあります。完成形のフロー（`*.shikigami.json`）もあります。AI を使わずに中身を見る場合は、Studio のフローの画面の下の「見本」で「完成形を開く」を押してください（見本のファイルも一緒に入ります）。バンドルを「ファイルから読み込む」で開いても同じです
 

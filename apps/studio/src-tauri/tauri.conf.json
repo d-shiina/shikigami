@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Shikigami Studio",
+  "productName": "SpellSheet Studio",
   "identifier": "dev.shikigami.studio",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -27,7 +27,15 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/installer-hooks.nsh"
+      },
+      "wix": {
+        "upgradeCode": "ed7d4ee2-120e-5229-a162-338b4a5b3f1d"
+      }
+    }
   },
   "plugins": {
     "updater": {

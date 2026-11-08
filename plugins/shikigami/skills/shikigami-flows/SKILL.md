@@ -1,11 +1,11 @@
 ---
 name: shikigami-flows
-description: Use when the user asks to create, change, debug or run an RPA flow / automation in Shikigami, or mentions Shikigami Studio. Covers the shikigami MCP tools and how to edit flows safely alongside a human.
+description: Use when the user asks to create, change, debug or run an RPA flow / automation in Shikigami, or mentions SpellSheet Studio. Covers the shikigami MCP tools and how to edit flows safely alongside a human.
 ---
 
 # Shikigamiのフローを作る・直す・動かす
 
-Shikigami はローカルで動く RPA です。あなた（AI）が作ったフローは、人間が Shikigami Studio で見て編集し、最後は **AI なし** で `shikigami run` により実行されます。したがって目的は「いま操作をこなすこと」ではなく、「AI がいなくても正しく動き続けるフローを残すこと」です。
+Shikigami はローカルで動く RPA です。あなた（AI）が作ったフローは、人間が SpellSheet Studio で見て編集し、最後は **AI なし** で `spellsheet run` により実行されます。したがって目的は「いま操作をこなすこと」ではなく、「AI がいなくても正しく動き続けるフローを残すこと」です。
 
 ## 基本の流れ
 
@@ -120,4 +120,4 @@ Shikigami はローカルで動く RPA です。あなた（AI）が作ったフ
 ## 現在の制約（Phase 2 時点）
 
 - Windows デスクトップ操作は UI Automation で見える部品だけ。SAP GUI Scripting・Java Access Bridge・画像認識はまだない。`list_step_types` の結果を正とする。
-- MCP サーバーから開始した実行は、サーバー（AI クライアントのセッション）が終了すると止まる。長時間の無人実行は `shikigami run` を使う。
+- MCP サーバーから開始した実行は、サーバー（AI クライアントのセッション）が終了すると止まる。長時間の無人実行は `spellsheet run` を使う。
