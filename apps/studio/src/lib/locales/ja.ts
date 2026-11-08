@@ -1689,6 +1689,11 @@ export const ja = {
     more: (n: number) => `…ほか ${n} 件`,
     zero: "（0件）",
   },
+  runInputs: {
+    title: "実行に必要な入力",
+    lead: "次の入力には初期値がありません。値を入力して実行してください",
+    keep: "入力した値を初期値として保存",
+  },
   vars: {
     groups: {
       input: { title: "入力", hint: "実行するときに渡す値" },
@@ -1712,6 +1717,8 @@ export const ja = {
       openStep: "フロー図でこのノードを開く",
       empty: "変数はまだありません",
     },
+    askedAtRun: "実行時に入力",
+    askedAtRunTitle: "初期値がないため、実行するときに値を入力します",
     details: "型・向き・機密の設定",
   },
   askCopied: "AI への依頼文をコピーしました。お使いの AI に貼り付けてください。修正内容を確認すると、ここから再開できます。",

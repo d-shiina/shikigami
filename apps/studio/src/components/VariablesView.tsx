@@ -18,6 +18,16 @@ import type { View } from "./Toolbar";
 import { VarIcon } from "./VarIcon";
 import { HoverPreview } from "./HoverPreview";
 import { previewSource } from "../lib/preview";
+import { askedAtRun } from "../lib/runInputs";
+
+/** 「実行時に入力」: an input with no default, asked for when the flow runs. */
+export function AskedAtRunTag() {
+  return (
+    <span title={t.vars.askedAtRunTitle} className="inline-block rounded-sm border border-accent-500/50 bg-accent-500/10 px-1.5 text-[11px] leading-[18px] font-semibold whitespace-nowrap text-accent-600">
+      {t.vars.askedAtRun}
+    </span>
+  );
+}
 
 function initialText(u: VariableUsage): string {
   const value = u.def?.default;
@@ -126,7 +136,9 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
                         {t.varType[u.type]}
                       </td>
                       <td className="max-w-[240px] px-3 py-2">
-                        {initial ? (
+                        {askedAtRun(u.def) ? (
+                          <AskedAtRunTag />
+                        ) : initial ? (
                           <HoverPreview
                             value={u.def?.secret ? undefined : u.def?.default}
                             longText
