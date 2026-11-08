@@ -265,7 +265,7 @@ async fn secrets_go_to_the_adapter_with_their_sites_only() {
         error.details.unwrap()["hint"]
             .as_str()
             .unwrap()
-            .contains("Studio")
+            .contains("Writer")
     );
 }
 

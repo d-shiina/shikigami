@@ -27,7 +27,7 @@ flowchart LR
 
   subgraph local[ユーザーのPC]
     MCP["spellsheet mcp<br/>(Rust, stdio)"]
-    STUDIO["SpellSheet Studio<br/>(Tauri 2 + React)"]
+    STUDIO["SpellSheet Writer<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
     subgraph libs[共有ライブラリ（Rust）]
@@ -59,8 +59,8 @@ flowchart LR
 | `shikigami-studio` | ユーザー | GUI。Core/Runtime をライブラリとして内包 |
 | `spellsheet mcp` | AI クライアント（stdio 子プロセス） | MCP ツールを提供。GUI なしで単独動作。CLI と同じ実行ファイルのサブコマンド（配布物を 1 つにするため） |
 | `shikigami` (CLI) | ユーザー / スケジューラー | ヘッドレス実行・管理 |
-| `spellsheet agent` | Windows のサインイン（PC・ユーザー・ワークスペースごとに 1 つ） | スケジュールと管理サーバーのジョブを 1 件ずつ実行（[remote.md](remote.md)、[schedules.md](schedules.md)） |
-| `spellsheet manager` | 管理者（サーバー） | 管理サーバー。並んだジョブを空いたエージェントに渡す（署名付き HTTP、[remote.md](remote.md)） |
+| `spellsheet worker` | Windows のサインイン（PC・ユーザー・ワークスペースごとに 1 つ） | スケジュールと管理サーバーのジョブを 1 件ずつ実行（[remote.md](remote.md)、[schedules.md](schedules.md)） |
+| `spellsheet manager` | 管理者（サーバー） | 管理サーバー。並んだジョブを空いた Worker に渡す（署名付き HTTP、[remote.md](remote.md)） |
 | `browser-adapter` (Node) | Runtime | Playwright 操作。必要時のみ起動 |
 
 Studio と MCP サーバーは **別プロセスで同じワークスペースを共有** する。同期は §7 の「ファイルを正とした楽観的並行制御＋変更通知」で行う。
@@ -101,8 +101,8 @@ shikigami/
 │  ├─ shikigami-mcp/          MCP サーバー（rmcp、`spellsheet mcp` で起動）
 │  ├─ shikigami-adapters/ 組込アダプターすべてとインストール済みプラグインの一覧（どの Runtime もここから作る）
 │  ├─ shikigami-secrets/  ワークスペースの金庫（暗号化ファイル、鍵は Windows の資格情報マネージャー）
-│  ├─ shikigami-agent/    `spellsheet agent`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
-│  ├─ shikigami-manager/  `spellsheet manager`：エージェントがジョブを取りに行く管理サーバー
+│  ├─ shikigami-agent/    `spellsheet worker`：スケジュールとリモートのジョブを実行する PC ごとの 1 プロセス
+│  ├─ shikigami-manager/  `spellsheet manager`：Worker がジョブを取りに行く管理サーバー
 │  ├─ shikigami-browser/  browser.*（Node サイドカーのクライアント）
 │  ├─ shikigami-desktop/  desktop.*（UI Automation）
 │  ├─ shikigami-excel/    excel.*（xlsx を直接読み書き、マクロは COM）

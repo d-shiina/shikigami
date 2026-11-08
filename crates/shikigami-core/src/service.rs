@@ -1027,7 +1027,7 @@ impl FlowService {
                 code: "UNATTENDED_NOT_ALLOWED",
                 message: format!("the workspace policy keeps {id} from running unattended"),
                 hint: Some(
-                    "Run it from Studio, or change \"unattended\" for it in policy.json.".into(),
+                    "Run it from Writer, or change \"unattended\" for it in policy.json.".into(),
                 ),
             })
         };
@@ -1048,7 +1048,7 @@ impl FlowService {
                 code: "NOT_PUBLISHED",
                 message: format!("flow {id} has no published version"),
                 hint: Some(
-                    "Unattended runs execute the published version only. A person approves and publishes it in Studio (レビュー台 → 確認して公開) or with `spellsheet version publish <id>`; `spellsheet run <id> --draft` runs the working content instead."
+                    "Unattended runs execute the published version only. A person approves and publishes it in Writer (レビュー台 → 確認して公開) or with `spellsheet version publish <id>`; `spellsheet run <id> --draft` runs the working content instead."
                         .into(),
                 ),
             });
@@ -1924,7 +1924,7 @@ fn ensure_person(actor: &Actor, what: &str) -> CoreResult<()> {
             code: "PUBLISH_NOT_ALLOWED",
             message: format!("only a person can {what}"),
             hint: Some(
-                "Ask the user to review the changes in SpellSheet Studio (レビュー台) and press 確認して公開."
+                "Ask the user to review the changes in SpellSheet Writer (レビュー台) and press 確認して公開."
                     .into(),
             ),
         });

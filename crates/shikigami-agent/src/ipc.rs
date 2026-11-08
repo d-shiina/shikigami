@@ -89,7 +89,7 @@ fn single_instance(local_root: &Path) -> std::io::Result<std::fs::File> {
         Ok(()) => Ok(file),
         Err(std::fs::TryLockError::WouldBlock) => Err(std::io::Error::new(
             std::io::ErrorKind::AddrInUse,
-            "the agent is already running for this workspace",
+            "the worker is already running for this workspace",
         )),
         Err(std::fs::TryLockError::Error(e)) => Err(e),
     }
@@ -265,7 +265,7 @@ pub async fn call(local_root: &Path, request: &Request) -> std::io::Result<Respo
         Some(line) => Ok(serde_json::from_str(&line)?),
         None => Err(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
-            "the agent closed the pipe",
+            "the worker closed the pipe",
         )),
     }
 }

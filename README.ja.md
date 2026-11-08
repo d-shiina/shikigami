@@ -10,20 +10,20 @@
 
 AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** を作成・編集・実行・保守できるローカルファーストの RPA プラットフォームです。完成したフローは AI なし・GUI なしで実行できます。対象 OS は **Windows 10/11（x64）** です。
 
-![SpellSheet Studio](docs/assets/studio-phase1.png)
+![SpellSheet Writer](docs/assets/studio-phase1.png)
 
 ## 使い始める
 
-1. [最新のリリース](https://github.com/d-shiina/shikigami/releases/latest)から `SpellSheet.Studio_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Studio が自動で更新されます。
-2. スタートメニューから **SpellSheet Studio** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
-3. AI にフローの作成を依頼するには、Studio 右上の「AI チャット」（Ctrl+J）で AI ペインを開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「導入する」を押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
-4. AI の変更はサイドバーの「確認待ち」で確認し、「確認して公開」を押します。公開したフローは、AI なしで Studio・実行画面「SpellSheet 実行」・スケジュールから実行できます。
+1. [最新のリリース](https://github.com/d-shiina/shikigami/releases/latest)から `SpellSheet.Writer_<版>_x64-setup.exe` をダウンロードして実行します。ユーザーごとのインストールなので、管理者権限は不要です。以降は Writer が自動で更新されます。
+2. スタートメニューから **SpellSheet Writer** を起動します。フローの画面の下にある「見本」から、完成したフローを開いて中身と動きを確認できます。
+3. AI にフローの作成を依頼するには、Writer 右上の「AI チャット」（Ctrl+J）で AI ペインを開き、使う AI（Claude Code・OpenAI Codex・Gemini CLI・GitHub Copilot）を選んで「導入する」を押します。あなたのユーザーフォルダーに入り、続けてサインインの画面が出ます（ターミナルは要りません）。「受注システムから未出荷の注文を集めるフローを作って」のように依頼すると、AI がフロー図にノードを追加していきます。
+4. AI の変更はサイドバーの「確認待ち」で確認し、「確認して公開」を押します。公開したフローは、AI なしで Writer・実行画面「SpellSheet Runner」・スケジュールから実行できます。
 
 業務 1 本を最初から最後まで通して試すには、[チュートリアル](docs/ja/tutorials/README.md)（各 15 分ほど、見本のファイル付き）を参照してください。以下は開発者向けの情報です。
 
 ## 現在の状態
 
-**Phase 1（基盤）と Phase 2（MCP サーバー）を実装済み。** Flow Core / Runtime / CLI / Studio（Tauri 2 + React）/ MCP サーバーが動作します。ブラウザ操作（Phase 3）も動作します（[docs/browser.md](docs/ja/browser.md)、`pnpm demo:browser` でデモ）。Windows のデスクトップアプリ操作（Phase 4）は UI Automation で動作します（[docs/desktop.md](docs/ja/desktop.md)）。Excel のブックは Excel なしで直接読み書きできます（[docs/office.md](docs/ja/office.md)）。詳細は [アーキテクチャ設計 §13](docs/ja/architecture.md#13-実装状況と制約)。
+**Phase 1（基盤）と Phase 2（MCP サーバー）を実装済み。** Flow Core / Runtime / CLI / Writer（Tauri 2 + React）/ MCP サーバーが動作します。ブラウザ操作（Phase 3）も動作します（[docs/browser.md](docs/ja/browser.md)、`pnpm demo:browser` でデモ）。Windows のデスクトップアプリ操作（Phase 4）は UI Automation で動作します（[docs/desktop.md](docs/ja/desktop.md)）。Excel のブックは Excel なしで直接読み書きできます（[docs/office.md](docs/ja/office.md)）。詳細は [アーキテクチャ設計 §13](docs/ja/architecture.md#13-実装状況と制約)。
 
 | ドキュメント | 内容 |
 |---|---|
@@ -33,13 +33,13 @@ AI（Claude Code / Codex / Cursor など）と人間が、**同じフロー** �
 | [docs/ai-chat.md](docs/ja/ai-chat.md) | MCP を使えない AI のチャット（Microsoft Copilot など）でフローを作る：渡す仕様書、答えの貼り付け、人の手直し |
 | [docs/runner.md](docs/ja/runner.md) | 動かすだけの人の実行画面：公開されたフロー、入力変数から作るフォーム、結果とファイル |
 | [docs/policy.md](docs/ja/policy.md) | 無人実行は承認・公開した版だけ、許可するサイト・アプリ、AI の操作の承認（`policy.json`） |
-| [docs/schedules.md](docs/ja/schedules.md) | スケジュールとファイルのきっかけ、それを PC ごとに動かすエージェント |
+| [docs/schedules.md](docs/ja/schedules.md) | スケジュールとファイルのきっかけ、それを PC ごとに動かす Worker |
 | [docs/audit.md](docs/ja/audit.md) | 監査の記録：誰がどのフローを変更・公開・実行したか（`spellsheet audit`）と保存期間 |
 | [docs/remote.md](docs/ja/remote.md) | 管理サーバー：PC の登録、空いた PC へのジョブの振り分け、プロトコル v1 と参考実装のサーバー |
 | [docs/oauth.md](docs/ja/oauth.md) | OAuth でサインインする Web API（Box など）。リダイレクト URL は固定のどんな URL でもよい |
 | [docs/ja/extensions.md](docs/ja/extensions.md) | 拡張機能：クラウド型 AI-OCR・社内システム・SaaS の API などのノードを後から追加（zip・URL・GitHub から導入） |
 | [docs/design/plugins.md](docs/design/plugins.md) | ノードのプラグイン：社内システムなど向けのノードを、本体を作り直さずに足す（マニフェスト + 別プロセス） |
-| [docs/design/ui-principles.md](docs/design/ui-principles.md) | Studio の画面の決まり：ボタンをどこに置き、どう見せるか、その理由 |
+| [docs/design/ui-principles.md](docs/design/ui-principles.md) | Writer の画面の決まり：ボタンをどこに置き、どう見せるか、その理由 |
 | [docs/ja/compatibility.md](docs/ja/compatibility.md) | 互換性の方針：フロー形式（`schemaVersion`・移行・`requires`）、MCP・CLI で何を壊さないか |
 | [docs/research.md](docs/research.md) | 採用ライブラリのバージョン・ライセンス・Windows 対応状況 |
 
@@ -50,7 +50,7 @@ crates/shikigami-core      Flow Core（唯一の正規データ層）
 crates/shikigami-runtime   RPA Runtime（AI・GUI なしで実行）
 crates/shikigami-cli       CLI（spellsheet コマンド。`spellsheet mcp` で MCP サーバー）
 crates/shikigami-mcp       MCP サーバー（rmcp）
-apps/studio                SpellSheet Studio（Tauri 2 + React + React Flow）
+apps/studio                SpellSheet Writer（Tauri 2 + React + React Flow）
 packages/schema            Rust から生成した TypeScript 型
 plugins/shikigami          Claude Code プラグイン（MCP 設定＋スキル）
 schemas/                   生成された JSON Schema
@@ -78,7 +78,7 @@ Rust を rustup で入れた場合は `rustup default stable-msvc` を設定し�
 ```sh
 pnpm install
 
-# Studio のフロントエンドをビルド（Tauri のビルドスクリプトが dist を要求するため、
+# Writer のフロントエンドをビルド（Tauri のビルドスクリプトが dist を要求するため、
 # clone 直後は cargo test / cargo build の前に一度必要）
 pnpm --filter @shikigami/studio build
 
@@ -94,7 +94,7 @@ cargo run -p shikigami-cli -- run examples/invoice-summary.json -i threshold=100
 # 1 本で画面に見せる（詳細は examples/full-demo/README.md）
 pnpm demo:full
 
-# Studio を起動
+# Writer を起動
 pnpm studio:dev
 
 # Rust の型を変更したら JSON Schema と TS 型を再生成
@@ -116,7 +116,7 @@ spellsheet version publish scn_example_invoice_summary       # 人が確認し�
 spellsheet run scn_example_invoice_summary --json           # 無人実行は公開版だけを動かす
 ```
 
-Studio を開いたまま CLI でフローを編集すると、変更が Studio に即座に反映されます。
+Writer を開いたまま CLI でフローを編集すると、変更が Writer に即座に反映されます。
 
 ## AI から使う（MCP）
 
@@ -126,7 +126,7 @@ Claude Code ならプラグインを入れるだけです（`shikigami` コマ�
 /plugin install shikigami --marketplace d-shiina/shikigami
 ```
 
-Studio をインストールしている場合は、Studio と同じフォルダーにある `shikigami.exe` を登録すると Studio の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Studio 右下のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/ja/release.md)）。
+Writer をインストールしている場合は、Writer と同じフォルダーにある `shikigami.exe` を登録すると Writer の更新と一緒に MCP サーバーも新しくなります（登録コマンドは Writer 右下のバージョン表示からコピーできます。詳しくは [docs/release.md](docs/ja/release.md)）。
 
 MCP サーバーだけを登録する場合は `claude mcp add shikigami -- spellsheet mcp`。リポジトリから開発していて PATH を通していない場合は、ビルドした実行ファイルを絶対パスで登録できます（`cargo build -p shikigami-cli` で更新されます）。
 
@@ -136,7 +136,7 @@ claude mcp add --scope user shikigami -- C:\path\to\shikigami\target\debug\shiki
 
 この登録とプラグインを併用すると、プラグイン側の `shikigami` サーバー（PATH 上の `shikigami` を起動）は接続に失敗しますが、スキルは使えます。
 
-Codex / Cursor の設定例とツール一覧は [docs/mcp.md](docs/ja/mcp.md) を参照してください。AI の変更は Studio に即座に反映され、Studio から元に戻せます。
+Codex / Cursor の設定例とツール一覧は [docs/mcp.md](docs/ja/mcp.md) を参照してください。AI の変更は Writer に即座に反映され、Writer から元に戻せます。
 
 ## ライセンス
 

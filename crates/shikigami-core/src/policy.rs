@@ -546,7 +546,7 @@ impl Policy {
             details: serde_json::json!({
                 "site": shown,
                 "allowed": self.sites,
-                "hint": "A person adds the site to \"sites\" in policy.json (Studio: 許可と承認). Do not work around it with another step.",
+                "hint": "A person adds the site to \"sites\" in policy.json (Writer: 許可と承認). Do not work around it with another step.",
             }),
         })
     }
@@ -568,7 +568,7 @@ impl Policy {
             details: serde_json::json!({
                 "app": program.trim(),
                 "allowed": self.apps,
-                "hint": "A person adds the program to \"apps\" in policy.json (Studio: 許可と承認).",
+                "hint": "A person adds the program to \"apps\" in policy.json (Writer: 許可と承認).",
             }),
         })
     }

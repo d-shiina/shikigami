@@ -1,6 +1,6 @@
 [package]
 name = "shikigami-studio"
-description = "Shikigami RPA Studio (Tauri 2 desktop app)"
+description = "Shikigami RPA Writer (Tauri 2 desktop app)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

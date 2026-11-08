@@ -2,7 +2,7 @@
 
 Japanese: [ja/audit.md](ja/audit.md)
 
-`spellsheet audit` shows, in one list, who changed, published and ran which flow on this PC, whether it was a person in Studio, the CLI, an AI over MCP, a schedule or a management server.
+`spellsheet audit` shows, in one list, who changed, published and ran which flow on this PC, whether it was a person in Writer, the CLI, an AI over MCP, a schedule or a management server.
 
 ```powershell
 spellsheet audit                              # everything, oldest first

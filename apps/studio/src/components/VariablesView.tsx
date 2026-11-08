@@ -277,7 +277,7 @@ export function VariablesView({ onView }: { onView: (view: View) => void }) {
             style={{ color }}
             className={`${quiet} -my-0.5 cursor-pointer appearance-none text-[12px]`}
           >
-            {/* A type this Studio does not know (a newer flow) stays as it is. */}
+            {/* A type this Writer does not know (a newer flow) stays as it is. */}
             {(TYPES.includes(u.type) ? TYPES : [u.type, ...TYPES]).map((v) => (
               <option key={v} value={v} className="text-ink">
                 {t.varType[v] ?? v}

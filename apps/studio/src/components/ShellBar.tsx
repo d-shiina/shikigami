@@ -92,7 +92,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
         {!compact && (
           <>
             {/* The app's name from the strings (t.appName), so a rename of this screen follows by itself:
-                the product in ink, which screen of it in grey ("SpellSheet" + "Studio"). */}
+                the product in ink, which screen of it in grey ("SpellSheet" + "Writer"). */}
             <span className="text-[13.5px] tracking-[-0.01em] whitespace-nowrap">
               <span className="font-semibold text-ink">{product}</span>
               {screen && <span className="ml-1 font-medium text-slate-500">{screen}</span>}
