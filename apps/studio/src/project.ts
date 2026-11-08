@@ -10,6 +10,7 @@ import { createContext, useContext } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { ApiError } from "./lib/api";
+import type { AskAnswer } from "./lib/ask";
 import { isErrorPayload } from "@shikigami/schema";
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -197,7 +198,14 @@ function message(e: unknown): string {
 
 const nameOf = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
-export function createProjectStore(api: ProjectApi, labels: { added: (n: number, folder: string) => string; discard: () => string }): StoreApi<ProjectState> {
+/** What the store needs from the screen: the words of a notice, and the question for unsaved edits. */
+export interface ProjectUi {
+  added: (n: number, folder: string) => string;
+  /** Asked before hand-edited text is left: "confirm" saves it first, "other" drops it, "cancel" stays. */
+  unsaved: (path: string) => Promise<AskAnswer>;
+}
+
+export function createProjectStore(api: ProjectApi, labels: ProjectUi): StoreApi<ProjectState> {
   let panelOpen = true;
   try {
     panelOpen = globalThis.localStorage?.getItem(PANEL_KEY) !== "closed";
@@ -267,7 +275,10 @@ export function createProjectStore(api: ProjectApi, labels: { added: (n: number,
           if (sheet.path === path) return;
           // The settings form saves as it is typed; only hand-edited text can be lost.
           if (sheet.config && !sheet.raw) await get().saveSheet();
-          else if (!(globalThis.confirm?.(labels.discard()) ?? true)) return;
+          else {
+            const answer = await labels.unsaved(sheet.path);
+            if (answer === "cancel" || (answer === "confirm" && !(await get().saveSheet()))) return;
+          }
         }
         try {
           const text = await api.readText(id, path);

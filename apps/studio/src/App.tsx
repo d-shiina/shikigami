@@ -6,6 +6,8 @@ import { activity, AgentContext, createAgentStore, useAgent } from "./agent";
 import { AgentButton } from "./components/AgentButton";
 import { AgentPane } from "./components/AgentPane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
+import { AskDialog } from "./components/AskDialog";
+import { unsavedAsk } from "./lib/ask";
 import { PickRequestCard } from "./components/PickRequestCard";
 import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
@@ -474,6 +476,7 @@ function Shell() {
       <SecretAskDialog />
       <RunInputsDialog />
       <ApprovalDialog />
+      <AskDialog />
       <PickRequestCard />
       <ContextMenu />
       <FileDragLayer />
@@ -548,7 +551,7 @@ export function App() {
   // Sentences name a node's part by its label (`{ part: "btnSave" }` → 部品「保存ボタン」).
   setPartLookup((name) => store.getState().flow?.parts?.[name]);
   const agentStore = useMemo(() => createAgentStore(agent), []);
-  const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), discard: () => t.project.sheet.discard }), []);
+  const projectStore = useMemo(() => createProjectStore(projectApi, { added: (n, folder) => t.project.added(n, folder), unsaved: unsavedAsk }), []);
 
   useEffect(() => {
     void store.getState().init();

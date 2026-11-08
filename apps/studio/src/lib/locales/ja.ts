@@ -42,7 +42,12 @@ export const ja = {
   secretKeyMissing:
     "このワークスペースのシークレットは別の PC か別の Windows ユーザーで登録されたため、ここでは値を読めません。リセットしてから登録し直してください。",
   secretReset: "リセットして登録し直す",
-  secretConfirmReset: "このワークスペースのシークレットと保存済みのログイン状態をすべて削除しますか？",
+  secretResetAsk: {
+    title: "シークレットをすべて削除して登録し直しますか？",
+    body: (n: number) =>
+      `このワークスペースのシークレット${n > 0 ? `（${n} 件）` : ""}と保存済みのログイン状態をすべて削除します。元に戻せません。削除したあとで、使うシークレットをもう一度登録してください。`,
+    confirm: "すべて削除",
+  },
   secretUse: "シークレット",
   secretText: "文字",
   secretChoose: "（シークレットを選択）",
@@ -74,7 +79,10 @@ export const ja = {
   secretOauthExpired: "期限切れ",
   secretOauthNotSignedIn: "未サインイン（「OAuth サインイン」ノードを実行するとサインインします）",
   secretSignOut: "サインアウト",
-  secretConfirmSignOut: (name: string) => `「${name}」の保存済みのサインイン（OAuth のトークンとブラウザのログイン状態）を削除しますか？次に使うときにもう一度サインインします。`,
+  secretSignOutAsk: {
+    title: (name: string) => `「${name}」からサインアウトしますか？`,
+    body: "保存済みの OAuth のトークンとブラウザのログイン状態を削除します。このシークレットを次に使うときに、もう一度サインインします。",
+  },
   secretPage: {
     used: "使っている",
     usage: "使っているフロー",
@@ -159,6 +167,9 @@ export const ja = {
   extracted: (name: string) => `新しいフロー「${name}」にまとめました`,
   close: "閉じる",
   cancel: "キャンセル",
+  ask: {
+    empty: "入力してください",
+  },
   secretNoDefault: "機密の変数には既定値を書けません。パスワードはサイドバーの「シークレット」に登録して、入力ノードで選びます",
   flows: "フロー",
   newFlow: "新規作成",
@@ -886,7 +897,13 @@ export const ja = {
       rename: "名前を変更",
       remove: "削除（ごみ箱へ）",
     },
-    renamePrompt: "新しい名前",
+    renameAsk: {
+      title: (name: string) => `「${name}」の名前を変更`,
+      label: "新しい名前",
+      confirm: "名前を変更",
+      badChar: "\\ / : * ? \" < > | は名前に使えません",
+      taken: (name: string) => `「${name}」はもうあります`,
+    },
     added: (n: number, folder: string) => `${n} 件を ${folder} に追加しました`,
     sheet: {
       settings: "設定",
@@ -917,7 +934,12 @@ export const ja = {
       duplicate: (name: string) => `「${name}」が 2 つあります`,
       log: "実行ログ",
       text: "テキスト",
-      discard: "変更を捨てて閉じますか？",
+      closeAsk: {
+        title: (name: string) => `「${name}」への変更を保存しますか？`,
+        body: "保存しないと、このファイルへの変更は失われます。",
+        save: "保存",
+        dontSave: "保存しない",
+      },
     },
   },
   outline: {
@@ -1961,7 +1983,10 @@ export const ja = {
     loadError: "読み込みエラー",
     checkUpdate: "更新の確認",
     uninstall: "アンインストール",
-    confirmUninstall: (name: string) => `「${name}」をアンインストールします。このノードを使うフローは、再インストールするまで検証エラーになります。`,
+    uninstallAsk: {
+      title: (name: string) => `「${name}」をアンインストールしますか？`,
+      body: "この拡張機能のノードを使うフローは、もう一度インストールするまで検証エラーになります。",
+    },
     latest: (name: string, v: string) => `「${name}」は最新です（v${v}）`,
     restartNeeded: "変更は Studio の再起動後に反映されます。",
     restart: "再起動",

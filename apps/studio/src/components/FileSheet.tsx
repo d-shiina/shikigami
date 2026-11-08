@@ -7,6 +7,7 @@ import type { ConfigFile, ConfigItem, ConfigType, Flow, Step } from "@shikigami/
 import { Calendar, FileCog, FileText, Hash, List, type LucideIcon, Plus, ScrollText, ToggleLeft, Type, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
+import { unsavedAsk } from "../lib/ask";
 import { t } from "../lib/i18n";
 import { itemUsers, roleOf, useProject } from "../project";
 import { stepName } from "./ProjectPanel";
@@ -315,7 +316,11 @@ export function FileSheet() {
   const Icon = sheet.config ? FileCog : isLog ? ScrollText : FileText;
   const close = () => {
     if (asForm && dirty) void p.saveSheet();
-    if (asForm || !dirty || window.confirm(t.project.sheet.discard)) p.closeSheet();
+    if (asForm || !dirty) return p.closeSheet();
+    void unsavedAsk(sheet.path).then(async (answer) => {
+      if (answer === "cancel" || (answer === "confirm" && !(await p.saveSheet()))) return;
+      p.closeSheet();
+    });
   };
   return (
     <aside
