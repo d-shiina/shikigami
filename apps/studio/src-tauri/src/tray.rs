@@ -95,7 +95,7 @@ pub(crate) fn create(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
 /// [`show_studio`] from an event handler, off the main thread (see
 /// [`show_runner_later`]).
-fn show_studio_later(app: &AppHandle) {
+pub(crate) fn show_studio_later(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(e) = show_studio(&app) {
