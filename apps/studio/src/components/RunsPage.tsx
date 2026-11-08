@@ -603,24 +603,22 @@ export function RunsPage() {
     setList(next);
     setTimeout(() => void poll(), 1500);
   };
-  const setEnabled = async (items: ScheduleView[], enabled: boolean) => {
+  // Each save is kept as it lands, so a later one failing leaves the list showing what was really saved.
+  const each = async (items: ScheduleView[], save: (item: ScheduleView) => Promise<ScheduleList> | null) => {
     try {
-      let next: ScheduleList | null = null;
-      for (const item of items) if (item.enabled !== enabled) next = await api.saveSchedule({ ...plain(item), enabled });
-      if (next) changed(next);
+      for (const item of items) {
+        const next = await save(item);
+        if (next) changed(next);
+      }
     } catch (e) {
       setError(message(e));
+      void load();
     }
   };
+  const setEnabled = (items: ScheduleView[], enabled: boolean) => each(items, (item) => (item.enabled === enabled ? null : api.saveSchedule({ ...plain(item), enabled })));
   const remove = async (items: ScheduleView[]) => {
-    try {
-      let next: ScheduleList | null = null;
-      for (const item of items) next = await api.deleteSchedule(item.id);
-      if (next) changed(next);
-      setSelected(new Set());
-    } catch (e) {
-      setError(message(e));
-    }
+    await each(items, (item) => api.deleteSchedule(item.id));
+    setSelected(new Set());
   };
   const menu = (item: ScheduleView): MenuSpec[] => [
     { label: r.edit, icon: Pencil, run: () => setEditing(plain(item)) },

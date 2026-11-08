@@ -524,10 +524,11 @@ export function ExtensionsPage() {
     setNotice(null);
     try {
       await what();
-      await load();
     } catch (err) {
       setError(message(err));
     }
+    // Also after a failure part-way through a bulk action: show what really changed.
+    await load();
   };
   const close = () => {
     if (preview) void extensionsApi.discard(preview.id).catch(() => {});
@@ -675,6 +676,7 @@ export function ExtensionsPage() {
                     rowKey={(ext) => ext.dir}
                     selected={new Set(picked.map((ext) => ext.dir))}
                     onSelect={setSelected}
+                    canPick={(ext) => ext.managed}
                     empty={e.notFound}
                     actionsWidth={44}
                     rowActions={(ext) => (ext.managed || ext.source ? <RowMenuButton items={() => menu(ext)} /> : null)}

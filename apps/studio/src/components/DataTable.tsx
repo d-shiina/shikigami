@@ -209,6 +209,7 @@ export function DataTable<T>({
   rowActions,
   actionsWidth = 84,
   rowProps,
+  canPick,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -232,6 +233,8 @@ export function DataTable<T>({
   actionsWidth?: number;
   /** More attributes and handlers for a row (hover, context menu, data-*). */
   rowProps?: (row: T) => Omit<HTMLAttributes<HTMLTableRowElement>, "className" | "onClick" | "onKeyDown">;
+  /** Rows that can be picked (default all): the others get no check box and stay out of "pick all" and ranges. */
+  canPick?: (row: T) => boolean;
 }) {
   const own = useTableView(columns, { storageKey, initialSort });
   const v = view ?? own;
@@ -264,11 +267,11 @@ export function DataTable<T>({
   const visible = groups ? groups.flatMap((g) => (folded.has(g.key) ? [] : g.rows)) : sorted;
 
   const picking = selected && onSelect ? { selected, onSelect } : null;
-  const keys = visible.map(rowKey);
+  const keys = (canPick ? visible.filter(canPick) : visible).map(rowKey);
   const pickedHere = picking ? keys.filter((k) => picking.selected.has(k)).length : 0;
   /** A click on a check box or with Ctrl: one row; with Shift: the rows from the last one picked. */
   const pick = (key: string, range: boolean) => {
-    if (!picking) return;
+    if (!picking || !keys.includes(key)) return;
     const next = new Set(picking.selected);
     const from = anchor.current ? keys.indexOf(anchor.current) : -1;
     if (range && from >= 0) {
@@ -327,7 +330,7 @@ export function DataTable<T>({
       >
         {picking && (
           <td className={`border-b border-slate-100 pr-1 pl-3 ${cellY}`}>
-            <Check checked={on} label={t.table.select} onPick={(e) => pick(key, e.shiftKey)} />
+            {(!canPick || canPick(row)) && <Check checked={on} label={t.table.select} onPick={(e) => pick(key, e.shiftKey)} />}
           </td>
         )}
         {shown.map((c) => (
