@@ -74,4 +74,16 @@ describe("DataTable", () => {
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "数" }));
     expect(screen.queryByRole("columnheader", { name: /数/ })).toBeNull();
   });
+
+  it("drops the rows of a folded group from the selection", () => {
+    let last = new Set<string>();
+    render(<Harness onPicked={(s) => (last = s)} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "表示" })).getByRole("button", { name: "数" }));
+    for (const box of screen.getAllByRole("checkbox", { name: "選択" })) fireEvent.click(box);
+    expect(last.size).toBe(4);
+    fireEvent.click(screen.getByRole("button", { name: /奇数/ }));
+    // The odd ones (いちご 3, あんず 1) are folded away; the even ones stay picked.
+    expect([...last].sort()).toEqual(["c", "d"]);
+  });
 });

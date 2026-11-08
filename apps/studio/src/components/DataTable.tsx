@@ -417,14 +417,20 @@ export function DataTable<T>({
                     <button
                       type="button"
                       aria-expanded={open}
-                      onClick={() =>
+                      onClick={() => {
                         setFolded((f) => {
                           const next = new Set(f);
                           if (open) next.add(g.key);
                           else next.delete(g.key);
                           return next;
-                        })
-                      }
+                        });
+                        // Folded rows are out of sight, so they leave the selection:
+                        // a bulk action never touches a row the viewer cannot see.
+                        if (open && picking) {
+                          const gone = new Set(g.rows.map(rowKey));
+                          if ([...picking.selected].some((k) => gone.has(k))) picking.onSelect(new Set([...picking.selected].filter((k) => !gone.has(k))));
+                        }
+                      }}
                       className="flex h-7 items-center gap-1.5 rounded-md px-1.5 text-[12px] font-medium text-ink hover:bg-slate-100"
                     >
                       {open ? <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" /> : <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />}
