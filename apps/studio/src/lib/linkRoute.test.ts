@@ -48,6 +48,15 @@ describe("routeLink", () => {
     expect(points[1]!.x).toBeLessThan(400);
   });
 
+  it("goes over a column between the writer and a reader further right", () => {
+    const middle: Box = { x: 400, y: 156, width: 290, height: 100 };
+    const reader: Box = { x: 800, y: 156, width: 290, height: 100 };
+    const boxes = [node(0), middle, reader];
+    const points = routeLink({ x: 290, y: 80 }, { x: 800, y: 200 }, 156, boxes);
+    expect(points.at(-1)).toEqual({ x: 800, y: 200 });
+    for (const b of boxes) expect(crosses(points.slice(1, -1), b)).toBe(false);
+  });
+
   it("goes up to a reader above the writer", () => {
     const points = routeLink({ x: 290, y: 2 * 156 + 80 }, { x: 0, y: 60 }, 0, column);
     for (const n of column) expect(crosses(points.slice(1, -1), n)).toBe(false);

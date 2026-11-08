@@ -42,9 +42,10 @@ function freeY(y: number, x1: number, x2: number, boxes: readonly Box[]): number
  * passing none of `boxes` (every node on the chart, the two ends included).
  */
 export function routeLink(from: Point, to: Point, toTop: number, boxes: readonly Box[]): Point[] {
-  // The reader is right of the free gap beside the writer (another column): down that gap, across at its height.
+  // The reader is right of the free gap beside the writer (another column): down that gap, across at its height,
+  // when nothing (a column between them) is in the way across.
   const beside = freeX(from.x + CLEAR, from.y, to.y, boxes, 1);
-  if (to.x - CLEAR >= beside) return [from, { x: beside, y: from.y }, { x: beside, y: to.y }, to];
+  if (to.x - CLEAR >= beside && freeY(to.y, beside, to.x, boxes) === to.y) return [from, { x: beside, y: from.y }, { x: beside, y: to.y }, to];
   // Else down (or up) the gap right of the writer, over in the gap above the reader, and down its left side.
   let cross = toTop - CLEAR;
   let right = beside;
