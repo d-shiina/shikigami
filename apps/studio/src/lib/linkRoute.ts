@@ -10,54 +10,145 @@ export type Box = { x: number; y: number; width: number; height: number };
 
 /** Between a line and the node it passes. */
 const CLEAR = 10;
-/** Tries before giving up on a free gap (a very crowded chart): the line then goes where it got to. */
-const MAX_TRIES = 40;
+/** What a turn costs, in pixels of length: fewer turns read easier than a slightly shorter line. */
+const TURN = 40;
+/** Room above and below the two ends where the line may go round something. */
+const REACH = 400;
 
-const overlapsY = (b: Box, y1: number, y2: number) => b.y < Math.max(y1, y2) && b.y + b.height > Math.min(y1, y2);
-const overlapsX = (b: Box, x1: number, x2: number) => b.x < Math.max(x1, x2) && b.x + b.width > Math.min(x1, x2);
-
-/** The first x from `x` going `dir` (1 right, -1 left) where a vertical line from y1 to y2 passes no box. */
-function freeX(x: number, y1: number, y2: number, boxes: readonly Box[], dir: 1 | -1): number {
-  for (let i = 0; i < MAX_TRIES; i++) {
-    const hit = boxes.find((b) => overlapsY(b, y1, y2) && b.x - CLEAR / 2 < x && b.x + b.width + CLEAR / 2 > x);
-    if (!hit) return x;
-    x = dir === 1 ? hit.x + hit.width + CLEAR : hit.x - CLEAR;
-  }
-  return x;
+/** Whether a straight piece of line from `a` to `b` (across or down) passes no box. */
+function free(a: Point, b: Point, boxes: readonly Box[]): boolean {
+  const m = CLEAR / 2;
+  const x1 = Math.min(a.x, b.x);
+  const x2 = Math.max(a.x, b.x);
+  const y1 = Math.min(a.y, b.y);
+  const y2 = Math.max(a.y, b.y);
+  return !boxes.some((o) => o.x - m < x2 && o.x + o.width + m > x1 && o.y - m < y2 && o.y + o.height + m > y1);
 }
 
-/** The lowest y at or above `y` where a horizontal line from x1 to x2 passes no box. */
-function freeY(y: number, x1: number, x2: number, boxes: readonly Box[]): number {
-  for (let i = 0; i < MAX_TRIES; i++) {
-    const hit = boxes.find((b) => overlapsX(b, x1, x2) && b.y - CLEAR / 2 < y && b.y + b.height + CLEAR / 2 > y);
-    if (!hit) return y;
-    y = hit.y - CLEAR;
-  }
-  return y;
-}
+const sorted = (values: number[]) => [...new Set(values)].sort((p, q) => p - q);
 
 /**
  * The corners of the line from `from` (a writer's socket, on its right) to
- * `to` (a reader's socket, on its left), whose node's top is at `toTop`,
- * passing none of `boxes` (every node on the chart, the two ends included).
+ * `to` (a reader's socket, on its left), passing none of `boxes` (every node
+ * on the chart, the two ends included): it leaves to the right and comes in
+ * from the left, and between runs along the gaps beside and between nodes,
+ * the shortest such way with the fewest turns. `toTop` is where the reader's
+ * node starts: with no way round (a chart too crowded), the line goes over in
+ * the gap above it.
  */
 export function routeLink(from: Point, to: Point, toTop: number, boxes: readonly Box[]): Point[] {
-  // The reader is right of the free gap beside the writer (another column): down that gap, across at its height,
-  // when nothing (a column between them) is in the way across.
-  const beside = freeX(from.x + CLEAR, from.y, to.y, boxes, 1);
-  if (to.x - CLEAR >= beside && freeY(to.y, beside, to.x, boxes) === to.y) return [from, { x: beside, y: from.y }, { x: beside, y: to.y }, to];
-  // Else down (or up) the gap right of the writer, over in the gap above the reader, and down its left side.
-  let cross = toTop - CLEAR;
-  let right = beside;
-  let left = to.x - CLEAR;
-  for (let i = 0; i < 4; i++) {
-    right = freeX(from.x + CLEAR, from.y, cross, boxes, 1);
-    left = freeX(to.x - CLEAR, cross, to.y, boxes, -1);
-    const y = freeY(cross, left, right, boxes);
-    if (y === cross) break;
-    cross = y;
+  const out = { x: from.x + CLEAR, y: from.y };
+  const into = { x: to.x - CLEAR, y: to.y };
+  const top = Math.min(from.y, to.y) - REACH;
+  const bottom = Math.max(from.y, to.y) + REACH;
+  const near = boxes.filter((b) => b.y < bottom && b.y + b.height > top);
+  // Where the line can run: beside each box and between them, and through the two ends.
+  const xs = sorted([out.x, into.x, ...near.flatMap((b) => [b.x - CLEAR, b.x + b.width + CLEAR])]);
+  const ys = sorted([out.y, into.y, ...near.flatMap((b) => [b.y - CLEAR, b.y + b.height + CLEAR])]).filter((y) => y >= top && y <= bottom);
+  const path = shortest(xs, ys, out, into, near);
+  if (path) return corners([from, ...path, to]);
+  // No way round: over in the gap above the reader.
+  const cross = toTop - CLEAR;
+  return [from, out, { x: out.x, y: cross }, { x: into.x, y: cross }, into, to];
+}
+
+/** The way from `a` to `b` over the grid of `xs` × `ys` with the fewest turns and least length, or null. */
+function shortest(xs: number[], ys: number[], a: Point, b: Point, boxes: readonly Box[]): Point[] | null {
+  const W = xs.length;
+  const H = ys.length;
+  const ax = xs.indexOf(a.x);
+  const ay = ys.indexOf(a.y);
+  const bx = xs.indexOf(b.x);
+  const by = ys.indexOf(b.y);
+  // A state is a point and the way the line came into it (0 across, 1 down), so a turn can cost.
+  const id = (i: number, j: number, d: number) => (j * W + i) * 2 + d;
+  const dist = new Float64Array(W * H * 2).fill(Infinity);
+  const prev = new Int32Array(W * H * 2).fill(-1);
+  const heap: [number, number][] = [];
+  const push = (cost: number, state: number) => {
+    heap.push([cost, state]);
+    let k = heap.length - 1;
+    while (k > 0) {
+      const up = (k - 1) >> 1;
+      if (heap[up]![0] <= heap[k]![0]) break;
+      [heap[up], heap[k]] = [heap[k]!, heap[up]!];
+      k = up;
+    }
+  };
+  const pop = (): [number, number] => {
+    const top = heap[0]!;
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let k = 0;
+      for (;;) {
+        const l = 2 * k + 1;
+        const r = l + 1;
+        let m = k;
+        if (l < heap.length && heap[l]![0] < heap[m]![0]) m = l;
+        if (r < heap.length && heap[r]![0] < heap[m]![0]) m = r;
+        if (m === k) break;
+        [heap[m], heap[k]] = [heap[k]!, heap[m]!];
+        k = m;
+      }
+    }
+    return top;
+  };
+  // It leaves the writer going across (to the right).
+  const start = id(ax, ay, 0);
+  dist[start] = 0;
+  push(0, start);
+  // Whether the step between two neighbouring grid points is clear, worked out once each.
+  const clear = new Map<number, boolean>();
+  const step = (i: number, j: number, i2: number, j2: number) => {
+    const key = Math.min(j * W + i, j2 * W + i2) * W * H + Math.max(j * W + i, j2 * W + i2);
+    let ok = clear.get(key);
+    if (ok === undefined) {
+      ok = free({ x: xs[i]!, y: ys[j]! }, { x: xs[i2]!, y: ys[j2]! }, boxes);
+      clear.set(key, ok);
+    }
+    return ok;
+  };
+  while (heap.length > 0) {
+    const [cost, state] = pop();
+    if (cost > dist[state]!) continue;
+    const d = state % 2;
+    const cell = (state - d) / 2;
+    const i = cell % W;
+    const j = (cell - i) / W;
+    // It comes into the reader across (from the left).
+    if (i === bx && j === by && d === 0) {
+      const points: Point[] = [];
+      for (let s = state; s !== -1; s = prev[s]!) {
+        const c = (s - (s % 2)) / 2;
+        points.push({ x: xs[c % W]!, y: ys[(c - (c % W)) / W]! });
+      }
+      return corners(points.reverse());
+    }
+    for (const [di, dj, nd] of [[1, 0, 0], [-1, 0, 0], [0, 1, 1], [0, -1, 1]] as const) {
+      const i2 = i + di;
+      const j2 = j + dj;
+      if (i2 < 0 || i2 >= W || j2 < 0 || j2 >= H || !step(i, j, i2, j2)) continue;
+      const next = id(i2, j2, nd);
+      const c = cost + Math.abs(xs[i2]! - xs[i]!) + Math.abs(ys[j2]! - ys[j]!) + (nd === d ? 0 : TURN);
+      if (c < dist[next]!) {
+        dist[next] = c;
+        prev[next] = state;
+        push(c, next);
+      }
+    }
   }
-  return [from, { x: right, y: from.y }, { x: right, y: cross }, { x: left, y: cross }, { x: left, y: to.y }, to];
+  return null;
+}
+
+/** Only the points where the line turns (and its two ends). */
+function corners(points: Point[]): Point[] {
+  return points.filter((p, k) => {
+    if (k === 0 || k === points.length - 1) return true;
+    const a = points[k - 1]!;
+    const b = points[k + 1]!;
+    return !((a.x === p.x && p.x === b.x) || (a.y === p.y && p.y === b.y));
+  });
 }
 
 /** An SVG path through `points` with rounded corners. */

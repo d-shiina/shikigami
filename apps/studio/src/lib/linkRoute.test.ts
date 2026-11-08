@@ -37,7 +37,6 @@ describe("routeLink", () => {
     const head: Box = { x: -40, y: 156, width: 400, height: 38 };
     const boxes = [node(0), head, node(2)];
     const points = routeLink({ x: 290, y: 80 }, { x: 0, y: 2 * 156 + 60 }, node(2).y, boxes);
-    expect(points[1]!.x).toBeGreaterThan(360);
     for (const b of boxes) expect(crosses(points.slice(1, -1), b)).toBe(false);
   });
 
@@ -54,6 +53,12 @@ describe("routeLink", () => {
     const boxes = [node(0), middle, reader];
     const points = routeLink({ x: 290, y: 80 }, { x: 800, y: 200 }, 156, boxes);
     expect(points.at(-1)).toEqual({ x: 800, y: 200 });
+    for (const b of boxes) expect(crosses(points.slice(1, -1), b)).toBe(false);
+  });
+
+  it("goes round a column beside the writer and a wide frame head under it", () => {
+    const boxes: Box[] = [node(0), { x: 400, y: 0, width: 290, height: 100 }, { x: -32, y: 232, width: 754, height: 38 }, { x: 200, y: 400, width: 290, height: 100 }];
+    const points = routeLink({ x: 290, y: 80 }, { x: 200, y: 460 }, 400, boxes);
     for (const b of boxes) expect(crosses(points.slice(1, -1), b)).toBe(false);
   });
 
