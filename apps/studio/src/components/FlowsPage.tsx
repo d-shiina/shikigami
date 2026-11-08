@@ -2,37 +2,20 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@shikigami/schema";
-import { BookOpen, ClipboardPaste, Copy, ExternalLink, FolderOpen, FolderOutput, MessageSquareText, MousePointerClick, Search, Trash2, Upload, Workflow } from "lucide-react";
+import { BookOpen, CalendarClock, ChevronDown, ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, FolderOutput, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Trash2, Upload, Workflow } from "lucide-react";
 import { useAgent, useAgentApi } from "../agent";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
 import { relativeTime } from "../lib/changes";
-import { copyText, menuFor } from "../lib/contextMenu";
-import { agent } from "../lib/api";
+import { copyText, menuFor, openMenu } from "../lib/contextMenu";
+import { agent, api, type ScheduleView } from "../lib/api";
+import { describeWhen } from "../lib/schedule";
+import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, SearchBox, SelectionBar, useTableView, ViewMenu } from "./DataTable";
 import { t } from "../lib/i18n";
 import { projectApi } from "../project";
 import { SAMPLES, type Sample, tutorialUrl } from "../lib/samples";
 
-const SORT_KEY = "shikigami.studio.sort";
-
-type Sort = "updated" | "name";
-
-function load<T>(key: string, fallback: T): T {
-  try {
-    const raw = globalThis.localStorage?.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function save(key: string, value: unknown) {
-  try {
-    globalThis.localStorage?.setItem(key, JSON.stringify(value));
-  } catch {
-    // Only a remembered preference.
-  }
-}
+const SORT_KEY = "shikigami.studio.flows.sort";
 
 /** A small square with the name's first letter, so flows are told apart at a glance. */
 export function Monogram({ name, active }: { name: string; active: boolean }) {
@@ -209,85 +192,95 @@ function Samples() {
   );
 }
 
-function Row({ summary, query }: { summary: FlowSummary; query: string }) {
-  const open = useOpen();
-  const duplicate = useStudio((s) => s.duplicate);
-  const remove = useStudio((s) => s.remove);
-  const setPlace = useStudio((s) => s.setPlace);
-  const [confirming, setConfirming] = useState(false);
+type Status = "published" | "behind" | "draft";
+type Auto = "on" | "paused" | "none";
+
+/**
+ * What the table says beside each flow, loaded after the list: whether it is
+ * published (and still the same), and the schedules that run it. Unknown
+ * while loading; the page shows the rows meanwhile.
+ */
+function useFlowFacts(summaries: FlowSummary[]) {
+  const [status, setStatus] = useState<Map<string, Status> | null>(null);
+  const [schedules, setSchedules] = useState<Map<string, ScheduleView[]>>(new Map());
+  useEffect(() => {
+    let live = true;
+    void Promise.all(
+      summaries.map((s) =>
+        api.publishedState(s.id).then(
+          (p): [string, Status] => [s.id, !p ? "draft" : p.matchesCurrent ? "published" : "behind"],
+          (): [string, Status] => [s.id, "draft"],
+        ),
+      ),
+    ).then((pairs) => live && setStatus(new Map(pairs)));
+    api
+      .listSchedules()
+      .then((list) => {
+        if (!live) return;
+        const by = new Map<string, ScheduleView[]>();
+        for (const item of list.schedules) by.set(item.flowId, [...(by.get(item.flowId) ?? []), item]);
+        setSchedules(by);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [summaries]);
+  const auto = (id: string): Auto => {
+    const items = schedules.get(id) ?? [];
+    return items.some((s) => s.enabled) ? "on" : items.length ? "paused" : "none";
+  };
+  return { status, schedules, auto };
+}
+
+const STATUS_ORDER: Status[] = ["published", "behind", "draft"];
+const STATUS_DOT: Record<Status, string> = { published: "bg-moegi-500", behind: "bg-amber-500", draft: "bg-slate-400" };
+const STATUS_PILL: Record<Status, string> = {
+  published: "bg-moegi-100 text-moegi-600",
+  behind: "bg-amber-50 text-amber-700",
+  draft: "bg-slate-100 text-slate-600",
+};
+const AUTO_ORDER: Auto[] = ["on", "paused", "none"];
+const AUTO_DOT: Record<Auto, string> = { on: "bg-brand-500", paused: "bg-slate-400", none: "bg-slate-200" };
+
+const statusLabel = (s: Status) => (s === "published" ? t.list.statusPublished : s === "behind" ? t.list.statusBehind : t.list.statusDraft);
+const autoLabel = (a: Auto) => (a === "on" ? t.list.autoOn : a === "paused" ? t.list.schedulePaused : t.list.autoNone);
+
+function StatusPill({ status }: { status: Status | undefined }) {
+  if (!status) return <span className="block h-5 w-14 animate-pulse rounded-full bg-slate-100" aria-hidden="true" />;
   return (
-    <tr
-      tabIndex={0}
-      onClick={() => open(summary.id)}
-      onKeyDown={(e) => e.key === "Enter" && open(summary.id)}
-      onContextMenu={menuFor(() => [
-        { label: t.menu.open, icon: FolderOpen, shortcut: "Enter", run: () => open(summary.id) },
-        {
-          label: t.duplicate,
-          icon: Copy,
-          run: () => {
-            setPlace("flows");
-            void duplicate(summary.id);
-          },
-        },
-        { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void projectApi.open(summary.id, "", false).catch(() => {}) },
-        { label: t.menu.copyId, icon: Copy, run: () => copyText(summary.id) },
-        "-",
-        { label: t.delete, icon: Trash2, danger: true, confirm: t.menu.confirmDelete, run: () => void remove(summary.id) },
-      ])}
-      className="group cursor-pointer border-b border-slate-100 last:border-b-0 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+    <span
+      className={`inline-flex h-5 max-w-full items-center gap-1.5 rounded-full px-2 text-[11.5px] font-medium whitespace-nowrap ${STATUS_PILL[status]}`}
+      title={status === "behind" ? t.publishedBehind : undefined}
     >
-      <td className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <Workflow size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
-          <span className="truncate text-[13px] font-semibold">
-            <Marked text={summary.name} query={query} />
-          </span>
-        </div>
-        {summary.description && <div className="mt-0.5 line-clamp-1 pl-[22px] text-[12px] text-slate-500">{summary.description}</div>}
-      </td>
-      <td className="px-3 py-2.5">
-        <div className="flex flex-wrap gap-1">
-          {(summary.tags ?? []).map((tag) => (
-            <span key={tag} className="rounded-sm bg-slate-100 px-1.5 text-[11px] leading-5 text-slate-600">
-              {tag}
-            </span>
-          ))}
-        </div>
-      </td>
-      <td className="px-3 py-2.5 text-right text-[12px] text-slate-500 tabular-nums">{summary.stepCount}</td>
-      <td className="px-3 py-2.5 text-[12px] whitespace-nowrap text-slate-500">{summary.updatedAt ? relativeTime(summary.updatedAt) : "—"}</td>
-      <td className="w-[1%] px-2 py-2.5 whitespace-nowrap">
-        <span className="invisible flex justify-end gap-0.5 group-focus-within:visible group-hover:visible">
-          <button
-            type="button"
-            title={t.duplicate}
-            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-ink"
-            onClick={(e) => {
-              e.stopPropagation();
-              setPlace("flows");
-              void duplicate(summary.id);
-            }}
-          >
-            <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title={confirming ? t.list.confirmDelete : t.delete}
-            className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-[12px] ${confirming ? "bg-shu-600 text-white" : "text-slate-500 hover:bg-shu-50 hover:text-shu-600"}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirming) void remove(summary.id);
-              setConfirming(!confirming);
-            }}
-            onBlur={() => setConfirming(false)}
-          >
-            <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
-            {confirming && t.list.confirmDelete}
-          </button>
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[status]}`} aria-hidden="true" />
+      <span className="truncate">{statusLabel(status)}</span>
+    </span>
+  );
+}
+
+function ScheduleCell({ items }: { items: ScheduleView[] | undefined }) {
+  const on = (items ?? []).filter((s) => s.enabled);
+  if (!items?.length) return <span className="block text-[12px] leading-5 text-slate-500">—</span>;
+  if (on.length === 0) return <span className="block text-[12px] leading-5 text-slate-500">{t.list.schedulePaused}</span>;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-[12px] leading-5 text-slate-700" title={on.map((s) => `${s.name}：${describeWhen(s.when)}`).join("\n")}>
+      <CalendarClock size={13} strokeWidth={1.75} className="shrink-0 text-brand-500" aria-hidden="true" />
+      <span className="truncate">{describeWhen(on[0]!.when)}</span>
+      {on.length > 1 && <span className="shrink-0 rounded bg-slate-100 px-1 text-[11px] text-slate-600 tabular-nums">+{on.length - 1}</span>}
+    </span>
+  );
+}
+
+function TagList({ tags }: { tags: string[] }) {
+  return (
+    <span className="flex min-w-0 gap-1 overflow-hidden">
+      {tags.map((name) => (
+        <span key={name} className="shrink-0 rounded-md border border-slate-200 px-1.5 text-[11.5px] leading-[18px] text-slate-600">
+          {name}
         </span>
-      </td>
-    </tr>
+      ))}
+    </span>
   );
 }
 
@@ -299,29 +292,158 @@ export function FlowsPage() {
   const create = useStudio((s) => s.create);
   const importFile = useStudio((s) => s.importFile);
   const setPlace = useStudio((s) => s.setPlace);
+  const duplicate = useStudio((s) => s.duplicate);
+  const remove = useStudio((s) => s.remove);
+  const store = useStudioApi();
+  const open = useOpen();
   const [query, setQuery] = useState("");
-  const [tag, setTag] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<Set<Status>>(new Set());
+  const [autos, setAutos] = useState<Set<Auto>>(new Set());
+  const [tags, setTags] = useState<Set<string>>(new Set());
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const [sort, setSortState] = useState<Sort>(() => load<Sort>(SORT_KEY, "updated"));
   const picker = useRef<HTMLInputElement>(null);
   const q = query.trim().toLowerCase();
+  const { status, schedules, auto } = useFlowFacts(summaries);
+  const l = t.list;
 
-  const setSort = (next: Sort) => {
-    setSortState(next);
-    save(SORT_KEY, next);
+  const menu = (s: FlowSummary) =>
+    [
+      { label: t.menu.open, icon: FolderOpen, shortcut: "Enter", run: () => open(s.id) },
+      {
+        label: t.duplicate,
+        icon: Copy,
+        run: () => {
+          setPlace("flows");
+          void duplicate(s.id);
+        },
+      },
+      { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void projectApi.open(s.id, "", false).catch(() => {}) },
+      { label: t.exportFlow, icon: Download, run: () => void exportMany([s.id]) },
+      { label: t.menu.copyId, icon: Copy, run: () => copyText(s.id) },
+      "-",
+      { label: t.delete, icon: Trash2, danger: true, confirm: t.menu.confirmDelete, run: () => void remove(s.id) },
+    ] as const;
+
+  const exportMany = async (ids: string[]) => {
+    try {
+      let last = "";
+      for (const id of ids) last = await api.exportFlow(id);
+      store.setState({ notice: ids.length === 1 ? `${t.exported}: ${last}` : l.exportedMany(ids.length), error: null });
+    } catch (e) {
+      store.setState({ error: e instanceof Error ? e.message : String(e) });
+    }
   };
-  const tags = useMemo(() => [...new Set(summaries.flatMap((s) => s.tags ?? []))].sort((a, b) => a.localeCompare(b, "ja")), [summaries]);
-  const rows = useMemo(() => {
-    const hits = summaries.filter(
-      (s) =>
-        (!tag || (s.tags ?? []).includes(tag)) &&
-        (!q || `${s.name} ${s.description} ${(s.tags ?? []).join(" ")}`.toLowerCase().includes(q)),
-    );
-    return hits.sort((a, b) =>
-      sort === "name" ? a.name.localeCompare(b.name, "ja") : (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
-    );
-  }, [summaries, q, tag, sort]);
+
+  // Each filter's counts are over the rows the other filters keep, as in Linear.
+  const keep = (s: FlowSummary, skip?: "status" | "auto" | "tags") =>
+    (skip === "status" || !statuses.size || statuses.has(status?.get(s.id) ?? "draft")) &&
+    (skip === "auto" || !autos.size || autos.has(auto(s.id))) &&
+    (skip === "tags" || !tags.size || (s.tags ?? []).some((x) => tags.has(x))) &&
+    (!q || `${s.name} ${s.description} ${(s.tags ?? []).join(" ")}`.toLowerCase().includes(q));
+  const rows = summaries.filter((s) => keep(s));
+  const countBy = <V,>(skip: "status" | "auto" | "tags", of: (s: FlowSummary) => V[]) => {
+    const n = new Map<V, number>();
+    for (const s of summaries) if (keep(s, skip)) for (const v of of(s)) n.set(v, (n.get(v) ?? 0) + 1);
+    return n;
+  };
+  const statusCount = countBy("status", (s) => [status?.get(s.id) ?? "draft"]);
+  const autoCount = countBy("auto", (s) => [auto(s.id)]);
+  const tagCount = countBy("tags", (s) => s.tags ?? []);
+  const allTags = useMemo(() => [...new Set(summaries.flatMap((s) => s.tags ?? []))].sort((a, b) => a.localeCompare(b, "ja")), [summaries]);
+  const filtered = statuses.size + autos.size + tags.size > 0;
+  // Only the rows on screen are acted on: a filter can hide picked ones.
+  const pickedIds = rows.map((s) => s.id).filter((id) => picked.has(id));
+
+  const columns: Column<FlowSummary>[] = [
+    {
+      id: "name",
+      header: t.name,
+      sortValue: (s) => s.name,
+      cell: (s) => (
+        <span className="flex min-w-0 items-center gap-2">
+          <Workflow size={14} strokeWidth={1.75} className="shrink-0 text-slate-500" aria-hidden="true" />
+          <span className="truncate font-medium text-ink" title={s.name}>
+            <Marked text={s.name} query={q} />
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "description",
+      header: t.versionField.description,
+      width: "w-[240px]",
+      hideBelow: 1000,
+      cell: (s) => (
+        <span className="block truncate text-[12.5px] text-slate-600" title={s.description || undefined}>
+          {s.description ? <Marked text={s.description} query={q} /> : <span className="text-slate-500">—</span>}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: l.statusColumn,
+      width: "w-[136px]",
+      sortValue: (s) => STATUS_ORDER.indexOf(status?.get(s.id) ?? "draft"),
+      group: (s) => {
+        const st = status?.get(s.id) ?? "draft";
+        return { key: st, order: STATUS_ORDER.indexOf(st), label: <StatusPill status={st} /> };
+      },
+      cell: (s) => <StatusPill status={status?.get(s.id)} />,
+    },
+    {
+      id: "schedule",
+      header: l.scheduleColumn,
+      width: "w-[150px]",
+      hideBelow: 720,
+      sortValue: (s) => AUTO_ORDER.indexOf(auto(s.id)) * 100 - (schedules.get(s.id) ?? []).filter((x) => x.enabled).length,
+      group: (s) => {
+        const a = auto(s.id);
+        return {
+          key: a,
+          order: AUTO_ORDER.indexOf(a),
+          label: (
+            <span className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${AUTO_DOT[a]}`} aria-hidden="true" />
+              {autoLabel(a)}
+            </span>
+          ),
+        };
+      },
+      cell: (s) => <ScheduleCell items={schedules.get(s.id)} />,
+    },
+    {
+      id: "tags",
+      header: t.versionField.tags,
+      width: "w-[130px]",
+      hideBelow: 1000,
+      sortValue: (s) => (s.tags ?? []).join(","),
+      cell: (s) => <TagList tags={s.tags ?? []} />,
+    },
+    {
+      id: "steps",
+      header: l.steps,
+      width: "w-[80px]",
+      align: "right",
+      hideBelow: 1000,
+      hiddenByDefault: true,
+      sortValue: (s) => s.stepCount,
+      cell: (s) => <span className="text-[12.5px] text-slate-600 tabular-nums">{s.stepCount}</span>,
+    },
+    {
+      id: "updated",
+      header: l.updatedColumn,
+      width: "w-[100px]",
+      sortValue: (s) => s.updatedAt ?? "",
+      cell: (s) => (
+        <span className="text-[12.5px] whitespace-nowrap text-slate-600" title={s.updatedAt ? new Date(s.updatedAt).toLocaleString("ja-JP") : undefined}>
+          {s.updatedAt ? relativeTime(s.updatedAt) : "—"}
+        </span>
+      ),
+    },
+  ];
+  const view = useTableView(columns, { storageKey: SORT_KEY, initialSort: { column: "updated", descending: true } });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -339,73 +461,71 @@ export function FlowsPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-paper">
-      <div className="mx-auto max-w-[1040px] px-6 py-5">
-        {/* Read left to right: what this is, how to narrow it, then making one, the filled button, at the end. */}
-        <div className="mb-3 flex items-center gap-2">
-          {/* The page's name is in the title bar; here only how many there are. */}
-          <span className="text-[12px] text-slate-500">{t.list.count(summaries.length)}</span>
-          <div className="ml-2 flex h-7 w-64 min-w-36 shrink items-center gap-1.5 rounded-lg border border-slate-200 bg-sheet px-2 focus-within:border-primary">
-            <Search size={14} strokeWidth={1.75} className="shrink-0 text-slate-400" aria-hidden="true" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-              placeholder={t.list.search}
-              className="min-w-0 flex-1 bg-transparent text-[13px] focus:outline-none"
-            />
-            {q && <span className="shrink-0 text-[11px] text-slate-400">{t.list.count(rows.length)}</span>}
+    <div className="@container h-full overflow-y-auto bg-paper">
+      <div className="mx-auto max-w-[1280px] px-6 pt-5 pb-3">
+        {/* Making one, the filled button, is at the end; finding and narrowing are on the left. */}
+        <div className="mb-3 flex items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <SearchBox value={query} onChange={setQuery} placeholder={l.searchFlows} hits={rows.length} />
+          {summaries.length > 0 && (
+            <>
+              <FacetFilter
+                label={l.statusColumn}
+                value={statuses}
+                onChange={setStatuses}
+                options={STATUS_ORDER.map((v) => ({ value: v, label: statusLabel(v), dot: STATUS_DOT[v], count: statusCount.get(v) ?? 0 }))}
+              />
+              <FacetFilter
+                label={l.scheduleColumn}
+                value={autos}
+                onChange={setAutos}
+                options={AUTO_ORDER.map((v) => ({ value: v, label: autoLabel(v), dot: AUTO_DOT[v], count: autoCount.get(v) ?? 0 }))}
+              />
+              {allTags.length > 0 && (
+                <FacetFilter label={t.versionField.tags} value={tags} onChange={setTags} options={allTags.map((v) => ({ value: v, label: v, count: tagCount.get(v) ?? 0 }))} />
+              )}
+              {filtered && (
+                <ClearFilters
+                  onClear={() => {
+                    setStatuses(new Set());
+                    setAutos(new Set());
+                    setTags(new Set());
+                  }}
+                />
+              )}
+            </>
+          )}
           </div>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
-            title={t.list.sort}
-            className="h-7 rounded-lg border border-slate-200 bg-sheet px-1.5 text-[12px] text-slate-600 focus:outline-none"
-          >
-            <option value="updated">{t.list.byUpdated}</option>
-            <option value="name">{t.list.byName}</option>
-          </select>
-          <span className="flex-1" />
+          <div className="flex shrink-0 items-center gap-2">
+          {summaries.length > 0 && <ViewMenu view={view} />}
           <input ref={picker} type="file" accept=".json,application/json" className="hidden" onChange={onPick} />
-          <button
-            type="button"
-            onClick={() => picker.current?.click()}
-            className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
-          >
-            <Upload size={14} strokeWidth={1.75} aria-hidden="true" />
-            {t.importFlow}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPasteOpen("new")}
-            hidden={agentOpen}
-            title={t.paste.lead}
-            className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-3 text-[13px] text-slate-700 hover:bg-slate-50"
-          >
-            <ClipboardPaste size={14} strokeWidth={1.75} aria-hidden="true" />
-            {t.paste.title}
-          </button>
-          {/* While naming a new flow, its form's "作成" is the one filled button. */}
-          <button type="button" onClick={() => setCreating(true)} hidden={creating} className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover">
-            ＋ {t.newFlow}
-          </button>
-        </div>
-        {tags.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-1" role="radiogroup" aria-label={t.versionField.tags}>
-            {[null, ...tags].map((value) => (
-              <button
-                key={value ?? "@all"}
-                type="button"
-                role="radio"
-                aria-checked={tag === value}
-                onClick={() => setTag(value)}
-                className={`h-7 rounded-lg px-2.5 text-[12px] ${tag === value ? "bg-slate-100 font-medium text-ink ring-1 ring-slate-400" : "bg-sheet text-slate-600 ring-1 ring-slate-200 hover:text-ink"}`}
-              >
-                {value ?? t.list.all}
-              </button>
-            ))}
+          {/* The one filled button makes a flow; its arrow holds the other ways in (Linear, GitHub). */}
+          <div className="flex shrink-0" hidden={creating}>
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="flex h-7 items-center gap-1 rounded-l-lg bg-primary pr-2.5 pl-3 text-[13px] font-medium whitespace-nowrap text-on-primary hover:bg-primary-hover"
+            >
+              ＋ {t.newFlow}
+            </button>
+            <button
+              type="button"
+              aria-label={l.moreWaysIn}
+              title={l.moreWaysIn}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                openMenu({ clientX: r.right - 220, clientY: r.bottom + 4, preventDefault: () => {} }, [
+                  { label: t.importFlow, icon: Upload, run: () => picker.current?.click() },
+                  ...(agentOpen ? [] : [{ label: t.paste.title, icon: ClipboardPaste, run: () => setPasteOpen("new") }]),
+                ]);
+              }}
+              className="grid h-7 w-7 place-items-center rounded-r-lg border-l border-white/25 bg-primary text-on-primary hover:bg-primary-hover"
+            >
+              <ChevronDown size={14} strokeWidth={2} aria-hidden="true" />
+            </button>
           </div>
-        )}
+          </div>
+        </div>
         <ImportConflict />
         {creating && (
           <form onSubmit={submit} className="mb-3 flex gap-2">
@@ -419,44 +539,75 @@ export function FlowsPage() {
               className="h-7 w-80 rounded-lg border border-brand-500 bg-sheet px-2 text-[13px] focus:outline-none"
             />
             <button type="submit" className="h-7 rounded-lg bg-primary px-3 text-[13px] text-on-primary">
-              {t.list.create}
+              {l.create}
             </button>
           </form>
         )}
         {summaries.length === 0 ? (
           <FirstSteps onCreate={() => setCreating(true)} />
         ) : (
-          <div className="border-y border-slate-200">
-            <table className="w-full table-fixed border-collapse text-left">
-              <colgroup>
-                <col />
-                <col className="w-[180px]" />
-                <col className="w-[72px]" />
-                <col className="w-[110px]" />
-                <col className="w-[88px]" />
-              </colgroup>
-              <thead className="text-[11px] text-slate-500">
-                <tr>
-                  <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.name}</th>
-                  <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.versionField.tags}</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-right font-medium">{t.list.steps}</th>
-                  <th className="border-b border-slate-200 px-3 py-2 font-medium">{t.list.updatedColumn}</th>
-                  <th className="border-b border-slate-200" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-[13px] text-slate-400">
-                      {t.list.notFound}
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((s) => <Row key={s.id} summary={s} query={q} />)
-                )}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <DataTable
+              columns={columns}
+              view={view}
+              rows={rows}
+              total={summaries.length}
+              rowKey={(s) => s.id}
+              onOpen={(s) => open(s.id)}
+              selected={picked}
+              onSelect={setPicked}
+              empty={
+                <span className="flex flex-col items-center gap-2">
+                  <SearchX size={20} strokeWidth={1.5} className="text-slate-400" aria-hidden="true" />
+                  {l.notFound}
+                  {(filtered || q) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuery("");
+                        setStatuses(new Set());
+                        setAutos(new Set());
+                        setTags(new Set());
+                      }}
+                      className="rounded-md border border-slate-300 px-2 py-0.5 text-[12px] text-slate-700 hover:bg-slate-50"
+                    >
+                      {t.table.clearFilters}
+                    </button>
+                  )}
+                </span>
+              }
+              actionsWidth={44}
+              rowActions={(s) => (
+                <button
+                  type="button"
+                  title={t.table.more}
+                  aria-label={t.table.more}
+                  className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-ink"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    openMenu({ clientX: r.right - 180, clientY: r.bottom + 4, preventDefault: () => {} }, menu(s));
+                  }}
+                >
+                  <MoreHorizontal size={16} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              )}
+              rowProps={(s) => ({ onContextMenu: menuFor(() => menu(s)) })}
+            />
+            <SelectionBar count={pickedIds.length} onClear={() => setPicked(new Set())}>
+              <BulkButton icon={Download} label={t.list.exportPicked} onClick={() => exportMany(pickedIds)} />
+              <BulkButton
+                icon={Trash2}
+                danger
+                label={t.delete}
+                confirmLabel={l.confirmDeleteMany(pickedIds.length)}
+                onClick={async () => {
+                  for (const id of pickedIds) await remove(id);
+                  setPicked(new Set());
+                }}
+              />
+            </SelectionBar>
+          </>
         )}
         <Samples />
       </div>
