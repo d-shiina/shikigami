@@ -20,7 +20,7 @@ SpellSheet comes with a small **reference server** (`spellsheet manager serve`) 
    }
    ```
 
-4. The agent (`spellsheet agent install`, or **Start the agent** in Studio's Automation) asks the server for work **only while it has nothing running**, offering the flows `remote.flows` allows that have a published version here. The server hands it a job that fits, if there is one.
+4. The agent (`spellsheet agent install`, or **Start the agent** in Writer's Automation) asks the server for work **only while it has nothing running**, offering the flows `remote.flows` allows that have a published version here. The server hands it a job that fits, if there is one.
 5. The agent runs the job like any unattended run: the **published version**, `policy.json`'s sites, apps and `unattended` rules, secrets from this PC's vault. The record's `origin` says `trigger: "remote"`, `requestedBy` (who asked on the server) and `jobId`. Events go to the server every 2 seconds and the report at the end; a run started while the server is unreachable still finishes and is reported when it is back.
 6. A job cancelled on the server is cancelled on the PC at its next check-in (`finally` still runs).
 

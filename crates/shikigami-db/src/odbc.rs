@@ -240,7 +240,7 @@ fn failure(error: &odbc_api::Error, doing: &str) -> StepError {
         ),
         "28000" => (
             "DB_LOGIN_FAILED",
-            "The database refused the login. Check the user name and password of the secret in Studio, or whether Windows authentication is allowed.",
+            "The database refused the login. Check the user name and password of the secret in Writer, or whether Windows authentication is allowed.",
             false,
         ),
         s if s.starts_with("08") => (

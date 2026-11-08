@@ -48,7 +48,7 @@ describe("explainError", () => {
     );
   });
 
-  it("speaks English when Studio does", () => {
+  it("speaks English when Writer does", () => {
     setLocale("en", false);
     expect(explainError({ code: "WINDOW_NOT_FOUND", message: "" }, step("desktop.click", { target: { window: { title: "Notepad" } } })).what).toBe(
       'The window "Notepad" is not open',

@@ -2,7 +2,7 @@
 
 英語版：[../audit.md](../audit.md)
 
-`spellsheet audit` は、この PC で誰がどのフローを変更・公開・実行したかを 1 つの一覧で表示します。Studio の人、CLI、MCP 経由の AI、スケジュール、管理サーバーのどれからの操作かも分かります。
+`spellsheet audit` は、この PC で誰がどのフローを変更・公開・実行したかを 1 つの一覧で表示します。Writer の人、CLI、MCP 経由の AI、スケジュール、管理サーバーのどれからの操作かも分かります。
 
 ```powershell
 spellsheet audit                              # すべて（古い順）

@@ -27,7 +27,7 @@ flowchart LR
 
   subgraph local[ユーザーのPC]
     MCP["spellsheet mcp<br/>(Rust, stdio)"]
-    STUDIO["SpellSheet Studio<br/>(Tauri 2 + React)"]
+    STUDIO["SpellSheet Writer<br/>(Tauri 2 + React)"]
     CLI["shikigami CLI"]
 
     subgraph libs[共有ライブラリ（Rust）]

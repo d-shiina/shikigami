@@ -4,17 +4,17 @@
 
 拡張機能は、SpellSheet に後からノードを追加する仕組みです。クラウド型 AI-OCR、社内システム、業務 SaaS の API など、使う人が限られる連携を、本体を作り直さずに追加できます。VS Code の拡張機能と同じく、入れたものだけがパレットに並び、要らなくなれば無効にしたり削除したりできます。
 
-- 拡張機能は **別のプログラム** として動きます（Node.js・Python・.NET・PowerShell など、標準入出力が使えれば言語は自由）。不具合があっても Studio や実行は落ちず、そのノードがエラーになるだけです。
+- 拡張機能は **別のプログラム** として動きます（Node.js・Python・.NET・PowerShell など、標準入出力が使えれば言語は自由）。不具合があっても Writer や実行は落ちず、そのノードがエラーになるだけです。
 - 追加したノードは組込のノードと同じく、パレットに並び、設定欄は拡張機能が宣言した内容から作られ、検証・再試行・タイムアウト・シークレットの伏せ字も同じように扱われます。
-- AI にも自動で渡ります。MCP の `list_step_types` / `get_step_schema`、Studio の「仕様書を保存」に拡張機能のノードが載ります。
+- AI にも自動で渡ります。MCP の `list_step_types` / `get_step_schema`、Writer の「仕様書を保存」に拡張機能のノードが載ります。
 
 仕組みの設計は [design/plugins.md](design/plugins.md) にあります（コード上の名前は「plugin」です）。
 
 ## 使う
 
-### Studio の「拡張機能」画面
+### Writer の「拡張機能」画面
 
-サイドバーの「拡張機能」で、インストール済みの一覧（有効・無効、更新の確認、アンインストール）と、「一覧」タブ（下のレジストリ）を扱います。「インストール」で入手先を指定すると、内容（追加されるノード・外部へ送信するデータ・必要なシークレット・起動するプログラム）を表示し、確認してからインストールします。変更は Studio の再起動後に反映されます（画面の「再起動」）。
+サイドバーの「拡張機能」で、インストール済みの一覧（有効・無効、更新の確認、アンインストール）と、「一覧」タブ（下のレジストリ）を扱います。「インストール」で入手先を指定すると、内容（追加されるノード・外部へ送信するデータ・必要なシークレット・起動するプログラム）を表示し、確認してからインストールします。変更は Writer の再起動後に反映されます（画面の「再起動」）。
 
 拡張機能のノードは、パレットに拡張機能の名前の分類で並び、ノード名の前に拡張機能の札（例「AI-OCR」）が付きます。設定欄はマニフェストの JSON Schema から作られます。
 
@@ -35,7 +35,7 @@ spellsheet plugin install https://github.com/<owner>/<repo> --yes  # インス�
 
 インストールの前に、拡張機能の名前・発行元・追加されるノード・**外部へ送るデータ**・必要なシークレット・起動するプログラムを表示します。拡張機能はこの PC でプログラムとして動くため、発行元を信頼できるものだけをインストールしてください。
 
-インストール先は `%LOCALAPPDATA%\SpellSheet\plugins\<名前>\` です。ワークスペースのフォルダーには置きません（共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動かないようにするため）。インストール・更新・無効化のあとは、Studio と AI クライアントを再起動すると反映されます。
+インストール先は `%LOCALAPPDATA%\SpellSheet\plugins\<名前>\` です。ワークスペースのフォルダーには置きません（共有ワークスペースに置かれたプログラムが、全員の PC で勝手に動かないようにするため）。インストール・更新・無効化のあとは、Writer と AI クライアントを再起動すると反映されます。
 
 ### 一覧・有効と無効・更新・削除
 
@@ -80,17 +80,17 @@ spellsheet plugin registry          # 一覧を表示
 
 クラウドのサービスへデータを送るノードは、マニフェストの `external` にその旨を宣言します。
 
-- Studio の確認パネル（公開の前）の「外への影響」に「Azure AI Document Intelligence へ送信：読み取るファイル（画像・PDF）」のように表示します。
+- Writer の確認パネル（公開の前）の「外への影響」に「Azure AI Document Intelligence へ送信：読み取るファイル（画像・PDF）」のように表示します。
 - 送り先のアドレスを持つ設定（`targets` に `site` として宣言したもの）は、ワークスペースの `policy.json` の `sites` で検査します。`sites` に `https://<リソース名>.cognitiveservices.azure.com` だけを書けば、それ以外へは送れません（[policy.md](policy.md)）。
 - 拡張機能のノードの `risk` は、AI がそのノードを動かすときの承認（`policy.json` の `ai.runFlow` / `ai.testStep`）に使います。外部へファイルを送るノードは `interactive` 以上にして、AI が人の承認なしに試せないようにしてください。
 
 ### シークレット
 
-API キーなどは Studio の「シークレット」に登録し、ノードの設定では名前で選びます。値はフローに書かれず、AI にも渡りません。
+API キーなどは Writer の「シークレット」に登録し、ノードの設定では名前で選びます。値はフローに書かれず、AI にも渡りません。
 
 - 拡張機能が受け取れるのは `secretParams` に挙げた設定だけです。
 - シークレットの「使ってよい先」に `plugin:<名前>`（例 `plugin:azureocr`）を登録したものだけが、その拡張機能に渡ります。登録がなければ `SECRET_PLUGIN_NOT_ALLOWED` で止まります。
-- マニフェストの `credentials` に種類（`login` / `apiKey` / `oauth`）を書くと、Studio はその種類のシークレットを選択肢に出し、新規登録の画面もその種類で開きます。
+- マニフェストの `credentials` に種類（`login` / `apiKey` / `oauth`）を書くと、Writer はその種類のシークレットを選択肢に出し、新規登録の画面もその種類で開きます。
 
 ## 作る
 
@@ -155,8 +155,8 @@ azureocr/
 | `action` | ○ | 操作名（`readDocument`）。JSON-RPC のメソッド名にもなる |
 | `label` | ○ | ノードの名前。**名詞**にします（「AI-OCR の読み取り」。「読み取る」にしない。[design/wording.md](design/wording.md)） |
 | `description` | ○ | AI が読む説明（英語でよい）。何を受け取り、何を返すかを書く |
-| `summary` | - | 人が読む一文。Studio のパレットと設定画面でノード名の下に出る（省略時は `description` の最初の一文） |
-| `params` | ○ | 設定の JSON Schema（`"type": "object"`）。Studio の設定欄はここから作られます |
+| `summary` | - | 人が読む一文。Writer のパレットと設定画面でノード名の下に出る（省略時は `description` の最初の一文） |
+| `params` | ○ | 設定の JSON Schema（`"type": "object"`）。Writer の設定欄はここから作られます |
 | `examples` | ○ | そのまま使えるノードの記述例（1 つ以上）。読み込み時に検証し、通らなければ拡張機能ごと読み込みません |
 | `hasOutput` | - | 結果を返すか（`saveAs` で受け取れる） |
 | `risk` | - | `safe`（影響なし）/ `interactive`（既定）/ `dangerous`（外部に影響する操作）。AI の承認に使う |
@@ -172,7 +172,7 @@ azureocr/
 
 #### 設定欄の名前と選択肢
 
-設定欄の名前は JSON Schema の `title`、下に出る説明は `description` です（日本語で書くと Studio にそのまま出ます）。選択肢（`enum`）の表示名は `x-enumLabels` に書きます。
+設定欄の名前は JSON Schema の `title`、下に出る説明は `description` です（日本語で書くと Writer にそのまま出ます）。選択肢（`enum`）の表示名は `x-enumLabels` に書きます。
 
 ```json
 "model": {
@@ -222,7 +222,7 @@ node --test examples\plugins\azure-ocr\test.mjs      # Azure の代わりのサ�
 [examples/plugins/azure-ocr](../../examples/plugins/azure-ocr) は、Azure AI Document Intelligence で画像・PDF の文字・表・請求書や領収書の項目を読み取るノード「AI-OCR の読み取り」を追加します。
 
 1. Azure ポータルで Document Intelligence のリソースを作り、「キーとエンドポイント」を開く
-2. Studio の「シークレット」で種類「API キー」を選んでキーを登録し、使ってよい先に `plugin:azureocr` を追加する
+2. Writer の「シークレット」で種類「API キー」を選んでキーを登録し、使ってよい先に `plugin:azureocr` を追加する
 3. ノードの設定で、エンドポイント・API キー（登録した名前）・ファイル・読み取りの種類を選ぶ
 4. 結果を `saveAs` で受け取り、`{{ invoice.fields.InvoiceTotal }}` や `{{ invoice.text }}` のように使う
 

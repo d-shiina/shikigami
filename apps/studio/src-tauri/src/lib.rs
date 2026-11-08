@@ -1,4 +1,4 @@
-//! SpellSheet Studio backend.
+//! SpellSheet Writer backend.
 //!
 //! Every command is a thin wrapper over `FlowService` (editing) or
 //! `Runtime` (execution). Studio owns no flow logic of its own, so what
@@ -78,6 +78,19 @@ pub fn run() {
     };
 
     let result = tauri::Builder::default()
+        // One SpellSheet per person: starting it again (the Runner shortcut
+        // while Writer is open, or Writer while only Runner is) opens that
+        // window in the one already running.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().any(|a| a == "--tray") {
+                return;
+            }
+            if args.iter().any(|a| a == "--runner") {
+                runner::show_runner_later(app);
+            } else {
+                tray::show_studio_later(app);
+            }
+        }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .manage(updater::PendingUpdate::default())
@@ -256,7 +269,7 @@ pub fn run() {
             });
         });
     if let Err(e) = result {
-        tracing::error!(error = %e, "Studio exited with an error");
+        tracing::error!(error = %e, "Writer exited with an error");
         std::process::exit(1);
     }
 }

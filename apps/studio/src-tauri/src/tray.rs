@@ -31,7 +31,7 @@ impl Default for TrayLabels {
         Self {
             tooltip: "SpellSheet".into(),
             open_runner: "実行画面を開く".into(),
-            open_studio: "Studio を開く".into(),
+            open_studio: "Writer を開く".into(),
             quit: "終了".into(),
         }
     }
@@ -95,11 +95,11 @@ pub(crate) fn create(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
 /// [`show_studio`] from an event handler, off the main thread (see
 /// [`show_runner_later`]).
-fn show_studio_later(app: &AppHandle) {
+pub(crate) fn show_studio_later(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(e) = show_studio(&app) {
-            tracing::warn!(error = %e, "cannot open Studio");
+            tracing::warn!(error = %e, "cannot open Writer");
         }
     });
 }

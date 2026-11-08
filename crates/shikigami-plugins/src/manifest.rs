@@ -260,7 +260,7 @@ impl Manifest {
             );
         }
         if self.label.trim().is_empty() {
-            p.add("label", "is empty", "write the name people see in Studio");
+            p.add("label", "is empty", "write the name people see in Writer");
         }
         if self.command.program.trim().is_empty() {
             p.add(

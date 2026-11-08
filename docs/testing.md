@@ -53,7 +53,7 @@ A case can also check that the run stops with an error:
 
 `tests/` goes into bundles (export to a file) with the flow.
 
-## In Studio
+## In Writer
 
 Use the "Tests" tab of the panel under the chart.
 
@@ -66,7 +66,7 @@ Use the "Tests" tab of the panel under the chart.
 
 Over MCP, `save_test_case` writes a case and `run_tests` runs them ([mcp.md](mcp.md)). When an AI changes a flow, ask it to "add test cases and fix it until run_tests passes": it then checks after each change that earlier results still hold. Secret inputs cannot be put in a case.
 
-The cases an AI saves are its **promises** for a change. Studio's review lists them first, each with its `description` (write it as what should happen, in business words), the input and expected result, and whether the flow keeps it; the person answers whether each promise is right. So write `description` for the person who reviews, not for the program (see [design/review-evidence.md](design/review-evidence.md)).
+The cases an AI saves are its **promises** for a change. Writer's review lists them first, each with its `description` (write it as what should happen, in business words), the input and expected result, and whether the flow keeps it; the person answers whether each promise is right. So write `description` for the person who reviews, not for the program (see [design/review-evidence.md](design/review-evidence.md)).
 
 ## From the command line
 
@@ -86,7 +86,7 @@ spellsheet test examples/tutorials/sales-csv/flow.json   # a flow file too
 2 passed, 1 failed
 ```
 
-- Each case is one ordinary run, recorded like any other (`origin.requestedBy` is `test:<case name>`). Open a failed case's run in Studio's run history by the run ID shown
+- Each case is one ordinary run, recorded like any other (`origin.requestedBy` is `test:<case name>`). Open a failed case's run in Writer's run history by the run ID shown
 - A flow that drives other apps or web sites really drives them in a test too. Pass test inputs (a test folder, a test system's URL) in `inputs`
 - The exit code is 1 when any case differs, for batch files and CI
 - `--json` prints one JSON object (`passed`, `failed`, `cases[]`; each case has `passed`, `runId`, `status`, `error`, `mismatches[]`). A mismatch has `at` (e.g. `outputs.total`), `expected` and `actual`

@@ -320,7 +320,7 @@ impl PluginStep {
                 format!("secret '{}' may not be passed to the {} plugin", secret.name, self.plugin),
             )
             .with_details(json!({
-                "hint": format!("Ask the user to add {site} to this secret's sites in Studio (シークレット) if this plugin may use it.")
+                "hint": format!("Ask the user to add {site} to this secret's sites in Writer (シークレット) if this plugin may use it.")
             })));
         }
         // Masked in the plugin's own diagnostics too.

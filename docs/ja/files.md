@@ -38,11 +38,11 @@ flows/<id>/
 - バンドル（`export_flow`）と複製はファイルも持っていきます（`output/`・`work/`・`logs/` を除く）。
 - バンドルのファイルを `spellsheet run 受注.shikigami.json` で直接実行すると、ファイルを隣の `受注.files/<id>/` に展開してそこで実行します。実行後も `output/` と `logs/` が残ります。
 - 従来の `flows/<id>.json` は、保存先を開いたときにフォルダーへ移します。
-- ファイルは Studio、AI（`write_project_file`）、`spellsheet flow add-file <id> <ファイル> --to input` で追加できます。
+- ファイルは Writer、AI（`write_project_file`）、`spellsheet flow add-file <id> <ファイル> --to input` で追加できます。
 
 ### 設定ファイル
 
-`config/` の設定ファイルは、名前付きの値を種類と説明つきで並べます。Studio はこれをフォームで見せます。
+`config/` の設定ファイルは、名前付きの値を種類と説明つきで並べます。Writer はこれをフォームで見せます。
 
 ```json
 {

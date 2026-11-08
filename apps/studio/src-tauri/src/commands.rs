@@ -328,7 +328,7 @@ pub fn read_project_text(
     if bytes.len() as u64 > shikigami_core::project::MAX_TEXT_READ {
         return Err(err(
             "PROJECT_FILE_TOO_LARGE",
-            "大きすぎるため Studio では開けません",
+            "大きすぎるため Writer では開けません",
         ));
     }
     let text = String::from_utf8(bytes)
@@ -356,7 +356,7 @@ pub fn read_project_image(
     if bytes.len() > 16 * 1024 * 1024 {
         return Err(err(
             "PROJECT_FILE_TOO_LARGE",
-            "大きすぎるため Studio では表示できません",
+            "大きすぎるため Writer では表示できません",
         ));
     }
     let kind = if bytes.starts_with(b"\x89PNG") {

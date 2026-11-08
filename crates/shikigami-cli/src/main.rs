@@ -476,7 +476,7 @@ fn plugin_command(cmd: &PluginCmd) -> Result<ExitCode> {
         }
         let dir = install::commit(&root, staged)?;
         eprintln!(
-            "installed into {} (restart Studio and AI clients to use it)",
+            "installed into {} (restart Writer and AI clients to use it)",
             dir.display()
         );
         Ok(ExitCode::SUCCESS)
@@ -1302,7 +1302,7 @@ fn runnable(
             code: "UNATTENDED_NOT_ALLOWED",
             message: format!("the workspace policy keeps {id} from running unattended"),
             hint: Some(
-                "Run it from Studio, or change \"unattended\" for it in policy.json.".into(),
+                "Run it from Writer, or change \"unattended\" for it in policy.json.".into(),
             ),
         }))
     };

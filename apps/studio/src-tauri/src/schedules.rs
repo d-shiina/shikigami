@@ -224,7 +224,7 @@ pub async fn start_agent(state: State<'_, AppState>) -> CmdResult<Option<AgentSt
     let cli = crate::agent::cli_path().ok_or_else(|| {
         err(
             "CLI_NOT_FOUND",
-            "the spellsheet command is not next to Studio or on PATH",
+            "the spellsheet command is not next to Writer or on PATH",
         )
     })?;
     let workspace = svc.store().root().to_path_buf();

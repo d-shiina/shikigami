@@ -16,7 +16,7 @@ The promises SpellSheet makes to the outside, and the rules for changing them. F
 | The CLI (commands, arguments, exit codes, `--json` output) | `crates/shikigami-cli` → `schemas/contract/cli.json`, `schemas/run-api.schema.json` | Task Scheduler, batch jobs, CI |
 | Plugin manifests and JSON-RPC (`manifestVersion`) | [design/plugins.md](design/plugins.md) (Japanese) | Plugin authors |
 
-Not promises: Studio's screens, the internal Rust API (the crates are not published), the wording of logs and errors (`message` and `hint` are reworded), descriptions such as those of `list_step_types`, and local areas of the workspace (where undo history and run records are kept).
+Not promises: Writer's screens, the internal Rust API (the crates are not published), the wording of logs and errors (`message` and `hint` are reworded), descriptions such as those of `list_step_types`, and local areas of the workspace (where undo history and run records are kept).
 
 ## 2. What may and may not change
 
@@ -48,7 +48,7 @@ Either way it goes under "Breaking changes" in [CHANGELOG.md](../CHANGELOG.md). 
 - Files, named versions, flows inside bundles and subflows all go through the same migration (`migrate::from_value` / `migrate::deserialize`)
 - A migrated flow is written in the new version the next time it is saved. Reading alone never rewrites the file
 - Future versions are not loaded (silently dropping fields would lose them on save)
-- Unknown keys inside `metadata` are kept (for notes from Studio and outside tools)
+- Unknown keys inside `metadata` are kept (for notes from Writer and outside tools)
 
 Tests: add a test to `migrate.rs` for every migration, showing a file of the previous version loads in the current one.
 
