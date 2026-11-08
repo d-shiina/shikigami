@@ -1,20 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useStudio } from "../context";
 import { t } from "../lib/i18n";
-import { type BottomTab, type LogEntry, diveChain, findStep, isActive, runBreakpoints, trailOf } from "../store";
-import { plain, sentence } from "../lib/sentence";
+import type { TraceFilter } from "../lib/runTrace";
+import { type BottomTab, isActive, runBreakpoints, trailOf } from "../store";
 import { PERSON_CODES } from "../lib/todos";
 import { useTodos } from "../lib/useTodos";
 import { IssuesPanel } from "./IssuesPanel";
 import { Resizer } from "./Resizer";
+import { RunLog, RunLogBar } from "./RunLog";
 import { TestsPanel } from "./TestsPanel";
-
-const LEVEL_STYLE = {
-  debug: "text-slate-400",
-  info: "text-slate-700",
-  warn: "text-amber-700",
-  error: "text-shu-600",
-} as const;
 
 /**
  * The panel under the chart: what a run did (log), what is wrong with the
@@ -51,6 +45,7 @@ export function BottomPanel() {
   // A part to pick is a to-do, counted once, not also as an error.
   const issueCount = useStudio((s) => s.validation?.issues.filter((i) => !PERSON_CODES.has(i.code)).length ?? 0) + todos;
   const [height, setHeight] = useState(readHeight);
+  const [filter, setFilter] = useState<TraceFilter>("all");
   if (!tab) return null;
   const resize = (next: number) => {
     setHeight(next);
@@ -76,31 +71,26 @@ export function BottomPanel() {
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`relative flex h-full items-center gap-1 px-2 text-xs font-medium ${tab === key ? "text-ink" : "text-slate-500 hover:text-ink"}`}
+            className={`relative flex h-full shrink-0 items-center gap-1 px-2 text-xs font-medium whitespace-nowrap ${tab === key ? "text-ink" : "text-slate-500 hover:text-ink"}`}
           >
             {label}
             {count > 0 && <span className="rounded-md bg-slate-200 px-1.5 text-[10px] text-slate-600">{count}</span>}
             {tab === key && <span className="absolute inset-x-2 bottom-[-1px] h-[2px] bg-ink" />}
           </button>
         ))}
-        {tab === "log" && run && (
-          <span className="ml-2 truncate text-xs text-slate-500">
-            <span title={run.runId}>{t.status[run.status]}</span>
-          </span>
-        )}
-        <span className="flex-1" />
+        {tab === "log" && run ? <RunLogBar filter={filter} onFilter={setFilter} /> : <span className="flex-1" />}
         {tab === "log" && trail && (
-          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={hideTrail}>
+          <button type="button" className="shrink-0 rounded-md px-2 text-xs leading-6 whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={hideTrail}>
             {t.clearTrail}
           </button>
         )}
         {tab === "log" && breakpointCount > 0 && (
-          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clearBreakpoints}>
+          <button type="button" className="shrink-0 rounded-md px-2 text-xs leading-6 whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clearBreakpoints}>
             {t.clearBreakpoints(breakpointCount)}
           </button>
         )}
         {tab === "log" && run && (
-          <button type="button" className="rounded-md px-2 text-xs leading-6 text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clear}>
+          <button type="button" className="shrink-0 rounded-md px-2 text-xs leading-6 whitespace-nowrap text-slate-500 hover:bg-slate-100 hover:text-ink" onClick={clear}>
             {t.clearLog}
           </button>
         )}
@@ -108,62 +98,13 @@ export function BottomPanel() {
           ✕
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">{tab === "log" ? <RunLog /> : tab === "tests" ? <TestsPanel /> : <IssuesPanel />}</div>
-    </section>
-  );
-}
-
-/**
- * The node a log line is about, by the name it has on the chart (never its
- * internal ID): pressing it brings the node up, inside a called flow too.
- */
-function StepLink({ entry }: { entry: LogEntry & { stepId: string } }) {
-  const flow = useStudio((s) => s.flow);
-  const called = useStudio((s) => s.called);
-  const stepTypes = useStudio((s) => s.stepTypes);
-  const goToPlace = useStudio((s) => s.goToPlace);
-  // The run of another flow than the one open: its nodes are not on the chart.
-  const here = useStudio((s) => !s.run?.flowId || s.run.flowId === s.flow?.id);
-  const path = entry.callPath ?? [];
-  const chain = diveChain(flow, called, path);
-  const owner = !here ? null : path.length === 0 ? flow : chain.length === path.length ? chain.at(-1)!.flow : null;
-  const step = owner ? findStep(owner.steps ?? [], entry.stepId) : null;
-  const def = step ? stepTypes.find((d) => d.type === step.type) : undefined;
-  const name = step ? step.name?.trim() || plain(sentence(step, def)) : t.evidence.goneStep;
-  const where = path.length > 0 && owner ? `${owner.name} › ` : "";
-  return (
-    <button
-      type="button"
-      disabled={!step}
-      className="ml-auto min-w-0 max-w-[40%] shrink-0 truncate font-sans text-slate-500 enabled:hover:text-brand-600 enabled:hover:underline disabled:text-slate-400"
-      title={step ? `${t.evidence.showInFlow}: ${where}${name}` : undefined}
-      onClick={() => step && goToPlace({ path, stepId: entry.stepId })}
-    >
-      {where}
-      {name}
-    </button>
-  );
-}
-
-function RunLog() {
-  const run = useStudio((s) => s.run);
-  const end = useRef<HTMLDivElement>(null);
-  const count = run?.logs.length ?? 0;
-  useEffect(() => {
-    // Braces matter: WebView2 returns a Promise here, which React would call as a cleanup.
-    end.current?.scrollIntoView({ block: "end" });
-  }, [count]);
-
-  return (
-    <div className="px-3 py-1 font-mono text-xs">
-      {run?.logs.map((entry) => (
-        <div key={`${entry.seq}-${entry.message}`} className={`flex gap-2 ${LEVEL_STYLE[entry.level]}`}>
-          <span className="shrink-0 text-slate-400">{entry.at.slice(11, 19)}</span>
-          <span className="whitespace-pre-wrap">{entry.message}</span>
-          {entry.stepId && <StepLink entry={{ ...entry, stepId: entry.stepId }} />}
+      {tab === "log" ? (
+        <div className="min-h-0 flex-1">
+          <RunLog filter={filter} />
         </div>
-      ))}
-      <div ref={end} />
-    </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">{tab === "tests" ? <TestsPanel /> : <IssuesPanel />}</div>
+      )}
+    </section>
   );
 }

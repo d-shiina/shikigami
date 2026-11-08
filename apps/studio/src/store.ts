@@ -47,6 +47,7 @@ import { CALL, CASE, FOR_EACH, SWITCH } from "./lib/stepTypes";
 import { registerExtensions } from "./lib/extensions";
 import { boxRange, copyText, partOps, readCopied, siblingRange, withNewIds, type Copied } from "./lib/stepClipboard";
 import { errorLine } from "./lib/errorText";
+import { emptyTrace, enclosing, findNode, type RunTrace, traceEvent, withError } from "./lib/runTrace";
 import { t } from "./lib/i18n";
 import { neighbor, outline } from "./lib/outline";
 import { ancestorsOf } from "./flow/layout";
@@ -104,6 +105,12 @@ export type LogEntry = {
   stepId?: string | null;
   /** Inside a called flow: the call steps down to the flow `stepId` is in. */
   callPath?: string[];
+  /** The node run (`RunTrace`) it belongs to; null or unset for the run itself. */
+  node?: number | null;
+  /** What the line marks in the run, drawn as its own row: start, end, pause, resume. */
+  mark?: "start" | "end" | "pause" | "resume";
+  /** A node's failure: the tree shows it on the node itself. */
+  fromStep?: boolean;
 };
 
 /** A node anywhere a run went: `stepId` in the flow the calls of `path` lead to. */
@@ -206,6 +213,8 @@ export type RunState = {
   failure: RunError | null;
   steps: Record<string, StepRunState>;
   logs: LogEntry[];
+  /** The nodes the run went through, as the run log draws them. */
+  trace: RunTrace;
   changes: VariableChange[];
   /** When each step began, in run order (retries not counted), to tell what a step saw. */
   starts: StepStart[];
@@ -690,6 +699,7 @@ const newRun = (runId: string, flowId: string | null = null): RunState => ({
   failure: null,
   steps: {},
   logs: [],
+  trace: emptyTrace(),
   changes: [],
   starts: [],
   inner: {},
@@ -1721,10 +1731,27 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
           let reveal = s.reveal;
           const run: RunState =
             s.run && s.run.runId === env.runId ? { ...s.run, steps: { ...s.run.steps }, logs: s.run.logs } : newRun(env.runId);
-          const push = (level: LogLevel, msg: string, stepId?: string | null, callPath?: string[]) => {
-            run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId, ...(callPath?.length ? { callPath } : {}) }];
-          };
           const path = callPathOf(env);
+          run.trace = traceEvent(run.trace ?? emptyTrace(), env, (stepId, callPath) => {
+            // Only the open flow's run is laid out on its flows.
+            if (run.flowId && run.flowId !== s.flow?.id) return undefined;
+            const chain = diveChain(s.flow, s.called, callPath);
+            const owner = callPath.length === 0 ? s.flow : chain.length === callPath.length ? chain.at(-1)!.flow : null;
+            const inside = owner ? enclosing(owner.steps ?? [], stepId) : undefined;
+            if (inside === undefined) return undefined;
+            if (inside !== null) return { stepId: inside, callPath };
+            // At the top of a called flow: inside the call.
+            return callPath.length > 0 ? { stepId: callPath.at(-1)!, callPath: callPath.slice(0, -1) } : null;
+          });
+          const push = (level: LogLevel, msg: string, stepId?: string | null, callPath?: string[], extra: Partial<LogEntry> = {}) => {
+            // The node run it is about; a line of the run itself sits in the node running now.
+            const node = stepId ? findNode(run.trace, stepId, callPath ?? [])?.key : run.trace.open.at(-1);
+            run.logs = [...run.logs, { seq: env.seq, at: env.at, level, message: msg, stepId, ...(callPath?.length ? { callPath } : {}), node: node ?? null, ...extra }];
+          };
+          if (env.type === "stepFinished" && env.error) {
+            const owner = path.length > 0 ? (diveChain(s.flow, s.called, path).at(-1)?.flow ?? null) : s.flow;
+            run.trace = withError(run.trace, env.stepId, path, errorLine(env.error, findStep(owner?.steps ?? [], env.stepId)));
+          }
           // Followed, the chart goes where the run is: into a called flow
           // when a step starts inside it, back out when one starts outside.
           let dive = s.dive;
@@ -1776,7 +1803,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = "running";
               run.flowId = env.flowId;
               run.revision = env.revision;
-              push("info", `▶ ${env.flowName}${t.runMsg.atRevision(env.revision)}`);
+              push("info", `▶ ${env.flowName}${t.runMsg.atRevision(env.revision)}`, null, undefined, { mark: "start", node: null });
               break;
             case "stepStarted":
               run.steps[env.stepId] = "running";
@@ -1793,7 +1820,9 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
                 // A call that failed inside: the line leads to the node in there.
                 const at = errorPlace(s.flow, s.called, env.stepId, env.error.details);
                 const owner = at.path.length > 0 ? (diveChain(s.flow, s.called, at.path).at(-1)?.flow ?? null) : s.flow;
-                push("error", `${errorLine(env.error, findStep(owner?.steps ?? [], at.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, at.stepId, at.path);
+                push("error", `${errorLine(env.error, findStep(owner?.steps ?? [], at.stepId))}${env.willRetry ? t.runMsg.willRetry : ""}`, at.stepId, at.path, {
+                  fromStep: true,
+                });
                 secretFix = secretFixOf(env.error) ?? secretFix;
               }
               break;
@@ -1817,7 +1846,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.evidence = null;
               states[env.stepId] = env.reason === "error" ? "failed" : "paused";
               if (path.length > 0) run.inner = { ...run.inner, [callKey(path)]: states };
-              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, env.stepId, path);
+              push(env.reason === "error" ? "error" : "info", env.reason === "error" ? `❚❚ ${t.runMsg.pausedOnError}` : `❚❚ ${t.runMsg.paused}`, env.stepId, path, {
+                mark: "pause",
+                node: run.trace.open.at(-1) ?? null,
+              });
               if (path.length === 0) reveal = { stepId: env.stepId, seq: (reveal?.seq ?? 0) + 1 };
               break;
             }
@@ -1833,7 +1865,10 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
                 run.inner = { ...run.inner, [key]: states };
               } else if (pause && run.steps[pause.stepId] === "paused") delete run.steps[pause.stepId];
               if (env.revision != null && pause?.callPath.length === 0) run.revision = env.revision;
-              push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`);
+              push("info", `▶ ${(t.runMsg.resume as Record<string, string>)[env.action] ?? env.action}${env.revision != null ? t.runMsg.atRevision(env.revision) : ""}`, null, undefined, {
+                mark: "resume",
+                node: run.trace.open.at(-1) ?? null,
+              });
               break;
             }
             case "runFinished":
@@ -1842,7 +1877,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
               run.status = env.status;
               run.pause = null;
               run.failure = env.status === "failed" ? (env.error ?? null) : null;
-              push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]}${t.runMsg.took(env.durationMs)}`);
+              push(env.status === "succeeded" ? "info" : "error", `■ ${t.status[env.status]}${t.runMsg.took(env.durationMs)}`, null, undefined, { mark: "end", node: null });
               break;
           }
           return { run, human, secretFix, reveal, ...moved };
@@ -1863,7 +1898,7 @@ export function createStudioStore(api: Api): StoreApi<StudioState> {
       },
 
       clearLog() {
-        set((s) => (s.run ? { run: { ...s.run, logs: [] } } : s));
+        set((s) => (s.run ? { run: { ...s.run, logs: [], trace: emptyTrace() } } : s));
       },
 
       dismiss() {
